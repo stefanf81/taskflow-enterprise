@@ -13,6 +13,7 @@ import { AppointmentStore } from './appointment.store';
 import { ServiceCatalogStore } from './service-catalog.store';
 import { BarberStore } from './barber.store';
 import { NotificationStore } from './notification.store';
+import { ReviewStore } from './review.store';
 import { StylistCard } from './components/stylist-card/stylist-card';
 import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
@@ -31,6 +32,7 @@ export class App implements OnInit {
   private readonly catalogStore = inject(ServiceCatalogStore);
   private readonly barberStore = inject(BarberStore);
   private readonly notificationStore = inject(NotificationStore);
+  private readonly reviewStore = inject(ReviewStore);
 
   // Authentication State delegated to the Store (Top-Tier DDD State management)
   readonly isLoggedIn = this.store.isLoggedIn;
@@ -81,30 +83,43 @@ export class App implements OnInit {
   cancelBookingId = '';
   cancelEmail = '';
 
-  // Stylist Profiles with Star Ratings
-  readonly stylistProfiles = [
+  // Stylist Profiles with Dynamic Star Ratings
+  readonly rawProfiles = [
     {
       name: 'Alex the Barber',
       title: 'Master Stylist',
-      rating: '4.9 ★',
-      reviews: '142 reviews',
       specialty: 'Classic Scissor Cuts',
     },
     {
       name: 'Sara the Stylist',
       title: 'Skin Fade Expert',
-      rating: '5.0 ★',
-      reviews: '198 reviews',
       specialty: 'Skin Fades & Tapers',
     },
     {
       name: 'Marcus Master Blade',
       title: 'Director Barber',
-      rating: '4.8 ★',
-      reviews: '240 reviews',
       specialty: 'Razor Shaves & Beards',
     },
   ];
+
+  readonly stylistProfiles = computed(() => {
+    const ratings = this.reviewStore.ratings();
+    return this.rawProfiles.map(p => {
+      const dbRating = ratings.find(r => r.barberName === p.name);
+      if (dbRating) {
+        return {
+          ...p,
+          rating: `${dbRating.averageRating.toFixed(1)} ★`,
+          reviews: `${dbRating.reviewCount} reviews`
+        };
+      }
+      return {
+        ...p,
+        rating: '5.0 ★', // default
+        reviews: 'New'
+      };
+    });
+  });
 
   // Preset Options for Booking Form
   readonly barbers = [
@@ -178,6 +193,7 @@ export class App implements OnInit {
 
   ngOnInit(): void {
     this.catalogStore.loadServices();
+    this.reviewStore.loadRatings();
     if (this.isLoggedIn()) {
       this.loadAppointments();
     }
@@ -294,7 +310,8 @@ export class App implements OnInit {
 
   // --- Notification Outbox Admin ---
   readonly notificationsList = this.notificationStore.notifications;
-}
+
+  // Handle Admin Logout delegated to the Store
   onLogout(): void {
     this.store.onLogout();
     this.showSuccess('Admin logged out successfully.');
@@ -645,5 +662,36 @@ export class App implements OnInit {
     setTimeout(() => {
       this.successMessage.set(null);
     }, 4500);
+  }
+
+  // --- Review Submission ---
+  reviewPublicId = '';
+  reviewRating = 5;
+  reviewComment = '';
+
+  submitReview(): void {
+    if (!this.reviewPublicId.trim()) {
+      this.errorMessage.set('Booking Code is required to submit a review.');
+      return;
+    }
+
+    this.isSubmitting.set(true);
+    this.todoService.submitReview(this.reviewPublicId.trim(), {
+      rating: this.reviewRating,
+      comment: this.reviewComment
+    }).subscribe({
+      next: () => {
+        this.isSubmitting.set(false);
+        this.showSuccess('Thank you for your review! We appreciate your feedback.');
+        this.reviewPublicId = '';
+        this.reviewComment = '';
+        this.reviewRating = 5;
+        this.reviewStore.loadRatings();
+      },
+      error: (err) => {
+        this.isSubmitting.set(false);
+        this.errorMessage.set(err.error?.message || 'Failed to submit review. Ensure the code is correct and the appointment is completed.');
+      }
+    });
   }
 }

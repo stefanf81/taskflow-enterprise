@@ -89,6 +89,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/appointments").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/catalog").permitAll()
+                .requestMatchers("/api/v1/reviews/public/**").permitAll()
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))

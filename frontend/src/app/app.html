@@ -449,7 +449,7 @@
             <!-- STEP 2: SELECT STYLIST -->
             @if (activeStep() === 2) {
               <div class="space-y-4 animate-fadeIn">
-                @for (profile of stylistProfiles; track profile.name) {
+                @for (profile of stylistProfiles(); track profile.name) {
                   <app-stylist-card
                     [profile]="profile"
                     [isSelected]="bookingBarber() === profile.name"
@@ -921,62 +921,135 @@
         </div>
       }
 
-      <!-- Interactive secure self-service cancellation portal -->
-      <section class="card bg-zinc-950 border border-white/10 rounded-3xl p-8 mt-8">
-        <h2 class="text-lg font-black text-zinc-100 tracking-tight mb-2 flex items-center gap-2">
-          <span class="text-rose-500">🧹</span> Secure Booking Cancellation
-        </h2>
-        <p class="text-xs text-zinc-400 font-light leading-relaxed mb-6">
-          Need to cancel your reservation? Provide your Booking ID and Email below to delete your
-          scheduled slot instantly from our calendar:
-        </p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
+        <!-- Interactive secure self-service cancellation portal -->
+        <section class="card bg-zinc-950 border border-white/10 rounded-3xl p-8">
+          <h2 class="text-lg font-black text-zinc-100 tracking-tight mb-2 flex items-center gap-2">
+            <span class="text-rose-500">🧹</span> Secure Booking Cancellation
+          </h2>
+          <p class="text-xs text-zinc-400 font-light leading-relaxed mb-6">
+            Need to cancel your reservation? Provide your Booking ID and Email below to delete your
+            scheduled slot instantly from our calendar:
+          </p>
 
-        <form (ngSubmit)="onPublicCancel()" #cancelForm="ngForm" class="space-y-4">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div class="form-group flex flex-col gap-1.5">
-              <label
-                for="cancelBookingId"
-                class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
-                >Booking ID <span class="required">*</span></label
-              >
-              <input
-                type="text"
-                id="cancelBookingId"
-                name="cancelBookingId"
-                [(ngModel)]="cancelBookingId"
-                required
-                placeholder="e.g., 10"
-                class="form-control"
-              />
+          <form (ngSubmit)="onPublicCancel()" #cancelForm="ngForm" class="space-y-4">
+            <div class="flex flex-col gap-4">
+              <div class="form-group flex flex-col gap-1.5">
+                <label
+                  for="cancelBookingId"
+                  class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
+                  >Booking ID <span class="required">*</span></label
+                >
+                <input
+                  type="text"
+                  id="cancelBookingId"
+                  name="cancelBookingId"
+                  [(ngModel)]="cancelBookingId"
+                  required
+                  placeholder="e.g., 8f8d9b..."
+                  class="form-control"
+                />
+              </div>
+              <div class="form-group flex flex-col gap-1.5">
+                <label
+                  for="cancelEmail"
+                  class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
+                  >Verification Email <span class="required">*</span></label
+                >
+                <input
+                  type="email"
+                  id="cancelEmail"
+                  name="cancelEmail"
+                  [(ngModel)]="cancelEmail"
+                  required
+                  placeholder="e.g., john@example.com"
+                  class="form-control"
+                />
+              </div>
             </div>
-            <div class="form-group flex flex-col gap-1.5">
-              <label
-                for="cancelEmail"
-                class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
-                >Verification Email <span class="required">*</span></label
+            <div class="flex justify-end pt-2">
+              <button
+                type="submit"
+                class="btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/100 hover:text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all w-full sm:w-auto"
+                [disabled]="cancelForm.invalid || isSubmitting()"
               >
-              <input
-                type="email"
-                id="cancelEmail"
-                name="cancelEmail"
-                [(ngModel)]="cancelEmail"
-                required
-                placeholder="e.g., john@example.com"
-                class="form-control"
-              />
+                {{ isSubmitting() ? 'Cancelling...' : 'Cancel Reservation' }}
+              </button>
             </div>
-          </div>
-          <div class="flex justify-end pt-2">
-            <button
-              type="submit"
-              class="btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/100 hover:text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all"
-              [disabled]="cancelForm.invalid || isSubmitting()"
-            >
-              {{ isSubmitting() ? 'Cancelling...' : 'Cancel Reservation' }}
-            </button>
-          </div>
-        </form>
-      </section>
+          </form>
+        </section>
+
+        <!-- Interactive secure self-service review portal -->
+        <section class="card bg-zinc-950 border border-white/10 rounded-3xl p-8">
+          <h2 class="text-lg font-black text-zinc-100 tracking-tight mb-2 flex items-center gap-2">
+            <span class="text-amber-400">⭐</span> Submit a Review
+          </h2>
+          <p class="text-xs text-zinc-400 font-light leading-relaxed mb-6">
+            Did you enjoy your haircut? Provide your Booking ID to leave a public rating and review for your barber!
+          </p>
+
+          <form (ngSubmit)="submitReview()" #reviewForm="ngForm" class="space-y-4">
+            <div class="flex flex-col gap-4">
+              <div class="form-group flex flex-col gap-1.5">
+                <label
+                  for="reviewPublicId"
+                  class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
+                  >Booking ID <span class="required">*</span></label
+                >
+                <input
+                  type="text"
+                  id="reviewPublicId"
+                  name="reviewPublicId"
+                  [(ngModel)]="reviewPublicId"
+                  required
+                  placeholder="e.g., 8f8d9b..."
+                  class="form-control"
+                />
+              </div>
+              <div class="form-group flex flex-col gap-1.5">
+                <label
+                  for="reviewRating"
+                  class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
+                  >Rating (1-5) <span class="required">*</span></label
+                >
+                <input
+                  type="number"
+                  id="reviewRating"
+                  name="reviewRating"
+                  [(ngModel)]="reviewRating"
+                  required
+                  min="1"
+                  max="5"
+                  class="form-control"
+                />
+              </div>
+              <div class="form-group flex flex-col gap-1.5">
+                <label
+                  for="reviewComment"
+                  class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
+                  >Comment (Optional)</label
+                >
+                <textarea
+                  id="reviewComment"
+                  name="reviewComment"
+                  [(ngModel)]="reviewComment"
+                  placeholder="Great haircut!"
+                  class="form-control min-h-[60px]"
+                ></textarea>
+              </div>
+            </div>
+            <div class="flex justify-end pt-2">
+              <button
+                type="submit"
+                class="btn btn-submit text-xs font-bold px-5 py-2.5 rounded-xl transition-all w-full sm:w-auto"
+                [disabled]="reviewForm.invalid || isSubmitting()"
+              >
+                {{ isSubmitting() ? 'Submitting...' : 'Submit Review' }}
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
 
       <!-- Guest Footer -->
       <footer class="mt-20 pt-10 border-t border-white/10 text-center">

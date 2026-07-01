@@ -99,6 +99,17 @@ export interface NotificationItem {
   status: string;
 }
 
+export interface BarberRating {
+  barberName: string;
+  averageRating: number;
+  reviewCount: number;
+}
+
+export interface ReviewRequest {
+  rating: number;
+  comment: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -109,6 +120,16 @@ export class TodoService {
   private readonly catalogUrl = '/api/v1/catalog';
   private readonly barbersUrl = '/api/v1/barbers';
   private readonly notificationsUrl = '/api/v1/notifications';
+  private readonly reviewsUrl = '/api/v1/reviews';
+
+  // --- Reviews API ---
+  getBarberRatings(): Observable<BarberRating[]> {
+    return this.http.get<BarberRating[]>(`${this.reviewsUrl}/public/barber-ratings`);
+  }
+
+  submitReview(publicId: string, request: ReviewRequest): Observable<void> {
+    return this.http.post<void>(`${this.reviewsUrl}/public/${publicId}`, request);
+  }
 
   // --- Notifications API ---
   getNotifications(): Observable<NotificationItem[]> {
