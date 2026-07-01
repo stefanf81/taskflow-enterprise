@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+@theme {
+  --color-gold-light: #e5c185;
+  --color-gold: #c5a059;
+  --color-gold-dark: #8e7a5c;
+  --color-obsidian-light: #1e293b;
+  --color-obsidian: #090d16;
+  --color-obsidian-dark: #030712;
+}

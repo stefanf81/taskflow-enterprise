@@ -1,0 +1,116 @@
+import { Injectable, inject } from '@angular/core';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable } from 'rxjs';
+
+export interface AppointmentItem {
+  id: number;
+  publicId: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  barberName: string;
+  bookingDate: string;
+  bookingTime: string;
+  serviceType: string;
+  status: string; // PENDING, APPROVED, DENIED
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AppointmentCreateRequest {
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  barberName: string;
+  bookingDate: string;
+  bookingTime: string;
+  serviceType: string;
+}
+
+export interface AppointmentUpdateRequest {
+  status: string;
+}
+
+export interface AppointmentStats {
+  total: number;
+  pending: number;
+  approved: number;
+  denied: number;
+  overdue: number;
+  progress: number;
+  approvedRevenue: number;
+}
+
+export interface AppointmentPage {
+  content: AppointmentItem[];
+  totalPages: number;
+  totalElements: number;
+  size: number;
+  number: number;
+}
+
+export interface AppointmentDashboardResponse {
+  page: AppointmentPage;
+  stats: AppointmentStats;
+}
+
+export interface LoginResponse {
+  token: string;
+  username: string;
+}
+
+@Injectable({
+  providedIn: 'root'
+})
+export class TodoService {
+  private readonly http = inject(HttpClient);
+  private readonly apiUrl = '/api/v1/appointments';
+  private readonly authUrl = '/api/v1/auth';
+
+  // Perform secure JWT login by posting to the authentication controller
+  login(username: string, password: string): Observable<LoginResponse> {
+    return this.http.post<LoginResponse>(`${this.authUrl}/login`, { username, password });
+  }
+
+  getAllAppointments(statusFilter?: string, search?: string, page = 0, size = 10): Observable<AppointmentDashboardResponse> {
+    let params = new HttpParams();
+    if (statusFilter && statusFilter !== 'all') {
+      params = params.set('status', statusFilter.toUpperCase());
+    }
+    if (search) {
+      params = params.set('search', search);
+    }
+    params = params.set('page', page.toString());
+    params = params.set('size', size.toString());
+    return this.http.get<AppointmentDashboardResponse>(this.apiUrl, { params });
+  }
+
+  getAppointmentById(id: number): Observable<AppointmentItem> {
+    return this.http.get<AppointmentItem>(`${this.apiUrl}/${id}`);
+  }
+
+  createAppointment(request: AppointmentCreateRequest): Observable<AppointmentItem> {
+    return this.http.post<AppointmentItem>(this.apiUrl, request);
+  }
+
+  getBusySlots(barberName: string, bookingDate: string): Observable<string[]> {
+    let params = new HttpParams()
+      .set('barberName', barberName)
+      .set('bookingDate', bookingDate);
+    return this.http.get<string[]>(`${this.apiUrl}/public/busy-slots`, { params });
+  }
+
+  publicCancelAppointment(publicId: string, email: string): Observable<void> {
+    let params = new HttpParams().set('email', email);
+    return this.http.put<void>(`${this.apiUrl}/public/cancel/${publicId}`, null, { params });
+  }
+
+  updateAppointmentStatus(id: number, statusValue: string): Observable<AppointmentItem> {
+    const request: AppointmentUpdateRequest = { status: statusValue };
+    return this.http.put<AppointmentItem>(`${this.apiUrl}/${id}`, request);
+  }
+
+  deleteAppointment(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/${id}`);
+  }
+}
