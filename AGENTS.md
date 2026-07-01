@@ -5,7 +5,7 @@
 - **Backend**: Spring Boot 3.5.3 / OpenJDK 21 / Gradle — `src/main/java/com/example/taskflow/`
   - High-Performance Tunings: Spring Boot AOT enabled, ParallelGC (`-XX:+UseParallelGC`, `-XX:ParallelGCThreads=10`, `-XX:+UseSIMDForMemoryOps`), 1GB fixed heap, Virtual Threads disabled (Platform threads used), Jackson Blackbird, Asynchronous Logging, OpenTelemetry 10% sampling, Caffeine local cache.
   - Packages: `controller`, `service`, `repository`, `dto`, `security`, `config`, `exception`, `model`
-  - Entry point: `TodoapiApplication.java`
+  - Entry point: `TaskflowApplication.java`
 - **Frontend**: Angular 22 / TypeScript / Tailwind CSS — `frontend/`
   - Entry: `frontend/src/main.ts`, app module: `frontend/src/app/`
   - Auth: `auth.interceptor.ts` (Bearer JWT from `sessionStorage`), `auth.guard.ts`

@@ -8,7 +8,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd "$SCRIPT_DIR"
 
 echo "=========================================================="
-echo "🛡️  BARBERFLOW DYNAMIC APPLICATION SECURITY TESTING (DAST)"
+echo "🛡️  TASKFLOW DYNAMIC APPLICATION SECURITY TESTING (DAST)"
 echo "=========================================================="
 
 # Check if docker daemon is running

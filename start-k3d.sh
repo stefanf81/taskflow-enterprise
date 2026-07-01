@@ -10,7 +10,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd "$SCRIPT_DIR"
 
 echo "=========================================================="
-echo "☸️  BARBERFLOW KUBERNETES DEPLOYMENT ON K3D"
+echo "☸️  TASKFLOW KUBERNETES DEPLOYMENT ON K3D"
 echo "=========================================================="
 
 # =========================================================================================

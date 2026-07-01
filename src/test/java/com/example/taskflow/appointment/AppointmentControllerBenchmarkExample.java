@@ -128,7 +128,7 @@ public class AppointmentControllerBenchmarkExample {
         double throughput = (double) TOTAL_REQUESTS / (stopWatch.getTotalTimeSeconds());
 
         System.out.println("\n=========================================================================");
-        System.out.println("📊 BARBERFLOW FULL-STACK REST API BENCHMARK METRICS");
+        System.out.println("📊 TASKFLOW FULL-STACK REST API BENCHMARK METRICS");
         System.out.println("=========================================================================");
         System.out.printf("  %-30s : %d items\n", "Pre-populated Data Volume", DATABASE_SIZE);
         System.out.printf("  %-30s : %d users\n", "Concurrent Users (Threads)", CONCURRENT_USERS);
