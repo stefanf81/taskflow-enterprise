@@ -10,6 +10,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TodoService, AppointmentItem, AppointmentStats } from './todo.service';
 import { AppointmentStore } from './appointment.store';
+import { ServiceCatalogStore } from './service-catalog.store';
+import { BarberStore } from './barber.store';
 import { StylistCard } from './components/stylist-card/stylist-card';
 import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
@@ -25,6 +27,8 @@ import { of } from 'rxjs';
 export class App implements OnInit {
   private readonly todoService = inject(TodoService);
   private readonly store = inject(AppointmentStore);
+  private readonly catalogStore = inject(ServiceCatalogStore);
+  private readonly barberStore = inject(BarberStore);
 
   // Authentication State delegated to the Store (Top-Tier DDD State management)
   readonly isLoggedIn = this.store.isLoggedIn;
@@ -108,43 +112,7 @@ export class App implements OnInit {
     'Marcus Master Blade',
   ];
   readonly timeSlots = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'];
-  readonly services = [
-    {
-      name: 'Classic Haircut',
-      price: 25,
-      duration: 30,
-      category: 'hair',
-      desc: 'Precision cut tailored to your head shape, complete with razor neck cleanup and premium styling.',
-    },
-    {
-      name: 'Modern Skin Fade',
-      price: 30,
-      duration: 45,
-      category: 'hair',
-      desc: 'Sleek blended skin fade with a crisp straight razor lineup and clay texturization.',
-    },
-    {
-      name: 'Beard Trim & Shave',
-      price: 18,
-      duration: 25,
-      category: 'beard',
-      desc: 'Detail beard lineup, hot steam towel treatment, aromatic pre-shave oil massage, and soothing trim.',
-    },
-    {
-      name: 'Royal Hot Towel Shave',
-      price: 22,
-      duration: 30,
-      category: 'beard',
-      desc: 'Traditional lather shaving using a straight razor blade, three rounds of steam towels, and cold-balm massage.',
-    },
-    {
-      name: 'The Executive Package',
-      price: 40,
-      duration: 60,
-      category: 'combo',
-      desc: 'The ultimate royal experience: Classic Haircut, full Beard Shave, facial wash, and essential-oil head massage.',
-    },
-  ];
+  readonly services = this.catalogStore.services;
 
   // SOTA Signals-based Reactive Computations
   readonly upcomingBookingDays = computed(() => {
@@ -178,20 +146,20 @@ export class App implements OnInit {
     const cat = this.selectedCategory();
     const query = this.serviceSearchQuery().trim().toLowerCase();
 
-    let list = this.services;
+    let list = this.services();
     if (cat !== 'all') {
       list = list.filter((s) => s.category === cat);
     }
     if (query) {
       list = list.filter(
-        (s) => s.name.toLowerCase().includes(query) || s.desc.toLowerCase().includes(query),
+        (s) => s.name.toLowerCase().includes(query) || s.description.toLowerCase().includes(query),
       );
     }
     return list;
   });
 
   readonly selectedServiceObj = computed(() => {
-    return this.services.find((s) => s.name === this.bookingService());
+    return this.services().find((s) => s.name === this.bookingService());
   });
 
   readonly estimatedEndTime = computed(() => {
@@ -199,7 +167,7 @@ export class App implements OnInit {
     if (!svc || !this.bookingTime()) return '';
     try {
       const startMin = this.parseTimeToMinutes(this.bookingTime());
-      const endMin = startMin + svc.duration;
+      const endMin = startMin + svc.durationMinutes;
       return this.formatMinutesToTimeString(endMin);
     } catch (e) {
       return '';
@@ -207,6 +175,7 @@ export class App implements OnInit {
   });
 
   ngOnInit(): void {
+    this.catalogStore.loadServices();
     if (this.isLoggedIn()) {
       this.loadAppointments();
     }
@@ -247,7 +216,77 @@ export class App implements OnInit {
     });
   }
 
-  // Handle Admin Logout delegated to the Store
+  // Admin View State
+  readonly adminView = signal<'appointments' | 'services' | 'schedules'>('appointments');
+
+  setAdminView(view: 'appointments' | 'services' | 'schedules'): void {
+    this.adminView.set(view);
+    if (view === 'schedules') {
+      this.barberStore.loadBarbers();
+    }
+  }
+
+  // --- Service Catalog Admin ---
+  readonly newServiceName = signal('');
+  readonly newServicePrice = signal<number | null>(null);
+  readonly newServiceDuration = signal<number | null>(null);
+  readonly newServiceCategory = signal('hair');
+  readonly newServiceDesc = signal('');
+
+  addService(): void {
+    if (!this.newServiceName() || !this.newServicePrice() || !this.newServiceDuration()) {
+      this.errorMessage.set('Name, price, and duration are required.');
+      return;
+    }
+    this.catalogStore.addService({
+      name: this.newServiceName(),
+      price: this.newServicePrice()!,
+      durationMinutes: this.newServiceDuration()!,
+      category: this.newServiceCategory(),
+      description: this.newServiceDesc()
+    });
+    this.showSuccess('Service added to catalog.');
+    this.newServiceName.set('');
+    this.newServicePrice.set(null);
+    this.newServiceDuration.set(null);
+    this.newServiceDesc.set('');
+  }
+
+  deleteService(id: number): void {
+    if (confirm('Are you sure you want to delete this service?')) {
+      this.catalogStore.deleteService(id);
+      this.showSuccess('Service deleted.');
+    }
+  }
+
+  // --- Barber Schedule Admin ---
+  readonly barbersList = this.barberStore.barbers;
+  readonly timeOffs = this.barberStore.timeOffs;
+  readonly selectedBarberId = this.barberStore.selectedBarberId;
+  
+  readonly newTimeOffStartDate = signal('');
+  readonly newTimeOffEndDate = signal('');
+  readonly newTimeOffReason = signal('');
+
+  addTimeOff(): void {
+    if (!this.newTimeOffStartDate() || !this.newTimeOffEndDate()) {
+      this.errorMessage.set('Start and end dates are required.');
+      return;
+    }
+    this.barberStore.addTimeOff({
+      startDate: this.newTimeOffStartDate(),
+      endDate: this.newTimeOffEndDate(),
+      reason: this.newTimeOffReason()
+    });
+    this.showSuccess('Time off added successfully.');
+    this.newTimeOffStartDate.set('');
+    this.newTimeOffEndDate.set('');
+    this.newTimeOffReason.set('');
+  }
+
+  selectAdminBarber(id: number): void {
+    this.barberStore.selectBarber(id);
+  }
   onLogout(): void {
     this.store.onLogout();
     this.showSuccess('Admin logged out successfully.');
@@ -380,7 +419,7 @@ export class App implements OnInit {
     this.bookingBarber.set(this.barbers[0]);
     this.bookingDate.set('');
     this.bookingTime.set(this.timeSlots[0]);
-    this.bookingService.set(this.services[0].name);
+    this.bookingService.set(this.services().length > 0 ? this.services()[0].name : '');
     this.selectedCategory.set('all');
     this.busySlots.set([]);
     this.activeStep.set(1);

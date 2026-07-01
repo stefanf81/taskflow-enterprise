@@ -45,6 +45,15 @@ class AppointmentServiceImplTest {
     @Mock
     private io.micrometer.tracing.Tracer tracer;
 
+    @Mock
+    private BarberRepository barberRepository;
+
+    @Mock
+    private BarberScheduleRepository barberScheduleRepository;
+
+    @Mock
+    private BarberTimeOffRepository barberTimeOffRepository;
+
     @InjectMocks
     private AppointmentServiceImpl appointmentService;
 

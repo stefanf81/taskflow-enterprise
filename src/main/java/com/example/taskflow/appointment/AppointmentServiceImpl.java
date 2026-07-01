@@ -28,12 +28,24 @@ public class AppointmentServiceImpl implements AppointmentService {
     private final ApplicationEventPublisher eventPublisher;
     private final CacheManager cacheManager;
     private final Tracer tracer;
+    private final BarberRepository barberRepository;
+    private final BarberScheduleRepository barberScheduleRepository;
+    private final BarberTimeOffRepository barberTimeOffRepository;
 
-    public AppointmentServiceImpl(AppointmentRepository appointmentRepository, ApplicationEventPublisher eventPublisher, CacheManager cacheManager, Tracer tracer) {
+    public AppointmentServiceImpl(AppointmentRepository appointmentRepository, 
+                                  ApplicationEventPublisher eventPublisher, 
+                                  CacheManager cacheManager, 
+                                  Tracer tracer,
+                                  BarberRepository barberRepository,
+                                  BarberScheduleRepository barberScheduleRepository,
+                                  BarberTimeOffRepository barberTimeOffRepository) {
         this.appointmentRepository = appointmentRepository;
         this.eventPublisher = eventPublisher;
         this.cacheManager = cacheManager;
         this.tracer = tracer;
+        this.barberRepository = barberRepository;
+        this.barberScheduleRepository = barberScheduleRepository;
+        this.barberTimeOffRepository = barberTimeOffRepository;
     }
 
     @Override
@@ -176,6 +188,31 @@ public class AppointmentServiceImpl implements AppointmentService {
     public java.util.List<String> getBusySlots(String barberName, String bookingDate) {
         try {
             LocalDate date = LocalDate.parse(bookingDate);
+            
+            // Check if Barber exists
+            java.util.Optional<Barber> barberOpt = barberRepository.findByName(barberName);
+            if (barberOpt.isPresent()) {
+                Barber barber = barberOpt.get();
+                
+                // 1. Check if barber has time off on this date
+                java.util.List<BarberTimeOff> timeOffs = barberTimeOffRepository.findTimeOffForBarberOnDate(barber.getId(), date);
+                if (!timeOffs.isEmpty()) {
+                    // Barber is off, return all possible slots as busy
+                    return java.util.Arrays.asList("09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00");
+                }
+                
+                // 2. Check if barber is scheduled to work on this day of week
+                // DayOfWeek in Java: 1 (Monday) to 7 (Sunday)
+                int dayOfWeek = date.getDayOfWeek().getValue();
+                java.util.Optional<BarberSchedule> scheduleOpt = barberScheduleRepository.findByBarberIdAndDayOfWeek(barber.getId(), dayOfWeek);
+                if (scheduleOpt.isEmpty()) {
+                    // Not scheduled to work, return all possible slots as busy
+                    return java.util.Arrays.asList("09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00");
+                }
+            }
+            
+            // 3. Barber is scheduled and not off (or we don't track schedule for this barber yet)
+            // Return actually booked/denied slots
             return appointmentRepository.findDistinctBookingTimes(barberName, date, "DENIED");
         } catch (Exception e) {
             logger.error("Error parsing bookingDate in getBusySlots: {}", maskInput(bookingDate), e);

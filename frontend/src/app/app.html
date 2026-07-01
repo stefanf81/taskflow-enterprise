@@ -176,16 +176,16 @@
             </h2>
 
             <div class="space-y-6">
-              @for (service of services; track service.name) {
+              @for (service of services(); track service.name) {
                 <div class="border-b border-white/5 pb-4 last:border-none last:pb-0">
                   <div class="flex justify-between items-center font-bold text-sm mb-1">
                     <span class="text-zinc-100">{{ service.name }}</span>
                     <span class="text-indigo-400">${{ service.price }}</span>
                   </div>
                   <p class="text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-2">
-                    ⏱️ Duration: {{ service.duration }} mins
+                    ⏱️ Duration: {{ service.durationMinutes }} mins
                   </p>
-                  <p class="text-xs text-zinc-400 font-light leading-relaxed">{{ service.desc }}</p>
+                  <p class="text-xs text-zinc-400 font-light leading-relaxed">{{ service.description }}</p>
                 </div>
               }
             </div>
@@ -435,10 +435,10 @@
                         <span class="text-indigo-400 text-lg">${{ service.price }}</span>
                       </div>
                       <p class="text-[10px] font-bold text-zinc-500 uppercase mt-0.5">
-                        ⏱️ Duration: {{ service.duration }} mins
+                        ⏱️ Duration: {{ service.durationMinutes }} mins
                       </p>
                       <p class="text-xs text-zinc-400 leading-relaxed font-light mt-1">
-                        {{ service.desc }}
+                        {{ service.description }}
                       </p>
                     </div>
                   }
@@ -764,7 +764,7 @@
                       <p class="flex justify-between">
                         <span>⏱️ Duration:</span>
                         <strong class="text-zinc-100 font-semibold"
-                          >{{ selectedServiceObj()?.duration }} mins</strong
+                          >{{ selectedServiceObj()?.durationMinutes }} mins</strong
                         >
                       </p>
                       <p class="flex justify-between">
@@ -1413,6 +1413,36 @@
         <!-- MAIN TABLE LIST (8 COLS) -->
         <main class="lg:col-span-8">
           <div class="card bg-zinc-950 border border-white/10 rounded-2xl p-6">
+            
+            <!-- ADMIN VIEW TOGGLE -->
+            <div class="flex gap-4 mb-6 border-b border-white/10 pb-4">
+              <button
+                (click)="setAdminView('appointments')"
+                [class.text-indigo-400]="adminView() === 'appointments'"
+                [class.font-black]="adminView() === 'appointments'"
+                class="text-sm font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors"
+              >
+                Appointments
+              </button>
+              <button
+                (click)="setAdminView('services')"
+                [class.text-indigo-400]="adminView() === 'services'"
+                [class.font-black]="adminView() === 'services'"
+                class="text-sm font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors"
+              >
+                Service Catalog
+              </button>
+              <button
+                (click)="setAdminView('schedules')"
+                [class.text-indigo-400]="adminView() === 'schedules'"
+                [class.font-black]="adminView() === 'schedules'"
+                class="text-sm font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors"
+              >
+                Schedules & Time-Off
+              </button>
+            </div>
+
+            @if (adminView() === 'appointments') {
             <!-- SEARCH AND TABS CONTROLS -->
             <div class="space-y-4 mb-6">
               <div class="relative w-full">
@@ -1622,6 +1652,77 @@
                 }
               }
             </div>
+            }
+
+            @if (adminView() === 'schedules') {
+              <div class="space-y-6 animate-fadeIn">
+                <h3 class="text-white font-bold text-lg">Barber Schedules & Time-Off</h3>
+                
+                <div class="flex flex-col md:flex-row gap-6">
+                  <!-- Barber Selection -->
+                  <div class="w-full md:w-1/3 space-y-3">
+                    <h4 class="text-zinc-400 text-xs font-bold uppercase tracking-wider">Select Barber</h4>
+                    @for (barber of barbersList(); track barber.id) {
+                      <div 
+                        class="p-4 rounded-xl border cursor-pointer transition-all"
+                        [class.bg-indigo-500_20]="selectedBarberId() === barber.id"
+                        [class.border-indigo-500]="selectedBarberId() === barber.id"
+                        [class.bg-zinc-900]="selectedBarberId() !== barber.id"
+                        [class.border-white_5]="selectedBarberId() !== barber.id"
+                        (click)="selectAdminBarber(barber.id)"
+                      >
+                        <p class="text-sm font-extrabold" [class.text-indigo-400]="selectedBarberId() === barber.id" [class.text-zinc-300]="selectedBarberId() !== barber.id">{{ barber.name }}</p>
+                        <p class="text-[10px] text-zinc-500 mt-1">{{ barber.email }}</p>
+                      </div>
+                    }
+                  </div>
+
+                  <!-- Time Off Management -->
+                  <div class="w-full md:w-2/3 space-y-6">
+                    <!-- Add Time Off Form -->
+                    <div class="card p-5 border border-white/5 bg-zinc-900/30 rounded-2xl">
+                      <h4 class="text-zinc-100 font-extrabold mb-4 border-b border-white/5 pb-2">Add Time-Off (Vacation/Sick)</h4>
+                      <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2">Start Date</label>
+                          <input type="date" [ngModel]="newTimeOffStartDate()" (ngModelChange)="newTimeOffStartDate.set($event)" class="search-input w-full p-2.5 rounded-xl text-sm bg-zinc-950 border border-white/10 text-white" />
+                        </div>
+                        <div>
+                          <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2">End Date</label>
+                          <input type="date" [ngModel]="newTimeOffEndDate()" (ngModelChange)="newTimeOffEndDate.set($event)" class="search-input w-full p-2.5 rounded-xl text-sm bg-zinc-950 border border-white/10 text-white" />
+                        </div>
+                      </div>
+                      <div class="mb-5">
+                        <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2">Reason</label>
+                        <input type="text" [ngModel]="newTimeOffReason()" (ngModelChange)="newTimeOffReason.set($event)" placeholder="e.g. Vacation" class="search-input w-full p-2.5 rounded-xl text-sm bg-zinc-950 border border-white/10 text-white" />
+                      </div>
+                      <button class="btn btn-submit w-full py-2.5" (click)="addTimeOff()">Save Time-Off</button>
+                    </div>
+
+                    <!-- Existing Time Off -->
+                    <div>
+                      <h4 class="text-zinc-400 text-xs font-bold uppercase tracking-wider mb-3">Scheduled Time-Off</h4>
+                      @if (timeOffs().length === 0) {
+                        <div class="text-center py-8 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20">
+                          <p class="text-xs text-zinc-500 font-light italic">No time-off scheduled.</p>
+                        </div>
+                      } @else {
+                        <div class="space-y-3">
+                          @for (to of timeOffs(); track to.id) {
+                            <div class="p-4 rounded-xl border border-white/5 bg-zinc-900/50 flex justify-between items-center">
+                              <div>
+                                <p class="text-sm font-bold text-rose-400">⛔ {{ to.startDate | date }} &rarr; {{ to.endDate | date }}</p>
+                                <p class="text-[11px] text-zinc-400 mt-1 font-light">{{ to.reason }}</p>
+                              </div>
+                            </div>
+                          }
+                        </div>
+                      }
+                    </div>
+                  </div>
+                </div>
+              </div>
+            }
           </div>
         </main>
       </div>

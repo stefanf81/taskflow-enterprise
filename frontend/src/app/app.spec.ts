@@ -19,6 +19,16 @@ describe('App Component Quality Assurance Suite', () => {
 
     fixture = TestBed.createComponent(App);
     app = fixture.componentInstance;
+    
+    // Seed the catalog store with mock data for testing
+    app['catalogStore'].services.set([
+      { id: 1, name: 'Classic Haircut', price: 25, durationMinutes: 30, category: 'hair', description: 'Desc' },
+      { id: 2, name: 'Modern Skin Fade', price: 30, durationMinutes: 45, category: 'hair', description: 'Desc' },
+      { id: 3, name: 'Beard Trim & Shave', price: 18, durationMinutes: 25, category: 'beard', description: 'Desc' },
+      { id: 4, name: 'Royal Hot Towel Shave', price: 22, durationMinutes: 30, category: 'beard', description: 'Desc' },
+      { id: 5, name: 'The Executive Package', price: 40, durationMinutes: 60, category: 'combo', description: 'Desc' }
+    ]);
+    
     fixture.detectChanges();
   });
 
@@ -64,7 +74,7 @@ describe('App Component Quality Assurance Suite', () => {
   it('should dynamically filter services based on category tabs', () => {
     // Default category 'all' should return all services
     app.setServiceCategory('all');
-    expect(app.filteredServices().length).toBe(app.services.length);
+    expect(app.filteredServices().length).toBe(app.services().length);
 
     // Filter by 'hair' category should return only haircut packages
     app.setServiceCategory('hair');

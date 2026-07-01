@@ -59,6 +59,37 @@ export interface LoginResponse {
   username: string;
 }
 
+export interface ServiceItem {
+  id: number;
+  name: string;
+  price: number;
+  durationMinutes: number;
+  category: string;
+  description: string;
+}
+
+export interface ServiceItemRequest {
+  name: string;
+  price: number;
+  durationMinutes: number;
+  category: string;
+  description: string;
+}
+
+export interface Barber {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+}
+
+export interface BarberTimeOff {
+  id?: number;
+  startDate: string;
+  endDate: string;
+  reason: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -66,6 +97,38 @@ export class TodoService {
   private readonly http = inject(HttpClient);
   private readonly apiUrl = '/api/v1/appointments';
   private readonly authUrl = '/api/v1/auth';
+  private readonly catalogUrl = '/api/v1/catalog';
+  private readonly barbersUrl = '/api/v1/barbers';
+
+  // --- Barbers & Time-Off API ---
+  getAllBarbers(): Observable<Barber[]> {
+    return this.http.get<Barber[]>(this.barbersUrl);
+  }
+
+  getTimeOff(barberId: number): Observable<BarberTimeOff[]> {
+    return this.http.get<BarberTimeOff[]>(`${this.barbersUrl}/${barberId}/time-off`);
+  }
+
+  addTimeOff(barberId: number, request: BarberTimeOff): Observable<BarberTimeOff> {
+    return this.http.post<BarberTimeOff>(`${this.barbersUrl}/${barberId}/time-off`, request);
+  }
+
+  // --- Service Catalog API ---
+  getAllServices(): Observable<ServiceItem[]> {
+    return this.http.get<ServiceItem[]>(this.catalogUrl);
+  }
+
+  createService(request: ServiceItemRequest): Observable<ServiceItem> {
+    return this.http.post<ServiceItem>(this.catalogUrl, request);
+  }
+
+  updateService(id: number, request: ServiceItemRequest): Observable<ServiceItem> {
+    return this.http.put<ServiceItem>(`${this.catalogUrl}/${id}`, request);
+  }
+
+  deleteService(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.catalogUrl}/${id}`);
+  }
 
   // Perform secure JWT login by posting to the authentication controller
   login(username: string, password: string): Observable<LoginResponse> {
