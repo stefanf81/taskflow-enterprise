@@ -174,6 +174,7 @@ Through exhaustive benchmarking, the application has been tuned for maximum Requ
 6.  **Asynchronous Logging**: Synchronous I/O locking has been eliminated by wrapping the Logback `FileAppender` inside an `AsyncAppender` with a massive non-blocking queue.
 7.  **Observability Taxonomy**: OpenTelemetry distributed tracing sampling was reduced from 100% to **10%** (`management.tracing.sampling.probability=0.1`), recovering peak RPS while retaining statistical observability.
 8.  **Local JVM Caching**: Read-heavy operations (e.g., retrieving busy slots) are annotated with `@Cacheable` and backed by **Caffeine** to prevent network/database exhaustion under heavy load.
+9.  **Upstream Connection Pooling (Nginx Keepalives)**: Configured a persistent TCP connection pool (`keepalive 64`) inside Nginx's proxy upstream block. Rather than tearing down the TCP connection after every single request, Nginx reuse connections, eliminating handshake latency entirely. This yielded a **7.1x increase in throughput (from 350 RPS to 2,505 RPS)** and slashed average proxy latency from 141.4ms to **19.8ms** during heavy end-to-end load tests.
 
 ---
 
