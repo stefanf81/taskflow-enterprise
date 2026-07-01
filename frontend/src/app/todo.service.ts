@@ -90,6 +90,15 @@ export interface BarberTimeOff {
   reason: string;
 }
 
+export interface NotificationItem {
+  id: number;
+  recipient: string;
+  type: string;
+  message: string;
+  sentAt: string;
+  status: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -99,6 +108,12 @@ export class TodoService {
   private readonly authUrl = '/api/v1/auth';
   private readonly catalogUrl = '/api/v1/catalog';
   private readonly barbersUrl = '/api/v1/barbers';
+  private readonly notificationsUrl = '/api/v1/notifications';
+
+  // --- Notifications API ---
+  getNotifications(): Observable<NotificationItem[]> {
+    return this.http.get<NotificationItem[]>(this.notificationsUrl);
+  }
 
   // --- Barbers & Time-Off API ---
   getAllBarbers(): Observable<Barber[]> {

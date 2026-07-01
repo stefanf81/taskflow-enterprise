@@ -21,6 +21,8 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     
     Appointment findByIdempotencyKey(String idempotencyKey);
     
+    java.util.List<Appointment> findByBookingDateAndReminderSentFalseAndStatus(LocalDate date, String status);
+    
     @Query("SELECT COUNT(a) > 0 FROM Appointment a WHERE a.id = :id AND LOWER(a.customerEmail) = LOWER(:email)")
     boolean existsByIdAndCustomerEmailIgnoreCase(@Param("id") Long id, @Param("email") String email);
 

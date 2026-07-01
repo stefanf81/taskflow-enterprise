@@ -12,6 +12,7 @@ import { TodoService, AppointmentItem, AppointmentStats } from './todo.service';
 import { AppointmentStore } from './appointment.store';
 import { ServiceCatalogStore } from './service-catalog.store';
 import { BarberStore } from './barber.store';
+import { NotificationStore } from './notification.store';
 import { StylistCard } from './components/stylist-card/stylist-card';
 import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
@@ -29,6 +30,7 @@ export class App implements OnInit {
   private readonly store = inject(AppointmentStore);
   private readonly catalogStore = inject(ServiceCatalogStore);
   private readonly barberStore = inject(BarberStore);
+  private readonly notificationStore = inject(NotificationStore);
 
   // Authentication State delegated to the Store (Top-Tier DDD State management)
   readonly isLoggedIn = this.store.isLoggedIn;
@@ -217,12 +219,14 @@ export class App implements OnInit {
   }
 
   // Admin View State
-  readonly adminView = signal<'appointments' | 'services' | 'schedules'>('appointments');
+  readonly adminView = signal<'appointments' | 'services' | 'schedules' | 'notifications'>('appointments');
 
-  setAdminView(view: 'appointments' | 'services' | 'schedules'): void {
+  setAdminView(view: 'appointments' | 'services' | 'schedules' | 'notifications'): void {
     this.adminView.set(view);
     if (view === 'schedules') {
       this.barberStore.loadBarbers();
+    } else if (view === 'notifications') {
+      this.notificationStore.loadNotifications();
     }
   }
 
@@ -287,6 +291,10 @@ export class App implements OnInit {
   selectAdminBarber(id: number): void {
     this.barberStore.selectBarber(id);
   }
+
+  // --- Notification Outbox Admin ---
+  readonly notificationsList = this.notificationStore.notifications;
+}
   onLogout(): void {
     this.store.onLogout();
     this.showSuccess('Admin logged out successfully.');

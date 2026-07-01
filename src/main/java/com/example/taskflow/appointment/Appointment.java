@@ -68,6 +68,9 @@ public class Appointment {
     @Column(nullable = false, length = 50)
     private String status = "PENDING";
 
+    @Column(name = "reminder_sent", nullable = false)
+    private Boolean reminderSent = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -187,6 +190,14 @@ public class Appointment {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public Boolean getReminderSent() {
+        return reminderSent;
+    }
+
+    public void setReminderSent(Boolean reminderSent) {
+        this.reminderSent = reminderSent;
     }
 
     public LocalDateTime getCreatedAt() {
