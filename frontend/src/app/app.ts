@@ -2,22 +2,25 @@ import { Component, OnInit, signal, computed, inject, ChangeDetectionStrategy } 
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TodoService, AppointmentItem, AppointmentStats } from './todo.service';
+import { AppointmentStore } from './appointment.store';
+import { StylistCard } from './components/stylist-card/stylist-card';
 import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, StylistCard],
   templateUrl: './app.html',
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class App implements OnInit {
   private readonly todoService = inject(TodoService);
+  private readonly store = inject(AppointmentStore);
 
-  // Authentication State
-  readonly isLoggedIn = signal<boolean>(!!sessionStorage.getItem('auth_token'));
+  // Authentication State delegated to the Store (Top-Tier DDD State management)
+  readonly isLoggedIn = this.store.isLoggedIn;
   showAdminLoginModal = false; // Toggles Admin Login Modal
   loginUsername = '';
   loginPassword = '';
@@ -31,34 +34,34 @@ export class App implements OnInit {
   readonly bookingTime = signal<string>('09:00');
   readonly bookingService = signal<string>('Classic Haircut');
 
-  // Core Admin Reactive States (Signals)
-  readonly appointments = signal<AppointmentItem[]>([]);
+  // Core Admin Reactive States delegated to the Store
+  readonly appointments = this.store.appointments;
   readonly searchQuery = signal<string>('');
   readonly selectedFilter = signal<string>('all');
   
-  // Pagination State (Signals)
-  readonly currentPage = signal<number>(0);
-  readonly totalPages = signal<number>(1);
-  readonly totalElements = signal<number>(0);
-  readonly pageSize = 50;
+  // Pagination State delegated to the Store
+  readonly currentPage = this.store.currentPage;
+  readonly totalPages = this.store.totalPages;
+  readonly totalElements = this.store.totalElements;
+  readonly pageSize = this.store.pageSize;
 
-  // Global Dashboard Stats (Signal)
-  readonly stats = signal<AppointmentStats>({ total: 0, pending: 0, approved: 0, denied: 0, overdue: 0, progress: 0, approvedRevenue: 0 });
+  // Global Dashboard Stats delegated to the Store
+  readonly stats = this.store.stats;
 
-  // Alerts & Loading State (Signals)
-  readonly errorMessage = signal<string | null>(null);
-  readonly successMessage = signal<string | null>(null);
-  readonly isSubmitting = signal<boolean>(false);
+  // Alerts & Loading State delegated to the Store
+  readonly errorMessage = this.store.errorMessage;
+  readonly successMessage = this.store.successMessage;
+  readonly isSubmitting = this.store.isSubmitting;
 
   // Dynamic Client-Side States & Filters
   readonly selectedCategory = signal<string>('all');
-  readonly busySlots = signal<string[]>([]);
+  readonly busySlots = this.store.busySlots;
   readonly activeStep = signal<number>(1);
   readonly activeFaq = signal<number | null>(null);
 
   // SOTA Calendar Guards, Loaders & Self-Service Signals
   readonly todayStr = new Date().toISOString().split('T')[0];
-  readonly isCheckingSlots = signal<boolean>(false);
+  readonly isCheckingSlots = this.store.isCheckingSlots;
   readonly serviceSearchQuery = signal<string>('');
   readonly showReceiptModal = signal<boolean>(false);
   readonly lastBookedAppointment = signal<any | null>(null);
@@ -182,13 +185,9 @@ export class App implements OnInit {
       });
   }
 
-  // Handle Admin Logout
+  // Handle Admin Logout delegated to the Store
   onLogout(): void {
-    sessionStorage.removeItem('auth_token');
-    this.isLoggedIn.set(false);
-    this.appointments.set([]);
-    this.stats.set({ total: 0, pending: 0, approved: 0, denied: 0, overdue: 0, progress: 0, approvedRevenue: 0 });
-    this.errorMessage.set(null);
+    this.store.onLogout();
     this.showSuccess('Admin logged out successfully.');
   }
 
@@ -232,36 +231,9 @@ export class App implements OnInit {
       });
   }
 
-  // Load Paginated Bookings from Backend (Admin Only)
+  // Load Paginated Bookings from Backend (Delegated to the Store)
   loadAppointments(): void {
-    if (!this.isLoggedIn()) return;
-
-    this.todoService.getAllAppointments(this.selectedFilter(), this.searchQuery(), this.currentPage(), this.pageSize)
-      .pipe(
-        catchError(err => {
-          if (err.status === 401) {
-            this.onLogout();
-            this.errorMessage.set('Session expired. Please log in again.');
-          } else {
-            this.errorMessage.set('Could not connect to the backend server. Please ensure the Spring Boot API is running.');
-          }
-          console.error('API Error:', err);
-          return of({
-            page: { content: [], totalPages: 1, totalElements: 0, size: this.pageSize, number: 0 },
-            stats: { total: 0, pending: 0, approved: 0, denied: 0, overdue: 0, progress: 0, approvedRevenue: 0 }
-          });
-        })
-      )
-      .subscribe(data => {
-        this.appointments.set(data.page.content);
-        this.stats.set(data.stats);
-        this.totalPages.set(data.page.totalPages);
-        this.totalElements.set(data.page.totalElements);
-        
-        if (data.page.content.length > 0 && this.errorMessage() && this.errorMessage()!.startsWith('Could not connect')) {
-          this.errorMessage.set(null);
-        }
-      });
+    this.store.loadAppointments(this.selectedFilter(), this.searchQuery());
   }
 
   // Approve Booking

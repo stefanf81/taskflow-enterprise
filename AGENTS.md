@@ -53,6 +53,11 @@ KUBECONFIG=k3d-kubeconfig.yaml kubectl get pods -n taskflow
 ## Key Conventions
 
 - **DB**: H2 in dev/test, PostgreSQL in prod (docker-compose / K8s). Flyway handles migrations — never use `ddl-auto=update`. All profiles use `ddl-auto=validate`.
+- **Container Hardening & Zero-Trust**:
+  - **Numeric UIDs**: Backend containers are configured with a hardcoded, unprivileged numeric UID (`10001:10001`) to comply with strict Kubernetes Pod Security Standards (PSS).
+  - **Zero-Trust Networks**: `docker-compose.yml` isolates the DB and Cache on the `backend-tier` network. The Nginx reverse proxy is on the `frontend-tier`. The backend bridges both. The frontend cannot physically talk to the database.
+  - **Read-Only Root**: Containers mount read-only filesystems with ephemeral directories mounted as `tmpfs` (e.g., `/tmp`, `/var/cache/nginx`), preventing runtime binary tampering.
+  - **Dropped Capabilities**: All services completely drop kernel privileges (`cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`).
 - **OSIV is off** (`spring.jpa.open-in-view=false`) — connections return to Hikari pool immediately after service methods.
 - **Auth**: Stateless JWT (Asymmetric RSA-2048 signing via OAuth2 Resource Server). Frontend stores token in `sessionStorage`, `auth.interceptor.ts` attaches `Authorization: Bearer` to every request. `/api/v1/auth/**` is the only public endpoint path.
 - **Frontend uses Angular 22 Signals** (no Zone.js digest loops). Styles use Tailwind with custom `gold`/`obsidian` color palette.
