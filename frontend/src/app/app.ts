@@ -14,6 +14,7 @@ import { ServiceCatalogStore } from './service-catalog.store';
 import { BarberStore } from './barber.store';
 import { NotificationStore } from './notification.store';
 import { ReviewStore } from './review.store';
+import { CustomerStore } from './customer.store';
 import { StylistCard } from './components/stylist-card/stylist-card';
 import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
@@ -33,12 +34,17 @@ export class App implements OnInit {
   private readonly barberStore = inject(BarberStore);
   private readonly notificationStore = inject(NotificationStore);
   private readonly reviewStore = inject(ReviewStore);
+  readonly customerStore = inject(CustomerStore);
 
   // Authentication State delegated to the Store (Top-Tier DDD State management)
   readonly isLoggedIn = this.store.isLoggedIn;
-  showAdminLoginModal = false; // Toggles Admin Login Modal
+  readonly userRole = signal<string>(sessionStorage.getItem('auth_role') || '');
+  showAdminLoginModal = false; // Toggles Admin/Customer Login Modal
   loginUsername = '';
   loginPassword = '';
+  isRegisterMode = false;
+  registerFullName = '';
+  registerPhone = '';
 
   // Client-Side Guest Booking Form State (Signals)
   readonly bookingName = signal<string>('');
@@ -199,13 +205,18 @@ export class App implements OnInit {
     }
   }
 
-  // Handle Admin Portal Login via JWT endpoint
+  // Handle Admin/Customer Portal Login via JWT endpoint
   onLogin(): void {
+    if (this.isRegisterMode) {
+      this.onRegister();
+      return;
+    }
+
     const user = this.loginUsername.trim();
     const pass = this.loginPassword.trim();
 
     if (!user || !pass) {
-      this.errorMessage.set('Username and password are required.');
+      this.errorMessage.set('Email and password are required.');
       return;
     }
 
@@ -216,20 +227,50 @@ export class App implements OnInit {
       next: (response) => {
         const tokenValue = 'Bearer ' + response.token;
         sessionStorage.setItem('auth_token', tokenValue);
+        sessionStorage.setItem('auth_role', response.role);
         this.isLoggedIn.set(true);
+        this.userRole.set(response.role);
         this.isSubmitting.set(false);
         this.showAdminLoginModal = false;
         this.errorMessage.set(null);
 
         this.loginUsername = '';
         this.loginPassword = '';
-        this.showSuccess('Welcome back, Owner! Admin session started.');
+        this.showSuccess(response.role === 'ROLE_ADMIN' ? 'Welcome back, Owner!' : 'Welcome back!');
         this.loadAppointments(); // Load bookings
       },
       error: (err) => {
-        this.errorMessage.set('Invalid admin credentials. Please try again.');
+        this.errorMessage.set('Invalid credentials. Please try again.');
         this.isSubmitting.set(false);
         console.error('Authentication error:', err);
+      },
+    });
+  }
+
+  onRegister(): void {
+    const email = this.loginUsername.trim();
+    const pass = this.loginPassword.trim();
+    const name = this.registerFullName.trim();
+    const phone = this.registerPhone.trim();
+
+    if (!email || !pass || !name) {
+      this.errorMessage.set('Name, email, and password are required.');
+      return;
+    }
+
+    this.isSubmitting.set(true);
+    this.errorMessage.set(null);
+
+    this.todoService.register({ email, password: pass, fullName: name, phone }).subscribe({
+      next: () => {
+        this.isRegisterMode = false;
+        this.isSubmitting.set(false);
+        this.showSuccess('Account created! You can now log in.');
+        this.errorMessage.set(null);
+      },
+      error: (err) => {
+        this.errorMessage.set(err.error?.message || 'Failed to create account.');
+        this.isSubmitting.set(false);
       },
     });
   }
@@ -314,7 +355,9 @@ export class App implements OnInit {
   // Handle Admin Logout delegated to the Store
   onLogout(): void {
     this.store.onLogout();
-    this.showSuccess('Admin logged out successfully.');
+    this.userRole.set('');
+    sessionStorage.removeItem('auth_role');
+    this.showSuccess('Logged out successfully.');
   }
 
   // Submit Guest Booking (Client Calendar Interface)
@@ -365,7 +408,11 @@ export class App implements OnInit {
 
   // Load Paginated Bookings from Backend (Delegated to the Store)
   loadAppointments(): void {
-    this.store.loadAppointments(this.selectedFilter(), this.searchQuery());
+    if (this.userRole() === 'ROLE_CUSTOMER') {
+      this.customerStore.loadAppointments();
+    } else {
+      this.store.loadAppointments(this.selectedFilter(), this.searchQuery());
+    }
   }
 
   // Approve Booking

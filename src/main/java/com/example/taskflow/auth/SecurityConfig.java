@@ -117,12 +117,20 @@ public class SecurityConfig {
     }
 
     @Bean
-    public UserDetailsService userDetailsService() {
-        UserDetails admin = User.withUsername(adminUsername)
-            .password(passwordEncoder().encode(adminPassword))
-            .roles("ADMIN")
-            .build();
-        return new org.springframework.security.provisioning.InMemoryUserDetailsManager(admin);
+    public org.springframework.boot.CommandLineRunner initAdminUser(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        return args -> {
+            if (userRepository.findByEmailIgnoreCase(adminUsername).isEmpty()) {
+                AppUser admin = new AppUser(
+                    adminUsername,
+                    passwordEncoder.encode(adminPassword),
+                    "Shop Owner",
+                    "",
+                    "ROLE_ADMIN"
+                );
+                userRepository.save(admin);
+                logger.info("Default admin user created successfully.");
+            }
+        };
     }
 
     @Bean

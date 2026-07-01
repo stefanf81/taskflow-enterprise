@@ -57,6 +57,14 @@ export interface AppointmentDashboardResponse {
 export interface LoginResponse {
   token: string;
   username: string;
+  role: string;
+}
+
+export interface RegisterRequest {
+  fullName: string;
+  email: string;
+  password: string;
+  phone: string;
 }
 
 export interface ServiceItem {
@@ -121,6 +129,21 @@ export class TodoService {
   private readonly barbersUrl = '/api/v1/barbers';
   private readonly notificationsUrl = '/api/v1/notifications';
   private readonly reviewsUrl = '/api/v1/reviews';
+  private readonly customerUrl = '/api/v1/customer';
+
+  // --- Customer Accounts & Auth ---
+  register(request: RegisterRequest): Observable<void> {
+    return this.http.post<void>(`${this.authUrl}/register`, request);
+  }
+
+  getCustomerAppointments(page = 0, size = 10): Observable<{ content: AppointmentItem[], totalPages: number }> {
+    const params = new HttpParams().set('page', page.toString()).set('size', size.toString());
+    return this.http.get<{ content: AppointmentItem[], totalPages: number }>(`${this.customerUrl}/appointments`, { params });
+  }
+
+  cancelCustomerAppointment(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.customerUrl}/appointments/${id}`);
+  }
 
   // --- Reviews API ---
   getBarberRatings(): Observable<BarberRating[]> {

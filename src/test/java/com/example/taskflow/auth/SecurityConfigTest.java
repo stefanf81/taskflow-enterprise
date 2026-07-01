@@ -102,6 +102,5 @@ class SecurityConfigTest {
         
         assertNotNull(config.passwordEncoder());
         assertNotNull(config.webSecurityCustomizer());
-        assertNotNull(config.userDetailsService());
     }
 }
