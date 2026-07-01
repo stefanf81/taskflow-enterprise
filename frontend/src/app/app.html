@@ -35,8 +35,7 @@
             />
           </svg>
           <span class="text-xl font-extrabold tracking-tight text-zinc-100 uppercase"
-            >BarberFlow
-            <span class="text-indigo-400 font-light lowercase text-base">pro</span></span
+            >TaskFlow <span class="text-indigo-400 font-light lowercase text-base">pro</span></span
           >
         </div>
         <div class="flex items-center gap-4">
@@ -386,7 +385,6 @@
                     (click)="setServiceCategory('all')"
                     [class.bg-zinc-950]="selectedCategory() === 'all'"
                     [class.text-indigo-400]="selectedCategory() === 'all'"
-                    
                     class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
                   >
                     All
@@ -396,7 +394,6 @@
                     (click)="setServiceCategory('hair')"
                     [class.bg-zinc-950]="selectedCategory() === 'hair'"
                     [class.text-indigo-400]="selectedCategory() === 'hair'"
-                    
                     class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
                   >
                     Hair
@@ -406,7 +403,6 @@
                     (click)="setServiceCategory('beard')"
                     [class.bg-zinc-950]="selectedCategory() === 'beard'"
                     [class.text-indigo-400]="selectedCategory() === 'beard'"
-                    
                     class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
                   >
                     Beards
@@ -416,7 +412,6 @@
                     (click)="setServiceCategory('combo')"
                     [class.bg-zinc-950]="selectedCategory() === 'combo'"
                     [class.text-indigo-400]="selectedCategory() === 'combo'"
-                    
                     class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
                   >
                     Combos
@@ -986,7 +981,7 @@
       <!-- Guest Footer -->
       <footer class="mt-20 pt-10 border-t border-white/10 text-center">
         <p class="text-xs text-zinc-500 font-light leading-normal">
-          🔒 BarberFlow platform is 100% secured utilizing industry standard SSL/TLS and stateless
+          🔒 TaskFlow platform is 100% secured utilizing industry standard SSL/TLS and stateless
           RSA-2048 OAuth2 encryption protocols.
         </p>
       </footer>
@@ -1197,7 +1192,7 @@
           </svg>
           <div>
             <h1 class="text-xl font-extrabold text-white uppercase leading-none">
-              BarberFlow Owner Panel
+              TaskFlow Owner Panel
             </h1>
             <p class="text-xs text-zinc-500 mt-1.5 font-light">
               Secure Appointment Approval and Financial Analytics System
@@ -1437,7 +1432,6 @@
                   (click)="setFilter('all')"
                   [class.bg-zinc-950]="selectedFilter() === 'all'"
                   [class.text-indigo-400]="selectedFilter() === 'all'"
-                  
                   class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100"
                 >
                   All
@@ -1446,7 +1440,6 @@
                   (click)="setFilter('pending')"
                   [class.bg-zinc-950]="selectedFilter() === 'pending'"
                   [class.text-indigo-400]="selectedFilter() === 'pending'"
-                  
                   class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100"
                 >
                   Pending
@@ -1455,7 +1448,6 @@
                   (click)="setFilter('approved')"
                   [class.bg-zinc-950]="selectedFilter() === 'approved'"
                   [class.text-indigo-400]="selectedFilter() === 'approved'"
-                  
                   class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100"
                 >
                   Approved
@@ -1464,7 +1456,6 @@
                   (click)="setFilter('overdue')"
                   [class.bg-zinc-950]="selectedFilter() === 'overdue'"
                   [class.text-indigo-400]="selectedFilter() === 'overdue'"
-                  
                   class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100 tab-btn tab-danger"
                 >
                   Overdue

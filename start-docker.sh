@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =========================================================================================
-# BarberFlow Docker Compose Startup Script
+# TaskFlow Docker Compose Startup Script
 # This script builds the optimized Docker images, runs static security analysis,
 # and spins up the entire application stack in isolated Docker networks.
 # =========================================================================================
@@ -16,7 +16,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd "$SCRIPT_DIR"
 
 echo "============================================"
-echo "🚀 Starting BarberFlow Full-Stack App in Docker"
+echo "🚀 Starting TaskFlow Full-Stack App in Docker"
 echo "============================================"
 
 # =========================================================================================
@@ -62,7 +62,7 @@ docker compose up -d
 
 echo ""
 echo "================================================="
-echo "🎉 BarberFlow is successfully running in containers!"
+echo "🎉 TaskFlow is successfully running in containers!"
 echo "================================================="
 echo "🖥️  Frontend       : http://localhost:4200"
 echo "🔌 Backend API     : http://localhost:8080/api/v1/appointments"

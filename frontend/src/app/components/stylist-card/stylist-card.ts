@@ -43,7 +43,7 @@ export interface StylistProfile {
         </p>
       </div>
     </div>
-  `
+  `,
 })
 export class StylistCard {
   // Use Angular 22 Signal-based inputs & outputs

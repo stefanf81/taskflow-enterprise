@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =========================================================================================
-# BarberFlow Docker Compose Teardown Script
+# TaskFlow Docker Compose Teardown Script
 # Safely spins down the container orchestration, cleans up networks, and preserves volumes.
 # =========================================================================================
 
@@ -10,7 +10,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd "$SCRIPT_DIR"
 
 echo "=========================================="
-echo "🛑 Stopping BarberFlow Full-Stack App"
+echo "🛑 Stopping TaskFlow Full-Stack App"
 echo "=========================================="
 
 # Check for Docker daemon to prevent confusing Compose errors

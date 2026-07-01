@@ -2,7 +2,7 @@
 
 ## Project Structure
 
-- **Backend**: Spring Boot 3.5.3 / OpenJDK 21 / Gradle — `src/main/java/com/example/todoapi/`
+- **Backend**: Spring Boot 3.5.3 / OpenJDK 21 / Gradle — `src/main/java/com/example/taskflow/`
   - High-Performance Tunings: Spring Boot AOT enabled, ParallelGC (`-XX:+UseParallelGC`, `-XX:ParallelGCThreads=10`, `-XX:+UseSIMDForMemoryOps`), 1GB fixed heap, Virtual Threads disabled (Platform threads used), Jackson Blackbird, Asynchronous Logging, OpenTelemetry 10% sampling, Caffeine local cache.
   - Packages: `controller`, `service`, `repository`, `dto`, `security`, `config`, `exception`, `model`
   - Entry point: `TodoapiApplication.java`
@@ -63,7 +63,7 @@ KUBECONFIG=k3d-kubeconfig.yaml kubectl get pods -n taskflow
 - **Frontend uses Angular 22 Signals** (no Zone.js digest loops). Styles use Tailwind with custom `gold`/`obsidian` color palette.
 - **Prettier** is the formatter (100 char width, single quotes). Run `npx prettier --write <file>` in `frontend/`.
 - **Testcontainers** are used for PostgreSQL integration tests. They require Docker to be running.
-- **ArchUnit** enforces package-level architecture constraints (`src/test/java/com/example/todoapi/architecture/`).
+- **ArchUnit** enforces package-level architecture constraints (`src/test/java/com/example/taskflow/architecture/`).
 - **Default credentials**: `admin` / `admin-password` (overridden by `SPRING_SECURITY_PASSWORD` env var).
 - **Nginx** frontend container runs on unprivileged port 8080 (mapped from host 4200).
 

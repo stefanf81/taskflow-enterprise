@@ -171,7 +171,7 @@ kubectl rollout status deployment/taskflow-backend -n taskflow --timeout=120s
 kubectl rollout status deployment/taskflow-frontend -n taskflow --timeout=120s
 
 echo "=========================================================="
-echo "🎉 BarberFlow successfully deployed in Kubernetes cluster!"
+echo "🎉 TaskFlow successfully deployed in Kubernetes cluster!"
 echo "=========================================================="
 echo "🖥️  Frontend          : http://localhost:4200"
 echo "🔌 Backend API        : http://localhost:8080/api/v1/appointments"

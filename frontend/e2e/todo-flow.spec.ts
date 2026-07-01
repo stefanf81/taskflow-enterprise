@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
  * connects to Nginx/Angular, interacts with DOM nodes, authenticates against Spring Security,
  * and performs database operations, ensuring the entire system operates harmoniously.
  */
-test.describe('BarberFlow Full-Stack Portal E2E Flow', () => {
+test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
 
   test.beforeEach(async ({ page }) => {
     // Capture browser console logs for robust E2E debugging
@@ -21,7 +21,7 @@ test.describe('BarberFlow Full-Stack Portal E2E Flow', () => {
   test('should display barber landing page and prevent unauthorized owner access by default', async ({ page }) => {
     // 1. Confirm landing page elements are visible
     await expect(page.locator('h1').first()).toContainText('Luxury Barber Scheduler');
-    await expect(page.locator('nav')).toContainText('BarberFlow');
+    await expect(page.locator('nav')).toContainText('TaskFlow');
     await expect(page.locator('button:has-text("Owner Portal")')).toBeVisible();
   });
 
@@ -86,7 +86,7 @@ test.describe('BarberFlow Full-Stack Portal E2E Flow', () => {
     await page.click('.modal-card button[type="submit"]');
 
     // 7. Assert dashboard loaded successfully
-    await expect(page.locator('h1')).toContainText('BarberFlow Owner Panel');
+    await expect(page.locator('h1')).toContainText('TaskFlow Owner Panel');
     await expect(page.locator('.alert-success')).toContainText('Welcome back, Owner!');
 
     // 8. Locate our requested appointment in the bookings list

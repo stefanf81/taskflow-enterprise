@@ -22,7 +22,7 @@ describe('App Component Quality Assurance Suite', () => {
     fixture.detectChanges();
   });
 
-  it('should compile and bootstrap the BarberFlow component cleanly', () => {
+  it('should compile and bootstrap the TaskFlow component cleanly', () => {
     expect(app).toBeTruthy();
   });
 
@@ -32,7 +32,7 @@ describe('App Component Quality Assurance Suite', () => {
     
     // Look for landing header and title
     expect(compiled.querySelector('header')).toBeTruthy();
-    expect(compiled.querySelector('nav')?.textContent).toContain('BarberFlow');
+    expect(compiled.querySelector('nav')?.textContent).toContain('TaskFlow');
     expect(compiled.querySelector('section')).toBeTruthy();
   });
 

@@ -1,4 +1,11 @@
-import { Component, OnInit, signal, computed, inject, ChangeDetectionStrategy } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  signal,
+  computed,
+  inject,
+  ChangeDetectionStrategy,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TodoService, AppointmentItem, AppointmentStats } from './todo.service';
@@ -13,7 +20,7 @@ import { of } from 'rxjs';
   imports: [CommonModule, FormsModule, StylistCard],
   templateUrl: './app.html',
   styleUrl: './app.css',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class App implements OnInit {
   private readonly todoService = inject(TodoService);
@@ -38,7 +45,7 @@ export class App implements OnInit {
   readonly appointments = this.store.appointments;
   readonly searchQuery = signal<string>('');
   readonly selectedFilter = signal<string>('all');
-  
+
   // Pagination State delegated to the Store
   readonly currentPage = this.store.currentPage;
   readonly totalPages = this.store.totalPages;
@@ -70,41 +77,95 @@ export class App implements OnInit {
 
   // Stylist Profiles with Star Ratings
   readonly stylistProfiles = [
-    { name: 'Alex the Barber', title: 'Master Stylist', rating: '4.9 ★', reviews: '142 reviews', specialty: 'Classic Scissor Cuts' },
-    { name: 'Sara the Stylist', title: 'Skin Fade Expert', rating: '5.0 ★', reviews: '198 reviews', specialty: 'Skin Fades & Tapers' },
-    { name: 'Marcus Master Blade', title: 'Director Barber', rating: '4.8 ★', reviews: '240 reviews', specialty: 'Razor Shaves & Beards' }
+    {
+      name: 'Alex the Barber',
+      title: 'Master Stylist',
+      rating: '4.9 ★',
+      reviews: '142 reviews',
+      specialty: 'Classic Scissor Cuts',
+    },
+    {
+      name: 'Sara the Stylist',
+      title: 'Skin Fade Expert',
+      rating: '5.0 ★',
+      reviews: '198 reviews',
+      specialty: 'Skin Fades & Tapers',
+    },
+    {
+      name: 'Marcus Master Blade',
+      title: 'Director Barber',
+      rating: '4.8 ★',
+      reviews: '240 reviews',
+      specialty: 'Razor Shaves & Beards',
+    },
   ];
 
   // Preset Options for Booking Form
-  readonly barbers = ['No Preference (First Available)', 'Alex the Barber', 'Sara the Stylist', 'Marcus Master Blade'];
+  readonly barbers = [
+    'No Preference (First Available)',
+    'Alex the Barber',
+    'Sara the Stylist',
+    'Marcus Master Blade',
+  ];
   readonly timeSlots = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'];
   readonly services = [
-    { name: 'Classic Haircut', price: 25, duration: 30, category: 'hair', desc: 'Precision cut tailored to your head shape, complete with razor neck cleanup and premium styling.' },
-    { name: 'Modern Skin Fade', price: 30, duration: 45, category: 'hair', desc: 'Sleek blended skin fade with a crisp straight razor lineup and clay texturization.' },
-    { name: 'Beard Trim & Shave', price: 18, duration: 25, category: 'beard', desc: 'Detail beard lineup, hot steam towel treatment, aromatic pre-shave oil massage, and soothing trim.' },
-    { name: 'Royal Hot Towel Shave', price: 22, duration: 30, category: 'beard', desc: 'Traditional lather shaving using a straight razor blade, three rounds of steam towels, and cold-balm massage.' },
-    { name: 'The Executive Package', price: 40, duration: 60, category: 'combo', desc: 'The ultimate royal experience: Classic Haircut, full Beard Shave, facial wash, and essential-oil head massage.' }
+    {
+      name: 'Classic Haircut',
+      price: 25,
+      duration: 30,
+      category: 'hair',
+      desc: 'Precision cut tailored to your head shape, complete with razor neck cleanup and premium styling.',
+    },
+    {
+      name: 'Modern Skin Fade',
+      price: 30,
+      duration: 45,
+      category: 'hair',
+      desc: 'Sleek blended skin fade with a crisp straight razor lineup and clay texturization.',
+    },
+    {
+      name: 'Beard Trim & Shave',
+      price: 18,
+      duration: 25,
+      category: 'beard',
+      desc: 'Detail beard lineup, hot steam towel treatment, aromatic pre-shave oil massage, and soothing trim.',
+    },
+    {
+      name: 'Royal Hot Towel Shave',
+      price: 22,
+      duration: 30,
+      category: 'beard',
+      desc: 'Traditional lather shaving using a straight razor blade, three rounds of steam towels, and cold-balm massage.',
+    },
+    {
+      name: 'The Executive Package',
+      price: 40,
+      duration: 60,
+      category: 'combo',
+      desc: 'The ultimate royal experience: Classic Haircut, full Beard Shave, facial wash, and essential-oil head massage.',
+    },
   ];
 
   // SOTA Signals-based Reactive Computations
   readonly upcomingBookingDays = computed(() => {
     const days = [];
     const today = new Date();
-    
+
     let count = 0;
     let offset = 0;
     while (count < 7 && offset < 14) {
       const nextDate = new Date(today);
       nextDate.setDate(today.getDate() + offset);
-      
+
       const dayOfWeek = nextDate.getDay();
-      if (dayOfWeek !== 0) { // Skip Sundays since we are closed
+      if (dayOfWeek !== 0) {
+        // Skip Sundays since we are closed
         const dateStr = nextDate.toISOString().split('T')[0];
         days.push({
           dateStr: dateStr,
           dayName: nextDate.toLocaleDateString('en-US', { weekday: 'short' }),
           dayNum: nextDate.getDate(),
-          monthName: nextDate.toLocaleDateString('en-US', { month: 'short' })
+          monthName: nextDate.toLocaleDateString('en-US', { month: 'short' }),
         });
         count++;
       }
@@ -116,19 +177,21 @@ export class App implements OnInit {
   readonly filteredServices = computed(() => {
     const cat = this.selectedCategory();
     const query = this.serviceSearchQuery().trim().toLowerCase();
-    
+
     let list = this.services;
     if (cat !== 'all') {
-      list = list.filter(s => s.category === cat);
+      list = list.filter((s) => s.category === cat);
     }
     if (query) {
-      list = list.filter(s => s.name.toLowerCase().includes(query) || s.desc.toLowerCase().includes(query));
+      list = list.filter(
+        (s) => s.name.toLowerCase().includes(query) || s.desc.toLowerCase().includes(query),
+      );
     }
     return list;
   });
 
   readonly selectedServiceObj = computed(() => {
-    return this.services.find(s => s.name === this.bookingService());
+    return this.services.find((s) => s.name === this.bookingService());
   });
 
   readonly estimatedEndTime = computed(() => {
@@ -153,7 +216,7 @@ export class App implements OnInit {
   onLogin(): void {
     const user = this.loginUsername.trim();
     const pass = this.loginPassword.trim();
-    
+
     if (!user || !pass) {
       this.errorMessage.set('Username and password are required.');
       return;
@@ -162,27 +225,26 @@ export class App implements OnInit {
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
 
-    this.todoService.login(user, pass)
-      .subscribe({
-        next: (response) => {
-          const tokenValue = 'Bearer ' + response.token;
-          sessionStorage.setItem('auth_token', tokenValue);
-          this.isLoggedIn.set(true);
-          this.isSubmitting.set(false);
-          this.showAdminLoginModal = false;
-          this.errorMessage.set(null);
-          
-          this.loginUsername = '';
-          this.loginPassword = '';
-          this.showSuccess('Welcome back, Owner! Admin session started.');
-          this.loadAppointments(); // Load bookings
-        },
-        error: (err) => {
-          this.errorMessage.set('Invalid admin credentials. Please try again.');
-          this.isSubmitting.set(false);
-          console.error('Authentication error:', err);
-        }
-      });
+    this.todoService.login(user, pass).subscribe({
+      next: (response) => {
+        const tokenValue = 'Bearer ' + response.token;
+        sessionStorage.setItem('auth_token', tokenValue);
+        this.isLoggedIn.set(true);
+        this.isSubmitting.set(false);
+        this.showAdminLoginModal = false;
+        this.errorMessage.set(null);
+
+        this.loginUsername = '';
+        this.loginPassword = '';
+        this.showSuccess('Welcome back, Owner! Admin session started.');
+        this.loadAppointments(); // Load bookings
+      },
+      error: (err) => {
+        this.errorMessage.set('Invalid admin credentials. Please try again.');
+        this.isSubmitting.set(false);
+        console.error('Authentication error:', err);
+      },
+    });
   }
 
   // Handle Admin Logout delegated to the Store
@@ -196,7 +258,7 @@ export class App implements OnInit {
     const name = this.bookingName().trim();
     const email = this.bookingEmail().trim();
     const phone = this.bookingPhone().trim();
-    
+
     if (!name || !email || !phone || !this.bookingDate()) {
       this.errorMessage.set('Please fill out all required fields to secure your slot.');
       return;
@@ -212,23 +274,29 @@ export class App implements OnInit {
       barberName: this.bookingBarber(),
       bookingDate: this.bookingDate(),
       bookingTime: this.bookingTime(),
-      serviceType: this.bookingService()
+      serviceType: this.bookingService(),
     };
 
-    this.todoService.createAppointment(payload)
-      .subscribe({
-        next: (created) => {
-          this.isSubmitting.set(false);
-          this.lastBookedAppointment.set(created);
-          this.showReceiptModal.set(true);
-          this.resetBookingForm();
-        },
-        error: (err) => {
-          console.error("CREATE APPT ERROR STATUS:", err.status, "MESSAGE:", err.message, "BODY:", err.error);
-          this.errorMessage.set(err.error?.message || 'Failed to submit booking request.');
-          this.isSubmitting.set(false);
-        }
-      });
+    this.todoService.createAppointment(payload).subscribe({
+      next: (created) => {
+        this.isSubmitting.set(false);
+        this.lastBookedAppointment.set(created);
+        this.showReceiptModal.set(true);
+        this.resetBookingForm();
+      },
+      error: (err) => {
+        console.error(
+          'CREATE APPT ERROR STATUS:',
+          err.status,
+          'MESSAGE:',
+          err.message,
+          'BODY:',
+          err.error,
+        );
+        this.errorMessage.set(err.error?.message || 'Failed to submit booking request.');
+        this.isSubmitting.set(false);
+      },
+    });
   }
 
   // Load Paginated Bookings from Backend (Delegated to the Store)
@@ -238,42 +306,39 @@ export class App implements OnInit {
 
   // Approve Booking
   approveAppointment(id: number): void {
-    this.todoService.updateAppointmentStatus(id, 'APPROVED')
-      .subscribe({
-        next: () => {
-          this.showSuccess('Appointment APPROVED! Client notification email dispatched.');
-          this.loadAppointments();
-        },
-        error: () => this.errorMessage.set('Failed to approve appointment.')
-      });
+    this.todoService.updateAppointmentStatus(id, 'APPROVED').subscribe({
+      next: () => {
+        this.showSuccess('Appointment APPROVED! Client notification email dispatched.');
+        this.loadAppointments();
+      },
+      error: () => this.errorMessage.set('Failed to approve appointment.'),
+    });
   }
 
   // Deny Booking
   denyAppointment(id: number): void {
-    this.todoService.updateAppointmentStatus(id, 'DENIED')
-      .subscribe({
-        next: () => {
-          this.showSuccess('Appointment DECLINED. Client notification email dispatched.');
-          this.loadAppointments();
-        },
-        error: () => this.errorMessage.set('Failed to decline appointment.')
-      });
+    this.todoService.updateAppointmentStatus(id, 'DENIED').subscribe({
+      next: () => {
+        this.showSuccess('Appointment DECLINED. Client notification email dispatched.');
+        this.loadAppointments();
+      },
+      error: () => this.errorMessage.set('Failed to decline appointment.'),
+    });
   }
 
   // Delete/Cancel Booking
   deleteAppointment(id: number): void {
     if (confirm('Are you sure you want to permanently delete/cancel this booking?')) {
-      this.todoService.deleteAppointment(id)
-        .subscribe({
-          next: () => {
-            this.showSuccess('Booking permanently deleted.');
-            if (this.appointments().length === 1 && this.currentPage() > 0) {
-              this.currentPage.update(p => p - 1);
-            }
-            this.loadAppointments();
-          },
-          error: () => this.errorMessage.set('Failed to delete booking.')
-        });
+      this.todoService.deleteAppointment(id).subscribe({
+        next: () => {
+          this.showSuccess('Booking permanently deleted.');
+          if (this.appointments().length === 1 && this.currentPage() > 0) {
+            this.currentPage.update((p) => p - 1);
+          }
+          this.loadAppointments();
+        },
+        error: () => this.errorMessage.set('Failed to delete booking.'),
+      });
     }
   }
 
@@ -336,10 +401,16 @@ export class App implements OnInit {
       return !!this.bookingBarber();
     }
     if (step === 3) {
-      return !!this.bookingDate() && !!this.bookingTime() && !this.busySlots().includes(this.bookingTime());
+      return (
+        !!this.bookingDate() &&
+        !!this.bookingTime() &&
+        !this.busySlots().includes(this.bookingTime())
+      );
     }
     if (step === 4) {
-      return !!this.bookingName().trim() && !!this.bookingEmail().trim() && !!this.bookingPhone().trim();
+      return (
+        !!this.bookingName().trim() && !!this.bookingEmail().trim() && !!this.bookingPhone().trim()
+      );
     }
     return false;
   }
@@ -352,7 +423,7 @@ export class App implements OnInit {
 
   goToNextStep(): void {
     if (this.isStepValid(this.activeStep())) {
-      this.activeStep.update(s => s + 1);
+      this.activeStep.update((s) => s + 1);
       if (this.activeStep() === 3) {
         this.onBarberOrDateChange();
       }
@@ -361,7 +432,7 @@ export class App implements OnInit {
 
   goToPrevStep(): void {
     if (this.activeStep() > 1) {
-      this.activeStep.update(s => s - 1);
+      this.activeStep.update((s) => s - 1);
     }
   }
 
@@ -401,7 +472,7 @@ export class App implements OnInit {
   });
 
   readonly checkoutFee = computed(() => {
-    return 2.50; // standard SOTA platform fee
+    return 2.5; // standard SOTA platform fee
   });
 
   readonly checkoutTotal = computed(() => {
@@ -417,20 +488,21 @@ export class App implements OnInit {
     }
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
-    this.todoService.publicCancelAppointment(publicId, email)
-      .subscribe({
-        next: () => {
-          this.isSubmitting.set(false);
-          this.cancelBookingId = '';
-          this.cancelEmail = '';
-          this.showSuccess('🗑️ Reservation successfully cancelled and deleted from our calendar.');
-          this.onBarberOrDateChange();
-        },
-        error: (err) => {
-          this.errorMessage.set(err.error?.message || 'Verification failed. Please check your Booking Code and Email.');
-          this.isSubmitting.set(false);
-        }
-      });
+    this.todoService.publicCancelAppointment(publicId, email).subscribe({
+      next: () => {
+        this.isSubmitting.set(false);
+        this.cancelBookingId = '';
+        this.cancelEmail = '';
+        this.showSuccess('🗑️ Reservation successfully cancelled and deleted from our calendar.');
+        this.onBarberOrDateChange();
+      },
+      error: (err) => {
+        this.errorMessage.set(
+          err.error?.message || 'Verification failed. Please check your Booking Code and Email.',
+        );
+        this.isSubmitting.set(false);
+      },
+    });
   }
 
   onBarberOrDateChange(): void {
@@ -440,25 +512,27 @@ export class App implements OnInit {
       // 1. Sunday Lock Check
       const selectedDateObj = new Date(date);
       const dayOfWeek = selectedDateObj.getUTCDay();
-      if (dayOfWeek === 0) { // 0 represents Sunday
-        this.errorMessage.set('Our shop is closed on Sundays. Please select a Monday through Saturday slot!');
+      if (dayOfWeek === 0) {
+        // 0 represents Sunday
+        this.errorMessage.set(
+          'Our shop is closed on Sundays. Please select a Monday through Saturday slot!',
+        );
         this.bookingDate.set('');
         this.busySlots.set([]);
         return;
       }
 
       this.isCheckingSlots.set(true);
-      this.todoService.getBusySlots(barber, date)
-        .subscribe({
-          next: (busy) => {
-            this.busySlots.set(busy);
-            this.isCheckingSlots.set(false);
-          },
-          error: () => {
-            this.busySlots.set([]);
-            this.isCheckingSlots.set(false);
-          }
-        });
+      this.todoService.getBusySlots(barber, date).subscribe({
+        next: (busy) => {
+          this.busySlots.set(busy);
+          this.isCheckingSlots.set(false);
+        },
+        error: () => {
+          this.busySlots.set([]);
+          this.isCheckingSlots.set(false);
+        },
+      });
     } else {
       this.busySlots.set([]);
     }

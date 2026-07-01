@@ -58,7 +58,7 @@ Below is the complete sequence of an authenticated, paginated API query from the
 
 ### **Step 1: Client Landing & Route Security Guard**
 *   **Active Files**: `app.ts`, `app.html`, `auth.guard.ts`
-*   **The Flow**: When the user accesses the BarberFlow app, the Angular engine bootstraps. The functional `auth.guard.ts` verifies if a valid `auth_token` exists in the transient `sessionStorage`. If no token exists, the DOM is locked, and a beautiful, custom **Login Portal Card** is rendered in `app.html`.
+*   **The Flow**: When the user accesses the TaskFlow app, the Angular engine bootstraps. The functional `auth.guard.ts` verifies if a valid `auth_token` exists in the transient `sessionStorage`. If no token exists, the DOM is locked, and a beautiful, custom **Login Portal Card** is rendered in `app.html`.
 
 ### **Step 2: Authenticating & Issuing the Stateless JWT**
 *   **Active Files**: `app.ts` (Angular), `todo.service.ts` (Angular), `SecurityConfig.java` (Spring Boot), `AuthController.java` (Spring Boot), `TokenProvider.java` (Spring Boot)
@@ -116,7 +116,7 @@ Below is the complete sequence of an authenticated, paginated API query from the
 
 ## 🛡️ 4. Local DevSecOps & Platform Observability Ecosystem
 
-To shift security left, BarberFlow integrates a multi-layered local DevSecOps pipeline and platform-level observability directly inside your development and local Kubernetes (k3d) environments.
+To shift security left, TaskFlow integrates a multi-layered local DevSecOps pipeline and platform-level observability directly inside your development and local Kubernetes (k3d) environments.
 
 ### 🛠️ A. Build-Time Static Analysis & Linting
 

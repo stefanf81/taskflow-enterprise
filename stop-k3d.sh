@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =========================================================================================
-# BarberFlow K3d Teardown Script
+# TaskFlow K3d Teardown Script
 # Safely destroys the local Kubernetes cluster and removes all isolated configuration files.
 # =========================================================================================
 
