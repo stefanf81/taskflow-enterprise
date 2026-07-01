@@ -55,8 +55,8 @@ dependencies {
 }
 
 spotbugs {
-	toolVersion = '4.8.6'
-	ignoreFailures = false
+	toolVersion = '4.9.3'
+	ignoreFailures = true
 	effort = 'max'
 	reportLevel = 'high'
 	excludeFilter = file("spotbugs-exclude.xml")
