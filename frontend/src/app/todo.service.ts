@@ -119,7 +119,7 @@ export interface ReviewRequest {
 }
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class TodoService {
   private readonly http = inject(HttpClient);
@@ -136,9 +136,15 @@ export class TodoService {
     return this.http.post<void>(`${this.authUrl}/register`, request);
   }
 
-  getCustomerAppointments(page = 0, size = 10): Observable<{ content: AppointmentItem[], totalPages: number }> {
+  getCustomerAppointments(
+    page = 0,
+    size = 10,
+  ): Observable<{ content: AppointmentItem[]; totalPages: number }> {
     const params = new HttpParams().set('page', page.toString()).set('size', size.toString());
-    return this.http.get<{ content: AppointmentItem[], totalPages: number }>(`${this.customerUrl}/appointments`, { params });
+    return this.http.get<{ content: AppointmentItem[]; totalPages: number }>(
+      `${this.customerUrl}/appointments`,
+      { params },
+    );
   }
 
   cancelCustomerAppointment(id: number): Observable<void> {
@@ -194,7 +200,12 @@ export class TodoService {
     return this.http.post<LoginResponse>(`${this.authUrl}/login`, { username, password });
   }
 
-  getAllAppointments(statusFilter?: string, search?: string, page = 0, size = 10): Observable<AppointmentDashboardResponse> {
+  getAllAppointments(
+    statusFilter?: string,
+    search?: string,
+    page = 0,
+    size = 10,
+  ): Observable<AppointmentDashboardResponse> {
     let params = new HttpParams();
     if (statusFilter && statusFilter !== 'all') {
       params = params.set('status', statusFilter.toUpperCase());
@@ -216,9 +227,7 @@ export class TodoService {
   }
 
   getBusySlots(barberName: string, bookingDate: string): Observable<string[]> {
-    let params = new HttpParams()
-      .set('barberName', barberName)
-      .set('bookingDate', bookingDate);
+    let params = new HttpParams().set('barberName', barberName).set('bookingDate', bookingDate);
     return this.http.get<string[]>(`${this.apiUrl}/public/busy-slots`, { params });
   }
 

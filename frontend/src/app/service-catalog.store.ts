@@ -4,7 +4,7 @@ import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class ServiceCatalogStore {
   private readonly todoService = inject(TodoService);
@@ -15,16 +15,17 @@ export class ServiceCatalogStore {
 
   loadServices(): void {
     this.isLoading.set(true);
-    this.todoService.getAllServices()
+    this.todoService
+      .getAllServices()
       .pipe(
-        catchError(err => {
+        catchError((err) => {
           console.error('Failed to load services:', err);
           this.errorMessage.set('Could not load service catalog.');
           this.isLoading.set(false);
           return of([]);
-        })
+        }),
       )
-      .subscribe(data => {
+      .subscribe((data) => {
         this.services.set(data);
         this.isLoading.set(false);
       });
@@ -40,7 +41,7 @@ export class ServiceCatalogStore {
         console.error('Failed to add service:', err);
         this.errorMessage.set('Failed to add service.');
         this.isLoading.set(false);
-      }
+      },
     });
   }
 
@@ -54,7 +55,7 @@ export class ServiceCatalogStore {
         console.error('Failed to update service:', err);
         this.errorMessage.set('Failed to update service.');
         this.isLoading.set(false);
-      }
+      },
     });
   }
 
@@ -68,7 +69,7 @@ export class ServiceCatalogStore {
         console.error('Failed to delete service:', err);
         this.errorMessage.set('Failed to delete service.');
         this.isLoading.set(false);
-      }
+      },
     });
   }
 }

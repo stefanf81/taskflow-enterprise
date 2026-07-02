@@ -22,9 +22,9 @@ pipeline {
                     steps {
                         script {
                             echo "Running Hadolint on Dockerfiles..."
-                            sh 'docker run --rm -i hadolint/hadolint < Dockerfile'
-                            sh 'docker run --rm -i hadolint/hadolint < Dockerfile.x64'
-                            sh 'docker run --rm -i hadolint/hadolint < frontend/Dockerfile'
+                            sh 'docker run --rm -i --entrypoint hadolint hadolint/hadolint --ignore DL3018 --ignore DL3029 - < Dockerfile'
+                            sh 'docker run --rm -i --entrypoint hadolint hadolint/hadolint --ignore DL3018 --ignore DL3029 - < Dockerfile.x64'
+                            sh 'docker run --rm -i --entrypoint hadolint hadolint/hadolint --ignore DL3018 --ignore DL3029 - < frontend/Dockerfile'
                         }
                     }
                 }

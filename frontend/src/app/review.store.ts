@@ -4,7 +4,7 @@ import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class ReviewStore {
   private readonly todoService = inject(TodoService);
@@ -15,16 +15,17 @@ export class ReviewStore {
 
   loadRatings(): void {
     this.isLoading.set(true);
-    this.todoService.getBarberRatings()
+    this.todoService
+      .getBarberRatings()
       .pipe(
-        catchError(err => {
+        catchError((err) => {
           console.error('Failed to load barber ratings:', err);
           this.errorMessage.set('Could not load barber ratings.');
           this.isLoading.set(false);
           return of([]);
-        })
+        }),
       )
-      .subscribe(data => {
+      .subscribe((data) => {
         this.ratings.set(data);
         this.isLoading.set(false);
       });

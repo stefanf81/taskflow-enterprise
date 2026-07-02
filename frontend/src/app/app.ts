@@ -110,19 +110,19 @@ export class App implements OnInit {
 
   readonly stylistProfiles = computed(() => {
     const ratings = this.reviewStore.ratings();
-    return this.rawProfiles.map(p => {
-      const dbRating = ratings.find(r => r.barberName === p.name);
+    return this.rawProfiles.map((p) => {
+      const dbRating = ratings.find((r) => r.barberName === p.name);
       if (dbRating) {
         return {
           ...p,
           rating: `${dbRating.averageRating.toFixed(1)} ★`,
-          reviews: `${dbRating.reviewCount} reviews`
+          reviews: `${dbRating.reviewCount} reviews`,
         };
       }
       return {
         ...p,
         rating: '5.0 ★', // default
-        reviews: 'New'
+        reviews: 'New',
       };
     });
   });
@@ -276,7 +276,9 @@ export class App implements OnInit {
   }
 
   // Admin View State
-  readonly adminView = signal<'appointments' | 'services' | 'schedules' | 'notifications'>('appointments');
+  readonly adminView = signal<'appointments' | 'services' | 'schedules' | 'notifications'>(
+    'appointments',
+  );
 
   setAdminView(view: 'appointments' | 'services' | 'schedules' | 'notifications'): void {
     this.adminView.set(view);
@@ -304,7 +306,7 @@ export class App implements OnInit {
       price: this.newServicePrice()!,
       durationMinutes: this.newServiceDuration()!,
       category: this.newServiceCategory(),
-      description: this.newServiceDesc()
+      description: this.newServiceDesc(),
     });
     this.showSuccess('Service added to catalog.');
     this.newServiceName.set('');
@@ -324,7 +326,7 @@ export class App implements OnInit {
   readonly barbersList = this.barberStore.barbers;
   readonly timeOffs = this.barberStore.timeOffs;
   readonly selectedBarberId = this.barberStore.selectedBarberId;
-  
+
   readonly newTimeOffStartDate = signal('');
   readonly newTimeOffEndDate = signal('');
   readonly newTimeOffReason = signal('');
@@ -337,7 +339,7 @@ export class App implements OnInit {
     this.barberStore.addTimeOff({
       startDate: this.newTimeOffStartDate(),
       endDate: this.newTimeOffEndDate(),
-      reason: this.newTimeOffReason()
+      reason: this.newTimeOffReason(),
     });
     this.showSuccess('Time off added successfully.');
     this.newTimeOffStartDate.set('');
@@ -723,22 +725,27 @@ export class App implements OnInit {
     }
 
     this.isSubmitting.set(true);
-    this.todoService.submitReview(this.reviewPublicId.trim(), {
-      rating: this.reviewRating,
-      comment: this.reviewComment
-    }).subscribe({
-      next: () => {
-        this.isSubmitting.set(false);
-        this.showSuccess('Thank you for your review! We appreciate your feedback.');
-        this.reviewPublicId = '';
-        this.reviewComment = '';
-        this.reviewRating = 5;
-        this.reviewStore.loadRatings();
-      },
-      error: (err) => {
-        this.isSubmitting.set(false);
-        this.errorMessage.set(err.error?.message || 'Failed to submit review. Ensure the code is correct and the appointment is completed.');
-      }
-    });
+    this.todoService
+      .submitReview(this.reviewPublicId.trim(), {
+        rating: this.reviewRating,
+        comment: this.reviewComment,
+      })
+      .subscribe({
+        next: () => {
+          this.isSubmitting.set(false);
+          this.showSuccess('Thank you for your review! We appreciate your feedback.');
+          this.reviewPublicId = '';
+          this.reviewComment = '';
+          this.reviewRating = 5;
+          this.reviewStore.loadRatings();
+        },
+        error: (err) => {
+          this.isSubmitting.set(false);
+          this.errorMessage.set(
+            err.error?.message ||
+              'Failed to submit review. Ensure the code is correct and the appointment is completed.',
+          );
+        },
+      });
   }
 }

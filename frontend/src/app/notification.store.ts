@@ -4,7 +4,7 @@ import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class NotificationStore {
   private readonly todoService = inject(TodoService);
@@ -15,16 +15,17 @@ export class NotificationStore {
 
   loadNotifications(): void {
     this.isLoading.set(true);
-    this.todoService.getNotifications()
+    this.todoService
+      .getNotifications()
       .pipe(
-        catchError(err => {
+        catchError((err) => {
           console.error('Failed to load notifications:', err);
           this.errorMessage.set('Could not load notification outbox.');
           this.isLoading.set(false);
           return of([]);
-        })
+        }),
       )
-      .subscribe(data => {
+      .subscribe((data) => {
         this.notifications.set(data);
         this.isLoading.set(false);
       });

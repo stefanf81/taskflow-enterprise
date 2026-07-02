@@ -14,21 +14,56 @@ describe('App Component Quality Assurance Suite', () => {
 
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideHttpClient(), provideHttpClientTesting()]
+      providers: [provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(App);
     app = fixture.componentInstance;
-    
+
     // Seed the catalog store with mock data for testing
     app['catalogStore'].services.set([
-      { id: 1, name: 'Classic Haircut', price: 25, durationMinutes: 30, category: 'hair', description: 'Desc' },
-      { id: 2, name: 'Modern Skin Fade', price: 30, durationMinutes: 45, category: 'hair', description: 'Desc' },
-      { id: 3, name: 'Beard Trim & Shave', price: 18, durationMinutes: 25, category: 'beard', description: 'Desc' },
-      { id: 4, name: 'Royal Hot Towel Shave', price: 22, durationMinutes: 30, category: 'beard', description: 'Desc' },
-      { id: 5, name: 'The Executive Package', price: 40, durationMinutes: 60, category: 'combo', description: 'Desc' }
+      {
+        id: 1,
+        name: 'Classic Haircut',
+        price: 25,
+        durationMinutes: 30,
+        category: 'hair',
+        description: 'Desc',
+      },
+      {
+        id: 2,
+        name: 'Modern Skin Fade',
+        price: 30,
+        durationMinutes: 45,
+        category: 'hair',
+        description: 'Desc',
+      },
+      {
+        id: 3,
+        name: 'Beard Trim & Shave',
+        price: 18,
+        durationMinutes: 25,
+        category: 'beard',
+        description: 'Desc',
+      },
+      {
+        id: 4,
+        name: 'Royal Hot Towel Shave',
+        price: 22,
+        durationMinutes: 30,
+        category: 'beard',
+        description: 'Desc',
+      },
+      {
+        id: 5,
+        name: 'The Executive Package',
+        price: 40,
+        durationMinutes: 60,
+        category: 'combo',
+        description: 'Desc',
+      },
     ]);
-    
+
     fixture.detectChanges();
   });
 
@@ -39,7 +74,7 @@ describe('App Component Quality Assurance Suite', () => {
   it('should render the premium Lookbook and Landing elements by default when unauthenticated', async () => {
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    
+
     // Look for landing header and title
     expect(compiled.querySelector('header')).toBeTruthy();
     expect(compiled.querySelector('nav')?.textContent).toContain('TaskFlow');
@@ -55,16 +90,16 @@ describe('App Component Quality Assurance Suite', () => {
 
   it('should calculate the 7-day upcoming booking carousel dynamically, skipping Sundays', () => {
     const days = app.upcomingBookingDays();
-    
+
     // Assert exactly 7 booking days are generated
     expect(days.length).toBe(7);
 
     // Verify no Sunday (dayName !== 'Sun') is present in the computed list
-    const hasSunday = days.some(d => d.dayName === 'Sun');
+    const hasSunday = days.some((d) => d.dayName === 'Sun');
     expect(hasSunday).toBe(false);
 
     // Assert that each day contains a valid YYYY-MM-DD string representation
-    days.forEach(day => {
+    days.forEach((day) => {
       expect(day.dateStr).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(day.dayNum).toBeGreaterThan(0);
       expect(day.dayNum).toBeLessThan(32);
@@ -80,13 +115,13 @@ describe('App Component Quality Assurance Suite', () => {
     app.setServiceCategory('hair');
     const hairServices = app.filteredServices();
     expect(hairServices.length).toBe(2); // Classic Haircut & Skin Fade
-    hairServices.forEach(s => expect(s.category).toBe('hair'));
+    hairServices.forEach((s) => expect(s.category).toBe('hair'));
 
     // Filter by 'beard' category should return only shave packages
     app.setServiceCategory('beard');
     const beardServices = app.filteredServices();
     expect(beardServices.length).toBe(2); // Beard Trim & Royal Shave
-    beardServices.forEach(s => expect(s.category).toBe('beard'));
+    beardServices.forEach((s) => expect(s.category).toBe('beard'));
   });
 
   it('should enforce step validation rules for guided wizard progression', () => {
@@ -120,14 +155,14 @@ describe('App Component Quality Assurance Suite', () => {
     // Choose Classic Haircut ($25)
     app.selectService('Classic Haircut');
     expect(app.checkoutSubtotal()).toBe(25);
-    expect(app.checkoutFee()).toBe(2.50);
-    expect(app.checkoutTotal()).toBe(27.50);
+    expect(app.checkoutFee()).toBe(2.5);
+    expect(app.checkoutTotal()).toBe(27.5);
 
     // Choose The Executive Package ($40)
     app.selectService('The Executive Package');
     expect(app.checkoutSubtotal()).toBe(40);
-    expect(app.checkoutFee()).toBe(2.50);
-    expect(app.checkoutTotal()).toBe(42.50);
+    expect(app.checkoutFee()).toBe(2.5);
+    expect(app.checkoutTotal()).toBe(42.5);
   });
 
   it('should translate 24-hour database representations into beautiful 12-hour AM/PM formats', () => {

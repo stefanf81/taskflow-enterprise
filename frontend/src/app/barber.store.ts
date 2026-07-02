@@ -4,7 +4,7 @@ import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class BarberStore {
   private readonly todoService = inject(TodoService);
@@ -12,22 +12,23 @@ export class BarberStore {
   readonly barbers = signal<Barber[]>([]);
   readonly timeOffs = signal<BarberTimeOff[]>([]);
   readonly selectedBarberId = signal<number | null>(null);
-  
+
   readonly isLoading = signal<boolean>(false);
   readonly errorMessage = signal<string | null>(null);
 
   loadBarbers(): void {
     this.isLoading.set(true);
-    this.todoService.getAllBarbers()
+    this.todoService
+      .getAllBarbers()
       .pipe(
-        catchError(err => {
+        catchError((err) => {
           console.error('Failed to load barbers:', err);
           this.errorMessage.set('Could not load barbers.');
           this.isLoading.set(false);
           return of([]);
-        })
+        }),
       )
-      .subscribe(data => {
+      .subscribe((data) => {
         this.barbers.set(data);
         this.isLoading.set(false);
         if (data.length > 0 && !this.selectedBarberId()) {
@@ -43,16 +44,17 @@ export class BarberStore {
 
   loadTimeOffs(barberId: number): void {
     this.isLoading.set(true);
-    this.todoService.getTimeOff(barberId)
+    this.todoService
+      .getTimeOff(barberId)
       .pipe(
-        catchError(err => {
+        catchError((err) => {
           console.error('Failed to load time off:', err);
           this.errorMessage.set('Could not load time off.');
           this.isLoading.set(false);
           return of([]);
-        })
+        }),
       )
-      .subscribe(data => {
+      .subscribe((data) => {
         this.timeOffs.set(data);
         this.isLoading.set(false);
       });
@@ -71,7 +73,7 @@ export class BarberStore {
         console.error('Failed to add time off:', err);
         this.errorMessage.set('Failed to add time off.');
         this.isLoading.set(false);
-      }
+      },
     });
   }
 }
