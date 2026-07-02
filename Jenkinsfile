@@ -30,10 +30,12 @@ pipeline {
                 }
                 stage('Check Frontend Formatting') {
                     steps {
-                        dir('frontend') {
-                            docker.image('node:22-alpine').inside {
-                                sh 'npm ci'
-                                sh 'npx prettier --check "src/**/*.ts" "src/**/*.html"'
+                        script {
+                            dir('frontend') {
+                                docker.image('node:22-alpine').inside {
+                                    sh 'npm ci'
+                                    sh 'npx prettier --check "src/**/*.ts" "src/**/*.html"'
+                                }
                             }
                         }
                     }
@@ -64,14 +66,16 @@ pipeline {
 
                 stage('Frontend: Angular Tests & Build') {
                     steps {
-                        dir('frontend') {
-                            docker.image('node:22-alpine').inside {
-                                echo "Running Vitest and Angular Production Build..."
-                                
-                                // [PRO-MOVE] Limit the Node.js V8 Engine/Angular Compiler to a strict 1.5GB Heap limit
-                                withEnv(['NODE_OPTIONS=--max-old-space-size=1536']) {
-                                    sh 'npm run test -- --watch=false'
-                                    sh 'npm run build'
+                        script {
+                            dir('frontend') {
+                                docker.image('node:22-alpine').inside {
+                                    echo "Running Vitest and Angular Production Build..."
+                                    
+                                    // [PRO-MOVE] Limit the Node.js V8 Engine/Angular Compiler to a strict 1.5GB Heap limit
+                                    withEnv(['NODE_OPTIONS=--max-old-space-size=1536']) {
+                                        sh 'npm run test -- --watch=false'
+                                        sh 'npm run build'
+                                    }
                                 }
                             }
                         }
