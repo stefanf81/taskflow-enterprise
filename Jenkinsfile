@@ -30,14 +30,7 @@ pipeline {
                 }
                 stage('Check Frontend Formatting') {
                     steps {
-                        script {
-                            dir('frontend') {
-                                docker.image('node:22-alpine').inside {
-                                    sh 'npm ci'
-                                    sh 'npx prettier --check "src/**/*.ts" "src/**/*.html"'
-                                }
-                            }
-                        }
+                        sh 'docker run --rm -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}/frontend" node:22-alpine sh -c "npm ci && npx prettier --check \'src/**/*.ts\' \'src/**/*.html\'"'
                     }
                 }
             }
@@ -47,16 +40,7 @@ pipeline {
             parallel {
                 stage('Backend: Spring Boot AOT & Tests') {
                     steps {
-                        script {
-                            // Mount docker.sock for Testcontainers
-                            docker.image('eclipse-temurin:21-jdk').inside('-v /var/run/docker.sock:/var/run/docker.sock') {
-                                echo "Running JUnit, ArchUnit, SpotBugs, and AOT compilation..."
-                                
-                                // [PRO-MOVE] Limit the Gradle Daemon and Java compiler to a strict 1.5GB Heap limit
-                                // to ensure Jenkins VM does not trigger an Out-Of-Memory (OOM) killer event during parallel builds
-                                sh './gradlew clean check processAot bootJar --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"'
-                            }
-                        }
+                        sh 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}" eclipse-temurin:21-jdk ./gradlew clean check processAot bootJar --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"'
                     }
                     post {
                         always {
@@ -68,19 +52,7 @@ pipeline {
 
                 stage('Frontend: Angular Tests & Build') {
                     steps {
-                        script {
-                            dir('frontend') {
-                                docker.image('node:22-alpine').inside {
-                                    echo "Running Vitest and Angular Production Build..."
-                                    
-                                    // [PRO-MOVE] Limit the Node.js V8 Engine/Angular Compiler to a strict 1.5GB Heap limit
-                                    withEnv(['NODE_OPTIONS=--max-old-space-size=1536']) {
-                                        sh 'npm run test -- --watch=false'
-                                        sh 'npm run build'
-                                    }
-                                }
-                            }
-                        }
+                        sh 'docker run --rm -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}/frontend" -e NODE_OPTIONS=--max-old-space-size=1536 node:22-alpine sh -c "npm run test -- --watch=false && npm run build"'
                     }
                 }
             }
@@ -117,13 +89,10 @@ pipeline {
                 branch 'main'
             }
             steps {
-                script {
-                    echo "Pushing verified images to GitHub Container Registry..."
-                    docker.withRegistry("https://${DOCKER_REGISTRY}", 'github-ghcr-creds') {
-                        sh "docker push ${DOCKER_REGISTRY}/stefanf81/taskflow-backend:${IMAGE_TAG}"
-                        sh "docker push ${DOCKER_REGISTRY}/stefanf81/taskflow-frontend:${IMAGE_TAG}"
-                    }
-                }
+                sh 'echo $DOCKER_CREDS_PSW | docker login $DOCKER_REGISTRY -u $DOCKER_CREDS_USR --password-stdin'
+                sh 'docker push $DOCKER_REGISTRY/stefanf81/taskflow-backend:$IMAGE_TAG'
+                sh 'docker push $DOCKER_REGISTRY/stefanf81/taskflow-frontend:$IMAGE_TAG'
+                sh 'docker logout $DOCKER_REGISTRY'
             }
         }
     }
