@@ -12,14 +12,22 @@ WORKDIR /app
 # we ensure that if we only change Java code, Docker doesn't invalidate the dependency cache.
 COPY gradle/ /app/gradle/
 COPY gradlew build.gradle settings.gradle /app/
+
+# [DEPENDENCY PRE-DOWNLOAD] Download dependencies first.
+# This ensures that external libraries are locked inside a cached Docker layer.
+# Only changes to build.gradle or settings.gradle will trigger a new download,
+# saving massive compilation time during frequent code updates.
+RUN --mount=type=cache,target=/root/.gradle \
+    chmod +x gradlew && ./gradlew dependencies --no-daemon
+
+# Now copy the source code to compile.
 COPY src/ /app/src/
 
 # [BUILDKIT CACHE MOUNT] This is an elite Docker optimization.
 # It mounts a persistent volume to /root/.gradle that survives between independent Docker builds.
-# If a build fails or you add a new library, Gradle won't have to re-download the entire internet again.
 # We run 'processAot' to trigger Spring Boot's Ahead-Of-Time compilation (removing runtime reflection overhead).
 RUN --mount=type=cache,target=/root/.gradle \
-    chmod +x gradlew && ./gradlew processAot bootJar --no-daemon
+    ./gradlew processAot bootJar --no-daemon
 
 # [LAYERED JAR EXTRACTION] Instead of running a massive 50MB "Fat JAR", we extract it into 4 layers.
 # This ensures that when you push a code change to Kubernetes, Docker only uploads the tiny 'application' layer (~4MB)
@@ -59,7 +67,7 @@ EXPOSE 8080
 # -XX:ParallelGCThreads=10   : Hardware pins the GC specifically to the 10 Performance Cores (P-cores) of the M4 Pro.
 # -XX:-UseAdaptiveSizePolicy : Prevents the JVM from constantly resizing young/old generations under load.
 # -XX:+UseSIMDForMemoryOps   : Forces AArch64 vectorized instructions to exploit M4 Pro memory bandwidth.
-ENV JAVA_OPTS="-Dspring.aot.enabled=true -Xms1g -Xmx1g -XX:+UseParallelGC -XX:ParallelGCThreads=10 -XX:+AlwaysPreTouch -XX:-UseAdaptiveSizePolicy -XX:+UseSIMDForMemoryOps"
+ENV JAVA_OPTS="-Dspring.aot.enabled=true -Xms1g -Xmx1g -XX:+UseParallelGC -XX:ParallelGCThreads=10 -XX:+AlwaysPreTouch -XX:-UseAdaptiveSizePolicy -XX:+UseSIMDForMemoryOps -XX:+ExitOnOutOfMemoryError"
 
 # [ENTRYPOINT] Tini takes PID 1, and spawns the Spring Boot JarLauncher to run our exploded layers directly.
 ENTRYPOINT ["/sbin/tini", "--"]

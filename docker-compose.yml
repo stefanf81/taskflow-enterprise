@@ -13,10 +13,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 256M
+          cpus: '2.0'
+          memory: 1024M
         reservations:
-          memory: 128M
+          memory: 512M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -55,10 +55,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 1536M
+          cpus: '4.0'
+          memory: 2560M
         reservations:
-          memory: 1024M
+          memory: 1536M
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/v3/api-docs"]
       interval: 30s
@@ -92,10 +92,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 256M
+          cpus: '1.0'
+          memory: 512M
         reservations:
-          memory: 128M
+          memory: 256M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -159,10 +159,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 256M
+          cpus: '1.0'
+          memory: 512M
         reservations:
-          memory: 128M
+          memory: 256M
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
       interval: 30s

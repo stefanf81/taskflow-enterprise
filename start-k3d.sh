@@ -50,8 +50,8 @@ rm -f k3d-kubeconfig.yaml
 # =========================================================================================
 echo "📦 Building backend and frontend production-grade Docker images..."
 export DOCKER_BUILDKIT=1 # Enforce BuildKit for cache mounting
-docker build -t taskflow-backend:latest .
-docker build -t taskflow-frontend:latest ./frontend
+docker build -t ghcr.io/stefanf81/taskflow-backend:latest .
+docker build -t ghcr.io/stefanf81/taskflow-frontend:latest ./frontend
 
 # =========================================================================================
 # 3a. Shift-Left Security: Static Lints & Vulnerability Scanning
@@ -89,8 +89,8 @@ export KUBECONFIG="$(pwd)/k3d-kubeconfig.yaml"
 # This prevents Kubernetes from trying to pull these images from Docker Hub.
 # =========================================================================================
 echo "🚚 Importing local images into the k3d cluster namespace..."
-k3d image import taskflow-backend:latest -c taskflow-cluster
-k3d image import taskflow-frontend:latest -c taskflow-cluster
+k3d image import ghcr.io/stefanf81/taskflow-backend:latest -c taskflow-cluster
+k3d image import ghcr.io/stefanf81/taskflow-frontend:latest -c taskflow-cluster
 
 # =========================================================================================
 # 7. Apply Namespace Manifest First to Enforce Bootstrap Order

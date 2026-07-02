@@ -3,6 +3,10 @@
 # Exit on any error
 set -e
 
+# Enforce BuildKit for parallelized, high-performance container compilations
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+
 # Automatically move to the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd "$SCRIPT_DIR"
@@ -22,14 +26,23 @@ docker compose up --build -d
 
 echo "⏳ Waiting for backend API to become healthy..."
 # Poll the actuator health endpoint until it is fully active
+HEALTHY=false
 for i in {1..30}; do
   if curl -s --connect-timeout 1 http://localhost:8080/actuator/health | grep -q "UP"; then
     echo "✅ Backend API is active and ready!"
+    HEALTHY=true
     break
   fi
   echo "  Waiting..."
   sleep 2
 done
+
+if [ "$HEALTHY" = false ]; then
+  echo "❌ Error: Backend API failed to become healthy within 60 seconds."
+  echo "🛑 Cleaning up containers..."
+  docker compose down
+  exit 1
+fi
 
 echo "📦 Pulling OWASP ZAP (Zed Attack Proxy) SOTA DAST scanner..."
 docker pull ghcr.io/zaproxy/zaproxy:stable

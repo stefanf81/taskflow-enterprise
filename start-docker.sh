@@ -10,6 +10,10 @@
 # the cluster if a build step or security scan fails midway through the pipeline.
 set -e
 
+# Enforce BuildKit for parallelized, high-performance container compilations
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+
 # Automatically move to the directory where this script is located.
 # This guarantees the script works perfectly regardless of where the user executes it from.
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"

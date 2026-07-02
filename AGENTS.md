@@ -3,7 +3,10 @@
 ## Project Structure
 
 - **Backend**: Spring Boot 3.5.3 / OpenJDK 21 / Gradle — `src/main/java/com/example/taskflow/`
-  - High-Performance Tunings: Spring Boot AOT enabled, ParallelGC (`-XX:+UseParallelGC`, `-XX:ParallelGCThreads=10`, `-XX:+UseSIMDForMemoryOps`), 1GB fixed heap, Virtual Threads disabled (Platform threads used), Jackson Blackbird, Asynchronous Logging, OpenTelemetry 10% sampling, Caffeine local cache.
+  - High-Performance Tunings: Spring Boot AOT enabled, 1GB fixed heap, Virtual Threads disabled (Platform threads used), Jackson Blackbird, Asynchronous Logging, OpenTelemetry 10% sampling, Caffeine local cache.
+  - Runtime Profiles & Multi-Arch JVM Optimization:
+    - **Local (Apple Silicon M4 Pro):** Optimized via native `Dockerfile` using ParallelGC (`-XX:+UseParallelGC`, `-XX:ParallelGCThreads=10`, `-XX:+UseSIMDForMemoryOps` vectorizations).
+    - **Production (AMD Ryzen 5 7430U):** Cross-compiled via `Dockerfile.x64` using ParallelGC (`-XX:+UseParallelGC`, `-XX:ParallelGCThreads=6`, and the corrected integer JVM syntax `-XX:UseAVX=2` for 256-bit Zen 3 Advanced Vector Extensions).
   - Packages: `controller`, `service`, `repository`, `dto`, `security`, `config`, `exception`, `model`
   - Entry point: `TaskflowApplication.java`
 - **Frontend**: Angular 22 / TypeScript / Tailwind CSS — `frontend/`

@@ -9,11 +9,20 @@ WORKDIR /app
 # [CACHE OPTIMIZATION] Copy gradle wrapper and build files first.
 COPY gradle/ /app/gradle/
 COPY gradlew build.gradle settings.gradle /app/
+
+# [DEPENDENCY PRE-DOWNLOAD] Pre-download and cache all external Gradle dependencies.
+# This isolates external library resolution in its own highly-cached Docker layer,
+# significantly accelerating frequent application recompilations.
+RUN --mount=type=cache,target=/root/.gradle \
+    chmod +x gradlew && ./gradlew dependencies --no-daemon
+
+# Now copy the application source files.
 COPY src/ /app/src/
 
 # [BUILDKIT CACHE MOUNT] Persistently cache Gradle dependencies between builds
+# We run 'processAot' to compile the application Ahead-Of-Time.
 RUN --mount=type=cache,target=/root/.gradle \
-    chmod +x gradlew && ./gradlew processAot bootJar --no-daemon
+    ./gradlew processAot bootJar --no-daemon
 
 # [LAYERED JAR EXTRACTION] Extract into 4 layers for lightning-fast container updates
 RUN java -Djarmode=tools -jar build/libs/*.jar extract --layers --launcher --destination extracted
@@ -45,10 +54,10 @@ EXPOSE 8080
 # -Xms1g -Xmx1g              : Locks heap size to 1GB to prevent OS dynamic memory allocation pauses.
 # -XX:+UseParallelGC         : Optimizes for pure maximum Request-Per-Second (RPS) throughput.
 # -XX:ParallelGCThreads=6    : Hardware pins the GC specifically to the 6 physical cores of the Ryzen 5 7430U (avoiding SMT contention).
-# -XX:+UseAVX=2              : Forces the JVM to utilize Advanced Vector Extensions 2 (AVX2) for massive memory bandwidth optimization on Zen 3 architecture.
+# -XX:UseAVX=2               : Forces the JVM to utilize Advanced Vector Extensions 2 (AVX2) for massive memory bandwidth optimization on Zen 3 architecture.
 # -XX:+AlwaysPreTouch        : Forces the JVM to actually touch every page of memory allocated by -Xms at startup.
 # -XX:-UseAdaptiveSizePolicy : Prevents the JVM from constantly resizing young/old generations under load.
-ENV JAVA_OPTS="-Dspring.aot.enabled=true -Xms1g -Xmx1g -XX:+UseParallelGC -XX:ParallelGCThreads=6 -XX:+UseAVX=2 -XX:+AlwaysPreTouch -XX:-UseAdaptiveSizePolicy"
+ENV JAVA_OPTS="-Dspring.aot.enabled=true -Xms1g -Xmx1g -XX:+UseParallelGC -XX:ParallelGCThreads=6 -XX:UseAVX=2 -XX:+AlwaysPreTouch -XX:-UseAdaptiveSizePolicy -XX:+ExitOnOutOfMemoryError"
 
 # [ENTRYPOINT] Tini takes PID 1, and spawns the Spring Boot JarLauncher to run our exploded layers directly.
 ENTRYPOINT ["/sbin/tini", "--"]

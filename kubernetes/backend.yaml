@@ -27,9 +27,10 @@ spec:
           command: ["sh", "-c", "until nc -z -w 2 db 5432 && nc -z -w 2 redis 6379; do echo 'Waiting for database and redis...'; sleep 2; done;"]
       containers:
         - name: backend
-          image: taskflow-backend:latest
+          image: ghcr.io/stefanf81/taskflow-backend:latest
           imagePullPolicy: IfNotPresent
           securityContext:
+            readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             runAsNonRoot: true
             runAsUser: 10001
@@ -37,6 +38,9 @@ spec:
             capabilities:
               drop:
                 - ALL
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
           env:
             - name: SPRING_PROFILES_ACTIVE
               valueFrom:
@@ -59,17 +63,17 @@ spec:
                   name: db-secret
                   key: POSTGRES_PASSWORD
             - name: JAVA_OPTS
-              value: "-Dspring.aot.enabled=true -Xms1g -Xmx1g -XX:+UseParallelGC -XX:ParallelGCThreads=10 -XX:+AlwaysPreTouch -XX:-UseAdaptiveSizePolicy -XX:+UseSIMDForMemoryOps -XX:+ExitOnOutOfMemoryError"
+              value: "-Dspring.aot.enabled=true -Xms1536m -Xmx1536m -XX:+UseParallelGC -XX:ParallelGCThreads=10 -XX:+AlwaysPreTouch -XX:-UseAdaptiveSizePolicy -XX:+UseSIMDForMemoryOps -XX:+ExitOnOutOfMemoryError"
           ports:
             - containerPort: 8080
               name: http
           resources:
             limits:
-              cpu: "1000m"
-              memory: 1536Mi
+              cpu: "4000m"
+              memory: 2560Mi
             requests:
-              cpu: "250m"
-              memory: 1024Mi
+              cpu: "1000m"
+              memory: 2048Mi
           startupProbe:
             httpGet:
               path: /actuator/health/liveness
@@ -89,6 +93,9 @@ spec:
               port: 8080
             periodSeconds: 10
             failureThreshold: 2
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

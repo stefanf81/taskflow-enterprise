@@ -33,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * This test simulates multiple concurrent threads making asynchronous, paginated requests against 
  * our booking database and validates that average latency remains below a threshold.
  */
-@SpringBootTest(properties = "app.rate-limit.enabled=false")
+@SpringBootTest(properties = {"app.rate-limit.enabled=false", "app.stats.cache.ttl=0"})
 @AutoConfigureMockMvc
 @Import(TestSecurityConfig.class)
 public class AppointmentControllerBenchmarkExample {

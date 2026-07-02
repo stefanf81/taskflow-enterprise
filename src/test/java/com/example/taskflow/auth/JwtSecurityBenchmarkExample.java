@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Isolating this micro-benchmark from Database and network I/O allows us to measure the raw cryptographic
  * throughput (Operations per Second) of our native Spring Security OAuth2 resource server encoder/decoder layer under load.
  */
-@SpringBootTest(properties = "app.rate-limit.enabled=false")
+@SpringBootTest(properties = {"app.rate-limit.enabled=false", "app.stats.cache.ttl=0"})
 public class JwtSecurityBenchmarkExample {
 
     @Autowired

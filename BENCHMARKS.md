@@ -163,7 +163,7 @@ To push the application to the physical limits of the M4 Pro, we implemented:
 
 **Verdict:** For an AMD Ryzen 5 7430U, we achieved a massive throughput leap by enforcing hardware-specific optimizations:
 1.  `-XX:ParallelGCThreads=6`: Hardcoded GC threads to exactly match the 6 physical cores of the CPU, eliminating SMT (hyperthreading) cache contention during "Stop The World" pauses.
-2.  `-XX:+UseAVX=2`: Forced the HotSpot JVM to compile JSON parsers and memory loops using 256-bit wide Advanced Vector Extensions 2 (AVX2), a flagship feature of the Zen 3 architecture.
+2.  `-XX:UseAVX=2`: Forced the HotSpot JVM to compile JSON parsers and memory loops using 256-bit wide Advanced Vector Extensions 2 (AVX2), a flagship feature of the Zen 3 architecture (corrected from the invalid non-boolean syntax `-XX:+UseAVX=2`).
 
 ---
 
