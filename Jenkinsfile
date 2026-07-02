@@ -1,6 +1,12 @@
 pipeline {
     agent any 
 
+    parameters {
+        booleanParam(name: 'RUN_LINT_AND_FORMAT', defaultValue: true, description: 'Run Dockerfile linting and Prettier checks')
+        booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Run JUnit, Vitest, and compilation tests')
+        booleanParam(name: 'RUN_SECURITY_SCANS', defaultValue: true, description: 'Run Trivy container security scans')
+    }
+
     environment {
         DOCKER_BUILDKIT = '1'
         DOCKER_REGISTRY = 'ghcr.io'
@@ -17,6 +23,9 @@ pipeline {
 
     stages {
         stage('🛠️ Initialization & Linting') {
+            when {
+                expression { params.RUN_LINT_AND_FORMAT }
+            }
             parallel {
                 stage('Lint Dockerfiles') {
                     steps {
@@ -40,11 +49,19 @@ pipeline {
             parallel {
                 stage('Backend: Spring Boot AOT & Tests') {
                     steps {
-                        sh 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}" eclipse-temurin:21-jdk ./gradlew clean check processAot bootJar --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"'
+                        script {
+                            if (params.RUN_TESTS) {
+                                echo "Running JUnit, ArchUnit, SpotBugs, and AOT compilation..."
+                                sh 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}" eclipse-temurin:21-jdk ./gradlew clean check processAot bootJar --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"'
+                            } else {
+                                echo "Skipping tests, compiling Java & AOT assets only..."
+                                sh 'docker run --rm -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}" eclipse-temurin:21-jdk ./gradlew clean processAot bootJar -x test -x spotbugsMain -x spotbugsTest -x spotbugsAot --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"'
+                            }
+                        }
                     }
                     post {
                         always {
-                            junit 'build/test-results/test/*.xml'
+                            junit allowEmptyResults: true, testResults: 'build/test-results/test/*.xml'
                             archiveArtifacts artifacts: 'build/jacoco/*.exec', allowEmptyArchive: true
                         }
                     }
@@ -52,7 +69,15 @@ pipeline {
 
                 stage('Frontend: Angular Tests & Build') {
                     steps {
-                        sh 'docker run --rm -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}/frontend" -e NODE_OPTIONS=--max-old-space-size=1536 node:22-alpine sh -c "npm run test -- --watch=false && npm run build"'
+                        script {
+                            if (params.RUN_TESTS) {
+                                echo "Running Vitest and Angular Production Build..."
+                                sh 'docker run --rm -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}/frontend" -e NODE_OPTIONS=--max-old-space-size=1536 node:22-alpine sh -c "npm run test -- --watch=false && npm run build"'
+                            } else {
+                                echo "Skipping frontend tests, building Angular Production assets only..."
+                                sh 'docker run --rm -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}/frontend" -e NODE_OPTIONS=--max-old-space-size=1536 node:22-alpine sh -c "npm run build"'
+                            }
+                        }
                     }
                 }
             }
@@ -70,6 +95,9 @@ pipeline {
         }
 
         stage('🛡️ Container Security Scans') {
+            when {
+                expression { params.RUN_SECURITY_SCANS }
+            }
             parallel {
                 stage('Trivy: Backend') {
                     steps {
