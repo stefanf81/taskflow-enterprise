@@ -1,6 +1,6 @@
-# 🚀 TaskFlow High-Performance Jenkins CI/CD Setup Guide
+# 🚀 TaskFlow High-Performance Jenkins (Docker-in-Docker) Setup & Pipeline Guide
 
-This guide describes how to run and configure a high-performance, plugin-free Jenkins CI/CD pipeline using **Docker-in-Docker (DinD)**. This setup is fully optimized for **MacBook Pro M4** local development (via Rancher Desktop/Docker) but can be easily deployed on any standard Linux VPS or bare-metal environment.
+This guide describes how to run, configure, and use a high-performance, plugin-free Jenkins CI/CD pipeline using **Docker-in-Docker (DinD)**. This setup is fully optimized for **MacBook Pro M4** local development (via Rancher Desktop/Docker Desktop) but can be easily deployed on any standard Linux VPS or bare-metal environment.
 
 By utilizing standard shell executions of the Docker CLI instead of custom Jenkins plugins, this pipeline is **immune to Jenkins plugin compilation errors** (like the missing `docker` or `jacoco` properties) and requires zero custom plugins to be installed on the Jenkins master.
 
@@ -19,24 +19,36 @@ The customized Jenkins configuration is located in the `jenkins_docker_in_docker
    ./start.sh
    ```
    *This script compiles the customized Jenkins master container and launches the secure Docker-in-Docker (DinD) daemon.*
-3. **Retrieve the Initial Admin Password**:
-   Run the following command to retrieve your Jenkins unlock key:
-   ```bash
-   docker logs my-jenkins 2>&1 | grep -A 5 "Jenkins initial setup required"
-   ```
 
 ---
 
-## 🔑 Step 2: Initial Jenkins Configuration
+## 🔑 Step 2: Retrieve the Admin Password & Unlock
+
+To unlock the Jenkins UI, you need the initial 32-character hexadecimal administrator password. You can retrieve it in one of two ways:
+
+*   **Option A (Via Docker Logs)**:
+    ```bash
+    docker logs my-jenkins
+    ```
+    *Look for the block of asterisks `*********************************` in the console log.*
+
+*   **Option B (Directly from Container File)**:
+    ```bash
+    docker exec my-jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+    ```
+
+---
+
+## 🏗️ Step 3: Initial Jenkins Wizard Configuration
 
 1. Open your browser and navigate to the mapped host port: **[http://localhost:8081](http://localhost:8081)**.
-2. **Unlock Jenkins**: Paste the admin password retrieved from the docker logs in Step 1.
-3. **Install Suggested Plugins**: Select the default **"Install suggested plugins"** option.
+2. **Unlock Jenkins**: Paste the admin password retrieved in Step 2.
+3. **Install Suggested Plugins**: Select the default **"Install suggested plugins"** option and let the wizard complete.
 4. **No Custom Plugins Required**: Because our modern pipeline utilizes standard Docker CLI commands directly in standard shell (`sh`) blocks, **you do not need to install the "Docker Pipeline" or "JaCoCo" plugins!** This ensures a fast, bloat-free Jenkins footprint.
 
 ---
 
-## 🔐 Step 3: Configure GitHub Container Registry (GHCR) Credentials
+## 🔐 Step 4: Configure GitHub Container Registry (GHCR) Credentials
 
 Your pipeline needs permission to log in and publish images to the GitHub Container Registry under your `ghcr.io` profile.
 
@@ -55,7 +67,7 @@ Your pipeline needs permission to log in and publish images to the GitHub Contai
 
 ---
 
-## 📂 Step 4: Create the Pipeline Project
+## 📂 Step 5: Create the Pipeline Project
 
 1. On the Jenkins home page, click **New Item**.
 2. Enter the name: **`taskflow-enterprise`** and select **Pipeline**. Click **OK**.
@@ -72,7 +84,7 @@ Your pipeline needs permission to log in and publish images to the GitHub Contai
 
 ---
 
-## ⚡ Step 5: Run & Parameterize Your Pipeline
+## ⚡ Step 6: Run & Parameterize Your Pipeline
 
 The TaskFlow pipeline is **fully parameterized** to support fast local compilations.
 
@@ -88,12 +100,25 @@ The TaskFlow pipeline is **fully parameterized** to support fast local compilati
 
 ---
 
-## 🛑 Step 6: Shutdown the Stack
+## 🛑 Step 7: Lifecycle Management (Stop, Restart, or Teardown)
 
-If you are done playing with Jenkins and want to free up RAM/CPU resources on your MacBook Pro M4, simply run the stop script:
+*   **Stop Jenkins**:
+    If you are done playing with Jenkins and want to free up RAM/CPU resources on your MacBook Pro M4, simply run the stop script:
+    ```bash
+    cd jenkins_docker_in_docker
+    ./stop.sh
+    ```
+    *All of your build logs, configuration keys, and persistent Docker layer caches will be safely preserved inside named volumes and ready for your next session!*
 
-```bash
-cd jenkins_docker_in_docker
-./stop.sh
-```
-*All of your build logs, configuration keys, and persistent Docker layer caches will be safely preserved inside named volumes and ready for your next session!*
+*   **Restart Jenkins**:
+    To launch it again later, just re-run:
+    ```bash
+    ./start.sh
+    ```
+
+*   **Complete Teardown (Remove All Data)**:
+    If you wish to delete all stored Jenkins configs, build history, and Docker image caches:
+    ```bash
+    cd jenkins_docker_in_docker
+    docker compose down --volumes --rmi all
+    ```
