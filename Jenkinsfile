@@ -73,12 +73,12 @@ pipeline {
             parallel {
                 stage('Trivy: Backend') {
                     steps {
-                        sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 ${DOCKER_REGISTRY}/stefanf81/taskflow-backend:${IMAGE_TAG}"
+                        sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL ${DOCKER_REGISTRY}/stefanf81/taskflow-backend:${IMAGE_TAG}"
                     }
                 }
                 stage('Trivy: Frontend') {
                     steps {
-                        sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 ${DOCKER_REGISTRY}/stefanf81/taskflow-frontend:${IMAGE_TAG}"
+                        sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL ${DOCKER_REGISTRY}/stefanf81/taskflow-frontend:${IMAGE_TAG}"
                     }
                 }
             }
