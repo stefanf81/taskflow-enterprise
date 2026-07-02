@@ -22,11 +22,26 @@ Start Jenkins. The `./start.sh` script will automatically build your customized 
 ./start.sh
 ```
 
-## Step 3
+## Step 3 (Retrieve Admin Password)
 
-Open Jenkins by going to: [http://localhost:8081/](http://localhost:8081/) and finish the installation process.
+To unlock Jenkins, you need the initial admin password. You can retrieve it in one of two ways:
+
+*   **Option A (Via Docker Logs)**:
+    ```bash
+    docker logs my-jenkins
+    ```
+    *Look for the block of asterisks `*********************************` in the console log containing the 32-character hex password.*
+
+*   **Option B (Directly from Container File)**:
+    ```bash
+    docker exec my-jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+    ```
 
 ## Step 4
+
+Open Jenkins by going to: [http://localhost:8081/](http://localhost:8081/) and paste the retrieved password to finish the installation process.
+
+## Step 5
 
 If you wish to stop Jenkins and get back to it later, simply run the stop script:
 
@@ -34,7 +49,7 @@ If you wish to stop Jenkins and get back to it later, simply run the stop script
 ./stop.sh
 ```
 
-If you wish to start Jenkins again later, just run the same command from Step 3.
+If you wish to start Jenkins again later, just run the same command from Step 2.
 
 
 # Removing Jenkins
