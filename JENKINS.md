@@ -1,113 +1,99 @@
-# 🚀 TaskFlow Jenkins CI/CD & Proxmox Deployment Guide
+# 🚀 TaskFlow High-Performance Jenkins CI/CD Setup Guide
 
-This is the ultimate, step-by-step master blueprint for taking the TaskFlow codebase and deploying it to a bare-metal Proxmox infrastructure. Because we are separating Jenkins from the production cluster, this setup will be incredibly clean, safe, and performant.
+This guide describes how to run and configure a high-performance, plugin-free Jenkins CI/CD pipeline using **Docker-in-Docker (DinD)**. This setup is fully optimized for **MacBook Pro M4** local development (via Rancher Desktop/Docker) but can be easily deployed on any standard Linux VPS or bare-metal environment.
 
----
-
-## Phase 1: Proxmox Infrastructure Provisioning
-*(You can do this manually in the Proxmox UI or via Terraform).*
-
-1. **Create VM 1 (The CI/CD Build Server):**
-   * **OS:** Ubuntu 24.04 LTS
-   * **Specs:** 8GB RAM, 4 to 6 vCPUs (AMD Ryzen 5 7430U), ~50GB Disk.
-   * **Proxmox Tuning:** Set CPU Type to **`host`** (exposes your Ryzen AVX2 instructions). Set Disk Controller to **`VirtIO SCSI`**.
-2. **Create VM 2 (The K3s Production Cluster):**
-   * **OS:** Ubuntu 24.04 LTS
-   * **Specs:** 8GB RAM, 4 to 6 vCPUs, ~30GB Disk.
-   * **Proxmox Tuning:** Set CPU Type to **`host`**.
+By utilizing standard shell executions of the Docker CLI instead of custom Jenkins plugins, this pipeline is **immune to Jenkins plugin compilation errors** (like the missing `docker` or `jacoco` properties) and requires zero custom plugins to be installed on the Jenkins master.
 
 ---
 
-## Phase 2: Base OS Tuning (Run on BOTH VMs)
-SSH into both VM 1 and VM 2, and run these commands to optimize Ubuntu for Docker/Kubernetes:
+## 🛠️ Step 1: Start Jenkins via Docker-in-Docker
 
-1. **Reduce Swappiness:**
+The customized Jenkins configuration is located in the `jenkins_docker_in_docker` folder. It is tuned with automated logging rotation, strict memory boundaries, and a persistent Docker layer volume cache so your builds run near-instantly.
+
+1. **Navigate to the setup directory**:
    ```bash
-   echo "vm.swappiness=10" | sudo tee -a /etc/sysctl.conf
-   sudo sysctl -p
+   cd jenkins_docker_in_docker
    ```
-2. **Maximize CPU Governor (Optional but recommended):**
+2. **Launch the Jenkins Stack**:
    ```bash
-   sudo apt update && sudo apt install cpufrequtils -y
-   echo 'GOVERNOR="performance"' | sudo tee /etc/default/cpufrequtils
-   sudo systemctl restart cpufrequtils
+   ./start.sh
+   ```
+   *This script compiles the customized Jenkins master container and launches the secure Docker-in-Docker (DinD) daemon.*
+3. **Retrieve the Initial Admin Password**:
+   Run the following command to retrieve your Jenkins unlock key:
+   ```bash
+   docker logs my-jenkins 2>&1 | grep -A 5 "Jenkins initial setup required"
    ```
 
 ---
 
-## Phase 3: Setup VM 1 (Jenkins & Docker)
-SSH into **VM 1** and execute the following:
+## 🔑 Step 2: Initial Jenkins Configuration
 
-1. **Install Docker:**
-   ```bash
-   curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh
-   ```
-2. **Install Java 21 & Jenkins:**
-   ```bash
-   sudo apt install fontconfig openjdk-21-jre -y
-   sudo wget -O /usr/share/keyrings/jenkins-keyring.asc https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
-   echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/" | sudo tee /etc/apt/sources.list.d/jenkins.list > /dev/null
-   sudo apt update && sudo apt install jenkins -y
-   ```
-3. **Grant Docker Permissions (CRITICAL):**
-   ```bash
-   sudo usermod -aG docker jenkins
-   ```
-4. **Tune Jenkins RAM (Limit to 1GB):**
-   * Open the systemd file: `sudo nano /lib/systemd/system/jenkins.service`
-   * Find `Environment="JAVA_OPTS=..."` and change it to:
-     `Environment="JAVA_OPTS=-Xms1g -Xmx1g -XX:+UseParallelGC -XX:+AlwaysPreTouch"`
-   * Reload systemd: `sudo systemctl daemon-reload && sudo systemctl restart jenkins`
+1. Open your browser and navigate to the mapped host port: **[http://localhost:8081](http://localhost:8081)**.
+2. **Unlock Jenkins**: Paste the admin password retrieved from the docker logs in Step 1.
+3. **Install Suggested Plugins**: Select the default **"Install suggested plugins"** option.
+4. **No Custom Plugins Required**: Because our modern pipeline utilizes standard Docker CLI commands directly in standard shell (`sh`) blocks, **you do not need to install the "Docker Pipeline" or "JaCoCo" plugins!** This ensures a fast, bloat-free Jenkins footprint.
 
 ---
 
-## Phase 4: Configure the Jenkins Pipeline
-Open your browser and navigate to `http://<VM_1_IP>:8080`.
+## 🔐 Step 3: Configure GitHub Container Registry (GHCR) Credentials
 
-1. **Unlock Jenkins:** Follow the on-screen instructions (install suggested plugins).
-2. **Install Docker Plugin:** Go to *Manage Jenkins > Plugins > Available plugins*. Search for and install **`Docker Pipeline`**.
-3. **Create GitHub Credentials:** 
-   * On GitHub, generate a Personal Access Token (PAT) with `write:packages` permissions.
-   * In Jenkins, go to *Manage Jenkins > Credentials > Global*. Add a new "Username with password". Use your GitHub username and the PAT. Set the ID to **`github-ghcr-creds`**.
-4. **Create the Pipeline:** 
-   * Click "New Item" -> "Pipeline" -> Name it `TaskFlow-CI`.
-   * Scroll down to "Pipeline script from SCM". Select Git, enter your public GitHub URL, specify `main` branch, and set Script Path to `Jenkinsfile`.
+Your pipeline needs permission to log in and publish images to the GitHub Container Registry under your `ghcr.io` profile.
 
----
-
-## Phase 5: Setup VM 2 (Production K3s)
-SSH into **VM 2** to deploy your live Kubernetes environment:
-
-1. **Install K3s:**
-   ```bash
-   curl -sfL https://get.k3s.io | sh -
-   ```
-2. **Extract Kubeconfig:**
-   * Run `sudo cat /etc/rancher/k3s/k3s.yaml`.
-   * Copy the contents to your local Mac (save it as `k3s-prod.yaml`). Change the `127.0.0.1` IP address inside the file to the IP address of VM 2.
+1. **Generate a GitHub Personal Access Token (PAT)**:
+   * Go to your GitHub account -> *Settings > Developer Settings > Personal Access Tokens > Tokens (classic)*.
+   * Generate a new token with **`write:packages`** and **`read:packages`** scopes.
+2. **Add Credentials in Jenkins**:
+   * On Jenkins, go to **Manage Jenkins** -> **Credentials** -> **System** -> **Global credentials (unrestricted)**.
+   * Click **Add Credentials**.
+   * Select **Username with password**.
+   * Configure the following fields:
+     * **Username**: Your GitHub username (e.g., `stefanf81`).
+     * **Password**: Your generated Personal Access Token (PAT).
+     * **ID**: **`github-ghcr-creds`** *(This ID must match the value defined in the Jenkinsfile environment block).*
+   * Click **Create**.
 
 ---
 
-## Phase 6: The Final Deployment
-You are now ready to launch the entire stack!
+## 📂 Step 4: Create the Pipeline Project
 
-1. **Build the Images:** Go to your Jenkins Web UI and click **"Build Now"**. Watch as Jenkins dynamically spins up containers, compiles your backend using AOT, tests everything, and pushes the ultra-lean Docker images to the GitHub Container Registry.
-2. **Deploy to K3s:** From your local Mac, point `kubectl` to your new production cluster and deploy your application:
-   ```bash
-   export KUBECONFIG=k3s-prod.yaml
-   kubectl apply -f kubernetes/namespace.yaml
-   
-   # Add your secrets (Replace passwords with secure values)
-   kubectl create secret generic db-secret \
-     --from-literal=POSTGRES_PASSWORD="production-secure-password" \
-     --namespace=taskflow --dry-run=client -o yaml | kubectl apply -f -
-     
-   kubectl create secret generic backend-secret \
-     --from-literal=SPRING_SECURITY_PASSWORD="admin-secure-password" \
-     --namespace=taskflow --dry-run=client -o yaml | kubectl apply -f -
-     
-   # Deploy the rest of the application
-   kubectl apply -f kubernetes/
-   ```
+1. On the Jenkins home page, click **New Item**.
+2. Enter the name: **`taskflow-enterprise`** and select **Pipeline**. Click **OK**.
+3. Under **General**, select **GitHub project** and enter your repository URL:
+   `https://github.com/stefanf81/taskflow-enterprise`
+4. Scroll down to the **Pipeline** section:
+   * **Definition**: Select **Pipeline script from SCM**.
+   * **SCM**: Select **Git**.
+   * **Repository URL**: `https://github.com/stefanf81/taskflow-enterprise`
+   * **Credentials**: Select `-none-` (unless your repository is private, in which case select or add your GitHub access credentials).
+   * **Branch Specifier**: Change `*/master` to **`*/main`**.
+   * **Script Path**: Verify it is set to **`Jenkinsfile`**.
+5. Click **Save**.
 
-Your enterprise-grade SaaS application is now live on your own bare-metal Proxmox homelab!
+---
+
+## ⚡ Step 5: Run & Parameterize Your Pipeline
+
+The TaskFlow pipeline is **fully parameterized** to support fast local compilations.
+
+1. **The First Build (Parameter Registration)**:
+   * On your pipeline project page, click **"Build Now"**.
+   * This initial run will read the `Jenkinsfile`, clone the repository, and register the build parameters in Jenkins' internal metadata.
+2. **Build with Parameters (Subsequent Runs)**:
+   * For all subsequent runs, the "Build Now" button will dynamically transform into **"Build with Parameters"**.
+   * Clicking this will present you with interactive checkboxes to toggle pipeline features on-the-fly:
+     * `RUN_LINT_AND_FORMAT` (Default: `true`) — Uncheck to bypass Dockerfile linting and Prettier checks.
+     * `RUN_TESTS` (Default: `true`) — Uncheck to bypass backend JUnit and frontend Vitest executions. *(Note: Compilation and packaging still run automatically so the downstream containerization stage succeeds!)*
+     * `RUN_SECURITY_SCANS` (Default: `true`) — Uncheck to bypass Trivy security scans.
+
+---
+
+## 🛑 Step 6: Shutdown the Stack
+
+If you are done playing with Jenkins and want to free up RAM/CPU resources on your MacBook Pro M4, simply run the stop script:
+
+```bash
+cd jenkins_docker_in_docker
+./stop.sh
+```
+*All of your build logs, configuration keys, and persistent Docker layer caches will be safely preserved inside named volumes and ready for your next session!*
