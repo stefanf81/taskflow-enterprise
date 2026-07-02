@@ -34,6 +34,11 @@ npm run e2e              # Playwright E2E (spins up dev server via webServer con
 npm run build            # production build
 ```
 
+### Developer Environment
+```
+./update-mcp.sh          # High-performance, concurrent OpenCode MCP and developer tool updater (Go, NPM, uv). Uses strict mode and atomic execution locks.
+```
+
 ### Full-stack Docker
 ```
 ./start-docker.sh        # docker compose up (db → backend → frontend, health-checked)

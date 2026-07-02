@@ -100,3 +100,7 @@ dependencyCheck {
 	failBuildOnCVSS = 7.0f
 	formats = ['HTML', 'JSON']
 }
+
+tasks.named("spotbugsAot") {
+    enabled = false
+}

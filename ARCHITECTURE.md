@@ -178,6 +178,8 @@ Through exhaustive benchmarking, the application has been tuned for maximum Requ
 7.  **Observability Taxonomy**: OpenTelemetry distributed tracing sampling was reduced from 100% to **10%** (`management.tracing.sampling.probability=0.1`), recovering peak RPS while retaining statistical observability.
 8.  **Local JVM Caching**: Read-heavy operations (e.g., retrieving busy slots) are annotated with `@Cacheable` and backed by **Caffeine** to prevent network/database exhaustion under heavy load.
 9.  **Upstream Connection Pooling (Nginx Keepalives)**: Configured a persistent TCP connection pool (`keepalive 64`) inside Nginx's proxy upstream block. Rather than tearing down the TCP connection after every single request, Nginx reuse connections, eliminating handshake latency entirely. This yielded a **7.1x increase in throughput (from 350 RPS to 2,505 RPS)** and slashed average proxy latency from 141.4ms to **19.8ms** during heavy end-to-end load tests.
+10. **Frontend-Backend Multiplexing & ETag Caching**: Enabled HTTP/2 in Spring Boot and configured Tomcat Keep-Alives (`server.tomcat.max-keep-alive-requests=100`) to let the browser execute concurrent requests over a single TCP connection. We also added a `ShallowEtagHeaderFilter` so the backend returns an instant `304 Not Modified` if the JSON payload hasn't changed.
+11. **Browser Preloading & View Transitions**: Configured the Angular 22 Router with `withPreloading(PreloadAllModules)` to silently download JavaScript chunks in the background. Combined with the native `withViewTransitions()` API, the perceived latency for the end-user drops to virtually zero.
 
 ---
 

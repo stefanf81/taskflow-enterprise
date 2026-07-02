@@ -38,7 +38,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     // 3. Assert error message banner is visible in the modal
     const alert = page.locator('.modal-card .alert-error');
     await expect(alert).toBeVisible();
-    await expect(alert).toContainText('Invalid admin credentials. Please try again.');
+    await expect(alert).toContainText('Invalid credentials. Please try again.');
   });
 
   test('should allow a guest to request a booking slot via the guided wizard, then owner logs in, approves it, and deletes it', async ({ page }) => {

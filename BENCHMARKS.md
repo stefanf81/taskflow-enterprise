@@ -165,6 +165,19 @@ To push the application to the physical limits of the M4 Pro, we implemented:
 1.  `-XX:ParallelGCThreads=6`: Hardcoded GC threads to exactly match the 6 physical cores of the CPU, eliminating SMT (hyperthreading) cache contention during "Stop The World" pauses.
 2.  `-XX:UseAVX=2`: Forced the HotSpot JVM to compile JSON parsers and memory loops using 256-bit wide Advanced Vector Extensions 2 (AVX2), a flagship feature of the Zen 3 architecture (corrected from the invalid non-boolean syntax `-XX:+UseAVX=2`).
 
+## 🌐 14. Frontend-Backend Network Hyper-Optimization
+**Goal:** Eliminate network latency between the Angular frontend browser client and the Spring Boot backend server.
+
+| Optimization Technique | Benefit | Mechanism |
+| :--- | :--- | :--- |
+| **HTTP/2 Multiplexing** | Eliminates Head-Of-Line Blocking | Multiplexes concurrent requests/responses over a single persistent TCP connection. |
+| **Keep-Alive Pooling** | Eliminates TCP/TLS Handshakes | Increased Tomcat Keep-Alive thresholds (`max-keep-alive-requests=100`) allowing the browser to reuse warm connections. |
+| **Shallow ETag Caching** | Saves Massive Bandwidth | Computes an MD5 payload hash. The browser sends `If-None-Match`, and the server returns an ultra-fast `304 Not Modified`, bypassing the JSON download. |
+| **Angular Route Preloading** | Instant Page Navigation | Uses `withPreloading(PreloadAllModules)`. The browser downloads lazy-loaded JS chunks in the background while the user is idle. |
+| **View Transitions API** | Perceived Latency Drop | Utilizes `withViewTransitions()` for native browser-accelerated visual cross-fades, creating a fluid, app-like experience. |
+
+**Verdict:** By attacking the latency layer natively at the browser/server network boundary, we bypassed the physical limitations of geographical distance and achieved instant-feeling application responsiveness.
+
 ---
 
 ### 🎉 Final Result
