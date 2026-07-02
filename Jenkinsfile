@@ -47,13 +47,15 @@ pipeline {
             parallel {
                 stage('Backend: Spring Boot AOT & Tests') {
                     steps {
-                        // Mount docker.sock for Testcontainers
-                        docker.image('eclipse-temurin:21-jdk').inside('-v /var/run/docker.sock:/var/run/docker.sock') {
-                            echo "Running JUnit, ArchUnit, SpotBugs, and AOT compilation..."
-                            
-                            // [PRO-MOVE] Limit the Gradle Daemon and Java compiler to a strict 1.5GB Heap limit
-                            // to ensure Jenkins VM does not trigger an Out-Of-Memory (OOM) killer event during parallel builds
-                            sh './gradlew clean check processAot bootJar --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"'
+                        script {
+                            // Mount docker.sock for Testcontainers
+                            docker.image('eclipse-temurin:21-jdk').inside('-v /var/run/docker.sock:/var/run/docker.sock') {
+                                echo "Running JUnit, ArchUnit, SpotBugs, and AOT compilation..."
+                                
+                                // [PRO-MOVE] Limit the Gradle Daemon and Java compiler to a strict 1.5GB Heap limit
+                                // to ensure Jenkins VM does not trigger an Out-Of-Memory (OOM) killer event during parallel builds
+                                sh './gradlew clean check processAot bootJar --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"'
+                            }
                         }
                     }
                     post {
