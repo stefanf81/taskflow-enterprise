@@ -16,6 +16,11 @@
         "build": {
           "builder": "@angular/build:application",
           "options": {
+            "optimization": {
+              "styles": {
+                "inlineCritical": false
+              }
+            },
             "security": {
               "autoCsp": false
             },

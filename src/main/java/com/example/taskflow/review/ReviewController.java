@@ -34,24 +34,22 @@ public class ReviewController {
 
     @PostMapping("/public/{publicId}")
     @Operation(summary = "Submit a review for a completed appointment")
-    public ResponseEntity<?> submitReview(@PathVariable String publicId, @Valid @RequestBody ReviewRequest request) {
+    public ResponseEntity<Void> submitReview(@PathVariable String publicId, @Valid @RequestBody ReviewRequest request) {
         Appointment appointment = appointmentRepository.findByPublicId(publicId);
         if (appointment == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse("Appointment not found."));
+            throw new ResourceNotFoundException("Appointment not found with public ID: " + publicId);
         }
         
         if (!"APPROVED".equals(appointment.getStatus())) { // Ideally we should have a COMPLETED status, but APPROVED acts as completed for now
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse("Only completed appointments can be reviewed."));
+            throw new IllegalArgumentException("Only completed appointments can be reviewed.");
         }
 
-        try {
-            Review review = new Review(appointment, request.rating(), request.comment());
-            reviewRepository.save(review);
-            return ResponseEntity.status(HttpStatus.CREATED).build();
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse("Review has already been submitted for this appointment."));
+        if (reviewRepository.existsByAppointmentId(appointment.getId())) {
+            throw new IllegalArgumentException("Review has already been submitted for this appointment.");
         }
+
+        Review review = new Review(appointment, request.rating(), request.comment());
+        reviewRepository.save(review);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
     }
-    
-    public record ErrorResponse(String message) {}
 }

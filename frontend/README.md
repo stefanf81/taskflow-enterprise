@@ -2,6 +2,41 @@
 
 This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.0.3.
 
+## Styling & Design System (Tailwind CSS v4)
+
+This project uses **Tailwind CSS v4** (`^4.3.1`) natively within Angular 22's esbuild-based application compiler (`@angular/build:application`). 
+
+### Core Configurations:
+1. **`.postcssrc.json`:** Rather than `tailwind.config.js` or `postcss.config.js`, Angular's native compiler requires a JSON-based PostCSS settings block in the frontend root:
+   ```json
+   {
+     "plugins": {
+       "@tailwindcss/postcss": {}
+     }
+   }
+   ```
+2. **`styles.css`:** Imports Tailwind CSS v4 natively and declares the custom brand variables inside the `@theme` directive:
+   ```css
+   @import "tailwindcss";
+
+   @theme {
+     --color-gold-light: #e5c185;
+     --color-gold: #c5a059;
+     --color-gold-dark: #8e7a5c;
+     --color-obsidian-light: #1e293b;
+     --color-obsidian: #090d16;
+     --color-obsidian-dark: #030712;
+   }
+   ```
+3. **`angular.json` Optimization Flag:** The production unprivileged Nginx container implements a strict Content Security Policy (`style-src 'self' 'unsafe-inline'`). To prevent Angular's default critical CSS extraction tool from injecting dynamic `onload` script attributes (which get blocked by the CSP and render the page unstyled), we explicitly disable style inlining inside `angular.json`:
+   ```json
+   "optimization": {
+     "styles": {
+       "inlineCritical": false
+     }
+   }
+   ```
+
 ## Development server
 
 To start a local development server, run:

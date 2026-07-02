@@ -5,6 +5,7 @@ import { catchError } from 'rxjs/operators';
 import { throwError } from 'rxjs';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
+  const router = inject(Router);
   const token = sessionStorage.getItem('auth_token');
   
   // Skip attaching token if we are hitting the login endpoint
@@ -23,8 +24,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     catchError(err => {
       if (err.status === 401) {
         sessionStorage.removeItem('auth_token');
-        const router = inject(Router);
-        router.navigate(['/login']);
+        // Do not redirect to /login to prevent infinite routing loops on public endpoints
       }
       return throwError(() => err);
     })

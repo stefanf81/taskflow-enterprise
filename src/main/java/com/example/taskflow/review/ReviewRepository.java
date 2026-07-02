@@ -9,6 +9,8 @@ import java.util.List;
 @Repository
 public interface ReviewRepository extends JpaRepository<Review, Long> {
     
+    boolean existsByAppointmentId(Long appointmentId);
+    
     @Query("SELECT new com.example.taskflow.review.BarberRatingResponse(r.appointment.barberName, AVG(r.rating), COUNT(r)) " +
            "FROM Review r GROUP BY r.appointment.barberName")
     List<BarberRatingResponse> getBarberRatings();

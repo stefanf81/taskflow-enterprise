@@ -29,8 +29,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -201,5 +200,77 @@ public class FeaturesIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(reviewRequest)))
                 .andExpect(status().isBadRequest());
+
+        // Ensure reviews fail if publicId is invalid
+        mockMvc.perform(post("/api/v1/reviews/public/invalid-public-id")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(reviewRequest)))
+                .andExpect(status().isNotFound());
+
+        // Now let's approve the appointment via admin token so it can be reviewed
+        mockMvc.perform(put("/api/v1/appointments/" + apptMap.get("id"))
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"APPROVED\"}"))
+                .andExpect(status().isOk());
+
+        // Submit the review successfully the first time
+        mockMvc.perform(post("/api/v1/reviews/public/" + publicId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(reviewRequest)))
+                .andExpect(status().isCreated());
+
+        // Submit a duplicate review (should fail with 400 Bad Request)
+        mockMvc.perform(post("/api/v1/reviews/public/" + publicId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(reviewRequest)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", is("Review has already been submitted for this appointment.")));
+
+        // --- FEATURE 5: Customer Dashboard & Private Cancellation ---
+        // Fetch customer appointments (returns 1 appointment for jane@example.com)
+        mockMvc.perform(get("/api/v1/customer/appointments")
+                        .header("Authorization", customerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].customerEmail", is("jane@example.com")));
+
+        // Attempt unauthorized cancellation of Jane's appointment using another customer's token
+        // First register and login another customer
+        Map<String, Object> otherCustomer = new HashMap<>();
+        otherCustomer.put("fullName", "Bob Customer");
+        otherCustomer.put("email", "bob@example.com");
+        otherCustomer.put("password", "bob-pass-123");
+        otherCustomer.put("phone", "555-9999");
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(otherCustomer)))
+                .andExpect(status().isCreated());
+
+        Map<String, String> bobLogin = new HashMap<>();
+        bobLogin.put("username", "bob@example.com");
+        bobLogin.put("password", "bob-pass-123");
+
+        String bobResponse = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(bobLogin)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> bobMap = objectMapper.readValue(bobResponse, Map.class);
+        String bobToken = "Bearer " + bobMap.get("token").toString();
+
+        // Bob tries to cancel Jane's appointment (should fail with 404 Not Found / Unauthorized)
+        mockMvc.perform(delete("/api/v1/customer/appointments/" + apptMap.get("id"))
+                        .header("Authorization", bobToken))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message", is("Appointment not found or unauthorized.")));
+
+        // Jane cancels her own appointment successfully (returns 204 No Content)
+        mockMvc.perform(delete("/api/v1/customer/appointments/" + apptMap.get("id"))
+                        .header("Authorization", customerToken))
+                .andExpect(status().isNoContent());
     }
 }

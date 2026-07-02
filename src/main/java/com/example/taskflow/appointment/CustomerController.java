@@ -1,5 +1,6 @@
 package com.example.taskflow.appointment;
 
+import com.example.taskflow.core.ResourceNotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
@@ -40,12 +41,13 @@ public class CustomerController {
 
     @DeleteMapping("/appointments/{id}")
     @Operation(summary = "Cancel my appointment")
-    public ResponseEntity<?> cancelMyAppointment(@PathVariable Long id, Authentication authentication) {
+    public ResponseEntity<Void> cancelMyAppointment(@PathVariable Long id, Authentication authentication) {
         String email = authentication.getName();
-        Appointment appointment = appointmentRepository.findById(id).orElse(null);
+        Appointment appointment = appointmentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Appointment not found or unauthorized."));
         
-        if (appointment == null || !appointment.getCustomerEmail().equalsIgnoreCase(email)) {
-            return ResponseEntity.status(404).body("Appointment not found or unauthorized.");
+        if (!appointment.getCustomerEmail().equalsIgnoreCase(email)) {
+            throw new ResourceNotFoundException("Appointment not found or unauthorized.");
         }
 
         appointmentService.deleteAppointment(id);
