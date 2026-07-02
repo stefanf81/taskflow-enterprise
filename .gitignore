@@ -36,6 +36,9 @@ out/
 ### VS Code ###
 .vscode/
 
+# Test execution results
+/test-results/
+
 ### Angular Frontend / Node.js ###
 frontend/node_modules/
 frontend/dist/
