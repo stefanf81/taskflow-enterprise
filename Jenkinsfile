@@ -114,7 +114,10 @@ pipeline {
 
         stage('🚀 Publish to GHCR') {
             when {
-                branch 'main'
+                anyOf {
+                    branch 'main'
+                    expression { env.GIT_BRANCH == 'origin/main' || env.GIT_BRANCH == 'main' }
+                }
             }
             steps {
                 sh 'echo $DOCKER_CREDS_PSW | docker login $DOCKER_REGISTRY -u $DOCKER_CREDS_USR --password-stdin'
