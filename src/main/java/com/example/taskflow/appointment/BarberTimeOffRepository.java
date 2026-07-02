@@ -11,6 +11,8 @@ import java.util.List;
 @Repository
 public interface BarberTimeOffRepository extends JpaRepository<BarberTimeOff, Long> {
     
+    List<BarberTimeOff> findByBarberId(Long barberId);
+
     @Query("SELECT t FROM BarberTimeOff t WHERE t.barber.id = :barberId AND :date >= t.startDate AND :date <= t.endDate")
     List<BarberTimeOff> findTimeOffForBarberOnDate(@Param("barberId") Long barberId, @Param("date") LocalDate date);
 }

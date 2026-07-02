@@ -1,5 +1,6 @@
 package com.example.taskflow.appointment;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 
@@ -11,6 +12,7 @@ public class BarberTimeOff {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "barber_id", nullable = false)
     private Barber barber;

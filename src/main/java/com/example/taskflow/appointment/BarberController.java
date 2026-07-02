@@ -41,10 +41,7 @@ public class BarberController {
     @GetMapping("/{barberId}/time-off")
     @Operation(summary = "Get time-off for a barber")
     public ResponseEntity<List<BarberTimeOff>> getTimeOff(@PathVariable Long barberId) {
-        // Find all time offs for barber. To keep it simple we just return all.
-        // In a real app we might filter by future dates.
-        List<BarberTimeOff> timeOffs = timeOffRepository.findAll().stream()
-            .filter(t -> t.getBarber().getId().equals(barberId)).toList();
+        List<BarberTimeOff> timeOffs = timeOffRepository.findByBarberId(barberId);
         return ResponseEntity.ok(timeOffs);
     }
 

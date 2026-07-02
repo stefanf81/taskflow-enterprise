@@ -155,6 +155,21 @@ public class FeaturesIntegrationTest {
         Barber barber = new Barber("James the Stylist", "james@taskflow.com", "555-0987");
         barber = barberRepository.save(barber);
 
+        // Create a TimeOff for the barber
+        BarberTimeOff timeOff = new BarberTimeOff();
+        timeOff.setBarber(barber);
+        timeOff.setStartDate(LocalDate.of(2030, 5, 20));
+        timeOff.setEndDate(LocalDate.of(2030, 5, 25));
+        timeOff.setReason("Training");
+        barberTimeOffRepository.save(timeOff);
+
+        // Fetch time-off for barber and verify it serializes correctly
+        mockMvc.perform(get("/api/v1/barbers/" + barber.getId() + "/time-off")
+                        .header("Authorization", adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].reason", is("Training")));
+
         // Seed working schedule for James the Stylist for Thursday (Day 4)
         BarberSchedule schedule = new BarberSchedule();
         schedule.setBarber(barber);
