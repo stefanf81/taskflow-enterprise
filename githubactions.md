@@ -233,7 +233,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Backend Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile.x64
@@ -245,7 +245,7 @@ jobs:
             ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:latest
 
       - name: Build Frontend Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend
           platforms: linux/amd64
@@ -257,7 +257,7 @@ jobs:
 
       - name: Trivy Scan Backend
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_security_scans }}
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:${{ env.IMAGE_TAG }}
           format: 'table'
@@ -268,7 +268,7 @@ jobs:
 
       - name: Trivy Scan Frontend
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_security_scans }}
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:${{ env.IMAGE_TAG }}
           format: 'table'
@@ -316,8 +316,8 @@ If you are pushing to an organization registry or the above steps don't work, yo
 3. Create a new repository secret named `CR_PAT` and paste your token.
 4. In `.github/workflows/ci.yml`, change the login step to use your PAT:
    ```yaml
-   - name: Login to GitHub Container Registry
-     uses: docker/login-action@v3
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
      with:
        registry: ghcr.io
        username: ${{ github.actor }}
