@@ -224,3 +224,37 @@ jobs:
 ## Step 4: Run the Workflow
 * **Automatic Runs**: The pipeline will trigger seamlessly on code pushes and pull requests to the `main` branch.
 * **Manual Runs (Parameterized)**: Go to the **Actions** tab in your repository, select the **TaskFlow Enterprise CI/CD** workflow on the left, and click **Run workflow**. You will be presented with the exact same interactive checkboxes for `run_lint_and_format`, `run_tests`, and `run_security_scans` that are available in Jenkins!
+
+## 🚨 Troubleshooting
+
+### Error: `denied: permission_denied: write_package` during `docker push`
+
+If you encounter a `write_package` permission error when the workflow attempts to push the images to GHCR, it means GitHub Actions is being blocked from writing to your registry. 
+
+**Solution 1: Check Repository Workflow Permissions**
+1. Go to your GitHub repository -> **Settings** -> **Actions** -> **General**.
+2. Scroll down to **Workflow permissions**.
+3. Ensure **Read and write permissions** is selected and save.
+
+**Solution 2: Link the Package to the Repository (If package already exists)**
+If you previously pushed this Docker image manually using a Personal Access Token, the package might be isolated from your repository's automated Action token.
+1. Go to your personal GitHub profile and click on **Packages**.
+2. Select the `taskflow-backend` (or `taskflow-frontend`) package.
+3. Click on **Package settings** (usually on the right-hand sidebar).
+4. Scroll down to **Manage Actions access**.
+5. Click **Add Repository**, search for your `taskflow-enterprise` repository, and grant it **Write** access.
+
+**Solution 3: Use a Personal Access Token (PAT)**
+If you are pushing to an organization registry or the above steps don't work, you can use a PAT:
+1. Generate a GitHub PAT with `write:packages` and `read:packages` scopes.
+2. Go to your repository -> **Settings** -> **Secrets and variables** -> **Actions**.
+3. Create a new repository secret named `CR_PAT` and paste your token.
+4. In `.github/workflows/ci.yml`, change the login step to use your PAT:
+   ```yaml
+   - name: Login to GitHub Container Registry
+     uses: docker/login-action@v3
+     with:
+       registry: ghcr.io
+       username: ${{ github.actor }}
+       password: ${{ secrets.CR_PAT }}
+   ```
