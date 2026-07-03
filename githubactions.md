@@ -57,12 +57,208 @@ If your GitHub account belongs to an organization with strict enterprise policie
 #### Part 3: Update `ci.yml` Login Step
 Update `.github/workflows/ci.yml` in the `Login to GitHub Container Registry` step to use your secret:
 ```yaml
+name: TaskFlow Enterprise CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      run_lint_and_format:
+        description: 'Run Dockerfile linting and Prettier checks'
+        required: true
+        default: true
+        type: boolean
+      run_tests:
+        description: 'Run JUnit, Vitest, and compilation tests'
+        required: true
+        default: false
+        type: boolean
+      run_security_scans:
+        description: 'Run Trivy container security scans'
+        required: true
+        default: false
+        type: boolean
+
+env:
+  DOCKER_REGISTRY: ghcr.io
+  IMAGE_TAG: ${{ github.run_number }}
+
+jobs:
+  lint-and-format:
+    name: 🛠️ Initialization & Linting
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_lint_and_format }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      - name: Lint Dockerfiles
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          ignore: DL3018,DL3029
+
+      - name: Lint Dockerfile.x64
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile.x64
+          ignore: DL3018,DL3029
+
+      - name: Lint Frontend Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: frontend/Dockerfile
+          ignore: DL3018,DL3029
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Check Frontend Formatting
+        working-directory: ./frontend
+        run: |
+          npm ci
+          npx prettier --check 'src/**/*.ts' 'src/**/*.html'
+
+  backend-pipeline:
+    name: ☕ Backend (Build, Test & Containerize)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Backend - Spring Boot Tests
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true }}
+        run: |
+          echo "Running JUnit, ArchUnit, and SpotBugs..."
+          ./gradlew clean check --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-test-results
+          path: build/test-results/test/*.xml
+
+      - name: Upload JaCoCo Report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-jacoco-report
+          path: build/jacoco/*.exec
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.CR_PAT }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push Backend Image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile.x64
+          platforms: linux/amd64
+          push: ${{ github.ref == 'refs/heads/main' }}
+          load: ${{ github.ref != 'refs/heads/main' }}
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:${{ env.IMAGE_TAG }}
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy Scan Backend
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_security_scans }}
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:${{ env.IMAGE_TAG }}
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'HIGH,CRITICAL'
+
+  frontend-pipeline:
+    name: 🎨 Frontend (Build, Test & Containerize)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Frontend - Angular Tests
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true }}
+        working-directory: ./frontend
+        env:
+          NODE_OPTIONS: --max-old-space-size=1536
+        run: |
+          npm ci
+          echo "Running Vitest..."
+          npm run test -- --watch=false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push Frontend Image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./frontend
+          platforms: linux/amd64
+          push: ${{ github.ref == 'refs/heads/main' }}
+          load: ${{ github.ref != 'refs/heads/main' }}
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:${{ env.IMAGE_TAG }}
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy Scan Frontend
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_security_scans }}
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:${{ env.IMAGE_TAG }}
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'HIGH,CRITICAL'
+
 ```
 
 ## Step 2: Create the Workflow File
@@ -141,9 +337,12 @@ jobs:
           npm ci
           npx prettier --check 'src/**/*.ts' 'src/**/*.html'
 
-  build-and-test:
-    name: 🧪 Parallel Build & Test
+  backend-pipeline:
+    name: ☕ Backend (Build, Test & Containerize)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v5
@@ -155,15 +354,11 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: Backend - Spring Boot AOT & Tests
+      - name: Backend - Spring Boot Tests
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true }}
         run: |
-          if [ "${{ github.event_name == 'workflow_dispatch' && !inputs.run_tests }}" = "true" ]; then
-            echo "Skipping tests, compiling Java & AOT assets only..."
-            ./gradlew clean processAot bootJar -x test -x spotbugsMain -x spotbugsTest -x spotbugsAot --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"
-          else
-            echo "Running JUnit, ArchUnit, SpotBugs, and AOT compilation..."
-            ./gradlew clean check processAot bootJar --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"
-          fi
+          echo "Running JUnit, ArchUnit, and SpotBugs..."
+          ./gradlew clean check --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"
 
       - name: Upload Test Results
         if: always()
@@ -179,52 +374,6 @@ jobs:
           name: backend-jacoco-report
           path: build/jacoco/*.exec
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: 'frontend/package-lock.json'
-
-      - name: Frontend - Angular Tests & Build
-        working-directory: ./frontend
-        env:
-          NODE_OPTIONS: --max-old-space-size=1536
-        run: |
-          npm ci
-          if [ "${{ github.event_name == 'workflow_dispatch' && !inputs.run_tests }}" = "true" ]; then
-            echo "Skipping frontend tests, building Angular Production assets only..."
-            npm run build
-          else
-            echo "Running Vitest and Angular Production Build..."
-            npm run test -- --watch=false
-            npm run build
-          fi
-
-      - name: Upload Compiled Assets (JAR & dist)
-        uses: actions/upload-artifact@v7
-        with:
-          name: compiled-assets
-          path: |
-            build/libs/*.jar
-            frontend/dist/
-
-  containerization:
-    name: 📦 Containerization & Publish
-    runs-on: ubuntu-latest
-    needs: build-and-test
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v5
-
-      - name: Download Compiled Assets
-        uses: actions/download-artifact@v8
-        with:
-          name: compiled-assets
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -235,28 +384,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Backend Image
+      - name: Build & Push Backend Image
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile.x64
           platforms: linux/amd64
-          push: false
-          load: true
+          push: ${{ github.ref == 'refs/heads/main' }}
+          load: ${{ github.ref != 'refs/heads/main' }}
           tags: |
             ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:${{ env.IMAGE_TAG }}
             ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:latest
-
-      - name: Build Frontend Image
-        uses: docker/build-push-action@v7
-        with:
-          context: ./frontend
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: |
-            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:${{ env.IMAGE_TAG }}
-            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Trivy Scan Backend
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_security_scans }}
@@ -269,6 +409,56 @@ jobs:
           vuln-type: 'os,library'
           severity: 'HIGH,CRITICAL'
 
+  frontend-pipeline:
+    name: 🎨 Frontend (Build, Test & Containerize)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Frontend - Angular Tests
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true }}
+        working-directory: ./frontend
+        env:
+          NODE_OPTIONS: --max-old-space-size=1536
+        run: |
+          npm ci
+          echo "Running Vitest..."
+          npm run test -- --watch=false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push Frontend Image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./frontend
+          platforms: linux/amd64
+          push: ${{ github.ref == 'refs/heads/main' }}
+          load: ${{ github.ref != 'refs/heads/main' }}
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:${{ env.IMAGE_TAG }}
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Trivy Scan Frontend
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_security_scans }}
         uses: aquasecurity/trivy-action@v0.36.0
@@ -280,13 +470,6 @@ jobs:
           vuln-type: 'os,library'
           severity: 'HIGH,CRITICAL'
 
-      - name: Publish to GHCR
-        if: github.ref == 'refs/heads/main'
-        run: |
-          docker push ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:${{ env.IMAGE_TAG }}
-          docker push ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:latest
-          docker push ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:${{ env.IMAGE_TAG }}
-          docker push ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:latest
 ```
 
 ## Step 4: Run the Workflow
