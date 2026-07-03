@@ -49,7 +49,7 @@ jobs:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_lint_and_format }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Lint Dockerfiles
         uses: hadolint/hadolint-action@v3.1.0
@@ -70,7 +70,7 @@ jobs:
           ignore: DL3018,DL3029
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'
@@ -87,10 +87,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
@@ -121,7 +121,7 @@ jobs:
           path: build/jacoco/*.exec
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'
@@ -159,7 +159,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download Compiled Assets
         uses: actions/download-artifact@v4
