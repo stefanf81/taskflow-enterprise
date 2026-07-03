@@ -12,6 +12,13 @@ plugins {
 group = 'com.example'
 version = '0.0.1-SNAPSHOT'
 
+ext {
+	set('tomcat.version', '10.1.55')
+	set('jackson.version', '2.18.8')
+	set('netty.version', '4.1.135.Final')
+	set('spring-security.version', '6.5.9')
+}
+
 java {
 	sourceCompatibility = JavaVersion.VERSION_21
 	targetCompatibility = JavaVersion.VERSION_21
