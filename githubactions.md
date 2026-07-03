@@ -177,7 +177,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Gradle Build Cache
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Backend - Spring Boot Tests
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true }}
@@ -426,7 +426,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Gradle Build Cache
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Backend - Spring Boot Tests
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true }}

@@ -47,7 +47,7 @@ jobs:
 
       - name: Detect Changed Files
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             backend:
@@ -118,7 +118,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Gradle Build Cache
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Backend - Spring Boot Tests
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true }}
