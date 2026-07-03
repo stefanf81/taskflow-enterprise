@@ -240,7 +240,9 @@ jobs:
           platforms: linux/amd64
           push: false
           load: true
-          tags: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:${{ env.IMAGE_TAG }}
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:${{ env.IMAGE_TAG }}
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:latest
 
       - name: Build Frontend Image
         uses: docker/build-push-action@v5
@@ -249,7 +251,9 @@ jobs:
           platforms: linux/amd64
           push: false
           load: true
-          tags: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:${{ env.IMAGE_TAG }}
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:${{ env.IMAGE_TAG }}
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:latest
 
       - name: Trivy Scan Backend
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_security_scans }}
@@ -277,7 +281,9 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           docker push ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:${{ env.IMAGE_TAG }}
+          docker push ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:latest
           docker push ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:${{ env.IMAGE_TAG }}
+          docker push ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:latest
 ```
 
 ## Step 4: Run the Workflow
