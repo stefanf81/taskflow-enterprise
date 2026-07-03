@@ -122,7 +122,7 @@ jobs:
     name: 🛠️ Initialization & Linting
     runs-on: ubuntu-latest
     needs: changes
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_lint_and_format }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_lint_and_format == true || inputs.run_lint_and_format == 'true' }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v5
@@ -180,7 +180,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Backend - Spring Boot Tests
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true || inputs.run_tests == 'true' }}
         run: |
           echo "Running JUnit, ArchUnit, and SpotBugs..."
           ./gradlew clean check --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"
@@ -222,7 +222,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trivy Scan Backend
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_security_scans }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_security_scans == true || inputs.run_security_scans == 'true' }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:${{ env.IMAGE_TAG }}
@@ -252,7 +252,7 @@ jobs:
           cache-dependency-path: 'frontend/package-lock.json'
 
       - name: Frontend - Angular Tests
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true || inputs.run_tests == 'true' }}
         working-directory: ./frontend
         env:
           NODE_OPTIONS: --max-old-space-size=1536
@@ -283,7 +283,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trivy Scan Frontend
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_security_scans }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_security_scans == true || inputs.run_security_scans == 'true' }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:${{ env.IMAGE_TAG }}
@@ -367,7 +367,7 @@ jobs:
     name: 🛠️ Initialization & Linting
     runs-on: ubuntu-latest
     needs: changes
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_lint_and_format }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_lint_and_format == true || inputs.run_lint_and_format == 'true' }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v5
@@ -425,7 +425,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Backend - Spring Boot Tests
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true || inputs.run_tests == 'true' }}
         run: |
           echo "Running JUnit, ArchUnit, and SpotBugs..."
           ./gradlew clean check --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"
@@ -467,7 +467,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trivy Scan Backend
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_security_scans }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_security_scans == true || inputs.run_security_scans == 'true' }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:${{ env.IMAGE_TAG }}
@@ -497,7 +497,7 @@ jobs:
           cache-dependency-path: 'frontend/package-lock.json'
 
       - name: Frontend - Angular Tests
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true || inputs.run_tests == 'true' }}
         working-directory: ./frontend
         env:
           NODE_OPTIONS: --max-old-space-size=1536
@@ -528,7 +528,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trivy Scan Frontend
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_security_scans }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_security_scans == true || inputs.run_security_scans == 'true' }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:${{ env.IMAGE_TAG }}
