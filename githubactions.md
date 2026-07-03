@@ -167,14 +167,14 @@ jobs:
 
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-test-results
           path: build/test-results/test/*.xml
 
       - name: Upload JaCoCo Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-jacoco-report
           path: build/jacoco/*.exec
@@ -202,7 +202,7 @@ jobs:
           fi
 
       - name: Upload Compiled Assets (JAR & dist)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: compiled-assets
           path: |
@@ -221,7 +221,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Download Compiled Assets
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: compiled-assets
 
