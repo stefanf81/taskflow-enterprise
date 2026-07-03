@@ -45,16 +45,12 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             "SUM(CASE WHEN a.status = 'PENDING' AND a.bookingDate < :now THEN 1 ELSE 0 END), " +
             "0, " +
             "COALESCE(SUM(CASE WHEN a.status = 'APPROVED' THEN " +
-            "CASE a.serviceType WHEN 'Classic Haircut' THEN 25.0 WHEN 'Modern Skin Fade' THEN 30.0 " +
-            "WHEN 'Beard Trim & Shave' THEN 18.0 WHEN 'Royal Hot Towel Shave' THEN 22.0 " +
-            "WHEN 'The Executive Package' THEN 40.0 ELSE 0.0 END ELSE 0.0 END), 0.0)) " +
+            "(SELECT s.price FROM ServiceItem s WHERE s.name = a.serviceType) ELSE 0.0 END), 0.0)) " +
             "FROM Appointment a")
     com.example.taskflow.appointment.AppointmentStats getAppointmentStats(@Param("now") LocalDate now);
 
     @Query("SELECT COALESCE(SUM(CASE WHEN a.status = 'APPROVED' THEN " +
-            "CASE a.serviceType WHEN 'Classic Haircut' THEN 25.0 WHEN 'Modern Skin Fade' THEN 30.0 " +
-            "WHEN 'Beard Trim & Shave' THEN 18.0 WHEN 'Royal Hot Towel Shave' THEN 22.0 " +
-            "WHEN 'The Executive Package' THEN 40.0 ELSE 0.0 END ELSE 0.0 END), 0.0) " +
+            "(SELECT s.price FROM ServiceItem s WHERE s.name = a.serviceType) ELSE 0.0 END), 0.0) " +
             "FROM Appointment a")
     double sumApprovedRevenue();
 }
