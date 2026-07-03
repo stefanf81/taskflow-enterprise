@@ -2,9 +2,68 @@
 
 If you prefer to run the CI/CD pipeline on **GitHub Actions** rather than Jenkins, follow this step-by-step plan to replicate the workflow using GitHub's native CI/CD.
 
-## Step 1: Prepare the GitHub Repository Settings
-1. **Enable GitHub Actions**: Navigate to your GitHub repository -> **Settings** -> **Actions** -> **General**. Ensure that "Allow all actions and reusable workflows" is selected.
-2. **Configure Package Permissions**: Your workflow needs permission to publish images to the GitHub Container Registry (GHCR) using the automatic `GITHUB_TOKEN`. Go to **Settings** -> **Actions** -> **General**, scroll down to **Workflow permissions**, and select **Read and write permissions**.
+## Step 1: Configure GitHub Actions & Package Permissions (Crucial)
+
+To prevent `write_package` or `permission_denied` errors when pushing Docker images to the GitHub Container Registry (GHCR), you must ensure GitHub Actions has both repository-level and package-level read/write permissions.
+
+### Option A: The Automatic GITHUB_TOKEN Method (Recommended)
+
+#### Part 1: Repository Workflow Permissions
+1. Navigate to your repository page on GitHub.
+2. Click on the **Settings** tab (the gear icon on the top menu bar).
+3. On the left sidebar, click on **Actions** -> **General**.
+4. Scroll down to the bottom of the page to the **Workflow permissions** section.
+5. Select **Read and write permissions**.
+6. Check the box for **"Allow GitHub Actions to create and approve pull requests"** (if applicable).
+7. Click the green **Save** button.
+
+#### Part 2: GHCR Package Access (If the Docker Packages Already Exist)
+If you previously built or pushed `taskflow-backend` or `taskflow-frontend` manually (e.g., via a local terminal or Personal Access Token), those packages are owned by your personal profile rather than the automated workflow token. You must explicitly link them to your repository:
+1. Go to your personal GitHub profile (e.g., `https://github.com/your-username`).
+2. Click on the **Packages** tab at the top.
+3. Click on the package named **`taskflow-backend`** (and later repeat for **`taskflow-frontend`**).
+4. On the right-hand sidebar, click on **Package settings**.
+5. Scroll down to the **Manage Actions access** section.
+6. Click the **Add repository** button.
+7. Search for your repository: **`stefanf81/taskflow-enterprise`** and select it.
+8. Under the role dropdown, change it from **Read** to **Write** or **Admin**.
+9. Click **Save** or **Add**.
+
+---
+
+### Option B: The Personal Access Token (PAT) Method (Use if Option A is restricted)
+
+If your GitHub account belongs to an organization with strict enterprise policies blocking workflow write permissions, use a classic PAT:
+
+#### Part 1: Generate your Personal Access Token
+1. Click on your profile picture in the top-right corner of GitHub -> **Settings**.
+2. Scroll to the bottom of the left sidebar and click **Developer settings**.
+3. Select **Personal access tokens** -> **Tokens (classic)**.
+4. Click **Generate new token** -> **Generate new token (classic)**.
+5. Give it a descriptive name (e.g., `GHCR_Actions_Token`).
+6. Select the following scopes:
+   * **`write:packages`** (automatically selects `read:packages`)
+   * **`delete:packages`** (optional, for cleanup)
+7. Click **Generate token** and copy the resulting string immediately (it will not be shown again).
+
+#### Part 2: Add Token as a Secret in the Repository
+1. Navigate back to your repository page on GitHub.
+2. Click **Settings** -> **Secrets and variables** -> **Actions** on the left menu.
+3. Click **New repository secret**.
+4. Set the **Name** to: **`CR_PAT`**.
+5. Paste your copied Personal Access Token into the **Value** box.
+6. Click **Add secret**.
+
+#### Part 3: Update `ci.yml` Login Step
+Update `.github/workflows/ci.yml` in the `Login to GitHub Container Registry` step to use your secret:
+```yaml
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.CR_PAT }}
+```
 
 ## Step 2: Create the Workflow File
 In the root of your project, create the following directory structure: `.github/workflows/` and add a new file named `ci.yml` (e.g., `.github/workflows/ci.yml`).
