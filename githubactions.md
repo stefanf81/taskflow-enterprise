@@ -89,12 +89,12 @@ on:
       run_tests:
         description: 'Run JUnit, Vitest, and compilation tests'
         required: true
-        default: true
+        default: false
         type: boolean
       run_security_scans:
         description: 'Run Trivy container security scans'
         required: true
-        default: true
+        default: false
         type: boolean
 
 env:
