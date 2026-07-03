@@ -91,7 +91,7 @@ permissions:
 
 env:
   DOCKER_REGISTRY: ghcr.io
-  IMAGE_TAG: ${{ github.run_number }}
+  IMAGE_TAG: latest
 
 jobs:
   changes:
@@ -106,7 +106,7 @@ jobs:
 
       - name: Detect Changed Files
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             backend:
@@ -217,9 +217,7 @@ jobs:
           platforms: linux/amd64
           push: ${{ github.ref == 'refs/heads/main' }}
           load: ${{ github.ref != 'refs/heads/main' }}
-          tags: |
-            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:${{ env.IMAGE_TAG }}
-            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:latest
+          tags: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:${{ env.IMAGE_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -280,9 +278,7 @@ jobs:
           platforms: linux/amd64
           push: ${{ github.ref == 'refs/heads/main' }}
           load: ${{ github.ref != 'refs/heads/main' }}
-          tags: |
-            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:${{ env.IMAGE_TAG }}
-            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:latest
+          tags: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:${{ env.IMAGE_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -340,7 +336,7 @@ permissions:
 
 env:
   DOCKER_REGISTRY: ghcr.io
-  IMAGE_TAG: ${{ github.run_number }}
+  IMAGE_TAG: latest
 
 jobs:
   changes:
@@ -355,7 +351,7 @@ jobs:
 
       - name: Detect Changed Files
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             backend:
@@ -466,9 +462,7 @@ jobs:
           platforms: linux/amd64
           push: ${{ github.ref == 'refs/heads/main' }}
           load: ${{ github.ref != 'refs/heads/main' }}
-          tags: |
-            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:${{ env.IMAGE_TAG }}
-            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:latest
+          tags: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-backend:${{ env.IMAGE_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -529,9 +523,7 @@ jobs:
           platforms: linux/amd64
           push: ${{ github.ref == 'refs/heads/main' }}
           load: ${{ github.ref != 'refs/heads/main' }}
-          tags: |
-            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:${{ env.IMAGE_TAG }}
-            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:latest
+          tags: ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/taskflow-frontend:${{ env.IMAGE_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
