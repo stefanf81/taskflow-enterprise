@@ -3,8 +3,8 @@
 # We explicitly set the platform to linux/amd64 to ensure that if this is built on an
 # Apple Silicon Mac, Docker uses Rosetta/QEMU to cross-compile the x64 binaries for cloud deployment.
 # =========================================================================================
-ARG TARGETPLATFORM=linux/amd64
-FROM --platform=$TARGETPLATFORM eclipse-temurin:21-jdk AS builder
+ARG PLATFORM=linux/amd64
+FROM --platform=$PLATFORM eclipse-temurin:21-jdk AS builder
 WORKDIR /app
 
 # [CACHE OPTIMIZATION] Copy gradle wrapper and build files first.
@@ -31,7 +31,7 @@ RUN java -Djarmode=tools -jar build/libs/*.jar extract --layers --launcher --des
 # =========================================================================================
 # STAGE 2: PRODUCTION RUNTIME STAGE (x64 / AMD64 Optimized)
 # =========================================================================================
-FROM --platform=$TARGETPLATFORM eclipse-temurin:21-jre-alpine
+FROM --platform=$PLATFORM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 # [PROCESS REAPING & KUBERNETES PSS] 
