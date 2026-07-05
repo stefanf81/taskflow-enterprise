@@ -11,19 +11,18 @@ WORKDIR /app
 COPY gradle/ /app/gradle/
 COPY gradlew build.gradle settings.gradle /app/
 
-# [DEPENDENCY PRE-DOWNLOAD] Pre-download and cache all external Gradle dependencies.
-# This isolates external library resolution in its own highly-cached Docker layer,
-# significantly accelerating frequent application recompilations.
-RUN --mount=type=cache,target=/root/.gradle \
-    chmod +x gradlew && ./gradlew dependencies --no-daemon
+# [DEPENDENCY PRE-DOWNLOAD] Pre-download all external Gradle dependencies.
+# We do NOT use --mount=type=cache here because it prevents GitHub Actions (type=gha) 
+# from exporting this layer to the remote cache. By making it a standard layer, 
+# GHA perfectly caches it as long as build.gradle doesn't change.
+RUN chmod +x gradlew && ./gradlew dependencies --no-daemon
 
 # Now copy the application source files.
 COPY src/ /app/src/
 
 # [BUILDKIT CACHE MOUNT] Persistently cache Gradle dependencies between builds
 # We run 'processAot' to compile the application Ahead-Of-Time.
-RUN --mount=type=cache,target=/root/.gradle \
-    ./gradlew processAot bootJar --no-daemon
+RUN ./gradlew processAot bootJar --no-daemon
 
 # [LAYERED JAR EXTRACTION] Extract into 4 layers for lightning-fast container updates
 RUN java -Djarmode=tools -jar build/libs/*.jar extract --layers --launcher --destination extracted
