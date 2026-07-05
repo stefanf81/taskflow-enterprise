@@ -54,3 +54,8 @@ pnpm-debug.log*
 
 # Local cluster credentials
 k3d-kubeconfig.yaml
+
+# Local AI Configuration & Reports
+llm-config.json
+lmstudio-qwen-config.json
+zap_report.html
