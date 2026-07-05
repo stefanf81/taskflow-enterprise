@@ -9,7 +9,7 @@ WORKDIR /app
 
 # [CACHE OPTIMIZATION] Copy gradle wrapper and build files first.
 COPY gradle/ /app/gradle/
-COPY gradlew build.gradle settings.gradle /app/
+COPY gradlew build.gradle settings.gradle gradle.properties /app/
 
 # [DEPENDENCY PRE-DOWNLOAD] Pre-download all external Gradle dependencies.
 # We do NOT use --mount=type=cache here because it prevents GitHub Actions (type=gha) 
