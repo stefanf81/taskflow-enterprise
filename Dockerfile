@@ -11,7 +11,7 @@ WORKDIR /app
 # Docker caches layers sequentially. By copying these before the source code,
 # we ensure that if we only change Java code, Docker doesn't invalidate the dependency cache.
 COPY gradle/ /app/gradle/
-COPY gradlew build.gradle settings.gradle /app/
+COPY gradlew build.gradle settings.gradle gradle.properties /app/
 
 # [DEPENDENCY PRE-DOWNLOAD] Download dependencies first.
 # This ensures that external libraries are locked inside a cached Docker layer.
@@ -26,13 +26,10 @@ COPY src/ /app/src/
 # [BUILDKIT CACHE MOUNT] This is an elite Docker optimization.
 # It mounts a persistent volume to /root/.gradle that survives between independent Docker builds.
 # We run 'processAot' to trigger Spring Boot's Ahead-Of-Time compilation (removing runtime reflection overhead).
+# Then we extract it into 4 layers for lightning-fast container updates.
 RUN --mount=type=cache,target=/root/.gradle \
-    ./gradlew processAot bootJar --no-daemon
-
-# [LAYERED JAR EXTRACTION] Instead of running a massive 50MB "Fat JAR", we extract it into 4 layers.
-# This ensures that when you push a code change to Kubernetes, Docker only uploads the tiny 'application' layer (~4MB)
-# instead of pushing the heavy 3rd-party dependencies every single time.
-RUN java -Djarmode=tools -jar build/libs/*.jar extract --layers --launcher --destination extracted
+    ./gradlew processAot bootJar --no-daemon && \
+    java -Djarmode=tools -jar build/libs/*.jar extract --layers --launcher --destination extracted
 
 # =========================================================================================
 # STAGE 2: PRODUCTION RUNTIME STAGE
