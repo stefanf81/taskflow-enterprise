@@ -21,11 +21,10 @@ RUN chmod +x gradlew && ./gradlew dependencies --no-daemon
 COPY src/ /app/src/
 
 # [BUILDKIT CACHE MOUNT] Persistently cache Gradle dependencies between builds
-# We run 'processAot' to compile the application Ahead-Of-Time.
-RUN ./gradlew processAot bootJar --no-daemon
-
-# [LAYERED JAR EXTRACTION] Extract into 4 layers for lightning-fast container updates
-RUN java -Djarmode=tools -jar build/libs/*.jar extract --layers --launcher --destination extracted
+# We run 'processAot' to compile the application Ahead-Of-Time, 
+# then extract into 4 layers for lightning-fast container updates.
+RUN ./gradlew processAot bootJar --no-daemon && \
+    java -Djarmode=tools -jar build/libs/*.jar extract --layers --launcher --destination extracted
 
 # =========================================================================================
 # STAGE 2: PRODUCTION RUNTIME STAGE (x64 / AMD64 Optimized)
