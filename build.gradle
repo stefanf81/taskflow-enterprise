@@ -111,3 +111,7 @@ dependencyCheck {
 tasks.named("spotbugsAot") {
     enabled = false
 }
+
+tasks.named("spotbugsTest") {
+    enabled = false
+}

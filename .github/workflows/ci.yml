@@ -149,7 +149,7 @@ jobs:
         if: github.event_name != 'workflow_dispatch' || inputs.run_tests
         run: |
           echo "Running JUnit, ArchUnit, and SpotBugs..."
-          ./gradlew check --no-daemon --parallel --build-cache -Dorg.gradle.jvmargs="-Xmx1536m"
+          ./gradlew check --no-daemon --parallel --build-cache
 
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v5
@@ -278,7 +278,7 @@ jobs:
       - name: Start Spring Boot Backend in Background
         if: github.event_name != 'workflow_dispatch' || inputs.run_tests
         run: |
-          nohup ./gradlew bootRun --no-daemon --parallel --build-cache -Dorg.gradle.jvmargs="-Xmx1536m" > spring-boot.log 2>&1 &
+          nohup ./gradlew bootRun --no-daemon --parallel --build-cache > spring-boot.log 2>&1 &
           echo "Spring Boot starting in background..."
           for i in {1..45}; do
             if curl --fail -s http://localhost:8080/api/v1/catalog > /dev/null; then

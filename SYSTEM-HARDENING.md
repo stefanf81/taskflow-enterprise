@@ -64,6 +64,17 @@ Two critical architectural alignments were identified and resolved to ensure run
     *   **Redis & Frontend:** Allowed limits of **`1.0` CPU** and **`512MB`** of memory.
     This eliminated resource throttling entirely, dropping system boot times to under 3 seconds!
 
+### Finding 8: Plaintext Secret Hardening in Opencode Configuration
+*   **Location:** `~/.config/opencode/opencode.jsonc` (GitHub MCP Server Configuration)
+*   **Issue:** The `github` MCP server config had a hardcoded GitHub Personal Access Token (PAT) stored directly in plaintext inside the configuration JSON. Hardcoding active credentials poses a critical security leakage risk should the config file be audited, backed up, or checked into repositories.
+*   **Resolution:** Sanitized the configuration by removing the plaintext credential and replacing it with Opencode's secure environment variable interpolation block:
+    ```json
+    "environment": {
+      "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_PERSONAL_ACCESS_TOKEN}"
+    }
+    ```
+    This securely resolves the PAT dynamically from the host process at execution time. The Docker container run command automatically forwards this value (`-e GITHUB_PERSONAL_ACCESS_TOKEN`), keeping the host filesystem zero-plaintext while enforcing a rigid zero-trust credential standard.
+
 ---
 
 ## 🧪 3. System Verification Status
