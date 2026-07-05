@@ -56,6 +56,9 @@ Handles the Angular 22 frontend build, testing, Playwright E2E execution, and co
 - **Playwright Browser Caching**:
   - Dynamically extracts the Playwright version and caches the `~/.cache/ms-playwright` directory based on the OS and version.
   - **Why:** Downloading hundreds of megabytes of headless browsers (Chromium, Firefox, WebKit) on every PR takes minutes. We conditionally run `npx playwright install-deps` (to get OS libraries) if the cache hits, completely bypassing the massive browser binary download.
+- **Embedded Spring Boot for Full-Stack E2E:** 
+  - Automatically spins up the Java Spring Boot backend (`./gradlew bootRun`) in the background of the frontend runner, waiting for its health check to become green before running Playwright.
+  - **Why:** The Angular application's E2E suite performs actual full-stack tasks (creating guest bookings, logging in as admin, approving bookings). Running Playwright tests without a running backend results in `504 Gateway Timeout` or connection errors. We also upload `spring-boot.log` as a workflow artifact upon failure to provide holistic backend+frontend debugging!
 - **E2E Artifact Uploads**: Uploads the `playwright-report/` upon completion.
   - **Why:** If an E2E test fails, developers can download the HTML report and traces to visually debug what went wrong in the browser.
 - **FinOps Artifact Retention (`retention-days: 7`)**:

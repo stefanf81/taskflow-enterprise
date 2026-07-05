@@ -281,6 +281,32 @@ jobs:
           path: frontend/coverage/
           retention-days: 7
 
+      - name: Set up JDK 21 for E2E Tests
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true || inputs.run_tests == 'true' }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle for E2E Tests
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true || inputs.run_tests == 'true' }}
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Start Spring Boot Backend in Background
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true || inputs.run_tests == 'true' }}
+        run: |
+          nohup ./gradlew bootRun --no-daemon > spring-boot.log 2>&1 &
+          echo "Spring Boot starting in background..."
+          for i in {1..45}; do
+            if curl -s http://localhost:8080/api/v1/services > /dev/null; then
+              echo "Backend is up and running!"
+              break
+            fi
+            echo "Waiting for backend... ($i)"
+            sleep 2
+          done
+          cat spring-boot.log | head -n 100 || true
+
       - name: Get Playwright version
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests == true || inputs.run_tests == 'true' }}
         id: playwright-version
@@ -312,6 +338,14 @@ jobs:
         with:
           name: playwright-report
           path: frontend/playwright-report/
+          retention-days: 7
+
+      - name: Upload Spring Boot Logs
+        if: always() && (github.event_name != 'workflow_dispatch' || inputs.run_tests == true || inputs.run_tests == 'true')
+        uses: actions/upload-artifact@v4
+        with:
+          name: spring-boot-logs
+          path: spring-boot.log
           retention-days: 7
 
       - name: Set up Docker Buildx
