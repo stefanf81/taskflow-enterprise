@@ -23,6 +23,12 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     
     Page<Appointment> findByCustomerEmailIgnoreCase(String customerEmail, Pageable pageable);
     
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM Appointment a WHERE a.bookingDate = :date AND a.reminderSent = :reminderSent AND a.status = :status")
+    java.util.List<Appointment> findForReminderWithLock(@Param("date") LocalDate date, 
+                                                         @Param("reminderSent") boolean reminderSent, 
+                                                         @Param("status") String status);
+    
     java.util.List<Appointment> findByBookingDateAndReminderSentFalseAndStatus(LocalDate date, String status);
     
     @Query("SELECT COUNT(a) > 0 FROM Appointment a WHERE a.id = :id AND LOWER(a.customerEmail) = LOWER(:email)")
@@ -44,9 +50,8 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             "SUM(CASE WHEN a.status = 'DENIED' THEN 1 ELSE 0 END), " +
             "SUM(CASE WHEN a.status = 'PENDING' AND a.bookingDate < :now THEN 1 ELSE 0 END), " +
             "0, " +
-            "COALESCE(SUM(CASE WHEN a.status = 'APPROVED' THEN " +
-            "(SELECT s.price FROM ServiceItem s WHERE s.name = a.serviceType) ELSE 0.0 END), 0.0)) " +
-            "FROM Appointment a")
+            "COALESCE(SUM(CASE WHEN a.status = 'APPROVED' THEN CAST(s.price AS double) ELSE 0.0 END), 0.0)) " +
+            "FROM Appointment a LEFT JOIN ServiceItem s ON s.name = a.serviceType")
     com.example.taskflow.appointment.AppointmentStats getAppointmentStats(@Param("now") LocalDate now);
 
     @Query("SELECT COALESCE(SUM(CASE WHEN a.status = 'APPROVED' THEN " +

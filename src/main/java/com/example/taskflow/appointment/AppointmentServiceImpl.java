@@ -94,6 +94,13 @@ public class AppointmentServiceImpl implements AppointmentService {
         }
     }
 
+    private void clearBusySlotsCache(String barberName, LocalDate bookingDate) {
+        Cache cache = cacheManager.getCache("busySlots");
+        if (cache != null) {
+            cache.evict(barberName + "-" + bookingDate);
+        }
+    }
+
     @Override
     @Transactional(readOnly = true)
     public AppointmentResponse getAppointmentById(Long id) {
@@ -112,6 +119,12 @@ public class AppointmentServiceImpl implements AppointmentService {
             }
         }
 
+        // Validate slot availability (prevent double-bookings and off-hour bookings)
+        java.util.List<String> busy = getBusySlots(request.barberName(), request.bookingDate().toString());
+        if (busy.contains(request.bookingTime())) {
+            throw new IllegalArgumentException("The selected slot is already booked or unavailable.");
+        }
+
         Appointment item = new Appointment();
         item.setIdempotencyKey(idempotencyKey);
         item.setCustomerName(request.customerName());
@@ -125,6 +138,7 @@ public class AppointmentServiceImpl implements AppointmentService {
 
         Appointment savedItem = appointmentRepository.save(item);
         clearAppointmentStatsCache();
+        clearBusySlotsCache(savedItem.getBarberName(), savedItem.getBookingDate());
 
         try {
             io.micrometer.tracing.Span currentSpan = tracer.currentSpan();
@@ -148,6 +162,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         item.setStatus(request.status().toUpperCase());
         Appointment savedItem = appointmentRepository.save(item);
         clearAppointmentStatsCache();
+        clearBusySlotsCache(savedItem.getBarberName(), savedItem.getBookingDate());
 
         try {
             io.micrometer.tracing.Span currentSpan = tracer.currentSpan();
@@ -170,6 +185,7 @@ public class AppointmentServiceImpl implements AppointmentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found with id: " + id));
         appointmentRepository.delete(item);
         clearAppointmentStatsCache();
+        clearBusySlotsCache(item.getBarberName(), item.getBookingDate());
 
         try {
             io.micrometer.tracing.Span currentSpan = tracer.currentSpan();
@@ -231,6 +247,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         }
         appointmentRepository.delete(item);
         clearAppointmentStatsCache();
+        clearBusySlotsCache(item.getBarberName(), item.getBookingDate());
     }
 
     @Override

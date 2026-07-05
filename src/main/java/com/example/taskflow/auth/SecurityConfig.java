@@ -36,6 +36,8 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import javax.sql.DataSource;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -78,21 +80,39 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
+        grantedAuthoritiesConverter.setAuthorityPrefix("");
+        grantedAuthoritiesConverter.setAuthoritiesClaimName("scope");
+
+        JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
+        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);
+
         http
             .csrf(csrf -> csrf.disable())
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api/v1/auth/**").permitAll()
-                .requestMatchers("/actuator/**").permitAll()
+                .requestMatchers("/actuator/health/**").permitAll()
+                .requestMatchers("/actuator/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments/public/busy-slots").permitAll()
                 .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/appointments").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/catalog", "/api/v1/catalog/**").permitAll()
                 .requestMatchers("/api/v1/reviews/public/**").permitAll()
+                // Strict Admin restrictions to prevent privilege escalation / BOLA / PII leakage
+                .requestMatchers(HttpMethod.GET, "/api/v1/appointments").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/appointments/{id}").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/{id}").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/appointments/{id}").hasRole("ADMIN")
+                .requestMatchers("/api/v1/barbers/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/catalog/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/catalog/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/catalog/**").hasRole("ADMIN")
+                .requestMatchers("/api/v1/notifications/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
-            .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+            .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
             .headers(headers -> headers
                 .frameOptions(frame -> frame.sameOrigin())
             );

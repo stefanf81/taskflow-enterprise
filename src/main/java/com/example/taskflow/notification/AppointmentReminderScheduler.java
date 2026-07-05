@@ -33,7 +33,7 @@ public class AppointmentReminderScheduler {
         LocalDate tomorrow = LocalDate.now().plusDays(1);
         logger.info("Scanning for appointments needing 24-hour reminders for date: {}", tomorrow);
 
-        List<Appointment> upcomingAppointments = appointmentRepository.findByBookingDateAndReminderSentFalseAndStatus(tomorrow, "APPROVED");
+        List<Appointment> upcomingAppointments = appointmentRepository.findForReminderWithLock(tomorrow, false, "APPROVED");
 
         for (Appointment appointment : upcomingAppointments) {
             logger.info("Sending reminder to {} for appointment on {}", appointment.getCustomerEmail(), appointment.getBookingDate());
