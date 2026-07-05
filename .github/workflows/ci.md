@@ -63,3 +63,9 @@ Handles the Angular 22 frontend build, testing, Playwright E2E execution, and co
   - **Why:** If an E2E test fails, developers can download the HTML report and traces to visually debug what went wrong in the browser.
 - **FinOps Artifact Retention (`retention-days: 7`)**:
   - **Why:** Applied to all `upload-artifact` steps (test results, jacoco, playwright). GitHub defaults to 90 days of retention, which rapidly consumes storage quotas. Test reports are generally useless after a few days, so a 7-day retention heavily optimizes cloud storage costs.
+
+## 9. Code Cleanliness & Syntax Optimizations
+The workflow script itself has been thoroughly refactored for readability and maintenance:
+- **Simplified Boolean Evaluations:** We removed overly verbose expressions like `${{ inputs.run_tests == true || inputs.run_tests == 'true' }}`. GitHub Actions natively interprets boolean input types, so conditions are now cleanly written as `if: github.event_name != 'workflow_dispatch' || inputs.run_tests`.
+- **Strict Least-Privilege Permissions:** The global `permissions:` block at the top of the file has been restricted solely to `contents: read`. Any job that needs more power (like pushing Docker images or creating PR comments) explicitly declares its own elevated `permissions` block. This prevents any newly added, misconfigured jobs from unintentionally inheriting global write access.
+- **Cleaner Shell Syntax:** Replaced unnecessary process piping (e.g., `cat spring-boot.log | head`) with direct commands (`head -n 100 spring-boot.log`) for better shell performance and readability.
