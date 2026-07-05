@@ -18,7 +18,7 @@ export default defineConfig({
   reporter: 'html',
   
   use: {
-    baseURL: 'http://localhost:4200',
+    baseURL: 'http://127.0.0.1:4200',
     trace: 'on',
     screenshot: 'only-on-failure',
   },
@@ -33,7 +33,7 @@ export default defineConfig({
   /* Automatically spin up the Angular dev server during E2E testing */
   webServer: {
     command: 'npm start',
-    url: 'http://localhost:4200',
+    url: 'http://127.0.0.1:4200',
     reuseExistingServer: !process.env['CI'],
     timeout: 120_000, // 2 minutes timeout for slow startup
   },
