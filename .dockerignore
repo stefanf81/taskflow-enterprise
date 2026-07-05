@@ -1,0 +1,11 @@
+.git
+.idea
+.gradle
+build/
+out/
+.env
+.github
+*.log
+kubernetes/
+frontend/
+node_modules/
