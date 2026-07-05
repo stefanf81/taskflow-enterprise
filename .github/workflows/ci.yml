@@ -270,6 +270,8 @@ jobs:
       - name: Setup Gradle for E2E Tests
         if: github.event_name != 'workflow_dispatch' || inputs.run_tests
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
 
       - name: Start Spring Boot Backend in Background
         if: github.event_name != 'workflow_dispatch' || inputs.run_tests
