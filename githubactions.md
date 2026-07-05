@@ -113,6 +113,7 @@ jobs:
         id: filter
         uses: dorny/paths-filter@v4
         with:
+          base: ${{ github.event.before != '0000000000000000000000000000000000000000' && github.event.before || github.sha }}
           filters: |
             backend:
               - 'src/**'
@@ -363,6 +364,7 @@ jobs:
         id: filter
         uses: dorny/paths-filter@v4
         with:
+          base: ${{ github.event.before != '0000000000000000000000000000000000000000' && github.event.before || github.sha }}
           filters: |
             backend:
               - 'src/**'
