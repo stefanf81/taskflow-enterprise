@@ -44,16 +44,18 @@ docker compose build
 # 3. Shift-Left Security: Static Lints & Vulnerability Scanning
 # We intercept the pipeline here. If Hadolint or Trivy detects a CRITICAL vulnerability 
 # in the OS layer or package manifest, they will log warnings.
+# 
+# [PERFORMANCE TWEAK] These IO/CPU-heavy scans are now backgrounded to run concurrently!
 # =========================================================================================
-echo "🔍 HADOLINT: Linting Dockerfiles..."
-docker run --rm -i hadolint/hadolint < Dockerfile || echo "⚠️  Hadolint found backend Dockerfile issues."
-docker run --rm -i hadolint/hadolint < frontend/Dockerfile || echo "⚠️  Hadolint found frontend Dockerfile issues."
+echo "🔍 Running static lints and vulnerability scans in parallel..."
 
-echo "🛡️  TRIVY: Scanning Backend container image..."
-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v ~/.cache:/root/.cache/ aquasec/trivy:latest image --severity HIGH,CRITICAL taskflow-backend:latest || echo "⚠️  Trivy found backend image issues."
+(docker run --rm -i hadolint/hadolint < Dockerfile || echo "⚠️  Hadolint found backend Dockerfile issues.") &
+(docker run --rm -i hadolint/hadolint < frontend/Dockerfile || echo "⚠️  Hadolint found frontend Dockerfile issues.") &
+(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v ~/.cache:/root/.cache/ aquasec/trivy:latest image --severity HIGH,CRITICAL taskflow-backend:latest || echo "⚠️  Trivy found backend image issues.") &
+(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v ~/.cache:/root/.cache/ aquasec/trivy:latest image --severity HIGH,CRITICAL taskflow-frontend:latest || echo "⚠️  Trivy found frontend image issues.") &
 
-echo "🛡️  TRIVY: Scanning Frontend container image..."
-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v ~/.cache:/root/.cache/ aquasec/trivy:latest image --severity HIGH,CRITICAL taskflow-frontend:latest || echo "⚠️  Trivy found frontend image issues."
+wait
+echo "✅ Security scans complete!"
 
 # =========================================================================================
 # 4. Spin up Containers
