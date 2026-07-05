@@ -35,6 +35,7 @@ A lightweight job that runs `hadolint` against all Dockerfiles and `prettier` ag
 ## 6. Job: `codeql-analysis` (SAST)
 Uses GitHub's native CodeQL engine across a matrix strategy (`java` and `javascript`).
 **Why:** CodeQL is the industry standard for Static Application Security Testing (SAST). It detects deep code-level vulnerabilities (like SQL injection or XSS) directly in the source code. The `security-extended,security-and-quality` queries ensure we catch both security flaws and maintainability issues.
+- **Compiler Tracing Strategy:** For Java, CodeQL uses build tracing (intercepting calls to `javac` during construction). To ensure it captures all compilation, **build caching must be bypassed and a clean compile forced** (`./gradlew clean compileJava --no-daemon --no-build-cache`). If we loaded compiled artifacts from cache, CodeQL would see zero compiler calls and fail with `CodeQL detected code written in Java/Kotlin but could not process any of it`.
 
 ## 7. Job: `backend-pipeline`
 This job handles the Spring Boot backend compilation, testing, and containerization.
