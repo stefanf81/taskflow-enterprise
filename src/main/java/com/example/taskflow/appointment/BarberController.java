@@ -1,5 +1,6 @@
 package com.example.taskflow.appointment;
 
+import com.example.taskflow.core.ResourceNotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
@@ -48,7 +49,8 @@ public class BarberController {
     @PostMapping("/{barberId}/time-off")
     @Operation(summary = "Add time-off for a barber")
     public ResponseEntity<BarberTimeOff> addTimeOff(@PathVariable Long barberId, @RequestBody BarberTimeOff timeOff) {
-        Barber barber = barberRepository.findById(barberId).orElseThrow();
+        Barber barber = barberRepository.findById(barberId)
+                .orElseThrow(() -> new ResourceNotFoundException("Barber not found with id: " + barberId));
         timeOff.setBarber(barber);
         return new ResponseEntity<>(timeOffRepository.save(timeOff), HttpStatus.CREATED);
     }

@@ -15,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 import io.micrometer.tracing.Tracer;
 
 import java.time.LocalDate;
-import java.util.regex.Pattern;
 
 @Service
 @Transactional

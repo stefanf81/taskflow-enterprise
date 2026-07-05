@@ -5,7 +5,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -22,7 +21,7 @@ public class CatalogServiceImpl implements CatalogService {
     public List<ServiceItemResponse> getAllServices() {
         return repository.findAll().stream()
                 .map(ServiceItemResponse::fromEntity)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
