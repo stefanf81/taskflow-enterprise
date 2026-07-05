@@ -5,6 +5,7 @@ import {
   computed,
   inject,
   ChangeDetectionStrategy,
+  ViewEncapsulation,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -26,6 +27,7 @@ import { of } from 'rxjs';
   templateUrl: './app.html',
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  encapsulation: ViewEncapsulation.None,
 })
 export class App implements OnInit {
   private readonly todoService = inject(TodoService);
