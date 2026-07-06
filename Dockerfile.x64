@@ -1,63 +1,91 @@
 # =========================================================================================
-# STAGE 1: BUILD STAGE (x64 / AMD64 Optimized)
-# We explicitly set the platform to linux/amd64 to ensure that if this is built on an
-# Apple Silicon Mac, Docker uses Rosetta/QEMU to cross-compile the x64 binaries for cloud deployment.
+# STAGE 1: BUILD STAGE
+# linux/amd64 is pinned explicitly so builds on Apple Silicon cross-compile via QEMU
+# to match the target cloud runtime, rather than producing arm64 binaries.
 # =========================================================================================
 ARG PLATFORM=linux/amd64
 FROM --platform=$PLATFORM eclipse-temurin:21-jdk AS builder
 WORKDIR /app
 
-# [CACHE OPTIMIZATION] Copy gradle wrapper and build files first.
+# [CACHE OPTIMIZATION] Copy only the build config first so dependency resolution
+# is cached independently of source changes.
 COPY gradle/ /app/gradle/
 COPY gradlew build.gradle settings.gradle gradle.properties /app/
 
-# [DEPENDENCY PRE-DOWNLOAD] Pre-download all external Gradle dependencies.
-# We do NOT use --mount=type=cache here because it prevents GitHub Actions (type=gha) 
-# from exporting this layer to the remote cache. By making it a standard layer, 
-# GHA perfectly caches it as long as build.gradle doesn't change.
+# [DEPENDENCY PRE-DOWNLOAD]
+# Deliberately NOT using --mount=type=cache: that mount is invisible to GitHub Actions'
+# type=gha exporter, so a plain layer is what actually gets reused across CI runs.
 RUN chmod +x gradlew && ./gradlew dependencies --no-daemon
 
-# Now copy the application source files.
 COPY src/ /app/src/
 
-# [BUILDKIT CACHE MOUNT] Persistently cache Gradle dependencies between builds
-# We run 'processAot' to compile the application Ahead-Of-Time, 
-# then extract into 4 layers for lightning-fast container updates.
+# AOT-compile, then explode into Spring Boot's layered jar format for fast image diffs.
 RUN ./gradlew processAot bootJar --no-daemon && \
     java -Djarmode=tools -jar build/libs/*.jar extract --layers --launcher --destination extracted
 
 # =========================================================================================
-# STAGE 2: PRODUCTION RUNTIME STAGE (x64 / AMD64 Optimized)
+# STAGE 2: RUNTIME STAGE
 # =========================================================================================
 FROM --platform=$PLATFORM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-# [PROCESS REAPING & KUBERNETES PSS] 
-# Install 'tini' and use explicit numeric UIDs (10001) for strict Kubernetes Pod Security Standards
+# tini for proper PID 1 / zombie reaping; fixed numeric UID/GID for Kubernetes
+# Pod Security Standards (no root, no dynamically-assigned UID).
 RUN apk add --no-cache tini \
     && addgroup -g 10001 -S appgroup && adduser -u 10001 -S appuser -G appgroup
 
-# [CACHED LAYER COPY] Copy the extracted layers from the builder stage
 COPY --from=builder --chown=10001:10001 /app/extracted/dependencies/ ./
 COPY --from=builder --chown=10001:10001 /app/extracted/spring-boot-loader/ ./
 COPY --from=builder --chown=10001:10001 /app/extracted/snapshot-dependencies/ ./
 COPY --from=builder --chown=10001:10001 /app/extracted/application/ ./
 
-# Drop root privileges immediately for security compliance
 USER 10001:10001
 
 EXPOSE 8080
 
-# [JVM TUNING: AMD RYZEN 5 7430U SPECIFIC]
-# -Dspring.aot.enabled=true  : Uses the AOT generated classes to bypass slow reflection.
-# -Xms1g -Xmx1g              : Locks heap size to 1GB to prevent OS dynamic memory allocation pauses.
-# -XX:+UseParallelGC         : Optimizes for pure maximum Request-Per-Second (RPS) throughput.
-# -XX:ParallelGCThreads=6    : Hardware pins the GC specifically to the 6 physical cores of the Ryzen 5 7430U (avoiding SMT contention).
-# -XX:UseAVX=2               : Forces the JVM to utilize Advanced Vector Extensions 2 (AVX2) for massive memory bandwidth optimization on Zen 3 architecture.
-# -XX:+AlwaysPreTouch        : Forces the JVM to actually touch every page of memory allocated by -Xms at startup.
-# -XX:-UseAdaptiveSizePolicy : Prevents the JVM from constantly resizing young/old generations under load.
-ENV JAVA_OPTS="-Dspring.aot.enabled=true -Xms1g -Xmx1g -XX:+UseParallelGC -XX:ParallelGCThreads=6 -XX:UseAVX=2 -XX:+AlwaysPreTouch -XX:-UseAdaptiveSizePolicy -XX:+ExitOnOutOfMemoryError"
+# [JVM TUNING: container-portable]
+#
+# -Dspring.aot.enabled=true   : use AOT-generated classes, skip reflection at startup.
+#
+# -XX:MaxRAMPercentage=75.0   : heap sized from the container's *actual* memory limit
+#                               (cgroup-aware since JDK 10+), rather than a fixed -Xmx
+#                               that's only correct on the one host it was tuned for.
+#
+# -XX:+UseParallelGC          : optimize for throughput/RPS over pause time.
+#
+# -XX:+ExitOnOutOfMemoryError : fail fast and let the orchestrator restart the pod.
+#
+# Deliberately NOT set, and why:
+#
+#  -XX:ParallelGCThreads / -XX:UseAVX
+#     These were pinned to one specific dev CPU (physical core count, AVX level).
+#     In the cloud the container's actual CPU allocation varies by node/instance type,
+#     so a fixed thread count either starves or oversubscribes the GC, and forcing an
+#     AVX level risks a SIGILL on hardware that doesn't support it. The JVM already reads
+#     the container's cgroup CPU limit at startup and sizes GC threads accordingly —
+#     let it.
+#
+#  -XX:+AlwaysPreTouch
+#     Pretouches the heap up to -Xms at startup, trading slower startup for fewer
+#     page-fault pauses on first traffic. Left off here because this image is built
+#     around fast AOT startup (processAot) and is expected to scale up/restart
+#     frequently; the cold-start cost isn't worth it unless this becomes a long-lived,
+#     rarely-restarted service where steady-state tail latency matters more than
+#     startup time — in which case re-add this AND set -XX:InitialRAMPercentage equal
+#     to MaxRAMPercentage (otherwise it only pretouches the JVM's small default
+#     initial heap, not the real one).
+#
+#  -XX:-UseAdaptiveSizePolicy
+#     Freezes young/old generation sizing instead of letting the GC adapt it at
+#     runtime. Only worth disabling once you've profiled this workload's actual
+#     allocation pattern and pinned an explicit generation split (NewRatio/NewSize)
+#     to lock in — disabling adaptive sizing without also pinning explicit generation
+#     sizes just means the split freezes at an arbitrary JVM guess, which is worse than
+#     leaving it adaptive. Especially relevant now that heap size itself is derived from
+#     MaxRAMPercentage rather than fixed, so there's no single "right" split to freeze.
+ENV JAVA_OPTS="-Dspring.aot.enabled=true -XX:MaxRAMPercentage=75.0 -XX:+UseParallelGC -XX:+ExitOnOutOfMemoryError"
 
-# [ENTRYPOINT] Tini takes PID 1, and spawns the Spring Boot JarLauncher to run our exploded layers directly.
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["sh", "-c", "java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]
+# `exec` replaces the shell with the JVM so SIGTERM from tini reaches the JVM directly,
+# enabling Spring Boot's graceful shutdown instead of waiting for SIGKILL.
+CMD ["sh", "-c", "exec java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]
