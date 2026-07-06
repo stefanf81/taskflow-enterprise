@@ -231,11 +231,11 @@ jobs:
           path: |
             frontend/dist
 
-  security:
-    name: Security Scan
+  security-backend:
+    name: Security Scan (Backend)
     needs: changes
     if: |
-      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main') &&
+      (needs.changes.outputs.backend == 'true' || github.ref == 'refs/heads/main') &&
       (github.event_name != 'workflow_dispatch' || inputs.run_security)
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -264,12 +264,37 @@ jobs:
           format: table
           exit-code: 0
 
+  security-frontend:
+    name: Security Scan (Frontend)
+    needs: changes
+    if: |
+      (needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main') &&
+      (github.event_name != 'workflow_dispatch' || inputs.run_security)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+
+      #####################################################
+      # Filesystem Scan
+      #####################################################
+      - name: Filesystem Scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: frontend
+          format: table
+          exit-code: 0
+
   e2e:
     name: End-to-End Tests
     needs:
       - backend
       - frontend
-      - security
     if: github.event_name != 'workflow_dispatch' || inputs.run_tests
     runs-on: ubuntu-latest
     timeout-minutes: 45
