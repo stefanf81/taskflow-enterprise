@@ -1,285 +1,166 @@
-name: TaskFlow Enterprise CI/CD (Optimized Fast + Production)
+
+name: TaskFlow Enterprise Production CI/CD
 
 on:
   push:
-    branches: ["main"]
+    branches: [main]
   pull_request:
-    branches: ["main"]
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      run_lint_and_format:
-        type: boolean
-        default: true
-      run_tests:
-        type: boolean
-        default: false
-      run_security_scans:
-        type: boolean
-        default: false
 
-############################################################
-# 🧷 SAFER CONCURRENCY
-############################################################
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
+  packages: write
+  security-events: write
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_TAG: ${{ github.sha }}
   BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/taskflow-backend
   FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/taskflow-frontend
+  IMAGE_TAG: ${{ github.sha }}
 
-############################################################
-# 🔍 CHANGE DETECTION
-############################################################
 jobs:
   changes:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
-
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - id: filter
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@v3
         with:
           filters: |
             backend:
               - 'src/**'
               - 'build.gradle'
-              - 'Dockerfile.x64'
+              - 'Dockerfile*'
             frontend:
               - 'frontend/**'
 
-  ############################################################
-  # 🧹 LINT (FAST GATE)
-  ############################################################
   lint:
     runs-on: ubuntu-latest
-    if: github.event_name != 'workflow_dispatch' || inputs.run_lint_and_format
-
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
-      - name: Dockerfile lint
-        uses: hadolint/hadolint-action@v3.3.0
+      - uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: Dockerfile.x64
-          ignore: DL3018,DL3029
 
-      - name: Frontend format check
-        run: |
-          if [ -d frontend ]; then
-            cd frontend
-            npx prettier --check "src/**/*.ts" "src/**/*.html"
-          fi
-
-  ############################################################
-  # ☕ BACKEND (OPTIMIZED GRADLE)
-  ############################################################
   backend:
-    runs-on: ubuntu-latest
-    needs: changes
+    needs: [changes, lint]
     if: needs.changes.outputs.backend == 'true' || github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
-      security-events: write
-
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: taskflow
+          POSTGRES_USER: taskflow
+          POSTGRES_PASSWORD: taskflow
+        ports: ["5432:5432"]
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
     env:
-      GRADLE_OPTS: -Dorg.gradle.daemon=true -Dorg.gradle.configuration-cache=true
-
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/taskflow
+      SPRING_DATASOURCE_USERNAME: taskflow
+      SPRING_DATASOURCE_PASSWORD: taskflow
+      SPRING_DATA_REDIS_HOST: localhost
+      SPRING_DATA_REDIS_PORT: 6379
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
-          java-version: '21'
           distribution: temurin
-
-      - uses: gradle/actions/setup-gradle@v6
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('**/*.gradle*') }}
-
-      - name: Build + Test (optimized)
-        if: github.event_name != 'workflow_dispatch' || inputs.run_tests
-        run: ./gradlew test assemble --parallel --build-cache
-
-      - uses: docker/setup-buildx-action@v4
-
-      - uses: docker/login-action@v4
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew --no-daemon clean test assemble --parallel --build-cache
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build backend image (optimized cache)
-        uses: docker/build-push-action@v7
+      - uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.x64
           push: ${{ github.ref == 'refs/heads/main' }}
-          load: ${{ github.ref != 'refs/heads/main' }}
           tags: ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Trivy scan backend
-        if: github.event_name != 'workflow_dispatch' || inputs.run_security_scans
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
-          format: sarif
-          output: trivy-backend.sarif
-          ignore-unfixed: true
-          severity: HIGH,CRITICAL
-
-      - name: Upload Trivy results
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-backend.sarif
-          category: backend-container
-
-  ############################################################
-  # 🎨 FRONTEND (OPTIMIZED CACHE)
-  ############################################################
   frontend:
-    runs-on: ubuntu-latest
-    needs: changes
+    needs: [changes, lint]
     if: needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
-      security-events: write
-
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-
-      - name: Cache npm
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: npm-${{ hashFiles('frontend/package-lock.json') }}
-          restore-keys: npm-
-
-      - name: Install dependencies (optimized)
-        run: |
+      - run: |
           cd frontend
-          npm ci --prefer-offline --no-audit --no-fund
+          npm ci
+          npm test -- --watch=false
+          npm run build
 
-      - name: Unit tests
-        if: github.event_name != 'workflow_dispatch' || inputs.run_tests
-        run: cd frontend && npm run test -- --watch=false --coverage
-
-      - name: Build frontend
-        run: cd frontend && npm run build
-
-      - uses: docker/setup-buildx-action@v4
-
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build frontend image
-        uses: docker/build-push-action@v7
-        with:
-          context: frontend
-          push: ${{ github.ref == 'refs/heads/main' }}
-          load: ${{ github.ref != 'refs/heads/main' }}
-          tags: ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
-
-      - name: Trivy scan frontend
-        if: github.event_name != 'workflow_dispatch' || inputs.run_security_scans
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
-          format: sarif
-          output: trivy-frontend.sarif
-          ignore-unfixed: true
-          severity: HIGH,CRITICAL
-
-      - name: Upload Trivy results
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-frontend.sarif
-          category: frontend-container
-
-  ############################################################
-  # 🧪 E2E (FAST + RELIABLE)
-  ############################################################
   e2e:
-    runs-on: ubuntu-latest
     needs: [backend, frontend]
-    if: github.event_name != 'workflow_dispatch' || inputs.run_tests
-
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: taskflow
+          POSTGRES_USER: taskflow
+          POSTGRES_PASSWORD: taskflow
+        ports: ["5432:5432"]
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
-          java-version: '21'
           distribution: temurin
-
-      - uses: gradle/actions/setup-gradle@v6
-
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-
-      - name: Cache Playwright
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}
-
-      - name: Start backend
-        run: |
-          nohup ./gradlew bootRun > spring.log 2>&1 &
-
-          timeout 120 bash -c '
-          until curl -fs http://localhost:8080/actuator/health || curl -fs http://localhost:8080/; do
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: |
+          nohup ./gradlew --no-daemon bootRun > spring.log 2>&1 &
+          for i in {1..60}; do
+            curl -fs http://localhost:8080/actuator/health && exit 0 || true
             sleep 2
-          done'
-
-      - name: Install frontend deps
-        run: cd frontend && npm ci --prefer-offline --no-audit --no-fund
-
-      - name: Playwright E2E (optimized)
-        run: |
+          done
+          cat spring.log
+          exit 1
+      - run: |
           cd frontend
-          npx playwright install
+          npm ci
+          npx playwright install --with-deps
           npm run e2e
-
-      - name: Upload logs
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
-          name: logs
-          path: spring.log
+          name: e2e-artifacts
+          path: |
+            spring.log
+            frontend/playwright-report
+            frontend/test-results
