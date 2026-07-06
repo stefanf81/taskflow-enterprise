@@ -91,9 +91,7 @@ jobs:
 
   backend:
     name: Backend
-    needs:
-      - changes
-      - lint
+    needs: changes
     if: needs.changes.outputs.backend == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -166,9 +164,7 @@ jobs:
 
   frontend:
     name: Frontend
-    needs:
-      - changes
-      - lint
+    needs: changes
     if: needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
