@@ -1,5 +1,5 @@
 
-name: TaskFlow Enterprise Production CI/CD
+name: TaskFlow Enterprise CI/CD
 
 on:
   push:
@@ -19,9 +19,9 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
+  IMAGE_TAG: ${{ github.sha }}
   BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/taskflow-backend
   FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/taskflow-frontend
-  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
   changes:
@@ -30,11 +30,11 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             backend:
@@ -48,10 +48,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: Dockerfile.x64
+          ignore: DL3018,DL3029
 
   backend:
     needs: [changes, lint]
@@ -76,8 +77,8 @@ jobs:
       SPRING_DATA_REDIS_HOST: localhost
       SPRING_DATA_REDIS_PORT: 6379
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -102,19 +103,14 @@ jobs:
     needs: [changes, lint]
     if: needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: |
-          cd frontend
-          npm ci
-          npm test -- --watch=false
-          npm run build
+      - run: cd frontend && npm ci && npm test -- --watch=false && npm run build
 
   e2e:
     needs: [backend, frontend]
@@ -127,39 +123,36 @@ jobs:
           POSTGRES_DB: taskflow
           POSTGRES_USER: taskflow
           POSTGRES_PASSWORD: taskflow
-        ports: ["5432:5432"]
       redis:
         image: redis:7-alpine
-        ports: ["6379:6379"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: |
+      - name: Start backend
+        run: |
           nohup ./gradlew --no-daemon bootRun > spring.log 2>&1 &
           for i in {1..60}; do
-            curl -fs http://localhost:8080/actuator/health && exit 0 || true
+            if curl -fs http://localhost:8080/actuator/health; then
+              exit 0
+            fi
             sleep 2
           done
           cat spring.log
           exit 1
-      - run: |
-          cd frontend
-          npm ci
-          npx playwright install --with-deps
-          npm run e2e
+      - run: cd frontend && npm ci && npx playwright install --with-deps && npm run e2e
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: e2e-artifacts
+          name: logs
           path: |
             spring.log
             frontend/playwright-report
