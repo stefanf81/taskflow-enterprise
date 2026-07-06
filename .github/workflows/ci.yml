@@ -233,10 +233,10 @@ jobs:
 
   security:
     name: Security Scan
-    needs:
-      - backend
-      - frontend
-    if: github.event_name != 'workflow_dispatch' || inputs.run_security
+    needs: changes
+    if: |
+      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main') &&
+      (github.event_name != 'workflow_dispatch' || inputs.run_security)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
