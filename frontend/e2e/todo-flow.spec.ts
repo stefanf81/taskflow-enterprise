@@ -2,23 +2,24 @@ import { test, expect } from '@playwright/test';
 
 /**
  * STATE-OF-THE-ART END-TO-END FLOW TEST SCRIPT FOR GUIDED BARBER BOOKING WIZARD
- * 
+ *
  * Why this is used:
  * To verify the actual full-stack user journey. It launches a real, headless browser,
  * connects to Nginx/Angular, interacts with DOM nodes, authenticates against Spring Security,
  * and performs database operations, ensuring the entire system operates harmoniously.
  */
 test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
-
   test.beforeEach(async ({ page }) => {
     // Capture browser console logs for robust E2E debugging
-    page.on('console', msg => console.log(`[BROWSER_CONSOLE] [${msg.type()}] ${msg.text()}`));
-    
+    page.on('console', (msg) => console.log(`[BROWSER_CONSOLE] [${msg.type()}] ${msg.text()}`));
+
     // Start each test on the landing page
     await page.goto('/');
   });
 
-  test('should display barber landing page and prevent unauthorized owner access by default', async ({ page }) => {
+  test('should display barber landing page and prevent unauthorized owner access by default', async ({
+    page,
+  }) => {
     // 1. Confirm landing page elements are visible
     await expect(page.locator('h1').first()).toContainText('Luxury Barber Scheduler');
     await expect(page.locator('nav')).toContainText('TaskFlow');
@@ -41,7 +42,9 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await expect(alert).toContainText('Invalid credentials. Please try again.');
   });
 
-  test('should allow a guest to request a booking slot via the guided wizard, then owner logs in, approves it, and deletes it', async ({ page }) => {
+  test('should allow a guest to request a booking slot via the guided wizard, then owner logs in, approves it, and deletes it', async ({
+    page,
+  }) => {
     // 1. Wizard Step 1: Select Treatment (e.g. Classic Haircut)
     await page.click('.services-list .card:has-text("Classic Haircut")');
     await page.click('.wizard-footer-controls .btn-submit');
@@ -68,7 +71,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
 
     // 5. Verify success banner is shown for guest booking request
     const receiptModal = page.locator('.modal-overlay');
-    
+
     // Check if error alert is visible instead
     if (await page.locator('.alert-error').isVisible()) {
       const errorText = await page.locator('.alert-error').textContent();
@@ -100,7 +103,9 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
 
     // 10. Delete the appointment
     page.once('dialog', async (dialog) => {
-      expect(dialog.message()).toContain('Are you sure you want to permanently delete/cancel this booking?');
+      expect(dialog.message()).toContain(
+        'Are you sure you want to permanently delete/cancel this booking?',
+      );
       await dialog.accept(); // Confirms deletion
     });
     await bookingCard.locator('.btn-delete').dispatchEvent('click');

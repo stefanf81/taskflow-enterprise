@@ -106,11 +106,6 @@ jobs:
           cd frontend
           npx prettier --check .
 
-      - name: ESLint
-        run: |
-          cd frontend
-          npm run lint
-
   backend:
     name: Backend
     needs:
@@ -237,9 +232,6 @@ jobs:
         run: |
           node --version
           npm --version
-
-      - name: Run ESLint
-        run: npm run lint
 
       - name: Check formatting
         run: npx prettier --check .

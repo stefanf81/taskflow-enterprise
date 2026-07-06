@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 /**
  * PLAYWRIGHT E2E CONFIGURATION
- * 
+ *
  * Why this is used:
  * This configures Microsoft Playwright to execute end-to-end browser tests.
  * It includes a built-in 'webServer' block that automatically spins up your
@@ -16,7 +16,7 @@ export default defineConfig({
   retries: process.env['CI'] ? 2 : 0,
   workers: process.env['CI'] ? 1 : undefined,
   reporter: 'html',
-  
+
   use: {
     baseURL: 'http://127.0.0.1:4200',
     trace: 'on',
@@ -27,7 +27,7 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-    }
+    },
   ],
 
   /* Automatically spin up the Angular dev server during E2E testing */
