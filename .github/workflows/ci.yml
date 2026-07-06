@@ -166,7 +166,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: backend-jar
-          path: build/libs/*.jar
+          path: |
+            build/libs/*.jar
+            !build/libs/*-plain.jar
 
   frontend:
     name: Frontend
