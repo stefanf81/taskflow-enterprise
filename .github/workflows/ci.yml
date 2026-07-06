@@ -105,9 +105,6 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      - name: Verify Gradle
-        run: ./gradlew --version
-
       - name: Build
         run: |
           ./gradlew \
@@ -165,11 +162,6 @@ jobs:
             --prefer-offline \
             --no-audit \
             --no-fund
-
-      - name: Verify versions
-        run: |
-          node --version
-          npm --version
 
       - name: Check formatting
         run: npx prettier --check .
@@ -385,6 +377,8 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
 
       - name: Install Browsers
         working-directory: frontend
@@ -435,8 +429,10 @@ jobs:
           push: ${{ github.ref == 'refs/heads/main' }}
           load: ${{ github.ref != 'refs/heads/main' }}
           tags: ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha,scope=${{ matrix.component }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+          cache-from: |
+            type=gha,scope=${{ matrix.component }}-main
+            type=gha,scope=${{ matrix.component }}-pr
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }}
 
       - name: Push Latest
         if: github.ref == 'refs/heads/main'
