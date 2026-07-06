@@ -241,7 +241,7 @@ jobs:
           npm run test -- \
             --watch=false \
             --browsers=ChromeHeadless \
-            --code-coverage
+            --coverage
 
       - name: Build production bundle
         run: npm run build
