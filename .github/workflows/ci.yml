@@ -235,7 +235,7 @@ jobs:
     name: Security Scan (Backend)
     needs: changes
     if: |
-      (needs.changes.outputs.backend == 'true' || github.ref == 'refs/heads/main') &&
+      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.docker == 'true') &&
       (github.event_name != 'workflow_dispatch' || inputs.run_security)
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -268,7 +268,7 @@ jobs:
     name: Security Scan (Frontend)
     needs: changes
     if: |
-      (needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main') &&
+      (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.docker == 'true') &&
       (github.event_name != 'workflow_dispatch' || inputs.run_security)
     runs-on: ubuntu-latest
     timeout-minutes: 20
