@@ -45,9 +45,15 @@ fi
 rm -f k3d-kubeconfig.yaml
 
 # =========================================================================================
-# 3. Build Production Docker Images
-# We compile the images using the optimized Layered AOT architectures.
+# 3. Build backend and frontend artifacts on the host
+# Reusing pre-built artifacts in Docker is a huge optimization that prevents in-container rebuilding.
 # =========================================================================================
+echo "🔨 Building backend JAR on the host..."
+./gradlew processAot bootJar --no-daemon
+
+echo "🔨 Building frontend production bundle on the host..."
+(cd frontend && npm ci --prefer-offline --no-audit --no-fund && npm run build)
+
 echo "📦 Building backend and frontend production-grade Docker images..."
 export DOCKER_BUILDKIT=1 # Enforce BuildKit for cache mounting
 docker build -t ghcr.io/stefanf81/taskflow-backend:latest .

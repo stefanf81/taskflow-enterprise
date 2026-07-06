@@ -91,12 +91,13 @@ public class NotificationListener {
         if (email == null || email.isEmpty()) {
             return "***";
         }
-        int atIndex = email.lastIndexOf('@');
+        String sanitized = email.replaceAll("[\\r\\n]", "");
+        int atIndex = sanitized.lastIndexOf('@');
         if (atIndex <= 0) {
             return "***";
         }
-        String localPart = email.substring(0, atIndex);
-        String domain = email.substring(atIndex);
+        String localPart = sanitized.substring(0, atIndex);
+        String domain = sanitized.substring(atIndex);
         
         if (localPart.length() <= 2) {
             return "**" + domain;
@@ -109,9 +110,10 @@ public class NotificationListener {
         if (name == null || name.isEmpty()) {
             return "***";
         }
-        if (name.length() <= 2) {
+        String sanitized = name.replaceAll("[\\r\\n]", "");
+        if (sanitized.length() <= 2) {
             return "**";
         }
-        return name.charAt(0) + "***" + name.charAt(name.length() - 1);
+        return sanitized.charAt(0) + "***" + sanitized.charAt(sanitized.length() - 1);
     }
 }

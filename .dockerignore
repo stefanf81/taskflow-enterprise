@@ -1,7 +1,10 @@
 .git
 .idea
 .gradle
-build/
+build/*
+!build/libs/
+build/libs/*
+!build/libs/*.jar
 out/
 .env
 .github
@@ -12,4 +15,5 @@ node_modules/
 .DS_Store
 *.class
 *.jar
+!build/libs/*.jar
 *.war

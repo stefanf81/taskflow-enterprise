@@ -105,7 +105,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleAuthenticationException(
             AuthenticationException ex, HttpServletRequest request) {
         
-        logger.warn("Authentication failed: {}", ex.getMessage());
+        String safeMessage = ex.getMessage() != null ? ex.getMessage().replaceAll("[\\r\\n]", "") : "";
+        logger.warn("Authentication failed: {}", safeMessage);
         
         ErrorResponse errorResponse = new ErrorResponse(
                 HttpStatus.UNAUTHORIZED.value(),
@@ -120,7 +121,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleAccessDeniedException(
             AccessDeniedException ex, HttpServletRequest request) {
         
-        logger.warn("Access denied: {}", ex.getMessage());
+        String safeMessage = ex.getMessage() != null ? ex.getMessage().replaceAll("[\\r\\n]", "") : "";
+        logger.warn("Access denied: {}", safeMessage);
         
         ErrorResponse errorResponse = new ErrorResponse(
                 HttpStatus.FORBIDDEN.value(),

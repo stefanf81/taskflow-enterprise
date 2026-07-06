@@ -1,5 +1,8 @@
 node_modules/
-dist/
+dist/*
+!dist/frontend/
+dist/frontend/*
+!dist/frontend/browser/
 .angular/
 coverage/
 playwright-report/

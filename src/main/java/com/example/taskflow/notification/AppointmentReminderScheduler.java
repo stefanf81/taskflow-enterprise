@@ -36,7 +36,8 @@ public class AppointmentReminderScheduler {
         List<Appointment> upcomingAppointments = appointmentRepository.findForReminderWithLock(tomorrow, false, "APPROVED");
 
         for (Appointment appointment : upcomingAppointments) {
-            logger.info("Sending reminder to {} for appointment on {}", appointment.getCustomerEmail(), appointment.getBookingDate());
+            String safeEmail = appointment.getCustomerEmail() != null ? appointment.getCustomerEmail().replaceAll("[\\r\\n]", "") : "";
+            logger.info("Sending reminder to {} for appointment on {}", safeEmail, appointment.getBookingDate());
             
             // Mock sending email
             String message = String.format("Hi %s, this is a reminder for your %s appointment with %s tomorrow at %s.",

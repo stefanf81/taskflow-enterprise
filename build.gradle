@@ -77,6 +77,10 @@ tasks.register("writeMainClasspath") {
 		file("build/main-cp.txt").text = sourceSets.main.runtimeClasspath.asPath
 	}
 }
+tasks.withType(org.springframework.boot.gradle.tasks.aot.ProcessAot).configureEach {
+	environment "SPRING_SECURITY_PASSWORD", "admin-password"
+	environment "SPRING_DATASOURCE_PASSWORD", "postgres-password"
+}
 tasks.named("test") {
 	useJUnitPlatform()
 	maxParallelForks = Math.max(1, (int) (Runtime.runtime.availableProcessors() / 2))
@@ -114,7 +118,7 @@ tasks.named("check") {
 	)
 }
 dependencyCheck {
-	failBuildOnCVSS = 8.0f
+	failBuildOnCVSS = 7.0f
 	formats = ['HTML', 'JSON']
 }
 tasks.named("dependencyUpdates") {

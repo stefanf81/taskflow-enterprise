@@ -1,5 +1,5 @@
 # =========================================================================================
-# STAGE 1: BUILD STAGE
+# STAGE 1: LAYER EXTRACTION
 # linux/amd64 is pinned explicitly so builds on Apple Silicon cross-compile via QEMU
 # to match the target cloud runtime, rather than producing arm64 binaries.
 # =========================================================================================
@@ -7,21 +7,11 @@ ARG PLATFORM=linux/amd64
 FROM --platform=$PLATFORM eclipse-temurin:21-jdk AS builder
 WORKDIR /app
 
-# [CACHE OPTIMIZATION] Copy only the build config first so dependency resolution
-# is cached independently of source changes.
-COPY gradle/ /app/gradle/
-COPY gradlew build.gradle settings.gradle gradle.properties /app/
+# Copy the pre-built jar from the build context
+COPY build/libs/*.jar /app/app.jar
 
-# [DEPENDENCY PRE-DOWNLOAD]
-# Deliberately NOT using --mount=type=cache: that mount is invisible to GitHub Actions'
-# type=gha exporter, so a plain layer is what actually gets reused across CI runs.
-RUN chmod +x gradlew && ./gradlew dependencies --no-daemon
-
-COPY src/ /app/src/
-
-# AOT-compile, then explode into Spring Boot's layered jar format for fast image diffs.
-RUN ./gradlew processAot bootJar --no-daemon && \
-    java -Djarmode=tools -jar build/libs/*.jar extract --layers --launcher --destination extracted
+# Extract layers using the Spring Boot jar tools mode
+RUN java -Djarmode=tools -jar /app/app.jar extract --layers --launcher --destination extracted
 
 # =========================================================================================
 # STAGE 2: RUNTIME STAGE

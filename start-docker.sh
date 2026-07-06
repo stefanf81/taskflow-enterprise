@@ -33,10 +33,15 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 # =========================================================================================
-# 2. Build Production Docker Images
-# We rely on 'docker compose build' to execute our elite Dockerfiles.
-# Note: The backend Dockerfile uses BuildKit caching, AOT compilation, and layered JAR extraction.
+# 2. Build backend and frontend artifacts on the host
+# Reusing pre-built artifacts in Docker is a huge optimization that prevents in-container rebuilding.
 # =========================================================================================
+echo "🔨 Building backend JAR on the host..."
+./gradlew processAot bootJar --no-daemon
+
+echo "🔨 Building frontend production bundle on the host..."
+(cd frontend && npm ci --prefer-offline --no-audit --no-fund && npm run build)
+
 echo "📦 Building images..."
 docker compose build
 

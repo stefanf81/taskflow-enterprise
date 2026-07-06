@@ -1,40 +1,15 @@
 # =========================================================================================
-# STAGE 1: BUILD STAGE
-# We use the standard JDK (Java Development Kit) because Gradle and javac are required
-# to compile the application. This stage is discarded after the build, so none of the
-# build tools are included in the final runtime image.
+# STAGE 1: LAYER EXTRACTION
 # =========================================================================================
 FROM eclipse-temurin:21-jdk AS builder
 
 WORKDIR /app
 
-# [CACHE OPTIMIZATION]
-# Copy the Gradle wrapper and build configuration first so dependency resolution is
-# cached independently of application source changes.
-COPY gradle/ /app/gradle/
-COPY gradlew build.gradle settings.gradle gradle.properties /app/
+# Copy the pre-built jar from the build context
+COPY build/libs/*.jar /app/app.jar
 
-# [DEPENDENCY PRE-DOWNLOAD]
-# Persist Gradle's dependency cache between local builds using a BuildKit cache mount.
-# Only changes to the build configuration will invalidate this layer.
-RUN --mount=type=cache,target=/root/.gradle \
-    chmod +x gradlew && \
-    ./gradlew dependencies --no-daemon
-
-# Copy the application source.
-COPY src/ /app/src/
-
-# [BUILD & LAYER EXTRACTION]
-# Reuse the Gradle cache, perform Spring Boot AOT compilation, build the executable JAR,
-# then extract it into layered form to maximize Docker layer reuse.
-RUN --mount=type=cache,target=/root/.gradle \
-    ./gradlew processAot bootJar --no-daemon && \
-    java -Djarmode=tools \
-         -jar build/libs/*.jar \
-         extract \
-         --layers \
-         --launcher \
-         --destination extracted
+# Extract layers using the Spring Boot jar tools mode
+RUN java -Djarmode=tools -jar /app/app.jar extract --layers --launcher --destination extracted
 
 # =========================================================================================
 # STAGE 2: PRODUCTION RUNTIME STAGE

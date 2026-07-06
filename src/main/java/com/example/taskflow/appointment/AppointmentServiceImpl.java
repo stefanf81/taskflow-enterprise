@@ -113,7 +113,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         if (idempotencyKey != null && !idempotencyKey.trim().isEmpty()) {
             Appointment existing = appointmentRepository.findByIdempotencyKey(idempotencyKey);
             if (existing != null) {
-                logger.info("Idempotency key {} already exists. Returning existing appointment.", idempotencyKey);
+                logger.info("Idempotency key {} already exists. Returning existing appointment.", idempotencyKey.replaceAll("[\\r\\n]", ""));
                 return AppointmentResponse.fromEntity(existing);
             }
         }
@@ -258,6 +258,10 @@ public class AppointmentServiceImpl implements AppointmentService {
         if (input == null || input.length() <= 4) {
             return "****";
         }
-        return input.substring(0, 2) + "****" + input.substring(input.length() - 2);
+        String sanitized = input.replaceAll("[\\r\\n]", "");
+        if (sanitized.length() <= 4) {
+            return "****";
+        }
+        return sanitized.substring(0, 2) + "****" + sanitized.substring(sanitized.length() - 2);
     }
 }
