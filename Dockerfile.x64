@@ -51,9 +51,14 @@ EXPOSE 8080
 #                               (cgroup-aware since JDK 10+), rather than a fixed -Xmx
 #                               that's only correct on the one host it was tuned for.
 #
-# -XX:+UseParallelGC          : optimize for throughput/RPS over pause time.
-#
 # -XX:+ExitOnOutOfMemoryError : fail fast and let the orchestrator restart the pod.
+#
+# No explicit GC algorithm is selected, which means G1 (the JDK 21 default since JDK 9)
+# is what actually runs here. G1 targets a max pause time (~200ms via MaxGCPauseMillis)
+# rather than pure throughput, which fits a request/response service where p99 latency
+# matters more than raw RPS. If this service is actually throughput-bound rather than
+# latency-sensitive, add back -XX:+UseParallelGC explicitly instead of relying on this
+# default — don't leave the choice implicit either way.
 #
 # Deliberately NOT set, and why:
 #
@@ -83,7 +88,7 @@ EXPOSE 8080
 #     sizes just means the split freezes at an arbitrary JVM guess, which is worse than
 #     leaving it adaptive. Especially relevant now that heap size itself is derived from
 #     MaxRAMPercentage rather than fixed, so there's no single "right" split to freeze.
-ENV JAVA_OPTS="-Dspring.aot.enabled=true -XX:MaxRAMPercentage=75.0 -XX:+UseParallelGC -XX:+ExitOnOutOfMemoryError"
+ENV JAVA_OPTS="-Dspring.aot.enabled=true -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"
 
 ENTRYPOINT ["/sbin/tini", "--"]
 # `exec` replaces the shell with the JVM so SIGTERM from tini reaches the JVM directly,

@@ -1,71 +1,97 @@
 # =========================================================================================
 # STAGE 1: BUILD STAGE
-# We use the standard JDK (Java Development Kit) here because we need the 'javac' compiler 
-# and Gradle to build the application. This stage is discarded after the build finishes, 
-# ensuring none of the build tools bloat our final production image.
+# We use the standard JDK (Java Development Kit) because Gradle and javac are required
+# to compile the application. This stage is discarded after the build, so none of the
+# build tools are included in the final runtime image.
 # =========================================================================================
 FROM eclipse-temurin:21-jdk AS builder
+
 WORKDIR /app
 
-# [CACHE OPTIMIZATION] Copy gradle wrapper and build files first.
-# Docker caches layers sequentially. By copying these before the source code,
-# we ensure that if we only change Java code, Docker doesn't invalidate the dependency cache.
+# [CACHE OPTIMIZATION]
+# Copy the Gradle wrapper and build configuration first so dependency resolution is
+# cached independently of application source changes.
 COPY gradle/ /app/gradle/
 COPY gradlew build.gradle settings.gradle gradle.properties /app/
 
-# [DEPENDENCY PRE-DOWNLOAD] Download dependencies first.
-# This ensures that external libraries are locked inside a cached Docker layer.
-# Only changes to build.gradle or settings.gradle will trigger a new download,
-# saving massive compilation time during frequent code updates.
+# [DEPENDENCY PRE-DOWNLOAD]
+# Persist Gradle's dependency cache between local builds using a BuildKit cache mount.
+# Only changes to the build configuration will invalidate this layer.
 RUN --mount=type=cache,target=/root/.gradle \
-    chmod +x gradlew && ./gradlew dependencies --no-daemon
+    chmod +x gradlew && \
+    ./gradlew dependencies --no-daemon
 
-# Now copy the source code to compile.
+# Copy the application source.
 COPY src/ /app/src/
 
-# [BUILDKIT CACHE MOUNT] This is an elite Docker optimization.
-# It mounts a persistent volume to /root/.gradle that survives between independent Docker builds.
-# We run 'processAot' to trigger Spring Boot's Ahead-Of-Time compilation (removing runtime reflection overhead).
-# Then we extract it into 4 layers for lightning-fast container updates.
+# [BUILD & LAYER EXTRACTION]
+# Reuse the Gradle cache, perform Spring Boot AOT compilation, build the executable JAR,
+# then extract it into layered form to maximize Docker layer reuse.
 RUN --mount=type=cache,target=/root/.gradle \
     ./gradlew processAot bootJar --no-daemon && \
-    java -Djarmode=tools -jar build/libs/*.jar extract --layers --launcher --destination extracted
+    java -Djarmode=tools \
+         -jar build/libs/*.jar \
+         extract \
+         --layers \
+         --launcher \
+         --destination extracted
 
 # =========================================================================================
 # STAGE 2: PRODUCTION RUNTIME STAGE
-# We switch to Alpine Linux JRE (Java Runtime Environment). 
-# Alpine uses 'musl' libc, stripping out vulnerable OS utilities and reducing the image size by ~20%.
+# A minimal Alpine-based JRE keeps the runtime image small while reducing the installed
+# operating system surface area.
 # =========================================================================================
 FROM eclipse-temurin:21-jre-alpine
+
 WORKDIR /app
 
-# [PROCESS REAPING & KUBERNETES PSS] 
-# 1. Install 'tini': A tiny init-system that runs as PID 1 to gracefully handle Kubernetes SIGTERM signals and reap zombie processes.
-# 2. Strict UIDs: We hardcode numeric user/group IDs (10001) to satisfy Kubernetes strict Pod Security Standards (PSS).
+# Install tini as PID 1 for proper signal handling and zombie reaping.
+# Create a fixed non-root user (UID/GID 10001) for compatibility with
+# Kubernetes Pod Security Standards.
 RUN apk add --no-cache tini \
-    && addgroup -g 10001 -S appgroup && adduser -u 10001 -S appuser -G appgroup
+    && addgroup -S -g 10001 appgroup \
+    && adduser -S -u 10001 -G appgroup appuser
 
-# [CACHED LAYER COPY] Copy the extracted layers from the builder stage.
-# Order is critical here: least-frequently changed (dependencies) to most-frequently changed (application).
+# Copy Spring Boot's extracted layers from least frequently changed to most frequently
+# changed to maximize Docker cache reuse.
 COPY --from=builder --chown=10001:10001 /app/extracted/dependencies/ ./
 COPY --from=builder --chown=10001:10001 /app/extracted/spring-boot-loader/ ./
 COPY --from=builder --chown=10001:10001 /app/extracted/snapshot-dependencies/ ./
 COPY --from=builder --chown=10001:10001 /app/extracted/application/ ./
 
-# Drop root privileges immediately for security compliance.
+# Drop root privileges.
 USER 10001:10001
 
 EXPOSE 8080
 
-# [JVM TUNING: M4 PRO / HIGH THROUGHPUT]
-# -Dspring.aot.enabled=true  : Uses the AOT generated classes to bypass slow reflection.
-# -Xms1g -Xmx1g              : Locks heap size to 1GB to prevent OS dynamic memory allocation pauses.
-# -XX:+UseParallelGC         : Optimizes for pure maximum Request-Per-Second (RPS) throughput.
-# -XX:ParallelGCThreads=10   : Hardware pins the GC specifically to the 10 Performance Cores (P-cores) of the M4 Pro.
-# -XX:-UseAdaptiveSizePolicy : Prevents the JVM from constantly resizing young/old generations under load.
-# -XX:+UseSIMDForMemoryOps   : Forces AArch64 vectorized instructions to exploit M4 Pro memory bandwidth.
-ENV JAVA_OPTS="-Dspring.aot.enabled=true -Xms1g -Xmx1g -XX:+UseParallelGC -XX:ParallelGCThreads=10 -XX:+AlwaysPreTouch -XX:-UseAdaptiveSizePolicy -XX:+UseSIMDForMemoryOps -XX:+ExitOnOutOfMemoryError"
+# =========================================================================================
+# JVM TUNING (Apple M4 Pro / Local Throughput Benchmarking)
+#
+# -Dspring.aot.enabled=true  : Enables Spring Boot's Ahead-of-Time generated classes,
+#                              reducing startup overhead by avoiding runtime reflection.
+#
+# -Xms1g -Xmx1g              : Fixes the heap size at 1 GB, eliminating runtime heap
+#                              expansion and contraction during benchmarking.
+#
+# -XX:+UseParallelGC         : Uses the throughput-oriented Parallel Garbage Collector.
+#                              Retained because benchmarking showed it performs better
+#                              for this workload than the default G1 collector.
+#
+# -XX:+AlwaysPreTouch        : Commits and touches the entire heap during startup,
+#                              trading slower startup for more predictable steady-state
+#                              memory access and fewer first-touch page faults.
+#
+# -XX:+ExitOnOutOfMemoryError: Terminates immediately on OOM so failures are explicit
+#                              instead of leaving the JVM in an unstable state.
+# =========================================================================================
+ENV JAVA_OPTS="-Dspring.aot.enabled=true \
+-Xms1g \
+-Xmx1g \
+-XX:+UseParallelGC \
+-XX:+AlwaysPreTouch \
+-XX:+ExitOnOutOfMemoryError"
 
-# [ENTRYPOINT] Tini takes PID 1, and spawns the Spring Boot JarLauncher to run our exploded layers directly.
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["sh", "-c", "java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]
+
+# Replace the shell with the JVM so signals from tini are delivered directly.
+CMD ["sh", "-c", "exec java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]
