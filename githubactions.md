@@ -111,7 +111,7 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -137,7 +137,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || inputs.run_lint_and_format
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Lint Dockerfiles
         uses: hadolint/hadolint-action@v3.3.0
@@ -160,6 +160,8 @@ jobs:
   codeql-analysis:
     name: 🛡️ CodeQL SAST Analysis
     runs-on: ubuntu-latest
+    needs: changes
+    if: github.event_name != 'workflow_dispatch' || inputs.run_security_scans
     permissions:
       security-events: write
       actions: read
@@ -170,17 +172,17 @@ jobs:
         language: [ 'java', 'javascript' ]
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
           build-mode: none
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{matrix.language}}"
 
@@ -197,25 +199,25 @@ jobs:
       checks: write
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
 
       - name: Setup Gradle Build Cache
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Backend - Spring Boot Tests
         if: github.event_name != 'workflow_dispatch' || inputs.run_tests
         run: |
           echo "Running JUnit, ArchUnit, and SpotBugs..."
-          ./gradlew check --no-daemon --parallel --build-cache -Dorg.gradle.jvmargs="-Xmx1536m"
+          ./gradlew check --no-daemon --parallel --build-cache
 
       - name: Publish Test Report
-        uses: mikepenz/action-junit-report@v5
+        uses: mikepenz/action-junit-report@v6
         if: always() && (github.event_name != 'workflow_dispatch' || inputs.run_tests)
         with:
           report_paths: 'build/test-results/test/*.xml'
@@ -225,7 +227,7 @@ jobs:
 
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-test-results
           path: build/test-results/test/*.xml
@@ -233,24 +235,24 @@ jobs:
 
       - name: Upload JaCoCo Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-jacoco-report
           path: build/jacoco/*.exec
           retention-days: 7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build & Push Backend Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile.x64
@@ -274,7 +276,7 @@ jobs:
 
       - name: Upload Trivy Scan Results
         if: github.event_name != 'workflow_dispatch' || inputs.run_security_scans
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-backend-results.sarif'
           category: backend-container
@@ -290,10 +292,10 @@ jobs:
       security-events: write
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
@@ -315,11 +317,11 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=1536
         run: |
           echo "Running Vitest..."
-          npm run test -- --watch=false
+          npm run test -- --watch=false --coverage
 
       - name: Store Frontend Test Results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-test-results
           path: frontend/coverage/
@@ -327,21 +329,21 @@ jobs:
 
       - name: Set up JDK 21 for E2E Tests
         if: github.event_name != 'workflow_dispatch' || inputs.run_tests
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
 
       - name: Setup Gradle for E2E Tests
         if: github.event_name != 'workflow_dispatch' || inputs.run_tests
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: true
 
       - name: Start Spring Boot Backend in Background
         if: github.event_name != 'workflow_dispatch' || inputs.run_tests
         run: |
-          nohup ./gradlew bootRun --no-daemon --parallel --build-cache -Dorg.gradle.jvmargs="-Xmx1536m" > spring-boot.log 2>&1 &
+          nohup ./gradlew bootRun --no-daemon --parallel --build-cache > spring-boot.log 2>&1 &
           echo "Spring Boot starting in background..."
           for i in {1..45}; do
             if curl --fail -s http://localhost:8080/api/v1/catalog > /dev/null; then
@@ -362,7 +364,7 @@ jobs:
       - name: Cache Playwright Browsers
         if: github.event_name != 'workflow_dispatch' || inputs.run_tests
         id: cache-playwright
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}
@@ -380,7 +382,7 @@ jobs:
 
       - name: Upload Playwright Report
         if: always() && (github.event_name != 'workflow_dispatch' || inputs.run_tests)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: frontend/playwright-report/
@@ -388,24 +390,24 @@ jobs:
 
       - name: Upload Spring Boot Logs
         if: always() && (github.event_name != 'workflow_dispatch' || inputs.run_tests)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: spring-boot-logs
           path: spring-boot.log
           retention-days: 7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build & Push Frontend Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend
           platforms: linux/amd64
@@ -428,10 +430,11 @@ jobs:
 
       - name: Upload Trivy Scan Results
         if: github.event_name != 'workflow_dispatch' || inputs.run_security_scans
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-frontend-results.sarif'
           category: frontend-container
+
 ```
 
 ## Step 3: Run the Workflow

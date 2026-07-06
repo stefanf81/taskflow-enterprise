@@ -112,6 +112,8 @@ tasks.named("spotbugsAot") {
     enabled = false
 }
 
+// [PERFORMANCE TWEAK] Skip running heavy static security analysis (SpotBugs) 
+// on test source code to significantly reduce CI compilation and check times.
 tasks.named("spotbugsTest") {
     enabled = false
 }
