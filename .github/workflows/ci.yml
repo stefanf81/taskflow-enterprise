@@ -162,6 +162,12 @@ jobs:
             build/reports
             build/test-results
 
+      - name: Upload Backend JAR
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-jar
+          path: build/libs/*.jar
+
   frontend:
     name: Frontend
     needs:
@@ -309,8 +315,6 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - uses: gradle/actions/setup-gradle@v6
-
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -318,11 +322,20 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       ##########################################################
+      # Download Backend JAR
+      ##########################################################
+      - name: Download Backend JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          path: backend-jar-dir
+
+      ##########################################################
       # Start Backend
       ##########################################################
       - name: Start Spring Boot
         run: |
-          nohup ./gradlew --no-daemon bootRun > spring.log 2>&1 &
+          nohup java -Dspring.profiles.active=prod -jar backend-jar-dir/*.jar > spring.log 2>&1 &
 
       ##########################################################
       # Wait for Backend
