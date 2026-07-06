@@ -95,35 +95,6 @@ jobs:
     if: needs.changes.outputs.backend == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: taskflow
-          POSTGRES_USER: taskflow
-          POSTGRES_PASSWORD: taskflow
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U taskflow"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/taskflow
-      SPRING_DATASOURCE_USERNAME: taskflow
-      SPRING_DATASOURCE_PASSWORD: taskflow
-      SPRING_DATA_REDIS_HOST: localhost
-      SPRING_DATA_REDIS_PORT: 6379
     steps:
       - uses: actions/checkout@v7
 
@@ -227,11 +198,15 @@ jobs:
           path: |
             frontend/dist
 
-  security-backend:
-    name: Security Scan (Backend)
+  security:
+    name: Security Scan (${{ matrix.component }})
     needs: changes
+    strategy:
+      fail-fast: true
+      matrix:
+        component: [backend, frontend]
     if: |
-      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.docker == 'true') &&
+      (needs.changes.outputs[matrix.component] == 'true' || needs.changes.outputs.docker == 'true') &&
       (github.event_name != 'workflow_dispatch' || inputs.run_security)
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -246,7 +221,7 @@ jobs:
       # Dependency Review (Pull Requests)
       #####################################################
       - name: Dependency Review
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && matrix.component == 'backend'
         uses: actions/dependency-review-action@v4
 
       #####################################################
@@ -256,33 +231,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
-          scan-ref: .
-          format: table
-          exit-code: 0
-
-  security-frontend:
-    name: Security Scan (Frontend)
-    needs: changes
-    if: |
-      (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.docker == 'true') &&
-      (github.event_name != 'workflow_dispatch' || inputs.run_security)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      security-events: write
-      packages: read
-    steps:
-      - uses: actions/checkout@v7
-
-      #####################################################
-      # Filesystem Scan
-      #####################################################
-      - name: Filesystem Scan
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: fs
-          scan-ref: frontend
+          scan-ref: ${{ matrix.component == 'backend' && '.' || 'frontend' }}
           format: table
           exit-code: 0
 
@@ -428,10 +377,14 @@ jobs:
             spring.log
 
   docker-build:
-    name: Build Docker Images
+    name: Build Docker (${{ matrix.component }})
     needs: e2e
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: true
+      matrix:
+        component: [backend, frontend]
     steps:
       - uses: actions/checkout@v7
 
@@ -443,33 +396,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Backend Image
+      - name: Build Image
         uses: docker/build-push-action@v7
         with:
-          context: .
-          file: Dockerfile.x64
+          context: ${{ matrix.component == 'backend' && '.' || 'frontend' }}
+          file: ${{ matrix.component == 'backend' && 'Dockerfile.x64' || 'frontend/Dockerfile' }}
           push: ${{ github.ref == 'refs/heads/main' }}
           load: ${{ github.ref != 'refs/heads/main' }}
-          tags: |
-            ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
+          tags: ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
 
-      - name: Build Frontend Image
-        uses: docker/build-push-action@v7
-        with:
-          context: frontend
-          push: ${{ github.ref == 'refs/heads/main' }}
-          load: ${{ github.ref != 'refs/heads/main' }}
-          tags: |
-            ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
-
-      - name: Push Backend Latest
+      - name: Push Latest
         if: github.ref == 'refs/heads/main'
-        run: docker buildx imagetools create ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }} --tag ${{ env.BACKEND_IMAGE }}:latest
-
-      - name: Push Frontend Latest
-        if: github.ref == 'refs/heads/main'
-        run: docker buildx imagetools create ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }} --tag ${{ env.FRONTEND_IMAGE }}:latest
+        run: docker buildx imagetools create ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }} --tag ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:latest
