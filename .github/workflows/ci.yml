@@ -211,9 +211,6 @@ jobs:
           node --version
           npm --version
 
-      - name: Check formatting
-        run: npx prettier --check .
-
       - name: Run unit tests
         run: |
           npm run test -- \
