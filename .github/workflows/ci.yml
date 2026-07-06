@@ -240,7 +240,6 @@ jobs:
         run: |
           npm run test -- \
             --watch=false \
-            --browsers=ChromeHeadless \
             --coverage
 
       - name: Build production bundle
