@@ -198,15 +198,11 @@ jobs:
           path: |
             frontend/dist
 
-  security:
-    name: Security Scan (${{ matrix.component }})
+  security-backend:
+    name: Security Scan (Backend)
     needs: changes
-    strategy:
-      fail-fast: true
-      matrix:
-        component: [backend, frontend]
     if: |
-      (needs.changes.outputs[matrix.component] == 'true' || needs.changes.outputs.docker == 'true') &&
+      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.docker == 'true') &&
       (github.event_name != 'workflow_dispatch' || inputs.run_security)
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -221,7 +217,7 @@ jobs:
       # Dependency Review (Pull Requests)
       #####################################################
       - name: Dependency Review
-        if: github.event_name == 'pull_request' && matrix.component == 'backend'
+        if: github.event_name == 'pull_request'
         uses: actions/dependency-review-action@v4
 
       #####################################################
@@ -231,7 +227,33 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
-          scan-ref: ${{ matrix.component == 'backend' && '.' || 'frontend' }}
+          scan-ref: .
+          format: table
+          exit-code: 0
+
+  security-frontend:
+    name: Security Scan (Frontend)
+    needs: changes
+    if: |
+      (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.docker == 'true') &&
+      (github.event_name != 'workflow_dispatch' || inputs.run_security)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+
+      #####################################################
+      # Filesystem Scan
+      #####################################################
+      - name: Filesystem Scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: frontend
           format: table
           exit-code: 0
 
