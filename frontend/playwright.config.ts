@@ -32,7 +32,7 @@ export default defineConfig({
 
   /* Automatically spin up the Angular dev server during E2E testing */
   webServer: {
-    command: 'npm start',
+    command: process.env['CI'] ? 'npx --yes http-server dist/frontend -p 4200' : 'npm start',
     url: 'http://127.0.0.1:4200',
     reuseExistingServer: !process.env['CI'],
     timeout: 120_000, // 2 minutes timeout for slow startup

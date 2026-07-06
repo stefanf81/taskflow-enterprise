@@ -297,6 +297,15 @@ jobs:
           path: backend-jar-dir
 
       ##########################################################
+      # Download Frontend Artifact
+      ##########################################################
+      - name: Download Frontend Build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      ##########################################################
       # Start Backend
       ##########################################################
       - name: Start Spring Boot
