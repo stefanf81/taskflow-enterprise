@@ -126,10 +126,6 @@ jobs:
       SPRING_DATASOURCE_PASSWORD: taskflow
       SPRING_DATA_REDIS_HOST: localhost
       SPRING_DATA_REDIS_PORT: 6379
-      GRADLE_OPTS: >-
-        -Dorg.gradle.daemon=false
-        -Dorg.gradle.parallel=true
-        -Dorg.gradle.configuration-cache=true
     steps:
       - uses: actions/checkout@v7
 
@@ -149,8 +145,6 @@ jobs:
             test \
             assemble \
             jacocoTestReport \
-            --build-cache \
-            --parallel \
             --stacktrace
 
       - name: Upload Test Reports
