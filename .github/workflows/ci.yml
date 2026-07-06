@@ -138,7 +138,6 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      SPRING_PROFILES_ACTIVE: prod
       SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/taskflow
       SPRING_DATASOURCE_USERNAME: taskflow
       SPRING_DATASOURCE_PASSWORD: taskflow
@@ -316,7 +315,7 @@ jobs:
       # Trivy Backend Image
       #####################################################
       - name: Scan Backend Image
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
           format: sarif
@@ -337,7 +336,7 @@ jobs:
       # Trivy Frontend Image
       #####################################################
       - name: Scan Frontend Image
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
           format: sarif
@@ -358,7 +357,7 @@ jobs:
       # Filesystem Scan
       #####################################################
       - name: Filesystem Scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
