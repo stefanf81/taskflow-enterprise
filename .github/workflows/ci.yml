@@ -175,13 +175,6 @@ jobs:
           path: |
             frontend/coverage
 
-      - name: Upload build
-        uses: actions/upload-artifact@v7
-        with:
-          name: frontend-dist
-          path: |
-            frontend/dist
-
   security-backend:
     name: Security Scan (Backend)
     needs: changes
@@ -309,15 +302,6 @@ jobs:
         with:
           name: backend-jar
           path: backend-jar-dir
-
-      ##########################################################
-      # Download Frontend Artifact
-      ##########################################################
-      - name: Download Frontend Build
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist
 
       ##########################################################
       # Start Backend
