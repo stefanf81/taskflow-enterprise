@@ -158,3 +158,593 @@ jobs:
           cd frontend
 
           npm run lint
+  backend:
+
+    name: Backend
+
+    needs:
+      - changes
+      - lint
+
+    if: needs.changes.outputs.backend == 'true' || github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 30
+
+    services:
+
+      postgres:
+
+        image: postgres:16
+
+        env:
+          POSTGRES_DB: taskflow
+          POSTGRES_USER: taskflow
+          POSTGRES_PASSWORD: taskflow
+
+        ports:
+          - 5432:5432
+
+        options: >-
+          --health-cmd "pg_isready -U taskflow"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+
+        image: redis:7-alpine
+
+        ports:
+          - 6379:6379
+
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/taskflow
+
+      SPRING_DATASOURCE_USERNAME: taskflow
+
+      SPRING_DATASOURCE_PASSWORD: taskflow
+
+      SPRING_DATA_REDIS_HOST: localhost
+
+      SPRING_DATA_REDIS_PORT: 6379
+
+      GRADLE_OPTS: >-
+        -Dorg.gradle.daemon=false
+        -Dorg.gradle.parallel=true
+        -Dorg.gradle.configuration-cache=true
+
+    steps:
+
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify Gradle
+
+        run: ./gradlew --version
+
+      - name: Build
+
+        run: |
+          ./gradlew \
+            clean \
+            test \
+            assemble \
+            jacocoTestReport \
+            --build-cache \
+            --parallel \
+            --stacktrace
+
+      - name: Upload Test Reports
+
+        if: always()
+
+        uses: actions/upload-artifact@v4
+
+        with:
+          name: backend-test-results
+
+          path: |
+            build/reports
+            build/test-results
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+
+        with:
+
+          registry: ghcr.io
+
+          username: ${{ github.actor }}
+
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Backend Image
+
+        uses: docker/build-push-action@v6
+
+        with:
+
+          context: .
+
+          file: Dockerfile.x64
+
+          push: github.ref == 'refs/heads/main'
+
+          load: github.ref != 'refs/heads/main'
+
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
+            ${{ env.BACKEND_IMAGE }}:latest
+
+          cache-from: type=gha,scope=backend
+
+          cache-to: type=gha,mode=max,scope=backend
+  frontend:
+
+    name: Frontend
+
+    needs:
+      - changes
+      - lint
+
+    if: needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+
+        run: |
+          npm ci \
+            --prefer-offline \
+            --no-audit \
+            --no-fund
+
+      - name: Verify versions
+
+        run: |
+          node --version
+          npm --version
+
+      - name: Run ESLint
+
+        run: npm run lint
+
+      - name: Check formatting
+
+        run: npx prettier --check .
+
+      - name: Run unit tests
+
+        run: |
+          npm run test -- \
+            --watch=false \
+            --browsers=ChromeHeadless \
+            --code-coverage
+
+      - name: Build production bundle
+
+        run: npm run build
+
+      - name: Upload coverage
+
+        uses: actions/upload-artifact@v4
+
+        if: always()
+
+        with:
+          name: frontend-coverage
+
+          path: |
+            frontend/coverage
+
+      - name: Upload build
+
+        uses: actions/upload-artifact@v4
+
+        with:
+          name: frontend-dist
+
+          path: |
+            frontend/dist
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build frontend image
+
+        uses: docker/build-push-action@v6
+
+        with:
+
+          context: frontend
+
+          push: ${{ github.ref == 'refs/heads/main' }}
+
+          load: ${{ github.ref != 'refs/heads/main' }}
+
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
+            ${{ env.FRONTEND_IMAGE }}:latest
+
+          cache-from: type=gha,scope=frontend
+
+          cache-to: type=gha,mode=max,scope=frontend
+  security:
+
+    name: Security Scan
+
+    needs:
+      - backend
+      - frontend
+
+    if: github.event_name != 'workflow_dispatch' || inputs.run_security
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+
+    steps:
+
+      - uses: actions/checkout@v5
+
+      #####################################################
+      # Dependency Review (Pull Requests)
+      #####################################################
+
+      - name: Dependency Review
+
+        if: github.event_name == 'pull_request'
+
+        uses: actions/dependency-review-action@v4
+
+      #####################################################
+      # Login to GHCR
+      #####################################################
+
+      - uses: docker/login-action@v3
+
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      #####################################################
+      # Trivy Backend Image
+      #####################################################
+
+      - name: Scan Backend Image
+
+        uses: aquasecurity/trivy-action@0.28.0
+
+        with:
+          image-ref: ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
+          format: sarif
+          output: trivy-backend.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      #####################################################
+      # Upload Backend SARIF
+      #####################################################
+
+      - name: Upload Backend SARIF
+
+        uses: github/codeql-action/upload-sarif@v3
+
+        with:
+          sarif_file: trivy-backend.sarif
+          category: backend-container
+
+      #####################################################
+      # Trivy Frontend Image
+      #####################################################
+
+      - name: Scan Frontend Image
+
+        uses: aquasecurity/trivy-action@0.28.0
+
+        with:
+          image-ref: ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
+          format: sarif
+          output: trivy-frontend.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      #####################################################
+      # Upload Frontend SARIF
+      #####################################################
+
+      - name: Upload Frontend SARIF
+
+        uses: github/codeql-action/upload-sarif@v3
+
+        with:
+          sarif_file: trivy-frontend.sarif
+          category: frontend-container
+
+      #####################################################
+      # Filesystem Scan
+      #####################################################
+
+      - name: Filesystem Scan
+
+        uses: aquasecurity/trivy-action@0.28.0
+
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          exit-code: 0
+
+      #####################################################
+      # Upload Security Reports
+      #####################################################
+
+      - name: Upload Reports
+
+        if: always()
+
+        uses: actions/upload-artifact@v4
+
+        with:
+          name: security-reports
+
+          path: |
+            trivy-backend.sarif
+            trivy-frontend.sarif
+  e2e:
+
+    name: End-to-End Tests
+
+    needs:
+      - backend
+      - frontend
+      - security
+
+    if: github.event_name != 'workflow_dispatch' || inputs.run_tests
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 45
+
+    services:
+
+      postgres:
+
+        image: postgres:16
+
+        env:
+          POSTGRES_DB: taskflow
+          POSTGRES_USER: taskflow
+          POSTGRES_PASSWORD: taskflow
+
+        ports:
+          - 5432:5432
+
+        options: >-
+          --health-cmd="pg_isready -U taskflow"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+
+        image: redis:7-alpine
+
+        ports:
+          - 6379:6379
+
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/taskflow
+      SPRING_DATASOURCE_USERNAME: taskflow
+      SPRING_DATASOURCE_PASSWORD: taskflow
+
+      SPRING_DATA_REDIS_HOST: localhost
+      SPRING_DATA_REDIS_PORT: 6379
+
+    steps:
+
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      ##########################################################
+      # Start Backend
+      ##########################################################
+
+      - name: Start Spring Boot
+
+        run: |
+
+          nohup ./gradlew --no-daemon bootRun > spring.log 2>&1 &
+
+      ##########################################################
+      # Wait for Backend
+      ##########################################################
+
+      - name: Wait for Backend
+
+        run: |
+
+          echo "Waiting for Spring Boot..."
+
+          for i in {1..90}; do
+
+            if curl -fs http://localhost:8080/actuator/health; then
+
+              echo "Backend ready"
+
+              exit 0
+
+            fi
+
+            sleep 2
+
+          done
+
+          echo "Backend failed"
+
+          echo "=============================="
+
+          cat spring.log
+
+          echo "=============================="
+
+          exit 1
+
+      ##########################################################
+      # Frontend
+      ##########################################################
+
+      - name: Install Frontend
+
+        working-directory: frontend
+
+        run: npm ci
+
+      ##########################################################
+      # Playwright
+      ##########################################################
+
+      - name: Install Browsers
+
+        working-directory: frontend
+
+        run: npx playwright install --with-deps
+
+      - name: Run Playwright
+
+        working-directory: frontend
+
+        run: npm run e2e
+
+      ##########################################################
+      # Upload Reports
+      ##########################################################
+
+      - name: Upload Playwright Report
+
+        if: always()
+
+        uses: actions/upload-artifact@v4
+
+        with:
+
+          name: playwright-report
+
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+            spring.log
+
+  publish:
+
+    name: Publish Images
+
+    needs:
+      - e2e
+
+    if: github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 20
+
+    steps:
+
+      - uses: docker/login-action@v3
+
+        with:
+
+          registry: ghcr.io
+
+          username: ${{ github.actor }}
+
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push Backend Latest
+
+        run: |
+
+          docker pull ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
+
+          docker tag \
+            ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }} \
+            ${{ env.BACKEND_IMAGE }}:latest
+
+          docker push ${{ env.BACKEND_IMAGE }}:latest
+
+      - name: Push Frontend Latest
+
+        run: |
+
+          docker pull ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
+
+          docker tag \
+            ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }} \
+            ${{ env.FRONTEND_IMAGE }}:latest
+
+          docker push ${{ env.FRONTEND_IMAGE }}:latest
