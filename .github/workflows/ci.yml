@@ -92,7 +92,7 @@ jobs:
   backend:
     name: Backend
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || github.ref == 'refs/heads/main'
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -133,7 +133,7 @@ jobs:
   frontend:
     name: Frontend
     needs: changes
-    if: needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main'
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -252,9 +252,17 @@ jobs:
   e2e:
     name: End-to-End Tests
     needs:
+      - changes
       - backend
       - frontend
-    if: github.event_name != 'workflow_dispatch' || inputs.run_tests
+      - security-backend
+      - security-frontend
+    if: |
+      always() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled') &&
+      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main') &&
+      (github.event_name != 'workflow_dispatch' || inputs.run_tests)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
@@ -403,7 +411,14 @@ jobs:
 
   docker-build:
     name: Build Docker (${{ matrix.component }})
-    needs: e2e
+    needs: 
+      - changes
+      - e2e
+    if: |
+      always() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled') &&
+      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
