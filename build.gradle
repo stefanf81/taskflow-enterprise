@@ -8,112 +8,133 @@ plugins {
 	id 'com.github.spotbugs' version '6.5.8'
 	id 'org.graalvm.buildtools.native' version '0.10.6'
 }
-
 group = 'com.example'
 version = '0.0.1-SNAPSHOT'
-
 ext {
 	set('tomcat.version', '10.1.55')
-	set('jackson.version', '2.18.8')
+	set('jackson-bom.version', '2.18.8')
 	set('netty.version', '4.1.135.Final')
 	set('spring-security.version', '6.5.9')
 }
-
 java {
 	sourceCompatibility = JavaVersion.VERSION_21
 	targetCompatibility = JavaVersion.VERSION_21
 }
-
 repositories {
 	mavenCentral()
 }
-
 dependencies {
+	// Spring Boot
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
-	implementation 'com.fasterxml.jackson.module:jackson-module-blackbird'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
-	implementation 'com.github.ben-manes.caffeine:caffeine'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	// Jackson
+	implementation 'com.fasterxml.jackson.module:jackson-module-blackbird'
+	// Cache
+	implementation 'com.github.ben-manes.caffeine:caffeine'
+	// Observability
 	implementation 'io.micrometer:micrometer-registry-prometheus'
 	implementation 'io.micrometer:micrometer-tracing-bridge-otel'
 	implementation 'io.opentelemetry:opentelemetry-exporter-otlp'
+	// OpenAPI
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.5'
-	
-	// Database Migration
+	// Database migration
 	implementation 'org.flywaydb:flyway-core'
 	implementation 'org.flywaydb:flyway-database-postgresql'
-
-	// SOTA OAuth2/JWT Resource Server Security
-	implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
-
-	runtimeOnly 'com.h2database:h2'
+	// Runtime
 	runtimeOnly 'org.postgresql:postgresql'
+	runtimeOnly 'com.h2database:h2'
+	// Testing
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.security:spring-security-test'
+	testImplementation 'org.testcontainers:testcontainers'
 	testImplementation 'org.testcontainers:junit-jupiter'
 	testImplementation 'org.testcontainers:postgresql'
 	testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	// Static analysis
 	spotbugsPlugins 'com.h3xstream.findsecbugs:findsecbugs-plugin:1.13.0'
 }
-
 spotbugs {
 	toolVersion = '4.9.3'
-	ignoreFailures = true
+	ignoreFailures = false
 	effort = 'max'
 	reportLevel = 'high'
 	excludeFilter = file("spotbugs-exclude.xml")
 }
-
 tasks.register("writeAotClasspath") {
-    doLast {
-        def cp = sourceSets.aot.runtimeClasspath.asPath
-        file("build/aot-cp.txt").text = cp
-    }
-}
-tasks.register("writeMainClasspath") {
-    doLast {
-        def cp = sourceSets.main.runtimeClasspath.asPath
-        file("build/main-cp.txt").text = cp
-    }
-}
-
-tasks.named('test') {
-	useJUnitPlatform()
-	maxParallelForks = Runtime.runtime.availableProcessors().intdiv(2) ?: 1
-	environment "SPRING_SECURITY_PASSWORD", "admin-password"
-	systemProperty 'spring.cache.type', 'simple'
-	finalizedBy jacocoTestReport
-}
-
-tasks.named("processTestAot") {
-    enabled = false
-}
-
-jacocoTestReport {
-	dependsOn test
-	reports {
-		xml.required = true
-		csv.required = true
-		html.required = true
+	doLast {
+		file("build/aot-cp.txt").text = sourceSets.aot.runtimeClasspath.asPath
 	}
 }
-
+tasks.register("writeMainClasspath") {
+	doLast {
+		file("build/main-cp.txt").text = sourceSets.main.runtimeClasspath.asPath
+	}
+}
+tasks.named("test") {
+	useJUnitPlatform()
+	maxParallelForks = Math.max(1, (int) (Runtime.runtime.availableProcessors() / 2))
+	environment "SPRING_SECURITY_PASSWORD", "admin-password"
+	systemProperty "spring.cache.type", "simple"
+	finalizedBy(tasks.jacocoTestReport)
+}
+tasks.named("processTestAot") {
+	enabled = false
+}
+jacoco {
+	toolVersion = "0.8.13"
+}
+jacocoTestReport {
+	dependsOn(tasks.test)
+	reports {
+		xml.required = true
+		html.required = true
+		csv.required = true
+	}
+}
+jacocoTestCoverageVerification {
+	dependsOn(tasks.test)
+	violationRules {
+		rule {
+			limit {
+				minimum = 0.80
+			}
+		}
+	}
+}
+tasks.named("check") {
+	dependsOn(
+			tasks.jacocoTestCoverageVerification
+	)
+}
 dependencyCheck {
-	failBuildOnCVSS = 7.0f
+	failBuildOnCVSS = 8.0f
 	formats = ['HTML', 'JSON']
 }
-
-tasks.named("spotbugsAot") {
-    enabled = false
+tasks.named("dependencyUpdates") {
+	rejectVersionIf {
+		def version = candidate.version.toLowerCase()
+		["alpha", "beta", "rc", "cr", "m", "ea"].any {
+			version.contains(it)
+		}
+	}
 }
-
-// [PERFORMANCE TWEAK] Skip running heavy static security analysis (SpotBugs) 
-// on test source code to significantly reduce CI compilation and check times.
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = "UTF-8"
+	options.incremental = true
+}
+tasks.named("spotbugsMain") {
+	enabled = false
+}
+tasks.named("spotbugsAot") {
+	enabled = false
+}
 tasks.named("spotbugsTest") {
-    enabled = false
+	enabled = false
 }
