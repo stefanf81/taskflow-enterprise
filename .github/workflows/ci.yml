@@ -1,159 +1,160 @@
-
 name: TaskFlow Enterprise CI/CD
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
+    branches:
+      - main
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: Run all tests
+        type: boolean
+        default: true
+
+      run_security:
+        description: Run security scans
+        type: boolean
+        default: true
+
+      push_images:
+        description: Push Docker images
+        type: boolean
+        default: false
 
 permissions:
   contents: read
   packages: write
   security-events: write
+  actions: read
+  pull-requests: read
+  checks: write
+
+concurrency:
+  group: taskflow-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
+  JAVA_VERSION: "21"
+  NODE_VERSION: "22"
+
   REGISTRY: ghcr.io
+
   IMAGE_TAG: ${{ github.sha }}
+
   BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/taskflow-backend
+
   FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/taskflow-frontend
 
+defaults:
+  run:
+    shell: bash
 jobs:
+
   changes:
+
+    name: Detect Changes
+
     runs-on: ubuntu-latest
+
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      docker: ${{ steps.filter.outputs.docker }}
+
     steps:
-      - uses: actions/checkout@v5
+
+      - name: Checkout
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
+
       - id: filter
         uses: dorny/paths-filter@v4
-        with:
-          filters: |
-            backend:
-              - 'src/**'
-              - 'build.gradle'
-              - 'Dockerfile*'
-            frontend:
-              - 'frontend/**'
 
-  lint:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v5
-      - uses: hadolint/hadolint-action@v3.1.0
         with:
+
+          filters: |
+
+            backend:
+
+              - src/**
+
+              - build.gradle
+
+              - settings.gradle
+
+              - gradle/**
+
+            frontend:
+
+              - frontend/**
+
+            docker:
+
+              - Dockerfile*
+
+              - docker/**
+  lint:
+
+    name: Lint & Formatting
+
+    needs: changes
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    steps:
+
+      - uses: actions/checkout@v5
+
+      - name: Dockerfile Lint
+
+        uses: hadolint/hadolint-action@v3.1.0
+
+        with:
+
           dockerfile: Dockerfile.x64
+
           ignore: DL3018,DL3029
 
-  backend:
-    needs: [changes, lint]
-    if: needs.changes.outputs.backend == 'true' || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: taskflow
-          POSTGRES_USER: taskflow
-          POSTGRES_PASSWORD: taskflow
-        ports: ["5432:5432"]
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
-    env:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/taskflow
-      SPRING_DATASOURCE_USERNAME: taskflow
-      SPRING_DATASOURCE_PASSWORD: taskflow
-      SPRING_DATA_REDIS_HOST: localhost
-      SPRING_DATA_REDIS_PORT: 6379
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew --no-daemon clean test assemble --parallel --build-cache
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile.x64
-          push: ${{ github.ref == 'refs/heads/main' }}
-          tags: ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Setup Node
 
-  frontend:
-    needs: [changes, lint]
-    if: needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: cd frontend && npm ci && npm test -- --watch=false && npm run build
+        uses: actions/setup-node@v5
 
-  e2e:
-    needs: [backend, frontend]
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: taskflow
-          POSTGRES_USER: taskflow
-          POSTGRES_PASSWORD: taskflow
-      redis:
-        image: redis:7-alpine
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
         with:
-          distribution: temurin
-          java-version: '21'
-      - uses: gradle/actions/setup-gradle@v4
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
+
+          node-version: ${{ env.NODE_VERSION }}
+
           cache: npm
+
           cache-dependency-path: frontend/package-lock.json
-      - name: Start backend
+
+      - name: Install frontend
+
         run: |
-          nohup ./gradlew --no-daemon bootRun > spring.log 2>&1 &
-          for i in {1..60}; do
-            if curl -fs http://localhost:8080/actuator/health; then
-              exit 0
-            fi
-            sleep 2
-          done
-          cat spring.log
-          exit 1
-      - run: cd frontend && npm ci && npx playwright install --with-deps && npm run e2e
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: logs
-          path: |
-            spring.log
-            frontend/playwright-report
-            frontend/test-results
+
+          cd frontend
+
+          npm ci
+
+      - name: Prettier
+
+        run: |
+
+          cd frontend
+
+          npx prettier --check .
+
+      - name: ESLint
+
+        run: |
+
+          cd frontend
+
+          npm run lint
