@@ -163,7 +163,6 @@ jobs:
       - name: Build
         run: |
           ./gradlew \
-            clean \
             test \
             assemble \
             jacocoTestReport \
@@ -462,11 +461,21 @@ jobs:
       ##########################################################
       - name: Install Frontend
         working-directory: frontend
-        run: npm ci
+        run: |
+          npm ci \
+            --prefer-offline \
+            --no-audit \
+            --no-fund
 
       ##########################################################
       # Playwright
       ##########################################################
+      - name: Cache Playwright Browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
       - name: Install Browsers
         working-directory: frontend
         run: npx playwright install --with-deps
@@ -503,17 +512,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push Backend Latest
-        run: |
-          docker pull ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
-          docker tag \
-            ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }} \
-            ${{ env.BACKEND_IMAGE }}:latest
-          docker push ${{ env.BACKEND_IMAGE }}:latest
+        run: docker buildx imagetools create ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }} --tag ${{ env.BACKEND_IMAGE }}:latest
 
       - name: Push Frontend Latest
-        run: |
-          docker pull ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
-          docker tag \
-            ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }} \
-            ${{ env.FRONTEND_IMAGE }}:latest
-          docker push ${{ env.FRONTEND_IMAGE }}:latest
+        run: docker buildx imagetools create ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }} --tag ${{ env.FRONTEND_IMAGE }}:latest
