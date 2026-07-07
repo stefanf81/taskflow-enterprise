@@ -7,16 +7,16 @@ This document explains the configuration of the `.github/workflows/ci.yml` file,
 ## 1. Trigger Configuration (`on`)
 The workflow is triggered on pushes and pull requests to the `main` branch. 
 It also includes a `workflow_dispatch` trigger with granular boolean inputs:
-- `run_lint_and_format`: Toggles quick static checks.
-- `run_tests`: Toggles heavy compilation and test execution.
-- `run_security_scans`: Toggles container vulnerability scanning.
+- `run_tests`: Toggles unit tests, integration tests, and Playwright E2E tests across both the frontend and backend.
+- `run_security`: Toggles heavy dependency reviews and filesystem scans.
+- `push_images`: Toggles whether compiled Docker images should be uploaded to the GitHub Container Registry (GHCR).
 **Why:** This allows developers to manually trigger specific parts of the pipeline without wasting compute resources on steps they don't need to run at that exact moment.
 
 ## 2. Concurrency (`concurrency`)
 ```yaml
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: taskflow-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 ```
 **Why:** If a developer pushes multiple commits to a PR in rapid succession, GitHub Actions will cancel the older, now-obsolete pipeline runs. This saves significant compute minutes and prevents a queue of stale builds.
 
@@ -28,60 +28,67 @@ The top-level permissions block grants the absolute minimum access required. Spe
 Uses `dorny/paths-filter@v4` to detect exactly which files changed in a PR or push.
 **Why:** Monorepos (where frontend and backend live together) waste massive amounts of time running backend tests when only a CSS file changed, or vice versa. This step dynamically determines whether the backend, frontend, or both need to run, completely skipping unaffected pipelines.
 
-## 5. Job: `lint-and-format`
-A lightweight job that runs `hadolint` against all Dockerfiles and `prettier` against the frontend codebase.
-**Why:** Fails fast. By running these checks early and separately, we don't waste 5 minutes booting up JVMs and Node environments just to tell a developer they missed a semicolon or a Dockerfile best practice.
+## 5. Job: `lint` (Dockerfile Lint)
+A lightweight job that runs `hadolint` against `Dockerfile.x64` to verify linting and compliance.
+**Why:** Fails fast. By running these checks early and separately, we don't waste 5 minutes booting up JVMs and Node environments just to tell a developer they missed a Dockerfile best practice.
 
-## 6. Job: `codeql-analysis` (SAST)
-Uses GitHub's native CodeQL engine across a matrix strategy (`java` and `javascript`).
-**Why:** CodeQL is the industry standard for Static Application Security Testing (SAST). It detects deep code-level vulnerabilities (like SQL injection or XSS) directly in the source code. The `security-extended,security-and-quality` queries ensure we catch both security flaws and maintainability issues.
-- **Build Mode None:** For Java, we utilize CodeQL's newer `build-mode: none` functionality. This analyzes the Java codebase without needing to intercept a clean compilation process, saving ~1 minute of redundant compilation overhead in the security scanning pipeline.
+## 6. Job: `backend`
+This job handles the Spring Boot backend compilation, testing, and packaging.
 
-## 7. Job: `backend-pipeline`
-This job handles the Spring Boot backend compilation, testing, and containerization.
-
-- **Gradle Build Cache (`setup-gradle@v4`)**: Caches Gradle dependencies and build outputs.
-- **Optimized Test Command**: `./gradlew check --no-daemon --parallel --build-cache`. 
-  - **Why:** We removed the `clean` task. Running `clean` destroys the local cache. By utilizing Gradle's build cache and parallel execution, incremental test runs are exponentially faster.
+- **Dynamic Task Sizing via `run_tests`:**
+  If manually triggered with tests disabled, the build step dynamically skips `./gradlew test` and `jacocoTestReport` to speed up compile times, executing only the essential compiler packaging operations:
+  ```bash
+  TASKS="processAot assemble"
+  if [ "${{ github.event_name != 'workflow_dispatch' || inputs.run_tests }}" = "true" ]; then
+    TASKS="test processAot assemble jacocoTestReport"
+  fi
+  ./gradlew --parallel --build-cache $TASKS --stacktrace
+  ```
+- **Gradle Task Parallelism & Caching:** We explicitly pass the `--parallel` and `--build-cache` arguments to `./gradlew`. This compiles and processes independent AOT tasks across multiple threads, leveraging build outputs from previous runs.
 - **Visual Test Reporting (`action-junit-report`)**: Parses XML test results and creates visual summaries in the GitHub UI.
-  - **Why:** Developers no longer need to download zip artifacts and dig through text logs to find which test failed.
-- **Docker BuildKit Caching (`cache-from/cache-to`)**:
-  - **Why:** Injects GitHub Actions' native caching directly into Docker Buildx. Unchanged Docker layers (like downloaded dependencies) are instantly pulled from cache rather than rebuilt.
-- **Trivy SARIF Upload**: 
-  - **Why:** Instead of printing vulnerabilities to a console log, Trivy generates a `.sarif` file which is uploaded to GitHub's native **Security > Code scanning alerts** tab for proper tracking and lifecycle management.
+- **Compressed Report Uploads:** Uploading individual files introduces massive API call latency. We compress reports into a single `backend-reports.tar.gz` archive before invoking `actions/upload-artifact@v7`, decreasing upload time from minutes to milliseconds.
 
-## 8. Job: `frontend-pipeline`
-Handles the Angular 22 frontend build, testing, Playwright E2E execution, and containerization.
+## 7. Job: `frontend`
+Handles the Angular 22 frontend linting, unit tests, and production distribution builds.
 
-- **Playwright Browser Caching**:
-  - Dynamically extracts the Playwright version and caches the `~/.cache/ms-playwright` directory based on the OS and version.
-  - **Why:** Downloading hundreds of megabytes of headless browsers (Chromium, Firefox, WebKit) on every PR takes minutes. We conditionally run `npx playwright install-deps` (to get OS libraries) if the cache hits, completely bypassing the massive browser binary download.
-- **Embedded Spring Boot for Full-Stack E2E:** 
-  - Automatically spins up the Java Spring Boot backend (`./gradlew bootRun`) in the background of the frontend runner, waiting for its health check to become green before running Playwright.
-  - **Why:** The Angular application's E2E suite performs actual full-stack tasks (creating guest bookings, logging in as admin, approving bookings). Running Playwright tests without a running backend results in `504 Gateway Timeout` or connection errors. We also upload `spring-boot.log` as a workflow artifact upon failure to provide holistic backend+frontend debugging!
-- **E2E Artifact Uploads**: Uploads the `playwright-report/` upon completion.
-  - **Why:** If an E2E test fails, developers can download the HTML report and traces to visually debug what went wrong in the browser.
-- **FinOps Artifact Retention (`retention-days: 7`)**:
-  - **Why:** Applied to all `upload-artifact` steps (test results, jacoco, playwright). GitHub defaults to 90 days of retention, which rapidly consumes storage quotas. Test reports are generally useless after a few days, so a 7-day retention heavily optimizes cloud storage costs.
+- **Shared Node Modules Caching (`actions/cache@v4`)**:
+  We cache the entire physical `node_modules` directory across jobs using a key generated from the hash of the `package-lock.json` file. This allows subsequent jobs to bypass the `npm ci` installer step entirely, saving up to a minute per run.
+- **Conditional Testing:** The unit tests and coverage calculations are bypassed when `run_tests` is disabled on a manual trigger, skipping redundant unit execution.
+- **Compressed Coverage Artifacts:** Rather than uploading raw files, we archive the test coverage reports into a single `frontend-coverage.tar.gz` before publishing.
 
-## 9. Code Cleanliness & Syntax Optimizations
-The workflow script itself has been thoroughly refactored for readability and maintenance:
-- **Simplified Boolean Evaluations:** We removed overly verbose expressions like `${{ inputs.run_tests == true || inputs.run_tests == 'true' }}`. GitHub Actions natively interprets boolean input types, so conditions are now cleanly written as `if: github.event_name != 'workflow_dispatch' || inputs.run_tests`.
-- **Strict Least-Privilege Permissions:** The global `permissions:` block at the top of the file has been restricted solely to `contents: read`. Any job that needs more power (like pushing Docker images or creating PR comments) explicitly declares its own elevated `permissions` block. This prevents any newly added, misconfigured jobs from unintentionally inheriting global write access.
-## 10. Ultimate Performance Bottleneck Optimizations
-To further squeeze every last second of performance out of the pipeline, three major bottlenecks were resolved:
-- **Consolidated Node Environments:** Previously, the `lint-and-format` job spun up a complete Node.js environment just to run Prettier, while `frontend-pipeline` did the same for Angular tests. Prettier has been moved directly into the `frontend-pipeline` immediately after `npm ci`. This eliminates an entirely redundant `actions/setup-node` and `npm ci` initialization! `lint-and-format` is now purely for Dockerfile linting (`lint-dockerfiles`).
-- **Scoped Docker Caching for Monorepos:** Because `frontend-pipeline` and `backend-pipeline` run in parallel, using standard `cache-from: type=gha` causes their BuildKit caches to overwrite each other. We applied `scope=backend` and `scope=frontend` to securely isolate their caching layers.
-- **Docker Layer Caching Optimization:** We removed `--mount=type=cache` from the `Dockerfile.x64` Gradle dependency download step. While buildkit cache mounts are great for local builds, they are *ephemeral* in GitHub Actions and are never exported to the `gha` cache backend. By converting the dependency download into a standard Docker layer, it is now perfectly cached and instantly restored across independent workflow runs, saving ~1 minute and 30 seconds of redundant library downloads!
-- **Frontend E2E Read-Only Cache:** In the `frontend-pipeline`, the embedded Spring Boot backend is only spun up to serve API requests for Playwright; it does not actually produce new build artifacts we care about. We configured its Gradle caching step with `cache-read-only: true`. This prevents the frontend runner from wastefully spending ~20-30 seconds uploading cache metadata at the end of its job, since the `backend-pipeline` job already handles cache writing.
-- **Missing gradle.properties in Docker:** We discovered that `Dockerfile.x64` was omitting `gradle.properties` during the initial `COPY` step. This meant that the Gradle instance running inside Docker silently ignored all the high-performance tunings (`org.gradle.parallel=true`, `org.gradle.configuration-cache=true`, and optimized JVM heap sizes). Copying this file into the build context unleashes the full speed of Gradle inside the container.
-- **Embedded E2E Gradle Caching:** The background Spring Boot `bootRun` command (used to serve the backend for Playwright tests) has been updated to use `--parallel --build-cache`. This allows the frontend runner to instantly pull the pre-compiled Java classes from the Gradle cache instead of recompiling the entire Spring application from scratch inside the Node.js runner.
-- **CodeQL Build-Mode None:** CodeQL SAST scanning for Java used to require a full `./gradlew clean compileJava` without caching to trace compiler invocations. By switching to `build-mode: none`, we bypass the ~60-second compilation step entirely and let CodeQL perform syntax-based analysis instead.
-- **CodeQL Contextual Skipping:** We added a `needs: changes` dependency and a job-level `if` condition to the `codeql-analysis` job. Previously, it would run on every manual `workflow_dispatch` trigger regardless of whether `run_security_scans` was toggled. Now, it respects the user's manual inputs, skipping the entire SAST matrix when security scans are disabled, saving precious compute minutes.
-- **Dockerignore Context Optimization:** We created `.dockerignore` and `frontend/.dockerignore` files to explicitly prevent local development artifacts, logs, and massive `node_modules/` or `build/` directories from being uploaded to the Docker daemon during `docker/build-push-action`. Without this, the `COPY . .` step in the frontend Dockerfile was silently overwriting the optimized Linux `node_modules` generated by `npm ci` with hundreds of megabytes of host-generated files, causing massive I/O bloat and cache invalidation.
+## 8. Job: `e2e` (End-to-End Tests)
+Runs Playwright E2E tests against a real, running backend and database.
 
-## 11. Code Maintenance & Dependency Modernization
-To ensure long-term stability and eliminate GitHub Actions deprecation warnings (specifically regarding Node.js 20 and CodeQL v3 retirements):
-- **Action Bumps:** Upgraded all GitHub Action tags (`actions/checkout@v7`, `actions/setup-java@v5`, `codeql-action@v4`, etc.) to their latest major releases. These native Node 24 versions eliminate all runtime shim warnings and prevent sudden CI breakages when older Node versions are decommissioned.
-- **Frontend Vitest Coverage Integration:** The Angular 22 `ng test` (powered by Vitest) command was strictly configured with the `--coverage` flag, and `@vitest/coverage-v8` was installed to correctly emit `frontend/coverage/` directories. This ensures artifact uploaders do not fail silently when archiving test metrics.
-- **Gradle Daemon Tuning Preservation:** Eradicated CLI JVM overrides (`-Dorg.gradle.jvmargs`) from CI commands (`./gradlew check` and `bootRun`). This restores the highly tuned `-XX:+UseParallelGC` directives present in `gradle.properties` that were previously being unintentionally overwritten during execution.
+- **Dual Dependency (`needs: [changes, backend, frontend]`)**:
+  The E2E job now waits for both the backend and frontend jobs to succeed first. If unit tests fail, the heavy and expensive browser tests are skipped immediately, preventing pipeline resource waste.
+- **Shared `node_modules` Directory:** Reuses the exact same `node_modules` cache generated in the `frontend` job, dropping dependency installation overhead to zero.
+- **Upgraded Playwright Browser Cache:** Playwright browsers are cached under a key tied directly to the `package-lock.json` file hash, guaranteeing that the cache is cleanly invalidated whenever the Playwright dependency version is modified. This also allowed us to remove the redundant `npx playwright --version` run step.
+- **Compressed Playwright Reports:** Group-packages `spring.log`, `frontend/playwright-report`, and `frontend/test-results` into a single consolidated `playwright-report.tar.gz`, avoiding per-file upload overheads.
+
+## 9. Job: `docker-build`
+Compiles secure, production-grade container images for the backend and frontend components.
+
+- **Robust Pushing & Flag Decoupling:** Image pushing has been refactored to:
+  `((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.push_images))`
+  * **Automated runs:** Automatically push to the GitHub Container Registry (`ghcr.io`) upon merges/pushes to the `main` branch.
+  * **Manual dispatches:** Fully respect the `push_images` checkbox parameter, permitting developers to choose whether they wish to push images, on any branch.
+- **Skipped Docker Login on PRs:** The `docker/login-action` step is gated under the same push condition as above, completely bypassing registry login steps during PR runs where no images are pushed.
+- **Manual Trigger Bypass (`workflow_dispatch`):** Added the manual trigger check to all job-level `if` checks to ensure that clicking "Run workflow" in GitHub UI actually executes the pipeline on any branch, instead of silently skipping due to lack of file changes.
+
+## 10. Container & JVM Hardening (SOTA)
+Our Docker build configurations (`Dockerfile` and `Dockerfile.x64`) implement state-of-the-art container optimization techniques:
+- **BuildKit Cache Mounts:** Utilizes `--mount=type=cache,target=/tmp` on the Spring Boot layer extraction step, allowing BuildKit to store temporary compilation metadata across iterations.
+- **COPY --link:** Copies multi-stage compiled artifacts using independent image layers, bypassing full filesystem rewrites and facilitating immediate image layer linking.
+- **JVM Class Data Sharing (CDS / AppCDS):**
+  - Executes a headless training run during the `docker build` process:
+    ```dockerfile
+    RUN java -XX:ArchiveClassesAtExit=application.jsa \
+             -Dspring.context.exit=onRefresh \
+             -Dspring.flyway.enabled=false \
+             -Dspring.jpa.hibernate.ddl-auto=none \
+             org.springframework.boot.loader.launch.JarLauncher \
+        && chown 10001:10001 application.jsa
+    ```
+  - Saves pre-linked and pre-parsed JVM class-data to `/app/application.jsa`, owned by our non-root UID.
+  - Mounts the shared archive at runtime via `ENV JAVA_OPTS="-XX:SharedArchiveFile=application.jsa -Xshare:on"`.
+  - **Results:** Reduces runtime memory footprint, reduces JIT CPU cycles during startup, and boots the entire enterprise full-stack backend inside the container in just **2.09 seconds**!
