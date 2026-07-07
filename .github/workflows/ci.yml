@@ -451,8 +451,10 @@ jobs:
           file: ${{ matrix.component == 'backend' && 'Dockerfile.x64' || 'frontend/Dockerfile' }}
           push: ${{ github.ref == 'refs/heads/main' || inputs.push_images }}
           tags: ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
-          cache-from: type=registry,ref=${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:latest
-          cache-to: type=inline
+          cache-from: |
+            type=gha,scope=${{ matrix.component }}-main
+            type=gha,scope=${{ matrix.component }}-pr
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }}
           provenance: false
           sbom: false
 
