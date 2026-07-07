@@ -1,0 +1,40 @@
+name: Delete Old GitHub Actions Caches
+
+on:
+  schedule:
+    # Runs every day at 02:00 UTC
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Delete caches older than 3 days
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          CUTOFF=$(date -u -d "3 days ago" +"%Y-%m-%dT%H:%M:%SZ")
+
+          echo "Deleting caches older than: $CUTOFF"
+
+          gh api \
+            "/repos/$REPO/actions/caches?per_page=100" \
+            --paginate \
+            --jq '.actions_caches[] | [.id, .created_at] | @tsv' |
+          while IFS=$'\t' read -r ID CREATED; do
+            if [[ "$CREATED" < "$CUTOFF" ]]; then
+              echo "Deleting cache $ID ($CREATED)"
+              gh api \
+                --method DELETE \
+                "/repos/$REPO/actions/caches/$ID"
+            fi
+          done
