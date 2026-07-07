@@ -34,7 +34,8 @@ WORKDIR /app
 # Install tini as PID 1 for proper signal handling and zombie reaping.
 # Create a fixed non-root user (UID/GID 10001) for compatibility with
 # Kubernetes Pod Security Standards.
-RUN apk add --no-cache tini \
+RUN apk update && apk upgrade --no-cache \
+    && apk add --no-cache tini \
     && addgroup -S -g 10001 appgroup \
     && adduser -S -u 10001 -G appgroup appuser
 

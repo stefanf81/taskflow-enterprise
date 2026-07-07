@@ -1,6 +1,6 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '3.5.3'
+	id 'org.springframework.boot' version '3.5.16'
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'org.owasp.dependencycheck' version '12.2.2'
 	id 'jacoco'
@@ -15,6 +15,11 @@ ext {
 	set('jackson-bom.version', '2.18.8')
 	set('netty.version', '4.1.135.Final')
 	set('spring-security.version', '6.5.9')
+	set('spring-framework.version', '6.2.19')
+	set('postgresql.version', '42.7.13')
+	set('logback.version', '1.5.37')
+	set('opentelemetry.version', '1.63.0')
+	set('commons-lang3.version', '3.17.0')
 }
 java {
 	sourceCompatibility = JavaVersion.VERSION_21
