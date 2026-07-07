@@ -34,10 +34,9 @@ WORKDIR /app
 # Install tini as PID 1 for proper signal handling and zombie reaping.
 # Create a fixed non-root user (UID/GID 10001) for compatibility with
 # Kubernetes Pod Security Standards.
-RUN apk update && apk upgrade --no-cache \
-    && apk add --no-cache tini \
-    && addgroup -S -g 10001 appgroup \
-    && adduser -S -u 10001 -G appgroup appuser
+RUN addgroup -g 10001 -S appgroup \
+    && adduser -u 10001 -S appuser -G appgroup \
+    && apk add --no-cache tini
 
 # Copy Spring Boot's extracted layers from least frequently changed to most frequently
 # changed to maximize Docker cache reuse.
