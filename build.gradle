@@ -22,8 +22,9 @@ ext {
 	set('commons-lang3.version', '3.17.0')
 }
 java {
-	sourceCompatibility = JavaVersion.VERSION_21
-	targetCompatibility = JavaVersion.VERSION_21
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
 }
 repositories {
 	mavenCentral()
@@ -139,11 +140,11 @@ tasks.withType(JavaCompile).configureEach {
 	options.incremental = true
 }
 tasks.named("spotbugsMain") {
-	enabled = false
+	enabled = true
 }
 tasks.named("spotbugsAot") {
 	enabled = false
 }
 tasks.named("spotbugsTest") {
-	enabled = false
+	enabled = true
 }

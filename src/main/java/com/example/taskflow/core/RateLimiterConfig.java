@@ -34,6 +34,9 @@ public class RateLimiterConfig {
 
                 String clientIp = getClientIp(request);
                 String path = request.getRequestURI();
+                if (path == null) {
+                    path = "";
+                }
                 boolean isAuthEndpoint = path.startsWith("/api/v1/auth/");
                 
                 int maxRequests = isAuthEndpoint ? AUTH_MAX_REQUESTS_PER_MINUTE : MAX_REQUESTS_PER_MINUTE;
@@ -46,7 +49,7 @@ public class RateLimiterConfig {
                 }
 
                 if (currentCount != null && currentCount > maxRequests) {
-                    String safePath = path != null ? path.replaceAll("[\\r\\n]", "") : "";
+                    String safePath = path.replaceAll("[\\r\\n]", "");
                     log.warn("Rate limit exceeded for IP {} on path {}", clientIp, safePath);
                     response.setStatus(429);
                     response.setHeader("Retry-After", "60");
