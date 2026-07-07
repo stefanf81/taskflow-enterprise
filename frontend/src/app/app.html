@@ -670,7 +670,7 @@
             <!-- STEP 4: CUSTOMER CONTACT & CONFIRM -->
             @if (activeStep() === 4) {
               <div class="space-y-4 animate-fadeIn">
-                <form (ngSubmit)="onBookAppointment()" #bookingForm="ngForm" class="todo-form">
+                <form (ngSubmit)="onBookAppointment()" #bookingForm="ngForm" class="appointment-form">
                   <div class="form-group">
                     <label for="customerName">Your Full Name <span class="required">*</span></label>
                     <input

@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { TodoService, ServiceItem, ServiceItemRequest } from './todo.service';
+import { AppointmentService, ServiceItem, ServiceItemRequest } from './appointment.service';
 import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
@@ -7,7 +7,7 @@ import { of } from 'rxjs';
   providedIn: 'root',
 })
 export class ServiceCatalogStore {
-  private readonly todoService = inject(TodoService);
+  private readonly appointmentService = inject(AppointmentService);
 
   readonly services = signal<ServiceItem[]>([]);
   readonly isLoading = signal<boolean>(false);
@@ -15,7 +15,7 @@ export class ServiceCatalogStore {
 
   loadServices(): void {
     this.isLoading.set(true);
-    this.todoService
+    this.appointmentService
       .getAllServices()
       .pipe(
         catchError((err) => {
@@ -33,7 +33,7 @@ export class ServiceCatalogStore {
 
   addService(request: ServiceItemRequest): void {
     this.isLoading.set(true);
-    this.todoService.createService(request).subscribe({
+    this.appointmentService.createService(request).subscribe({
       next: () => {
         this.loadServices();
       },
@@ -47,7 +47,7 @@ export class ServiceCatalogStore {
 
   updateService(id: number, request: ServiceItemRequest): void {
     this.isLoading.set(true);
-    this.todoService.updateService(id, request).subscribe({
+    this.appointmentService.updateService(id, request).subscribe({
       next: () => {
         this.loadServices();
       },
@@ -61,7 +61,7 @@ export class ServiceCatalogStore {
 
   deleteService(id: number): void {
     this.isLoading.set(true);
-    this.todoService.deleteService(id).subscribe({
+    this.appointmentService.deleteService(id).subscribe({
       next: () => {
         this.loadServices();
       },

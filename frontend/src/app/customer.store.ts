@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { TodoService, AppointmentItem } from './todo.service';
+import { AppointmentService, AppointmentItem } from './appointment.service';
 import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
@@ -7,7 +7,7 @@ import { of } from 'rxjs';
   providedIn: 'root',
 })
 export class CustomerStore {
-  private readonly todoService = inject(TodoService);
+  private readonly appointmentService = inject(AppointmentService);
 
   readonly appointments = signal<AppointmentItem[]>([]);
   readonly totalPages = signal<number>(1);
@@ -18,7 +18,7 @@ export class CustomerStore {
 
   loadAppointments(): void {
     this.isLoading.set(true);
-    this.todoService
+    this.appointmentService
       .getCustomerAppointments(this.currentPage(), 10)
       .pipe(
         catchError((err) => {
@@ -39,7 +39,7 @@ export class CustomerStore {
     if (!confirm('Are you sure you want to cancel this appointment?')) return;
 
     this.isLoading.set(true);
-    this.todoService.cancelCustomerAppointment(id).subscribe({
+    this.appointmentService.cancelCustomerAppointment(id).subscribe({
       next: () => {
         this.loadAppointments();
       },

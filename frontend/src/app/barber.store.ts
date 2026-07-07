@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { TodoService, Barber, BarberTimeOff } from './todo.service';
+import { AppointmentService, Barber, BarberTimeOff } from './appointment.service';
 import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
@@ -7,7 +7,7 @@ import { of } from 'rxjs';
   providedIn: 'root',
 })
 export class BarberStore {
-  private readonly todoService = inject(TodoService);
+  private readonly appointmentService = inject(AppointmentService);
 
   readonly barbers = signal<Barber[]>([]);
   readonly timeOffs = signal<BarberTimeOff[]>([]);
@@ -18,7 +18,7 @@ export class BarberStore {
 
   loadBarbers(): void {
     this.isLoading.set(true);
-    this.todoService
+    this.appointmentService
       .getAllBarbers()
       .pipe(
         catchError((err) => {
@@ -44,7 +44,7 @@ export class BarberStore {
 
   loadTimeOffs(barberId: number): void {
     this.isLoading.set(true);
-    this.todoService
+    this.appointmentService
       .getTimeOff(barberId)
       .pipe(
         catchError((err) => {
@@ -65,7 +65,7 @@ export class BarberStore {
     if (!barberId) return;
 
     this.isLoading.set(true);
-    this.todoService.addTimeOff(barberId, request).subscribe({
+    this.appointmentService.addTimeOff(barberId, request).subscribe({
       next: () => {
         this.loadTimeOffs(barberId);
       },

@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { TodoService, AppointmentItem, AppointmentStats } from './todo.service';
+import { AppointmentService, AppointmentItem, AppointmentStats } from './appointment.service';
 import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
@@ -7,7 +7,7 @@ import { of } from 'rxjs';
   providedIn: 'root',
 })
 export class AppointmentStore {
-  private readonly todoService = inject(TodoService);
+  private readonly appointmentService = inject(AppointmentService);
 
   // Authentication State
   readonly isLoggedIn = signal<boolean>(!!sessionStorage.getItem('auth_token'));
@@ -41,7 +41,7 @@ export class AppointmentStore {
   loadAppointments(selectedFilter: string, searchQuery: string): void {
     if (!this.isLoggedIn()) return;
 
-    this.todoService
+    this.appointmentService
       .getAllAppointments(selectedFilter, searchQuery, this.currentPage(), this.pageSize)
       .pipe(
         catchError((err) => {

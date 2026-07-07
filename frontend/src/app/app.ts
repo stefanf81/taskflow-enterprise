@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { TodoService, AppointmentItem, AppointmentStats } from './todo.service';
+import { AppointmentService, AppointmentItem, AppointmentStats } from './appointment.service';
 import { AppointmentStore } from './appointment.store';
 import { ServiceCatalogStore } from './service-catalog.store';
 import { BarberStore } from './barber.store';
@@ -30,7 +30,7 @@ import { of } from 'rxjs';
   encapsulation: ViewEncapsulation.None,
 })
 export class App implements OnInit {
-  private readonly todoService = inject(TodoService);
+  private readonly appointmentService = inject(AppointmentService);
   private readonly store = inject(AppointmentStore);
   private readonly catalogStore = inject(ServiceCatalogStore);
   private readonly barberStore = inject(BarberStore);
@@ -225,7 +225,7 @@ export class App implements OnInit {
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
 
-    this.todoService.login(user, pass).subscribe({
+    this.appointmentService.login(user, pass).subscribe({
       next: (response) => {
         const tokenValue = 'Bearer ' + response.token;
         sessionStorage.setItem('auth_token', tokenValue);
@@ -263,7 +263,7 @@ export class App implements OnInit {
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
 
-    this.todoService.register({ email, password: pass, fullName: name, phone }).subscribe({
+    this.appointmentService.register({ email, password: pass, fullName: name, phone }).subscribe({
       next: () => {
         this.isRegisterMode = false;
         this.isSubmitting.set(false);
@@ -388,7 +388,7 @@ export class App implements OnInit {
       serviceType: this.bookingService(),
     };
 
-    this.todoService.createAppointment(payload).subscribe({
+    this.appointmentService.createAppointment(payload).subscribe({
       next: (created) => {
         this.isSubmitting.set(false);
         this.lastBookedAppointment.set(created);
@@ -421,7 +421,7 @@ export class App implements OnInit {
 
   // Approve Booking
   approveAppointment(id: number): void {
-    this.todoService.updateAppointmentStatus(id, 'APPROVED').subscribe({
+    this.appointmentService.updateAppointmentStatus(id, 'APPROVED').subscribe({
       next: () => {
         this.showSuccess('Appointment APPROVED! Client notification email dispatched.');
         this.loadAppointments();
@@ -432,7 +432,7 @@ export class App implements OnInit {
 
   // Deny Booking
   denyAppointment(id: number): void {
-    this.todoService.updateAppointmentStatus(id, 'DENIED').subscribe({
+    this.appointmentService.updateAppointmentStatus(id, 'DENIED').subscribe({
       next: () => {
         this.showSuccess('Appointment DECLINED. Client notification email dispatched.');
         this.loadAppointments();
@@ -444,7 +444,7 @@ export class App implements OnInit {
   // Delete/Cancel Booking
   deleteAppointment(id: number): void {
     if (confirm('Are you sure you want to permanently delete/cancel this booking?')) {
-      this.todoService.deleteAppointment(id).subscribe({
+      this.appointmentService.deleteAppointment(id).subscribe({
         next: () => {
           this.showSuccess('Booking permanently deleted.');
           if (this.appointments().length === 1 && this.currentPage() > 0) {
@@ -603,7 +603,7 @@ export class App implements OnInit {
     }
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
-    this.todoService.publicCancelAppointment(publicId, email).subscribe({
+    this.appointmentService.publicCancelAppointment(publicId, email).subscribe({
       next: () => {
         this.isSubmitting.set(false);
         this.cancelBookingId = '';
@@ -638,7 +638,7 @@ export class App implements OnInit {
       }
 
       this.isCheckingSlots.set(true);
-      this.todoService.getBusySlots(barber, date).subscribe({
+      this.appointmentService.getBusySlots(barber, date).subscribe({
         next: (busy) => {
           this.busySlots.set(busy);
           this.isCheckingSlots.set(false);
@@ -727,7 +727,7 @@ export class App implements OnInit {
     }
 
     this.isSubmitting.set(true);
-    this.todoService
+    this.appointmentService
       .submitReview(this.reviewPublicId.trim(), {
         rating: this.reviewRating,
         comment: this.reviewComment,

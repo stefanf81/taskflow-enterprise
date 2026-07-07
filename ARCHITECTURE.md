@@ -16,7 +16,7 @@ Below is the complete sequence of an authenticated, paginated API query from the
   app.ts (Angular Signals)                               │
     │                                                    │
     ▼ (2. Request created)                               │
-  todo.service.ts (getAllAppointments)                   │
+  appointment.service.ts (getAllAppointments)                   │
     │                                                    │
     ▼ (3. Token appended)                                │
   auth.interceptor.ts (Bearer JWT)                       │
@@ -61,10 +61,10 @@ Below is the complete sequence of an authenticated, paginated API query from the
 *   **The Flow**: When the user accesses the TaskFlow app, the Angular engine bootstraps. The functional `auth.guard.ts` verifies if a valid `auth_token` exists in the transient `sessionStorage`. If no token exists, the DOM is locked, and a beautiful, custom **Login Portal Card** is rendered in `app.html`.
 
 ### **Step 2: Authenticating & Issuing the Stateless JWT**
-*   **Active Files**: `app.ts` (Angular), `todo.service.ts` (Angular), `SecurityConfig.java` (Spring Boot), `AuthController.java` (Spring Boot), `TokenProvider.java` (Spring Boot)
+*   **Active Files**: `app.ts` (Angular), `appointment.service.ts` (Angular), `SecurityConfig.java` (Spring Boot), `AuthController.java` (Spring Boot), `TokenProvider.java` (Spring Boot)
 *   **The Flow**: 
     1.  The user inputs credentials (`admin` / `admin-password`).
-    2.  `todo.service.ts` sends a `POST /api/v1/auth/login` containing the credentials.
+    2.  `appointment.service.ts` sends a `POST /api/v1/auth/login` containing the credentials.
     3.  On the backend, `SecurityConfig` recognizes `/api/v1/auth/**` as a publicly permitted endpoint and lets the request pass.
     4.  `AuthController` delegates authentication to the `AuthenticationManager`. It validates credentials against the secure in-memory `UserDetailsService` using a BCrypt password matcher.
     5.  Once authenticated, `TokenProvider` generates a cryptographically signed JSON Web Token (JWT) using asymmetric RS256 (RSA 2048-bit keys) and returns it inside a `LoginResponse` DTO.
@@ -107,7 +107,7 @@ Below is the complete sequence of an authenticated, paginated API query from the
 
 | Feature Integration | Why they influence each other | Alternative | Why the connected flow is better |
 |---|---|---|---|
-| **JWT Interceptor + sessionStorage** | The interceptor automatically extracts tokens from storage and attaches them, allowing `todo.service` methods to be 100% clean and authentication-free. | Hardcoding headers inside individual service calls. | Centralizes auth, eliminates code repetition (DRY), and makes adding new endpoints 100% secure out-of-the-box. |
+| **JWT Interceptor + sessionStorage** | The interceptor automatically extracts tokens from storage and attaches them, allowing `appointment.service` methods to be 100% clean and authentication-free. | Hardcoding headers inside individual service calls. | Centralizes auth, eliminates code repetition (DRY), and makes adding new endpoints 100% secure out-of-the-box. |
 | **H2 Count Indexing + `open-in-view=false`** | Fast index counts inside the DB minimize query execution time. Disabling OSIV closes the connection immediately afterward. | Keeping Hibernate sessions open during JSON rendering with in-memory counting. | Completely prevents database connection pool starvation under heavy production traffic, keeping memory overhead close to zero. |
 | **Flyway Migrations + JPA Validation** | Flyway sets up schema/indexes during container boot. JPA uses `ddl-auto=validate` to confirm schema integrity before opening connection pools. | Relying on Hibernate's unpredictable `ddl-auto=update` during runtime. | Guarantees complete data integrity, prevents accidental drop tables/column corruption, and makes builds reproducible across dev and prod environments. |
 | **Unprivileged Docker + Non-Root Nginx** | Docker isolates host namespaces, while Alpine's unprivileged JRE and unprivileged Nginx run without host-root permissions. | Standard containers running as default root on port 80. | Completely blocks container-breakout privilege escalation exploits, protecting your physical host server from root compromise. |

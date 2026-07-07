@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { TodoService, NotificationItem } from './todo.service';
+import { AppointmentService, NotificationItem } from './appointment.service';
 import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
@@ -7,7 +7,7 @@ import { of } from 'rxjs';
   providedIn: 'root',
 })
 export class NotificationStore {
-  private readonly todoService = inject(TodoService);
+  private readonly appointmentService = inject(AppointmentService);
 
   readonly notifications = signal<NotificationItem[]>([]);
   readonly isLoading = signal<boolean>(false);
@@ -15,7 +15,7 @@ export class NotificationStore {
 
   loadNotifications(): void {
     this.isLoading.set(true);
-    this.todoService
+    this.appointmentService
       .getNotifications()
       .pipe(
         catchError((err) => {

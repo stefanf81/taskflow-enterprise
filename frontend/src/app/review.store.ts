@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { TodoService, BarberRating, ReviewRequest } from './todo.service';
+import { AppointmentService, BarberRating, ReviewRequest } from './appointment.service';
 import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
@@ -7,7 +7,7 @@ import { of } from 'rxjs';
   providedIn: 'root',
 })
 export class ReviewStore {
-  private readonly todoService = inject(TodoService);
+  private readonly appointmentService = inject(AppointmentService);
 
   readonly ratings = signal<BarberRating[]>([]);
   readonly isLoading = signal<boolean>(false);
@@ -15,7 +15,7 @@ export class ReviewStore {
 
   loadRatings(): void {
     this.isLoading.set(true);
-    this.todoService
+    this.appointmentService
       .getBarberRatings()
       .pipe(
         catchError((err) => {

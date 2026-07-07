@@ -121,7 +121,7 @@ export interface ReviewRequest {
 @Injectable({
   providedIn: 'root',
 })
-export class TodoService {
+export class AppointmentService {
   private readonly http = inject(HttpClient);
   private readonly apiUrl = '/api/v1/appointments';
   private readonly authUrl = '/api/v1/auth';
