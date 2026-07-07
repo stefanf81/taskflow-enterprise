@@ -22,19 +22,23 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Using last_accessed_at instead of created_at ensures we don't delete actively used caches
           CUTOFF=$(date -u -d "3 days ago" +"%Y-%m-%dT%H:%M:%SZ")
 
-          echo "Deleting caches older than: $CUTOFF"
+          echo "Searching for caches last accessed before: $CUTOFF"
 
-          gh api \
-            "/repos/$REPO/actions/caches?per_page=100" \
-            --paginate \
-            --jq '.actions_caches[] | [.id, .created_at] | @tsv' |
-          while IFS=$'\t' read -r ID CREATED; do
-            if [[ "$CREATED" < "$CUTOFF" ]]; then
-              echo "Deleting cache $ID ($CREATED)"
-              gh api \
-                --method DELETE \
-                "/repos/$REPO/actions/caches/$ID"
-            fi
+          # Offload filtering to jq for better performance
+          CACHE_IDS=$(gh api --paginate "/repos/$REPO/actions/caches?per_page=100" \
+            --jq ".actions_caches[] | select(.last_accessed_at < \"$CUTOFF\") | .id")
+
+          if [ -z "$CACHE_IDS" ]; then
+            echo "No caches found older than $CUTOFF"
+            exit 0
+          fi
+
+          echo "Found old caches. Deleting..."
+          for ID in $CACHE_IDS; do
+            echo "Deleting cache $ID"
+            # The || true prevents the whole workflow from failing if a single deletion fails (e.g. race condition)
+            gh api --method DELETE "/repos/$REPO/actions/caches/$ID" || echo "Failed to delete cache $ID, continuing..."
           done
