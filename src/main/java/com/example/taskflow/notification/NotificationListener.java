@@ -34,6 +34,12 @@ public class NotificationListener {
         String subject;
         String content;
 
+        String barber = appointment.getBarberName() != null ? appointment.getBarberName().replaceAll("[\\r\\n]", "") : "";
+        String service = appointment.getServiceType() != null ? appointment.getServiceType().replaceAll("[\\r\\n]", "") : "";
+        String date = appointment.getBookingDate() != null ? appointment.getBookingDate().toString().replaceAll("[\\r\\n]", "") : "";
+        String time = appointment.getBookingTime() != null ? appointment.getBookingTime().replaceAll("[\\r\\n]", "") : "";
+        String status = appointment.getStatus() != null ? appointment.getStatus().replaceAll("[\\r\\n]", "") : "";
+
         if ("APPROVED".equalsIgnoreCase(appointment.getStatus())) {
             subject = "Appointment APPROVED";
             content = String.format("Dear %s, your %s appointment with %s on %s at %s has been APPROVED.",
@@ -44,10 +50,10 @@ public class NotificationListener {
             logger.info("Dear {},", maskName(appointment.getCustomerName()));
             logger.info("Your appointment at TaskFlow has been approved by the owner.");
             logger.info("-------------------------------------------------------------------------");
-            logger.info("Barber  : {}", appointment.getBarberName());
-            logger.info("Service : {}", appointment.getServiceType());
-            logger.info("Date    : {}", appointment.getBookingDate());
-            logger.info("Time    : {}", appointment.getBookingTime());
+            logger.info("Barber  : {}", barber);
+            logger.info("Service : {}", service);
+            logger.info("Date    : {}", date);
+            logger.info("Time    : {}", time);
             logger.info("-------------------------------------------------------------------------");
             logger.info("We look forward to seeing you. Thank you for choosing TaskFlow!");
         } else if ("DENIED".equalsIgnoreCase(appointment.getStatus())) {
@@ -59,7 +65,7 @@ public class NotificationListener {
             logger.info("Subject: {}", subject);
             logger.info("Dear {},", maskName(appointment.getCustomerName()));
             logger.info("Unfortunately, we could not accommodate your appointment request on {} at {}.", 
-                    appointment.getBookingDate(), appointment.getBookingTime());
+                    date, time);
             logger.info("Please feel free to book another available slot on our website!");
         } else {
             subject = "Appointment Update";
@@ -68,7 +74,7 @@ public class NotificationListener {
 
             logger.info("Subject: {}", subject);
             logger.info("Dear {},", maskName(appointment.getCustomerName()));
-            logger.info("Your appointment status has been updated to: {}.", appointment.getStatus());
+            logger.info("Your appointment status has been updated to: {}.", status);
         }
         logger.info("=========================================================================");
 
@@ -83,7 +89,8 @@ public class NotificationListener {
             );
             outboxRepository.save(outbox);
         } catch (Exception e) {
-            logger.error("Failed to save state change notification to outbox: {}", e.getMessage());
+            String safeMsg = e.getMessage() != null ? e.getMessage().replaceAll("[\\r\\n]", "") : "";
+            logger.error("Failed to save state change notification to outbox: {}", safeMsg);
         }
     }
 

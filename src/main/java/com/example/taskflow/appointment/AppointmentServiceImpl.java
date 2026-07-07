@@ -147,7 +147,8 @@ public class AppointmentServiceImpl implements AppointmentService {
                 currentSpan.tag("appointment.status", savedItem.getStatus());
             }
         } catch (Exception e) {
-            logger.warn("Failed to add tracing tags: {}", e.getMessage());
+            String safeMsg = e.getMessage() != null ? e.getMessage().replaceAll("[\\r\\n]", "") : "";
+            logger.warn("Failed to add tracing tags: {}", safeMsg);
         }
 
         return AppointmentResponse.fromEntity(savedItem);
@@ -170,7 +171,8 @@ public class AppointmentServiceImpl implements AppointmentService {
                 currentSpan.tag("appointment.status", savedItem.getStatus());
             }
         } catch (Exception e) {
-            logger.warn("Failed to add tracing tags: {}", e.getMessage());
+            String safeMsg = e.getMessage() != null ? e.getMessage().replaceAll("[\\r\\n]", "") : "";
+            logger.warn("Failed to add tracing tags: {}", safeMsg);
         }
 
         eventPublisher.publishEvent(new AppointmentStatusChangedEvent(this, savedItem));
@@ -193,7 +195,8 @@ public class AppointmentServiceImpl implements AppointmentService {
                 currentSpan.tag("appointment.action", "delete");
             }
         } catch (Exception e) {
-            logger.warn("Failed to add tracing tags: {}", e.getMessage());
+            String safeMsg = e.getMessage() != null ? e.getMessage().replaceAll("[\\r\\n]", "") : "";
+            logger.warn("Failed to add tracing tags: {}", safeMsg);
         }
     }
 

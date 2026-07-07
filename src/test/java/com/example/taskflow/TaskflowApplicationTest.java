@@ -13,6 +13,6 @@ class TaskflowApplicationTest {
 
     @Test
     void testMain() {
-        TaskflowApplication.main(new String[]{});
+        TaskflowApplication.main(new String[]{"--server.port=0"});
     }
 }
