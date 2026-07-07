@@ -5,11 +5,22 @@ FROM eclipse-temurin:21-jdk AS builder
 
 WORKDIR /app
 
-# Copy the pre-built jar from the build context
+# Copy the pre-built jar from the build context.
+#
+# NOTE on Build Performance:
+# This project separates compilation (CI runner) from packaging (Docker build).
+# If you ever decide to move the entire Gradle compilation inside this Dockerfile
+# (a "monolithic" multi-stage build), ensure you leverage BuildKit cache mounts
+# to cache the downloaded dependencies and compiler plugins:
+#
+#   RUN --mount=type=cache,target=/root/.gradle ./gradlew bootJar
+#
+# This prevents Gradle from re-downloading libraries on every build iteration.
 COPY build/libs/*.jar /app/app.jar
 
 # Extract layers using the Spring Boot jar tools mode
-RUN java -Djarmode=tools -jar /app/app.jar extract --layers --launcher --destination extracted
+RUN --mount=type=cache,target=/tmp \
+    java -Djarmode=tools -jar /app/app.jar extract --layers --launcher --destination extracted
 
 # =========================================================================================
 # STAGE 2: PRODUCTION RUNTIME STAGE
@@ -29,10 +40,18 @@ RUN apk add --no-cache tini \
 
 # Copy Spring Boot's extracted layers from least frequently changed to most frequently
 # changed to maximize Docker cache reuse.
-COPY --from=builder --chown=10001:10001 /app/extracted/dependencies/ ./
-COPY --from=builder --chown=10001:10001 /app/extracted/spring-boot-loader/ ./
-COPY --from=builder --chown=10001:10001 /app/extracted/snapshot-dependencies/ ./
-COPY --from=builder --chown=10001:10001 /app/extracted/application/ ./
+COPY --link --from=builder --chown=10001:10001 /app/extracted/dependencies/ ./
+COPY --link --from=builder --chown=10001:10001 /app/extracted/spring-boot-loader/ ./
+COPY --link --from=builder --chown=10001:10001 /app/extracted/snapshot-dependencies/ ./
+COPY --link --from=builder --chown=10001:10001 /app/extracted/application/ ./
+
+# Perform a Class Data Sharing (CDS) training run
+RUN java -XX:ArchiveClassesAtExit=application.jsa \
+         -Dspring.context.exit=onRefresh \
+         -Dspring.flyway.enabled=false \
+         -Dspring.jpa.hibernate.ddl-auto=none \
+         org.springframework.boot.loader.launch.JarLauncher \
+    && chown 10001:10001 application.jsa
 
 # Drop root privileges.
 USER 10001:10001
@@ -64,7 +83,9 @@ ENV JAVA_OPTS="-Dspring.aot.enabled=true \
 -Xmx1g \
 -XX:+UseParallelGC \
 -XX:+AlwaysPreTouch \
--XX:+ExitOnOutOfMemoryError"
+-XX:+ExitOnOutOfMemoryError \
+-XX:SharedArchiveFile=application.jsa \
+-Xshare:on"
 
 ENTRYPOINT ["/sbin/tini", "--"]
 

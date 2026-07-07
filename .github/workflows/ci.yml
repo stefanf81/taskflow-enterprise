@@ -105,21 +105,29 @@ jobs:
 
       - name: Build
         run: |
-          ./gradlew \
-            test \
-            processAot \
-            assemble \
-            jacocoTestReport \
-            --stacktrace
+          TASKS="processAot assemble"
+          if [ "${{ github.event_name != 'workflow_dispatch' || inputs.run_tests }}" = "true" ]; then
+            TASKS="test processAot assemble jacocoTestReport"
+          fi
+          ./gradlew --parallel --build-cache $TASKS --stacktrace
+
+      - name: Compress Reports
+        if: always() && (github.event_name != 'workflow_dispatch' || inputs.run_tests)
+        run: |
+          mkdir -p backend-artifacts
+          [ -d "build/reports" ] && cp -r build/reports backend-artifacts/
+          [ -d "build/test-results" ] && cp -r build/test-results backend-artifacts/
+          if [ "$(ls -A backend-artifacts)" ]; then
+            tar -czf backend-reports.tar.gz -C backend-artifacts .
+          fi
 
       - name: Upload Test Reports
-        if: always()
+        if: always() && (github.event_name != 'workflow_dispatch' || inputs.run_tests)
         uses: actions/upload-artifact@v7
         with:
           name: backend-test-results
-          path: |
-            build/reports
-            build/test-results
+          path: backend-reports.tar.gz
+          if-no-files-found: ignore
 
       - name: Upload Backend JAR
         uses: actions/upload-artifact@v7
@@ -147,7 +155,15 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Cache Node Modules
+        id: node-modules-cache
+        uses: actions/cache@v4
+        with:
+          path: frontend/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: |
           npm ci \
             --prefer-offline \
@@ -158,6 +174,7 @@ jobs:
         run: npx prettier --check .
 
       - name: Run unit tests
+        if: github.event_name != 'workflow_dispatch' || inputs.run_tests
         run: |
           npm run test -- \
             --watch=false \
@@ -172,13 +189,22 @@ jobs:
           name: frontend-dist
           path: frontend/dist/frontend/browser
 
+      - name: Compress coverage
+        if: always() && (github.event_name != 'workflow_dispatch' || inputs.run_tests)
+        run: |
+          mkdir -p frontend-artifacts
+          [ -d "frontend/coverage" ] && cp -r frontend/coverage frontend-artifacts/
+          if [ "$(ls -A frontend-artifacts)" ]; then
+            tar -czf frontend-coverage.tar.gz -C frontend-artifacts .
+          fi
+
       - name: Upload coverage
         uses: actions/upload-artifact@v7
-        if: always()
+        if: always() && (github.event_name != 'workflow_dispatch' || inputs.run_tests)
         with:
           name: frontend-coverage
-          path: |
-            frontend/coverage
+          path: frontend-coverage.tar.gz
+          if-no-files-found: ignore
 
   security-backend:
     name: Security Scan (Backend)
@@ -266,6 +292,7 @@ jobs:
     needs:
       - changes
       - backend
+      - frontend
     if: |
       always() &&
       !contains(needs.*.result, 'failure') &&
@@ -356,7 +383,15 @@ jobs:
       ##########################################################
       # Frontend
       ##########################################################
+      - name: Cache Node Modules
+        id: node-modules-cache
+        uses: actions/cache@v4
+        with:
+          path: frontend/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
       - name: Install Frontend
+        if: steps.node-modules-cache.outputs.cache-hit != 'true'
         working-directory: frontend
         run: |
           npm ci \
@@ -367,16 +402,11 @@ jobs:
       ##########################################################
       # Playwright
       ##########################################################
-      - name: Get Playwright version
-        id: playwright-version
-        working-directory: frontend
-        run: echo "version=$(npx playwright --version | awk '{print $2}')" >> $GITHUB_OUTPUT
-
       - name: Cache Playwright Browsers
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
 
@@ -391,15 +421,24 @@ jobs:
       ##########################################################
       # Upload Reports
       ##########################################################
+      - name: Compress Playwright Reports
+        if: always()
+        run: |
+          mkdir -p playwright-artifacts
+          [ -f "spring.log" ] && cp spring.log playwright-artifacts/
+          [ -d "frontend/playwright-report" ] && cp -r frontend/playwright-report playwright-artifacts/
+          [ -d "frontend/test-results" ] && cp -r frontend/test-results playwright-artifacts/
+          if [ "$(ls -A playwright-artifacts)" ]; then
+            tar -czf playwright-report.tar.gz -C playwright-artifacts .
+          fi
+
       - name: Upload Playwright Report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report
-          path: |
-            frontend/playwright-report
-            frontend/test-results
-            spring.log
+          path: playwright-report.tar.gz
+          if-no-files-found: ignore
 
   docker-build:
     name: Build Docker (${{ matrix.component }})
