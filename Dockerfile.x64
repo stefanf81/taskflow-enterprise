@@ -98,9 +98,13 @@ EXPOSE 8080
 #     sizes just means the split freezes at an arbitrary JVM guess, which is worse than
 #     leaving it adaptive. Especially relevant now that heap size itself is derived from
 #     MaxRAMPercentage rather than fixed, so there's no single "right" split to freeze.
-ENV JAVA_OPTS="-Dspring.aot.enabled=true -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError -XX:SharedArchiveFile=application.jsa -Xshare:on"
-
-ENTRYPOINT ["/sbin/tini", "--"]
-# `exec` replaces the shell with the JVM so SIGTERM from tini reaches the JVM directly,
-# enabling Spring Boot's graceful shutdown instead of waiting for SIGKILL.
-CMD ["sh", "-c", "exec java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]
+ENTRYPOINT ["/sbin/tini", "--", "java"]
+# Replace the shell with direct JVM execution.
+CMD [ \
+  "-Dspring.aot.enabled=true", \
+  "-XX:MaxRAMPercentage=75.0", \
+  "-XX:+ExitOnOutOfMemoryError", \
+  "-XX:SharedArchiveFile=application.jsa", \
+  "-Xshare:on", \
+  "org.springframework.boot.loader.launch.JarLauncher" \
+]

@@ -62,7 +62,7 @@ spec:
                 secretKeyRef:
                   name: db-secret
                   key: POSTGRES_PASSWORD
-            - name: JAVA_OPTS
+            - name: JAVA_TOOL_OPTIONS
               value: "-Dspring.aot.enabled=true -Xms1536m -Xmx1536m -XX:+UseParallelGC -XX:ParallelGCThreads=10 -XX:+AlwaysPreTouch -XX:-UseAdaptiveSizePolicy -XX:+UseSIMDForMemoryOps -XX:+ExitOnOutOfMemoryError"
           ports:
             - containerPort: 8080

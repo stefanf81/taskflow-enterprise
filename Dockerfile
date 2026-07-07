@@ -78,16 +78,17 @@ EXPOSE 8080
 # -XX:+ExitOnOutOfMemoryError: Terminates immediately on OOM so failures are explicit
 #                              instead of leaving the JVM in an unstable state.
 # =========================================================================================
-ENV JAVA_OPTS="-Dspring.aot.enabled=true \
--Xms1g \
--Xmx1g \
--XX:+UseParallelGC \
--XX:+AlwaysPreTouch \
--XX:+ExitOnOutOfMemoryError \
--XX:SharedArchiveFile=application.jsa \
--Xshare:on"
+ENTRYPOINT ["/sbin/tini", "--", "java"]
 
-ENTRYPOINT ["/sbin/tini", "--"]
-
-# Replace the shell with the JVM so signals from tini are delivered directly.
-CMD ["sh", "-c", "exec java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]
+# Replace the shell with direct JVM execution.
+CMD [ \
+    "-Dspring.aot.enabled=true", \
+    "-Xms1g", \
+    "-Xmx1g", \
+    "-XX:+UseParallelGC", \
+    "-XX:+AlwaysPreTouch", \
+    "-XX:+ExitOnOutOfMemoryError", \
+    "-XX:SharedArchiveFile=application.jsa", \
+    "-Xshare:on", \
+    "org.springframework.boot.loader.launch.JarLauncher" \
+]

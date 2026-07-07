@@ -90,5 +90,5 @@ Our Docker build configurations (`Dockerfile` and `Dockerfile.x64`) implement st
         && chown 10001:10001 application.jsa
     ```
   - Saves pre-linked and pre-parsed JVM class-data to `/app/application.jsa`, owned by our non-root UID.
-  - Mounts the shared archive at runtime via `ENV JAVA_OPTS="-XX:SharedArchiveFile=application.jsa -Xshare:on"`.
+  - Mounts the shared archive at runtime via native `CMD` arguments `"-XX:SharedArchiveFile=application.jsa" "-Xshare:on"`.
   - **Results:** Reduces runtime memory footprint, reduces JIT CPU cycles during startup, and boots the entire enterprise full-stack backend inside the container in just **2.09 seconds**!
