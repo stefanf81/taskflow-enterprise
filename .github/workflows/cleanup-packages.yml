@@ -1,0 +1,87 @@
+name: Cleanup Old Packages
+
+on:
+  schedule:
+    # Run every day at 2:00 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+env:
+  PACKAGE_NAME: "taskflow-backend" # TODO: Change this to your actual package name (e.g., taskflow-backend or taskflow-frontend)
+  PACKAGE_TYPE: "container" # Can be container, npm, maven, rubygems, docker, nuget
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - name: Delete old packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "Determining account type for $OWNER..."
+          ACCOUNT_TYPE=$(gh api /users/$OWNER -q '.type')
+          
+          if [ "$ACCOUNT_TYPE" = "Organization" ]; then
+            BASE_URL="/orgs/$OWNER"
+          else
+            BASE_URL="/users/$OWNER"
+          fi
+          
+          echo "Fetching package versions for $OWNER/$PACKAGE_NAME..."
+          
+          # Fetch all versions for the package
+          # We use pagination (--paginate) to ensure we get all versions
+          # Continue on error (|| true) in case the package doesn't exist yet
+          versions_json=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            $BASE_URL/packages/$PACKAGE_TYPE/$PACKAGE_NAME/versions \
+            --paginate || echo "[]")
+
+          if [ "$versions_json" = "[]" ] || [ -z "$versions_json" ]; then
+            echo "Package not found or has no versions."
+            exit 0
+          fi
+
+          # Calculate the cutoff date (7 days ago) in ISO 8601 format
+          cutoff_date=$(date -d "7 days ago" -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "Cutoff date for deletion: $cutoff_date"
+
+          # Use jq to filter the versions based on the criteria:
+          # 1. created_at is older than the cutoff_date
+          # 2. The metadata tags array does not contain 'latest'
+          # 3. The metadata tags array does not contain any semantic version tag (e.g., v1.0.0, 1.0.0)
+          version_ids_to_delete=$(echo "$versions_json" | jq -r --arg cutoff "$cutoff_date" '
+            .[] | 
+            select(.created_at < $cutoff) |
+            select(
+              .metadata.container.tags | 
+              (index("latest") | not) and 
+              (map(test("^v?[0-9]+(\\.[0-9]+)*$")) | any | not)
+            ) | 
+            .id
+          ')
+
+          if [ -z "$version_ids_to_delete" ]; then
+            echo "No packages found matching the deletion criteria."
+            exit 0
+          fi
+
+          echo "Found the following package version IDs to delete:"
+          echo "$version_ids_to_delete"
+
+          # Loop through the IDs and delete them
+          for version_id in $version_ids_to_delete; do
+            echo "Deleting version ID: $version_id..."
+            gh api \
+              --method DELETE \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              $BASE_URL/packages/$PACKAGE_TYPE/$PACKAGE_NAME/versions/$version_id
+            
+            echo "Successfully deleted version ID: $version_id"
+          done
