@@ -74,14 +74,19 @@ jobs:
           echo "Found the following package version IDs to delete:"
           echo "$version_ids_to_delete"
 
-          # Loop through the IDs and delete them
-          for version_id in $version_ids_to_delete; do
-            echo "Deleting version ID: $version_id..."
+          # Loop through the IDs and delete them in parallel (4 at a time) for massive performance improvements
+          echo "$version_ids_to_delete" | xargs -n 1 -P 4 -I {} bash -c '
+            echo "Deleting version ID: {}..."
             gh api \
+              --silent \
               --method DELETE \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              $BASE_URL/packages/$PACKAGE_TYPE/$PACKAGE_NAME/versions/$version_id
+              '"$BASE_URL"'/packages/'"$PACKAGE_TYPE"'/'"$PACKAGE_NAME"'/versions/{}
             
-            echo "Successfully deleted version ID: $version_id"
-          done
+            if [ $? -eq 0 ]; then
+              echo "Successfully deleted version ID: {}"
+            else
+              echo "Failed to delete version ID: {}"
+            fi
+          '
