@@ -63,7 +63,13 @@ spec:
                   name: db-secret
                   key: POSTGRES_PASSWORD
             - name: JAVA_TOOL_OPTIONS
-              value: "-Dspring.aot.enabled=true -Xms1536m -Xmx1536m -XX:+UseParallelGC -XX:ParallelGCThreads=10 -XX:+AlwaysPreTouch -XX:-UseAdaptiveSizePolicy -XX:+UseSIMDForMemoryOps -XX:+ExitOnOutOfMemoryError"
+              # Container-portable heap (cgroup-aware, ~60% of the 2560Mi limit ≈ 1.5GiB)
+              # plus hard caps on off-heap memory so the container RSS cannot blow past
+              # the limit. Previous flags pinned GC threads / AVX level (SIGILL + oversubscription
+              # risk) and froze the young/old split with -UseAdaptiveSizePolicy but no explicit
+              # generation sizes (an anti-pattern). AlwaysPreTouch was also removed so the heap
+              # is committed lazily, shrinking idle RSS instead of pre-committing 1.5GiB at boot.
+              value: "-Dspring.aot.enabled=true -XX:MaxRAMPercentage=60.0 -XX:+UseParallelGC -XX:MaxDirectMemorySize=256m -XX:MaxMetaspaceSize=256m -XX:+ExitOnOutOfMemoryError"
           ports:
             - containerPort: 8080
               name: http

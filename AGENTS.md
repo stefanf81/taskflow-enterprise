@@ -3,10 +3,10 @@
 ## Project Structure
 
 - **Backend**: Spring Boot 3.5.3 / OpenJDK 21 / Gradle — `src/main/java/com/example/taskflow/`
-  - High-Performance Tunings: Spring Boot AOT enabled, 1GB fixed heap, Virtual Threads disabled (Platform threads used), Jackson Blackbird, Asynchronous Logging, OpenTelemetry 10% sampling, Caffeine local cache.
+  - High-Performance Tunings: Spring Boot AOT enabled, container-portable heap sizing (1GB fixed heap locally, `MaxRAMPercentage` in production), Virtual Threads disabled (Platform threads used), Jackson Blackbird, Asynchronous Logging, OpenTelemetry 10% sampling, Redis-backed caching (Spring Cache abstraction).
   - Runtime Profiles & Multi-Arch JVM Optimization:
-    - **Local (Apple Silicon M4 Pro):** Optimized via native `Dockerfile` using ParallelGC (`-XX:+UseParallelGC`, `-XX:ParallelGCThreads=10`, `-XX:+UseSIMDForMemoryOps` vectorizations).
-    - **Production (AMD Ryzen 5 7430U):** Cross-compiled via `Dockerfile.x64` using ParallelGC (`-XX:+UseParallelGC`, `-XX:ParallelGCThreads=6`, and the corrected integer JVM syntax `-XX:UseAVX=2` for 256-bit Zen 3 Advanced Vector Extensions).
+    - **Local (Apple Silicon M4 Pro):** Optimized via native `Dockerfile` using ParallelGC with a fixed 1GB heap (`-Xms1g -Xmx1g`) and `-XX:+AlwaysPreTouch` for predictable startup. Off-heap memory is bounded via `-XX:MaxDirectMemorySize=256m` and `-XX:MaxMetaspaceSize=256m`.
+    - **Production (AMD Ryzen 5 7430U):** Cross-compiled via `Dockerfile.x64` using container-portable sizing — the heap scales to the orchestrator's cgroup limit (`-XX:MaxRAMPercentage`), and CPU-pinned GC/AVX flags are deliberately omitted so the JVM reads the container's actual CPU allocation. Off-heap memory is bounded the same way. The k8s `backend.yaml` sets `MaxRAMPercentage=60.0` via `JAVA_TOOL_OPTIONS`, overriding the image default.
   - Packages: `controller`, `service`, `repository`, `dto`, `security`, `config`, `exception`, `model`
   - Entry point: `TaskflowApplication.java`
 - **Frontend**: Angular 22 / TypeScript / Tailwind CSS — `frontend/`

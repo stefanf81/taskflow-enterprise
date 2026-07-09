@@ -76,6 +76,14 @@ EXPOSE 8080
 #                              trading slower startup for more predictable steady-state
 #                              memory access and fewer first-touch page faults.
 #
+# -XX:MaxDirectMemorySize    : Caps Netty's off-heap direct buffers (Lettuce Redis
+#                              client + OpenTelemetry). Without this the JVM default
+#                              lets direct memory track the heap size and the container
+#                              RSS blows past -Xmx and hits the cgroup limit.
+#
+# -XX:MaxMetaspaceSize       : Caps class-metadata memory so a long-running container
+#                              cannot slowly creep upward.
+#
 # -XX:+ExitOnOutOfMemoryError: Terminates immediately on OOM so failures are explicit
 #                              instead of leaving the JVM in an unstable state.
 # =========================================================================================
@@ -87,6 +95,8 @@ CMD [ \
     "-Xms1g", \
     "-Xmx1g", \
     "-XX:+UseParallelGC", \
+    "-XX:MaxDirectMemorySize=256m", \
+    "-XX:MaxMetaspaceSize=256m", \
     "-XX:+AlwaysPreTouch", \
     "-XX:+ExitOnOutOfMemoryError", \
     "-XX:SharedArchiveFile=application.jsa", \

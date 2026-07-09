@@ -62,7 +62,13 @@ EXPOSE 8080
 #                               (cgroup-aware since JDK 10+), rather than a fixed -Xmx
 #                               that's only correct on the one host it was tuned for.
 #
-# -XX:+ExitOnOutOfMemoryError : fail fast and let the orchestrator restart the pod.
+#  -XX:+ExitOnOutOfMemoryError : fail fast and let the orchestrator restart the pod.
+#
+#  -XX:MaxDirectMemorySize / -XX:MaxMetaspaceSize
+#     Cap off-heap memory. MaxRAMPercentage only bounds the *heap*; the Redis client
+#     (Lettuce, Netty-based) and OpenTelemetry allocate native direct buffers that are
+#     NOT part of -Xmx. Left uncapped the container RSS runs well past the heap and
+#     into the cgroup limit. 256m each is ample for this workload's connection counts.
 #
 # No explicit GC algorithm is selected, which means G1 (the JDK 21 default since JDK 9)
 # is what actually runs here. G1 targets a max pause time (~200ms via MaxGCPauseMillis)
@@ -104,6 +110,8 @@ ENTRYPOINT ["/sbin/tini", "--", "java"]
 CMD [ \
   "-Dspring.aot.enabled=true", \
   "-XX:MaxRAMPercentage=75.0", \
+  "-XX:MaxDirectMemorySize=256m", \
+  "-XX:MaxMetaspaceSize=256m", \
   "-XX:+ExitOnOutOfMemoryError", \
   "-XX:SharedArchiveFile=application.jsa", \
   "-Xshare:on", \

@@ -42,8 +42,7 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 	// Jackson
 	implementation 'com.fasterxml.jackson.module:jackson-module-blackbird'
-	// Cache
-	implementation 'com.github.ben-manes.caffeine:caffeine'
+	// Cache (Redis-backed via spring-boot-starter-data-redis; Caffeine was unused)
 	// Observability
 	implementation 'io.micrometer:micrometer-registry-prometheus'
 	implementation 'io.micrometer:micrometer-tracing-bridge-otel'
