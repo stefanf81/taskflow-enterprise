@@ -82,7 +82,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Dockerfile Lint
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.3.0
         with:
           dockerfile: Dockerfile.x64
           ignore: DL3018,DL3029
@@ -226,7 +226,7 @@ jobs:
       #####################################################
       - name: Dependency Review
         if: github.event_name == 'pull_request'
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
 
       #####################################################
       # Cache Trivy database
