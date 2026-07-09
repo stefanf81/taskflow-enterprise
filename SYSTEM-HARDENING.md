@@ -75,6 +75,13 @@ Two critical architectural alignments were identified and resolved to ensure run
     ```
     This securely resolves the PAT dynamically from the host process at execution time. The Docker container run command automatically forwards this value (`-e GITHUB_PERSONAL_ACCESS_TOKEN`), keeping the host filesystem zero-plaintext while enforcing a rigid zero-trust credential standard.
 
+### Finding 9: Dual-Dockerfile Architectural Separation (Dev vs. Prod Tuning)
+*   **Location:** `/Dockerfile`, `/Dockerfile.x64`
+*   **Issue:** In previous stages, local benchmarking properties and production cloud configurations were co-mingled in a single, un-optimized Docker configuration. Running fixed throughput parameters in the cloud led to resource allocation imbalances, while running dynamic, un-tuned containers locally introduced performance variance during local hardware testing.
+*   **Resolution:** Codified a rigid separation of concerns by establishing a dual-Dockerfile strategy:
+    *   **Local dev & benchmarking (`Dockerfile`):** Retains hardware-specific parallel GC optimization (`-XX:+UseParallelGC`), fixed 1GB JVM heap limits (`-Xms1g -Xmx1g`), and pre-committed heap pages (`-XX:+AlwaysPreTouch`) to maximize consistent RPS output on developer machines.
+    *   **Production & orchestrator deployments (`Dockerfile.x64`):** Leverages container-portable, cgroup-aware scaling via `-XX:MaxRAMPercentage=75.0`, relies on standard low-latency G1 GC for stable p99 latencies, and cross-compiles explicitly under `--platform=linux/amd64` to match cloud runtimes without risk of architecture compatibility crashes.
+
 ---
 
 ## 🧪 3. System Verification Status
