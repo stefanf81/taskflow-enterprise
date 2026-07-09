@@ -54,13 +54,21 @@ class AppointmentServiceImplTest {
     @Mock
     private BarberTimeOffRepository barberTimeOffRepository;
 
-    @InjectMocks
+    private BusySlotsService busySlotsService;
+
     private AppointmentServiceImpl appointmentService;
 
     private Appointment testAppointment;
 
     @BeforeEach
     void setUp() {
+        busySlotsService = new BusySlotsService(barberRepository, barberScheduleRepository, barberTimeOffRepository, appointmentRepository);
+        appointmentService = new AppointmentServiceImpl(
+                appointmentRepository, eventPublisher, cacheManager, tracer,
+                barberRepository, barberScheduleRepository, barberTimeOffRepository,
+                busySlotsService
+        );
+
         testAppointment = new Appointment("John Doe", "john@test.com", "1234567890", "Barber Alex", LocalDate.now(), "10:00", "Haircut");
         testAppointment.setId(1L);
         testAppointment.setPublicId("test-public-id");

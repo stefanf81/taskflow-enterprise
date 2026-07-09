@@ -3,7 +3,6 @@ package com.example.taskflow.appointment;
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
@@ -31,13 +30,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     private final BarberRepository barberRepository;
     private final BarberScheduleRepository barberScheduleRepository;
     private final BarberTimeOffRepository barberTimeOffRepository;
-
-    // Self-reference to the AOP proxy so @Cacheable / @Transactional are honored on
-    // internal calls (fixes the getBusySlots cache-bypass on the create path).
-    // @Lazy breaks the constructor-time cycle between this bean and its own proxy.
-    @Autowired
-    @org.springframework.context.annotation.Lazy
-    private AppointmentService self;
+    private final BusySlotsService busySlotsService;
 
     public AppointmentServiceImpl(AppointmentRepository appointmentRepository, 
                                   ApplicationEventPublisher eventPublisher, 
@@ -45,7 +38,8 @@ public class AppointmentServiceImpl implements AppointmentService {
                                   Tracer tracer,
                                   BarberRepository barberRepository,
                                   BarberScheduleRepository barberScheduleRepository,
-                                  BarberTimeOffRepository barberTimeOffRepository) {
+                                  BarberTimeOffRepository barberTimeOffRepository,
+                                  BusySlotsService busySlotsService) {
         this.appointmentRepository = appointmentRepository;
         this.eventPublisher = eventPublisher;
         this.cacheManager = cacheManager;
@@ -53,6 +47,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         this.barberRepository = barberRepository;
         this.barberScheduleRepository = barberScheduleRepository;
         this.barberTimeOffRepository = barberTimeOffRepository;
+        this.busySlotsService = busySlotsService;
     }
 
     @Override
@@ -127,8 +122,8 @@ public class AppointmentServiceImpl implements AppointmentService {
         }
 
         // Validate slot availability (prevent double-bookings and off-hour bookings)
-        // Call via self-proxy so the @Cacheable busySlots cache is actually used.
-        java.util.List<String> busy = self.getBusySlots(request.barberName(), request.bookingDate().toString());
+        // Call via injected BusySlotsService so the @Cacheable proxy is actually used.
+        java.util.List<String> busy = busySlotsService.getBusySlots(request.barberName(), request.bookingDate().toString());
         if (busy.contains(request.bookingTime())) {
             throw new IllegalArgumentException("The selected slot is already booked or unavailable.");
         }
@@ -211,40 +206,8 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     @Override
     @Transactional(readOnly = true)
-    @org.springframework.cache.annotation.Cacheable(value = "busySlots", key = "#barberName + '-' + #bookingDate")
     public java.util.List<String> getBusySlots(String barberName, String bookingDate) {
-        try {
-            LocalDate date = LocalDate.parse(bookingDate);
-            
-            // Check if Barber exists
-            java.util.Optional<Barber> barberOpt = barberRepository.findByName(barberName);
-            if (barberOpt.isPresent()) {
-                Barber barber = barberOpt.get();
-                
-                // 1. Check if barber has time off on this date
-                java.util.List<BarberTimeOff> timeOffs = barberTimeOffRepository.findTimeOffForBarberOnDate(barber.getId(), date);
-                if (!timeOffs.isEmpty()) {
-                    // Barber is off, return all possible slots as busy
-                    return java.util.Arrays.asList("09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00");
-                }
-                
-                // 2. Check if barber is scheduled to work on this day of week
-                // DayOfWeek in Java: 1 (Monday) to 7 (Sunday)
-                int dayOfWeek = date.getDayOfWeek().getValue();
-                java.util.Optional<BarberSchedule> scheduleOpt = barberScheduleRepository.findByBarberIdAndDayOfWeek(barber.getId(), dayOfWeek);
-                if (scheduleOpt.isEmpty()) {
-                    // Not scheduled to work, return all possible slots as busy
-                    return java.util.Arrays.asList("09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00");
-                }
-            }
-            
-            // 3. Barber is scheduled and not off (or we don't track schedule for this barber yet)
-            // Return actually booked/denied slots
-            return appointmentRepository.findDistinctBookingTimes(barberName, date, "DENIED");
-        } catch (Exception e) {
-            logger.error("Error parsing bookingDate in getBusySlots: {}", maskInput(bookingDate), e);
-            return java.util.Collections.emptyList();
-        }
+        return busySlotsService.getBusySlots(barberName, bookingDate);
     }
 
     @Override
