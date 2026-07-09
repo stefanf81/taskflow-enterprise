@@ -6,20 +6,21 @@ plugins {
 	id 'jacoco'
 	id 'com.github.ben-manes.versions' version '0.54.0'
 	id 'com.github.spotbugs' version '6.5.8'
-	id 'org.graalvm.buildtools.native' version '0.10.6'
+	id 'org.graalvm.buildtools.native' version '0.11.5'
 }
 group = 'com.example'
 version = '0.0.1-SNAPSHOT'
 ext {
 	set('tomcat.version', '10.1.55')
-	set('jackson-bom.version', '2.18.8')
+	set('jackson-bom.version', '2.22.1')
 	set('netty.version', '4.1.135.Final')
-	set('spring-security.version', '6.5.9')
+	set('spring-security.version', '6.5.11')
 	set('spring-framework.version', '6.2.19')
 	set('postgresql.version', '42.7.13')
 	set('logback.version', '1.5.37')
 	set('opentelemetry.version', '1.63.0')
 	set('commons-lang3.version', '3.17.0')
+	set('junit-platform.version', '1.14.4')
 }
 java {
 	toolchain {
@@ -48,7 +49,7 @@ dependencies {
 	implementation 'io.micrometer:micrometer-tracing-bridge-otel'
 	implementation 'io.opentelemetry:opentelemetry-exporter-otlp'
 	// OpenAPI
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.5'
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17'
 	// Database migration
 	implementation 'org.flywaydb:flyway-core'
 	implementation 'org.flywaydb:flyway-database-postgresql'
@@ -61,10 +62,10 @@ dependencies {
 	testImplementation 'org.testcontainers:testcontainers'
 	testImplementation 'org.testcontainers:junit-jupiter'
 	testImplementation 'org.testcontainers:postgresql'
-	testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
+	testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.2'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	// Static analysis
-	spotbugsPlugins 'com.h3xstream.findsecbugs:findsecbugs-plugin:1.13.0'
+	spotbugsPlugins 'com.h3xstream.findsecbugs:findsecbugs-plugin:1.14.0'
 }
 spotbugs {
 	toolVersion = '4.9.3'
@@ -129,7 +130,14 @@ dependencyCheck {
 }
 tasks.named("dependencyUpdates") {
 	rejectVersionIf {
-		def version = candidate.version.toLowerCase()
+		if (it.currentVersion != null) {
+			def currentMajor = it.currentVersion.tokenize('.')[0]
+			def candidateMajor = it.candidate.version.tokenize('.')[0]
+			if (currentMajor != candidateMajor) {
+				return true
+			}
+		}
+		def version = it.candidate.version.toLowerCase()
 		["alpha", "beta", "rc", "cr", "m", "ea"].any {
 			version.contains(it)
 		}
