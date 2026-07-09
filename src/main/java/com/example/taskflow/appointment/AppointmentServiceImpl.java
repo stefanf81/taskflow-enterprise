@@ -3,6 +3,7 @@ package com.example.taskflow.appointment;
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
@@ -30,6 +31,13 @@ public class AppointmentServiceImpl implements AppointmentService {
     private final BarberRepository barberRepository;
     private final BarberScheduleRepository barberScheduleRepository;
     private final BarberTimeOffRepository barberTimeOffRepository;
+
+    // Self-reference to the AOP proxy so @Cacheable / @Transactional are honored on
+    // internal calls (fixes the getBusySlots cache-bypass on the create path).
+    // @Lazy breaks the constructor-time cycle between this bean and its own proxy.
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private AppointmentService self;
 
     public AppointmentServiceImpl(AppointmentRepository appointmentRepository, 
                                   ApplicationEventPublisher eventPublisher, 
@@ -119,7 +127,8 @@ public class AppointmentServiceImpl implements AppointmentService {
         }
 
         // Validate slot availability (prevent double-bookings and off-hour bookings)
-        java.util.List<String> busy = getBusySlots(request.barberName(), request.bookingDate().toString());
+        // Call via self-proxy so the @Cacheable busySlots cache is actually used.
+        java.util.List<String> busy = self.getBusySlots(request.barberName(), request.bookingDate().toString());
         if (busy.contains(request.bookingTime())) {
             throw new IllegalArgumentException("The selected slot is already booked or unavailable.");
         }
