@@ -46,17 +46,17 @@ Two critical architectural alignments were identified and resolved to ensure run
     *   *The SOTA Win:* Because the properties match exactly, Spring's internal Test Context Bootstrapper **boots the application context exactly ONCE** at the beginning of the test suite and safely **shares/reuses** that active JRE context across all test classes, shortening the suite's execution time to **under 3 seconds**! We also configured the `test` task in `build.gradle` to run parallel forks matching 50% of the host's CPU core count (`maxParallelForks`).
 
 ### Finding 5: Production JVM Startup Crash (UseAVX Syntax Error on x64)
-*   **Location:** `/Dockerfile.x64`, `/kubernetes/backend.yaml`
+*   **Location:** `/Dockerfile.x64`, `/k3d/backend.yaml`
 *   **Issue:** The production deployment profiles specified the HotSpot flag `-XX:+UseAVX=2`. Because AVX is a numeric-value option rather than a boolean option, the JRE instantly crashed on boot with: `Error: Selected option -XX:+UseAVX=2 is not a boolean option.`
 *   **Resolution:** Corrected the option syntax to `-XX:UseAVX=2` (removing the invalid `+` prefix). Additionally, decoupled the `JAVA_OPTS` from the Kubernetes manifests entirely, letting the Docker container run natively on its platform-specific environment variables (`Dockerfile` ARM64 vs `Dockerfile.x64` AMD64), achieving true cloud-native write-once-run-anywhere separation.
 
 ### Finding 6: Kubernetes Pod Security Standards (PSS Hardening & Read-Only Root FS)
-*   **Location:** `/kubernetes/backend.yaml`, `/kubernetes/frontend.yaml`
+*   **Location:** `/k3d/backend.yaml`, `/k3d/frontend.yaml`
 *   **Issue:** The application containers were running with mutable root filesystems, which is a major security vulnerability flagged by Policy controllers like Kyverno and Trivy-Operator.
 *   **Resolution:** Hardened both deployments to enforce **`readOnlyRootFilesystem: true`**. Mounted high-speed, temporary in-memory **`emptyDir` volumes** on writeable directories (`/tmp` for Tomcat classloaders, and `/tmp`, `/var/cache/nginx`, and `/var/run` for the Nginx proxy), successfully complying with **Strict Pod Security Standards (PSS)** with zero runtime execution impact.
 
 ### Finding 7: Hardware Resource Scale-up for MacBook M4 Pro (48GB RAM)
-*   **Location:** `/kubernetes/` (All Deployment Manifests), `/docker-compose.yml`
+*   **Location:** `/k3d/` (All Deployment Manifests), `/docker-compose.yml`
 *   **Issue:** Local database, cache, and backend containers were limited to generic, low-powered CPU (`0.5` Core) and memory (`256M`) limits, causing unnecessary performance throttling on your 48GB M4 Pro development machine.
 *   **Resolution:** Scaled up CPU and Memory allotments across both Docker Compose and Kubernetes manifests to fully unleash your hardware:
     *   **Backend:** Allowed limits of **`4.0` CPUs (4 Performance Cores)** and **`2.5GB`** of memory.
@@ -118,4 +118,4 @@ To run the suite in a secure, high-performance configuration, please adhere to t
     keytool -genkeypair -alias taskflow -keyalg RSA -keysize 2048 -storetype PKCS12 -keystore temp.p12 -validity 3650
     ```
     And configure `APP_RSA_PRIVATE_KEY` and `APP_RSA_PUBLIC_KEY` environment variables.
-3.  **Local Deployment:** Run `./start-docker.sh` for an automated composed deploy, or `./start-k3d.sh` for a multi-replica local Kubernetes deployment with Kyverno and Trivy observability operators.
+3.  **Local Deployment:** Run `./start-docker.sh` for an automated composed deploy, or `./k3d/start-k3d.sh` for a multi-replica local Kubernetes deployment with Kyverno and Trivy observability operators.

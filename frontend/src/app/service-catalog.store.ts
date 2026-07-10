@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { AppointmentService, ServiceItem, ServiceItemRequest } from './appointment.service';
+import { AppointmentService, ServiceItem } from './appointment.service';
 import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
@@ -29,47 +29,5 @@ export class ServiceCatalogStore {
         this.services.set(data);
         this.isLoading.set(false);
       });
-  }
-
-  addService(request: ServiceItemRequest): void {
-    this.isLoading.set(true);
-    this.appointmentService.createService(request).subscribe({
-      next: () => {
-        this.loadServices();
-      },
-      error: (err) => {
-        console.error('Failed to add service:', err);
-        this.errorMessage.set('Failed to add service.');
-        this.isLoading.set(false);
-      },
-    });
-  }
-
-  updateService(id: number, request: ServiceItemRequest): void {
-    this.isLoading.set(true);
-    this.appointmentService.updateService(id, request).subscribe({
-      next: () => {
-        this.loadServices();
-      },
-      error: (err) => {
-        console.error('Failed to update service:', err);
-        this.errorMessage.set('Failed to update service.');
-        this.isLoading.set(false);
-      },
-    });
-  }
-
-  deleteService(id: number): void {
-    this.isLoading.set(true);
-    this.appointmentService.deleteService(id).subscribe({
-      next: () => {
-        this.loadServices();
-      },
-      error: (err) => {
-        console.error('Failed to delete service:', err);
-        this.errorMessage.set('Failed to delete service.');
-        this.isLoading.set(false);
-      },
-    });
   }
 }

@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AppointmentService, AppointmentItem, AppointmentStats } from './appointment.service';
+import { AppointmentService, AppointmentItem } from './appointment.service';
 import { AppointmentStore } from './appointment.store';
 import { ServiceCatalogStore } from './service-catalog.store';
 import { BarberStore } from './barber.store';
@@ -17,8 +17,6 @@ import { NotificationStore } from './notification.store';
 import { ReviewStore } from './review.store';
 import { CustomerStore } from './customer.store';
 import { StylistCard } from './components/stylist-card/stylist-card';
-import { catchError } from 'rxjs/operators';
-import { of } from 'rxjs';
 
 @Component({
   selector: 'app-root',
@@ -65,8 +63,6 @@ export class App implements OnInit {
   // Pagination State delegated to the Store
   readonly currentPage = this.store.currentPage;
   readonly totalPages = this.store.totalPages;
-  readonly totalElements = this.store.totalElements;
-  readonly pageSize = this.store.pageSize;
 
   // Global Dashboard Stats delegated to the Store
   readonly stats = this.store.stats;
@@ -83,7 +79,6 @@ export class App implements OnInit {
   readonly activeFaq = signal<number | null>(null);
 
   // SOTA Calendar Guards, Loaders & Self-Service Signals
-  readonly todayStr = new Date().toISOString().split('T')[0];
   readonly isCheckingSlots = this.store.isCheckingSlots;
   readonly serviceSearchQuery = signal<string>('');
   readonly showReceiptModal = signal<boolean>(false);
@@ -288,39 +283,6 @@ export class App implements OnInit {
       this.barberStore.loadBarbers();
     } else if (view === 'notifications') {
       this.notificationStore.loadNotifications();
-    }
-  }
-
-  // --- Service Catalog Admin ---
-  readonly newServiceName = signal('');
-  readonly newServicePrice = signal<number | null>(null);
-  readonly newServiceDuration = signal<number | null>(null);
-  readonly newServiceCategory = signal('hair');
-  readonly newServiceDesc = signal('');
-
-  addService(): void {
-    if (!this.newServiceName() || !this.newServicePrice() || !this.newServiceDuration()) {
-      this.errorMessage.set('Name, price, and duration are required.');
-      return;
-    }
-    this.catalogStore.addService({
-      name: this.newServiceName(),
-      price: this.newServicePrice()!,
-      durationMinutes: this.newServiceDuration()!,
-      category: this.newServiceCategory(),
-      description: this.newServiceDesc(),
-    });
-    this.showSuccess('Service added to catalog.');
-    this.newServiceName.set('');
-    this.newServicePrice.set(null);
-    this.newServiceDuration.set(null);
-    this.newServiceDesc.set('');
-  }
-
-  deleteService(id: number): void {
-    if (confirm('Are you sure you want to delete this service?')) {
-      this.catalogStore.deleteService(id);
-      this.showSuccess('Service deleted.');
     }
   }
 

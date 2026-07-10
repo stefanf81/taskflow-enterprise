@@ -52,6 +52,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Local environment / secrets (template is .env.example)
+.env
+
 # Local cluster credentials
 k3d-kubeconfig.yaml
 
@@ -59,3 +62,15 @@ k3d-kubeconfig.yaml
 llm-config.json
 lmstudio-qwen-config.json
 zap_report.html
+
+# OS / Editor / Logs
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+*.log
+
+# Local env overrides (template remains .env.example)
+.env.local
+.env.*.local

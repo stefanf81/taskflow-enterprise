@@ -1,5 +1,4 @@
 import { Component, input, output } from '@angular/core';
-import { CommonModule } from '@angular/common';
 
 export interface StylistProfile {
   name: string;
@@ -12,7 +11,7 @@ export interface StylistProfile {
 @Component({
   selector: 'app-stylist-card',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   template: `
     <div
       class="card p-4 border border-white/5 bg-zinc-900/30 hover:border-indigo-500/30 hover:bg-indigo-500/5 flex items-center gap-4 cursor-pointer transition-all"

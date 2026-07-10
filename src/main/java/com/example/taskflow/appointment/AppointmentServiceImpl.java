@@ -27,26 +27,17 @@ public class AppointmentServiceImpl implements AppointmentService {
     private final ApplicationEventPublisher eventPublisher;
     private final CacheManager cacheManager;
     private final Tracer tracer;
-    private final BarberRepository barberRepository;
-    private final BarberScheduleRepository barberScheduleRepository;
-    private final BarberTimeOffRepository barberTimeOffRepository;
     private final BusySlotsService busySlotsService;
 
     public AppointmentServiceImpl(AppointmentRepository appointmentRepository, 
                                   ApplicationEventPublisher eventPublisher, 
                                   CacheManager cacheManager, 
-                                  Tracer tracer,
-                                  BarberRepository barberRepository,
-                                  BarberScheduleRepository barberScheduleRepository,
-                                  BarberTimeOffRepository barberTimeOffRepository,
-                                  BusySlotsService busySlotsService) {
+                                   Tracer tracer,
+                                   BusySlotsService busySlotsService) {
         this.appointmentRepository = appointmentRepository;
         this.eventPublisher = eventPublisher;
         this.cacheManager = cacheManager;
         this.tracer = tracer;
-        this.barberRepository = barberRepository;
-        this.barberScheduleRepository = barberScheduleRepository;
-        this.barberTimeOffRepository = barberTimeOffRepository;
         this.busySlotsService = busySlotsService;
     }
 
@@ -229,14 +220,4 @@ public class AppointmentServiceImpl implements AppointmentService {
         return appointmentRepository.findByPublicId(publicId);
     }
 
-    private String maskInput(String input) {
-        if (input == null || input.length() <= 4) {
-            return "****";
-        }
-        String sanitized = input.replaceAll("[\\r\\n]", "");
-        if (sanitized.length() <= 4) {
-            return "****";
-        }
-        return sanitized.substring(0, 2) + "****" + sanitized.substring(sanitized.length() - 2);
-    }
 }

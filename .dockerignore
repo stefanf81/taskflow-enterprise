@@ -9,7 +9,7 @@ out/
 .env
 .github
 *.log
-kubernetes/
+k3d/
 frontend/
 node_modules/
 .DS_Store

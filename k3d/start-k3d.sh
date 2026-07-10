@@ -5,9 +5,11 @@
 set -e
 
 # Automatically move to the directory where this script is located
-# This guarantees the script works regardless of where the user executes it from.
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-cd "$SCRIPT_DIR"
+# This script lives in ./k3d but operates from the repository root
+# (where gradlew, Dockerfile, and frontend/ reside; k3d-config.yaml lives alongside this script).
+REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$REPO_ROOT"
 
 echo "=========================================================="
 echo "☸️  TASKFLOW KUBERNETES DEPLOYMENT ON K3D"
@@ -79,7 +81,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v ~/.cache:/root/.
 # We boot the cluster using a declarative YAML file rather than CLI arguments for reproducibility.
 # =========================================================================================
 echo "☸️  Creating optimized single-node k3d cluster 'taskflow-cluster' via declarative configuration..."
-k3d cluster create --config k3d-config.yaml
+k3d cluster create --config k3d/k3d-config.yaml
 
 # =========================================================================================
 # 5. Isolate Kubeconfig to Prevent Global AWS/EKS MFA Prompts (SOTA Isolation)
@@ -103,7 +105,7 @@ k3d image import ghcr.io/stefanf81/taskflow-frontend:latest -c taskflow-cluster
 # =========================================================================================
 echo "📄 Applying namespace manifest..."
 export KUBECONFIG="$(pwd)/k3d-kubeconfig.yaml"
-kubectl apply -f kubernetes/namespace.yaml
+kubectl apply -f k3d/namespace.yaml
 
 # =========================================================================================
 # 8. Dynamic Secret Generation
@@ -163,7 +165,7 @@ helm upgrade --install loki-stack grafana/loki-stack \
 # Deploy the actual database, cache, tracing, backend, and frontend pods.
 # =========================================================================================
 echo "📄 Applying remaining Kubernetes manifests..."
-kubectl apply -f kubernetes/
+kubectl apply -f k3d/
 
 # =========================================================================================
 # 11. Wait for Rollouts to Complete
@@ -192,5 +194,5 @@ echo "💡 Port-forward Grafana : KUBECONFIG=k3d-kubeconfig.yaml kubectl port-fo
 echo "🔑 Grafana Password     : KUBECONFIG=k3d-kubeconfig.yaml kubectl get secret --namespace loki loki-stack-grafana -o jsonpath=\"{.data.admin-password}\" | base64 --decode ; echo"
 echo "=========================================================="
 echo "💡 To check running pods: KUBECONFIG=k3d-kubeconfig.yaml kubectl get pods -n taskflow"
-echo "💡 To stop and clean up : ./stop-k3d.sh"
+echo "💡 To stop and clean up : ./k3d/stop-k3d.sh"
 echo "=========================================================="

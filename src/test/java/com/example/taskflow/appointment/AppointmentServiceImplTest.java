@@ -65,7 +65,6 @@ class AppointmentServiceImplTest {
         busySlotsService = new BusySlotsService(barberRepository, barberScheduleRepository, barberTimeOffRepository, appointmentRepository);
         appointmentService = new AppointmentServiceImpl(
                 appointmentRepository, eventPublisher, cacheManager, tracer,
-                barberRepository, barberScheduleRepository, barberTimeOffRepository,
                 busySlotsService
         );
 

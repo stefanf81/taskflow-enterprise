@@ -13,7 +13,7 @@
   - Entry: `frontend/src/main.ts`, app module: `frontend/src/app/`
   - Auth: `auth.interceptor.ts` (Bearer JWT from `sessionStorage`), `auth.guard.ts`
 - **DB**: Flyway migrations in `src/main/resources/db/migration/`
-- **K8s manifests**: `kubernetes/` (namespace, backend, frontend, postgres, configmap, network policy)
+- **K8s manifests**: `k3d/` (namespace, backend, frontend, postgres, configmap, network policy)
 
 ## Commands
 
@@ -59,9 +59,9 @@ To maintain absolute data privacy, cost efficiency, and low-latency development 
 
 ### Kubernetes (k3d)
 ```
-./start-k3d.sh           # builds images → creates k3d cluster → imports images → applies manifests
-./stop-k3d.sh            # deletes k3d cluster + kubeconfig
-# After start-k3d.sh:
+./k3d/start-k3d.sh    # builds images → creates k3d cluster → imports images → applies manifests
+./k3d/stop-k3d.sh     # deletes k3d cluster + kubeconfig
+# After ./k3d/start-k3d.sh:
 KUBECONFIG=k3d-kubeconfig.yaml kubectl get pods -n taskflow
 ```
 
@@ -91,7 +91,7 @@ KUBECONFIG=k3d-kubeconfig.yaml kubectl get pods -n taskflow
 
 - `./gradlew test` requires Docker (Testcontainers).
 - `./gradlew check` includes OWASP dependency check — build will fail if any dependency has CVSS >= 7.
-- `start-k3d.sh` deletes any existing `taskflow-cluster` and overwrites `k3d-kubeconfig.yaml`. Do not run alongside other k3d clusters using the same name.
-- The `.env` file (from `.env.example`) is required by docker-compose. Change default passwords before production use.
+- `k3d/start-k3d.sh` deletes any existing `taskflow-cluster` and overwrites `k3d-kubeconfig.yaml`. Do not run alongside other k3d clusters using the same name.
+- The `.env` file (from `.env.example`) is required by docker-compose and is git-ignored — copy `.env.example` to `.env` and adjust as needed. Change default passwords before production use.
 - Frontend `dist/` and `node_modules/` are gitignored. Do not commit build artifacts.
 - E2E tests (`npm run e2e`) start their own dev server — don't run `npm start` separately when running e2e.

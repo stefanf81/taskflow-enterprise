@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { AppointmentService, BarberRating, ReviewRequest } from './appointment.service';
+import { AppointmentService, BarberRating } from './appointment.service';
 import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 

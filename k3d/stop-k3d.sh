@@ -7,7 +7,10 @@
 
 # Automatically move to the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-cd "$SCRIPT_DIR"
+# This script lives in ./k3d but operates from the repository root
+# (where the generated k3d-kubeconfig.yaml is written).
+REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$REPO_ROOT"
 
 echo "=========================================================="
 echo "🛑 STOPPING TASKFLOW KUBERNETES CLUSTER ON K3D"

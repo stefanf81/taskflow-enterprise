@@ -76,14 +76,6 @@ export interface ServiceItem {
   description: string;
 }
 
-export interface ServiceItemRequest {
-  name: string;
-  price: number;
-  durationMinutes: number;
-  category: string;
-  description: string;
-}
-
 export interface Barber {
   id: number;
   name: string;
@@ -183,18 +175,6 @@ export class AppointmentService {
     return this.http.get<ServiceItem[]>(this.catalogUrl);
   }
 
-  createService(request: ServiceItemRequest): Observable<ServiceItem> {
-    return this.http.post<ServiceItem>(this.catalogUrl, request);
-  }
-
-  updateService(id: number, request: ServiceItemRequest): Observable<ServiceItem> {
-    return this.http.put<ServiceItem>(`${this.catalogUrl}/${id}`, request);
-  }
-
-  deleteService(id: number): Observable<void> {
-    return this.http.delete<void>(`${this.catalogUrl}/${id}`);
-  }
-
   // Perform secure JWT login by posting to the authentication controller
   login(username: string, password: string): Observable<LoginResponse> {
     return this.http.post<LoginResponse>(`${this.authUrl}/login`, { username, password });
@@ -216,10 +196,6 @@ export class AppointmentService {
     params = params.set('page', page.toString());
     params = params.set('size', size.toString());
     return this.http.get<AppointmentDashboardResponse>(this.apiUrl, { params });
-  }
-
-  getAppointmentById(id: number): Observable<AppointmentItem> {
-    return this.http.get<AppointmentItem>(`${this.apiUrl}/${id}`);
   }
 
   createAppointment(request: AppointmentCreateRequest): Observable<AppointmentItem> {

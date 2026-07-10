@@ -29,14 +29,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
                                                          @Param("reminderSent") boolean reminderSent, 
                                                          @Param("status") String status);
     
-    java.util.List<Appointment> findByBookingDateAndReminderSentFalseAndStatus(LocalDate date, String status);
-    
-    @Query("SELECT COUNT(a) > 0 FROM Appointment a WHERE a.id = :id AND LOWER(a.customerEmail) = LOWER(:email)")
-    boolean existsByIdAndCustomerEmailIgnoreCase(@Param("id") Long id, @Param("email") String email);
-
-    long countByStatus(String status);
-    long countByStatusAndBookingDateBefore(String status, LocalDate date);
-    
     @Query(value = "SELECT DISTINCT a.booking_time FROM appointments a WHERE a.barber_name = :barberName AND a.booking_date = :bookingDate AND a.status <> :status ORDER BY a.booking_time LIMIT 500", 
            nativeQuery = true)
     java.util.List<String> findDistinctBookingTimes(@Param("barberName") String barberName, 
@@ -53,9 +45,4 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             "COALESCE(SUM(CASE WHEN a.status = 'APPROVED' THEN CAST(s.price AS double) ELSE 0.0 END), 0.0)) " +
             "FROM Appointment a LEFT JOIN ServiceItem s ON s.name = a.serviceType")
     com.example.taskflow.appointment.AppointmentStats getAppointmentStats(@Param("now") LocalDate now);
-
-    @Query("SELECT COALESCE(SUM(CASE WHEN a.status = 'APPROVED' THEN " +
-            "(SELECT s.price FROM ServiceItem s WHERE s.name = a.serviceType) ELSE 0.0 END), 0.0) " +
-            "FROM Appointment a")
-    double sumApprovedRevenue();
 }

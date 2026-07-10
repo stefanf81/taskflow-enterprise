@@ -92,3 +92,31 @@ Our Docker build configurations (`Dockerfile` and `Dockerfile.x64`) implement st
   - Saves pre-linked and pre-parsed JVM class-data to `/app/application.jsa`, owned by our non-root UID.
   - Mounts the shared archive at runtime via native `CMD` arguments `"-XX:SharedArchiveFile=application.jsa" "-Xshare:on"`.
   - **Results:** Reduces runtime memory footprint, reduces JIT CPU cycles during startup, and boots the entire enterprise full-stack backend inside the container in just **2.09 seconds**!
+
+---
+
+## 11. Repository & GHCR Setup
+
+The workflow pushes images to the GitHub Container Registry (GHCR) using the default `GITHUB_TOKEN`.
+
+### Workflow permissions
+1. Repository **Settings → Actions → General**.
+2. Under **Workflow permissions**, select **Read and write permissions** (required so the token can push packages and write security events).
+3. Click **Save**.
+
+### Linking packages to the repository (if they already exist)
+If you previously pushed `taskflow-backend` / `taskflow-frontend` manually (e.g. via a PAT), those packages are owned by your profile rather than the repository token:
+1. On your GitHub profile, open **Packages → taskflow-backend** (and `taskflow-frontend`).
+2. **Package settings → Manage Actions access → Add repository**, select this repository, and grant **Write**.
+
+### Personal Access Token fallback (`CR_PAT`)
+If organization policy blocks workflow write permissions, create a classic PAT with `write:packages` (and optionally `delete:packages`) and store it as a repository secret named `CR_PAT`. Then change the `docker/login-action` step in `ci.yml` to use `password: ${{ secrets.CR_PAT }}`.
+
+> For the equivalent Jenkins pipeline, see [`JENKINS.md`](../JENKINS.md).
+
+## 12. Troubleshooting
+
+### `denied: permission_denied: write_package` during `docker push`
+- Confirm **Read and write permissions** is enabled under **Settings → Actions → General**.
+- If the package already exists, link it to the repository as described above.
+- Otherwise fall back to the `CR_PAT` secret method.
