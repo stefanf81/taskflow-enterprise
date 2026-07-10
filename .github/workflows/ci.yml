@@ -359,7 +359,7 @@ jobs:
       ##########################################################
       - name: Start Spring Boot
         run: |
-          nohup java -Dspring.profiles.active=prod -jar backend-jar-dir/*.jar > spring.log 2>&1 &
+          nohup java -Dspring.profiles.active=prod -jar backend-jar-dir/*.jar > spring.log 2>&1 < /dev/null &
 
       ##########################################################
       # Wait for Backend
