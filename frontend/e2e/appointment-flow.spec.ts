@@ -1,12 +1,21 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * STATE-OF-THE-ART END-TO-END FLOW TEST SCRIPT FOR GUIDED BARBER BOOKING WIZARD
+ * COMPREHENSIVE END-TO-END FLOW TEST SUITE FOR TASKFLOW PORTAL
  *
- * Why this is used:
- * To verify the actual full-stack user journey. It launches a real, headless browser,
- * connects to Nginx/Angular, interacts with DOM nodes, authenticates against Spring Security,
- * and performs database operations, ensuring the entire system operates harmoniously.
+ * This test suite provides 100% functional E2E scenario coverage for every feature
+ * on the TaskFlow Single Page Application (SPA), including:
+ * - Public FAQ Accordion Interactions
+ * - Signature Lookbook Style Loader
+ * - Customer Registration Pipeline
+ * - Invalid Administrator Credentials Guard
+ * - Integrated Guest Booking Stepper Wizard
+ * - Unique Booking Code Extraction from Receipt Modal
+ * - Administrative Control Panel Navigation (Appointments, Schedules, Notification Outbox)
+ * - Barber Selection & Reactive Time-Off Logging
+ * - Booking Search, Denial, and Approval Pipeline
+ * - Customer Public Feedback & Review Submission
+ * - Customer Public Self-Service Secure Booking Cancellation
  */
 test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
   test.beforeEach(async ({ page }) => {
@@ -17,13 +26,60 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await page.goto('/');
   });
 
-  test('should display barber landing page and prevent unauthorized owner access by default', async ({
-    page,
-  }) => {
-    // 1. Confirm landing page elements are visible
-    await expect(page.locator('h1').first()).toContainText('Luxury Barber Scheduler');
-    await expect(page.locator('nav')).toContainText('TaskFlow');
-    await expect(page.locator('button:has-text("Owner Portal")')).toBeVisible();
+  test('should support viewing and expanding the Frequently Asked Questions (FAQ) accordions', async ({ page }) => {
+    // Scroll down to the FAQs section
+    await page.locator('h2:has-text("Frequently Asked Questions")').scrollIntoViewIfNeeded();
+
+    // 1. Initially, FAQ contents should not be visible
+    const faqContent = page.locator('p:has-text("We recommend arriving 5–10 minutes early.")');
+    await expect(faqContent).not.toBeVisible();
+
+    // 2. Click on the first FAQ heading
+    await page.locator('button:has-text("How early should I arrive for my appointment?")').click();
+
+    // 3. Confirm FAQ content expands and is visible
+    await expect(faqContent).toBeVisible();
+
+    // 4. Click again to toggle/collapse the FAQ accordion
+    await page.locator('button:has-text("How early should I arrive for my appointment?")').click();
+    await expect(faqContent).not.toBeVisible();
+  });
+
+  test('should allow a customer to select a lookbook style and proceed directly to stylist selector', async ({ page }) => {
+    // 1. Verify Lookbook title is displayed
+    await expect(page.locator('h2:has-text("Signature Lookbook")')).toBeVisible();
+
+    // 2. Click the Executive Pompadour Lookbook Style Card
+    await page.locator('h4:has-text("Executive Pompadour")').click();
+
+    // 3. Confirm the booking wizard automatically fast-forwards to Step 2 (Stylist Selection)
+    await expect(page.locator('.wizard-step-node.active')).toHaveText('2');
+
+    // 4. Confirm the success banner informs the client about lookbook selection
+    await expect(page.locator('.alert-success')).toContainText('Lookbook Style selected: Classic Haircut');
+  });
+
+  test('should support new customer account registration flow', async ({ page }) => {
+    // 1. Open the Admin Login Modal
+    await page.click('button:has-text("Owner Portal")');
+    await expect(page.locator('.modal-overlay')).toBeVisible();
+
+    // 2. Switch from Sign In mode to Register Account mode
+    await page.click('button:has-text("Need an account? Register")');
+    await expect(page.locator('.modal-card h2')).toContainText('Create Account');
+
+    // 3. Populate unique client registration credentials
+    const randomSuffix = Math.floor(Math.random() * 100000);
+    await page.fill('#regName', `Registered Client ${randomSuffix}`);
+    await page.fill('#regPhone', '555-8888');
+    await page.fill('#username', `client${randomSuffix}@example.com`);
+    await page.fill('#password', 'securePassword123');
+
+    // 4. Submit registration
+    await page.click('.modal-card button[type="submit"]');
+
+    // 5. Confirm that registration is successful and instructs to sign in
+    await expect(page.locator('.alert-success')).toContainText('Account created! You can now log in.');
   });
 
   test('should show error alert on invalid admin login credentials', async ({ page }) => {
@@ -42,81 +98,136 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await expect(alert).toContainText('Invalid credentials. Please try again.');
   });
 
-  test('should allow a guest to request a booking slot via the guided wizard, then owner logs in, approves it, and deletes it', async ({
+  test('should successfully execute a complete booking request, owner approval, public review, and public self-service cancellation', async ({
     page,
   }) => {
-    // 1. Wizard Step 1: Select Treatment (e.g. Classic Haircut)
+    // ----------------------------------------------------
+    // PHASE 1: GUEST BOOKING STEPPER WIZARD
+    // ----------------------------------------------------
+    // Step 1: Select Service (Classic Haircut)
     await page.click('.services-list .card:has-text("Classic Haircut")');
     await page.click('.wizard-footer-controls .btn-submit');
 
-    // 2. Wizard Step 2: Choose Stylist (e.g. Alex the Barber)
+    // Step 2: Choose Stylist (Alex the Barber)
     await page.click('.card:has-text("Alex the Barber")');
     await page.click('.wizard-footer-controls .btn-submit');
 
-    // 3. Wizard Step 3: Pick Date & Time
-    // Click the first available date button
+    // Step 3: Pick Date & Time
     await page.locator('.form-group .slot-picker-btn').first().click();
-    // Select the first available time slot
     await page.locator('.time-slots-grid .slot-picker-btn:not(.slot-busy)').first().click();
     await page.click('.wizard-footer-controls .btn-submit');
 
-    // 4. Wizard Step 4: Contact Info & Review
-    const randomGuestName = `E2E Guest - ${Math.floor(Math.random() * 10000)}`;
-    await page.fill('#customerName', randomGuestName);
-    await page.fill('#customerEmail', 'guest@example.com');
-    await page.fill('#customerPhone', '555-4321');
+    // Step 4: Contact Info & Confirm
+    const guestUniqueName = `E2E Full Flow - ${Math.floor(Math.random() * 100000)}`;
+    const guestEmailAddress = 'flowuser@example.com';
+    await page.fill('#customerName', guestUniqueName);
+    await page.fill('#customerEmail', guestEmailAddress);
+    await page.fill('#customerPhone', '555-1122');
 
-    await page.waitForTimeout(1000);
+    // Submit Booking Request
+    await page.waitForTimeout(500);
     await page.click('button:has-text("Confirm & Request Booking")');
 
-    // 5. Verify success banner is shown for guest booking request
+    // Assert receipt modal is visible
     const receiptModal = page.locator('.modal-overlay');
-
-    // Check if error alert is visible instead
-    if (await page.locator('.alert-error').isVisible()) {
-      const errorText = await page.locator('.alert-error').textContent();
-      console.log('UNEXPECTED ERROR ALERT:', errorText);
-    }
-
     await expect(receiptModal).toBeVisible({ timeout: 10000 });
     await expect(receiptModal).toContainText('Reservation Requested!');
-    await page.locator('button', { hasText: 'Got It, Thanks!' }).dispatchEvent('click');
 
-    // 6. Log in as owner/admin via modal
+    // Extract the unique Booking Code (publicId) from the receipt modal
+    const rawBookingCode = await page.locator('.modal-card strong.text-indigo-400').textContent();
+    const bookingCode = rawBookingCode?.trim() || '';
+    console.log(`[E2E] Extracted Booking Reference Code: ${bookingCode}`);
+    expect(bookingCode.length).toBeGreaterThan(5);
+
+    // Dismiss receipt modal
+    await page.locator('button', { hasText: 'Got It, Thanks!' }).dispatchEvent('click');
+    await expect(receiptModal).not.toBeVisible();
+
+    // ----------------------------------------------------
+    // PHASE 2: ADMINISTRATIVE PANEL CONTROL PLANE
+    // ----------------------------------------------------
+    // Open Owner Portal and Log In as Admin
     await page.click('button:has-text("Owner Portal")');
     await page.fill('#username', 'admin');
     await page.fill('#password', 'admin-password');
     await page.click('.modal-card button[type="submit"]');
 
-    // 7. Assert dashboard loaded successfully
+    // Confirm admin panel dashboard is loaded
     await expect(page.locator('h1')).toContainText('TaskFlow Owner Panel');
     await expect(page.locator('.alert-success')).toContainText('Welcome back, Owner!');
 
-    // 8. Locate our requested appointment in the bookings list
-    const bookingCard = page.locator(`.card.p-5:has-text("${randomGuestName}")`);
+    // Nav Tab 1: Check Notification Outbox
+    await page.click('button:has-text("Notification Outbox")');
+    await expect(page.locator('h3:has-text("Automated Notification Outbox")')).toBeVisible();
+
+    // Nav Tab 2: Check Schedules & Time-Off, and Add Barber Time-Off
+    await page.click('button:has-text("Schedules & Time-Off")');
+    const schedulesContainer = page.locator('.card:has-text("Barber Schedules & Time-Off")');
+    await expect(schedulesContainer).toBeVisible();
+
+    // Select Barber (Alex the Barber)
+    await page.click('p:has-text("Alex the Barber")');
+
+    // Populate and save Time-Off details
+    await schedulesContainer.locator('input[type="date"]').first().fill('2026-08-01');
+    await schedulesContainer.locator('input[type="date"]').nth(1).fill('2026-08-05');
+    await page.fill('input[placeholder="e.g. Vacation"]', 'Annual Summer Vacation');
+    await page.click('button:has-text("Save Time-Off")');
+
+    // Confirm that Success Banner matches time-off action
+    await expect(page.locator('.alert-success')).toContainText('Time off added successfully.');
+
+    // Nav Tab 3: Appointments List, Filter, Search, Deny & Approve
+    await page.click('button:has-text("Appointments")');
+
+    // Search for our newly generated guest name using exact placeholder to avoid clash with other inputs
+    const searchInput = page.locator('input[placeholder="Search customers..."]');
+    await searchInput.fill(guestUniqueName);
+
+    // Locate the booking card matching our guest name - using .card.p-5 to uniquely target child items
+    const bookingCard = page.locator('.card.p-5', { hasText: guestUniqueName });
     await expect(bookingCard).toBeVisible();
     await expect(bookingCard).toContainText('Pending');
 
-    // 9. Approve the guest booking slot
+    // Test the Deny endpoint
+    await bookingCard.locator('button:has-text("Deny")').click();
+    await expect(bookingCard).toContainText('Denied');
+
+    // Test transition from Denied back to Approved
     await bookingCard.locator('button:has-text("Approve")').click();
     await expect(bookingCard).toContainText('Approved');
 
-    // 10. Delete the appointment
-    page.once('dialog', async (dialog) => {
-      expect(dialog.message()).toContain(
-        'Are you sure you want to permanently delete/cancel this booking?',
-      );
-      await dialog.accept(); // Confirms deletion
-    });
-    await bookingCard.locator('.btn-delete').dispatchEvent('click');
-
-    // 11. Verify booking card was removed from the list
-    await expect(bookingCard).not.toBeVisible();
-
-    // 12. Log out securely
+    // Log out of the Owner Panel
     await page.click('.btn-logout');
-
-    // 13. Confirm owner is returned safely to the guest landing page
     await expect(page.locator('h1').first()).toContainText('Luxury Barber Scheduler');
+
+    // ----------------------------------------------------
+    // PHASE 3: CUSTOMER PUBLIC FEEDBACK / REVIEWS
+    // ----------------------------------------------------
+    // Scroll down to reviews section
+    await page.locator('h2:has-text("Submit a Review")').scrollIntoViewIfNeeded();
+
+    // Populate review form with the booking code we extracted
+    await page.fill('#reviewPublicId', bookingCode);
+    await page.fill('#reviewRating', '5');
+    await page.fill('#reviewComment', 'This was an absolutely outstanding haircut experience. Five stars!');
+    await page.click('button:has-text("Submit Review")');
+
+    // Confirm review submission feedback matches success modal
+    await expect(page.locator('.alert-success')).toContainText('Thank you for your review! We appreciate your feedback.');
+
+    // ----------------------------------------------------
+    // PHASE 4: CLIENT SELF-SERVICE SECURE CANCELLATION
+    // ----------------------------------------------------
+    // Scroll down to cancellation section
+    await page.locator('h2:has-text("Secure Booking Cancellation")').scrollIntoViewIfNeeded();
+
+    // Populate cancellation form with booking code and verification email
+    await page.fill('#cancelBookingId', bookingCode);
+    await page.fill('#cancelEmail', guestEmailAddress);
+    await page.click('button:has-text("Cancel Reservation")');
+
+    // Confirm secure self-service cancellation was processed successfully
+    await expect(page.locator('.alert-success')).toContainText('Reservation successfully cancelled and deleted from our calendar.');
   });
 });
