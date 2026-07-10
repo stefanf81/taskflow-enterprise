@@ -52,8 +52,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Local environment / secrets (template is .env.example)
-.env
+# Local environment / secrets (protects .env.example template)
+.env*
+!.env.example
 
 # Local cluster credentials
 k3d-kubeconfig.yaml
@@ -70,7 +71,3 @@ Thumbs.db
 *.swo
 *~
 *.log
-
-# Local env overrides (template remains .env.example)
-.env.local
-.env.*.local
