@@ -74,8 +74,12 @@ describe('App Component Quality Assurance Suite', () => {
 
     // Flush pending httpResource initialization requests with mock seed data
     const httpMock = TestBed.inject(HttpTestingController);
-    httpMock.match((req) => req.url.includes('/api/v1/catalog')).forEach((req) => req.flush(mockServices));
-    httpMock.match((req) => req.url.includes('/api/v1/reviews/public/barber-ratings')).forEach((req) => req.flush(mockRatings));
+    httpMock
+      .match((req) => req.url.includes('/api/v1/catalog'))
+      .forEach((req) => req.flush(mockServices));
+    httpMock
+      .match((req) => req.url.includes('/api/v1/reviews/public/barber-ratings'))
+      .forEach((req) => req.flush(mockRatings));
     httpMock.match(() => true).forEach((req) => req.flush([]));
   });
 
