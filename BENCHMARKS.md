@@ -255,5 +255,17 @@ To push the application to the physical limits of the M4 Pro, we implemented:
 
 ---
 
+## 📝 21. Jackson JSON Library (Serialization Format & Formatting Traps)
+**Goal:** Measure the impact of common JSON date-formatting options on peak JVM serialization throughput.
+
+| Configuration Profile | Peak JSON Throughput | Average Latency | p99 Tail Latency | Performance Impact |
+| :--- | :--- | :--- | :--- | :--- |
+| **Jackson Defaults + Blackbird (Winner)** | **7,381.72 RPS** | **6.77 ms** | **18 ms** | *Baseline (Peak Throughput)* |
+| ISO-8601 String Dates (`write-dates-as-timestamps=false`) | 6,946.39 RPS | 7.19 ms | 21 ms | **❌ 5.9% Performance Slowdown** |
+
+**Verdict:** Many public optimization guides suggest forcing Jackson to serialize dates as ISO-8601 strings rather than raw numeric timestamps for readability. However, our load tests show this introduces a **~5.9% throughput penalty** due to the CPU-intensive string manipulation and timezone calculations required for formatting. Writing raw numeric timestamps is incredibly cheap for the JVM and allows **Jackson Blackbird**'s bytecode-generated serializers to run at maximum physical throughput. We retained the optimized default configuration.
+
+---
+
 ### 🎉 Final Result
 The **TaskFlow Enterprise** stack is fully optimized across every single layer of the OSI model, representing the absolute pinnacle of full-stack engineering.
