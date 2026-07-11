@@ -11,15 +11,15 @@ plugins {
 group = 'com.example'
 version = '0.0.1-SNAPSHOT'
 ext {
-	set('tomcat.version', '10.1.55')
+	set('tomcat.version', '10.1.57')
 	set('jackson-bom.version', '2.22.1')
-	set('netty.version', '4.1.135.Final')
+	set('netty.version', '4.1.136.Final')
 	set('spring-security.version', '6.5.11')
 	set('spring-framework.version', '6.2.19')
 	set('postgresql.version', '42.7.13')
-	set('logback.version', '1.5.37')
-	set('opentelemetry.version', '1.63.0')
-	set('commons-lang3.version', '3.17.0')
+	set('logback.version', '1.5.38')
+	set('opentelemetry.version', '1.64.0')
+	set('commons-lang3.version', '3.20.0')
 	set('junit-platform.version', '1.14.4')
 }
 java {
