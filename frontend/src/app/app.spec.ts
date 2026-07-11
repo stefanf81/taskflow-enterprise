@@ -20,8 +20,8 @@ describe('App Component Quality Assurance Suite', () => {
     fixture = TestBed.createComponent(App);
     app = fixture.componentInstance;
 
-    // Seed the catalog store with mock data for testing
-    app['catalogStore'].services.set([
+    // Define mock data for seeding via HTTP flushes
+    const mockServices = [
       {
         id: 1,
         name: 'Classic Haircut',
@@ -62,12 +62,20 @@ describe('App Component Quality Assurance Suite', () => {
         category: 'combo',
         description: 'Desc',
       },
-    ]);
+    ];
+
+    const mockRatings = [
+      { barberName: 'Alex the Barber', averageRating: 4.8, reviewCount: 12 },
+      { barberName: 'Sara the Stylist', averageRating: 4.9, reviewCount: 15 },
+      { barberName: 'Marcus Master Blade', averageRating: 5.0, reviewCount: 8 },
+    ];
 
     fixture.detectChanges();
 
-    // Flush any pending httpResource initialization requests to prevent whenStable() from hanging
+    // Flush pending httpResource initialization requests with mock seed data
     const httpMock = TestBed.inject(HttpTestingController);
+    httpMock.match((req) => req.url.includes('/api/v1/catalog')).forEach((req) => req.flush(mockServices));
+    httpMock.match((req) => req.url.includes('/api/v1/reviews/public/barber-ratings')).forEach((req) => req.flush(mockRatings));
     httpMock.match(() => true).forEach((req) => req.flush([]));
   });
 
