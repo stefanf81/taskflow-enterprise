@@ -43,6 +43,8 @@ All benchmarks were run locally on an **Apple M4 Pro (14-Core, AArch64)** utiliz
 
 **Verdict:** The `/login` endpoint is heavily CPU-bound (Bcrypt/RSA). Virtual Threads actually *hurt* performance here due to context-switching overhead without any I/O blocking benefits. We **disabled Virtual Threads** and kept Tomcat.
 
+*Architectural Duality Note (Loom):* Under sequential, load-tested I/O-bound operations (like retrieving cached busy slots), virtual threads *did* yield a **50.8% drop in p99 latency** (from `61ms` down to `30ms`). However, because global activation affects *all* endpoints—including CPU-heavy cryptographic operations where Loom suffers an 8% penalty—the system is standard-tuned to standard Platform Threads to prioritize peak authentication throughput.
+
 ---
 
 ## 📝 4. JSON Serialization (Reflection vs. Bytecode)
@@ -202,6 +204,18 @@ To push the application to the physical limits of the M4 Pro, we implemented:
 | Sequential Index Vacuum | 135.26 ms | 0.06 seconds | *Baseline* |
 
 **Verdict:** PostgreSQL 17 introduces compact index structures and a memory-efficient radix tree for vacuuming. By setting `max_parallel_maintenance_workers = 4`, the vacuum engine launches concurrent background workers, scaling maintenance throughput across CPU cores and drastically reducing transactional overhead.
+
+---
+
+## 🌐 17. Netty Off-Heap Memory Pooling (Socket I/O & Caching)
+**Goal:** Eliminate memory allocation synchronization bottlenecks between Tomcat HTTP threads and Netty during high-concurrency Redis caching requests.
+
+| Configuration Profile | Peak Cache Throughput | p99 Tail Latency | Efficiency Boost |
+| :--- | :--- | :--- | :--- |
+| **Pooled Thread-Local Buffers (Winner)** | **6,864.53 RPS** | **45 ms** | **🚀 4.5% higher RPS, 26.2% lower p99 latency** |
+| Standard Global Allocator | 6,567.94 RPS | 61 ms | *Baseline* |
+
+**Verdict:** Netty's `PooledByteBufAllocator` disables thread-local buffer caches for standard Java/Tomcat threads by default to prevent leaks. Under heavy concurrent load, this forces Tomcat threads to compete for global allocator synchronized locks. By enforcing `io.netty.allocator.useCacheForAllThreads=true` in `TaskflowApplication.java`, we enabled thread-local caching for Tomcat's recycled thread pool, entirely bypassing synchronization bottlenecks and dropping tail latency down to **45 ms**.
 
 ---
 
