@@ -19,6 +19,7 @@ spec:
         - name: postgres
           image: postgres:17-alpine
           imagePullPolicy: IfNotPresent
+          args: ["-c", "max_parallel_maintenance_workers=4"]
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
