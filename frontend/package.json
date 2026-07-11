@@ -4,8 +4,10 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve --host 127.0.0.1",
+    "prebuild": "npx prettier --check .",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
+    "pretest": "npx prettier --check .",
     "test": "ng test",
     "e2e": "playwright test"
   },
