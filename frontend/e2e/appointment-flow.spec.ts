@@ -26,7 +26,9 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await page.goto('/');
   });
 
-  test('should support viewing and expanding the Frequently Asked Questions (FAQ) accordions', async ({ page }) => {
+  test('should support viewing and expanding the Frequently Asked Questions (FAQ) accordions', async ({
+    page,
+  }) => {
     // Scroll down to the FAQs section
     await page.locator('h2:has-text("Frequently Asked Questions")').scrollIntoViewIfNeeded();
 
@@ -45,7 +47,9 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await expect(faqContent).not.toBeVisible();
   });
 
-  test('should allow a customer to select a lookbook style and proceed directly to stylist selector', async ({ page }) => {
+  test('should allow a customer to select a lookbook style and proceed directly to stylist selector', async ({
+    page,
+  }) => {
     // 1. Verify Lookbook title is displayed
     await expect(page.locator('h2:has-text("Signature Lookbook")')).toBeVisible();
 
@@ -56,7 +60,9 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await expect(page.locator('.wizard-step-node.active')).toHaveText('2');
 
     // 4. Confirm the success banner informs the client about lookbook selection
-    await expect(page.locator('.alert-success')).toContainText('Lookbook Style selected: Classic Haircut');
+    await expect(page.locator('.alert-success')).toContainText(
+      'Lookbook Style selected: Classic Haircut',
+    );
   });
 
   test('should support new customer account registration flow', async ({ page }) => {
@@ -79,7 +85,9 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await page.click('.modal-card button[type="submit"]');
 
     // 5. Confirm that registration is successful and instructs to sign in
-    await expect(page.locator('.alert-success')).toContainText('Account created! You can now log in.');
+    await expect(page.locator('.alert-success')).toContainText(
+      'Account created! You can now log in.',
+    );
   });
 
   test('should show error alert on invalid admin login credentials', async ({ page }) => {
@@ -210,11 +218,16 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     // Populate review form with the booking code we extracted
     await page.fill('#reviewPublicId', bookingCode);
     await page.fill('#reviewRating', '5');
-    await page.fill('#reviewComment', 'This was an absolutely outstanding haircut experience. Five stars!');
+    await page.fill(
+      '#reviewComment',
+      'This was an absolutely outstanding haircut experience. Five stars!',
+    );
     await page.click('button:has-text("Submit Review")');
 
     // Confirm review submission feedback matches success modal
-    await expect(page.locator('.alert-success')).toContainText('Thank you for your review! We appreciate your feedback.');
+    await expect(page.locator('.alert-success')).toContainText(
+      'Thank you for your review! We appreciate your feedback.',
+    );
 
     // ----------------------------------------------------
     // PHASE 4: CLIENT SELF-SERVICE SECURE CANCELLATION
@@ -228,6 +241,8 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await page.click('button:has-text("Cancel Reservation")');
 
     // Confirm secure self-service cancellation was processed successfully
-    await expect(page.locator('.alert-success')).toContainText('Reservation successfully cancelled and deleted from our calendar.');
+    await expect(page.locator('.alert-success')).toContainText(
+      'Reservation successfully cancelled and deleted from our calendar.',
+    );
   });
 });
