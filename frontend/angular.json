@@ -54,7 +54,7 @@
                 }
               ],
               "outputHashing": "all",
-              "subresourceIntegrity": true,
+              "subresourceIntegrity": false,
               "statsJson": true
             },
             "development": {
