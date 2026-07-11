@@ -50,6 +50,8 @@ spec:
             - "log_min_duration_statement=1000"
             - "-c"
             - "autovacuum_work_mem=128MB"
+            - "-c"
+            - "jit=off"
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true

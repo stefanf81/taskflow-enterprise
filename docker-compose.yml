@@ -34,6 +34,8 @@ services:
       - "log_min_duration_statement=1000"
       - "-c"
       - "autovacuum_work_mem=128MB"
+      - "-c"
+      - "jit=off"
     env_file:
       - .env
     ports:

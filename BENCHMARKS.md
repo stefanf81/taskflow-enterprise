@@ -36,6 +36,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Spring Cache & Redis 7.2 Integration**:
     *   **Caffeine Cache**: Leveraged as a lightning-fast local cache for in-memory reads during development/testing.
     *   **Redis (Production)**: Centralized caching layer using high-performance connection pools in production (`spring.cache.type=redis`) to isolate heavy workloads.
+    *   **Fail-Fast Circuit**: Reduced Lettuce Redis connection timeout to 2 seconds (`spring.data.redis.timeout=2000`) to prevent dead Redis nodes from exhausting Tomcat threads.
 *   **API Protection & Security Hardening**:
     *   **Rate Limiting**: Enforced bulletproof rate-limiting in production (`app.rate-limit.enabled=true`) to block DDoS/runaway crawlers.
     *   **CORS Safeguards**: Strict domain restrictions (`app.cors.allowed-origins`) configured to block unauthorized domains.
@@ -45,6 +46,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Jackson JSON Library**:
     *   **Jackson Blackbird (`jackson-module-blackbird`)**: Enabled ASM bytecode-generation for DTO serialization, bypassing slow Java Reflection.
     *   **Serialization Traps Avoided**: Preserved raw numeric timestamps over expensive CPU-bound ISO-8601 string conversions.
+    *   **Payload Minimization**: Enforced `spring.jackson.default-property-inclusion=non_null` to automatically strip null fields from network transmissions, minimizing JSON payload sizes and serialization time.
 *   **Netty (Off-Heap Buffers)**:
     *   Custom pooling alignment (`io.netty.allocator.useCacheForAllThreads=true`) to enable Tomcat threads to reuse pooled thread-local buffers during Redis cache transactions, completely avoiding global Netty allocator lock contentions.
 
@@ -52,6 +54,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **PostgreSQL 17 (Alpine)**:
     *   **Memory Architecture Tuning**: Configured `shared_buffers=256MB` (25% system RAM), `effective_cache_size=768MB` (75% RAM), `work_mem=16MB` (for sorting and hash joins in memory), and `maintenance_work_mem=256MB` (for vacuuming).
     *   **Write & WAL Tuning**: Enforced `wal_buffers=16MB`, `checkpoint_completion_target=0.9` (spreading write I/O over 15-minute intervals), and `wal_compression=on`.
+    *   **OLTP JIT Compilation Guard**: Explicitly disabled Just-In-Time query compilation (`jit=off`), saving the query planner from wasting CPU compiling dynamic queries when raw execution time is already under 1ms.
     *   **Storage Access Tuning**: Reduced `random_page_cost=1.1` and raised `effective_io_concurrency=200` to inform the planner of NVMe flash speeds, forcing index scans over sequential disk sweeps.
     *   **Observability**: Integrated `pg_stat_statements` preloaded extension for global slow-query logging.
     *   **Parallel Maintenance**: Sized `max_parallel_maintenance_workers=4` for parallel index vacuuming.
