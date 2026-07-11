@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Service, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
@@ -110,9 +110,7 @@ export interface ReviewRequest {
   comment: string;
 }
 
-@Injectable({
-  providedIn: 'root',
-})
+@Service()
 export class AppointmentService {
   private readonly http = inject(HttpClient);
   private readonly apiUrl = '/api/v1/appointments';

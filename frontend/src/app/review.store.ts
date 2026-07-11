@@ -1,33 +1,21 @@
-import { Injectable, inject, signal } from '@angular/core';
-import { AppointmentService, BarberRating } from './appointment.service';
-import { catchError } from 'rxjs/operators';
-import { of } from 'rxjs';
+import { Service, computed } from '@angular/core';
+import { httpResource } from '@angular/common/http';
+import { BarberRating } from './appointment.service';
 
-@Injectable({
-  providedIn: 'root',
-})
+@Service()
 export class ReviewStore {
-  private readonly appointmentService = inject(AppointmentService);
+  private readonly ratingsResource = httpResource<BarberRating[]>(() => '/api/v1/reviews/public/barber-ratings', {
+    defaultValue: []
+  });
 
-  readonly ratings = signal<BarberRating[]>([]);
-  readonly isLoading = signal<boolean>(false);
-  readonly errorMessage = signal<string | null>(null);
+  readonly ratings = this.ratingsResource.value;
+  readonly isLoading = this.ratingsResource.isLoading;
+  readonly errorMessage = computed(() => {
+    const err = this.ratingsResource.error();
+    return err ? 'Could not load barber ratings.' : null;
+  });
 
   loadRatings(): void {
-    this.isLoading.set(true);
-    this.appointmentService
-      .getBarberRatings()
-      .pipe(
-        catchError((err) => {
-          console.error('Failed to load barber ratings:', err);
-          this.errorMessage.set('Could not load barber ratings.');
-          this.isLoading.set(false);
-          return of([]);
-        }),
-      )
-      .subscribe((data) => {
-        this.ratings.set(data);
-        this.isLoading.set(false);
-      });
+    this.ratingsResource.reload();
   }
 }

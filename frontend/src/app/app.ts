@@ -7,7 +7,7 @@ import {
   ChangeDetectionStrategy,
   ViewEncapsulation,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, NgOptimizedImage } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AppointmentService, AppointmentItem } from './appointment.service';
 import { AppointmentStore } from './appointment.store';
@@ -21,7 +21,7 @@ import { StylistCard } from './components/stylist-card/stylist-card';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule, StylistCard],
+  imports: [CommonModule, FormsModule, StylistCard, NgOptimizedImage],
   templateUrl: './app.html',
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -57,8 +57,8 @@ export class App implements OnInit {
 
   // Core Admin Reactive States delegated to the Store
   readonly appointments = this.store.appointments;
-  readonly searchQuery = signal<string>('');
-  readonly selectedFilter = signal<string>('all');
+  readonly searchQuery = this.store.searchQuery;
+  readonly selectedFilter = this.store.selectedFilter;
 
   // Pagination State delegated to the Store
   readonly currentPage = this.store.currentPage;

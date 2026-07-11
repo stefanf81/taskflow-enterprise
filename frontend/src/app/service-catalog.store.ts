@@ -1,33 +1,21 @@
-import { Injectable, inject, signal } from '@angular/core';
-import { AppointmentService, ServiceItem } from './appointment.service';
-import { catchError } from 'rxjs/operators';
-import { of } from 'rxjs';
+import { Service, computed } from '@angular/core';
+import { httpResource } from '@angular/common/http';
+import { ServiceItem } from './appointment.service';
 
-@Injectable({
-  providedIn: 'root',
-})
+@Service()
 export class ServiceCatalogStore {
-  private readonly appointmentService = inject(AppointmentService);
+  private readonly servicesResource = httpResource<ServiceItem[]>(() => '/api/v1/catalog', {
+    defaultValue: []
+  });
 
-  readonly services = signal<ServiceItem[]>([]);
-  readonly isLoading = signal<boolean>(false);
-  readonly errorMessage = signal<string | null>(null);
+  readonly services = this.servicesResource.value;
+  readonly isLoading = this.servicesResource.isLoading;
+  readonly errorMessage = computed(() => {
+    const err = this.servicesResource.error();
+    return err ? 'Could not load service catalog.' : null;
+  });
 
   loadServices(): void {
-    this.isLoading.set(true);
-    this.appointmentService
-      .getAllServices()
-      .pipe(
-        catchError((err) => {
-          console.error('Failed to load services:', err);
-          this.errorMessage.set('Could not load service catalog.');
-          this.isLoading.set(false);
-          return of([]);
-        }),
-      )
-      .subscribe((data) => {
-        this.services.set(data);
-        this.isLoading.set(false);
-      });
+    this.servicesResource.reload();
   }
 }
