@@ -201,7 +201,7 @@ pipeline {
 
                         // 3. Run Playwright inside official Playwright container (browsers pre-installed, no npx install needed)
                         echo "Running Playwright E2E tests..."
-                        sh 'docker run --rm --network host -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}/frontend" mcr.microsoft.com/playwright:v1.45.0-noble sh -c "npm ci --prefer-offline --no-audit --no-fund && npm run e2e"'
+                        sh 'docker run --rm --network host -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}/frontend" mcr.microsoft.com/playwright:v1.61.1-noble sh -c "npm ci --prefer-offline --no-audit --no-fund && npm run e2e"'
                     } finally {
                         // 4. Always tear down the Docker stack to prevent resource leaks on the runner
                         echo "Cleaning up Docker Compose stack..."

@@ -303,7 +303,7 @@ jobs:
     timeout-minutes: 45
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_DB: taskflow
           POSTGRES_USER: taskflow
