@@ -8,7 +8,7 @@ All benchmarks were run locally on an **Apple M4 Pro (14-Core, AArch64)** utiliz
 
 ## 🛠️ Frameworks & Performance Tweaks Inventory
 
-The **TaskFlow Enterprise** stack is fully optimized across every layer. Below is the comprehensive, production-grade inventory of the frameworks we utilize and the exact high-performance tunings applied to each:
+The **TaskFlow Enterprise** stack is fully optimized across every layer. Below is the truly exhaustive, production-grade inventory of every framework, library, and tool we utilize, along with the exact high-performance tunings and configurations applied to each:
 
 ### ☕ 1. JVM & Runtime Layer
 *   **OpenJDK 21 (Eclipse Temurin Alpine)**:
@@ -27,6 +27,10 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Spring Security & stateless JWT**:
     *   **Asymmetric Cryptography**: Standardized on RSA-2048 signing/verification using asymmetric key-pairs (`app.rsa.private-key` / `public-key`).
     *   **Zero-Trust Session Isolation**: Enforced stateless token authentication via session storage in the frontend, attaching authorization headers dynamically. Restricted all routes except public `/api/v1/auth/**`.
+*   **Springdoc OpenAPI 3 (Swagger UI)**:
+    *   Integrated `springdoc-openapi-starter-webmvc-ui` for automated, interactive API documentation generation from code structures.
+*   **Spring Boot Validation**:
+    *   Integrated `spring-boot-starter-validation` (Hibernate Validator) for rigorous JSR-380 input sanitization and boundary enforcement.
 *   **Flyway Database Migrations**:
     *   Managed schema evolution explicitly via versioned migration SQL files under `src/main/resources/db/migration/`, disabling runtime `ddl-auto=update` to prevent schema drift.
 *   **Spring Cache & Redis 7.2 Integration**:
@@ -66,14 +70,17 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 ### 🅰️ 5. Angular 22 Frontend Layer
 *   **Zoneless Change Detection**:
     *   Replaced Zone.js digest loop entirely with Angular 22 **Signals** (`provideZonelessChangeDetection()`), driving native, high-performance UI updates.
+*   **RxJS**:
+    *   Utilized core reactive extensions (`rxjs`) for managing complex, composable asynchronous event streams and state.
 *   **Code Splitting & Preloading**:
     *   Granular page and feature chunking (`loadComponent()` / `loadChildren()`) combined with aggressive background preloading (`withPreloading(PreloadAllModules)`) for immediate route navigations.
 *   **Deferrable Views**:
     *   Used `@defer` blocks to dynamically lazy-load heavy in-page elements only when idle.
-*   **Build Budget Regression Guards**:
+*   **Build Budget Regression Guards & Cache Busting**:
     *   Enforced rigorous build failure boundaries in `angular.json` for initial total (`1MB` limit) and individual lazy chunks (`400kB` warning, `600kB` error) to automatically catch bundle bloat in CI.
-*   **Tailwind CSS**:
-    *   Integrated utility-first CSS compilation with custom `gold`/`obsidian` color mapping, delivering dynamic style bundles compiled in a single esbuild pass.
+    *   Enforced `outputHashing: "all"` to aggressively bust caches on deployments, and explicitly disabled critical CSS inlining (`inlineCritical: false`) to pair optimally with Nginx's external caching.
+*   **Tailwind CSS (with PostCSS & Autoprefixer)**:
+    *   Integrated utility-first CSS compilation with custom `gold`/`obsidian` color mapping, relying on **PostCSS** and **Autoprefixer** under the hood to ensure cross-browser vendor prefix compatibility, delivered via esbuild.
 
 ### 🔭 6. Observability & Monitoring
 *   **Spring Boot Actuator**:
@@ -83,26 +90,33 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Jaeger Server & Micrometer**:
     *   Collected traces via a Dockerized Jaeger `1.57` backend with trace propagation, mapped to Prometheus/Micrometer metrics.
 
-### 🐳 7. Proxy, Containers, Testing & CI/CD
+### 🐳 7. Proxy, Containers, Build Tools & CI/CD
 *   **Nginx (Alpine-Unprivileged)**:
     *   **Elite Upstream Connection Pooling**: Enforced permanent persistent connection reuse (`upstream { keepalive 64; }`) to completely bypass the 3-way TCP handshake latency between Nginx and the backend.
+    *   **Proxy Buffering**: Tuned `proxy_buffers 8 16k;` and `proxy_buffer_size 32k;` specifically to handle the high-throughput transmission of large JSON payloads without blocking worker threads.
+    *   **Aggressive Static Caching**: Enforced long-lived browser caching (`expires 6M; Cache-Control "public";`) specifically for frontend assets (JS, CSS, images).
     *   **Socket Optimization**: Enabled kernel zero-copy transfer (`sendfile on`), aggregated packet transfers (`tcp_nopush on`), and disabled Nagle's algorithm (`tcp_nodelay on`) to deliver JSON payloads instantly.
-*   **Zero-Trust Containers Hardening**:
-    *   Hardened via non-root UIDs (`10001:10001`), completely dropped Linux capabilities (`cap_drop: [ALL]`), read-only root filesystems, and ephemeral `/tmp` paths mapped as RAM-backed `tmpfs` mounts.
-    *   `tini` configured as PID 1 to reap zombie processes safely.
+*   **Zero-Trust Containers & Quotas**:
+    *   **Resource Quotas**: Hardcoded CPU `limits` and memory `reservations` in `docker-compose.yml` to prevent noisy-neighbor starvation across the stack.
+    *   **Log Rotation**: Prevented disk exhaustion attacks by capping container logs via the `json-file` driver (`max-size: 10m`, `max-file: 3`).
+    *   **Hardening**: Secured via non-root UIDs (`10001:10001`), completely dropped Linux capabilities (`cap_drop: [ALL]`), read-only root filesystems, and ephemeral `/tmp` paths mapped as RAM-backed `tmpfs` mounts. `tini` configured as PID 1 to reap zombie processes safely.
 *   **Docker Multi-Network Isolation**:
     *   Isolated database traffic natively by creating independent `backend-tier` and `frontend-tier` virtual bridges. The client frontend can never physically establish a network path to the database.
 *   **Kubernetes (k3d Cluster)**:
     *   Assembled a strict security context profile with restricted pod capabilities, network policies mapping isolated namespace routes, and automated probe-driven rollouts.
-*   **Vitest & Playwright Testing Suites**:
-    *   Managed browser-less unit tests under Angular via Vitest (JSDom) and robust end-to-end user journeys using headless Playwright.
-*   **Testcontainers (PostgreSQL)**:
-    *   Leveraged real Dockerized PostgreSQL database containers within Spring Boot integration test environments to guarantee perfect schema/SQL execution parity during compilation.
-*   **ArchUnit Architecture Assertions**:
-    *   Enforced clean code design constraints via package dependency assertions during unit testing to prevent architecture erosion.
-*   **OWASP Vulnerability Scanners**:
-    *   **Dependency-Check**: Configured Gradle to check and break the build on upstream dependencies with known CVE scores `CVSS >= 7`.
-    *   **OWASP ZAP DAST**: Implemented automated Dynamic Application Security Testing scanning against the OpenAPI specification.
+*   **Testing Suites (Vitest, Playwright, Testcontainers)**:
+    *   Managed browser-less unit tests under Angular via **Vitest** (with JSDom and v8 coverage) and robust end-to-end user journeys using headless **Playwright**.
+    *   Leveraged real Dockerized PostgreSQL database containers within Spring Boot integration test environments via **Testcontainers** to guarantee perfect schema/SQL execution parity during compilation.
+*   **Gradle Build Velocity & GraalVM Support**:
+    *   **Incremental Compilation**: Enforced `options.incremental = true` for rapid local `javac` evaluations.
+    *   **Parallel Test Execution**: Configured `maxParallelForks` to dynamically scale JVM test forks based on `availableProcessors() / 2` to saturate CI pipelines.
+    *   **GraalVM Native Tools**: Integrated `org.graalvm.buildtools.native` to pave the road for future AOT native-image compilations.
+*   **Code Quality & Static Analysis Guards**:
+    *   **SpotBugs & FindSecBugs**: Integrated `spotbugs` plugin with `findsecbugs-plugin` at `effort = 'max'` to automatically break CI builds on detected security anti-patterns.
+    *   **JaCoCo Coverage Enforcement**: Defined strict validation rules (`minimum = 0.80` branch/line coverage) to fail pipelines on untested code paths.
+    *   **Ben Manes Versions**: Configured dynamic dependency resolution rules to strictly reject unstable package updates (`alpha`, `beta`, `rc`).
+    *   **ArchUnit**: Enforced clean code design constraints via package dependency assertions during unit testing to prevent architecture erosion.
+    *   **OWASP Vulnerability Scanners**: Configured Gradle to check and break the build on upstream dependencies with known CVE scores `CVSS >= 7` via **Dependency-Check**, paired with automated **OWASP ZAP DAST** scanning against the OpenAPI spec.
 
 ---
 
