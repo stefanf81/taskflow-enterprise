@@ -2,7 +2,7 @@ import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { App } from './app';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 
 describe('App Component Quality Assurance Suite', () => {
   let fixture: ComponentFixture<App>;
@@ -65,6 +65,10 @@ describe('App Component Quality Assurance Suite', () => {
     ]);
 
     fixture.detectChanges();
+
+    // Flush any pending httpResource initialization requests to prevent whenStable() from hanging
+    const httpMock = TestBed.inject(HttpTestingController);
+    httpMock.match(() => true).forEach((req) => req.flush([]));
   });
 
   it('should compile and bootstrap the TaskFlow component cleanly', () => {
