@@ -75,6 +75,10 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   Replaced Zone.js digest loop entirely with Angular 22 **Signals** (`provideZonelessChangeDetection()`), driving native, high-performance UI updates.
 *   **RxJS**:
     *   Utilized core reactive extensions (`rxjs`) for managing complex, composable asynchronous event streams and state.
+*   **Modern HTTP Client (`withFetch`)**:
+    *   Switched the core HTTP client engine to leverage the native browser `fetch` API (`provideHttpClient(withFetch())`), explicitly stripping out legacy `XMLHttpRequest` overhead and enabling optimized native streams.
+*   **Optimized Control Flow**:
+    *   Completely adopted the new declarative block syntax (`@for`, `@if`) combined with strict `track` expressions, bypassing legacy `*ngFor` / `*ngIf` structural directive overhead.
 *   **Code Splitting & Preloading**:
     *   Granular page and feature chunking (`loadComponent()` / `loadChildren()`) combined with aggressive background preloading (`withPreloading(PreloadAllModules)`) for immediate route navigations.
 *   **Deferrable Views**:
@@ -468,6 +472,18 @@ By setting `spring.jpa.properties.hibernate.query.in_clause_parameter_padding=tr
 | `any` (per lazy chunk) | *none* | **400kB warn / 600kB err** (sized above our 396kB `main` entry chunk so it guards lazy chunks, not the initial bundle) |
 
 **Verdict:** Without an `any` budget, a single bloated lazy-loaded chunk can slip through CI unnoticed. The new guard fails the production build if any individual chunk exceeds 600kB (warning at 400kB), catching regressions (e.g. a heavy dependency pulled into one route) before merge. Threshold is sized above our 396kB entry `main` chunk so it guards lazy chunks rather than the legitimate initial bundle.
+
+---
+
+## 🚀 28. Angular `withFetch()` Native API
+**Goal:** Eliminate legacy `XMLHttpRequest` overhead in the Angular HttpClient by migrating to the modern, highly optimized `fetch` API.
+
+| HTTP Client Engine | Connection Type | Streaming Support | Edge / Cloudflare Workers |
+| :--- | :--- | :--- | :--- |
+| **`withFetch()` (Winner)** | **Native Browser `fetch`** | **Native Streams** | **Yes (Full Compat)** |
+| Default `XMLHttpRequest` | Legacy DOM Object | Emulated/Buffered | No |
+
+**Verdict:** Even in Angular 22, the framework defaults to the legacy `XMLHttpRequest` API under the hood to ensure backwards compatibility with older corporate projects. By explicitly appending `provideHttpClient(withFetch())` in `app.config.ts`, we strip out the XHR wrapper overhead and allow Angular to leverage the native, highly optimized `fetch` API. This is the top recommended HTTP networking tweak for modern Angular applications.
 
 ---
 
