@@ -21,7 +21,7 @@ import { StylistCard } from './components/stylist-card/stylist-card';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule, StylistCard, NgOptimizedImage],
+  imports: [CommonModule, FormsModule, StylistCard],
   templateUrl: './app.html',
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

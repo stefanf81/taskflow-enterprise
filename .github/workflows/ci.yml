@@ -206,6 +206,44 @@ jobs:
           path: frontend-coverage.tar.gz
           if-no-files-found: ignore
 
+  codeql:
+    name: CodeQL
+    needs:
+      - changes
+      - backend
+      - frontend
+    if: |
+      always() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled') &&
+      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java, javascript
+
+      - name: Build Backend
+        run: ./gradlew assemble --parallel --build-cache
+
+      - name: Analyze CodeQL
+        uses: github/codeql-action/analyze@v3
+
   security-backend:
     name: Security Scan (Backend)
     needs: changes
@@ -247,8 +285,15 @@ jobs:
         with:
           scan-type: fs
           scan-ref: .
-          format: table
+          format: sarif
+          output: trivy-results.sarif
           exit-code: 0
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
 
   security-frontend:
     name: Security Scan (Frontend)
@@ -284,8 +329,15 @@ jobs:
         with:
           scan-type: fs
           scan-ref: frontend
-          format: table
+          format: sarif
+          output: trivy-results.sarif
           exit-code: 0
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
 
   e2e:
     name: End-to-End Tests
@@ -293,6 +345,9 @@ jobs:
       - changes
       - backend
       - frontend
+      - codeql
+      - security-backend
+      - security-frontend
     if: |
       always() &&
       !contains(needs.*.result, 'failure') &&
@@ -489,7 +544,7 @@ jobs:
         with:
           context: ${{ matrix.component == 'backend' && '.' || 'frontend' }}
           file: ${{ matrix.component == 'backend' && 'Dockerfile.x64' || 'frontend/Dockerfile' }}
-          push: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.push_images) }}
+          load: true
           tags: ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
           cache-from: |
             type=gha,scope=${{ matrix.component }}-main
@@ -497,6 +552,27 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.component }}-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }}
           provenance: false
           sbom: false
+
+      - name: Scan Docker Image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
+          format: sarif
+          output: trivy-results.sarif
+          scan-type: image
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Push Image
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.push_images)
+        run: docker push ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
 
       - name: Push Latest
         if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.push_images)
