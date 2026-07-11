@@ -12,6 +12,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class TaskflowApplication {
 
+	static {
+		System.setProperty("io.netty.allocator.type", "pooled");
+		System.setProperty("io.netty.allocator.useCacheForAllThreads", "true");
+	}
+
 	public static void main(String[] args) {
 		SpringApplication.run(TaskflowApplication.class, args);
 	}
