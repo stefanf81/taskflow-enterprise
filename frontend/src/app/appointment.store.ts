@@ -1,6 +1,11 @@
 import { Service, signal, computed, inject } from '@angular/core';
 import { httpResource } from '@angular/common/http';
-import { AppointmentService, AppointmentItem, AppointmentStats, AppointmentDashboardResponse } from './appointment.service';
+import {
+  AppointmentService,
+  AppointmentItem,
+  AppointmentStats,
+  AppointmentDashboardResponse,
+} from './appointment.service';
 
 @Service()
 export class AppointmentStore {
@@ -41,17 +46,28 @@ export class AppointmentStore {
           overdue: 0,
           progress: 0,
           approvedRevenue: 0,
-        }
-      }
-    }
+        },
+      },
+    },
   );
 
   readonly appointments = computed(() => this.appointmentsResource.value()?.page.content ?? []);
-  readonly stats = computed(() => this.appointmentsResource.value()?.stats ?? {
-    total: 0, pending: 0, approved: 0, denied: 0, overdue: 0, progress: 0, approvedRevenue: 0
-  });
+  readonly stats = computed(
+    () =>
+      this.appointmentsResource.value()?.stats ?? {
+        total: 0,
+        pending: 0,
+        approved: 0,
+        denied: 0,
+        overdue: 0,
+        progress: 0,
+        approvedRevenue: 0,
+      },
+  );
   readonly totalPages = computed(() => this.appointmentsResource.value()?.page.totalPages ?? 1);
-  readonly totalElements = computed(() => this.appointmentsResource.value()?.page.totalElements ?? 0);
+  readonly totalElements = computed(
+    () => this.appointmentsResource.value()?.page.totalElements ?? 0,
+  );
 
   // Alerts & Loading State (Signals)
   readonly errorMessage = signal<string | null>(null);

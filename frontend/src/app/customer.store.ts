@@ -7,12 +7,12 @@ export class CustomerStore {
   private readonly appointmentService = inject(AppointmentService);
   readonly currentPage = signal<number>(0);
 
-  private readonly appointmentsResource = httpResource<{ content: AppointmentItem[]; totalPages: number }>(
-    () => `/api/v1/customer/appointments?page=${this.currentPage()}&size=10`,
-    {
-      defaultValue: { content: [], totalPages: 1 }
-    }
-  );
+  private readonly appointmentsResource = httpResource<{
+    content: AppointmentItem[];
+    totalPages: number;
+  }>(() => `/api/v1/customer/appointments?page=${this.currentPage()}&size=10`, {
+    defaultValue: { content: [], totalPages: 1 },
+  });
 
   readonly appointments = computed(() => this.appointmentsResource.value()?.content ?? []);
 

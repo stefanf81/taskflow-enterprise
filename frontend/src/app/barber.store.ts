@@ -7,7 +7,7 @@ export class BarberStore {
   private readonly appointmentService = inject(AppointmentService);
 
   private readonly barbersResource = httpResource<Barber[]>(() => '/api/v1/barbers', {
-    defaultValue: []
+    defaultValue: [],
   });
 
   readonly barbers = this.barbersResource.value;
@@ -19,14 +19,16 @@ export class BarberStore {
       return id ? `/api/v1/barbers/${id}/time-off` : undefined;
     },
     {
-      defaultValue: []
-    }
+      defaultValue: [],
+    },
   );
 
   readonly timeOffs = this.timeOffsResource.value;
 
-  readonly isLoading = computed(() => this.barbersResource.isLoading() || this.timeOffsResource.isLoading());
-  
+  readonly isLoading = computed(
+    () => this.barbersResource.isLoading() || this.timeOffsResource.isLoading(),
+  );
+
   readonly errorMessage = computed(() => {
     if (this.barbersResource.error()) return 'Could not load barbers.';
     if (this.timeOffsResource.error()) return 'Could not load time off.';

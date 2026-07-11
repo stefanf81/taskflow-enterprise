@@ -5,7 +5,7 @@ import { ServiceItem } from './appointment.service';
 @Service()
 export class ServiceCatalogStore {
   private readonly servicesResource = httpResource<ServiceItem[]>(() => '/api/v1/catalog', {
-    defaultValue: []
+    defaultValue: [],
   });
 
   readonly services = this.servicesResource.value;

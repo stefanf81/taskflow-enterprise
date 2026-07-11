@@ -4,9 +4,12 @@ import { BarberRating } from './appointment.service';
 
 @Service()
 export class ReviewStore {
-  private readonly ratingsResource = httpResource<BarberRating[]>(() => '/api/v1/reviews/public/barber-ratings', {
-    defaultValue: []
-  });
+  private readonly ratingsResource = httpResource<BarberRating[]>(
+    () => '/api/v1/reviews/public/barber-ratings',
+    {
+      defaultValue: [],
+    },
+  );
 
   readonly ratings = this.ratingsResource.value;
   readonly isLoading = this.ratingsResource.isLoading;

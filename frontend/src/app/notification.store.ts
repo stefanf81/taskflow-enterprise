@@ -4,9 +4,12 @@ import { NotificationItem } from './appointment.service';
 
 @Service()
 export class NotificationStore {
-  private readonly notificationsResource = httpResource<NotificationItem[]>(() => '/api/v1/notifications', {
-    defaultValue: []
-  });
+  private readonly notificationsResource = httpResource<NotificationItem[]>(
+    () => '/api/v1/notifications',
+    {
+      defaultValue: [],
+    },
+  );
 
   readonly notifications = this.notificationsResource.value;
   readonly isLoading = this.notificationsResource.isLoading;
