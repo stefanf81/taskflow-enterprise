@@ -117,6 +117,9 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   **Ben Manes Versions**: Configured dynamic dependency resolution rules to strictly reject unstable package updates (`alpha`, `beta`, `rc`).
     *   **ArchUnit**: Enforced clean code design constraints via package dependency assertions during unit testing to prevent architecture erosion.
     *   **OWASP Vulnerability Scanners**: Configured Gradle to check and break the build on upstream dependencies with known CVE scores `CVSS >= 7` via **Dependency-Check**, paired with automated **OWASP ZAP DAST** scanning against the OpenAPI spec.
+*   **Trivy & Hadolint Container Security**: Automated CI/CD pipelines run **Hadolint** for Dockerfile best-practice enforcement and **Trivy** for deep filesystem and container image vulnerability scanning.
+*   **Prettier**: Enforced strict, automated formatting rules across the frontend codebase to prevent style regressions.
+*   **CI/CD Pipeline Caching**: Maximized CI/CD velocity across GitHub Actions and Jenkins by explicitly caching `npm`, `gradle`, `trivy` databases, and utilizing **Docker BuildKit** multi-arch layer caching.
 
 ---
 
