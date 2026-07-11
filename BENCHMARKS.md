@@ -8,7 +8,7 @@ All benchmarks were run locally on an **Apple M4 Pro (14-Core, AArch64)** utiliz
 
 ## 🛠️ Frameworks & Performance Tweaks Inventory
 
-The **TaskFlow Enterprise** stack is fully optimized across every layer. Below is the comprehensive inventory of the frameworks we utilize and the exact high-performance tunings applied to each:
+The **TaskFlow Enterprise** stack is fully optimized across every layer. Below is the comprehensive, production-grade inventory of the frameworks we utilize and the exact high-performance tunings applied to each:
 
 ### ☕ 1. JVM & Runtime Layer
 *   **OpenJDK 21 (Eclipse Temurin Alpine)**:
@@ -20,54 +20,89 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 
 ### 🍃 2. Spring Boot 3.5.3 Application Layer
 *   **Embedded Apache Tomcat**:
-    *   **Thread Pre-Warming**: Pre-allocated `server.tomcat.threads.min-spare=20` to entirely bypass OS-level thread spawning syscall overhead during sudden high-concurrency traffic bursts.
+    *   **Thread Pre-Warming**: Pre-allocated `server.tomcat.threads.min-spare=20` to entirely bypass OS-level thread spawning overhead during sudden high-concurrency traffic bursts.
     *   **Keep-Alive Optimizations**: Raised threshold to `max-keep-alive-requests=100` and `timeout=60s` to reuse warm TCP connections directly.
 *   **Spring Boot 3.5 AOT (Ahead-of-Time)**:
     *   Compiled bean metadata into static Java classes (`./gradlew processAot`) to bypass expensive runtime reflection and dynamic proxy generation.
+*   **Spring Security & stateless JWT**:
+    *   **Asymmetric Cryptography**: Standardized on RSA-2048 signing/verification using asymmetric key-pairs (`app.rsa.private-key` / `public-key`).
+    *   **Zero-Trust Session Isolation**: Enforced stateless token authentication via session storage in the frontend, attaching authorization headers dynamically. Restricted all routes except public `/api/v1/auth/**`.
+*   **Flyway Database Migrations**:
+    *   Managed schema evolution explicitly via versioned migration SQL files under `src/main/resources/db/migration/`, disabling runtime `ddl-auto=update` to prevent schema drift.
+*   **Spring Cache & Redis 7.2 Integration**:
+    *   **Caffeine Cache**: Leveraged as a lightning-fast local cache for in-memory reads during development/testing.
+    *   **Redis (Production)**: Centralized caching layer using high-performance connection pools in production (`spring.cache.type=redis`) to isolate heavy workloads.
+*   **API Protection & Security Hardening**:
+    *   **Rate Limiting**: Enforced bulletproof rate-limiting in production (`app.rate-limit.enabled=true`) to block DDoS/runaway crawlers.
+    *   **CORS Safeguards**: Strict domain restrictions (`app.cors.allowed-origins`) configured to block unauthorized domains.
+    *   **Error Exposure Reduction**: Configured `server.error.include-stacktrace=never` and `include-message=never` for secure error shielding in production.
+
+### 📦 3. Serialization & Socket I/O
 *   **Jackson JSON Library**:
     *   **Jackson Blackbird (`jackson-module-blackbird`)**: Enabled ASM bytecode-generation for DTO serialization, bypassing slow Java Reflection.
     *   **Serialization Traps Avoided**: Preserved raw numeric timestamps over expensive CPU-bound ISO-8601 string conversions.
 *   **Netty (Off-Heap Buffers)**:
     *   Custom pooling alignment (`io.netty.allocator.useCacheForAllThreads=true`) to enable Tomcat threads to reuse pooled thread-local buffers during Redis cache transactions, completely avoiding global Netty allocator lock contentions.
-*   **Observability**:
-    *   OpenTelemetry sampling rate tuned to **10%** (`management.tracing.sampling.probability=0.1`) to achieve statistical coverage while reclaiming ~2% tracing overhead.
-*   **Gzip Compression**:
-    *   Enforced dynamic HTTP response compression on all high-density payloads (`>1024` bytes) across text, JSON, and CSS MIME types.
 
-### 🗄️ 3. Database, JPA & Connection Pooling Layer
+### 🗄️ 4. Database, JPA & Connection Pooling Layer
 *   **PostgreSQL 17 (Alpine)**:
     *   **Memory Architecture Tuning**: Configured `shared_buffers=256MB` (25% system RAM), `effective_cache_size=768MB` (75% RAM), `work_mem=16MB` (for sorting and hash joins in memory), and `maintenance_work_mem=256MB` (for vacuuming).
     *   **Write & WAL Tuning**: Enforced `wal_buffers=16MB`, `checkpoint_completion_target=0.9` (spreading write I/O over 15-minute intervals), and `wal_compression=on`.
     *   **Storage Access Tuning**: Reduced `random_page_cost=1.1` and raised `effective_io_concurrency=200` to inform the planner of NVMe flash speeds, forcing index scans over sequential disk sweeps.
     *   **Observability**: Integrated `pg_stat_statements` preloaded extension for global slow-query logging.
     *   **Parallel Maintenance**: Sized `max_parallel_maintenance_workers=4` for parallel index vacuuming.
-*   **Hibernate 6**:
+*   **Hibernate 6 (JPA)**:
     *   **AST Cache Sizing**: Bounded Query Plan Cache to `plan_cache_max_size=4096` to eliminate AST compiler thrashing.
     *   **IN-Clause Parameter Padding**: Enabled power-of-2 parameter list padding (`in_clause_parameter_padding=true`) to reuse prepared query plans on the database regardless of array sizes.
     *   **Batch Write Performance**: Batched CRUD statements (`jdbc.batch_size=50`, `order_inserts=true`, `order_updates=true`) rewritten as bulk operations via PostgreSQL URL `reWriteBatchedInserts=true`.
     *   **Stream Loading**: Sized `jdbc.fetch_size=50` to pull large lists in chunked streams.
     *   **Safeguards**: Hardcoded JPA query timeout (`javax.persistence.query.timeout=5000` ms) to stop runaway queries.
-*   **HikariCP**:
+*   **HikariCP Connection Pool**:
     *   Optimal connection boundaries (`maximum-pool-size=25`, `minimum-idle=10`) with zero-overhead leak detection logging (`leak-detection-threshold=2000` ms).
     *   Disabled Open Session in View (OSIV) to release connection resources back to the pool instantly after transactions close.
+*   **H2 Database Engine**:
+    *   Configured as a high-speed, in-memory database during local execution and testing profiles (`H2Dialect`), restricting console access safely to localhost.
 
-### 🅰️ 4. Angular 22 Frontend Layer
+### 🅰️ 5. Angular 22 Frontend Layer
 *   **Zoneless Change Detection**:
     *   Replaced Zone.js digest loop entirely with Angular 22 **Signals** (`provideZonelessChangeDetection()`), driving native, high-performance UI updates.
 *   **Code Splitting & Preloading**:
-    *   Granular page and feature chunking (`loadComponent()` / `loadChildren()`) combined with aggressive background preloading (`withPreloading(PreloadAllModules)`) for immediate page navigations.
+    *   Granular page and feature chunking (`loadComponent()` / `loadChildren()`) combined with aggressive background preloading (`withPreloading(PreloadAllModules)`) for immediate route navigations.
 *   **Deferrable Views**:
     *   Used `@defer` blocks to dynamically lazy-load heavy in-page elements only when idle.
 *   **Build Budget Regression Guards**:
     *   Enforced rigorous build failure boundaries in `angular.json` for initial total (`1MB` limit) and individual lazy chunks (`400kB` warning, `600kB` error) to automatically catch bundle bloat in CI.
+*   **Tailwind CSS**:
+    *   Integrated utility-first CSS compilation with custom `gold`/`obsidian` color mapping, delivering dynamic style bundles compiled in a single esbuild pass.
 
-### 🐳 5. Proxy, Container & Host Layer
+### 🔭 6. Observability & Monitoring
+*   **Spring Boot Actuator**:
+    *   Exposed native health check probes (`/actuator/health/liveness`, `readiness`) integrated with orchestrator state machines, and a dedicated `/actuator/prometheus` endpoint.
+*   **OpenTelemetry Tracing**:
+    *   Integrated OTel 1.64.0 tracing with a 10% sampling probability (`management.tracing.sampling.probability=0.1`) to achieve robust coverage while stripping only ~0.7% overhead.
+*   **Jaeger Server & Micrometer**:
+    *   Collected traces via a Dockerized Jaeger `1.57` backend with trace propagation, mapped to Prometheus/Micrometer metrics.
+
+### 🐳 7. Proxy, Containers, Testing & CI/CD
 *   **Nginx (Alpine-Unprivileged)**:
     *   **Elite Upstream Connection Pooling**: Enforced permanent persistent connection reuse (`upstream { keepalive 64; }`) to completely bypass the 3-way TCP handshake latency between Nginx and the backend.
     *   **Socket Optimization**: Enabled kernel zero-copy transfer (`sendfile on`), aggregated packet transfers (`tcp_nopush on`), and disabled Nagle's algorithm (`tcp_nodelay on`) to deliver JSON payloads instantly.
-*   **Container Hardening**:
+*   **Zero-Trust Containers Hardening**:
     *   Hardened via non-root UIDs (`10001:10001`), completely dropped Linux capabilities (`cap_drop: [ALL]`), read-only root filesystems, and ephemeral `/tmp` paths mapped as RAM-backed `tmpfs` mounts.
     *   `tini` configured as PID 1 to reap zombie processes safely.
+*   **Docker Multi-Network Isolation**:
+    *   Isolated database traffic natively by creating independent `backend-tier` and `frontend-tier` virtual bridges. The client frontend can never physically establish a network path to the database.
+*   **Kubernetes (k3d Cluster)**:
+    *   Assembled a strict security context profile with restricted pod capabilities, network policies mapping isolated namespace routes, and automated probe-driven rollouts.
+*   **Vitest & Playwright Testing Suites**:
+    *   Managed browser-less unit tests under Angular via Vitest (JSDom) and robust end-to-end user journeys using headless Playwright.
+*   **Testcontainers (PostgreSQL)**:
+    *   Leveraged real Dockerized PostgreSQL database containers within Spring Boot integration test environments to guarantee perfect schema/SQL execution parity during compilation.
+*   **ArchUnit Architecture Assertions**:
+    *   Enforced clean code design constraints via package dependency assertions during unit testing to prevent architecture erosion.
+*   **OWASP Vulnerability Scanners**:
+    *   **Dependency-Check**: Configured Gradle to check and break the build on upstream dependencies with known CVE scores `CVSS >= 7`.
+    *   **OWASP ZAP DAST**: Implemented automated Dynamic Application Security Testing scanning against the OpenAPI specification.
 
 ---
 
