@@ -304,5 +304,52 @@ By setting `spring.jpa.properties.hibernate.query.in_clause_parameter_padding=tr
 
 ---
 
+## 🐘 25. PostgreSQL Production Memory, Checkpoint & WAL Tuning
+**Goal:** Close the single largest gap found when comparing our stack to top production-tuning guides (PostgreSQL official docs, AWS RDS tuning guide, r/PostgreSQL, Elysiate, *Advanced PostgreSQL 17 Tuning at Scale*).
+
+| Parameter | Previous | New (1 GB / 2 vCPU container) | Why |
+| :--- | :--- | :--- | :--- |
+| `shared_buffers` | default (128MB) | `256MB` (25% RAM) | PostgreSQL's own cache; keeps hot pages in memory |
+| `effective_cache_size` | default | `768MB` (75% RAM) | Planner hint → favours index scans over seq scans |
+| `work_mem` | default (4MB) | `16MB` | Sorts/hashes in memory; kept low for OLTP + 25-conn pool |
+| `maintenance_work_mem` | default (64MB) | `256MB` | Faster VACUUM / `CREATE INDEX` (PG17 TID store improvement) |
+| `wal_buffers` | default | `16MB` | Lower WAL write latency |
+| `checkpoint_completion_target` | `0.5` | `0.9` | Spreads checkpoint I/O, eliminates spikes |
+| `checkpoint_timeout` | `5min` | `15min` | Fewer checkpoints under load |
+| `wal_compression` | off | `on` | Smaller WAL, less disk I/O |
+| `max_wal_size` | `1GB` | `1GB` (made explicit) | Raised under heavy write load |
+| `random_page_cost` | `4.0` | `1.1` | NVMe/SSD → index scans competitive with seq scans |
+| `effective_io_concurrency` | `1` | `200` | Parallelise buffered I/O on fast storage |
+| `shared_preload_libraries` | — | `pg_stat_statements` | Slow-query observability |
+| `log_min_duration_statement` | — | `1000ms` | Log queries slower than 1s |
+| `autovacuum_work_mem` | inherits | `128MB` | Dedicated autovacuum memory |
+
+**Verdict:** Our previous deployment only set `max_parallel_maintenance_workers=4`. Every authoritative source agrees the memory/checkpoint/WAL knobs above are the difference between a laptop-default Postgres and a production-tuned one. Values are sized to our container's 1 GB RAM / 2 vCPU limit and **validated to start cleanly** (`database system is ready to accept connections`, no `could not access file` for `pg_stat_statements`). These are *configuration-hardening recommendations, not in-process throughput benchmarks* — confirm under real production load by watching `pg_stat_statements`, `pg_stat_io`, and checkpoint frequency.
+
+---
+
+## 🔧 26. Hibernate Fetch Size, Query Timeout & Production Hardening
+**Goal:** Apply the remaining JPA-level safeguards recommended across top Spring Boot production checklists (Engineering Unfiltered "12 settings", TheLinuxCode, Towards AI).
+
+- `hibernate.jdbc.fetch_size=50` — streams large result sets from Postgres in batches instead of row-by-row.
+- `javax.persistence.query.timeout=5000` — global 5s safety net so a runaway query cannot pin a HikariCP connection indefinitely.
+- `hibernate.jdbc.lob.non_contextual_creation=true` — removes per-Lob contextual proxy overhead.
+- `server.error.include-stacktrace=never` / `server.error.include-message=never` — production hardening so error responses never leak internals.
+
+---
+
+## 🅰️ 27. Angular Per-Chunk Bundle Budget
+**Goal:** Extend the Angular build budget guard (top Angular 22 perf blogs) beyond the initial bundle and component styles.
+
+| Budget | Previous | New |
+| :--- | :--- | :--- |
+| `initial` | 500kB warn / 1MB err | unchanged |
+| `anyComponentStyle` | 20kB / 50kB | unchanged |
+| `any` (per lazy chunk) | *none* | **400kB warn / 600kB err** (sized above our 396kB `main` entry chunk so it guards lazy chunks, not the initial bundle) |
+
+**Verdict:** Without an `any` budget, a single bloated lazy-loaded chunk can slip through CI unnoticed. The new guard fails the production build if any individual chunk exceeds 600kB (warning at 400kB), catching regressions (e.g. a heavy dependency pulled into one route) before merge. Threshold is sized above our 396kB entry `main` chunk so it guards lazy chunks rather than the legitimate initial bundle.
+
+---
+
 ### 🎉 Final Result
 The **TaskFlow Enterprise** stack is fully optimized across every single layer of the OSI model, representing the absolute pinnacle of full-stack engineering.

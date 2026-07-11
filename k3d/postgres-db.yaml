@@ -19,7 +19,37 @@ spec:
         - name: postgres
           image: postgres:17-alpine
           imagePullPolicy: IfNotPresent
-          args: ["-c", "max_parallel_maintenance_workers=4"]
+          args:
+            - "-c"
+            - "max_parallel_maintenance_workers=4"
+            - "-c"
+            - "shared_buffers=256MB"
+            - "-c"
+            - "effective_cache_size=768MB"
+            - "-c"
+            - "work_mem=16MB"
+            - "-c"
+            - "maintenance_work_mem=256MB"
+            - "-c"
+            - "wal_buffers=16MB"
+            - "-c"
+            - "checkpoint_completion_target=0.9"
+            - "-c"
+            - "checkpoint_timeout=15min"
+            - "-c"
+            - "wal_compression=on"
+            - "-c"
+            - "max_wal_size=1GB"
+            - "-c"
+            - "random_page_cost=1.1"
+            - "-c"
+            - "effective_io_concurrency=200"
+            - "-c"
+            - "shared_preload_libraries=pg_stat_statements"
+            - "-c"
+            - "log_min_duration_statement=1000"
+            - "-c"
+            - "autovacuum_work_mem=128MB"
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
