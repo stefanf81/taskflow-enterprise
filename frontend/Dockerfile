@@ -1,6 +1,11 @@
 # Production Nginx Runtime Stage (Security Hardened Non-Root)
 FROM nginxinc/nginx-unprivileged:alpine
 
+USER root
+# Upgrade Alpine packages to resolve CVEs / security vulnerabilities
+RUN apk update && apk upgrade --no-cache
+USER 101
+
 # Copy static assets from the pre-built dist directory on host
 COPY dist/frontend/browser /usr/share/nginx/html
 
