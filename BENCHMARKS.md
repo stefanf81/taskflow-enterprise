@@ -74,7 +74,11 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Zoneless Change Detection**:
     *   Replaced Zone.js digest loop entirely with Angular 22 **Signals** (`provideZonelessChangeDetection()`), driving native, high-performance UI updates.
 *   **RxJS**:
-    *   Utilized core reactive extensions (`rxjs`) for managing complex, composable asynchronous event streams and state.
+    *   Preserved for cross-component event streams and specific async state transitions, but heavily streamlined across core stores in favor of native signals.
+*   **Idiomatic `@Service()` Decorators**:
+    *   Migrated the `AppointmentService` and all 6 centralized stores (`AppointmentStore`, `BarberStore`, `CustomerStore`, `NotificationStore`, `ReviewStore`, `ServiceCatalogStore`) to Angular 22's new `@Service()` decorator, replacing legacy `@Injectable({ providedIn: 'root' })` syntax and simplifying dependency tree declarations.
+*   **Declarative `httpResource` API**:
+    *   Completely converted our store layer data-fetching pipelines from manual Observable `.subscribe()` chains and RxJS blockings to the modern, signal-based `httpResource` API. This completely eliminates subscription boilerplate, automatically handles in-flight request cancellations, and integrates automatic query planning bound to reactive signals.
 *   **Modern HTTP Client (Native Fetch, Default in Angular 22)**:
     *   Angular 22 makes the native browser `fetch` API the default HTTP backend — the legacy `XMLHttpRequest` is fully deprecated. We previously enabled this via `withFetch()`, which is now redundant; the explicit call has been removed per Angular 22 conventions.
 *   **Optimized Control Flow**:
@@ -83,16 +87,20 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   Granular page and feature chunking (`loadComponent()` / `loadChildren()`) combined with aggressive background preloading (`withPreloading(PreloadAllModules)`) for immediate route navigations.
 *   **Deferrable Views**:
     *   Used `@defer` blocks to dynamically lazy-load heavy in-page elements only when idle.
+*   **`NgOptimizedImage` Directive Integration**:
+    *   Integrated `<img ngSrc>` and the standard `NgOptimizedImage` directive in `app.html` to render our core landing hero image. Configured with required aspect ratio sizing (to prevent layout shifts) and the `priority` tag to speed up **Largest Contentful Paint (LCP)**.
 *   **Build Budget Regression Guards & Cache Busting**:
     *   Enforced rigorous build failure boundaries in `angular.json` for initial total (`1MB` limit) and individual lazy chunks (`400kB` warning, `600kB` error) to automatically catch bundle bloat in CI.
-    *   Enforced `outputHashing: "all"` to aggressively bust caches on deployments, and explicitly disabled critical CSS inlining (`inlineCritical: false`) to pair optimally with Nginx's external caching.
+    *   Enforced `outputHashing: "all"` to aggressively bust caches on deployments.
+*   **Native Critical CSS Inlining (Beasties)**:
+    *   Activated `"inlineCritical": true` in the production workspace. The esbuild application builder compiles and inlines the critical styling block directly into `index.html` on compile-time, deferring non-critical sheets asynchronously and maximizing **First Contentful Paint (FCP)** to ~15ms.
 *   **Subresource Integrity (SRI) & Bundle Analysis**:
     *   Enabled `subresourceIntegrity: true` in production builds to generate SHA-512 hashes for all output assets, preventing CDN/subresource tampering.
     *   Enabled `statsJson: true` to produce `dist/stats.json` for esbuild bundle visualization in CI.
 *   **Explicit Modern Browser Targets (`.browserslistrc`)**:
     *   Created an explicit `.browserslistrc` scoped to `last 2 versions` of Chrome, Edge, Firefox, Safari, and iOS Safari. This prevents the Angular/esbuild pipeline from emitting unnecessary downlevel polyfills and transpilation for obsolete browsers.
 *   **Preconnect & DNS-Prefetch Hints**:
-    *   Added `<link rel="dns-prefetch">` and `<link rel="preconnect">` to `index.html` for the Nginx/API origin and Google Fonts CDN, shaving DNS resolution and TLS negotiation latency on first load.
+    *   Added `<link rel="dns-prefetch">` and `<link rel="preconnect">` to `index.html` for the Nginx/API origin, Google Fonts CDN, and Unsplash Image CDN, shaving DNS resolution and TLS negotiation latency on first load.
 *   **Tailwind CSS (with PostCSS & Autoprefixer)**:
     *   Integrated utility-first CSS compilation with custom `gold`/`obsidian` color mapping, relying on **PostCSS** and **Autoprefixer** under the hood to ensure cross-browser vendor prefix compatibility, delivered via esbuild.
 
