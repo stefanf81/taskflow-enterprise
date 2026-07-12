@@ -1,7 +1,7 @@
 # =========================================================================================
 # STAGE 1: LAYER EXTRACTION
 # =========================================================================================
-FROM eclipse-temurin:21-jdk AS builder
+FROM eclipse-temurin:21-jre-alpine AS builder
 
 WORKDIR /app
 
@@ -16,11 +16,15 @@ WORKDIR /app
 #   RUN --mount=type=cache,target=/root/.gradle ./gradlew bootJar
 #
 # This prevents Gradle from re-downloading libraries on every build iteration.
+#
+# WARNING: The glob below must match exactly ONE jar. If both the bootJar and
+# the -plain.jar variant are present (e.g. after `./gradlew build` instead of
+# `./gradlew bootJar`), this COPY command will fail. Only the bootJar should
+# be in build/libs/ before building this image.
 COPY build/libs/*.jar /app/app.jar
 
 # Extract layers using the Spring Boot jar tools mode
-RUN --mount=type=cache,target=/tmp \
-    java -Djarmode=tools -jar /app/app.jar extract --layers --launcher --destination extracted
+RUN java -Djarmode=tools -jar /app/app.jar extract --layers --launcher --destination extracted
 
 # =========================================================================================
 # STAGE 2: PRODUCTION RUNTIME STAGE
@@ -34,8 +38,12 @@ WORKDIR /app
 # Install tini as PID 1 for proper signal handling and zombie reaping.
 # Create a fixed non-root user (UID/GID 10001) for compatibility with
 # Kubernetes Pod Security Standards.
-RUN apk update && apk upgrade --no-cache \
-    && addgroup -g 10001 -S appgroup \
+#
+# NOTE: `apk upgrade` is intentionally omitted — the base image
+# (eclipse-temurin:21-jre-alpine) is already kept up to date by the image
+# maintainer, and running upgrade inside the Dockerfile would make builds
+# non-reproducible by pulling unpredictable package versions.
+RUN addgroup -g 10001 -S appgroup \
     && adduser -u 10001 -S appuser -G appgroup \
     && apk add --no-cache tini
 
@@ -46,12 +54,38 @@ COPY --link --from=builder --chown=10001:10001 /app/extracted/spring-boot-loader
 COPY --link --from=builder --chown=10001:10001 /app/extracted/snapshot-dependencies/ ./
 COPY --link --from=builder --chown=10001:10001 /app/extracted/application/ ./
 
-# Perform a Class Data Sharing (CDS) training run
+# Build a JVM Class Data Sharing (CDS) archive.
+#
+# Uses PropertiesLauncher with -Dloader.main to delegate to
+# CdsTrainingApplication (com.example.cdstraining), which sits outside the
+# production component-scan hierarchy and excludes infrastructure that
+# requires external services (database, Redis, etc.), so this runs
+# successfully during docker build before any containers are started.
+#
+# PropertiesLauncher is used instead of JarLauncher because it supports
+# the loader.main property for specifying an alternative main class.
+#
+# Disable components that are irrelevant during CDS training to keep the
+# startup minimal and fast:
+#   - spring.aot.enabled=false              : Skip AOT-optimized path (training uses
+#                                             a different class-loading profile)
+#   - spring.cache.type=none                 : Don't attempt Redis connection
+#   - management.otlp.tracing.export.enabled=false : Don't attempt OTLP export
+#   - app.cds-training=true                  : Skips the admin-user CommandLineRunner
+#
+# spring.context.exit=onRefresh terminates the application immediately after
+# the Spring context has fully initialized, allowing CDS to observe a complete
+# startup without leaving a server running during the Docker build.
 RUN java -XX:ArchiveClassesAtExit=application.jsa \
+         -Dspring.aot.enabled=false \
+         -Dloader.main=com.example.cdstraining.CdsTrainingApplication \
          -Dspring.context.exit=onRefresh \
+         -Dapp.cds-training=true \
          -Dspring.flyway.enabled=false \
-         -Dspring.jpa.hibernate.ddl-auto=none \
-         org.springframework.boot.loader.launch.JarLauncher \
+         -Dspring.cache.type=none \
+         -Dmanagement.otlp.tracing.export.enabled=false \
+         org.springframework.boot.loader.launch.PropertiesLauncher \
+    && test -s application.jsa \
     && chown 10001:10001 application.jsa
 
 # Drop root privileges.
@@ -60,46 +94,70 @@ USER 10001:10001
 EXPOSE 8080
 
 # =========================================================================================
-# JVM TUNING (Apple M4 Pro / Local Throughput Benchmarking)
+# JVM TUNING (Container-Portable Heap Sizing)
 #
 # -Dspring.aot.enabled=true  : Enables Spring Boot's Ahead-of-Time generated classes,
 #                              reducing startup overhead by avoiding runtime reflection.
 #
-# -Xms1g -Xmx1g              : Fixes the heap size at 1 GB, eliminating runtime heap
-#                              expansion and contraction during benchmarking.
+# -XX:InitialRAMPercentage=50.0
+# -XX:MaxRAMPercentage=75.0
 #
-# -XX:+UseParallelGC         : Uses the throughput-oriented Parallel Garbage Collector.
-#                              Retained because benchmarking showed it performs better
-#                              for this workload than the default G1 collector.
-#
-# -XX:+AlwaysPreTouch        : Commits and touches the entire heap during startup,
-#                              trading slower startup for more predictable steady-state
-#                              memory access and fewer first-touch page faults.
+#   These replace the old fixed -Xms1g / -Xmx1g so the same image adapts to any
+#   container memory limit (2 GB, 4 GB, 16 GB, ...) without a rebuild.
+#   75% leaves headroom for metaspace, thread stacks, direct memory, and other
+#   native JVM overhead so the container's RSS stays below its cgroup limit.
 #
 # -XX:MaxDirectMemorySize    : Caps Netty's off-heap direct buffers (Lettuce Redis
 #                              client + OpenTelemetry). Without this the JVM default
-#                              lets direct memory track the heap size and the container
-#                              RSS blows past -Xmx and hits the cgroup limit.
+#                              lets direct memory track the heap size and the
+#                              container RSS blows past -Xmx and hits the cgroup
+#                              limit.
 #
-# -XX:MaxMetaspaceSize       : Caps class-metadata memory so a long-running container
-#                              cannot slowly creep upward.
+# -XX:MaxMetaspaceSize       : Caps class-metadata memory so a long-running
+#                              container cannot slowly creep upward.
 #
-# -XX:+ExitOnOutOfMemoryError: Terminates immediately on OOM so failures are explicit
-#                              instead of leaving the JVM in an unstable state.
+# -XX:+ExitOnOutOfMemoryError: Terminates immediately on OOM so failures are
+#                              explicit instead of leaving the JVM in an unstable
+#                              state.
+#
+# Garbage Collector
+#
+# No collector is explicitly selected — JDK 21 defaults to G1GC.
+#
+# G1 targets predictable pause times (approximately 200 ms by default via
+# MaxGCPauseMillis) rather than maximizing raw throughput, making it a sensible
+# default for request/response services where latency generally matters more
+# than peak requests per second.
+#
+# ParallelGC was previously used here because local benchmarking on Apple M4 Pro
+# showed higher throughput numbers. However, inside Kubernetes containers the
+# workload is server-style (mixed young/old GC, variable request rates) where
+# G1's adaptive heuristics and pause-time control serve the application better.
+# The throughput advantage of ParallelGC on a 14-core laptop does not translate
+# to a contended container CPU-share in production.
+#
+# Deliberately NOT configured
+# ---------------------------
+#
+# -XX:+AlwaysPreTouch
+#
+#   Pretouching commits the entire initial heap during startup, which means every
+#   pod restart pays a measurable latency cost before serving traffic. In Kubernetes
+#   where pods are recycled regularly (rollouts, scaling events, node drains), fast
+#   startup matters more than shaving a few microseconds off the first request's
+#   page faults. Spring AOT and CDS already handle the bulk of startup optimisation.
 # =========================================================================================
 ENTRYPOINT ["/sbin/tini", "--", "java"]
 
 # Replace the shell with direct JVM execution.
 CMD [ \
     "-Dspring.aot.enabled=true", \
-    "-Xms1g", \
-    "-Xmx1g", \
-    "-XX:+UseParallelGC", \
+    "-XX:InitialRAMPercentage=50.0", \
+    "-XX:MaxRAMPercentage=75.0", \
     "-XX:MaxDirectMemorySize=256m", \
     "-XX:MaxMetaspaceSize=256m", \
-    "-XX:+AlwaysPreTouch", \
     "-XX:+ExitOnOutOfMemoryError", \
     "-XX:SharedArchiveFile=application.jsa", \
-    "-Xshare:on", \
+    "-Xshare:auto", \
     "org.springframework.boot.loader.launch.JarLauncher" \
 ]

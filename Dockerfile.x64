@@ -1,119 +1,295 @@
 # =========================================================================================
-# STAGE 1: LAYER EXTRACTION
-# linux/amd64 is pinned explicitly so builds on Apple Silicon cross-compile via QEMU
-# to match the target cloud runtime, rather than producing arm64 binaries.
+#
+# Production Spring Boot image
+#
+# Design goals:
+#
+# • Fast incremental Docker builds through layered Spring Boot extraction.
+# • Fast cold starts using Spring AOT and JVM Class Data Sharing (CDS).
+# • Container-portable JVM tuning that adapts automatically to runtime limits.
+# • Kubernetes-friendly runtime (non-root, fixed UID/GID, proper PID 1).
+# • Small production runtime image containing only the JRE and application.
+#
 # =========================================================================================
+
+# =========================================================================================
+# STAGE 1: LAYER EXTRACTION
+#
+# linux/amd64 is pinned explicitly so builds on Apple Silicon cross-compile via
+# QEMU to match the target cloud runtime rather than accidentally producing
+# arm64 binaries.
+# =========================================================================================
+
 ARG PLATFORM=linux/amd64
+
 FROM --platform=$PLATFORM eclipse-temurin:21-jdk AS builder
+
 WORKDIR /app
 
-# Copy the pre-built jar from the build context.
+# Copy the pre-built executable Spring Boot jar from the build context.
 #
-# NOTE on Build Performance:
-# This project separates compilation (CI runner) from packaging (Docker build).
-# If you ever decide to move the entire Gradle compilation inside this Dockerfile
-# (a "monolithic" multi-stage build), ensure you leverage BuildKit cache mounts
-# to cache the downloaded dependencies and compiler plugins:
+# NOTE on build performance:
 #
-#   RUN --mount=type=cache,target=/root/.gradle ./gradlew bootJar
+# This project intentionally separates compilation (performed by the CI runner)
+# from packaging (performed by Docker). Java dependencies have already been
+# resolved before the Docker build begins, keeping image creation fast.
 #
-# This prevents Gradle from re-downloading libraries on every build iteration.
+# If compilation is ever moved into this Dockerfile (a monolithic multi-stage
+# build), leverage BuildKit cache mounts so Gradle dependencies and compiler
+# plugins survive between builds:
+#
+#     RUN --mount=type=cache,target=/root/.gradle ./gradlew bootJar
+#
+# Without the cache mount Gradle will download dependencies from scratch on
+# every build, significantly increasing build times.
+
 COPY build/libs/*.jar /app/app.jar
 
-# Extract layers using the Spring Boot jar tools mode
+# Extract the executable Spring Boot jar into deterministic Docker layers.
+#
+# Separating framework dependencies, snapshot dependencies, the Spring Boot
+# loader and application classes maximizes Docker layer cache reuse.
+# Changes to application code typically invalidate only the top application
+# layer instead of forcing the entire image to be rebuilt.
+
 RUN --mount=type=cache,target=/tmp \
-    java -Djarmode=tools -jar /app/app.jar extract --layers --launcher --destination extracted
+    java \
+        -Djarmode=tools \
+        -jar /app/app.jar \
+        extract \
+        --layers \
+        --launcher \
+        --destination extracted
 
 # =========================================================================================
-# STAGE 2: RUNTIME STAGE
+# STAGE 2: RUNTIME
 # =========================================================================================
+
 FROM --platform=$PLATFORM eclipse-temurin:21-jre-alpine
+
 WORKDIR /app
 
-# tini for proper PID 1 / zombie reaping; fixed numeric UID/GID for Kubernetes
-# Pod Security Standards (no root, no dynamically-assigned UID).
-RUN apk update && apk upgrade --no-cache \
-    && addgroup -g 10001 -S appgroup \
-    && adduser -u 10001 -S appuser -G appgroup \
-    && apk add --no-cache tini
+# Install tini and create a dedicated non-root runtime user.
+#
+# Running Java under tini ensures PID 1 correctly forwards Unix signals and
+# reaps orphaned child processes, avoiding the shutdown and zombie-process
+# issues that occur when applications run directly as PID 1 inside containers.
+#
+# A fixed numeric UID/GID is used instead of dynamically allocated IDs. This
+# avoids permission mismatches on mounted volumes and satisfies Kubernetes Pod
+# Security Standards requiring non-root containers.
+
+RUN apk add --no-cache tini \
+ && addgroup -g 10001 -S appgroup \
+ && adduser -u 10001 -S appuser -G appgroup
+
+# Copy the extracted layers in dependency order.
+#
+# BuildKit's --link avoids unnecessary filesystem copies between layers,
+# reducing build I/O while allowing better layer reuse.
+#
+# Lower layers (framework dependencies) change infrequently and therefore stay
+# cached across most builds, while application classes occupy the top layer and
+# are rebuilt most often.
 
 COPY --link --from=builder --chown=10001:10001 /app/extracted/dependencies/ ./
 COPY --link --from=builder --chown=10001:10001 /app/extracted/spring-boot-loader/ ./
 COPY --link --from=builder --chown=10001:10001 /app/extracted/snapshot-dependencies/ ./
 COPY --link --from=builder --chown=10001:10001 /app/extracted/application/ ./
 
-# Perform a Class Data Sharing (CDS) training run
-RUN java -XX:ArchiveClassesAtExit=application.jsa \
-         -Dspring.context.exit=onRefresh \
-         -Dspring.flyway.enabled=false \
-         -Dspring.jpa.hibernate.ddl-auto=none \
-         org.springframework.boot.loader.launch.JarLauncher \
-    && chown 10001:10001 application.jsa
+# Build a JVM Class Data Sharing (CDS) archive.
+#
+# The application is started once during the image build so the JVM records the
+# classes actually loaded during startup. That archive is reused at runtime
+# (-Xshare:auto), reducing class-loading work and improving cold-start latency.
+#
+# spring.context.exit=onRefresh terminates the application immediately after
+# the Spring context has fully initialized, allowing CDS to observe a complete
+# startup without leaving a server running during the Docker build.
+#
+#This keeps the training startup deterministic and independent of external
+#infrastructure while still loading the majority of framework classes needed
+#for production startup.
+#
+# NOTE:
+#
+# The CDS archive is generated during image build, not container startup. This
+# intentionally shifts startup work left into the build pipeline so every
+# deployed container benefits from faster cold starts without paying the CDS
+# training cost repeatedly.
+
+RUN java \
+    -XX:ArchiveClassesAtExit=application.jsa \
+    -Dspring.aot.enabled=false \
+    -Dloader.main=com.example.cdstraining.CdsTrainingApplication \
+    -Dspring.context.exit=onRefresh \
+    -Dapp.cds-training=true \
+    -Dspring.flyway.enabled=false \
+    -Dspring.cache.type=none \
+    -Dmanagement.otlp.tracing.export.enabled=false \
+    org.springframework.boot.loader.launch.PropertiesLauncher \
+ && test -s application.jsa \
+ && chown 10001:10001 application.jsa
 
 USER 10001:10001
 
 EXPOSE 8080
 
-# [JVM TUNING: container-portable]
+# =========================================================================================
+# JVM TUNING
 #
-# -Dspring.aot.enabled=true   : use AOT-generated classes, skip reflection at startup.
+# These options are intentionally chosen to remain portable across different
+# Kubernetes nodes and container memory limits rather than being tuned for a
+# single machine.
 #
-# -XX:MaxRAMPercentage=75.0   : heap sized from the container's *actual* memory limit
-#                               (cgroup-aware since JDK 10+), rather than a fixed -Xmx
-#                               that's only correct on the one host it was tuned for.
+# Startup strategy:
 #
-#  -XX:+ExitOnOutOfMemoryError : fail fast and let the orchestrator restart the pod.
+# Spring AOT removes much of Spring's runtime reflection, bean discovery and
+# proxy generation, while JVM Class Data Sharing (CDS) reduces the JVM's own
+# class-loading overhead. They optimize different parts of startup and therefore
+# complement rather than replace one another.
 #
-#  -XX:MaxDirectMemorySize / -XX:MaxMetaspaceSize
-#     Cap off-heap memory. MaxRAMPercentage only bounds the *heap*; the Redis client
-#     (Lettuce, Netty-based) and OpenTelemetry allocate native direct buffers that are
-#     NOT part of -Xmx. Left uncapped the container RSS runs well past the heap and
-#     into the cgroup limit. 256m each is ample for this workload's connection counts.
+# =========================================================================================
+
 #
-# No explicit GC algorithm is selected, which means G1 (the JDK 21 default since JDK 9)
-# is what actually runs here. G1 targets a max pause time (~200ms via MaxGCPauseMillis)
-# rather than pure throughput, which fits a request/response service where p99 latency
-# matters more than raw RPS. If this service is actually throughput-bound rather than
-# latency-sensitive, add back -XX:+UseParallelGC explicitly instead of relying on this
-# default — don't leave the choice implicit either way.
+# -Dspring.aot.enabled=true
 #
-# Deliberately NOT set, and why:
+# Enables the Ahead-of-Time (AOT) optimizations generated during the build.
+# Instead of discovering many beans and reflective access paths during startup,
+# Spring uses pre-generated code, reducing startup time and memory usage.
 #
-#  -XX:ParallelGCThreads / -XX:UseAVX
-#     These were pinned to one specific dev CPU (physical core count, AVX level).
-#     In the cloud the container's actual CPU allocation varies by node/instance type,
-#     so a fixed thread count either starves or oversubscribes the GC, and forcing an
-#     AVX level risks a SIGILL on hardware that doesn't support it. The JVM already reads
-#     the container's cgroup CPU limit at startup and sizes GC threads accordingly —
-#     let it.
+# -----------------------------------------------------------------------------
+
 #
-#  -XX:+AlwaysPreTouch
-#     Pretouches the heap up to -Xms at startup, trading slower startup for fewer
-#     page-fault pauses on first traffic. Left off here because this image is built
-#     around fast AOT startup (processAot) and is expected to scale up/restart
-#     frequently; the cold-start cost isn't worth it unless this becomes a long-lived,
-#     rarely-restarted service where steady-state tail latency matters more than
-#     startup time — in which case re-add this AND set -XX:InitialRAMPercentage equal
-#     to MaxRAMPercentage (otherwise it only pretouches the JVM's small default
-#     initial heap, not the real one).
+# -XX:MaxRAMPercentage=75.0
 #
-#  -XX:-UseAdaptiveSizePolicy
-#     Freezes young/old generation sizing instead of letting the GC adapt it at
-#     runtime. Only worth disabling once you've profiled this workload's actual
-#     allocation pattern and pinned an explicit generation split (NewRatio/NewSize)
-#     to lock in — disabling adaptive sizing without also pinning explicit generation
-#     sizes just means the split freezes at an arbitrary JVM guess, which is worse than
-#     leaving it adaptive. Especially relevant now that heap size itself is derived from
-#     MaxRAMPercentage rather than fixed, so there's no single "right" split to freeze.
+# Sizes the Java heap from the container's actual memory limit (cgroup-aware
+# since JDK 10+) rather than relying on a fixed -Xmx chosen for one particular
+# machine.
+#
+# 75% intentionally leaves headroom for metaspace, thread stacks, direct memory,
+# JNI allocations and other native JVM overhead so the container's total RSS
+# remains comfortably below its cgroup memory limit.
+#
+# -----------------------------------------------------------------------------
+
+#
+# -XX:+ExitOnOutOfMemoryError
+#
+# Terminates the JVM immediately on OutOfMemoryError instead of attempting to
+# continue in a potentially corrupted state. In Kubernetes, failing fast allows
+# the orchestrator to replace the pod rather than serving traffic from a
+# degraded process.
+#
+# -----------------------------------------------------------------------------
+
+#
+# -XX:MaxDirectMemorySize
+# -XX:MaxMetaspaceSize
+#
+# MaxRAMPercentage limits only the Java heap.
+#
+# Native memory used by direct ByteBuffers, Netty, Lettuce (Redis),
+# OpenTelemetry, thread stacks and other JVM components exists outside the heap
+# and therefore contributes to the container's RSS independently of -Xmx.
+#
+# Explicit limits prevent unbounded off-heap growth that could otherwise
+# exhaust the container memory limit despite the Java heap remaining within
+# bounds.
+#
+# 256 MB for each pool is sufficient for this workload's expected connection
+# counts and allocation characteristics.
+#
+# -----------------------------------------------------------------------------
+
+#
+# Garbage Collector
+#
+# No collector is selected explicitly, so JDK 21 uses G1 GC by default.
+#
+# G1 targets predictable pause times (approximately 200 ms by default via
+# MaxGCPauseMillis) rather than maximizing raw throughput, making it a sensible
+# default for request/response services where latency is generally more
+# important than peak requests per second.
+#
+# This omission is intentional because G1 is the desired collector today.
+# If the service later becomes throughput-bound instead of latency-sensitive,
+# specify -XX:+UseParallelGC explicitly rather than relying on whatever future
+# JDK releases choose as the default collector.
+#
+# =============================================================================
+# Deliberately NOT configured
+# =============================================================================
+
+#
+# -XX:ParallelGCThreads
+# -XX:UseAVX
+#
+# These options were previously pinned for one specific development machine.
+#
+# In production, CPU allocation varies between Kubernetes nodes and instance
+# types. Hard-coding GC thread counts can either underutilize available CPUs or
+# oversubscribe them, while forcing an AVX level risks SIGILL failures on
+# hardware that does not support the requested instruction set.
+#
+# Modern JVMs already detect container CPU limits and size GC worker threads
+# appropriately. Allow the JVM to make those decisions dynamically.
+#
+# -----------------------------------------------------------------------------
+
+#
+# -XX:+AlwaysPreTouch
+#
+# Pretouches every page of the initial heap during startup, trading slower
+# startup for fewer page faults once traffic arrives.
+#
+# This image is optimized for rapid startup and horizontal scaling using Spring
+# AOT, so the additional startup cost outweighs the runtime benefit.
+#
+# If this service eventually becomes a long-lived process where steady-state
+# latency matters more than startup time, reconsider enabling this option
+# together with:
+#
+#     -XX:InitialRAMPercentage=<same as MaxRAMPercentage>
+#
+# Otherwise the JVM pretouches only its small default initial heap rather than
+# the full heap intended for production.
+#
+# -----------------------------------------------------------------------------
+
+#
+# -XX:-UseAdaptiveSizePolicy
+#
+# Disabling adaptive sizing freezes the young/old generation split at startup.
+#
+# That is only beneficial after profiling a production workload and explicitly
+# selecting generation sizes (NewSize, MaxNewSize, NewRatio, etc.).
+#
+# Without those additional settings the JVM simply freezes whatever initial
+# guess it made, which is generally worse than allowing it to adapt
+# dynamically—especially when the overall heap itself varies according to
+# MaxRAMPercentage.
+#
+
+# Run the JVM under tini.
+#
+# ENTRYPOINT fixes the executable chain:
+#
+#     tini → java
+#
+# while CMD supplies the default JVM options and the application's main class.
+#
+# Keeping them separate allows operators to override JVM arguments (or even the
+# main class) at `docker run` time without replacing the process supervisor
+# (tini), ensuring correct signal forwarding and child-process reaping.
+
 ENTRYPOINT ["/sbin/tini", "--", "java"]
-# Replace the shell with direct JVM execution.
-CMD [ \
-  "-Dspring.aot.enabled=true", \
-  "-XX:MaxRAMPercentage=75.0", \
-  "-XX:MaxDirectMemorySize=256m", \
-  "-XX:MaxMetaspaceSize=256m", \
-  "-XX:+ExitOnOutOfMemoryError", \
-  "-XX:SharedArchiveFile=application.jsa", \
-  "-Xshare:on", \
-  "org.springframework.boot.loader.launch.JarLauncher" \
-]
+
+CMD ["-Dspring.aot.enabled=true", \
+     "-XX:MaxRAMPercentage=75.0", \
+     "-XX:MaxDirectMemorySize=256m", \
+     "-XX:MaxMetaspaceSize=256m", \
+     "-XX:+ExitOnOutOfMemoryError", \
+     "-XX:SharedArchiveFile=application.jsa", \
+     "-Xshare:auto", \
+     "org.springframework.boot.loader.launch.JarLauncher"]
