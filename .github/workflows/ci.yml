@@ -23,7 +23,7 @@ on:
         default: false
 
 permissions:
-  contents: read
+  contents: write
   packages: write
   security-events: write
   actions: read
@@ -105,12 +105,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
 
       - name: Build
-        run: |
-          TASKS="processAot assemble"
-          if [ "${{ github.event_name == 'workflow_dispatch' && inputs.run_tests == true }}" = "true" ]; then
-            TASKS="test processAot assemble jacocoTestReport"
-          fi
-          ./gradlew --parallel --build-cache $TASKS --stacktrace
+        run: ./gradlew --parallel --build-cache processAot assemble --stacktrace
+
+      - name: Dependency Submission
+        uses: gradle/actions/dependency-submission@v4
+
+      - name: Run Tests
+        if: github.event_name == 'workflow_dispatch' && inputs.run_tests == true
+        run: ./gradlew --parallel --build-cache test jacocoTestReport --stacktrace
 
       - name: Compress Reports
         if: always() && (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
