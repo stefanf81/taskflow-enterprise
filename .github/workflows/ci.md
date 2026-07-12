@@ -66,8 +66,8 @@ Consolidates and collapses the previously redundant backend and frontend securit
 
 - **Dynamic Matrix Execution:** Calculates a dynamic `security_components` array in the `changes` job based on which paths had modifications. If only frontend files changed, the backend filesystem scan is skipped; if only backend files changed, the frontend filesystem scan is skipped.
 - **Deduplicated Dependency Review:** Runs the heavier GitHub `Dependency Review` action strictly on Pull Requests for the `Backend` matrix component, avoiding scanning the whole repository multiple times in separate jobs.
-- **Centralized & Dynamic Trivy Database Cache:**
-  Shares a single cache configuration for the Trivy database between both scans, drastically reducing setup overhead. To avoid stale cache issues when upgrading `aquasecurity/trivy-action`, the workflow **dynamically extracts the actual action version** directly from `.github/workflows/ci.yml` at runtime via regex (`grep`/`cut`) and injects it into the cache key. This ensures the cache is automatically invalidated whenever a developer upgrades the action version, eliminating hardcoded version mismatches.
+- **Centralized & Robust Trivy Database Cache:**
+  Shares a single cache configuration for the Trivy database between both scans, drastically reducing setup overhead. To avoid stale cache issues when upgrading `aquasecurity/trivy-action`, the workflow utilizes a workflow-level environment variable `TRIVY_VERSION` and injects it into the cache key. This ensures the cache is automatically and cleanly invalidated whenever the Trivy version is upgraded, eliminating fragile regex parsing in shell steps and avoiding hardcoded version mismatches.
 - **Robust Failure Resiliency:** Utilizes the defensive fallback component `none` to avoid matrix compilation errors on PRs with only general/docs changes, and leverages `if: matrix.component.name != 'none' && always()` to guarantee that SARIF reports are uploaded even if the security scan fails.
 
 ## 9. Job: `e2e` (End-to-End Tests)
@@ -83,6 +83,8 @@ Runs Playwright E2E tests against a real, running backend and database.
 Compiles secure, production-grade container images for the backend and frontend components.
 
 - **Deduplicated Multi-Tag Builds:** Both the unique commit SHA (`IMAGE_TAG`) and `latest` tags are defined simultaneously in the `docker/build-push-action` step. This ensures Buildx executes a single build compilation graph, tagging the resulting local image under both tags at once.
+- **Local Loading (`load: true`) for Image Scanning:**
+  The workflow uses `load: true` to load the built image into the local Docker daemon instead of utilizing direct pushing (`push: true`). Although this prevents utilizing Buildx's fastest registry push workflow (which pushes built layers directly to the registry from the builder cache), it is a necessary requirement. This allows **Trivy** to run local container image scans (`scan-type: image`) to identify vulnerabilities *prior* to pushing any images to the remote registry.
 - **Unified Image Pushing:** When the push triggers are met, we push both tags (`IMAGE_TAG` and `latest`) in a single step block. This eliminates the need for any secondary metadata commands (such as `docker buildx imagetools create`), making the workflow much simpler and fully prepared for any future multi-platform registry push expansions.
 - **Dynamic Matrix Execution:** Instead of a hardcoded matrix that tries to build both components and fails when compilation is skipped, we use a dynamic `docker_components` output array calculated in the `changes` job. This only compiles and scans images that actually had changes.
 - **Defensive Fallback Handling:** If no code components changed (e.g., only general documentation changed), the matrix falls back to `['none']` and all runner steps are safely bypassed using `if: matrix.component != 'none'` checks to avoid empty matrix errors.
