@@ -79,9 +79,10 @@ WORKDIR /app
 # avoids permission mismatches on mounted volumes and satisfies Kubernetes Pod
 # Security Standards requiring non-root containers.
 
-RUN apk add --no-cache tini \
+RUN apk update && apk upgrade --no-cache \
  && addgroup -g 10001 -S appgroup \
- && adduser -u 10001 -S appuser -G appgroup
+ && adduser -u 10001 -S appuser -G appgroup \
+ && apk add --no-cache tini
 
 # Copy the extracted layers in dependency order.
 #
