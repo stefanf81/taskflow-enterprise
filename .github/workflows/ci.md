@@ -61,7 +61,15 @@ Handles the Angular 22 frontend linting, unit tests, and production distribution
 - **Conditional Testing:** The unit tests and coverage calculations are bypassed when `run_tests` is disabled on a manual trigger, skipping redundant unit execution.
 - **Direct Coverage Artifacts:** We upload the test coverage reports directly using `actions/upload-artifact@v7` with a 14-day retention period, rather than manually compressing them into `.tar.gz` files.
 
-## 8. Job: `e2e` (End-to-End Tests)
+## 8. Job: `security` (Unified Security Scan)
+Consolidates and collapses the previously redundant backend and frontend security scanning jobs into a single highly optimized matrix-driven job.
+
+- **Dynamic Matrix Execution:** Calculates a dynamic `security_components` array in the `changes` job based on which paths had modifications. If only frontend files changed, the backend filesystem scan is skipped; if only backend files changed, the frontend filesystem scan is skipped.
+- **Deduplicated Dependency Review:** Runs the heavier GitHub `Dependency Review` action strictly on Pull Requests for the `Backend` matrix component, avoiding scanning the whole repository multiple times in separate jobs.
+- **Centralized Trivy Database Cache:** Shares a single cache configuration for the Trivy database between both scans, drastically reducing setup overhead.
+- **Robust Failure Resiliency:** Utilizes the defensive fallback component `none` to avoid matrix compilation errors on PRs with only general/docs changes, and leverages `if: matrix.component.name != 'none' && always()` to guarantee that SARIF reports are uploaded even if the security scan fails.
+
+## 9. Job: `e2e` (End-to-End Tests)
 Runs Playwright E2E tests against a real, running backend and database.
 
 - **Dual Dependency (`needs: [changes, backend, frontend]`)**:
@@ -70,7 +78,7 @@ Runs Playwright E2E tests against a real, running backend and database.
 - **Targeted Browser Installation:** Instead of installing all available major browsers (Chromium, Firefox, WebKit), we only install `chromium` (`npx playwright install --with-deps chromium`), which matches the Desktop Chrome browser used in `playwright.config.ts`. This reduces dependency download sizes and drastically speeds up the installation phase.
 - **Direct Playwright Reports Upload:** We upload `spring.log`, `frontend/playwright-report`, and `frontend/test-results` directly using the `upload-artifact` action. To save CPU cycles on already-compressed images and logs, we set `compression-level: 0` and apply a 14-day retention policy.
 
-## 9. Job: `docker-build`
+## 10. Job: `docker-build`
 Compiles secure, production-grade container images for the backend and frontend components.
 
 - **Dynamic Matrix Execution:** Instead of a hardcoded matrix that tries to build both components and fails when compilation is skipped, we use a dynamic `docker_components` output array calculated in the `changes` job. This only compiles and scans images that actually had changes.
@@ -83,7 +91,7 @@ Compiles secure, production-grade container images for the backend and frontend 
 - **Skipped Docker Login on PRs:** The `docker/login-action` step is gated under the same push condition as above, completely bypassing registry login steps during PR runs where no images are pushed.
 - **Manual Trigger Bypass (`workflow_dispatch`):** Added the manual trigger check to all job-level `if` checks to ensure that clicking "Run workflow" in GitHub UI actually executes the pipeline on any branch, instead of silently skipping due to lack of file changes.
 
-## 10. Container & JVM Hardening (SOTA)
+## 11. Container & JVM Hardening (SOTA)
 Our Docker build configurations (`Dockerfile` and `Dockerfile.x64`) implement state-of-the-art container optimization techniques:
 - **BuildKit Cache Mounts:** Utilizes `--mount=type=cache,target=/tmp` on the Spring Boot layer extraction step, allowing BuildKit to store temporary compilation metadata across iterations.
 - **COPY --link:** Copies multi-stage compiled artifacts using independent image layers, bypassing full filesystem rewrites and facilitating immediate image layer linking.
@@ -103,7 +111,7 @@ Our Docker build configurations (`Dockerfile` and `Dockerfile.x64`) implement st
 
 ---
 
-## 11. Repository & GHCR Setup
+## 12. Repository & GHCR Setup
 
 The workflow pushes images to the GitHub Container Registry (GHCR) using the default `GITHUB_TOKEN`.
 
@@ -122,7 +130,7 @@ If organization policy blocks workflow write permissions, create a classic PAT w
 
 > For the equivalent Jenkins pipeline, see [`JENKINS.md`](../JENKINS.md).
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 ### `denied: permission_denied: write_package` during `docker push`
 - Confirm **Read and write permissions** is enabled under **Settings → Actions → General**.

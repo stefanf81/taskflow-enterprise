@@ -58,6 +58,7 @@ jobs:
       docker_backend: ${{ steps.filter.outputs.docker_backend }}
       docker_frontend: ${{ steps.filter.outputs.docker_frontend }}
       docker_components: ${{ steps.components.outputs.matrix }}
+      security_components: ${{ steps.security_components.outputs.matrix }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -105,6 +106,26 @@ jobs:
             components+=(none)
           fi
           printf 'matrix=%s\n' "$(printf '%s\n' "${components[@]}" | jq -R . | jq -s -c .)" >> "$GITHUB_OUTPUT"
+
+      - name: Select Security components
+        id: security_components
+        env:
+          BACKEND_CHANGED: ${{ steps.filter.outputs.backend }}
+          FRONTEND_CHANGED: ${{ steps.filter.outputs.frontend }}
+          DOCKER_CHANGED: ${{ steps.filter.outputs.docker }}
+          IS_MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          components=()
+          if [[ "$BACKEND_CHANGED" == "true" || "$DOCKER_CHANGED" == "true" || "$IS_MANUAL" == "true" ]]; then
+            components+=('{"name":"Backend","path":"."}')
+          fi
+          if [[ "$FRONTEND_CHANGED" == "true" || "$DOCKER_CHANGED" == "true" || "$IS_MANUAL" == "true" ]]; then
+            components+=('{"name":"Frontend","path":"frontend"}')
+          fi
+          if (( ${#components[@]} == 0 )); then
+            components+=('{"name":"none","path":"none"}')
+          fi
+          printf 'matrix=%s\n' "$(printf '%s\n' "${components[@]}" | jq -s -c .)" >> "$GITHUB_OUTPUT"
 
   lint:
     name: Dockerfile Lint
@@ -284,12 +305,11 @@ jobs:
       - name: Analyze CodeQL
         uses: github/codeql-action/analyze@v4
 
-  security-backend:
-    name: Security Scan (Backend)
+  security:
+    name: Security Scan (${{ matrix.component.name }})
     needs: changes
     if: |
       github.event_name != 'push' &&
-      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch') &&
       (github.event_name != 'workflow_dispatch' || inputs.run_security)
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -297,24 +317,31 @@ jobs:
       contents: read
       security-events: write
       packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.changes.outputs.security_components) }}
     steps:
       - uses: actions/checkout@v7
+        if: matrix.component.name != 'none'
 
       #####################################################
       # Dependency Review (Pull Requests)
       #####################################################
       - name: Dependency Review
-        if: github.event_name == 'pull_request'
+        if: matrix.component.name == 'Backend' && github.event_name == 'pull_request'
         uses: actions/dependency-review-action@v5
 
       #####################################################
       # Cache Trivy database
       #####################################################
       - name: Set Trivy cache key
+        if: matrix.component.name != 'none'
         id: trivy-cache-key
         run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Trivy database
+        if: matrix.component.name != 'none'
         uses: actions/cache@v6
         with:
           path: ~/.cache/trivy
@@ -326,66 +353,18 @@ jobs:
       # Filesystem Scan
       #####################################################
       - name: Filesystem Scan
+        if: matrix.component.name != 'none'
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
-          scan-ref: .
+          scan-ref: ${{ matrix.component.path }}
           format: sarif
           output: trivy-results.sarif
           exit-code: 0
 
       - name: Upload SARIF
+        if: matrix.component.name != 'none' && always()
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        with:
-          sarif_file: trivy-results.sarif
-
-  security-frontend:
-    name: Security Scan (Frontend)
-    needs: changes
-    if: |
-      github.event_name != 'push' &&
-      (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch') &&
-      (github.event_name != 'workflow_dispatch' || inputs.run_security)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      security-events: write
-      packages: read
-    steps:
-      - uses: actions/checkout@v7
-
-      #####################################################
-      # Cache Trivy database
-      #####################################################
-      - name: Set Trivy cache key
-        id: trivy-cache-key
-        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Trivy database
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/trivy
-          key: trivy-${{ runner.os }}-v0.36.0-${{ steps.trivy-cache-key.outputs.week }}
-          restore-keys: |
-            trivy-${{ runner.os }}-v0.36.0-
-
-      #####################################################
-      # Filesystem Scan
-      #####################################################
-      - name: Filesystem Scan
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: fs
-          scan-ref: frontend
-          format: sarif
-          output: trivy-results.sarif
-          exit-code: 0
-
-      - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
         with:
           sarif_file: trivy-results.sarif
 
@@ -396,8 +375,7 @@ jobs:
       - backend
       - frontend
       - codeql
-      - security-backend
-      - security-frontend
+      - security
     if: |
       always() &&
       !contains(needs.*.result, 'failure') &&
