@@ -26,7 +26,8 @@ The top-level permissions block grants the absolute minimum access required. Spe
 
 ## 4. Job: `changes` (Path Filtering)
 Uses `dorny/paths-filter@v4` to detect exactly which files changed in a PR or push. We enforce a 5-minute timeout on this job to prevent it from stalling.
-**Why:** Monorepos (where frontend and backend live together) waste massive amounts of time running backend tests when only a CSS file changed, or vice versa. This step dynamically determines whether the backend, frontend, or both need to run, completely skipping unaffected pipelines.
+We have split the filters further to include `docker_backend` and `docker_frontend` and added a shell script to dynamically output a JSON array of changed components (`docker_components`).
+**Why:** Monorepos (where frontend and backend live together) waste massive amounts of time running backend tests when only a CSS file changed, or vice versa. This step dynamically determines whether the backend, frontend, or both need to run (and similarly, which Docker images actually need to be built), completely skipping unaffected pipelines and avoiding missing build artifact failures.
 
 ## 5. Job: `lint` (Dockerfile Lint)
 A lightweight job that runs `hadolint` against `Dockerfile.x64` and `frontend/Dockerfile` to verify linting and compliance. It only runs if Docker-related files were changed.
@@ -53,6 +54,10 @@ Handles the Angular 22 frontend linting, unit tests, and production distribution
 
 - **Secure NPM Caching (`actions/setup-node@v6`)**:
   Instead of caching the entire `node_modules` directory (which can lead to stale native binaries and cache poisoning risks), we rely on `setup-node`'s built-in `npm` cache. We always execute `npm ci` to ensure a clean, reproducible dependency tree.
+- **Angular Build Caching:**
+  We use `actions/cache` targeted directly at `frontend/.angular/cache`, keyed by the runner's OS and the `package-lock.json` hash. This stores compilation outputs across workflow runs and makes subsequent builds and tests significantly faster.
+- **Bypassing Redundant Prettier Runs:**
+  Rather than calling `npm run test` and `npm run build`, we call `npx ng test` and `npx ng build` directly. This prevents triggering the NPM pre-lifecycle hooks (`pretest`, `prebuild`) which otherwise run formatting checks multiple redundant times.
 - **Conditional Testing:** The unit tests and coverage calculations are bypassed when `run_tests` is disabled on a manual trigger, skipping redundant unit execution.
 - **Direct Coverage Artifacts:** We upload the test coverage reports directly using `actions/upload-artifact@v7` with a 14-day retention period, rather than manually compressing them into `.tar.gz` files.
 
@@ -62,11 +67,15 @@ Runs Playwright E2E tests against a real, running backend and database.
 - **Dual Dependency (`needs: [changes, backend, frontend]`)**:
   The E2E job now waits for both the backend and frontend jobs to succeed first. If unit tests fail, the heavy and expensive browser tests are skipped immediately, preventing pipeline resource waste.
 - **Upgraded Playwright Browser Cache:** Playwright browsers are cached under a key tied directly to the `package-lock.json` file hash, guaranteeing that the cache is cleanly invalidated whenever the Playwright dependency version is modified. This also allowed us to remove the redundant `npx playwright --version` run step.
+- **Targeted Browser Installation:** Instead of installing all available major browsers (Chromium, Firefox, WebKit), we only install `chromium` (`npx playwright install --with-deps chromium`), which matches the Desktop Chrome browser used in `playwright.config.ts`. This reduces dependency download sizes and drastically speeds up the installation phase.
 - **Direct Playwright Reports Upload:** We upload `spring.log`, `frontend/playwright-report`, and `frontend/test-results` directly using the `upload-artifact` action. To save CPU cycles on already-compressed images and logs, we set `compression-level: 0` and apply a 14-day retention policy.
 
 ## 9. Job: `docker-build`
 Compiles secure, production-grade container images for the backend and frontend components.
 
+- **Dynamic Matrix Execution:** Instead of a hardcoded matrix that tries to build both components and fails when compilation is skipped, we use a dynamic `docker_components` output array calculated in the `changes` job. This only compiles and scans images that actually had changes.
+- **Defensive Fallback Handling:** If no code components changed (e.g., only general documentation changed), the matrix falls back to `['none']` and all runner steps are safely bypassed using `if: matrix.component != 'none'` checks to avoid empty matrix errors.
+- **Robust Security Scan Uploading:** Trivy security scanning uses `exit-code: 1` to fail on high or critical vulnerabilities. The final SARIF upload step utilizes `if: matrix.component != 'none' && always()` to ensure scan results are successfully uploaded to the GitHub Security tab even if vulnerabilities cause the scanning step to fail.
 - **Robust Pushing & Flag Decoupling:** Image pushing has been refactored to:
   `((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.push_images))`
   * **Automated runs:** Automatically push to the GitHub Container Registry (`ghcr.io`) upon merges/pushes to the `main` branch.
