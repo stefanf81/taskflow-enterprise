@@ -212,22 +212,34 @@ jobs:
       contents: read
       security-events: write
       actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java
+            build-mode: autobuild
+          - language: javascript
+            build-mode: none
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-java@v5
+        if: matrix.language == 'java'
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
       - uses: gradle/actions/setup-gradle@v6
+        if: matrix.language == 'java'
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
-          languages: java, javascript
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
 
       - name: Autobuild
+        if: matrix.build-mode == 'autobuild'
         uses: github/codeql-action/autobuild@v4
 
       - name: Analyze CodeQL
