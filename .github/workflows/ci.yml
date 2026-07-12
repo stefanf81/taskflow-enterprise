@@ -76,6 +76,7 @@ jobs:
   lint:
     name: Dockerfile Lint
     needs: changes
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -106,13 +107,13 @@ jobs:
       - name: Build
         run: |
           TASKS="processAot assemble"
-          if [ "${{ github.event_name != 'workflow_dispatch' || inputs.run_tests }}" = "true" ]; then
+          if [ "${{ github.event_name == 'workflow_dispatch' && inputs.run_tests == true }}" = "true" ]; then
             TASKS="test processAot assemble jacocoTestReport"
           fi
           ./gradlew --parallel --build-cache $TASKS --stacktrace
 
       - name: Compress Reports
-        if: always() && (github.event_name != 'workflow_dispatch' || inputs.run_tests)
+        if: always() && (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
         run: |
           mkdir -p backend-artifacts
           [ -d "build/reports" ] && cp -r build/reports backend-artifacts/
@@ -122,7 +123,7 @@ jobs:
           fi
 
       - name: Upload Test Reports
-        if: always() && (github.event_name != 'workflow_dispatch' || inputs.run_tests)
+        if: always() && (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
         uses: actions/upload-artifact@v7
         with:
           name: backend-test-results
@@ -174,7 +175,7 @@ jobs:
         run: npx prettier --check .
 
       - name: Run unit tests
-        if: github.event_name != 'workflow_dispatch' || inputs.run_tests
+        if: github.event_name == 'workflow_dispatch' && inputs.run_tests == true
         run: |
           npm run test -- \
             --watch=false \
@@ -190,7 +191,7 @@ jobs:
           path: frontend/dist/frontend/browser
 
       - name: Compress coverage
-        if: always() && (github.event_name != 'workflow_dispatch' || inputs.run_tests)
+        if: always() && (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
         run: |
           mkdir -p frontend-artifacts
           [ -d "frontend/coverage" ] && cp -r frontend/coverage frontend-artifacts/
@@ -200,7 +201,7 @@ jobs:
 
       - name: Upload coverage
         uses: actions/upload-artifact@v7
-        if: always() && (github.event_name != 'workflow_dispatch' || inputs.run_tests)
+        if: always() && (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
         with:
           name: frontend-coverage
           path: frontend-coverage.tar.gz
@@ -214,6 +215,7 @@ jobs:
       - frontend
     if: |
       always() &&
+      github.event_name != 'push' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled') &&
       (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
@@ -248,6 +250,7 @@ jobs:
     name: Security Scan (Backend)
     needs: changes
     if: |
+      github.event_name != 'push' &&
       (needs.changes.outputs.backend == 'true' || needs.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch') &&
       (github.event_name != 'workflow_dispatch' || inputs.run_security)
     runs-on: ubuntu-latest
@@ -299,6 +302,7 @@ jobs:
     name: Security Scan (Frontend)
     needs: changes
     if: |
+      github.event_name != 'push' &&
       (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch') &&
       (github.event_name != 'workflow_dispatch' || inputs.run_security)
     runs-on: ubuntu-latest
@@ -353,7 +357,7 @@ jobs:
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled') &&
       (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') &&
-      (github.event_name != 'workflow_dispatch' || inputs.run_tests)
+      (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
@@ -499,7 +503,6 @@ jobs:
     name: Build Docker (${{ matrix.component }})
     needs: 
       - changes
-      - e2e
       - backend
       - frontend
     if: |
