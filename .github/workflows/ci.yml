@@ -239,8 +239,8 @@ jobs:
         with:
           languages: java, javascript
 
-      - name: Build Backend
-        run: ./gradlew clean assemble --parallel --no-build-cache
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v4
 
       - name: Analyze CodeQL
         uses: github/codeql-action/analyze@v4
