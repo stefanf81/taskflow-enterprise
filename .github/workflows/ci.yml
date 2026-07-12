@@ -338,16 +338,19 @@ jobs:
       - name: Set Trivy cache key
         if: matrix.component.name != 'none'
         id: trivy-cache-key
-        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+          TRIVY_VERSION=$(grep -o 'aquasecurity/trivy-action@[^[:space:]]*' .github/workflows/ci.yml | head -n1 | cut -d'@' -f2)
+          echo "version=$TRIVY_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Cache Trivy database
         if: matrix.component.name != 'none'
         uses: actions/cache@v6
         with:
           path: ~/.cache/trivy
-          key: trivy-${{ runner.os }}-v0.36.0-${{ steps.trivy-cache-key.outputs.week }}
+          key: trivy-${{ runner.os }}-${{ steps.trivy-cache-key.outputs.version }}-${{ steps.trivy-cache-key.outputs.week }}
           restore-keys: |
-            trivy-${{ runner.os }}-v0.36.0-
+            trivy-${{ runner.os }}-${{ steps.trivy-cache-key.outputs.version }}-
 
       #####################################################
       # Filesystem Scan

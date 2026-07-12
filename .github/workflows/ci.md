@@ -66,7 +66,8 @@ Consolidates and collapses the previously redundant backend and frontend securit
 
 - **Dynamic Matrix Execution:** Calculates a dynamic `security_components` array in the `changes` job based on which paths had modifications. If only frontend files changed, the backend filesystem scan is skipped; if only backend files changed, the frontend filesystem scan is skipped.
 - **Deduplicated Dependency Review:** Runs the heavier GitHub `Dependency Review` action strictly on Pull Requests for the `Backend` matrix component, avoiding scanning the whole repository multiple times in separate jobs.
-- **Centralized Trivy Database Cache:** Shares a single cache configuration for the Trivy database between both scans, drastically reducing setup overhead.
+- **Centralized & Dynamic Trivy Database Cache:**
+  Shares a single cache configuration for the Trivy database between both scans, drastically reducing setup overhead. To avoid stale cache issues when upgrading `aquasecurity/trivy-action`, the workflow **dynamically extracts the actual action version** directly from `.github/workflows/ci.yml` at runtime via regex (`grep`/`cut`) and injects it into the cache key. This ensures the cache is automatically invalidated whenever a developer upgrades the action version, eliminating hardcoded version mismatches.
 - **Robust Failure Resiliency:** Utilizes the defensive fallback component `none` to avoid matrix compilation errors on PRs with only general/docs changes, and leverages `if: matrix.component.name != 'none' && always()` to guarantee that SARIF reports are uploaded even if the security scan fails.
 
 ## 9. Job: `e2e` (End-to-End Tests)
