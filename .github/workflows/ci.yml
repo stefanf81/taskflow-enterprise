@@ -108,7 +108,7 @@ jobs:
         run: ./gradlew --parallel --build-cache processAot assemble --stacktrace
 
       - name: Dependency Submission
-        uses: gradle/actions/dependency-submission@v4
+        uses: gradle/actions/dependency-submission@v6
 
       - name: Run Tests
         if: github.event_name == 'workflow_dispatch' && inputs.run_tests == true
