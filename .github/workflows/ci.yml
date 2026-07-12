@@ -50,6 +50,7 @@ jobs:
   changes:
     name: Detect Changes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -71,22 +72,28 @@ jobs:
               - frontend/**
             docker:
               - Dockerfile*
+              - frontend/Dockerfile
               - docker/**
 
   lint:
     name: Dockerfile Lint
     needs: changes
-    if: github.event_name != 'push'
+    if: needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
-      - name: Dockerfile Lint
+      - name: Lint backend Dockerfile
         uses: hadolint/hadolint-action@v3.3.0
         with:
           dockerfile: Dockerfile.x64
           ignore: DL3018,DL3029
+
+      - name: Lint frontend Dockerfile
+        uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: frontend/Dockerfile
 
   backend:
     name: Backend
@@ -111,23 +118,16 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.run_tests == true
         run: ./gradlew --parallel --build-cache test jacocoTestReport --stacktrace
 
-      - name: Compress Reports
-        if: always() && (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
-        run: |
-          mkdir -p backend-artifacts
-          [ -d "build/reports" ] && cp -r build/reports backend-artifacts/
-          [ -d "build/test-results" ] && cp -r build/test-results backend-artifacts/
-          if [ "$(ls -A backend-artifacts)" ]; then
-            tar -czf backend-reports.tar.gz -C backend-artifacts .
-          fi
-
       - name: Upload Test Reports
         if: always() && (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
         uses: actions/upload-artifact@v7
         with:
           name: backend-test-results
-          path: backend-reports.tar.gz
+          path: |
+            build/reports
+            build/test-results
           if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload Backend JAR
         uses: actions/upload-artifact@v7
@@ -136,6 +136,8 @@ jobs:
           path: |
             build/libs/*.jar
             !build/libs/*-plain.jar
+          compression-level: 0
+          retention-days: 14
 
   frontend:
     name: Frontend
@@ -155,15 +157,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Cache Node Modules
-        id: node-modules-cache
-        uses: actions/cache@v6
-        with:
-          path: frontend/node_modules
-          key: node-modules-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
-
       - name: Install dependencies
-        if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: |
           npm ci \
             --prefer-offline \
@@ -188,23 +182,17 @@ jobs:
         with:
           name: frontend-dist
           path: frontend/dist/frontend/browser
-
-      - name: Compress coverage
-        if: always() && (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
-        run: |
-          mkdir -p frontend-artifacts
-          [ -d "frontend/coverage" ] && cp -r frontend/coverage frontend-artifacts/
-          if [ "$(ls -A frontend-artifacts)" ]; then
-            tar -czf frontend-coverage.tar.gz -C frontend-artifacts .
-          fi
+          compression-level: 0
+          retention-days: 14
 
       - name: Upload coverage
         uses: actions/upload-artifact@v7
         if: always() && (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
         with:
           name: frontend-coverage
-          path: frontend-coverage.tar.gz
+          path: frontend/coverage
           if-no-files-found: ignore
+          retention-days: 14
 
   codeql:
     name: CodeQL
@@ -271,13 +259,17 @@ jobs:
       #####################################################
       # Cache Trivy database
       #####################################################
+      - name: Set Trivy cache key
+        id: trivy-cache-key
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
       - name: Cache Trivy database
         uses: actions/cache@v6
         with:
           path: ~/.cache/trivy
-          key: trivy-${{ runner.os }}-${{ github.sha }}
+          key: trivy-${{ runner.os }}-v0.36.0-${{ steps.trivy-cache-key.outputs.week }}
           restore-keys: |
-            trivy-${{ runner.os }}-
+            trivy-${{ runner.os }}-v0.36.0-
 
       #####################################################
       # Filesystem Scan
@@ -316,13 +308,17 @@ jobs:
       #####################################################
       # Cache Trivy database
       #####################################################
+      - name: Set Trivy cache key
+        id: trivy-cache-key
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
       - name: Cache Trivy database
         uses: actions/cache@v6
         with:
           path: ~/.cache/trivy
-          key: trivy-${{ runner.os }}-${{ github.sha }}
+          key: trivy-${{ runner.os }}-v0.36.0-${{ steps.trivy-cache-key.outputs.week }}
           restore-keys: |
-            trivy-${{ runner.os }}-
+            trivy-${{ runner.os }}-v0.36.0-
 
       #####################################################
       # Filesystem Scan
@@ -441,15 +437,7 @@ jobs:
       ##########################################################
       # Frontend
       ##########################################################
-      - name: Cache Node Modules
-        id: node-modules-cache
-        uses: actions/cache@v6
-        with:
-          path: frontend/node_modules
-          key: node-modules-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
-
       - name: Install Frontend
-        if: steps.node-modules-cache.outputs.cache-hit != 'true'
         working-directory: frontend
         run: |
           npm ci \
@@ -479,24 +467,18 @@ jobs:
       ##########################################################
       # Upload Reports
       ##########################################################
-      - name: Compress Playwright Reports
-        if: always()
-        run: |
-          mkdir -p playwright-artifacts
-          [ -f "spring.log" ] && cp spring.log playwright-artifacts/
-          [ -d "frontend/playwright-report" ] && cp -r frontend/playwright-report playwright-artifacts/
-          [ -d "frontend/test-results" ] && cp -r frontend/test-results playwright-artifacts/
-          if [ "$(ls -A playwright-artifacts)" ]; then
-            tar -czf playwright-report.tar.gz -C playwright-artifacts .
-          fi
-
       - name: Upload Playwright Report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report
-          path: playwright-report.tar.gz
+          path: |
+            spring.log
+            frontend/playwright-report
+            frontend/test-results
           if-no-files-found: ignore
+          compression-level: 0
+          retention-days: 14
 
   docker-build:
     name: Build Docker (${{ matrix.component }})
