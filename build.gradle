@@ -22,6 +22,16 @@ ext {
 	set('commons-lang3.version', '3.20.0')
 	set('junit-platform.version', '1.14.4')
 }
+configurations.all {
+	resolutionStrategy.eachDependency { details ->
+		if (details.requested.group == 'org.apache.logging.log4j' && details.requested.name == 'log4j-core') {
+			details.useVersion '2.25.4'
+		}
+		if (details.requested.group == 'org.apache.commons' && details.requested.name == 'commons-compress') {
+			details.useVersion '1.26.0'
+		}
+	}
+}
 java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(21)
