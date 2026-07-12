@@ -82,6 +82,8 @@ Runs Playwright E2E tests against a real, running backend and database.
 ## 10. Job: `docker-build`
 Compiles secure, production-grade container images for the backend and frontend components.
 
+- **Deduplicated Multi-Tag Builds:** Both the unique commit SHA (`IMAGE_TAG`) and `latest` tags are defined simultaneously in the `docker/build-push-action` step. This ensures Buildx executes a single build compilation graph, tagging the resulting local image under both tags at once.
+- **Unified Image Pushing:** When the push triggers are met, we push both tags (`IMAGE_TAG` and `latest`) in a single step block. This eliminates the need for any secondary metadata commands (such as `docker buildx imagetools create`), making the workflow much simpler and fully prepared for any future multi-platform registry push expansions.
 - **Dynamic Matrix Execution:** Instead of a hardcoded matrix that tries to build both components and fails when compilation is skipped, we use a dynamic `docker_components` output array calculated in the `changes` job. This only compiles and scans images that actually had changes.
 - **Defensive Fallback Handling:** If no code components changed (e.g., only general documentation changed), the matrix falls back to `['none']` and all runner steps are safely bypassed using `if: matrix.component != 'none'` checks to avoid empty matrix errors.
 - **Robust Security Scan Uploading:** Trivy security scanning uses `exit-code: 1` to fail on high or critical vulnerabilities. The final SARIF upload step utilizes `if: matrix.component != 'none' && always()` to ensure scan results are successfully uploaded to the GitHub Security tab even if vulnerabilities cause the scanning step to fail.
