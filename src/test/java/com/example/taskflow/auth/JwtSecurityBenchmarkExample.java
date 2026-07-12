@@ -55,7 +55,7 @@ public class JwtSecurityBenchmarkExample {
             tokens.add(jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue());
         }
         stopWatch.stop();
-        long genTimeNs = stopWatch.getLastTaskTimeNanos();
+        long genTimeNs = stopWatch.lastTaskInfo().getTimeNanos();
 
         // 2. Benchmark Token Validation & Claims Parsing (Asymmetric RSA-2048 Verify)
         stopWatch.start("Token Parsing & Signature Verification");
@@ -67,7 +67,7 @@ public class JwtSecurityBenchmarkExample {
             }
         }
         stopWatch.stop();
-        long parseTimeNs = stopWatch.getLastTaskTimeNanos();
+        long parseTimeNs = stopWatch.lastTaskInfo().getTimeNanos();
 
         // Calculate Metrics
         double genTimeMs = genTimeNs / 1_000_000.0;

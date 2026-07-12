@@ -305,6 +305,7 @@ class AppointmentServiceImplTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void testGetAppointmentStatsCached_CacheHit() {
         AppointmentStats cachedStats = new AppointmentStats(10L, 5L, 3L, 2L, 0L, 30, 75.0);
         when(cacheManager.getCache("appointmentStats")).thenReturn(cache);
