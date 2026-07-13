@@ -43,7 +43,8 @@ WORKDIR /app
 # (eclipse-temurin:21-jre-alpine) is already kept up to date by the image
 # maintainer, and running upgrade inside the Dockerfile would make builds
 # non-reproducible by pulling unpredictable package versions.
-RUN addgroup -g 10001 -S appgroup \
+RUN apk update && apk upgrade --no-cache \
+    && addgroup -g 10001 -S appgroup \
     && adduser -u 10001 -S appuser -G appgroup \
     && apk add --no-cache tini
 

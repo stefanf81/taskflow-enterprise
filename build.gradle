@@ -28,7 +28,7 @@ configurations.all {
 			details.useVersion '2.25.4'
 		}
 		if (details.requested.group == 'org.apache.commons' && details.requested.name == 'commons-compress') {
-			details.useVersion '1.26.0'
+			details.useVersion '1.27.1'
 		}
 	}
 }
