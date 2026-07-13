@@ -1,3 +1,16 @@
+buildscript {
+	repositories {
+		mavenCentral()
+	}
+	configurations.all {
+		resolutionStrategy.eachDependency { details ->
+			if (details.requested.group == 'com.fasterxml.jackson.core' && details.requested.name == 'jackson-databind') {
+				details.useVersion '2.22.1'
+			}
+		}
+	}
+}
+
 plugins {
 	id 'java'
 	id 'org.springframework.boot' version '3.5.16'
