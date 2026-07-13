@@ -168,7 +168,11 @@ tasks.named("dependencyUpdates") {
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = "UTF-8"
 	options.incremental = true
-	options.compilerArgs << "-Xlint:deprecation" << "-Xlint:unchecked"
+	if (name.contains("Aot")) {
+		options.compilerArgs << "-nowarn" << "-Xlint:none"
+	} else {
+		options.compilerArgs << "-Xlint:deprecation" << "-Xlint:unchecked"
+	}
 }
 tasks.named("spotbugsMain") {
 	enabled = true
