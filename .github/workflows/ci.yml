@@ -653,6 +653,20 @@ jobs:
           target: 'http://localhost:8080/v3/api-docs'
           allow_issue_writing: false
 
+      - name: Convert ZAP JSON to SARIF
+        if: always()
+        uses: matiascariboni/action-zap2sarif@master
+        with:
+          file_in: report_json.json
+          file_out: zap-results.sarif
+
+      - name: Upload ZAP SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: zap-results.sarif
+          category: dast-zap
+
       - name: Upload ZAP Report
         if: always()
         uses: actions/upload-artifact@v7
@@ -663,6 +677,7 @@ jobs:
             report_html.html
             report_json.json
             report_md.md
+            zap-results.sarif
           if-no-files-found: ignore
           compression-level: 0
           retention-days: 14
