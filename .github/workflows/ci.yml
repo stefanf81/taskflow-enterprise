@@ -103,11 +103,8 @@ jobs:
           if [[ "$FRONTEND_CHANGED" == "true" || "$DOCKER_FRONTEND_CHANGED" == "true" || "$IS_MAIN" == "true" || "$IS_MANUAL" == "true" ]]; then
             components+=(frontend)
           fi
-          if (( ${#components[@]} == 0 )); then
-            components+=(none)
-          fi
           printf 'matrix=%s\n' "$(printf '%s\n' "${components[@]}" | jq -R . | jq -s -c .)" >> "$GITHUB_OUTPUT"
-
+ 
       - name: Select Security components
         id: security_components
         env:
@@ -122,9 +119,6 @@ jobs:
           fi
           if [[ "$FRONTEND_CHANGED" == "true" || "$DOCKER_CHANGED" == "true" || "$IS_MANUAL" == "true" ]]; then
             components+=('{"name":"Frontend","path":"frontend"}')
-          fi
-          if (( ${#components[@]} == 0 )); then
-            components+=('{"name":"none","path":"none"}')
           fi
           printf 'matrix=%s\n' "$(printf '%s\n' "${components[@]}" | jq -s -c .)" >> "$GITHUB_OUTPUT"
 
@@ -167,7 +161,12 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - uses: gradle/actions/setup-gradle@v6
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          # Enable writing to the cache on non-default/PR branches so subsequent commits/runs 
+          # on the same branch don't re-download dependencies (by default, GHA setup-gradle only writes on 'main')
+          cache-read-only: false
 
       - name: Build
         run: ./gradlew --parallel --build-cache processAot assemble --stacktrace
@@ -203,6 +202,26 @@ jobs:
           compression-level: 0
           retention-days: 14
 
+  dependency-submission:
+    name: Dependency Submission
+    needs: changes
+    if: |
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Generate and submit dependency graph
+        uses: gradle/actions/dependency-submission@v6
+
   frontend:
     name: Frontend
     needs: changes
@@ -223,8 +242,14 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+
+      - name: Cache npm global cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
 
       - name: Install dependencies
         run: |
@@ -315,8 +340,12 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - uses: gradle/actions/setup-gradle@v6
+      - name: Setup Gradle (CodeQL)
+        uses: gradle/actions/setup-gradle@v6
         if: matrix.language == 'java'
+        with:
+          # Enable writing to the cache on non-default/PR branches for faster subsequent CodeQL runs
+          cache-read-only: false
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -336,7 +365,9 @@ jobs:
     needs: changes
     if: |
       (
-        github.event_name == 'pull_request' ||
+        needs.changes.outputs.backend == 'true' ||
+        needs.changes.outputs.frontend == 'true' ||
+        needs.changes.outputs.docker == 'true' ||
         github.ref == 'refs/heads/main' ||
         github.event_name == 'workflow_dispatch'
       ) &&
@@ -353,26 +384,29 @@ jobs:
         component: ${{ fromJSON(needs.changes.outputs.security_components) }}
     steps:
       - uses: actions/checkout@v7
-        if: matrix.component.name != 'none'
 
       #####################################################
       # Dependency Review (Pull Requests)
       #####################################################
       - name: Dependency Review
-        if: matrix.component.name == 'Backend' && github.event_name == 'pull_request'
+        if: |
+          github.event_name == 'pull_request' && (
+            matrix.component.name == 'Backend' || (
+              matrix.component.name == 'Frontend' && 
+              needs.changes.outputs.backend != 'true'
+            )
+          )
         uses: actions/dependency-review-action@v5
 
       #####################################################
       # Cache Trivy database
       #####################################################
       - name: Set Trivy cache key
-        if: matrix.component.name != 'none'
         id: trivy-cache-key
         run: |
           echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Trivy database
-        if: matrix.component.name != 'none'
         uses: actions/cache@v6
         with:
           path: ~/.cache/trivy
@@ -383,10 +417,15 @@ jobs:
       #####################################################
       # Filesystem Scan
       #####################################################
+      # DevSecOps Asymmetry Design - Filesystem Scan:
+      # We use 'exit-code: 0' (non-blocking) for filesystem scans so that build pipelines are not 
+      # interrupted by dev-only or transitive dependencies that won't make it to the final runtime.
+      # Instead, we upload the generated SARIF file so developers can review, track, and remediate 
+      # findings directly on the GitHub Security tab and inline on PRs via Advanced Security.
       - name: Filesystem Scan
-        if: matrix.component.name != 'none'
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: ${{ env.TRIVY_VERSION }}
           scan-type: fs
           scan-ref: ${{ matrix.component.path }}
           format: sarif
@@ -394,7 +433,7 @@ jobs:
           exit-code: 0
 
       - name: Upload SARIF
-        if: matrix.component.name != 'none' && always()
+        if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
@@ -459,8 +498,14 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+
+      - name: Cache npm global cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
 
       ##########################################################
       # Download Backend JAR
@@ -680,17 +725,15 @@ jobs:
           path: frontend/dist/frontend/browser
 
       - uses: docker/setup-buildx-action@v4
-        if: matrix.component != 'none'
 
       - uses: docker/login-action@v4
-        if: matrix.component != 'none' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.push_images))
+        if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.push_images))
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Image
-        if: matrix.component != 'none'
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.component == 'backend' && '.' || 'frontend' }}
@@ -706,10 +749,15 @@ jobs:
           provenance: false
           sbom: false
 
+      # DevSecOps Asymmetry Design - Container Image Scan:
+      # Unlike the non-blocking filesystem scan, this step serves as our final release gate before artifacts
+      # are pushed to GHCR. We enforce 'exit-code: 1' (hard fail) on HIGH or CRITICAL vulnerabilities
+      # (with 'ignore-unfixed: true') to guarantee that no severely vulnerable image reaches production,
+      # while avoiding blocks on un-remediable CVEs.
       - name: Scan Docker Image
-        if: matrix.component != 'none'
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: ${{ env.TRIVY_VERSION }}
           image-ref: ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
           format: sarif
           output: trivy-results.sarif
@@ -719,13 +767,13 @@ jobs:
           exit-code: 1
 
       - name: Upload SARIF
-        if: matrix.component != 'none' && always()
+        if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
 
       - name: Push Image
-        if: matrix.component != 'none' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.push_images))
+        if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.push_images))
         run: |
           docker push ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
           docker push ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:latest

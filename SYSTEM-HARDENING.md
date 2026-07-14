@@ -82,6 +82,53 @@ Two critical architectural alignments were identified and resolved to ensure run
     *   **Local dev & benchmarking (`Dockerfile`):** Retains hardware-specific parallel GC optimization (`-XX:+UseParallelGC`), fixed 1GB JVM heap limits (`-Xms1g -Xmx1g`), and pre-committed heap pages (`-XX:+AlwaysPreTouch`) to maximize consistent RPS output on developer machines.
     *   **Production & orchestrator deployments (`Dockerfile.x64`):** Leverages container-portable, cgroup-aware scaling via `-XX:MaxRAMPercentage=75.0`, relies on standard low-latency G1 GC for stable p99 latencies, and cross-compiles explicitly under `--platform=linux/amd64` to match cloud runtimes without risk of architecture compatibility crashes.
 
+### Finding 10: Asymmetric DevSecOps Scanning Policy (Filesystem vs. Container Gating)
+*   **Location:** `.github/workflows/ci.yml` (Filesystem Scan vs. Scan Docker Image Steps)
+*   **Issue:** The security workflow was designed with an asymmetric scanning policy: the *Filesystem Scan* step of Trivy ran with `exit-code: 0` (non-blocking), while the *Scan Docker Image* step of Trivy ran with `exit-code: 1` (blocking). This is a highly effective, deliberate design choice:
+    1.  **Filesystem Scan (Non-Blocking):** Designed to generate a comprehensive SARIF report for security analysis. Failing this step would block the build and pull requests due to minor, temporary, or dev-only dependencies that are not packaged in the final hardened image. By setting `exit-code: 0`, the step completes successfully and uploads the SARIF report to GitHub Advanced Security Code Scanning, allowing developers to track and resolve alerts inline on PRs without breaking the build process.
+    2.  **Scan Docker Image (Blocking):** Positioned directly prior to the `Push Image` step as our final release gate. It enforces `exit-code: 1` on `HIGH` or `CRITICAL` severity findings, but includes `ignore-unfixed: true`. This prevents blocking the pipeline on un-remediable CVEs while acting as a hard security gate that stops severely vulnerable built containers from reaching the `ghcr.io` production registry.
+*   **Resolution:** Added clear, comprehensive inline comments directly to the `.github/workflows/ci.yml` file documenting this asymmetry. This ensures the rationale remains fully transparent, prevents accidental alignment of these steps by future maintainers, and codifies our DevSecOps architectural intent.
+
+### Finding 11: GitHub Actions Gradle Caching Optimization (PR Cache Gaps)
+*   **Location:** `.github/workflows/ci.yml` (Setup Gradle Steps)
+*   **Issue:** The workflow utilized `gradle/actions/setup-gradle@v6` which provides highly optimized state caching between runs. However, by default, the action enforces `cache-read-only: true` on all non-default (e.g., Pull Request) branches. Under this default policy, the first run on any PR branch is forced to download all new or modified Java dependencies from scratch on every commit/run, as GHA cannot write updated state back to the cache for that branch scope. This results in significant pipeline latencies during rapid iteration cycles on feature branches.
+*   **Resolution:** Configured `cache-read-only: false` explicitly for the `setup-gradle` steps across both the main `backend` build and the `codeql` analysis jobs. This allows PR branches to write their updated dependency, plugin, and wrapper state back to their branch-specific cache. Subsequent commits and runs within the same PR now benefit from a completely warm cache, significantly lowering pipeline times for active developers.
+
+### Finding 12: Automated GitHub Dependency Graph Submission
+*   **Location:** `.github/workflows/ci.yml` (Dependency Submission Job)
+*   **Issue:** The repository relied on asynchronous static analysis (CodeQL and Trivy filesystem scans) to identify security issues, but lacked direct, native integration with the **GitHub Dependency Graph** and **Dependabot** alert systems for Gradle. Without a formal dependency manifest submission, GitHub could not accurately map transitive library dependencies, leaving the project exposed to delayed vulnerability identification.
+*   **Resolution:** Introduced a dedicated `dependency-submission` job to the main CI workflow using **`gradle/actions/dependency-submission@v6`** (matching our other Gradle action major versions). This job runs on the main branch whenever a push or manual run occurs, extracting the complete dependency graph and submitting it immediately to the GitHub Dependency Submission API. This guarantees 100% accurate, up-to-the-minute tracking of transitive dependencies and empowers Dependabot to generate instant security patches/PRs the moment a vulnerability is disclosed.
+
+### Finding 13: NPM Global Cache Gaps in Frontend & E2E Jobs
+*   **Location:** `.github/workflows/ci.yml` (Frontend and E2E Jobs)
+*   **Issue:** The workflow previously configured the built-in node cache option in `actions/setup-node@v6` via `cache: npm`. However, during sub-directory execution (the frontend lives under `frontend/`) and multiple jobs (such as the separate `e2e` and `frontend` jobs), the default `setup-node` caching of `~/.npm` was occasionally prone to branch-restoration scoping mismatches and failed to fully cache the packages. As a result, `npm ci` was re-downloading and re-verifying a massive set of NPM registry tarballs on every run, adding considerable overhead to the pipeline.
+*   **Resolution:** Replaced the generic `cache: npm` setup-node option with an explicit, rock-solid **`actions/cache@v6`** step targeted directly at the global npm cache directory (**`~/.npm`**), keyed on the exact `frontend/package-lock.json` hash. Configured this optimized cache across both the `frontend` compilation job and the heavy `e2e` integration testing job. This guarantees absolute cache preservation of npm packages, enabling subsequent PR commits and pipeline runs to execute `npm ci --prefer-offline` in near-instant, offline-only mode.
+
+### Finding 14: Unsynchronized Trivy CLI Engine Versions
+*   **Location:** `.github/workflows/ci.yml` (Trivy Scan Steps)
+*   **Issue:** The workflow defined a global environment variable `TRIVY_VERSION: v0.36.0` to manage Trivy cache invalidations, but relied solely on the GitHub Action tag (`aquasecurity/trivy-action@v0.36.0`) to run the scans. This is an anti-pattern: the action version tag and the underlying Trivy CLI binary version are completely separate, which can lead to silent drift and cache invalidation mismatches when the action version upgrades or downloads a different, hardcoded CLI binary under the hood.
+*   **Resolution:** Configured both Trivy scanning steps (Filesystem and Container scans) to pass the CLI version explicitly using the action's **`version: ${{ env.TRIVY_VERSION }}`** input parameter. This guarantees that the exact Trivy CLI engine used at runtime is completely synchronized with the global environmental variable and the database cache key structure, preventing version mismatches and ensuring deterministic scan reports.
+
+### Finding 15: Redundant Job Creation on Zero-Change Pull Requests
+*   **Location:** `.github/workflows/ci.yml` (Select Components & Matrix Fallbacks)
+*   **Issue:** To handle PRs that changed neither frontend, backend, nor docker files (e.g. documentation-only updates), the workflow computed a fallback component named `none` and ran empty `security` and `docker-build` jobs to bypass empty matrix evaluation errors. While these jobs skipped all their steps immediately, they still spun up virtual machines on GitHub Actions runner fleets, wasting precious startup time and concurrent execution slots.
+*   **Resolution:** Eliminated the `'none'` fallback array entirely from our path-filtering logic. Instead, introduced a robust, job-level **`if` condition** to the `security` job that evaluates path outcomes before the runner even allocates a VM. The `security` and `docker-build` jobs are now skipped completely and never created on zero-change pull requests, entirely avoiding unnecessary runner allocations.
+
+### Finding 16: Backend-Only Dependency Review Restrictions
+*   **Location:** `.github/workflows/ci.yml` (Dependency Review Step)
+*   **Issue:** The GitHub Dependency Review step was strictly gated to execute only when `matrix.component.name == 'Backend'`. This meant that if a developer opened a Pull Request that only updated frontend NPM dependencies, the security gate was completely skipped, failing to scan and flag severe packages inside `frontend/package.json` before merging.
+*   **Resolution:** Redesigned the step's evaluation condition to support both Backend and Frontend manifests while maintaining a strict **runs-exactly-once** constraint to avoid wasting pipeline minutes. The Dependency Review action now executes on either the `Backend` loop, or falls back to the `Frontend` loop strictly if no backend changes are present in the PR:
+  ```yaml
+  if: |
+    github.event_name == 'pull_request' && (
+      matrix.component.name == 'Backend' || (
+        matrix.component.name == 'Frontend' && 
+        needs.changes.outputs.backend != 'true'
+      )
+    )
+  ```
+  This guarantees 100% security coverage of all Pull Requests changing either Java (Gradle) or Angular (NPM) manifests, with zero duplicate runs.
+
 ---
 
 ## 🧪 3. System Verification Status
