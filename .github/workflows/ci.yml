@@ -773,6 +773,16 @@ jobs:
 
       - name: Push Image
         if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.push_images))
-        run: |
-          docker push ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
-          docker push ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:latest
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.component == 'backend' && '.' || 'frontend' }}
+          file: ${{ matrix.component == 'backend' && 'Dockerfile.x64' || 'frontend/Dockerfile' }}
+          push: true
+          tags: |
+            ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
+            ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:latest
+          cache-from: |
+            type=gha,scope=${{ matrix.component }}-main
+            type=gha,scope=${{ matrix.component }}-pr
+          provenance: true
+          sbom: true
