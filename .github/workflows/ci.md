@@ -47,8 +47,8 @@ This job handles the Spring Boot backend compilation, testing, and packaging.
 ## 7. Job: `frontend`
 Handles the Angular 22 frontend linting, unit tests, and production distribution builds.
 
-- **Explicit Global NPM Cache (`actions/cache@v6` on `~/.npm`)**:
-  Instead of relying on `setup-node`'s generic built-in cache (which can be prone to branch-restoration scoping mismatches in sub-directory monorepos), we implement an explicit, highly optimized `actions/cache@v6` step targeted directly at the global npm cache directory (`~/.npm`), keyed by the frontend lockfile hash. By executing `npm ci --prefer-offline`, we ensure clean, reproducible dependency builds while enabling extremely fast, near-offline package resolution.
+- **Built-in Global NPM Cache (`actions/setup-node@v6`)**:
+  Leverages the native `cache: npm` and `cache-dependency-path: frontend/package-lock.json` properties of the `setup-node` action. This reduces manual configuration boilerplate, manages branch-scoped cache restoration automatically before any installations occur, and removes general maintenance overhead.
 - **Angular Build Caching:**
   We use `actions/cache` targeted directly at `frontend/.angular/cache`, keyed by the runner's OS and the `package-lock.json` hash. This stores compilation outputs across workflow runs and makes subsequent builds and tests significantly faster.
 - **Bypassing Redundant Prettier Runs:**
@@ -71,6 +71,11 @@ Consolidates and collapses the previously redundant backend and frontend securit
 - **Centralized & Robust Trivy Database Cache:**
   Shares a single cache configuration for the Trivy database between both scans, drastically reducing setup overhead. The cache key is bound to `TRIVY_VERSION`, ensuring the database is automatically and cleanly invalidated whenever the Trivy version is upgraded.
 
+## 8a. Job: `codeql` (Parallelized CodeQL Analysis)
+Performs deep semantic security analysis of the codebase.
+
+- **Parallelized Critical Path:** The `codeql` job depends strictly on the `changes` step, running in parallel with the main `backend` and `frontend` compilation steps rather than being serialized behind them. Since CodeQL performs its own build tracking (autobuild/traced-build) and does not consume the production JARs or Web bundles, letting it run in parallel reduces the overall workflow critical path duration significantly.
+
 ## 9. Job: `e2e` (End-to-End Tests)
 Runs Playwright E2E tests against a real, running backend and database.
 
@@ -87,6 +92,9 @@ Runs automated OWASP ZAP API scans against a live, running instance of the backe
 - **Fast Startup via Artifact Reuse:** Instantly downloads the compiled `backend-jar` artifact, completely bypassing compile and assembly cycles.
 - **Automated OWASP ZAP OpenAPI Scan:** Spins up the Spring Boot backend in the background and waits for the `/actuator/health` endpoint to be healthy. Then, it runs the official `zaproxy/action-api-scan@v0.9.0` container action to parse and fuzz all endpoints discovered in the OpenAPI schema (`/v3/api-docs`).
 - **Interactive Security Reports:** Compiles and archives the standard ZAP `report_html.html` report along with the active `spring.log` as build artifacts (`zap-dast-report`) for simple analysis and resolution of identified warnings.
+- **GitHub Security (GHAS) Code Scanning Integration:** Translates raw ZAP DAST findings into the standardized Static Analysis Results Interchange Format (SARIF) using a robust, in-repo Python conversion utility (`scripts/zap2sarif.py`). 
+  - *URI Sanitization:* Standard SARIF converters preserve full absolute live endpoints (e.g. `http://localhost:8080/api/v1/auth`), which fail GitHub's ingestion validation with scheme mismatches (`SARIF URI scheme "http" did not match the checkout URI scheme "file"`). Our custom script robustly strips schemes and port overrides (transforming it to `localhost/api/v1/auth`), making the file immediately acceptable as a valid relative path within the checked-out codebase.
+  - *Risk/Severity Mapping:* Maps ZAP's proprietary risk numbers to industry-standard threat levels (`error`, `warning`, `note`) and appends official CWE annotations (e.g. `external/cwe/cwe-XXX`) so the security findings render natively on the **GitHub Security → Code Scanning** dashboard.
 
 ## 10. Job: `docker-build`
 Compiles secure, production-grade container images for the backend and frontend components.
