@@ -5,12 +5,13 @@ This document explains the configuration of the `.github/workflows/ci.yml` file,
 ---
 
 ## 1. Trigger Configuration (`on`)
-The workflow is triggered on pushes and pull requests to the `main` branch. 
-It also includes a `workflow_dispatch` trigger with granular boolean inputs:
-- `run_tests`: Toggles unit tests, integration tests, and Playwright E2E tests across both the frontend and backend.
-- `run_security`: Toggles heavy dependency reviews and filesystem scans.
-- `push_images`: Toggles whether compiled Docker images should be uploaded to the GitHub Container Registry (GHCR).
-**Why:** This allows developers to manually trigger specific parts of the pipeline without wasting compute resources on steps they don't need to run at that exact moment.
+The workflow is triggered on pushes and pull requests to the `main` branch. On Pull Requests, **all tests (backend compile and unit/integration tests, frontend unit tests, and Playwright End-to-End tests)** run automatically by default to catch any regressions early.
+
+It also includes a `workflow_dispatch` trigger with granular boolean inputs for manual runs:
+- `run_tests`: Toggles unit tests, integration tests, and Playwright E2E tests across both the frontend and backend on manual runs (default: true).
+- `run_security`: Toggles heavy dependency reviews and filesystem scans (default: true).
+- `push_images`: Toggles whether compiled Docker images should be uploaded to the GitHub Container Registry (GHCR) (default: false).
+**Why:** This runs a comprehensive and rigorous set of quality gates on every Pull Request automatically, while offering fine-grained toggles for custom manual developer runs.
 
 ## 2. Concurrency (`concurrency`)
 ```yaml
@@ -36,15 +37,8 @@ A lightweight job that runs `hadolint` against `Dockerfile.x64` and `frontend/Do
 ## 6. Job: `backend`
 This job handles the Spring Boot backend compilation, testing, and packaging.
 
-- **Dynamic Task Sizing via `run_tests`:**
-  If manually triggered with tests disabled, the build step dynamically skips `./gradlew test` and `jacocoTestReport` to speed up compile times, executing only the essential compiler packaging operations:
-  ```bash
-  TASKS="processAot assemble"
-  if [ "${{ github.event_name != 'workflow_dispatch' || inputs.run_tests }}" = "true" ]; then
-    TASKS="test processAot assemble jacocoTestReport"
-  fi
-  ./gradlew --parallel --build-cache $TASKS --stacktrace
-  ```
+- **Automatic & Conditional Test Execution:**
+  Unit and integration tests run automatically on all Pull Requests. On manual runs (`workflow_dispatch`), they are executed conditionally if `run_tests` is enabled, or skipped entirely to fast-track packaging.
 - **Gradle Task Parallelism & Caching:** We explicitly pass the `--parallel` and `--build-cache` arguments to `./gradlew`. This compiles and processes independent AOT tasks across multiple threads, leveraging build outputs from previous runs.
 - **Visual Test Reporting (`action-junit-report`)**: Parses XML test results and creates visual summaries in the GitHub UI.
 - **Direct Artifact Uploads:** Instead of manually compressing reports into a `.tar.gz` archive, we upload the `build/reports` and `build/test-results` directories directly using `actions/upload-artifact@v7`. We set a 14-day retention period. For JAR files, we set `compression-level: 0` because they are already compressed natively.
@@ -58,7 +52,7 @@ Handles the Angular 22 frontend linting, unit tests, and production distribution
   We use `actions/cache` targeted directly at `frontend/.angular/cache`, keyed by the runner's OS and the `package-lock.json` hash. This stores compilation outputs across workflow runs and makes subsequent builds and tests significantly faster.
 - **Bypassing Redundant Prettier Runs:**
   Rather than calling `npm run test` and `npm run build`, we call `npx ng test` and `npx ng build` directly. This prevents triggering the NPM pre-lifecycle hooks (`pretest`, `prebuild`) which otherwise run formatting checks multiple redundant times.
-- **Conditional Testing:** The unit tests and coverage calculations are bypassed when `run_tests` is disabled on a manual trigger, skipping redundant unit execution.
+- **Conditional Testing:** Unit tests and coverage outputs run automatically by default on every Pull Request, and can be bypassed on manual triggers if `run_tests` is disabled.
 - **Direct Coverage Artifacts:** We upload the test coverage reports directly using `actions/upload-artifact@v7` with a 14-day retention period, rather than manually compressing them into `.tar.gz` files.
 
 ## 8. Job: `security` (Unified Security Scan)
@@ -78,6 +72,14 @@ Runs Playwright E2E tests against a real, running backend and database.
 - **Upgraded Playwright Browser Cache:** Playwright browsers are cached under a key tied directly to the `package-lock.json` file hash, guaranteeing that the cache is cleanly invalidated whenever the Playwright dependency version is modified. This also allowed us to remove the redundant `npx playwright --version` run step.
 - **Targeted Browser Installation:** Instead of installing all available major browsers (Chromium, Firefox, WebKit), we only install `chromium` (`npx playwright install --with-deps chromium`), which matches the Desktop Chrome browser used in `playwright.config.ts`. This reduces dependency download sizes and drastically speeds up the installation phase.
 - **Direct Playwright Reports Upload:** We upload `spring.log`, `frontend/playwright-report`, and `frontend/test-results` directly using the `upload-artifact` action. To save CPU cycles on already-compressed images and logs, we set `compression-level: 0` and apply a 14-day retention policy.
+
+## 9a. Job: `dast` (Dynamic Application Security Testing)
+Runs automated OWASP ZAP API scans against a live, running instance of the backend.
+
+- **Dynamic Environment Provisioning:** Similar to the `e2e` job, the `dast` job provisions high-speed **PostgreSQL 17** and **Redis** service containers on the runner to provide a fully clean integration environment.
+- **Fast Startup via Artifact Reuse:** Instantly downloads the compiled `backend-jar` artifact, completely bypassing compile and assembly cycles.
+- **Automated OWASP ZAP OpenAPI Scan:** Spins up the Spring Boot backend in the background and waits for the `/actuator/health` endpoint to be healthy. Then, it runs the official `zaproxy/action-api-scan@v0.9.0` container action to parse and fuzz all endpoints discovered in the OpenAPI schema (`/v3/api-docs`).
+- **Interactive Security Reports:** Compiles and archives an interactive `zap_report.html` report along with the active `spring.log` as build artifacts (`zap-dast-report`) for simple analysis and resolution of identified warnings.
 
 ## 10. Job: `docker-build`
 Compiles secure, production-grade container images for the backend and frontend components.
