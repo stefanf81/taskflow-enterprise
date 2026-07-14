@@ -41,7 +41,7 @@ env:
   IMAGE_TAG: ${{ github.sha }}
   BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/taskflow-backend
   FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/taskflow-frontend
-  TRIVY_VERSION: v0.36.0
+  TRIVY_VERSION: v0.70.0
 
 defaults:
   run:
