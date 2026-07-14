@@ -111,13 +111,14 @@ jobs:
           BACKEND_CHANGED: ${{ steps.filter.outputs.backend }}
           FRONTEND_CHANGED: ${{ steps.filter.outputs.frontend }}
           DOCKER_CHANGED: ${{ steps.filter.outputs.docker }}
+          IS_MAIN: ${{ github.ref == 'refs/heads/main' }}
           IS_MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           components=()
-          if [[ "$BACKEND_CHANGED" == "true" || "$DOCKER_CHANGED" == "true" || "$IS_MANUAL" == "true" ]]; then
+          if [[ "$BACKEND_CHANGED" == "true" || "$DOCKER_CHANGED" == "true" || "$IS_MAIN" == "true" || "$IS_MANUAL" == "true" ]]; then
             components+=('{"name":"Backend","path":"."}')
           fi
-          if [[ "$FRONTEND_CHANGED" == "true" || "$DOCKER_CHANGED" == "true" || "$IS_MANUAL" == "true" ]]; then
+          if [[ "$FRONTEND_CHANGED" == "true" || "$DOCKER_CHANGED" == "true" || "$IS_MAIN" == "true" || "$IS_MANUAL" == "true" ]]; then
             components+=('{"name":"Frontend","path":"frontend"}')
           fi
           printf 'matrix=%s\n' "$(printf '%s\n' "${components[@]}" | jq -s -c .)" >> "$GITHUB_OUTPUT"

@@ -136,6 +136,11 @@ Two critical architectural alignments were identified and resolved to ensure run
     2.  **Skip Cascades:** When a push or PR did not involve security-related files, the `security` job was safely skipped using our optimized job-level `if` conditional. However, because GHA propagates skip outcomes, this skip cascaded downstream and forced GHA to **completely bypass/skip the `e2e` job**, leaving functional integration tests un-run on clean commits.
 *   **Resolution:** Decoupled the `e2e` job from static analysis by removing `codeql` and `security` from its `needs` array. It now depends strictly on `changes`, `backend`, and `frontend`. This resolves the skip cascade issue, allowing E2E tests to execute reliably on every clean commit, and speeds up feature pipeline execution by allowing integration tests to run immediately in parallel with CodeQL.
 
+### Finding 18: Empty Matrix Creation Failure on Security Scan Job
+*   **Location:** `.github/workflows/ci.yml` (Select Security Components / Security Job)
+*   **Issue:** When we optimized the workflow by removing the `'none'` fallback array from the path filtering scripts, we introduced a rare, extremely subtle race condition on the `main` branch pushes. On merges or pushes to the `main` branch that did not modify any source code (e.g. documentation-only changes), the `security` job-level `if` evaluated to `true` (because `github.ref == 'refs/heads/main'`), forcing GHA to schedule the job. However, because no backend or frontend files changed, the matrix evaluation resolved to an empty array (`[]`). In GitHub Actions, **an empty matrix array is a system validation failure** that causes GHA to immediately fail the entire check suite with a parsing/validation error.
+*   **Resolution:** Aligned the `security_components` detection script with the `docker_components` logic by explicitly adding the `IS_MAIN: ${{ github.ref == 'refs/heads/main' }}` variable to its environment and selection checks. Now, pushes to `main` will correctly populate the matrix with `Backend` and `Frontend` components by default, completely eliminating any possibility of empty matrix runtime exceptions while ensuring full-range security coverage for production merges.
+
 ---
 
 ## 🧪 3. System Verification Status
