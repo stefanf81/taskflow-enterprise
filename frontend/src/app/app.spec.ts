@@ -321,7 +321,9 @@ describe('App Component Quality Assurance Suite', () => {
     app.cancelEmail = 'test@example.com';
     app.onPublicCancel();
 
-    let reqs = httpMock.match((req) => req.url.includes('/api/v1/appointments/public/cancel/test-id'));
+    let reqs = httpMock.match((req) =>
+      req.url.includes('/api/v1/appointments/public/cancel/test-id'),
+    );
     expect(reqs.length).toBe(1);
     expect(reqs[0].request.method).toBe('PUT');
     reqs[0].flush(null);
