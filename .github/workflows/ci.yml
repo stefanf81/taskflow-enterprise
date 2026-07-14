@@ -653,15 +653,18 @@ jobs:
           target: 'http://localhost:8080/v3/api-docs'
           allow_issue_writing: false
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
       - name: Convert ZAP JSON to SARIF
         if: always()
-        uses: matiascariboni/action-zap2sarif@master
-        with:
-          file_in: report_json.json
-          file_out: zap-results.sarif
+        run: python scripts/zap2sarif.py report_json.json zap-results.sarif
 
       - name: Upload ZAP SARIF to GitHub Security
         if: always()
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: zap-results.sarif
