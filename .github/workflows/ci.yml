@@ -619,6 +619,7 @@ jobs:
           format: openapi
           target: 'http://localhost:8080/v3/api-docs'
           cmd_options: '-r zap_report.html'
+          allow_issue_writing: false
 
       - name: Upload ZAP Report
         if: always()
