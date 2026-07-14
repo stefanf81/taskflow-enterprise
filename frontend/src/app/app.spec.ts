@@ -216,4 +216,162 @@ describe('App Component Quality Assurance Suite', () => {
     app.toggleFaq(2);
     expect(app.activeFaq()).toBe(2);
   });
+
+  it('should support non-HTTP simple helper methods', () => {
+    app.setAdminView('notifications');
+    expect(app.adminView()).toBe('notifications');
+
+    app.setAdminView('schedules');
+    expect(app.adminView()).toBe('schedules');
+
+    expect(app.isOverdue({ bookingDate: '2020-01-01' } as any)).toBe(true);
+    expect(app.isOverdue({ bookingDate: '2099-12-31' } as any)).toBe(false);
+    expect(app.isOverdue({} as any)).toBe(false);
+
+    app.selectStylist('Sara the Stylist');
+    expect(app.bookingBarber()).toBe('Sara the Stylist');
+
+    app.selectLookbookStyle('Classic Haircut', 'hair');
+    expect(app.bookingService()).toBe('Classic Haircut');
+    expect(app.selectedCategory()).toBe('hair');
+    expect(app.activeStep()).toBe(2);
+  });
+
+  it('should support onLogout', () => {
+    sessionStorage.setItem('auth_role', 'ROLE_ADMIN');
+    app.userRole.set('ROLE_ADMIN');
+    app.onLogout();
+    expect(app.userRole()).toBe('');
+    expect(sessionStorage.getItem('auth_role')).toBeNull();
+  });
+
+  it('should validate step 4 correctly', () => {
+    app.bookingName.set('Test User');
+    app.bookingEmail.set('test@example.com');
+    app.bookingPhone.set('1234567890');
+    expect(app.isStepValid(4)).toBe(true);
+
+    app.bookingName.set('');
+    expect(app.isStepValid(4)).toBe(false);
+  });
+
+  it('should handle onLogin success and failure', () => {
+    const httpMock = TestBed.inject(HttpTestingController);
+
+    // failure path
+    app.loginUsername = 'wrong';
+    app.loginPassword = 'wrong-password';
+    app.onLogin();
+
+    let reqs = httpMock.match((req) => req.url.includes('/api/v1/auth/login'));
+    expect(reqs.length).toBe(1);
+    reqs[0].error(new ProgressEvent('error'), { status: 401, statusText: 'Unauthorized' });
+    expect(app.errorMessage()).toBe('Invalid credentials. Please try again.');
+
+    // success path
+    app.loginUsername = 'admin';
+    app.loginPassword = 'admin-password';
+    app.onLogin();
+
+    reqs = httpMock.match((req) => req.url.includes('/api/v1/auth/login'));
+    expect(reqs.length).toBe(1);
+    reqs[0].flush({ token: 'test-token', role: 'ROLE_ADMIN' });
+    expect(app.isLoggedIn()).toBe(true);
+    expect(app.userRole()).toBe('ROLE_ADMIN');
+    expect(sessionStorage.getItem('auth_token')).toBe('Bearer test-token');
+    expect(sessionStorage.getItem('auth_role')).toBe('ROLE_ADMIN');
+  });
+
+  it('should handle onRegister success and failure', () => {
+    const httpMock = TestBed.inject(HttpTestingController);
+
+    app.isRegisterMode = true;
+    app.loginUsername = 'newuser@example.com';
+    app.loginPassword = 'password123';
+    app.registerFullName = 'New User';
+    app.registerPhone = '555-1234';
+
+    app.onLogin(); // triggers onRegister when isRegisterMode is true
+
+    let reqs = httpMock.match((req) => req.url.includes('/api/v1/auth/register'));
+    expect(reqs.length).toBe(1);
+    reqs[0].flush({ message: 'Success' });
+
+    expect(app.isRegisterMode).toBe(false);
+    expect(app.successMessage()).toBe('Account created! You can now log in.');
+
+    // error path
+    app.isRegisterMode = true;
+    app.loginUsername = 'newuser2@example.com';
+    app.loginPassword = 'password123';
+    app.registerFullName = 'New User 2';
+    app.registerPhone = '555-1234';
+
+    app.onLogin();
+    reqs = httpMock.match((req) => req.url.includes('/api/v1/auth/register'));
+    expect(reqs.length).toBe(1);
+    reqs[0].error(new ProgressEvent('error'), { status: 400, statusText: 'Bad Request' });
+    expect(app.errorMessage()).toBe('Failed to create account.');
+  });
+
+  it('should handle onPublicCancel success and failure', () => {
+    const httpMock = TestBed.inject(HttpTestingController);
+
+    app.cancelBookingId = 'test-id';
+    app.cancelEmail = 'test@example.com';
+    app.onPublicCancel();
+
+    let reqs = httpMock.match((req) => req.url.includes('/api/v1/appointments/public/cancel/test-id'));
+    expect(reqs.length).toBe(1);
+    expect(reqs[0].request.method).toBe('PUT');
+    reqs[0].flush(null);
+
+    expect(app.successMessage()).toBe(
+      '🗑️ Reservation successfully cancelled and deleted from our calendar.',
+    );
+    expect(app.cancelBookingId).toBe('');
+    expect(app.cancelEmail).toBe('');
+
+    // error path
+    app.cancelBookingId = 'bad-id';
+    app.cancelEmail = 'test@example.com';
+    app.onPublicCancel();
+
+    reqs = httpMock.match((req) => req.url.includes('/api/v1/appointments/public/cancel/bad-id'));
+    expect(reqs.length).toBe(1);
+    reqs[0].error(new ProgressEvent('error'), { status: 404, statusText: 'Not Found' });
+    expect(app.errorMessage()).toBe(
+      'Verification failed. Please check your Booking Code and Email.',
+    );
+  });
+
+  it('should handle submitReview success and failure', () => {
+    const httpMock = TestBed.inject(HttpTestingController);
+
+    app.reviewPublicId = 'test-id';
+    app.reviewRating = 4;
+    app.reviewComment = 'Great!';
+    app.submitReview();
+
+    let reqs = httpMock.match((req) => req.url.includes('/api/v1/reviews/public/test-id'));
+    expect(reqs.length).toBe(1);
+    expect(reqs[0].request.method).toBe('POST');
+    expect(reqs[0].request.body).toEqual({ rating: 4, comment: 'Great!' });
+    reqs[0].flush(null);
+
+    expect(app.successMessage()).toBe('Thank you for your review! We appreciate your feedback.');
+    expect(app.reviewPublicId).toBe('');
+    expect(app.reviewComment).toBe('');
+
+    // error path
+    app.reviewPublicId = 'bad-id';
+    app.submitReview();
+
+    reqs = httpMock.match((req) => req.url.includes('/api/v1/reviews/public/bad-id'));
+    expect(reqs.length).toBe(1);
+    reqs[0].error(new ProgressEvent('error'), { status: 400, statusText: 'Bad Request' });
+    expect(app.errorMessage()).toBe(
+      'Failed to submit review. Ensure the code is correct and the appointment is completed.',
+    );
+  });
 });
