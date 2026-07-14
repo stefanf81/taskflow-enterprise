@@ -285,10 +285,13 @@ jobs:
       - frontend
     if: |
       always() &&
-      github.event_name != 'push' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled') &&
-      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || needs.changes.outputs.docker == 'true' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+      (
+        github.event_name == 'pull_request' ||
+        github.ref == 'refs/heads/main' ||
+        github.event_name == 'workflow_dispatch'
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -332,7 +335,11 @@ jobs:
     name: Security Scan (${{ matrix.component.name }})
     needs: changes
     if: |
-      github.event_name != 'push' &&
+      (
+        github.event_name == 'pull_request' ||
+        github.ref == 'refs/heads/main' ||
+        github.event_name == 'workflow_dispatch'
+      ) &&
       (github.event_name != 'workflow_dispatch' || inputs.run_security)
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -406,6 +413,7 @@ jobs:
       !contains(needs.*.result, 'cancelled') &&
       (
         github.event_name == 'pull_request' ||
+        github.ref == 'refs/heads/main' ||
         (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
       )
     runs-on: ubuntu-latest
@@ -541,8 +549,11 @@ jobs:
       - changes
       - backend
     if: |
-      github.event_name != 'push' &&
-      (needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch') &&
+      (
+        needs.changes.outputs.backend == 'true' ||
+        github.ref == 'refs/heads/main' ||
+        github.event_name == 'workflow_dispatch'
+      ) &&
       (github.event_name != 'workflow_dispatch' || inputs.run_security)
     runs-on: ubuntu-latest
     timeout-minutes: 20
