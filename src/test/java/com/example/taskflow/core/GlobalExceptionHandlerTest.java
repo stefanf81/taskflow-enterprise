@@ -161,4 +161,50 @@ class GlobalExceptionHandlerTest {
         assertEquals(500, response.getBody().getStatus());
         assertEquals("An unexpected error occurred. Please try again later.", response.getBody().getMessage());
     }
+
+    @Test
+    void testHandleHttpMessageNotReadableException() {
+        org.springframework.http.converter.HttpMessageNotReadableException ex = mock(org.springframework.http.converter.HttpMessageNotReadableException.class);
+        when(ex.getMessage()).thenReturn("Malformed JSON");
+        RuntimeException cause = new RuntimeException("Parse error detail");
+        when(ex.getMostSpecificCause()).thenReturn(cause);
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleHttpMessageNotReadableException(ex, request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("Malformed JSON request payload: Parse error detail", response.getBody().getMessage());
+    }
+
+    @Test
+    void testHandleNotFoundExceptions() {
+        org.springframework.web.servlet.resource.NoResourceFoundException ex = mock(org.springframework.web.servlet.resource.NoResourceFoundException.class);
+        when(ex.getMessage()).thenReturn("Resource not found message");
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleNotFoundExceptions(ex, request);
+
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("Resource not found: Resource not found message", response.getBody().getMessage());
+    }
+
+    @Test
+    void testHandleMethodNotSupportedException() {
+        org.springframework.web.HttpRequestMethodNotSupportedException ex = mock(org.springframework.web.HttpRequestMethodNotSupportedException.class);
+        when(ex.getMessage()).thenReturn("Request method 'POST' is not supported");
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleMethodNotSupportedException(ex, request);
+
+        assertEquals(HttpStatus.METHOD_NOT_ALLOWED, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("Method not allowed: Request method 'POST' is not supported", response.getBody().getMessage());
+    }
+
+    @Test
+    void testHandleMediaTypeNotSupportedException() {
+        org.springframework.web.HttpMediaTypeNotSupportedException ex = mock(org.springframework.web.HttpMediaTypeNotSupportedException.class);
+        when(ex.getMessage()).thenReturn("Content-Type 'text/plain' is not supported");
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleMediaTypeNotSupportedException(ex, request);
+
+        assertEquals(HttpStatus.UNSUPPORTED_MEDIA_TYPE, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("Unsupported media type: Content-Type 'text/plain' is not supported", response.getBody().getMessage());
+    }
 }

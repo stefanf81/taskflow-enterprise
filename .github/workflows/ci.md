@@ -60,6 +60,7 @@ Handles the Angular 22 frontend linting, unit tests, and production distribution
 Submits the complete, deep Java and Gradle dependency tree directly to the GitHub Dependency Submission API.
 
 - **Dependabot Integration:** Uses `gradle/actions/dependency-submission@v6` to extract, compile, and upload the full transitive dependency graph on pushes to the `main` branch. This empowers Dependabot to dynamically track package vulnerabilities and automatically generate hotfix pull requests the moment a CVE is disclosed.
+- **Caching & Permissions:** Explicitly configured with `contents: write` and `actions: write` permissions. The `actions: write` permission is crucial to allow the Gradle Action to save and restore dependencies caching successfully, preventing "cache write denied" warnings while maximizing the build execution speed on subsequent runs.
 
 ## 8. Job: `security` (Unified Security Scan)
 Consolidates and collapses the previously redundant backend and frontend security scanning jobs into a single highly optimized matrix-driven job.

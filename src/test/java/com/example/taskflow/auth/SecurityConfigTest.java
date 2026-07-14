@@ -101,6 +101,5 @@ class SecurityConfigTest {
         SecurityConfig config = new SecurityConfig("admin", "pass", "*", null, null, dummyDataSource());
         
         assertNotNull(config.passwordEncoder());
-        assertNotNull(config.webSecurityCustomizer());
     }
 }
