@@ -40,14 +40,15 @@ This job handles the Spring Boot backend compilation, testing, and packaging.
 - **Automatic & Conditional Test Execution:**
   Unit and integration tests run automatically on all Pull Requests. On manual runs (`workflow_dispatch`), they are executed conditionally if `run_tests` is enabled, or skipped entirely to fast-track packaging.
 - **Gradle Task Parallelism & Caching:** We explicitly pass the `--parallel` and `--build-cache` arguments to `./gradlew`. This compiles and processes independent AOT tasks across multiple threads, leveraging build outputs from previous runs.
+- **Gradle Caching Write Access (`cache-read-only: false`):** We configure `cache-read-only: false` on the setup-gradle action. By default, setup-gradle disables cache writes on non-default branches (e.g. Pull Requests). Overriding this ensures that PR branches can cache new/updated dependencies, avoiding slow downloads on subsequent commits.
 - **Visual Test Reporting (`action-junit-report`)**: Parses XML test results and creates visual summaries in the GitHub UI.
 - **Direct Artifact Uploads:** Instead of manually compressing reports into a `.tar.gz` archive, we upload the `build/reports` and `build/test-results` directories directly using `actions/upload-artifact@v7`. We set a 14-day retention period. For JAR files, we set `compression-level: 0` because they are already compressed natively.
 
 ## 7. Job: `frontend`
 Handles the Angular 22 frontend linting, unit tests, and production distribution builds.
 
-- **Secure NPM Caching (`actions/setup-node@v6`)**:
-  Instead of caching the entire `node_modules` directory (which can lead to stale native binaries and cache poisoning risks), we rely on `setup-node`'s built-in `npm` cache. We always execute `npm ci` to ensure a clean, reproducible dependency tree.
+- **Explicit Global NPM Cache (`actions/cache@v6` on `~/.npm`)**:
+  Instead of relying on `setup-node`'s generic built-in cache (which can be prone to branch-restoration scoping mismatches in sub-directory monorepos), we implement an explicit, highly optimized `actions/cache@v6` step targeted directly at the global npm cache directory (`~/.npm`), keyed by the frontend lockfile hash. By executing `npm ci --prefer-offline`, we ensure clean, reproducible dependency builds while enabling extremely fast, near-offline package resolution.
 - **Angular Build Caching:**
   We use `actions/cache` targeted directly at `frontend/.angular/cache`, keyed by the runner's OS and the `package-lock.json` hash. This stores compilation outputs across workflow runs and makes subsequent builds and tests significantly faster.
 - **Bypassing Redundant Prettier Runs:**
@@ -55,20 +56,26 @@ Handles the Angular 22 frontend linting, unit tests, and production distribution
 - **Conditional Testing:** Unit tests and coverage outputs run automatically by default on every Pull Request, and can be bypassed on manual triggers if `run_tests` is disabled.
 - **Direct Coverage Artifacts:** We upload the test coverage reports directly using `actions/upload-artifact@v7` with a 14-day retention period, rather than manually compressing them into `.tar.gz` files.
 
+## 7a. Job: `dependency-submission` (Dependency Graph Submission)
+Submits the complete, deep Java and Gradle dependency tree directly to the GitHub Dependency Submission API.
+
+- **Dependabot Integration:** Uses `gradle/actions/dependency-submission@v6` to extract, compile, and upload the full transitive dependency graph on pushes to the `main` branch. This empowers Dependabot to dynamically track package vulnerabilities and automatically generate hotfix pull requests the moment a CVE is disclosed.
+
 ## 8. Job: `security` (Unified Security Scan)
 Consolidates and collapses the previously redundant backend and frontend security scanning jobs into a single highly optimized matrix-driven job.
 
 - **Dynamic Matrix Execution:** Calculates a dynamic `security_components` array in the `changes` job based on which paths had modifications. If only frontend files changed, the backend filesystem scan is skipped; if only backend files changed, the frontend filesystem scan is skipped.
-- **Deduplicated Dependency Review:** Runs the heavier GitHub `Dependency Review` action strictly on Pull Requests for the `Backend` matrix component, avoiding scanning the whole repository multiple times in separate jobs.
+- **Smart Job-Level Gating (Skip Optimization):** We applied a robust, job-level `if` conditional that checks path filters before a virtual runner VM is allocated. If a commit contains zero code changes (e.g. documentation-only pushes), GHA completely skips scheduling the job, saving substantial compute minutes and concurrent execution slots. We also completely eliminated the redundant `'none'` matrix fallback array.
+- **Trivy CLI Version Synchronization:** Rather than relying purely on GHA action tags (which can drift from the underlying CLI binary), we explicitly define `TRIVY_VERSION: v0.70.0` globally and pass it to the scanner using `version: ${{ env.TRIVY_VERSION }}`. This aligns the local CLI installation, database cache keys, and engine version flawlessly, avoiding any HTTP 404 download crashes.
+- **Expanded, Runs-Exactly-Once Dependency Review:** Runs the heavier GitHub `Dependency Review` action strictly on Pull Requests exactly once per run. It executes on the `Backend` loop, or falls back to the `Frontend` loop strictly if no backend changes are present in the PR, guaranteeing 100% scanning coverage of Angular NPM lockfile updates without redundant execution overhead.
 - **Centralized & Robust Trivy Database Cache:**
-  Shares a single cache configuration for the Trivy database between both scans, drastically reducing setup overhead. To avoid stale cache issues when upgrading `aquasecurity/trivy-action`, the workflow utilizes a workflow-level environment variable `TRIVY_VERSION` and injects it into the cache key. This ensures the cache is automatically and cleanly invalidated whenever the Trivy version is upgraded, eliminating fragile regex parsing in shell steps and avoiding hardcoded version mismatches.
-- **Robust Failure Resiliency:** Utilizes the defensive fallback component `none` to avoid matrix compilation errors on PRs with only general/docs changes, and leverages `if: matrix.component.name != 'none' && always()` to guarantee that SARIF reports are uploaded even if the security scan fails.
+  Shares a single cache configuration for the Trivy database between both scans, drastically reducing setup overhead. The cache key is bound to `TRIVY_VERSION`, ensuring the database is automatically and cleanly invalidated whenever the Trivy version is upgraded.
 
 ## 9. Job: `e2e` (End-to-End Tests)
 Runs Playwright E2E tests against a real, running backend and database.
 
-- **Dual Dependency (`needs: [changes, backend, frontend]`)**:
-  The E2E job now waits for both the backend and frontend jobs to succeed first. If unit tests fail, the heavy and expensive browser tests are skipped immediately, preventing pipeline resource waste.
+- **Decoupled dependencies (`needs: [changes, backend, frontend]`)**:
+  The E2E job depends strictly on `changes`, `backend`, and `frontend` (not `codeql` or `security`). This eliminates redundant bottlenecks (E2E tests don't have to wait for static CodeQL analysis) and completely prevents skip-cascading. If the `security` job is skipped on clean commits, GHA will no longer bypass E2E tests, allowing them to run reliably on every merge or push.
 - **Upgraded Playwright Browser Cache:** Playwright browsers are cached under a key tied directly to the `package-lock.json` file hash, guaranteeing that the cache is cleanly invalidated whenever the Playwright dependency version is modified. This also allowed us to remove the redundant `npx playwright --version` run step.
 - **Targeted Browser Installation:** Instead of installing all available major browsers (Chromium, Firefox, WebKit), we only install `chromium` (`npx playwright install --with-deps chromium`), which matches the Desktop Chrome browser used in `playwright.config.ts`. This reduces dependency download sizes and drastically speeds up the installation phase.
 - **Direct Playwright Reports Upload:** We upload `spring.log`, `frontend/playwright-report`, and `frontend/test-results` directly using the `upload-artifact` action. To save CPU cycles on already-compressed images and logs, we set `compression-level: 0` and apply a 14-day retention policy.
@@ -85,12 +92,13 @@ Runs automated OWASP ZAP API scans against a live, running instance of the backe
 Compiles secure, production-grade container images for the backend and frontend components.
 
 - **Deduplicated Multi-Tag Builds:** Both the unique commit SHA (`IMAGE_TAG`) and `latest` tags are defined simultaneously in the `docker/build-push-action` step. This ensures Buildx executes a single build compilation graph, tagging the resulting local image under both tags at once.
-- **Local Loading (`load: true`) for Image Scanning:**
-  The workflow uses `load: true` to load the built image into the local Docker daemon instead of utilizing direct pushing (`push: true`). Although this prevents utilizing Buildx's fastest registry push workflow (which pushes built layers directly to the registry from the builder cache), it is a necessary requirement. This allows **Trivy** to run local container image scans (`scan-type: image`) to identify vulnerabilities *prior* to pushing any images to the remote registry.
-- **Unified Image Pushing:** When the push triggers are met, we push both tags (`IMAGE_TAG` and `latest`) in a single step block. This eliminates the need for any secondary metadata commands (such as `docker buildx imagetools create`), making the workflow much simpler and fully prepared for any future multi-platform registry push expansions.
+- **Optimized Two-Stage Build-and-Push (SLSA & SBOM)**:
+  To support local Trivy vulnerability scans, we must load the image into the local runner's daemon (`load: true`). However, GHA Buildx local loading does not support image index structures containing supply-chain annotations (SLSA provenance and SBOMs) and will crash. We solve this elegantly using a two-stage pattern:
+  1.  **Stage 1 (Build Local & Scan):** Builds with `load: true`, `provenance: false`, and `sbom: false`. The image is scanned locally by Trivy (acting as a hard release gate).
+  2.  **Stage 2 (Registry Push with Attestations):** When pushing to the registry, the manual `docker push` step is replaced with a second `build-push-action` utilizing `push: true`, `provenance: true`, and `sbom: true` (`provenance: true` registers SLSA metadata and `sbom: true` attaches SBOMs). Because Buildx pulls from the warm GHA cache populated during Stage 1, this push step executes **near-instantaneously** (under 5 seconds) without redundant compiling!
 - **Dynamic Matrix Execution:** Instead of a hardcoded matrix that tries to build both components and fails when compilation is skipped, we use a dynamic `docker_components` output array calculated in the `changes` job. This only compiles and scans images that actually had changes.
-- **Defensive Fallback Handling:** If no code components changed (e.g., only general documentation changed), the matrix falls back to `['none']` and all runner steps are safely bypassed using `if: matrix.component != 'none'` checks to avoid empty matrix errors.
-- **Robust Security Scan Uploading:** Trivy security scanning uses `exit-code: 1` to fail on high or critical vulnerabilities. The final SARIF upload step utilizes `if: matrix.component != 'none' && always()` to ensure scan results are successfully uploaded to the GitHub Security tab even if vulnerabilities cause the scanning step to fail.
+- **Smart Job-Level Gating (Skip Optimization):** We applied a robust, job-level `if` conditional that checks path filters before a virtual runner VM is allocated. If a commit contains zero code changes (e.g. documentation-only pushes), GHA completely skips scheduling the job, saving substantial compute minutes and concurrent execution slots. We also completely eliminated the redundant `'none'` matrix fallback array.
+- **Robust Security Scan Uploading:** Trivy security scanning uses `exit-code: 1` to fail on high or critical vulnerabilities. The final SARIF upload step utilizes `if: always()` to ensure scan results are successfully uploaded to the GitHub Security tab even if vulnerabilities cause the scanning step to fail.
 - **Robust Pushing & Flag Decoupling:** Image pushing has been refactored to:
   `((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.push_images))`
   * **Automated runs:** Automatically push to the GitHub Container Registry (`ghcr.io`) upon merges/pushes to the `main` branch.
