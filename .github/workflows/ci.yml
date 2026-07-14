@@ -151,7 +151,12 @@ jobs:
   backend:
     name: Backend
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.docker_backend == 'true' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: |
+      github.event_name == 'pull_request' ||
+      needs.changes.outputs.backend == 'true' ||
+      needs.changes.outputs.docker_backend == 'true' ||
+      github.ref == 'refs/heads/main' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -168,11 +173,17 @@ jobs:
         run: ./gradlew --parallel --build-cache processAot assemble --stacktrace
 
       - name: Run Tests
-        if: github.event_name == 'workflow_dispatch' && inputs.run_tests == true
+        if: |
+          github.event_name == 'pull_request' ||
+          (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
         run: ./gradlew --parallel --build-cache test jacocoTestReport --stacktrace
 
       - name: Upload Test Reports
-        if: always() && (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
+        if: |
+          always() && (
+            github.event_name == 'pull_request' ||
+            (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
+          )
         uses: actions/upload-artifact@v7
         with:
           name: backend-test-results
@@ -195,7 +206,12 @@ jobs:
   frontend:
     name: Frontend
     needs: changes
-    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.docker_frontend == 'true' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: |
+      github.event_name == 'pull_request' ||
+      needs.changes.outputs.frontend == 'true' ||
+      needs.changes.outputs.docker_frontend == 'true' ||
+      github.ref == 'refs/heads/main' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -229,7 +245,9 @@ jobs:
             angular-${{ runner.os }}-
 
       - name: Run unit tests
-        if: github.event_name == 'workflow_dispatch' && inputs.run_tests == true
+        if: |
+          github.event_name == 'pull_request' ||
+          (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
         run: |
           npx ng test \
             --watch=false \
@@ -248,7 +266,11 @@ jobs:
 
       - name: Upload coverage
         uses: actions/upload-artifact@v7
-        if: always() && (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
+        if: |
+          always() && (
+            github.event_name == 'pull_request' ||
+            (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
+          )
         with:
           name: frontend-coverage
           path: frontend/coverage
@@ -382,8 +404,10 @@ jobs:
       always() &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled') &&
-      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') &&
-      (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
+      (
+        github.event_name == 'pull_request' ||
+        (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
@@ -507,6 +531,103 @@ jobs:
             spring.log
             frontend/playwright-report
             frontend/test-results
+          if-no-files-found: ignore
+          compression-level: 0
+          retention-days: 14
+
+  dast:
+    name: DAST Scan (OWASP ZAP)
+    needs:
+      - changes
+      - backend
+    if: |
+      github.event_name != 'push' &&
+      (needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch') &&
+      (github.event_name != 'workflow_dispatch' || inputs.run_security)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: taskflow
+          POSTGRES_USER: taskflow
+          POSTGRES_PASSWORD: taskflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U taskflow"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/taskflow
+      SPRING_DATASOURCE_USERNAME: taskflow
+      SPRING_DATASOURCE_PASSWORD: taskflow
+      SPRING_DATA_REDIS_HOST: localhost
+      SPRING_DATA_REDIS_PORT: 6379
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Download Backend JAR
+        uses: actions/download-artifact@v8
+        with:
+          name: backend-jar
+          path: backend-jar-dir
+
+      - name: Start Spring Boot Backend
+        run: |
+          nohup java -Dspring.profiles.active=prod -jar backend-jar-dir/*.jar > spring.log 2>&1 < /dev/null &
+
+      - name: Wait for Backend
+        run: |
+          echo "Waiting for Spring Boot..."
+          for i in {1..90}; do
+            if curl -fs http://localhost:8080/actuator/health; then
+              echo "Backend ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Backend failed"
+          echo "=============================="
+          cat spring.log
+          echo "=============================="
+          exit 1
+
+      - name: Run OWASP ZAP API Scan
+        uses: zaproxy/action-api-scan@v0.9.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          format: openapi
+          target: 'http://localhost:8080/v3/api-docs'
+          cmd_options: '-r zap_report.html'
+
+      - name: Upload ZAP Report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: zap-dast-report
+          path: |
+            spring.log
+            zap_report.html
           if-no-files-found: ignore
           compression-level: 0
           retention-days: 14

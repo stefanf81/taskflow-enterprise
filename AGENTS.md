@@ -66,9 +66,7 @@ KUBECONFIG=k3d-kubeconfig.yaml kubectl get pods -n taskflow
 ```
 
 ### Security
-```
-./run-dast-scan.sh       # spins up compose, runs OWASP ZAP against OpenAPI spec, writes zap_report.html
-```
+Security scans (filesystem lints, container image vulnerability scans, and DAST OpenAPI security scans) are automated and executed directly within GitHub Actions to maintain lightweight local environments.
 
 ## Key Conventions
 
