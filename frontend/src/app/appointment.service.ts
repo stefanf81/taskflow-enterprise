@@ -206,8 +206,7 @@ export class AppointmentService {
   }
 
   publicCancelAppointment(publicId: string, email: string): Observable<void> {
-    let params = new HttpParams().set('email', email);
-    return this.http.put<void>(`${this.apiUrl}/public/cancel/${publicId}`, null, { params });
+    return this.http.put<void>(`${this.apiUrl}/public/cancel/${publicId}`, { email });
   }
 
   updateAppointmentStatus(id: number, statusValue: string): Observable<AppointmentItem> {

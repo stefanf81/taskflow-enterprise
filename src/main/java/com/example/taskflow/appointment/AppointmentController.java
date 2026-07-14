@@ -79,11 +79,8 @@ public class AppointmentController {
     public ResponseEntity<Void> publicCancelAppointment(
             @Parameter(description = "The public UUID of the appointment")
             @PathVariable String publicId,
-            @Parameter(description = "Booking email for verification")
-            @NotBlank(message = "Email is required")
-            @Email(message = "Email must be valid")
-            @RequestParam String email) {
-        appointmentService.publicCancelAppointment(publicId, email);
+            @Valid @RequestBody CancelRequest request) {
+        appointmentService.publicCancelAppointment(publicId, request.email());
         return ResponseEntity.noContent().build();
     }
 

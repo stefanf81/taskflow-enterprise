@@ -200,7 +200,8 @@ class AppointmentControllerIntegrationTest {
         Appointment savedItem = appointmentRepository.save(item);
 
         mockMvc.perform(put("/api/v1/appointments/public/cancel/" + savedItem.getPublicId())
-                        .param("email", "alex@test.com"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CancelRequest("alex@test.com"))))
                 .andExpect(status().isNoContent());
 
         assertFalse(appointmentRepository.existsById(savedItem.getId()));
