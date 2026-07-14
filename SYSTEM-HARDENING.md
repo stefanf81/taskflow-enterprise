@@ -129,6 +129,13 @@ Two critical architectural alignments were identified and resolved to ensure run
   ```
   This guarantees 100% security coverage of all Pull Requests changing either Java (Gradle) or Angular (NPM) manifests, with zero duplicate runs.
 
+### Finding 17: Redundant Pipeline Bottlenecks and Skip Cascades on E2E Tests
+*   **Location:** `.github/workflows/ci.yml` (End-to-End Tests Job)
+*   **Issue:** The `e2e` job previously listed `codeql` and `security` (Trivy scans) in its `needs` dependency array. This created two major pipeline inefficiencies:
+    1.  **Pipeline Bottlenecks:** The integration tests were forced to block and wait for the slow `codeql` job (~2 minutes) to finish, even though E2E testing has zero functional dependency on static CodeQL analysis.
+    2.  **Skip Cascades:** When a push or PR did not involve security-related files, the `security` job was safely skipped using our optimized job-level `if` conditional. However, because GHA propagates skip outcomes, this skip cascaded downstream and forced GHA to **completely bypass/skip the `e2e` job**, leaving functional integration tests un-run on clean commits.
+*   **Resolution:** Decoupled the `e2e` job from static analysis by removing `codeql` and `security` from its `needs` array. It now depends strictly on `changes`, `backend`, and `frontend`. This resolves the skip cascade issue, allowing E2E tests to execute reliably on every clean commit, and speeds up feature pipeline execution by allowing integration tests to run immediately in parallel with CodeQL.
+
 ---
 
 ## 🧪 3. System Verification Status

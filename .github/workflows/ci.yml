@@ -444,8 +444,6 @@ jobs:
       - changes
       - backend
       - frontend
-      - codeql
-      - security
     if: |
       always() &&
       !contains(needs.*.result, 'failure') &&
