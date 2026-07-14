@@ -63,6 +63,9 @@ k3d-kubeconfig.yaml
 llm-config.json
 lmstudio-qwen-config.json
 zap_report.html
+report_html.html
+report_json.json
+report_md.md
 
 # OS / Editor / Logs
 .DS_Store

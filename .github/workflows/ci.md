@@ -79,7 +79,7 @@ Runs automated OWASP ZAP API scans against a live, running instance of the backe
 - **Dynamic Environment Provisioning:** Similar to the `e2e` job, the `dast` job provisions high-speed **PostgreSQL 17** and **Redis** service containers on the runner to provide a fully clean integration environment.
 - **Fast Startup via Artifact Reuse:** Instantly downloads the compiled `backend-jar` artifact, completely bypassing compile and assembly cycles.
 - **Automated OWASP ZAP OpenAPI Scan:** Spins up the Spring Boot backend in the background and waits for the `/actuator/health` endpoint to be healthy. Then, it runs the official `zaproxy/action-api-scan@v0.9.0` container action to parse and fuzz all endpoints discovered in the OpenAPI schema (`/v3/api-docs`).
-- **Interactive Security Reports:** Compiles and archives an interactive `zap_report.html` report along with the active `spring.log` as build artifacts (`zap-dast-report`) for simple analysis and resolution of identified warnings.
+- **Interactive Security Reports:** Compiles and archives the standard ZAP `report_html.html` report along with the active `spring.log` as build artifacts (`zap-dast-report`) for simple analysis and resolution of identified warnings.
 
 ## 10. Job: `docker-build`
 Compiles secure, production-grade container images for the backend and frontend components.
