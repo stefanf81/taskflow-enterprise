@@ -17,6 +17,10 @@ on:
         description: Run security scans
         type: boolean
         default: true
+      run_dast:
+        description: Run DAST scan (OWASP ZAP)
+        type: boolean
+        default: false
       push_images:
         description: Push Docker images
         type: boolean
@@ -243,14 +247,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-
-      - name: Cache npm global cache
-        uses: actions/cache@v6
-        with:
-          path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
-          restore-keys: |
-            npm-${{ runner.os }}-
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         run: |
@@ -305,19 +303,11 @@ jobs:
 
   codeql:
     name: CodeQL
-    needs:
-      - changes
-      - backend
-      - frontend
+    needs: [changes]
     if: |
-      always() &&
-      !contains(needs.*.result, 'failure') &&
-      !contains(needs.*.result, 'cancelled') &&
-      (
-        github.event_name == 'pull_request' ||
-        github.ref == 'refs/heads/main' ||
-        github.event_name == 'workflow_dispatch'
-      )
+      github.event_name == 'pull_request' ||
+      github.ref == 'refs/heads/main' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -497,14 +487,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-
-      - name: Cache npm global cache
-        uses: actions/cache@v6
-        with:
-          path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
-          restore-keys: |
-            npm-${{ runner.os }}-
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       ##########################################################
       # Download Backend JAR
@@ -592,13 +576,7 @@ jobs:
     needs:
       - changes
       - backend
-    if: |
-      (
-        needs.changes.outputs.backend == 'true' ||
-        github.ref == 'refs/heads/main' ||
-        github.event_name == 'workflow_dispatch'
-      ) &&
-      (github.event_name != 'workflow_dispatch' || inputs.run_security)
+    if: github.event_name == 'workflow_dispatch' && inputs.run_dast == true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
