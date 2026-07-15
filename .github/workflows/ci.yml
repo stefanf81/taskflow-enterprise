@@ -564,6 +564,19 @@ jobs:
       # Filesystem Scan
       #####################################################
 
+      # NOTE ON SEVERITY GATING (intentional asymmetry):
+      # This filesystem/source scan is REPORT-ONLY (exit-code: 0) — it never
+      # fails the build. It's meant to surface vulnerable dependencies early
+      # (via the SARIF upload -> Code Scanning tab) without blocking PRs on
+      # every transitive CVE in source manifests, many of which never ship.
+      #
+      # The Docker image scan in the `docker-build` job below is the hard
+      # gate (exit-code: 1, severity: HIGH,CRITICAL) — it blocks the build
+      # because that's the artifact that actually gets deployed.
+      #
+      # If you "fix" one of these to match the other, you will either start
+      # blocking every PR on unshipped source CVEs, or stop blocking on
+      # vulnerable images entirely. Keep them different on purpose.
       - name: Trivy Filesystem Scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -573,7 +586,8 @@ jobs:
           format: sarif
           output: trivy-results.sarif
 
-          # Non-blocking scan
+          # Non-blocking scan — see note above. Do not change without
+          # also reconsidering the image scan's exit-code.
           exit-code: 0
 
       #####################################################
@@ -973,7 +987,12 @@ jobs:
     timeout-minutes: 20
 
     strategy:
-      fail-fast: true
+      # fail-fast is deliberately false: backend and frontend images are
+      # built and scanned independently. A HIGH/CRITICAL CVE (and resulting
+      # exit-code: 1) in one image's Trivy scan should not cancel the other
+      # component's build — both scan results need to surface so both teams
+      # get signal in the same run.
+      fail-fast: false
 
       matrix:
         component: ${{ fromJSON(needs.changes.outputs.docker_components) }}
@@ -1053,6 +1072,12 @@ jobs:
       # Scan
       ##########################################################
 
+      # NOTE ON SEVERITY GATING (intentional asymmetry):
+      # This is the HARD GATE — exit-code: 1 with severity HIGH,CRITICAL
+      # fails the build/push. This scan targets the actual image that gets
+      # deployed, unlike the source/filesystem Trivy scan in the `security`
+      # job, which is report-only (exit-code: 0) by design. Do not align
+      # the two exit-codes without deliberately reconsidering both.
       - name: Scan Docker Image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
