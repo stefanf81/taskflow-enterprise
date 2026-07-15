@@ -1,5 +1,5 @@
 # Production Nginx Runtime Stage (Security Hardened Non-Root)
-FROM nginxinc/nginx-unprivileged:alpine
+FROM nginxinc/nginx-unprivileged:stable-alpine-slim
 
 USER root
 # Upgrade Alpine packages to resolve CVEs / security vulnerabilities
