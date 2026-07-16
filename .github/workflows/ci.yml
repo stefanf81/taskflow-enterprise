@@ -232,7 +232,6 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
-          cache: gradle
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -325,7 +324,6 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
-          cache: gradle
 
       - name: Submit Dependency Graph
         uses: gradle/actions/dependency-submission@v6
@@ -470,7 +468,6 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
-          cache: gradle
 
       - name: Set up Gradle
         if: matrix.language == 'java'
@@ -680,7 +677,6 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
-          cache: gradle
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -865,7 +861,6 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
-          cache: gradle
 
       ##########################################################
       # Download Backend
@@ -1049,13 +1044,14 @@ jobs:
       # Build
       ##########################################################
 
-      - name: Build Image
+      - name: Build and Push Image
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.component == 'backend' && '.' || 'frontend' }}
           file: ${{ matrix.component == 'backend' && 'Dockerfile.x64' || 'frontend/Dockerfile' }}
 
-          load: true
+          push: ${{ github.event_name == 'workflow_dispatch' && inputs.push_images == true }}
+          load: ${{ !(github.event_name == 'workflow_dispatch' && inputs.push_images == true) }}
 
           tags: |
             ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
@@ -1068,8 +1064,8 @@ jobs:
           cache-to: |
             type=gha,mode=max,scope=${{ matrix.component }}-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }}
 
-          provenance: false
-          sbom: false
+          provenance: ${{ github.event_name == 'workflow_dispatch' && inputs.push_images == true }}
+          sbom: ${{ github.event_name == 'workflow_dispatch' && inputs.push_images == true }}
 
       ##########################################################
       # Scan
@@ -1109,30 +1105,3 @@ jobs:
           sarif_file: trivy-results.sarif
           category: docker-${{ matrix.component }}
 
-      ##########################################################
-      # Push
-      ##########################################################
-
-      - name: Push Image
-        if: |
-          github.event_name == 'workflow_dispatch' &&
-          inputs.push_images == true
-
-        uses: docker/build-push-action@v6
-
-        with:
-          context: ${{ matrix.component == 'backend' && '.' || 'frontend' }}
-          file: ${{ matrix.component == 'backend' && 'Dockerfile.x64' || 'frontend/Dockerfile' }}
-
-          push: true
-
-          tags: |
-            ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
-            ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:latest
-
-          cache-from: |
-            type=gha,scope=${{ matrix.component }}-main
-            type=gha,scope=${{ matrix.component }}-pr
-
-          provenance: true
-          sbom: true
