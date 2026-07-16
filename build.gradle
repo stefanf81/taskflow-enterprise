@@ -18,7 +18,7 @@ plugins {
 	id 'org.owasp.dependencycheck' version '12.2.2'
 	id 'jacoco'
 	id 'com.github.ben-manes.versions' version '0.54.0'
-	id 'com.github.spotbugs' version '6.5.8'
+	id 'com.github.spotbugs' version '6.5.9'
 	id 'org.graalvm.buildtools.native' version '0.11.5'
 }
 group = 'com.example'
@@ -73,11 +73,11 @@ dependencies {
 	// OpenAPI
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17'
 	// Database migration
-	implementation 'org.flywaydb:flyway-core'
-	implementation 'org.flywaydb:flyway-database-postgresql'
+	implementation 'org.flywaydb:flyway-core:11.20.3'
+	implementation 'org.flywaydb:flyway-database-postgresql:11.20.3'
 	// Runtime
 	runtimeOnly 'org.postgresql:postgresql'
-	runtimeOnly 'com.h2database:h2'
+	runtimeOnly 'com.h2database:h2:2.4.240'
 	// Testing
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.security:spring-security-test'
@@ -90,7 +90,7 @@ dependencies {
 	spotbugsPlugins 'com.h3xstream.findsecbugs:findsecbugs-plugin:1.14.0'
 }
 spotbugs {
-	toolVersion = '4.9.3'
+	toolVersion = '4.10.3'
 	ignoreFailures = false
 	effort = 'max'
 	reportLevel = 'high'
