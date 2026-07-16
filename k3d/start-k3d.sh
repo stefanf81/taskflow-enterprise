@@ -158,7 +158,7 @@ helm upgrade --install loki-stack grafana/loki-stack \
 # Deploy the actual database, cache, tracing, backend, and frontend pods.
 # =========================================================================================
 echo "📄 Applying remaining Kubernetes manifests..."
-kubectl apply -f k3d/
+find k3d -maxdepth 1 -name "*.yaml" ! -name "k3d-config.yaml" | sort | xargs -I {} kubectl apply -f {}
 
 # =========================================================================================
 # 11. Wait for Rollouts to Complete
