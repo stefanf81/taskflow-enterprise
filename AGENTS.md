@@ -2,8 +2,8 @@
 
 ## Project Structure
 
-- **Backend**: Spring Boot 3.5.3 / OpenJDK 21 / Gradle — `src/main/java/com/example/taskflow/`
-  - High-Performance Tunings: Spring Boot AOT enabled, container-portable heap sizing (1GB fixed heap locally, `MaxRAMPercentage` in production), Virtual Threads disabled (Platform threads used), Jackson Blackbird, Asynchronous Logging, OpenTelemetry 10% sampling, Redis-backed caching (Spring Cache abstraction).
+- **Backend**: Spring Boot 4.1.0 / OpenJDK 21 / Gradle — `src/main/java/com/example/taskflow/`
+  - High-Performance Tunings: Spring Boot AOT enabled, container-portable heap sizing (1GB fixed heap locally, `MaxRAMPercentage` in production), Virtual Threads disabled (Platform threads used), Jackson 3, Lazy Connection Fetching, Asynchronous Logging, OpenTelemetry 10% sampling, Redis-backed caching (Spring Cache abstraction).
   - Runtime Profiles & Multi-Arch JVM Optimization:
     - **Local (Apple Silicon M4 Pro):** Optimized via native `Dockerfile` using ParallelGC with a fixed 1GB heap (`-Xms1g -Xmx1g`) and `-XX:+AlwaysPreTouch` for predictable startup. Off-heap memory is bounded via `-XX:MaxDirectMemorySize=256m` and `-XX:MaxMetaspaceSize=256m`.
     - **Production (AMD Ryzen 5 7430U):** Cross-compiled via `Dockerfile.x64` using container-portable sizing — the heap scales to the orchestrator's cgroup limit (`-XX:MaxRAMPercentage`), and CPU-pinned GC/AVX flags are deliberately omitted so the JVM reads the container's actual CPU allocation. Off-heap memory is bounded the same way. The k8s `backend.yaml` sets `MaxRAMPercentage=60.0` via `JAVA_TOOL_OPTIONS`, overriding the image default.
