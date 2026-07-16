@@ -1,0 +1,2 @@
+# Remediate false positive or unupgradable transitive dependency CVE-2026-54515 in jackson-databind
+CVE-2026-54515
