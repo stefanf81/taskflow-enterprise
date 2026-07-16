@@ -77,14 +77,17 @@ COPY --link --from=builder --chown=10001:10001 /app/extracted/application/ ./
 # spring.context.exit=onRefresh terminates the application immediately after
 # the Spring context has fully initialized, allowing CDS to observe a complete
 # startup without leaving a server running during the Docker build.
-RUN java -XX:ArchiveClassesAtExit=application.jsa \
+RUN OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 java -XX:ArchiveClassesAtExit=application.jsa \
          -Dspring.aot.enabled=false \
          -Dloader.main=com.example.cdstraining.CdsTrainingApplication \
          -Dspring.context.exit=onRefresh \
          -Dapp.cds-training=true \
          -Dspring.flyway.enabled=false \
          -Dspring.cache.type=none \
+         -Dmanagement.tracing.enabled=false \
          -Dmanagement.otlp.tracing.export.enabled=false \
+         -Dotel.sdk.disabled=true \
+         -Dotel.exporter.otlp.endpoint=http://localhost:4317 \
          org.springframework.boot.loader.launch.PropertiesLauncher \
     && test -s application.jsa \
     && chown 10001:10001 application.jsa

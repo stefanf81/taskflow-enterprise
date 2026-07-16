@@ -20,7 +20,13 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
         "org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration",
         "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration",
         "org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration",
-        "org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration"
+        "org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration",
+        "org.springframework.boot.actuate.autoconfigure.observation.ObservationAutoConfiguration",
+        "org.springframework.boot.actuate.autoconfigure.tracing.MicrometerTracingAutoConfiguration",
+        "org.springframework.boot.actuate.autoconfigure.opentelemetry.OpenTelemetryAutoConfiguration",
+        "org.springframework.boot.actuate.autoconfigure.tracing.otlp.OtlpTracingAutoConfiguration",
+        "org.springframework.boot.actuate.autoconfigure.metrics.export.otlp.OtlpMetricsExportAutoConfiguration",
+        "org.springframework.boot.actuate.autoconfigure.logging.otlp.OtlpLoggingAutoConfiguration"
 })
 public class CdsTrainingApplication {
 
