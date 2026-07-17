@@ -83,7 +83,9 @@ public class AppointmentServiceImpl implements AppointmentService {
     private void clearAppointmentStatsCache() {
         Cache cache = cacheManager.getCache("appointmentStats");
         if (cache != null) {
-            cache.clear();
+            // Evict only the current day's stats to prevent cache stampede
+            // (clear() would wipe all cached days and cause a thundering herd on the next read)
+            cache.evict(LocalDate.now());
         }
     }
 

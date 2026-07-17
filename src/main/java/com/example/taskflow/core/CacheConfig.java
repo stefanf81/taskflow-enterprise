@@ -13,6 +13,9 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import org.springframework.web.filter.ShallowEtagHeaderFilter;
 import jakarta.servlet.Filter;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.InputStream;
 import java.time.Duration;
 
 @Configuration
@@ -20,7 +23,13 @@ public class CacheConfig {
 
     @Bean
     public Filter shallowEtagHeaderFilter() {
-        return new ShallowEtagHeaderFilter();
+        return new ShallowEtagHeaderFilter() {
+            @Override
+            protected boolean isEligibleForEtag(HttpServletRequest request, HttpServletResponse response,
+                                                int responseStatusCode, InputStream inputStream) {
+                return "GET".equals(request.getMethod());
+            }
+        };
     }
 
     @Bean
@@ -52,6 +61,12 @@ public class CacheConfig {
                 .withCacheConfiguration("appointmentStats",
                         RedisCacheConfiguration.defaultCacheConfig()
                                 .entryTtl(Duration.ofMinutes(5))
+                                .disableCachingNullValues()
+                                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
+                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper))))
+                .withCacheConfiguration("busySlots",
+                        RedisCacheConfiguration.defaultCacheConfig()
+                                .entryTtl(Duration.ofMinutes(2))
                                 .disableCachingNullValues()
                                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper))));

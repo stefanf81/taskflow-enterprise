@@ -89,7 +89,7 @@ tasks.withType(org.springframework.boot.gradle.tasks.aot.ProcessAot).configureEa
 }
 tasks.named("test") {
 	useJUnitPlatform()
-	maxParallelForks = Math.max(1, (int) (Runtime.runtime.availableProcessors() / 2))
+	maxParallelForks = Math.max(1, (int) (Runtime.runtime.availableProcessors() * 0.75))
 	environment "SPRING_SECURITY_PASSWORD", "admin-password"
 	systemProperty "spring.cache.type", "simple"
 	finalizedBy(tasks.jacocoTestReport)
