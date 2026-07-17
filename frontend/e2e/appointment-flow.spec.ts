@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type TestInfo } from '@playwright/test';
 
 /**
  * COMPREHENSIVE END-TO-END FLOW TEST SUITE FOR TASKFLOW PORTAL
@@ -18,12 +18,33 @@ import { test, expect } from '@playwright/test';
  * - Customer Public Self-Service Secure Booking Cancellation
  */
 test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
-  test.beforeEach(async ({ page }) => {
-    // Capture browser console logs for robust E2E debugging
-    page.on('console', (msg) => console.log(`[BROWSER_CONSOLE] [${msg.type()}] ${msg.text()}`));
+  test.beforeEach(async ({ page }, testInfo) => {
+    // Buffer browser console logs per-test. We deliberately do NOT echo them
+    // to stdout on every run: expected auth failures (e.g. 401 from the
+    // "invalid admin login" guard and the unauthenticated barbers store)
+    // would otherwise flood the CI log and bury the real signal. Captured
+    // messages are only emitted when a test actually fails (see afterEach).
+    const consoleBuffer: string[] = [];
+    testInfo['consoleBuffer'] = consoleBuffer;
+    page.on('console', (msg) =>
+      consoleBuffer.push(`[BROWSER_CONSOLE] [${msg.type()}] ${msg.text()}`),
+    );
 
     // Start each test on the landing page
     await page.goto('/');
+  });
+
+  test.afterEach(async ({}, testInfo) => {
+    // Only surface the captured browser console output for failing tests so
+    // the CI log stays clean on green runs but keeps full diagnostics on red ones.
+    if (testInfo.status !== 'passed' && testInfo['consoleBuffer']?.length) {
+      console.log(
+        `\n[BROWSER_CONSOLE] --- Captured browser console for failed test "${testInfo.title}" ---`,
+      );
+      for (const line of testInfo['consoleBuffer']) {
+        console.log(line);
+      }
+    }
   });
 
   test('should support viewing and expanding the Frequently Asked Questions (FAQ) accordions', async ({
