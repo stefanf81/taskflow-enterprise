@@ -122,7 +122,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   Leveraged real Dockerized PostgreSQL database containers within Spring Boot integration test environments via **Testcontainers** to guarantee perfect schema/SQL execution parity during compilation.
 *   **Gradle Build Velocity & GraalVM Support**:
     *   **Incremental Compilation**: Enforced `options.incremental = true` for rapid local `javac` evaluations.
-    *   **Parallel Test Execution**: Configured `maxParallelForks` to dynamically scale JVM test forks based on `availableProcessors() / 2` to saturate CI pipelines.
+    *   **Parallel Test Execution**: Configured `maxParallelForks` to dynamically scale JVM test forks based on `availableProcessors() * 0.75` to saturate CI pipelines without starving the host (Testcontainers tests are I/O- and container-bound, not CPU-bound, so over-subscribing cores is safe).
     *   **GraalVM Native Tools**: Integrated `org.graalvm.buildtools.native` to pave the road for future AOT native-image compilations.
 *   **Code Quality & Static Analysis Guards**:
     *   **SpotBugs & FindSecBugs**: Integrated `spotbugs` plugin with `findsecbugs-plugin` at `effort = 'max'` to automatically break CI builds on detected security anti-patterns.
@@ -317,7 +317,7 @@ To push the application to the physical limits of the M4 Pro, we implemented:
 | :--- | :--- | :--- |
 | **HTTP/2 Multiplexing** | Eliminates Head-Of-Line Blocking | Multiplexes concurrent requests/responses over a single persistent TCP connection. |
 | **Keep-Alive Pooling** | Eliminates TCP/TLS Handshakes | Increased Tomcat Keep-Alive thresholds (`max-keep-alive-requests=100`) allowing the browser to reuse warm connections. |
-| **Shallow ETag Caching** | Saves Massive Bandwidth | Computes an MD5 payload hash. The browser sends `If-None-Match`, and the server returns an ultra-fast `304 Not Modified`, bypassing the JSON download. |
+| **Shallow ETag Caching** | Saves Massive Bandwidth | Computes an MD5 payload hash. The browser sends `If-None-Match`, and the server returns an ultra-fast `304 Not Modified`, bypassing the JSON download. Restricted to GET requests only — POST/PUT/DELETE skip ETag content-buffering entirely to avoid unnecessary overhead on mutations. |
 | **Angular Route Preloading** | Instant Page Navigation | Uses `withPreloading(PreloadAllModules)`. The browser downloads lazy-loaded JS chunks in the background while the user is idle. |
 | **View Transitions API** | Perceived Latency Drop | Utilizes `withViewTransitions()` for native browser-accelerated visual cross-fades, creating a fluid, app-like experience. |
 
@@ -483,14 +483,16 @@ By setting `spring.jpa.properties.hibernate.query.in_clause_parameter_padding=tr
 ---
 
 ## ⚡ 28. Nginx vs Tomcat Compression Offloading
-**Goal:** Measure the throughput impact of explicitly disabling embedded Spring Boot compression and offloading GZIP entirely to the Nginx reverse proxy.
+**Goal:** Measure the throughput impact of compression placement and eliminate double-compression waste.
 
 | Compression Engine | Peak Throughput | Avg Latency | CPU Usage Focus |
 | :--- | :--- | :--- | :--- |
 | **Nginx Edge Compression (Winner)** | **19,726 RPS** | **5.00 ms** | **JVM focused entirely on business logic / DB I/O** |
 | Tomcat Embedded Compression | 15,887 RPS | 6.20 ms | JVM wasting cycles compressing JSON |
 
-**Verdict:** By setting `server.compression.enabled=false` in Spring Boot, the JVM pushed a staggering 19,726 RPS on raw JSON delivery. We configured Nginx to act as the gatekeeper, accepting this raw JSON, compressing it with its highly optimized Gzip engine (`gzip_comp_level 6`), and delivering it to the client. This offloading strategy isolates the heavy CPU burden of compression away from the application server, allowing maximum transaction throughput.
+**Verdict:** Nginx edge compression is the primary compression engine for external traffic (19,726 RPS). To prevent double-compression waste on the proxy path, Nginx strips the `Accept-Encoding` header upstream (`proxy_set_header Accept-Encoding "";` in `nginx.conf`), so the backend always sends raw JSON to Nginx. Nginx then compresses it once for the client.
+
+Tomcat compression (`server.compression.enabled=true`) is kept enabled as a **fallback for direct JVM access paths** (pod-to-pod calls, monitoring tools hitting `/actuator/prometheus`). In practice these paths handle low traffic volumes, so the 15,887 RPS throughput is acceptable — the architectural guarantee is that no path ever sends uncompressed payloads to an external consumer.
 
 ---
 
