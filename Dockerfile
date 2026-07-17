@@ -105,12 +105,21 @@ EXPOSE 8080
 #                              reducing startup overhead by avoiding runtime reflection.
 #
 # -XX:InitialRAMPercentage=50.0
-# -XX:MaxRAMPercentage=75.0
+# -XX:MaxRAMPercentage=50.0
 #
 #   These replace the old fixed -Xms1g / -Xmx1g so the same image adapts to any
 #   container memory limit (2 GB, 4 GB, 16 GB, ...) without a rebuild.
-#   75% leaves headroom for metaspace, thread stacks, direct memory, and other
-#   native JVM overhead so the container's RSS stays below its cgroup limit.
+#   50% (NOT the common 75% default) deliberately leaves ~half the container for
+#   off-heap: this app uses Netty (OTLP) + Lettuce (Redis) direct buffers, plus
+#   ~200 Tomcat thread stacks and the code cache. At the 2GiB taskflow limit,
+#   50% = 1GiB heap + 1GiB off-heap, which keeps the pod safely under its cgroup
+#   limit under load (75% would yield 1.5GiB heap and OOMKilled the 2Gi pod).
+#
+#   NOTE: the deployment (gitops/apps/taskflow/backend.yaml) intentionally does
+#   NOT override these with -Xmx/-XX:MaxDirectMemorySize. Dockerfile CMD args win
+#   over JAVA_TOOL_OPTIONS for conflicting flags (JVM "last-wins"), so an env -Xmx
+#   would either be ignored (when RAM% is set) or silently override the direct-
+#   memory cap. The image is the single source of truth for JVM sizing.
 #
 # -XX:MaxDirectMemorySize    : Caps Netty's off-heap direct buffers (Lettuce Redis
 #                              client + OpenTelemetry). Without this the JVM default
@@ -158,7 +167,7 @@ ENTRYPOINT ["/sbin/tini", "--", "java"]
 CMD [ \
     "-Dspring.aot.enabled=true", \
     "-XX:InitialRAMPercentage=50.0", \
-    "-XX:MaxRAMPercentage=75.0", \
+    "-XX:MaxRAMPercentage=50.0", \
     "-XX:MaxDirectMemorySize=256m", \
     "-XX:MaxMetaspaceSize=256m", \
     "-XX:+ExitOnOutOfMemoryError", \
