@@ -37,7 +37,9 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-	// Jackson
+	// Jackson — pin databind to 2.21.5 to clear CVE-2026-54515 (case-insensitive @JsonIgnoreProperties bypass).
+	// Note: only the 2.x line (com.fasterxml.jackson.core) is pinned; the 3.x line (tools.jackson.core) ships 3.1.4 which is already patched.
+	implementation 'com.fasterxml.jackson.core:jackson-databind:2.21.5'
 	// Cache (Redis-backed via spring-boot-starter-data-redis; Caffeine was unused)
 	// Observability
 	implementation 'org.springframework.boot:spring-boot-micrometer-tracing-opentelemetry'
