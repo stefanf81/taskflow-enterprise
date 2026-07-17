@@ -69,7 +69,11 @@ spec:
               # risk) and froze the young/old split with -UseAdaptiveSizePolicy but no explicit
               # generation sizes (an anti-pattern). AlwaysPreTouch was also removed so the heap
               # is committed lazily, shrinking idle RSS instead of pre-committing 1.5GiB at boot.
-              value: "-Dspring.aot.enabled=true -XX:MaxRAMPercentage=60.0 -XX:+UseParallelGC -XX:MaxDirectMemorySize=256m -XX:MaxMetaspaceSize=256m -XX:+ExitOnOutOfMemoryError"
+              # The collector is left unspecified so the JVM uses G1GC (JDK 21 default) — see the
+              # Dockerfile for the rationale: inside a contended container CPU-share, G1's adaptive
+              # pause-time control serves a server-style workload better than ParallelGC's raw
+              # throughput bias measured on a 14-core laptop.
+              value: "-Dspring.aot.enabled=true -XX:MaxRAMPercentage=60.0 -XX:MaxDirectMemorySize=256m -XX:MaxMetaspaceSize=256m -XX:+ExitOnOutOfMemoryError"
           ports:
             - containerPort: 8080
               name: http

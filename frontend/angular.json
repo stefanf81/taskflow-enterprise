@@ -17,8 +17,14 @@
           "builder": "@angular/build:application",
           "options": {
             "optimization": {
+              "scripts": true,
               "styles": {
-                "inlineCritical": false
+                "minify": true,
+                "inlineCritical": true,
+                "removeSpecialComments": true
+              },
+              "fonts": {
+                "inline": true
               }
             },
             "security": {
@@ -32,15 +38,17 @@
                 "input": "public"
               }
             ],
-            "styles": ["src/styles.css"]
+            "styles": [
+              "src/styles.css"
+            ]
           },
           "configurations": {
             "production": {
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "500kB",
-                  "maximumError": "1MB"
+                  "maximumWarning": "350kB",
+                  "maximumError": "500kB"
                 },
                 {
                   "type": "anyComponentStyle",
@@ -54,7 +62,7 @@
                 }
               ],
               "outputHashing": "all",
-              "subresourceIntegrity": false,
+              "subresourceIntegrity": true,
               "statsJson": true
             },
             "development": {

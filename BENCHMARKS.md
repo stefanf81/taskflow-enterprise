@@ -12,11 +12,9 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 
 ### ☕ 1. JVM & Runtime Layer
 *   **OpenJDK 21 (Eclipse Temurin Alpine)**:
-    *   **Tuned GC Model**: Enforced **ParallelGC** (`-XX:+UseParallelGC -XX:-UseAdaptiveSizePolicy`) to maximize pure throughput for CPU-bound REST transactions.
-    *   **Deterministic Heap Allocation**: Sized to a static `1GB` (`-Xms1g -Xmx1g`) locally to completely eliminate runtime heap expansion pauses. Sized in production using container-portable `-XX:MaxRAMPercentage=60.0` bounds inside our Kubernetes environments.
-    *   **Apple Silicon (M4 Pro) Tuning**: Local runs explicitly pin GC to performance cores (`-XX:ParallelGCThreads=10`) and utilize AArch64 vectorization (`-XX:+UseSIMDForMemoryOps`) for blazingly fast memory operations.
-    *   **AMD Ryzen 5 Custom Tuning**: Production images pin thread counts (`-XX:ParallelGCThreads=6`) to physical cores to eliminate hyperthreading context thrashing, and utilize 256-bit wide instructions (`-XX:UseAVX=2`) for JSON serialization.
-    *   **Project Loom / Virtual Threads**: Intentionally disabled (`spring.threads.virtual.enabled=false`) to prevent ParallelGC carrier-thread pinning under Bcrypt hashing locks.
+    *   **GC Model (deliberately unspecified → G1GC default)**: The collector is left unpinned so the JVM uses **G1GC** (JDK 21 default). Empirically re-verified on this M4 Pro (see §1 benchmark below): G1GC and ParallelGC are **statistically identical** (~189 RPS on the real `/login` path), while *pinning* GC threads / AVX (`-XX:ParallelGCThreads`, `-XX:+UseSIMDForMemoryOps`, `-XX:UseAVX`) is measurably **worse** (~8% lower RPS, higher p99). The previous "ParallelGC wins" claim was not reproducible on the actual BCrypt-bound login path and has been retracted.
+    *   **Deterministic Heap Allocation (local)**: Sized to a static `1GB` (`-Xms1g -Xmx1g`) for local benchmarking to eliminate heap-expansion noise. Production uses container-portable `-XX:MaxRAMPercentage=60.0` (k3d) / `75.0` (Docker) bounds so the same image adapts to any cgroup limit.
+    *   **Project Loom / Virtual Threads**: Intentionally disabled (`spring.threads.virtual.enabled=false`). Rationale below in §3 — Virtual Threads hurt the CPU-bound `/login` (Bcrypt/RSA) path under Loom scheduling.
 
 ### 🍃 2. Spring Boot 4.1.0 Application Layer
 *   **Embedded Apache Tomcat 11**:
@@ -137,15 +135,18 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 ---
 
 ## 🚀 1. The JVM & Garbage Collection
-**Goal:** Maximize peak Request-Per-Second (RPS) throughput for CPU-bound API requests (`/api/v1/auth/login`).
+**Goal:** Maximize peak Request-Per-Second (RPS) throughput for CPU-bound API requests (`/api/v1/auth/login`), and determine whether the GC collector choice matters.
+
+**Important measurement note (reproducibility):** The real `/login` path is dominated by **BCrypt password verification (strength 10)** plus RSA-2048 JWT signing. BCrypt is a fixed per-request CPU cost, so throughput saturates at a fixed RPS *regardless of GC*: raising concurrency from 50→200 threads moves RPS only 196→190 while average latency blows up 0.25s→1.04s. The GC therefore cannot change peak throughput on this endpoint — it only affects tail latency under saturation. The previously-published "8,742 RPS" figure was **not reproducible** on the actual login path (it implied a BCrypt cost ~50× lighter than reality) and has been retracted. The table below is the honest, re-measured result on an Apple M4 Pro (14-core, arm64, OpenJDK 25, 1 GB fixed heap, 30 s `hey` runs at `-c 50`).
 
 | Configuration | Requests / Sec (RPS) | Avg Latency | Notes |
 | :--- | :--- | :--- | :--- |
-| **Tuned ParallelGC (Winner)** | **8,742 RPS** | **5.71 ms** | `-XX:+UseParallelGC -XX:-UseAdaptiveSizePolicy`. Max throughput. |
-| Default (G1GC) | 8,610 RPS | 5.80 ms | Java 21 Default. Excellent baseline. |
-| Generational ZGC | 8,072 RPS | 6.19 ms | Perfect microsecond latency, but an ~8% throughput penalty. |
+| **G1GC (default, chosen)** | **~189 RPS** | **~0.264 s** | No collector flag set. Matches Dockerfile/k3d. |
+| ParallelGC | ~189 RPS | ~0.264 s | `-XX:+UseParallelGC`. Statistically identical to G1. |
+| ParallelGC `-UseAdaptiveSizePolicy` | ~190 RPS | ~0.263 s | No measurable benefit. |
+| ParallelGC + pinned `ParallelGCThreads=10` + `UseSIMDForMemoryOps` | ~174 RPS | ~0.288 s | **Worse** — pinning hurts on this workload. |
 
-**Verdict:** We locked the heap to `1GB` (`-Xms1g -Xmx1g`) to prevent OS allocation pauses and permanently activated **ParallelGC** to prioritize raw peak throughput.
+**Verdict:** The GC collector is a **wash** for throughput on the BCrypt-bound login path (~189 RPS either way). We deliberately leave the collector unspecified so the JVM uses **G1GC**, which also gives better adaptive pause-time control inside contended Kubernetes containers (see `Dockerfile` rationale). Pinning GC threads / AVX / `-UseAdaptiveSizePolicy` was empirically **counter-productive** and has been removed from all images. If a future endpoint is genuinely GC/allocation-bound (large JSON payloads, high allocation rate), revisit this comparison with that endpoint.
 
 ---
 
@@ -288,25 +289,16 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 ## 🍎 13. Apple M4 Pro Silicon Custom Tuning
 **Goal:** Maximize hardware utilization for the local host.
 
-To push the application to the physical limits of the M4 Pro, we implemented:
-1.  `-XX:ParallelGCThreads=10`: Explicitly pinned the JVM Garbage Collector strictly to the 10 Performance Cores (P-cores), preventing macOS from scheduling critical "Stop The World" tasks onto the slower Efficiency Cores.
-2.  `-XX:+UseSIMDForMemoryOps`: Forced the OpenJDK to utilize Apple's AArch64 vectorized SIMD hardware instructions, unlocking the massive memory bandwidth of the M4 Pro for Jackson object serialization.
+Prior versions of this document claimed large wins from pinning `-XX:ParallelGCThreads=10` and `-XX:+UseSIMDForMemoryOps` on the M4 Pro. **These were re-tested and retracted**: on the real `/login` path (BCrypt-bound, see §1) the pinned ParallelGC config measured **~174 RPS vs ~189 RPS for default G1GC** — i.e. pinning was ~8% *slower*. The JVM's automatic container/hardware detection already sizes GC workers and chooses appropriate vectorization for Apple Silicon. We no longer set any of these flags.
+
+Current local tuning is limited to what the JVM does automatically plus the heap pin used only for benchmark isolation (`-Xms1g -Xmx1g`); production relies on `MaxRAMPercentage` instead.
 
 ---
 
 ## 💻 14. x64 / AMD Ryzen 5 Custom Tuning
 **Goal:** Maximize hardware utilization for an AMD Ryzen 5 7430U (Zen 3) deployment.
 
-| Configuration Profile | Peak Throughput | Avg Latency |
-| :--- | :--- | :--- |
-| **Ryzen 5 Tuned (Winner)** | **33,983 RPS** | **N/A** |
-| Baseline (Cloud Default) | 2,424 RPS | 20.4 ms |
-| Generic High Throughput | 2,252 RPS | 22.0 ms |
-| Ultra-Low Latency (ZGC) | 714 RPS | 69.7 ms |
-
-**Verdict:** For an AMD Ryzen 5 7430U, we achieved a massive throughput leap by enforcing hardware-specific optimizations:
-1.  `-XX:ParallelGCThreads=6`: Hardcoded GC threads to exactly match the 6 physical cores of the CPU, eliminating SMT (hyperthreading) cache contention during "Stop The World" pauses.
-2.  `-XX:UseAVX=2`: Forced the HotSpot JVM to compile JSON parsers and memory loops using 256-bit wide Advanced Vector Extensions 2 (AVX2), a flagship feature of the Zen 3 architecture.
+**Retracted.** The previously published "33,983 RPS" Ryzen 5 figure (and the `2,424 RPS` baseline) was not reproducible and is inconsistent with the BCrypt-bound login bottleneck established in §1 (real peak ≈ 189 RPS on comparable hardware). The claimed `-XX:ParallelGCThreads=6` / `-XX:UseAVX=2` wins were also contradicted by the M4 re-test (pinning hurts). All such hardware-pinned GC flags have been **removed** from `Dockerfile.x64` and `k3d/backend.yaml`; the production image relies on G1GC + `MaxRAMPercentage` and lets the JVM size GC workers dynamically per node. If a genuinely allocation-bound workload emerges, re-benchmark on the actual target hardware before re-introducing any pin.
 
 ---
 
