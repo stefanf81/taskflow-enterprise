@@ -10,7 +10,7 @@ on:
       - main
 
   schedule:
-    - cron: '0 3 * * *'
+    - cron: '0 2 * * *'
 
   workflow_dispatch:
     inputs:
@@ -435,9 +435,12 @@ jobs:
     needs: changes
 
     if: |
+      github.event_name == 'schedule' ||
       github.ref == 'refs/heads/main' ||
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'schedule'
+      (
+        github.event_name == 'workflow_dispatch' &&
+        inputs.run_security == true
+      )
 
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -1104,4 +1107,3 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
           category: docker-${{ matrix.component }}
-
