@@ -16,7 +16,7 @@ import java.io.IOException;
 import java.time.Duration;
 
 @Configuration
-@ConditionalOnProperty(name = "app.rate-limit.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "app.rate-limit.enabled", havingValue = "true", matchIfMissing = false)
 public class RateLimiterConfig {
 
     private static final Logger log = LoggerFactory.getLogger(RateLimiterConfig.class);

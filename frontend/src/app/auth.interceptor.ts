@@ -1,28 +1,22 @@
 import { HttpInterceptorFn } from '@angular/common/http';
-import { inject } from '@angular/core';
 import { catchError } from 'rxjs/operators';
 import { throwError } from 'rxjs';
 
+// The JWT is now stored in an HttpOnly, SameSite=Strict cookie set by the backend.
+// The browser automatically attaches it to same-origin /api requests, so the
+// interceptor no longer reads or writes the token in JavaScript (XSS-safe).
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
-  const token = sessionStorage.getItem('auth_token');
-
-  // Skip attaching token if we are hitting the login endpoint
+  // Login is unauthenticated; everything else rides on the cookie.
   if (req.url.includes('/api/v1/auth/login')) {
     return next(req);
   }
 
-  let authReq = req;
-  if (token) {
-    authReq = req.clone({
-      headers: req.headers.set('Authorization', token),
-    });
-  }
-
-  return next(authReq).pipe(
+  return next(req).pipe(
     catchError((err) => {
       if (err.status === 401) {
-        sessionStorage.removeItem('auth_token');
-        // Do not redirect to /login to prevent infinite routing loops on public endpoints
+        // Notify the app to drop its client-side auth state. No redirect to
+        // avoid infinite loops on public endpoints.
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
       }
       return throwError(() => err);
     }),

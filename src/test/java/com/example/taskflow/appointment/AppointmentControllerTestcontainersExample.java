@@ -78,15 +78,15 @@ public class AppointmentControllerTestcontainersExample {
         loginRequest.put("username", "admin");
         loginRequest.put("password", "admin-password");
 
-        String responseJson = mockMvc.perform(post("/api/v1/auth/login")
+        // The JWT now lives in the HttpOnly 'access_token' cookie (C2 migration);
+        // it is no longer returned in the response body.
+        String cookie = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn().getResponse().getCookie("access_token").getValue();
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> responseMap = objectMapper.readValue(responseJson, Map.class);
-        authHeader = "Bearer " + responseMap.get("token").toString();
+        authHeader = "Bearer " + cookie;
     }
 
     @Test

@@ -2,7 +2,8 @@ package com.example.taskflow.core;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
 import org.springframework.boot.cache.autoconfigure.RedisCacheManagerBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,6 +22,29 @@ import java.time.Duration;
 @Configuration
 public class CacheConfig {
 
+    /**
+     * P4: Explicit allow-list for Jackson default typing instead of the unsafe
+     * LaissezFaireSubTypeValidator. Only the concrete types we actually cache are
+     * permitted to be reconstructed from Redis, eliminating the polymorphic
+     * deserialization (gadget-vector) attack surface.
+     */
+    private static final PolymorphicTypeValidator CACHE_TYPE_VALIDATOR =
+            BasicPolymorphicTypeValidator.builder()
+                    .allowIfBaseType("com.example.taskflow.appointment.AppointmentStats")
+                    .allowIfBaseType("java.util.List")
+                    .allowIfBaseType("java.lang.String")
+                    .build();
+
+    private static ObjectMapper redisObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.activateDefaultTyping(
+                CACHE_TYPE_VALIDATOR,
+                ObjectMapper.DefaultTyping.NON_FINAL,
+                JsonTypeInfo.As.PROPERTY
+        );
+        return mapper;
+    }
+
     @Bean
     public Filter shallowEtagHeaderFilter() {
         return new ShallowEtagHeaderFilter() {
@@ -34,41 +58,27 @@ public class CacheConfig {
 
     @Bean
     public RedisCacheConfiguration cacheConfiguration() {
-        ObjectMapper redisObjectMapper = new ObjectMapper();
-        redisObjectMapper.activateDefaultTyping(
-                LaissezFaireSubTypeValidator.instance,
-                ObjectMapper.DefaultTyping.NON_FINAL,
-                JsonTypeInfo.As.PROPERTY
-        );
-
         return RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofMinutes(10))
                 .disableCachingNullValues()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper)));
+                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper())));
     }
 
     @Bean
     public RedisCacheManagerBuilderCustomizer redisCacheManagerBuilderCustomizer() {
-        ObjectMapper redisObjectMapper = new ObjectMapper();
-        redisObjectMapper.activateDefaultTyping(
-                LaissezFaireSubTypeValidator.instance,
-                ObjectMapper.DefaultTyping.NON_FINAL,
-                JsonTypeInfo.As.PROPERTY
-        );
-
         return builder -> builder
                 .withCacheConfiguration("appointmentStats",
                         RedisCacheConfiguration.defaultCacheConfig()
                                 .entryTtl(Duration.ofMinutes(5))
                                 .disableCachingNullValues()
                                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper))))
+                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper()))))
                 .withCacheConfiguration("busySlots",
                         RedisCacheConfiguration.defaultCacheConfig()
                                 .entryTtl(Duration.ofMinutes(2))
                                 .disableCachingNullValues()
                                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper))));
+                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper()))));
     }
 }

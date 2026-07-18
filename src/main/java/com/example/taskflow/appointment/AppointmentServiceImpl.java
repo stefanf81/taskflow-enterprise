@@ -1,5 +1,7 @@
 package com.example.taskflow.appointment;
 
+import com.example.taskflow.catalog.ServiceItem;
+import com.example.taskflow.catalog.ServiceItemRepository;
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,23 +24,29 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     private static final Logger logger = LoggerFactory.getLogger(AppointmentServiceImpl.class);
     private static final int MAX_BUSY_SLOTS = 500;
-    
+
     private final AppointmentRepository appointmentRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final CacheManager cacheManager;
     private final Tracer tracer;
     private final BusySlotsService busySlotsService;
+    private final BarberRepository barberRepository;
+    private final ServiceItemRepository serviceItemRepository;
 
-    public AppointmentServiceImpl(AppointmentRepository appointmentRepository, 
-                                  ApplicationEventPublisher eventPublisher, 
-                                  CacheManager cacheManager, 
+    public AppointmentServiceImpl(AppointmentRepository appointmentRepository,
+                                  ApplicationEventPublisher eventPublisher,
+                                  CacheManager cacheManager,
                                    Tracer tracer,
-                                   BusySlotsService busySlotsService) {
+                                   BusySlotsService busySlotsService,
+                                   BarberRepository barberRepository,
+                                   ServiceItemRepository serviceItemRepository) {
         this.appointmentRepository = appointmentRepository;
         this.eventPublisher = eventPublisher;
         this.cacheManager = cacheManager;
         this.tracer = tracer;
         this.busySlotsService = busySlotsService;
+        this.barberRepository = barberRepository;
+        this.serviceItemRepository = serviceItemRepository;
     }
 
     @Override
@@ -105,6 +113,25 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<AppointmentResponse> getMyAppointments(String email, int page, int size) {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(
+                page, size, org.springframework.data.domain.Sort.by("bookingDate").descending());
+        return appointmentRepository.findByCustomerEmailIgnoreCase(email, pageable)
+                .map(AppointmentResponse::fromEntity);
+    }
+
+    @Override
+    public void cancelMyAppointment(Long id, String email) {
+        Appointment appointment = appointmentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Appointment not found or unauthorized."));
+        if (!appointment.getCustomerEmail().equalsIgnoreCase(email)) {
+            throw new ResourceNotFoundException("Appointment not found or unauthorized.");
+        }
+        deleteAppointment(id);
+    }
+
+    @Override
     public AppointmentResponse createAppointment(AppointmentCreateRequest request, String idempotencyKey) {
         if (idempotencyKey != null && !idempotencyKey.trim().isEmpty()) {
             Appointment existing = appointmentRepository.findByIdempotencyKey(idempotencyKey);
@@ -126,29 +153,59 @@ public class AppointmentServiceImpl implements AppointmentService {
         item.setCustomerName(request.customerName());
         item.setCustomerEmail(request.customerEmail());
         item.setCustomerPhone(request.customerPhone());
+        // A1: keep denormalized name cache in sync with the FK (renders instantly
+        // in the UI without an extra join) AND resolve the real catalog FKs.
         item.setBarberName(request.barberName());
+        item.setServiceType(request.serviceType());
+        resolveAndSetCatalogReferences(item, request.barberName(), request.serviceType());
         item.setBookingDate(request.bookingDate());
         item.setBookingTime(request.bookingTime());
-        item.setServiceType(request.serviceType());
         item.setStatus("PENDING");
 
-        Appointment savedItem = appointmentRepository.save(item);
-        clearAppointmentStatsCache();
-        clearBusySlotsCache(savedItem.getBarberName(), savedItem.getBookingDate());
-
+        // A4: idempotency is enforced by a unique constraint on idempotency_key.
+        // The check-then-save above is non-atomic, so concurrent duplicates can
+        // race past the check. Catch the constraint violation and return the
+        // already-persisted row instead of surfacing a 500.
         try {
-            io.micrometer.tracing.Span currentSpan = tracer.currentSpan();
-            if (currentSpan != null) {
-                currentSpan.tag("appointment.id", String.valueOf(savedItem.getId()));
-                currentSpan.tag("appointment.customer", savedItem.getCustomerName());
-                currentSpan.tag("appointment.status", savedItem.getStatus());
-            }
-        } catch (Exception e) {
-            String safeMsg = e.getMessage() != null ? e.getMessage().replaceAll("[\\r\\n]", "") : "";
-            logger.warn("Failed to add tracing tags: {}", safeMsg);
-        }
+            Appointment savedItem = appointmentRepository.save(item);
+            clearAppointmentStatsCache();
+            clearBusySlotsCache(savedItem.getBarberName(), savedItem.getBookingDate());
 
-        return AppointmentResponse.fromEntity(savedItem);
+            try {
+                io.micrometer.tracing.Span currentSpan = tracer.currentSpan();
+                if (currentSpan != null) {
+                    currentSpan.tag("appointment.id", String.valueOf(savedItem.getId()));
+                    currentSpan.tag("appointment.customer", savedItem.getCustomerName());
+                    currentSpan.tag("appointment.status", savedItem.getStatus());
+                }
+            } catch (Exception e) {
+                String safeMsg = e.getMessage() != null ? e.getMessage().replaceAll("[\\r\\n]", "") : "";
+                logger.warn("Failed to add tracing tags: {}", safeMsg);
+            }
+
+            return AppointmentResponse.fromEntity(savedItem);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            Appointment existing = appointmentRepository.findByIdempotencyKey(idempotencyKey);
+            if (existing != null) {
+                logger.info("Concurrent duplicate for idempotency key {}. Returning existing appointment.",
+                        idempotencyKey != null ? idempotencyKey.replaceAll("[\\r\\n]", "") : "<null>");
+                return AppointmentResponse.fromEntity(existing);
+            }
+            throw ex;
+        }
+    }
+
+    /**
+     * A1: resolve the catalog FKs from the free-text names submitted by the
+     * booking form. The denormalized name columns are already set by the caller;
+     * this additionally wires the real {@code barber} / {@code service}
+     * associations for relational integrity and correct stats joins. A missing
+     * catalog entry (e.g. a typo'd barber) leaves the FK null but keeps the
+     * denormalized string so the booking is never lost.
+     */
+    private void resolveAndSetCatalogReferences(Appointment item, String barberName, String serviceType) {
+        barberRepository.findByName(barberName).ifPresent(item::setBarber);
+        serviceItemRepository.findByName(serviceType).ifPresent(item::setService);
     }
 
     @Override
@@ -172,6 +229,9 @@ public class AppointmentServiceImpl implements AppointmentService {
             logger.warn("Failed to add tracing tags: {}", safeMsg);
         }
 
+        // Publish the status-change event. The notification outbox entry is written
+        // by the (separate) notification slice listener so the appointment slice
+        // stays decoupled from the notification slice (ArchUnit cycle rule).
         eventPublisher.publishEvent(new AppointmentStatusChangedEvent(this, savedItem));
 
         return AppointmentResponse.fromEntity(savedItem);

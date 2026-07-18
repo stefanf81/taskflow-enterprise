@@ -47,7 +47,8 @@ public class JwtSecurityBenchmarkExample {
         Instant now = Instant.now();
         for (int i = 0; i < ITERATIONS; i++) {
             JwtClaimsSet claims = JwtClaimsSet.builder()
-                    .issuer("self")
+                    .issuer("taskflow")
+                    .audience(java.util.List.of("taskflow-api"))
                     .issuedAt(now)
                     .expiresAt(now.plusSeconds(3600))
                     .subject("benchmark-user")

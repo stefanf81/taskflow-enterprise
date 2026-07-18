@@ -83,15 +83,15 @@ public class FeaturesIntegrationTest {
         loginRequest.put("username", "admin@taskflow.com");
         loginRequest.put("password", "admin-password");
 
-        String responseJson = mockMvc.perform(post("/api/v1/auth/login")
+        // The JWT now lives in the HttpOnly 'access_token' cookie (C2 migration);
+        // it is no longer returned in the response body.
+        String cookie = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn().getResponse().getCookie("access_token").getValue();
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> responseMap = objectMapper.readValue(responseJson, Map.class);
-        adminToken = "Bearer " + responseMap.get("token").toString();
+        adminToken = "Bearer " + cookie;
     }
 
     @Test
@@ -138,16 +138,16 @@ public class FeaturesIntegrationTest {
         customerLogin.put("username", "jane@example.com");
         customerLogin.put("password", "customer-pass-888");
 
-        String customerResponse = mockMvc.perform(post("/api/v1/auth/login")
+        // The JWT now lives in the HttpOnly 'access_token' cookie (C2 migration);
+        // it is no longer returned in the response body.
+        String customerCookie = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(customerLogin)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role", is("ROLE_CUSTOMER")))
-                .andReturn().getResponse().getContentAsString();
+                .andReturn().getResponse().getCookie("access_token").getValue();
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> customerMap = objectMapper.readValue(customerResponse, Map.class);
-        String customerToken = "Bearer " + customerMap.get("token").toString();
+        String customerToken = "Bearer " + customerCookie;
 
         // --- FEATURE 2: Barber Schedule & Time-Off Management ---
         // Create Barber
@@ -266,15 +266,15 @@ public class FeaturesIntegrationTest {
         bobLogin.put("username", "bob@example.com");
         bobLogin.put("password", "bob-pass-123");
 
-        String bobResponse = mockMvc.perform(post("/api/v1/auth/login")
+        // The JWT now lives in the HttpOnly 'access_token' cookie (C2 migration);
+        // it is no longer returned in the response body.
+        String bobCookie = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(bobLogin)))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn().getResponse().getCookie("access_token").getValue();
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> bobMap = objectMapper.readValue(bobResponse, Map.class);
-        String bobToken = "Bearer " + bobMap.get("token").toString();
+        String bobToken = "Bearer " + bobCookie;
 
         // Bob tries to cancel Jane's appointment (should fail with 404 Not Found / Unauthorized)
         mockMvc.perform(delete("/api/v1/customer/appointments/" + apptMap.get("id"))

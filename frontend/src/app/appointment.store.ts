@@ -11,8 +11,10 @@ import {
 export class AppointmentStore {
   private readonly appointmentService = inject(AppointmentService);
 
-  // Authentication State
-  readonly isLoggedIn = signal<boolean>(!!sessionStorage.getItem('auth_token'));
+  // Authentication State.
+  // The JWT is held in an HttpOnly cookie (not readable by JS). The UI auth
+  // state is derived purely from signals, restored on refresh via /auth/me.
+  readonly isLoggedIn = signal<boolean>(false);
 
   // Pagination & Filter States
   readonly currentPage = signal<number>(0);
@@ -83,10 +85,24 @@ export class AppointmentStore {
     this.appointmentsResource.reload();
   }
 
-  // Handle Admin Logout
+  // Handle Admin Logout — clear the HttpOnly cookie on the backend, then drop UI state.
   onLogout(): void {
-    sessionStorage.removeItem('auth_token');
+    this.appointmentService.logout().subscribe({
+      next: () => this.resetAuthState(),
+      error: () => this.resetAuthState(),
+    });
+  }
+
+  // Reset local auth signals (also invoked on a 401 from the interceptor).
+  resetAuthState(): void {
     this.isLoggedIn.set(false);
     this.errorMessage.set(null);
+  }
+
+  constructor() {
+    // React to 401s anywhere in the app by clearing client-side auth state.
+    if (typeof window !== 'undefined') {
+      window.addEventListener('auth:unauthorized', () => this.resetAuthState());
+    }
   }
 }

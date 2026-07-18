@@ -55,7 +55,6 @@ export interface AppointmentDashboardResponse {
 }
 
 export interface LoginResponse {
-  token: string;
   username: string;
   role: string;
 }
@@ -173,9 +172,21 @@ export class AppointmentService {
     return this.http.get<ServiceItem[]>(this.catalogUrl);
   }
 
-  // Perform secure JWT login by posting to the authentication controller
+  // Perform secure JWT login by posting to the authentication controller.
+  // The backend responds with an HttpOnly, SameSite=Strict cookie; no token is
+  // returned to (or stored by) JavaScript.
   login(username: string, password: string): Observable<LoginResponse> {
     return this.http.post<LoginResponse>(`${this.authUrl}/login`, { username, password });
+  }
+
+  // Returns the currently authenticated principal (used to restore UI role after a page refresh).
+  me(): Observable<LoginResponse> {
+    return this.http.get<LoginResponse>(`${this.authUrl}/me`);
+  }
+
+  // Clears the HttpOnly auth cookie on the backend.
+  logout(): Observable<void> {
+    return this.http.post<void>(`${this.authUrl}/logout`, {});
   }
 
   getAllAppointments(

@@ -24,7 +24,10 @@ public class NotificationOutbox {
     private LocalDateTime sentAt;
 
     @Column(nullable = false, length = 50)
-    private String status; // SENT, FAILED
+    private String status; // PENDING, SENT, FAILED
+
+    @Column(name = "retry_count", nullable = false)
+    private int retryCount = 0;
 
     public NotificationOutbox() {}
 
@@ -34,6 +37,7 @@ public class NotificationOutbox {
         this.message = message;
         this.sentAt = sentAt;
         this.status = status;
+        this.retryCount = 0;
     }
 
     public Long getId() { return id; }
@@ -48,4 +52,7 @@ public class NotificationOutbox {
     public void setSentAt(LocalDateTime sentAt) { this.sentAt = sentAt; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public int getRetryCount() { return retryCount; }
+    public void setRetryCount(int retryCount) { this.retryCount = retryCount; }
 }

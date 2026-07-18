@@ -28,6 +28,15 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     java.util.List<Appointment> findForReminderWithLock(@Param("date") LocalDate date, 
                                                          @Param("reminderSent") boolean reminderSent, 
                                                          @Param("status") String status);
+
+    @Query("SELECT a.id FROM Appointment a WHERE a.bookingDate = :date AND a.reminderSent = :reminderSent AND a.status = :status")
+    java.util.List<Long> findReminderIds(@Param("date") LocalDate date,
+                                         @Param("reminderSent") boolean reminderSent,
+                                         @Param("status") String status);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM Appointment a WHERE a.id = :id")
+    java.util.Optional<Appointment> findByIdForUpdate(@Param("id") Long id);
     
     @Query(value = "SELECT DISTINCT a.booking_time FROM appointments a WHERE a.barber_name = :barberName AND a.booking_date = :bookingDate AND a.status <> :status ORDER BY a.booking_time LIMIT 500", 
            nativeQuery = true)
@@ -43,6 +52,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             "SUM(CASE WHEN a.status = 'PENDING' AND a.bookingDate < :now THEN 1 ELSE 0 END), " +
             "0, " +
             "COALESCE(SUM(CASE WHEN a.status = 'APPROVED' THEN CAST(s.price AS double) ELSE 0.0 END), 0.0)) " +
-            "FROM Appointment a LEFT JOIN ServiceItem s ON s.name = a.serviceType")
+            "FROM Appointment a LEFT JOIN a.service s")
     com.example.taskflow.appointment.AppointmentStats getAppointmentStats(@Param("now") LocalDate now);
 }

@@ -3,6 +3,8 @@ import { App } from './app';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
+import { provideRouter } from '@angular/router';
+import { routes } from './app.routes';
 
 describe('App Component Quality Assurance Suite', () => {
   let fixture: ComponentFixture<App>;
@@ -10,11 +12,11 @@ describe('App Component Quality Assurance Suite', () => {
 
   beforeEach(async () => {
     // Clean storage state before each test run
-    sessionStorage.removeItem('auth_token');
+    sessionStorage.removeItem('auth_role');
 
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter(routes)],
     }).compileComponents();
 
     fixture = TestBed.createComponent(App);
@@ -80,6 +82,12 @@ describe('App Component Quality Assurance Suite', () => {
     httpMock
       .match((req) => req.url.includes('/api/v1/reviews/public/barber-ratings'))
       .forEach((req) => req.flush(mockRatings));
+    // The component calls /api/v1/auth/me on init to restore session. In this
+    // unauthenticated default state we respond 401 so it stays logged out and
+    // does not trigger further (pending) appointment-loading requests.
+    httpMock
+      .match((req) => req.url.includes('/api/v1/auth/me'))
+      .forEach((req) => req.flush(null, { status: 401, statusText: 'Unauthorized' }));
     httpMock.match(() => true).forEach((req) => req.flush([]));
   });
 
@@ -275,10 +283,9 @@ describe('App Component Quality Assurance Suite', () => {
 
     reqs = httpMock.match((req) => req.url.includes('/api/v1/auth/login'));
     expect(reqs.length).toBe(1);
-    reqs[0].flush({ token: 'test-token', role: 'ROLE_ADMIN' });
+    reqs[0].flush({ username: 'admin', role: 'ROLE_ADMIN' });
     expect(app.isLoggedIn()).toBe(true);
     expect(app.userRole()).toBe('ROLE_ADMIN');
-    expect(sessionStorage.getItem('auth_token')).toBe('Bearer test-token');
     expect(sessionStorage.getItem('auth_role')).toBe('ROLE_ADMIN');
   });
 

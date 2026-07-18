@@ -1,5 +1,6 @@
 package com.example.taskflow.appointment;
 
+import com.example.taskflow.catalog.ServiceItem;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -15,7 +16,9 @@ import java.util.UUID;
     @Index(name = "idx_appointment_public_id", columnList = "public_id", unique = true),
     @Index(name = "idx_appointment_barber_date_status", columnList = "barber_name,booking_date,status"),
     @Index(name = "idx_appointment_status_customer_name", columnList = "status,customer_name"),
-    @Index(name = "idx_appointment_status_date", columnList = "status,booking_date")
+    @Index(name = "idx_appointment_status_date", columnList = "status,booking_date"),
+    @Index(name = "idx_appointment_barber_id", columnList = "barber_id"),
+    @Index(name = "idx_appointment_service_id", columnList = "service_id")
 })
 public class Appointment {
 
@@ -49,6 +52,10 @@ public class Appointment {
     @Column(name = "barber_name", nullable = false, length = 100)
     private String barberName;
 
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "barber_id", foreignKey = @ForeignKey(name = "fk_appointment_barber"))
+    private Barber barber;
+
     @NotNull(message = "Booking date is required")
     @Column(name = "booking_date", nullable = false)
     private LocalDate bookingDate;
@@ -62,6 +69,10 @@ public class Appointment {
     @Size(max = 100)
     @Column(name = "service_type", nullable = false, length = 100)
     private String serviceType;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "service_id", foreignKey = @ForeignKey(name = "fk_appointment_service"))
+    private ServiceItem service;
 
     @NotBlank(message = "Status is required")
     @Size(max = 50)
@@ -182,6 +193,22 @@ public class Appointment {
 
     public void setServiceType(String serviceType) {
         this.serviceType = serviceType;
+    }
+
+    public Barber getBarber() {
+        return barber;
+    }
+
+    public void setBarber(Barber barber) {
+        this.barber = barber;
+    }
+
+    public ServiceItem getService() {
+        return service;
+    }
+
+    public void setService(ServiceItem service) {
+        this.service = service;
     }
 
     public String getStatus() {

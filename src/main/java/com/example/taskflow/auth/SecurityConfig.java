@@ -23,6 +23,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import com.nimbusds.jose.jwk.JWKSet;
@@ -32,9 +33,12 @@ import com.nimbusds.jose.proc.SecurityContext;
 
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import javax.sql.DataSource;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.util.List;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.Arrays;
@@ -53,6 +57,8 @@ public class SecurityConfig {
     private final KeyPair keyPair;
     private final RSAKey rsaKey;
     private final DataSource dataSource;
+    private final String jwtIssuer;
+    private final String jwtAudience;
 
     public SecurityConfig(
             @Value("${spring.security.user.name:admin}") String adminUsername,
@@ -60,11 +66,15 @@ public class SecurityConfig {
             @Value("${app.cors.allowed-origins:*}") String allowedOrigins,
             @Value("${app.rsa.private-key:#{null}}") String privateKeyB64,
             @Value("${app.rsa.public-key:#{null}}") String publicKeyB64,
+            @Value("${app.jwt.issuer:taskflow}") String jwtIssuer,
+            @Value("${app.jwt.audience:taskflow-api}") String jwtAudience,
             DataSource dataSource) {
         this.adminUsername = adminUsername;
         this.adminPassword = adminPassword;
         this.allowedOrigins = allowedOrigins;
         this.dataSource = dataSource;
+        this.jwtIssuer = jwtIssuer;
+        this.jwtAudience = jwtAudience;
         this.keyPair = loadOrGenerateRsaKeyPair(privateKeyB64, publicKeyB64);
         this.rsaKey = new RSAKey.Builder((RSAPublicKey) keyPair.getPublic())
                 .privateKey((RSAPrivateKey) keyPair.getPrivate())
@@ -95,7 +105,8 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/api/v1/auth/**").permitAll()
+                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/register").permitAll()
                 .requestMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments/public/busy-slots").permitAll()
@@ -115,13 +126,38 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/notifications/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
-            .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
+            .oauth2ResourceServer(oauth2 -> oauth2
+                .bearerTokenResolver(cookieBearerTokenResolver())
+                .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
             .headers(headers -> headers
                 .frameOptions(frame -> frame.sameOrigin())
                 .addHeaderWriter(new org.springframework.security.web.header.writers.StaticHeadersWriter("Cross-Origin-Resource-Policy", "same-origin"))
             );
 
         return http.build();
+    }
+
+    /**
+     * Resolves the OAuth2 bearer token from the HttpOnly {@code access_token} cookie
+     * (C2 migration), falling back to the standard {@code Authorization: Bearer}
+     * header. This lets the Angular SPA authenticate via the secure cookie without
+     * ever exposing the JWT to JavaScript.
+     */
+    @Bean
+    public BearerTokenResolver cookieBearerTokenResolver() {
+        DefaultBearerTokenResolver headerResolver = new DefaultBearerTokenResolver();
+        return request -> {
+            jakarta.servlet.http.Cookie[] cookies = request.getCookies();
+            if (cookies != null) {
+                for (jakarta.servlet.http.Cookie cookie : cookies) {
+                    if ("access_token".equals(cookie.getName())) {
+                        String value = cookie.getValue();
+                        return (value != null && !value.isBlank()) ? value : null;
+                    }
+                }
+            }
+            return headerResolver.resolve(request);
+        };
     }
 
     @Bean
@@ -169,7 +205,17 @@ public class SecurityConfig {
     @Bean
     public JwtDecoder jwtDecoder() {
         try {
-            return NimbusJwtDecoder.withPublicKey(this.rsaKey.toRSAPublicKey()).build();
+            NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(this.rsaKey.toRSAPublicKey()).build();
+            // A3: validate issuer + audience (expiry is enforced by the default
+            // validators). Rejects tokens issued by another authority or intended
+            // for a different resource, closing token-substitution gaps.
+            org.springframework.security.oauth2.core.OAuth2TokenValidator<org.springframework.security.oauth2.jwt.Jwt> audienceValidator =
+                    new org.springframework.security.oauth2.jwt.JwtClaimValidator<List<String>>(
+                            "aud", aud -> aud != null && aud.contains(jwtAudience));
+            decoder.setJwtValidator(new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(
+                    JwtValidators.createDefaultWithIssuer(jwtIssuer),
+                    audienceValidator));
+            return decoder;
         } catch (Exception e) {
             throw new IllegalStateException("Failed to configure RSA Public Key decoder", e);
         }

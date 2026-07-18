@@ -1,5 +1,6 @@
 package com.example.taskflow.auth;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -14,9 +15,16 @@ import java.util.stream.Collectors;
 public class TokenProvider {
 
     private final JwtEncoder encoder;
+    private final String issuer;
+    private final String audience;
 
-    public TokenProvider(JwtEncoder encoder) {
+    public TokenProvider(
+            JwtEncoder encoder,
+            @Value("${app.jwt.issuer:taskflow}") String issuer,
+            @Value("${app.jwt.audience:taskflow-api}") String audience) {
         this.encoder = encoder;
+        this.issuer = issuer;
+        this.audience = audience;
     }
 
     public String generateToken(Authentication authentication) {
@@ -28,7 +36,8 @@ public class TokenProvider {
                 .collect(Collectors.joining(" "));
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
-                .issuer("self")
+                .issuer(issuer)
+                .audience(java.util.List.of(audience))
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(expiry))
                 .subject(authentication.getName())

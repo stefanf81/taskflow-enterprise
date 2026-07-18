@@ -67,8 +67,10 @@ class AppointmentReminderSchedulerTest {
     @Test
     void testProcessReminders_Success() {
         LocalDate tomorrow = LocalDate.now().plusDays(1);
-        when(appointmentRepository.findForReminderWithLock(tomorrow, false, "APPROVED"))
-                .thenReturn(Arrays.asList(app1, app2));
+        when(appointmentRepository.findReminderIds(tomorrow, false, "APPROVED"))
+                .thenReturn(Arrays.asList(1L, 2L));
+        when(appointmentRepository.findByIdForUpdate(1L)).thenReturn(java.util.Optional.of(app1));
+        when(appointmentRepository.findByIdForUpdate(2L)).thenReturn(java.util.Optional.of(app2));
 
         when(notificationOutboxRepository.save(any(NotificationOutbox.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(appointmentRepository.save(any(Appointment.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -84,14 +86,16 @@ class AppointmentReminderSchedulerTest {
         verify(appointmentRepository, times(1)).save(app1);
         verify(appointmentRepository, times(1)).save(app2);
 
-        // Verify custom parameters passed to repo
-        verify(appointmentRepository, times(1)).findForReminderWithLock(tomorrow, false, "APPROVED");
+        // Verify the per-appointment ID loader is used (A5: lock released per row)
+        verify(appointmentRepository, times(1)).findReminderIds(tomorrow, false, "APPROVED");
+        verify(appointmentRepository, times(1)).findByIdForUpdate(1L);
+        verify(appointmentRepository, times(1)).findByIdForUpdate(2L);
     }
 
     @Test
     void testProcessReminders_EmptyList() {
         LocalDate tomorrow = LocalDate.now().plusDays(1);
-        when(appointmentRepository.findForReminderWithLock(tomorrow, false, "APPROVED"))
+        when(appointmentRepository.findReminderIds(tomorrow, false, "APPROVED"))
                 .thenReturn(Collections.emptyList());
 
         reminderScheduler.processReminders();

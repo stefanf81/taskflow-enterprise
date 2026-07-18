@@ -4,6 +4,7 @@ import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -11,6 +12,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.time.Duration;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -105,5 +107,22 @@ class RateLimiterConfigTest {
         verify(redisTemplate, times(1)).expire(eq("rate_limit:127.0.0.1:api"), eq(Duration.ofMinutes(1)));
         verify(filterChain, times(1)).doFilter(request, response);
         assertEquals(200, response.getStatus());
+    }
+
+    @Test
+    void shouldNotCreateFilterBeanWhenRateLimitDisabled() {
+        // matchIfMissing=false: the filter must NOT be created unless explicitly enabled.
+        // Without Redis present this prevents a self-DoS (every request 500-ing).
+        var context = new AnnotationConfigApplicationContext();
+        context.register(RateLimiterConfig.class);
+        // Property deliberately left unset (and would be false if set) -> bean absent.
+        context.refresh();
+
+        String[] names = context.getBeanNamesForType(OncePerRequestFilter.class);
+        boolean hasRateLimitFilter = java.util.Arrays.stream(names)
+                .anyMatch(n -> n.toLowerCase().contains("rateLimit") || n.contains("rateLimitFilter"));
+        assertFalse(hasRateLimitFilter, "Rate limiter filter must be absent when not explicitly enabled");
+
+        context.close();
     }
 }

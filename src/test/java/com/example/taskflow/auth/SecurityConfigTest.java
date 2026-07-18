@@ -36,7 +36,7 @@ class SecurityConfigTest {
 
     @Test
     void testCorsConfigurationSourceWithSpecificOrigin() throws Exception {
-        SecurityConfig config = new SecurityConfig("admin", "pass", "http://localhost:3000", null, null, dummyDataSource());
+        SecurityConfig config = new SecurityConfig("admin", "pass", "http://localhost:3000", null, null, "taskflow", "taskflow-api", dummyDataSource());
         
         CorsConfigurationSource source = config.corsConfigurationSource();
         assertNotNull(source);
@@ -44,7 +44,7 @@ class SecurityConfigTest {
 
     @Test
     void testCorsConfigurationSourceWithWildcard() throws Exception {
-        SecurityConfig config = new SecurityConfig("admin", "pass", "*", null, null, dummyDataSource());
+        SecurityConfig config = new SecurityConfig("admin", "pass", "*", null, null, "taskflow", "taskflow-api", dummyDataSource());
         
         CorsConfigurationSource source = config.corsConfigurationSource();
         assertNotNull(source);
@@ -59,7 +59,7 @@ class SecurityConfigTest {
         String privBase64 = Base64.getEncoder().encodeToString(kp.getPrivate().getEncoded());
         String pubBase64 = Base64.getEncoder().encodeToString(kp.getPublic().getEncoded());
         
-        SecurityConfig config = new SecurityConfig("admin", "pass", "*", privBase64, pubBase64, dummyDataSource());
+        SecurityConfig config = new SecurityConfig("admin", "pass", "*", privBase64, pubBase64, "taskflow", "taskflow-api", dummyDataSource());
         
         assertNotNull(config.jwtDecoder());
         assertNotNull(config.jwkSource());
@@ -68,26 +68,26 @@ class SecurityConfigTest {
 
     @Test
     void testLoadRsaKeyInvalid() throws Exception {
-        SecurityConfig config = new SecurityConfig("admin", "pass", "*", "invalid-base64", "invalid-base64", dummyDataSource());
+        SecurityConfig config = new SecurityConfig("admin", "pass", "*", "invalid-base64", "invalid-base64", "taskflow", "taskflow-api", dummyDataSource());
         
         assertNotNull(config.jwtDecoder()); // Should fallback to ephemeral keys
     }
 
     @Test
     void testLoadRsaKeyBlank() throws Exception {
-        SecurityConfig config = new SecurityConfig("admin", "pass", "*", "", "   ", dummyDataSource());
+        SecurityConfig config = new SecurityConfig("admin", "pass", "*", "", "   ", "taskflow", "taskflow-api", dummyDataSource());
         assertNotNull(config.jwtDecoder()); 
     }
     
     @Test
     void testLoadRsaKeyPartiallyBlank() throws Exception {
-        SecurityConfig config = new SecurityConfig("admin", "pass", "*", "valid-fake-base", "", dummyDataSource());
+        SecurityConfig config = new SecurityConfig("admin", "pass", "*", "valid-fake-base", "", "taskflow", "taskflow-api", dummyDataSource());
         assertNotNull(config.jwtDecoder()); 
     }
 
     @Test
     void testJwtDecoderException() throws Exception {
-        SecurityConfig config = new SecurityConfig("admin", "pass", "*", null, null, dummyDataSource());
+        SecurityConfig config = new SecurityConfig("admin", "pass", "*", null, null, "taskflow", "taskflow-api", dummyDataSource());
         
         java.lang.reflect.Field rsaKeyField = SecurityConfig.class.getDeclaredField("rsaKey");
         rsaKeyField.setAccessible(true);
@@ -98,7 +98,7 @@ class SecurityConfigTest {
 
     @Test
     void testBeans() throws Exception {
-        SecurityConfig config = new SecurityConfig("admin", "pass", "*", null, null, dummyDataSource());
+        SecurityConfig config = new SecurityConfig("admin", "pass", "*", null, null, "taskflow", "taskflow-api", dummyDataSource());
         
         assertNotNull(config.passwordEncoder());
     }

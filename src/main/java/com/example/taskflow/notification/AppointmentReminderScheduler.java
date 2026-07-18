@@ -25,39 +25,62 @@ public class AppointmentReminderScheduler {
         this.notificationOutboxRepository = notificationOutboxRepository;
     }
 
-    // Runs every hour. For testing, we can keep it hourly. "0 0 * * * *"
-    // But since it's a showcase, maybe every 15 minutes is fine.
+    // Runs every 15 minutes. The outer sweep is NOT transactional: it only loads
+    // the IDs that need a reminder, then processes each appointment in its own
+    // transaction (see processOne). A5: previously the entire loop ran under a
+    // single PESSIMISTIC_WRITE transaction, locking every matching row for the
+    // whole sweep. Now the row lock is acquired and released per appointment.
     @Scheduled(fixedRate = 900000) // 15 minutes
-    @Transactional
     public void processReminders() {
         LocalDate tomorrow = LocalDate.now().plusDays(1);
         logger.info("Scanning for appointments needing 24-hour reminders for date: {}", tomorrow);
 
-        List<Appointment> upcomingAppointments = appointmentRepository.findForReminderWithLock(tomorrow, false, "APPROVED");
+        List<Long> upcomingAppointmentIds = appointmentRepository.findReminderIds(tomorrow, false, "APPROVED");
 
-        for (Appointment appointment : upcomingAppointments) {
-            String safeEmail = appointment.getCustomerEmail() != null ? appointment.getCustomerEmail().replaceAll("[\\r\\n]", "") : "";
-            logger.info("Sending reminder to {} for appointment on {}", safeEmail, appointment.getBookingDate());
-            
-            // Mock sending email
-            String message = String.format("Hi %s, this is a reminder for your %s appointment with %s tomorrow at %s.",
-                    appointment.getCustomerName(), appointment.getServiceType(), appointment.getBarberName(), appointment.getBookingTime());
-            
-            NotificationOutbox outbox = new NotificationOutbox(
-                    appointment.getCustomerEmail(),
-                    "EMAIL",
-                    message,
-                    LocalDateTime.now(),
-                    "SENT"
-            );
-            
-            notificationOutboxRepository.save(outbox);
-            
-            // Mark as sent
-            appointment.setReminderSent(true);
-            appointmentRepository.save(appointment);
+        int processed = 0;
+        for (Long appointmentId : upcomingAppointmentIds) {
+            try {
+                processOne(appointmentId);
+                processed++;
+            } catch (Exception e) {
+                String safeMsg = e.getMessage() != null ? e.getMessage().replaceAll("[\\r\\n]", "") : "";
+                logger.error("Failed to process reminder for appointment {}: {}", appointmentId, safeMsg);
+            }
         }
         
-        logger.info("Processed {} reminders.", upcomingAppointments.size());
+        logger.info("Processed {} reminders.", processed);
+    }
+
+    @Transactional
+    public void processOne(Long appointmentId) {
+        // A5: re-load the single row with a PESSIMISTIC_WRITE lock inside this
+        // dedicated transaction so the lock is held only for this appointment and
+        // released on commit — not for the whole sweep.
+        Appointment appointment = appointmentRepository.findByIdForUpdate(appointmentId).orElse(null);
+        if (appointment == null || Boolean.TRUE.equals(appointment.getReminderSent())) {
+            return;
+        }
+
+        String safeEmail = appointment.getCustomerEmail() != null ? appointment.getCustomerEmail().replaceAll("[\\r\\n]", "") : "";
+        logger.info("Sending reminder to {} for appointment on {}", safeEmail, appointment.getBookingDate());
+        
+        // Mock sending email
+        String message = String.format("Hi %s, this is a reminder for your %s appointment with %s tomorrow at %s.",
+                appointment.getCustomerName(), appointment.getServiceType(), appointment.getBarberName(), appointment.getBookingTime());
+        
+        NotificationOutbox outbox = new NotificationOutbox(
+                appointment.getCustomerEmail(),
+                "EMAIL",
+                message,
+                LocalDateTime.now(),
+                "SENT"
+        );
+        
+        notificationOutboxRepository.save(outbox);
+        
+        // Mark as sent; this row's PESSIMISTIC_WRITE lock is released when the
+        // transaction for this single appointment commits.
+        appointment.setReminderSent(true);
+        appointmentRepository.save(appointment);
     }
 }
