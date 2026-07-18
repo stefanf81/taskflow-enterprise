@@ -18,6 +18,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -93,11 +94,15 @@ public class SecurityConfig {
 
         http
             .csrf(csrf -> csrf
+                // Only exempt truly public state-changing endpoints from CSRF.
+                // Authenticated endpoints (including POST /api/v1/auth/logout and
+                // admin POST/PUT/DELETE) retain CSRF protection.
                 .ignoringRequestMatchers(
-                    "/api/v1/auth/**",
-                    "/api/v1/appointments",
-                    "/api/v1/appointments/public/**",
-                    "/api/v1/reviews/public/**"
+                    PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/login"),
+                    PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/register"),
+                    PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/appointments"),
+                    PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*"),
+                    PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/reviews/public/**")
                 )
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
@@ -105,6 +110,7 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/register").permitAll()
                 .requestMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()

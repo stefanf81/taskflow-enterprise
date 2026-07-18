@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { CommonModule, NgOptimizedImage } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { form, required, email, FormField, FormRoot } from '@angular/forms/signals';
 import { Router, RouterOutlet } from '@angular/router';
 import { AppointmentService, AppointmentItem } from './appointment.service';
 import { AppointmentStore } from './appointment.store';
@@ -19,10 +20,21 @@ import { ReviewStore } from './review.store';
 import { CustomerStore } from './customer.store';
 import { StylistCard } from './components/stylist-card/stylist-card';
 
+/** Model shape for the Signal Forms booking wizard. */
+interface BookingFormModel {
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  barberName: string;
+  bookingDate: string;
+  bookingTime: string;
+  serviceType: string;
+}
+
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule, StylistCard, RouterOutlet],
+  imports: [CommonModule, FormsModule, StylistCard, RouterOutlet, FormField, FormRoot],
   templateUrl: './app.html',
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -48,14 +60,34 @@ export class App implements OnInit {
   registerFullName = '';
   registerPhone = '';
 
-  // Client-Side Guest Booking Form State (Signals)
-  readonly bookingName = signal<string>('');
-  readonly bookingEmail = signal<string>('');
-  readonly bookingPhone = signal<string>('');
-  readonly bookingBarber = signal<string>('No Preference (First Available)');
-  readonly bookingDate = signal<string>('');
-  readonly bookingTime = signal<string>('09:00');
-  readonly bookingService = signal<string>('Classic Haircut');
+  // Booking Form Model Interface (public for test access)
+  readonly bookingModel = signal<BookingFormModel>({
+    customerName: '',
+    customerEmail: '',
+    customerPhone: '',
+    barberName: 'No Preference (First Available)',
+    bookingDate: '',
+    bookingTime: '09:00',
+    serviceType: 'Classic Haircut',
+  });
+
+  // Angular 22 Signal Forms (field-level validation + two-way binding via [formField])
+  readonly bookingForm = form(this.bookingModel, (f) => {
+    required(f.customerName);
+    required(f.customerEmail);
+    required(f.customerPhone);
+    required(f.bookingDate);
+    required(f.bookingTime);
+  });
+
+  // Convenience computed signals for backward-compatible template display
+  readonly bookingName = computed(() => this.bookingModel().customerName);
+  readonly bookingEmail = computed(() => this.bookingModel().customerEmail);
+  readonly bookingPhone = computed(() => this.bookingModel().customerPhone);
+  readonly bookingBarber = computed(() => this.bookingModel().barberName);
+  readonly bookingDate = computed(() => this.bookingModel().bookingDate);
+  readonly bookingTime = computed(() => this.bookingModel().bookingTime);
+  readonly bookingService = computed(() => this.bookingModel().serviceType);
 
   // Core Admin Reactive States delegated to the Store
   readonly appointments = this.store.appointments;
@@ -181,14 +213,15 @@ export class App implements OnInit {
   });
 
   readonly selectedServiceObj = computed(() => {
-    return this.services().find((s) => s.name === this.bookingService());
+    return this.services().find((s) => s.name === this.bookingModel().serviceType);
   });
 
   readonly estimatedEndTime = computed(() => {
     const svc = this.selectedServiceObj();
-    if (!svc || !this.bookingTime()) return '';
+    const time = this.bookingModel().bookingTime;
+    if (!svc || !time) return '';
     try {
-      const startMin = this.parseTimeToMinutes(this.bookingTime());
+      const startMin = this.parseTimeToMinutes(time);
       const endMin = startMin + svc.durationMinutes;
       return this.formatMinutesToTimeString(endMin);
     } catch (e) {
@@ -347,11 +380,12 @@ export class App implements OnInit {
 
   // Submit Guest Booking (Client Calendar Interface)
   onBookAppointment(): void {
-    const name = this.bookingName().trim();
-    const email = this.bookingEmail().trim();
-    const phone = this.bookingPhone().trim();
+    const model = this.bookingModel();
+    const name = model.customerName.trim();
+    const email = model.customerEmail.trim();
+    const phone = model.customerPhone.trim();
 
-    if (!name || !email || !phone || !this.bookingDate()) {
+    if (!name || !email || !phone || !model.bookingDate) {
       this.errorMessage.set('Please fill out all required fields to secure your slot.');
       return;
     }
@@ -363,10 +397,10 @@ export class App implements OnInit {
       customerName: name,
       customerEmail: email,
       customerPhone: phone,
-      barberName: this.bookingBarber(),
-      bookingDate: this.bookingDate(),
-      bookingTime: this.bookingTime(),
-      serviceType: this.bookingService(),
+      barberName: model.barberName,
+      bookingDate: model.bookingDate,
+      bookingTime: model.bookingTime,
+      serviceType: model.serviceType,
     };
 
     this.appointmentService.createAppointment(payload).subscribe({
@@ -476,15 +510,18 @@ export class App implements OnInit {
     this.setPage(this.currentPage() - 1);
   }
 
-  // Reset Guest Form
+  // Reset Guest Form (mutate model — convenience signals reflect automatically)
   resetBookingForm(): void {
-    this.bookingName.set('');
-    this.bookingEmail.set('');
-    this.bookingPhone.set('');
-    this.bookingBarber.set(this.barbers[0]);
-    this.bookingDate.set('');
-    this.bookingTime.set(this.timeSlots[0]);
-    this.bookingService.set(this.services().length > 0 ? this.services()[0].name : '');
+    const defaultService = this.services().length > 0 ? this.services()[0].name : '';
+    this.bookingModel.set({
+      customerName: '',
+      customerEmail: '',
+      customerPhone: '',
+      barberName: this.barbers[0],
+      bookingDate: '',
+      bookingTime: this.timeSlots[0],
+      serviceType: defaultService,
+    });
     this.selectedCategory.set('all');
     this.busySlots.set([]);
     this.activeStep.set(1);
@@ -498,23 +535,18 @@ export class App implements OnInit {
   }
 
   isStepValid(step: number): boolean {
+    const m = this.bookingModel();
     if (step === 1) {
-      return !!this.bookingService();
+      return !!m.serviceType;
     }
     if (step === 2) {
-      return !!this.bookingBarber();
+      return !!m.barberName;
     }
     if (step === 3) {
-      return (
-        !!this.bookingDate() &&
-        !!this.bookingTime() &&
-        !this.busySlots().includes(this.bookingTime())
-      );
+      return !!m.bookingDate && !!m.bookingTime && !this.busySlots().includes(m.bookingTime);
     }
     if (step === 4) {
-      return (
-        !!this.bookingName().trim() && !!this.bookingEmail().trim() && !!this.bookingPhone().trim()
-      );
+      return !!m.customerName.trim() && !!m.customerEmail.trim() && !!m.customerPhone.trim();
     }
     return false;
   }
@@ -541,13 +573,13 @@ export class App implements OnInit {
   }
 
   selectStylist(name: string): void {
-    this.bookingBarber.set(name);
+    this.bookingModel.update((m) => ({ ...m, barberName: name }));
     this.onBarberOrDateChange();
   }
 
   // Interactive Lookbook Style Selector
   selectLookbookStyle(serviceName: string, category: string): void {
-    this.bookingService.set(serviceName);
+    this.bookingModel.update((m) => ({ ...m, serviceType: serviceName }));
     this.selectedCategory.set(category);
     this.activeStep.set(2); // Automatically proceed to stylist select
     this.showSuccess(`✨ Lookbook Style selected: ${serviceName}! Choose your stylist next.`);
@@ -621,7 +653,7 @@ export class App implements OnInit {
         this.errorMessage.set(
           'Our shop is closed on Sundays. Please select a Monday through Saturday slot!',
         );
-        this.bookingDate.set('');
+        this.bookingModel.update((m) => ({ ...m, bookingDate: '' }));
         this.busySlots.set([]);
         return;
       }
@@ -644,17 +676,17 @@ export class App implements OnInit {
 
   selectTimeSlot(slot: string): void {
     if (!this.busySlots().includes(slot)) {
-      this.bookingTime.set(slot);
+      this.bookingModel.update((m) => ({ ...m, bookingTime: slot }));
     }
   }
 
   selectBookingDate(dateStr: string): void {
-    this.bookingDate.set(dateStr);
+    this.bookingModel.update((m) => ({ ...m, bookingDate: dateStr }));
     this.onBarberOrDateChange();
   }
 
   selectService(name: string): void {
-    this.bookingService.set(name);
+    this.bookingModel.update((m) => ({ ...m, serviceType: name }));
   }
 
   setServiceCategory(cat: string): void {

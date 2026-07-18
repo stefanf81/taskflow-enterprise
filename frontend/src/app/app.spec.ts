@@ -153,11 +153,11 @@ describe('App Component Quality Assurance Suite', () => {
     expect(app.isStepValid(1)).toBe(true);
 
     // Select a blank service to verify step 1 invalidation
-    app.bookingService.set('');
+    app.selectService('');
     expect(app.isStepValid(1)).toBe(false);
 
     // Restore service
-    app.bookingService.set('Classic Haircut');
+    app.selectService('Classic Haircut');
     expect(app.isStepValid(1)).toBe(true);
 
     // STEP 2 is valid because No Preference barber is selected by default
@@ -166,8 +166,7 @@ describe('App Component Quality Assurance Suite', () => {
     // STEP 3 requires a date and time slot to be valid
     expect(app.isStepValid(3)).toBe(false); // Invalid initially
 
-    app.bookingDate.set('2026-06-25');
-    app.bookingTime.set('10:00');
+    app.bookingModel.update((m) => ({ ...m, bookingDate: '2026-06-25', bookingTime: '10:00' }));
     expect(app.isStepValid(3)).toBe(true); // Valid now
 
     // If the selected slot is busy/taken, step 3 should be invalidated
@@ -198,13 +197,19 @@ describe('App Component Quality Assurance Suite', () => {
 
   it('should compute the estimated completion end time based on service duration', () => {
     // Select Classic Haircut (30 mins duration)
-    app.bookingService.set('Classic Haircut');
-    app.bookingTime.set('10:00'); // 10:00 AM
+    app.bookingModel.update((m) => ({
+      ...m,
+      serviceType: 'Classic Haircut',
+      bookingTime: '10:00',
+    })); // 10:00 AM
     expect(app.estimatedEndTime()).toBe('10:30'); // represented as 10:30 (24h)
 
     // Select Skin Fade (45 mins duration)
-    app.bookingService.set('Modern Skin Fade');
-    app.bookingTime.set('13:15'); // 01:15 PM
+    app.bookingModel.update((m) => ({
+      ...m,
+      serviceType: 'Modern Skin Fade',
+      bookingTime: '13:15',
+    })); // 01:15 PM
     expect(app.estimatedEndTime()).toBe('14:00'); // represented as 14:00 (02:00 PM)
   });
 
@@ -254,12 +259,15 @@ describe('App Component Quality Assurance Suite', () => {
   });
 
   it('should validate step 4 correctly', () => {
-    app.bookingName.set('Test User');
-    app.bookingEmail.set('test@example.com');
-    app.bookingPhone.set('1234567890');
+    app.bookingModel.update((m) => ({
+      ...m,
+      customerName: 'Test User',
+      customerEmail: 'test@example.com',
+      customerPhone: '1234567890',
+    }));
     expect(app.isStepValid(4)).toBe(true);
 
-    app.bookingName.set('');
+    app.bookingModel.update((m) => ({ ...m, customerName: '' }));
     expect(app.isStepValid(4)).toBe(false);
   });
 

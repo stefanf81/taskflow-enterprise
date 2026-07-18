@@ -30,6 +30,10 @@ public class AppointmentController {
 
     @GetMapping
     @Operation(summary = "View a list of scheduled appointments", description = "Can be filtered by status and customer name, with pagination.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Successfully retrieved paginated appointments"),
+            @ApiResponse(responseCode = "400", description = "Invalid filter or pagination parameters")
+    })
     public ResponseEntity<AppointmentDashboardResponse> getAllAppointments(
             @Parameter(description = "Filter by status (PENDING, APPROVED, DENIED)")
             @RequestParam(required = false) String status,
@@ -60,6 +64,10 @@ public class AppointmentController {
 
     @GetMapping("/public/busy-slots")
     @Operation(summary = "Get a list of busy time slots for a specific barber on a specific date (Guest Access)")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of busy time slots returned"),
+            @ApiResponse(responseCode = "400", description = "Invalid barber name or date format")
+    })
     public ResponseEntity<java.util.List<String>> getBusySlots(
             @Parameter(description = "Barber name")
             @NotBlank(message = "Barber name is required")
@@ -76,6 +84,11 @@ public class AppointmentController {
 
     @PutMapping("/public/cancel/{publicId}")
     @Operation(summary = "Cancel an appointment securely as a guest by verifying the booking email (Guest Access)")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "204", description = "Appointment successfully cancelled"),
+            @ApiResponse(responseCode = "400", description = "Invalid or mismatched email"),
+            @ApiResponse(responseCode = "404", description = "Appointment with given public ID not found")
+    })
     public ResponseEntity<Void> publicCancelAppointment(
             @Parameter(description = "The public UUID of the appointment")
             @PathVariable String publicId,

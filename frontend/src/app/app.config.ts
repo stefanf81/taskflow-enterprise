@@ -1,5 +1,10 @@
 import { ApplicationConfig, provideZonelessChangeDetection } from '@angular/core';
-import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/http';
+import {
+  provideHttpClient,
+  withFetch,
+  withInterceptors,
+  withXsrfConfiguration,
+} from '@angular/common/http';
 import {
   provideRouter,
   withInMemoryScrolling,
@@ -25,6 +30,13 @@ export const appConfig: ApplicationConfig = {
       }),
     ),
 
-    provideHttpClient(withFetch(), withInterceptors([authInterceptor])),
+    provideHttpClient(
+      withFetch(),
+      withInterceptors([authInterceptor]),
+      withXsrfConfiguration({
+        cookieName: 'XSRF-TOKEN',
+        headerName: 'X-XSRF-TOKEN',
+      }),
+    ),
   ],
 };

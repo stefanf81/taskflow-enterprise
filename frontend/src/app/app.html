@@ -671,8 +671,8 @@
             @if (activeStep() === 4) {
               <div class="space-y-4 animate-fadeIn">
                 <form
+                  [formRoot]="bookingForm"
                   (ngSubmit)="onBookAppointment()"
-                  #bookingForm="ngForm"
                   class="appointment-form"
                 >
                   <div class="form-group">
@@ -680,12 +680,9 @@
                     <input
                       type="text"
                       id="customerName"
-                      name="customerName"
-                      [ngModel]="bookingName()"
-                      (ngModelChange)="bookingName.set($event)"
-                      required
                       placeholder="e.g., John Doe"
                       class="form-control"
+                      [formField]="bookingForm.customerName"
                     />
                   </div>
 
@@ -697,12 +694,9 @@
                       <input
                         type="email"
                         id="customerEmail"
-                        name="customerEmail"
-                        [ngModel]="bookingEmail()"
-                        (ngModelChange)="bookingEmail.set($event)"
-                        required
                         placeholder="e.g., john@example.com"
                         class="form-control"
+                        [formField]="bookingForm.customerEmail"
                       />
                     </div>
 
@@ -713,45 +707,12 @@
                       <input
                         type="text"
                         id="customerPhone"
-                        name="customerPhone"
-                        [ngModel]="bookingPhone()"
-                        (ngModelChange)="bookingPhone.set($event)"
-                        required
                         placeholder="e.g., 555-0199"
                         class="form-control"
+                        [formField]="bookingForm.customerPhone"
                       />
                     </div>
                   </div>
-
-                  <!-- Hidden Bindings for validations -->
-                  <input
-                    type="hidden"
-                    name="bookingTime"
-                    [ngModel]="bookingTime()"
-                    (ngModelChange)="bookingTime.set($event)"
-                    required
-                  />
-                  <input
-                    type="hidden"
-                    name="bookingService"
-                    [ngModel]="bookingService()"
-                    (ngModelChange)="bookingService.set($event)"
-                    required
-                  />
-                  <input
-                    type="hidden"
-                    name="bookingBarber"
-                    [ngModel]="bookingBarber()"
-                    (ngModelChange)="bookingBarber.set($event)"
-                    required
-                  />
-                  <input
-                    type="hidden"
-                    name="bookingDate"
-                    [ngModel]="bookingDate()"
-                    (ngModelChange)="bookingDate.set($event)"
-                    required
-                  />
 
                   <!-- Real-Time Booking Summary Card -->
                   <div
@@ -813,7 +774,7 @@
                   <button
                     type="submit"
                     class="btn btn-submit login-btn w-full mt-6 py-3 text-sm font-bold tracking-wide uppercase transition-all duration-200"
-                    [disabled]="bookingForm.invalid || isSubmitting()"
+                    [disabled]="isSubmitting()"
                   >
                     {{ isSubmitting() ? 'Securing Slot...' : 'Confirm & Request Booking' }}
                   </button>

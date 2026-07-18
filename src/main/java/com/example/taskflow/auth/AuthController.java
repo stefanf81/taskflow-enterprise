@@ -1,6 +1,9 @@
 package com.example.taskflow.auth;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -16,6 +19,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.web.csrf.CsrfToken;
 
 import java.time.Duration;
 import java.util.stream.Collectors;
@@ -44,6 +48,10 @@ public class AuthController {
 
     @PostMapping("/login")
     @Operation(summary = "Authenticate user and issue an HttpOnly JWT cookie")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Login successful — JWT set in HttpOnly cookie"),
+            @ApiResponse(responseCode = "401", description = "Invalid username or password")
+    })
     public ResponseEntity<LoginResponse> authenticateUser(@Valid @RequestBody LoginRequest loginRequest,
                                                           HttpServletResponse response) {
         Authentication authentication = authenticationManager.authenticate(
@@ -60,6 +68,10 @@ public class AuthController {
 
     @PostMapping("/register")
     @Operation(summary = "Register a new customer account")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "Account created successfully"),
+            @ApiResponse(responseCode = "400", description = "Email already registered or invalid input")
+    })
     public ResponseEntity<?> registerUser(@Valid @RequestBody RegisterRequest request) {
         if (userRepository.findByEmailIgnoreCase(request.email()).isPresent()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse("Email is already registered."));
@@ -77,8 +89,19 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.CREATED).body(new ErrorResponse("Account created successfully."));
     }
 
+    @GetMapping("/csrf")
+    @Operation(summary = "Get CSRF token for authenticated state-changing requests")
+    @ApiResponse(responseCode = "200", description = "CSRF token returned (also set in XSRF-TOKEN cookie)")
+    public CsrfToken csrf(CsrfToken token) {
+        return token;
+    }
+
     @GetMapping("/me")
     @Operation(summary = "Return the currently authenticated principal's role")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Authenticated user's role returned"),
+            @ApiResponse(responseCode = "401", description = "No valid session cookie present")
+    })
     public ResponseEntity<LoginResponse> currentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()
@@ -108,6 +131,7 @@ public class AuthController {
 
     @PostMapping("/logout")
     @Operation(summary = "Clear the HttpOnly JWT cookie")
+    @ApiResponse(responseCode = "204", description = "JWT cookie cleared — session ended")
     public ResponseEntity<Void> logout(HttpServletResponse response) {
         ResponseCookie cookie = ResponseCookie.from("access_token", "")
                 .httpOnly(true)

@@ -4,6 +4,9 @@ import com.example.taskflow.appointment.Appointment;
 import com.example.taskflow.appointment.AppointmentRepository;
 import com.example.taskflow.core.ResourceNotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -28,13 +31,19 @@ public class ReviewController {
 
     @GetMapping("/public/barber-ratings")
     @Operation(summary = "Get aggregated ratings for all barbers")
+    @ApiResponse(responseCode = "200", description = "Aggregated barber ratings returned")
     public ResponseEntity<List<BarberRatingResponse>> getBarberRatings() {
         return ResponseEntity.ok(reviewRepository.getBarberRatings());
     }
 
     @PostMapping("/public/{publicId}")
     @Operation(summary = "Submit a review for a completed appointment")
-    public ResponseEntity<Void> submitReview(@PathVariable String publicId, @Valid @RequestBody ReviewRequest request) {
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "Review submitted successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid review data, appointment not completed, or duplicate review"),
+            @ApiResponse(responseCode = "404", description = "Appointment with given public ID not found")
+    })
+    public ResponseEntity<Void> submitReview(@Parameter(description = "Public UUID of the completed appointment") @PathVariable String publicId, @Valid @RequestBody ReviewRequest request) {
         Appointment appointment = appointmentRepository.findByPublicId(publicId);
         if (appointment == null) {
             throw new ResourceNotFoundException("Appointment not found with public ID: " + publicId);
