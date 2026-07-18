@@ -35,6 +35,13 @@ export class BarberStore {
     return null;
   });
 
+  // Action-level error surfaced to the UI when a write (add time off) fails.
+  // Separate from the read-only errorMessage so a transient write failure does
+  // not mask a load error and vice-versa.
+  readonly actionErrorMessage = signal<string | null>(null);
+  readonly actionSuccessMessage = signal<string | null>(null);
+  readonly isSaving = signal<boolean>(false);
+
   constructor() {
     effect(() => {
       const data = this.barbers();
@@ -61,13 +68,26 @@ export class BarberStore {
     const barberId = this.selectedBarberId();
     if (!barberId) return;
 
+    this.actionErrorMessage.set(null);
+    this.isSaving.set(true);
     this.appointmentService.addTimeOff(barberId, request).subscribe({
       next: () => {
+        this.isSaving.set(false);
+        this.actionErrorMessage.set(null);
+        this.actionSuccessMessage.set('Time off added successfully.');
         this.timeOffsResource.reload();
       },
       error: (err) => {
-        console.error('Failed to add time off:', err);
+        this.isSaving.set(false);
+        this.actionErrorMessage.set(
+          this.extractError(err, 'Failed to add time off. Please try again.'),
+        );
       },
     });
+  }
+
+  private extractError(err: unknown, fallback: string): string {
+    const detail = (err as { error?: { message?: string } })?.error?.message;
+    return detail && typeof detail === 'string' ? detail : fallback;
   }
 }

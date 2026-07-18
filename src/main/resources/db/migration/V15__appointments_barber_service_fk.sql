@@ -29,11 +29,19 @@ WHERE service_id IS NULL;
 -- 3. Add the foreign keys with ON DELETE RESTRICT so a catalog row cannot be
 --    silently removed while appointments still reference it (rename is safe via
 --    an UPDATE on the catalog row; delete is blocked until history is resolved).
---    NOTE: Flyway runs this migration exactly once per schema-history; on a full
---    DB reset the history is also reset so the columns/constraints do not pre-exist.
+--    The DROP CONSTRAINT IF EXISTS guards make this idempotent so a re-applied /
+--    repaired Flyway history (e.g. `flyway repair` after a checksum change, or a
+--    partial apply on a fresh clone) does not fail with "constraint already
+--    exists". Both H2 and PostgreSQL support DROP CONSTRAINT IF EXISTS.
+ALTER TABLE appointments
+    DROP CONSTRAINT IF EXISTS fk_appointment_barber;
+
 ALTER TABLE appointments
     ADD CONSTRAINT fk_appointment_barber
     FOREIGN KEY (barber_id) REFERENCES barbers (id);
+
+ALTER TABLE appointments
+    DROP CONSTRAINT IF EXISTS fk_appointment_service;
 
 ALTER TABLE appointments
     ADD CONSTRAINT fk_appointment_service

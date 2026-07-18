@@ -52,6 +52,9 @@ export class AdminDashboard {
   readonly barbersList = this.barberStore.barbers;
   readonly timeOffs = this.barberStore.timeOffs;
   readonly selectedBarberId = this.barberStore.selectedBarberId;
+  readonly timeOffActionError = this.barberStore.actionErrorMessage;
+  readonly timeOffActionSuccess = this.barberStore.actionSuccessMessage;
+  readonly isSavingTimeOff = this.barberStore.isSaving;
   readonly newTimeOffStartDate = signal('');
   readonly newTimeOffEndDate = signal('');
   readonly newTimeOffReason = signal('');
@@ -71,12 +74,13 @@ export class AdminDashboard {
       this.errorMessage.set('Start and end dates are required.');
       return;
     }
+    // Clear any stale alert before the async write.
+    this.successMessage.set(null);
     this.barberStore.addTimeOff({
       startDate: this.newTimeOffStartDate(),
       endDate: this.newTimeOffEndDate(),
       reason: this.newTimeOffReason(),
     });
-    this.successMessage.set('Time off added successfully.');
     this.newTimeOffStartDate.set('');
     this.newTimeOffEndDate.set('');
     this.newTimeOffReason.set('');

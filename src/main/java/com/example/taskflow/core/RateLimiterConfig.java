@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,7 +23,7 @@ public class RateLimiterConfig {
     private static final Logger log = LoggerFactory.getLogger(RateLimiterConfig.class);
     
     private static final int MAX_REQUESTS_PER_MINUTE = 100;
-    private static final int AUTH_MAX_REQUESTS_PER_MINUTE = 5;
+    private static final int AUTH_MAX_REQUESTS_PER_MINUTE = 20;
 
     @Bean
     public OncePerRequestFilter rateLimitFilter(StringRedisTemplate redisTemplate) {

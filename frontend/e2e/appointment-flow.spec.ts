@@ -266,4 +266,62 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
       'Reservation successfully cancelled and deleted from our calendar.',
     );
   });
+
+  test('should redirect an unauthenticated user away from the protected /admin dashboard', async ({
+    page,
+  }) => {
+    // TE2 (security): the auth guard (A1.2) must block deep-linking to the
+    // owner panel without a valid session and send the user back to the landing
+    // page rather than rendering the dashboard.
+    await page.goto('/admin');
+    await expect(page).not.toHaveURL(/\/admin$/);
+    await expect(page).toHaveURL(/\/$|^\/\?/);
+    await expect(page.locator('h1').first()).toContainText('Luxury Barber Scheduler');
+  });
+
+  test('should reject a public self-service cancellation with a mismatched email', async ({
+    page,
+  }) => {
+    // TE2: the public cancel endpoint requires the booking code AND the
+    // reservation email to match. A wrong email must surface a verification
+    // error and NOT cancel anything.
+    await page.locator('h2:has-text("Secure Booking Cancellation")').scrollIntoViewIfNeeded();
+
+    await page.fill('#cancelBookingId', 'some-nonexistent-code');
+    await page.fill('#cancelEmail', 'not-the-right-email@example.com');
+    await page.click('button:has-text("Cancel Reservation")');
+
+    const alert = page.locator('.alert-error');
+    await expect(alert).toBeVisible();
+    await expect(alert).toContainText(
+      'Verification failed. Please check your Booking Code and Email.',
+    );
+  });
+
+  test('should reject a review submission for an unknown or not-completed booking code', async ({
+    page,
+  }) => {
+    // TE2: reviews are only accepted for a valid, completed appointment. A
+    // fabricated or reused code should fail validation and surface an error
+    // rather than silently creating a review.
+    await page.locator('h2:has-text("Submit a Review")').scrollIntoViewIfNeeded();
+
+    await page.fill('#reviewPublicId', 'totally-made-up-code');
+    await page.fill('#reviewRating', '5');
+    await page.fill('#reviewComment', 'Should not be accepted.');
+    await page.click('button:has-text("Submit Review")');
+
+    const alert = page.locator('.alert-error');
+    await expect(alert).toBeVisible();
+    await expect(alert).toContainText('Failed to submit review.');
+  });
+
+  test('should reject an unauthenticated POST to a protected admin API', async ({ page }) => {
+    // TE2 (API-level security sanity, runs in the same browser origin):
+    // with no session cookie, calling an admin-only endpoint directly must
+    // return 401 and never return appointment data. This guards against a
+    // regression where a controller was left unsecured (C2).
+    const response = await page.request.get('/api/v1/appointments');
+    expect(response.status()).toBe(401);
+  });
 });

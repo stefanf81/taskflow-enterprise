@@ -25,6 +25,7 @@ export class CustomerPortal {
 
   readonly errorMessage = this.store.errorMessage;
   readonly successMessage = this.store.successMessage;
+  readonly cancelErrorMessage = this.customerStore.cancelErrorMessage;
 
   formatTime12Hour(time24: string): string {
     if (!time24) return '';

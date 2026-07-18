@@ -525,6 +525,44 @@
                   <h4 class="text-zinc-100 font-extrabold mb-4 border-b border-white/5 pb-2">
                     Add Time-Off (Vacation/Sick)
                   </h4>
+
+                  @if (timeOffActionError()) {
+                    <div
+                      role="alert"
+                      class="alert alert-error mb-4 py-2.5 px-4 rounded-xl text-xs border border-red-500/20 flex items-center gap-2"
+                    >
+                      <span class="text-rose-400 leading-normal font-medium">{{
+                        timeOffActionError()
+                      }}</span>
+                      <button
+                        type="button"
+                        class="text-base font-bold opacity-60 hover:opacity-100 ml-auto"
+                        (click)="timeOffActionError.set(null)"
+                        aria-label="Dismiss error"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  }
+
+                  @if (timeOffActionSuccess()) {
+                    <div
+                      role="status"
+                      class="alert alert-success mb-4 py-2.5 px-4 rounded-xl text-xs border border-emerald-500/10 flex items-center gap-2"
+                    >
+                      <span class="text-emerald-400 leading-normal font-medium">{{
+                        timeOffActionSuccess()
+                      }}</span>
+                      <button
+                        type="button"
+                        class="text-base font-bold opacity-60 hover:opacity-100 ml-auto"
+                        (click)="timeOffActionSuccess.set(null)"
+                        aria-label="Dismiss"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  }
                   <div class="grid grid-cols-2 gap-4 mb-4">
                     <div>
                       <label

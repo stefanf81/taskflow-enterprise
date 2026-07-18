@@ -1,11 +1,13 @@
+import { Component } from '@angular/core';
 import { Routes } from '@angular/router';
 import { authGuard } from './auth.guard';
 
+/** Empty landing component — the root App template IS the landing page. */
+@Component({ template: '', standalone: true })
+class AppShell {}
+
 export const routes: Routes = [
-  {
-    path: '',
-    loadComponent: () => import('./app').then((m) => m.App),
-  },
+  { path: '', pathMatch: 'full', component: AppShell },
   {
     path: 'admin',
     canActivate: [authGuard],

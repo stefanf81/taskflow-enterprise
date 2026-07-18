@@ -15,7 +15,11 @@ spec:
     spec:
       initContainers:
         - name: wait-for-db
-          image: alpine:3.19.1
+          # busybox ships `nc` (netcat); the previously used alpine:3.19.1 image
+          # does not include it, so the init container failed immediately and the
+          # backend pod never started. busybox also keeps the unprivileged
+          # numeric UID (10001) and read-only-friendly footprint.
+          image: busybox:latest
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
