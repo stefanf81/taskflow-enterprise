@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import io.micrometer.tracing.Tracer;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 @Service
 @Transactional
@@ -31,6 +32,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     private final Tracer tracer;
     private final BusySlotsService busySlotsService;
     private final BarberRepository barberRepository;
+    private final BarberScheduleRepository barberScheduleRepository;
     private final ServiceItemRepository serviceItemRepository;
 
     public AppointmentServiceImpl(AppointmentRepository appointmentRepository,
@@ -39,6 +41,7 @@ public class AppointmentServiceImpl implements AppointmentService {
                                    Tracer tracer,
                                    BusySlotsService busySlotsService,
                                    BarberRepository barberRepository,
+                                   BarberScheduleRepository barberScheduleRepository,
                                    ServiceItemRepository serviceItemRepository) {
         this.appointmentRepository = appointmentRepository;
         this.eventPublisher = eventPublisher;
@@ -46,6 +49,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         this.tracer = tracer;
         this.busySlotsService = busySlotsService;
         this.barberRepository = barberRepository;
+        this.barberScheduleRepository = barberScheduleRepository;
         this.serviceItemRepository = serviceItemRepository;
     }
 
@@ -141,7 +145,12 @@ public class AppointmentServiceImpl implements AppointmentService {
             }
         }
 
-        // Validate slot availability (prevent double-bookings and off-hour bookings)
+        // A2: enforce that the requested time falls within the barber's scheduled
+        // working window for that day of week (returns a clear 400 rather than
+        // relying on the busy-slot side effect). Backed by BarberSchedule.
+        validateBookingTimeWithinSchedule(request.barberName(), request.bookingDate(), request.bookingTime());
+
+        // Validate slot availability (prevent double-bookings)
         // Call via injected BusySlotsService so the @Cacheable proxy is actually used.
         java.util.List<String> busy = busySlotsService.getBusySlots(request.barberName(), request.bookingDate().toString());
         if (busy.contains(request.bookingTime())) {
@@ -192,6 +201,31 @@ public class AppointmentServiceImpl implements AppointmentService {
                 return AppointmentResponse.fromEntity(existing);
             }
             throw ex;
+        }
+    }
+
+    /**
+     * A2: confirm the requested {@code bookingTime} is inside the barber's
+     * {@link BarberSchedule} window for the weekday of {@code bookingDate}.
+     * Throws {@link IllegalArgumentException} (→ 400) when the barber is not
+     * scheduled that day or the time is outside working hours.
+     */
+    private void validateBookingTimeWithinSchedule(String barberName, LocalDate bookingDate, String bookingTime) {
+        Barber barber = barberRepository.findByName(barberName).orElse(null);
+        if (barber == null) {
+            // Barber unknown: the booking still proceeds with the denormalized name,
+            // but we cannot validate the window — let the busy-slot check handle it.
+            return;
+        }
+        BarberSchedule schedule = barberScheduleRepository
+                .findByBarberIdAndDayOfWeek(barber.getId(), bookingDate.getDayOfWeek().getValue())
+                .orElseThrow(() -> new IllegalArgumentException("The selected barber is not scheduled to work on the requested date."));
+
+        LocalTime requested = LocalTime.parse(bookingTime);
+        if (requested.isBefore(schedule.getStartTime()) || !requested.isBefore(schedule.getEndTime())) {
+            throw new IllegalArgumentException(
+                    "Booking time must be within the barber's working hours (" +
+                            schedule.getStartTime() + "–" + schedule.getEndTime() + ").");
         }
     }
 

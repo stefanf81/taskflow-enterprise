@@ -12,6 +12,7 @@ import { FormsModule } from '@angular/forms';
 import { form, required, email, FormField, FormRoot } from '@angular/forms/signals';
 import { Router, RouterOutlet } from '@angular/router';
 import { AppointmentService, AppointmentItem } from './appointment.service';
+import { AuthState } from './auth.state';
 import { AppointmentStore } from './appointment.store';
 import { ServiceCatalogStore } from './service-catalog.store';
 import { BarberStore } from './barber.store';
@@ -49,10 +50,12 @@ export class App implements OnInit {
   private readonly reviewStore = inject(ReviewStore);
   readonly customerStore = inject(CustomerStore);
   private readonly router = inject(Router);
+  private readonly authState = inject(AuthState);
 
   // Authentication State delegated to the Store (Top-Tier DDD State management)
+  // A1.2: role is held ONLY in memory via AuthState — never trusted from sessionStorage.
   readonly isLoggedIn = this.store.isLoggedIn;
-  readonly userRole = signal<string>(sessionStorage.getItem('auth_role') || '');
+  readonly userRole = this.authState.role;
   showAdminLoginModal = false; // Toggles Admin/Customer Login Modal
   loginUsername = '';
   loginPassword = '';
@@ -232,26 +235,20 @@ export class App implements OnInit {
   ngOnInit(): void {
     this.catalogStore.loadServices();
     this.reviewStore.loadRatings();
-    // Restore UI role from the backend if a session cookie exists (survives refresh).
+    // A1.2: restore UI role from the backend if a session cookie exists (survives
+    // refresh). The role lives only in memory — never read from sessionStorage.
+    this.authState.bootstrap();
     this.appointmentService.me().subscribe({
       next: (me) => {
         this.isLoggedIn.set(true);
-        this.userRole.set(me.role);
-        sessionStorage.setItem('auth_role', me.role);
         this.loadAppointments();
-        this.router.navigateByUrl(this.dashboardPathFor(me.role));
+        this.router.navigateByUrl(this.authState.dashboardPathFor(me.role));
       },
       error: () => {
         // No active session — stay logged out.
         this.isLoggedIn.set(false);
-        this.userRole.set('');
-        sessionStorage.removeItem('auth_role');
       },
     });
-  }
-
-  private dashboardPathFor(role: string): string {
-    return role === 'ROLE_ADMIN' ? '/admin' : role === 'ROLE_CUSTOMER' ? '/customer' : '';
   }
 
   // Handle Admin/Customer Portal Login via JWT endpoint
@@ -275,9 +272,9 @@ export class App implements OnInit {
     this.appointmentService.login(user, pass).subscribe({
       next: (response) => {
         // The JWT lives in an HttpOnly cookie set by the backend; nothing to store here.
-        sessionStorage.setItem('auth_role', response.role);
+        // A1.2: role is kept only in memory via AuthState.
+        this.authState.applyRole(response.role);
         this.isLoggedIn.set(true);
-        this.userRole.set(response.role);
         this.isSubmitting.set(false);
         this.showAdminLoginModal = false;
         this.errorMessage.set(null);
@@ -286,7 +283,7 @@ export class App implements OnInit {
         this.loginPassword = '';
         this.showSuccess(response.role === 'ROLE_ADMIN' ? 'Welcome back, Owner!' : 'Welcome back!');
         this.loadAppointments(); // Load bookings
-        this.router.navigateByUrl(this.dashboardPathFor(response.role));
+        this.router.navigateByUrl(this.authState.dashboardPathFor(response.role));
       },
       error: (err) => {
         this.errorMessage.set('Invalid credentials. Please try again.');
@@ -373,8 +370,8 @@ export class App implements OnInit {
   // Handle Admin Logout delegated to the Store
   onLogout(): void {
     this.store.onLogout();
-    this.userRole.set('');
-    sessionStorage.removeItem('auth_role');
+    this.authState.clear();
+    this.isLoggedIn.set(false);
     this.showSuccess('Logged out successfully.');
   }
 

@@ -17,7 +17,6 @@ import org.springframework.validation.annotation.Validated;
 
 @RestController
 @RequestMapping("/api/v1/appointments")
-@CrossOrigin(origins = "${app.cors.allowed-origins:*}")
 @Tag(name = "Barber Appointment Management System", description = "Operations for booking and approving appointments")
 @Validated
 public class AppointmentController {

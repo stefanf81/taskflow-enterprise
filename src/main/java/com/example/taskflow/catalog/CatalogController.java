@@ -14,7 +14,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/catalog")
-@CrossOrigin(origins = "${app.cors.allowed-origins:*}")
 @Tag(name = "Service Catalog", description = "Operations for managing shop services and pricing")
 public class CatalogController {
 

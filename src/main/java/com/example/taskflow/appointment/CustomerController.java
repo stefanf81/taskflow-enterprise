@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/customer")
-@CrossOrigin(origins = "${app.cors.allowed-origins:*}")
 @Tag(name = "Customer Dashboard", description = "Endpoints for logged-in customers")
 public class CustomerController {
 

@@ -11,7 +11,7 @@ describe('App Component Quality Assurance Suite', () => {
   let app: App;
 
   beforeEach(async () => {
-    // Clean storage state before each test run
+    // Clean storage state before each test run (defensive; role is no longer trusted from storage)
     sessionStorage.removeItem('auth_role');
 
     await TestBed.configureTestingModule({
@@ -251,8 +251,7 @@ describe('App Component Quality Assurance Suite', () => {
   });
 
   it('should support onLogout', () => {
-    sessionStorage.setItem('auth_role', 'ROLE_ADMIN');
-    app.userRole.set('ROLE_ADMIN');
+    // A1.2: role lives only in memory (AuthState), never in sessionStorage.
     app.onLogout();
     expect(app.userRole()).toBe('');
     expect(sessionStorage.getItem('auth_role')).toBeNull();
@@ -294,7 +293,8 @@ describe('App Component Quality Assurance Suite', () => {
     reqs[0].flush({ username: 'admin', role: 'ROLE_ADMIN' });
     expect(app.isLoggedIn()).toBe(true);
     expect(app.userRole()).toBe('ROLE_ADMIN');
-    expect(sessionStorage.getItem('auth_role')).toBe('ROLE_ADMIN');
+    // A1.2: role must NOT be persisted to sessionStorage
+    expect(sessionStorage.getItem('auth_role')).toBeNull();
   });
 
   it('should handle onRegister success and failure', () => {

@@ -17,7 +17,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/reviews")
-@CrossOrigin(origins = "${app.cors.allowed-origins:*}")
 @Tag(name = "Client Reviews", description = "Public review submissions and rating aggregates")
 public class ReviewController {
 
@@ -46,7 +45,9 @@ public class ReviewController {
     public ResponseEntity<Void> submitReview(@Parameter(description = "Public UUID of the completed appointment") @PathVariable String publicId, @Valid @RequestBody ReviewRequest request) {
         Appointment appointment = appointmentRepository.findByPublicId(publicId);
         if (appointment == null) {
-            throw new ResourceNotFoundException("Appointment not found with public ID: " + publicId);
+            // Do not echo the publicId — that would let an attacker enumerate which
+            // IDs exist (information disclosure / enumeration oracle).
+            throw new ResourceNotFoundException("Appointment not found or not available for review.");
         }
         
         if (!"APPROVED".equals(appointment.getStatus())) { // Ideally we should have a COMPLETED status, but APPROVED acts as completed for now

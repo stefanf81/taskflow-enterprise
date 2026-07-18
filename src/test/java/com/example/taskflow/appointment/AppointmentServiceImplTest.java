@@ -68,7 +68,7 @@ class AppointmentServiceImplTest {
         busySlotsService = new BusySlotsService(barberRepository, barberScheduleRepository, barberTimeOffRepository, appointmentRepository);
         appointmentService = new AppointmentServiceImpl(
                 appointmentRepository, eventPublisher, cacheManager, tracer,
-                busySlotsService, barberRepository, serviceItemRepository
+                busySlotsService, barberRepository, barberScheduleRepository, serviceItemRepository
         );
 
         testAppointment = new Appointment("John Doe", "john@test.com", "1234567890", "Barber Alex", LocalDate.now(), "10:00", "Haircut");

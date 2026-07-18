@@ -26,7 +26,6 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/auth")
-@CrossOrigin(origins = "${app.cors.allowed-origins:*}")
 @Tag(name = "Authentication Portal", description = "Endpoints for user authentication")
 public class AuthController {
 

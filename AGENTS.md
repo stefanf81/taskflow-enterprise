@@ -11,7 +11,7 @@
   - Entry point: `TaskflowApplication.java`
 - **Frontend**: Angular 22 / TypeScript / Tailwind CSS — `frontend/`
   - Entry: `frontend/src/main.ts`, app module: `frontend/src/app/`
-  - Auth: `auth.interceptor.ts` (Bearer JWT from `sessionStorage`), `auth.guard.ts`
+  - Auth: Stateless JWT in an HttpOnly `access_token` cookie (RSA-2048 asymmetric, OAuth2 Resource Server). `auth.interceptor.ts` attaches the CSRF header; `auth.guard.ts` is a `canActivateFn` that gates the `/admin` and `/customer` dashboards. The principal's role is restored from the backend via `GET /api/v1/auth/me` (reads the cookie) into an **in-memory** signal (`AuthState`) — it is never trusted from `sessionStorage`/`localStorage`. Note: `app.config.ts` uses `withXsrfConfiguration({ cookieName: 'XSRF-TOKEN', ... })` while the backend sets the CSRF cookie as `access_token`; reconcile the cookie name before relying on double-submit CSRF.
 - **DB**: Flyway migrations in `src/main/resources/db/migration/`
 - **K8s manifests**: `k3d/` (namespace, backend, frontend, postgres, configmap, network policy)
 

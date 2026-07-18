@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,7 +15,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/barbers")
-@CrossOrigin(origins = "${app.cors.allowed-origins:*}")
 @Tag(name = "Barber Management", description = "Operations for managing barbers, schedules, and time-off")
 public class BarberController {
 
@@ -43,8 +43,8 @@ public class BarberController {
             @ApiResponse(responseCode = "201", description = "Barber created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid barber data")
     })
-    public ResponseEntity<Barber> createBarber(@RequestBody Barber barber) {
-        return new ResponseEntity<>(barberRepository.save(barber), HttpStatus.CREATED);
+    public ResponseEntity<Barber> createBarber(@Valid @RequestBody BarberRequest request) {
+        return new ResponseEntity<>(barberRepository.save(request.toEntity()), HttpStatus.CREATED);
     }
 
     @GetMapping("/{barberId}/time-off")
@@ -65,10 +65,12 @@ public class BarberController {
             @ApiResponse(responseCode = "400", description = "Invalid time-off data"),
             @ApiResponse(responseCode = "404", description = "Barber not found")
     })
-    public ResponseEntity<BarberTimeOff> addTimeOff(@Parameter(description = "Barber database ID") @PathVariable Long barberId, @RequestBody BarberTimeOff timeOff) {
+    public ResponseEntity<BarberTimeOff> addTimeOff(@Parameter(description = "Barber database ID") @PathVariable Long barberId, @Valid @RequestBody BarberTimeOffRequest request) {
         Barber barber = barberRepository.findById(barberId)
                 .orElseThrow(() -> new ResourceNotFoundException("Barber not found with id: " + barberId));
-        timeOff.setBarber(barber);
-        return new ResponseEntity<>(timeOffRepository.save(timeOff), HttpStatus.CREATED);
+        if (!request.isDateRangeValid()) {
+            throw new IllegalArgumentException("End date must not be before start date.");
+        }
+        return new ResponseEntity<>(timeOffRepository.save(request.toEntity(barber)), HttpStatus.CREATED);
     }
 }
