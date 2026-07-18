@@ -84,7 +84,13 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <!-- Style 1 -->
           <div
+            tabindex="0"
+            role="button"
             (click)="selectLookbookStyle('Classic Haircut', 'hair')"
+            (keydown.enter)="selectLookbookStyle('Classic Haircut', 'hair')"
+            (keydown.space)="
+              selectLookbookStyle('Classic Haircut', 'hair'); $event.preventDefault()
+            "
             class="group p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-indigo-500/10 hover:border-indigo-500/30 hover:shadow-[0_0_15px_rgba(99,102,241,0.2)] cursor-pointer text-center transition-all duration-300"
           >
             <span class="text-3xl block mb-3">👦🏻</span>
@@ -104,7 +110,13 @@
 
           <!-- Style 2 -->
           <div
+            tabindex="0"
+            role="button"
             (click)="selectLookbookStyle('Modern Skin Fade', 'hair')"
+            (keydown.enter)="selectLookbookStyle('Modern Skin Fade', 'hair')"
+            (keydown.space)="
+              selectLookbookStyle('Modern Skin Fade', 'hair'); $event.preventDefault()
+            "
             class="group p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-indigo-500/10 hover:border-indigo-500/30 hover:shadow-[0_0_15px_rgba(99,102,241,0.2)] cursor-pointer text-center transition-all duration-300"
           >
             <span class="text-3xl block mb-3">👱🏽‍♂️</span>
@@ -124,7 +136,13 @@
 
           <!-- Style 3 -->
           <div
+            tabindex="0"
+            role="button"
             (click)="selectLookbookStyle('Beard Trim & Shave', 'beard')"
+            (keydown.enter)="selectLookbookStyle('Beard Trim & Shave', 'beard')"
+            (keydown.space)="
+              selectLookbookStyle('Beard Trim & Shave', 'beard'); $event.preventDefault()
+            "
             class="group p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-indigo-500/10 hover:border-indigo-500/30 hover:shadow-[0_0_15px_rgba(99,102,241,0.2)] cursor-pointer text-center transition-all duration-300"
           >
             <span class="text-3xl block mb-3">🧔🏾</span>
@@ -144,7 +162,13 @@
 
           <!-- Style 4 -->
           <div
+            tabindex="0"
+            role="button"
             (click)="selectLookbookStyle('The Executive Package', 'combo')"
+            (keydown.enter)="selectLookbookStyle('The Executive Package', 'combo')"
+            (keydown.space)="
+              selectLookbookStyle('The Executive Package', 'combo'); $event.preventDefault()
+            "
             class="group p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-indigo-500/10 hover:border-indigo-500/30 hover:shadow-[0_0_15px_rgba(99,102,241,0.2)] cursor-pointer text-center transition-all duration-300"
           >
             <span class="text-3xl block mb-3">🤵🏼</span>
@@ -265,7 +289,11 @@
             </p>
 
             <!-- STEP TIMELINE METRICS TRACKER -->
-            <div class="relative flex items-center justify-between mb-8 px-1">
+            <div
+              role="tablist"
+              aria-label="Booking steps"
+              class="relative flex items-center justify-between mb-8 px-1"
+            >
               <div
                 class="absolute left-0 right-0 h-0.5 bg-white/5 z-0 top-1/2 -translate-y-1/2"
               ></div>
@@ -277,6 +305,10 @@
               @for (stepNum of [1, 2, 3, 4]; track stepNum) {
                 <button
                   type="button"
+                  role="tab"
+                  [attr.aria-selected]="activeStep() === stepNum"
+                  [attr.aria-controls]="'step-panel-' + stepNum"
+                  [attr.tabindex]="activeStep() === stepNum ? '0' : '-1'"
                   (click)="setStep(stepNum)"
                   class="wizard-step-node relative z-20 w-9 h-9 rounded-full border bg-zinc-950 text-zinc-500 text-xs font-black flex items-center justify-center cursor-pointer transition-all duration-300"
                   [class.active]="activeStep() === stepNum"
@@ -309,6 +341,7 @@
             <!-- STATUS BANNERS -->
             @if (errorMessage()) {
               <div
+                role="alert"
                 class="alert alert-error mb-6 animate-fadeIn py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-red-500/20"
               >
                 <svg
@@ -332,6 +365,7 @@
                   type="button"
                   class="text-base font-bold opacity-60 hover:opacity-100"
                   (click)="errorMessage.set(null)"
+                  aria-label="Dismiss error"
                 >
                   &times;
                 </button>
@@ -340,6 +374,7 @@
 
             @if (successMessage()) {
               <div
+                role="status"
                 class="alert alert-success mb-6 animate-fadeIn py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-emerald-500/10"
               >
                 <svg
@@ -364,7 +399,12 @@
 
             <!-- STEP 1: TREATMENT SELECT -->
             @if (activeStep() === 1) {
-              <div class="space-y-4 animate-fadeIn">
+              <div
+                id="step-panel-1"
+                role="tabpanel"
+                aria-labelledby="step-tab-1"
+                class="space-y-4 animate-fadeIn"
+              >
                 <!-- Live Search Box inside Step 1 -->
                 <div class="relative w-full">
                   <span class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500">🔍</span>
@@ -423,9 +463,13 @@
                 <div class="services-list max-h-[380px] overflow-y-auto pr-0.5 space-y-3">
                   @for (service of filteredServices(); track service.name) {
                     <div
+                      tabindex="0"
+                      role="button"
                       class="card p-4 border border-white/5 bg-zinc-900/30 hover:border-indigo-500/30 cursor-pointer transition-all"
                       [class.selected-service-item]="bookingService() === service.name"
                       (click)="selectService(service.name)"
+                      (keydown.enter)="selectService(service.name)"
+                      (keydown.space)="selectService(service.name); $event.preventDefault()"
                     >
                       <div class="flex justify-between items-center font-bold">
                         <span class="text-zinc-100 text-base flex items-center gap-1.5">
@@ -450,7 +494,12 @@
 
             <!-- STEP 2: SELECT STYLIST -->
             @if (activeStep() === 2) {
-              <div class="space-y-4 animate-fadeIn">
+              <div
+                id="step-panel-2"
+                role="tabpanel"
+                aria-labelledby="step-tab-2"
+                class="space-y-4 animate-fadeIn"
+              >
                 @for (profile of stylistProfiles(); track profile.name) {
                   <app-stylist-card
                     [profile]="profile"
@@ -461,11 +510,17 @@
 
                 <!-- No Preference Option -->
                 <div
+                  tabindex="0"
+                  role="button"
                   class="card p-4 border border-white/5 bg-zinc-900/30 hover:border-indigo-500/30 hover:bg-indigo-500/5 flex items-center gap-4 cursor-pointer transition-all"
                   [class.selected-service-item]="
                     bookingBarber() === 'No Preference (First Available)'
                   "
                   (click)="selectStylist('No Preference (First Available)')"
+                  (keydown.enter)="selectStylist('No Preference (First Available)')"
+                  (keydown.space)="
+                    selectStylist('No Preference (First Available)'); $event.preventDefault()
+                  "
                 >
                   <div
                     class="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-lg font-black text-indigo-400"
@@ -488,7 +543,12 @@
 
             <!-- STEP 3: PICK DATE & AVAILABLE TIME SLOT -->
             @if (activeStep() === 3) {
-              <div class="space-y-6 animate-fadeIn">
+              <div
+                id="step-panel-3"
+                role="tabpanel"
+                aria-labelledby="step-tab-3"
+                class="space-y-6 animate-fadeIn"
+              >
                 <!-- SOTA Quick-Date Carousel Picker Grid -->
                 <div class="form-group">
                   <label class="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-2"
@@ -503,11 +563,17 @@
                   >
                     @for (day of upcomingBookingDays(); track day.dateStr) {
                       <div
+                        tabindex="0"
+                        role="button"
+                        [attr.aria-label]="
+                          'Select date: ' + day.dayName + ' ' + day.dayNum + ' ' + day.monthName
+                        "
                         class="card slot-picker-btn"
                         [class.slot-selected]="bookingDate() === day.dateStr"
                         (click)="selectBookingDate(day.dateStr)"
+                        (keydown.enter)="selectBookingDate(day.dateStr)"
+                        (keydown.space)="selectBookingDate(day.dateStr); $event.preventDefault()"
                         style="
-                          cursor: pointer;
                           padding: 0.75rem 0.5rem;
                           text-align: center;
                           border-radius: var(--radius-md);
@@ -669,7 +735,12 @@
 
             <!-- STEP 4: CUSTOMER CONTACT & CONFIRM -->
             @if (activeStep() === 4) {
-              <div class="space-y-4 animate-fadeIn">
+              <div
+                id="step-panel-4"
+                role="tabpanel"
+                aria-labelledby="step-tab-4"
+                class="space-y-4 animate-fadeIn"
+              >
                 <form
                   [formRoot]="bookingForm"
                   (ngSubmit)="onBookAppointment()"
@@ -683,7 +754,18 @@
                       placeholder="e.g., John Doe"
                       class="form-control"
                       [formField]="bookingForm.customerName"
+                      [attr.aria-invalid]="!bookingModel().customerName.trim() ? 'true' : null"
+                      aria-describedby="customerName-error"
                     />
+                    @if (!bookingModel().customerName.trim()) {
+                      <span
+                        id="customerName-error"
+                        role="alert"
+                        class="text-rose-400 text-[10px] mt-1 block"
+                      >
+                        Full name is required.
+                      </span>
+                    }
                   </div>
 
                   <div class="form-row">
@@ -697,7 +779,18 @@
                         placeholder="e.g., john@example.com"
                         class="form-control"
                         [formField]="bookingForm.customerEmail"
+                        [attr.aria-invalid]="!bookingModel().customerEmail.trim() ? 'true' : null"
+                        aria-describedby="customerEmail-error"
                       />
+                      @if (!bookingModel().customerEmail.trim()) {
+                        <span
+                          id="customerEmail-error"
+                          role="alert"
+                          class="text-rose-400 text-[10px] mt-1 block"
+                        >
+                          Valid email address is required.
+                        </span>
+                      }
                     </div>
 
                     <div class="form-group">
@@ -710,7 +803,18 @@
                         placeholder="e.g., 555-0199"
                         class="form-control"
                         [formField]="bookingForm.customerPhone"
+                        [attr.aria-invalid]="!bookingModel().customerPhone.trim() ? 'true' : null"
+                        aria-describedby="customerPhone-error"
                       />
+                      @if (!bookingModel().customerPhone.trim()) {
+                        <span
+                          id="customerPhone-error"
+                          role="alert"
+                          class="text-rose-400 text-[10px] mt-1 block"
+                        >
+                          Phone number is required.
+                        </span>
+                      }
                     </div>
                   </div>
 
@@ -824,7 +928,10 @@
             <div class="border-b border-white/5 pb-4">
               <button
                 type="button"
+                id="faq-btn-0"
                 (click)="toggleFaq(0)"
+                [attr.aria-expanded]="activeFaq() === 0"
+                aria-controls="faq-panel-0"
                 class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center outline-none"
               >
                 <span>⏰ How early should I arrive for my appointment?</span>
@@ -833,17 +940,27 @@
                 }}</span>
               </button>
               @if (activeFaq() === 0) {
-                <p class="text-zinc-400 font-light leading-relaxed mt-2 pl-1 animate-fadeIn">
-                  We recommend arriving 5–10 minutes early. This gives you plenty of time to enjoy a
-                  complimentary beverage (premium coffee, cold beer, or water) and settle in before
-                  your service begins.
-                </p>
+                <div
+                  id="faq-panel-0"
+                  role="region"
+                  aria-labelledby="faq-btn-0"
+                  class="animate-fadeIn"
+                >
+                  <p class="text-zinc-400 font-light leading-relaxed mt-2 pl-1">
+                    We recommend arriving 5–10 minutes early. This gives you plenty of time to enjoy
+                    a complimentary beverage (premium coffee, cold beer, or water) and settle in
+                    before your service begins.
+                  </p>
+                </div>
               }
             </div>
             <div class="border-b border-white/5 pb-4">
               <button
                 type="button"
+                id="faq-btn-1"
                 (click)="toggleFaq(1)"
+                [attr.aria-expanded]="activeFaq() === 1"
+                aria-controls="faq-panel-1"
                 class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center outline-none"
               >
                 <span>💳 Do you accept credit cards and contactless payments?</span>
@@ -852,17 +969,27 @@
                 }}</span>
               </button>
               @if (activeFaq() === 1) {
-                <p class="text-zinc-400 font-light leading-relaxed mt-2 pl-1 animate-fadeIn">
-                  Yes! We accept all major credit cards, Apple Pay, Google Pay, and standard
-                  contactless payments at check-out. No prepayment is required when submitting your
-                  booking request online.
-                </p>
+                <div
+                  id="faq-panel-1"
+                  role="region"
+                  aria-labelledby="faq-btn-1"
+                  class="animate-fadeIn"
+                >
+                  <p class="text-zinc-400 font-light leading-relaxed mt-2 pl-1">
+                    Yes! We accept all major credit cards, Apple Pay, Google Pay, and standard
+                    contactless payments at check-out. No prepayment is required when submitting
+                    your booking request online.
+                  </p>
+                </div>
               }
             </div>
             <div class="border-b border-white/5 pb-4">
               <button
                 type="button"
+                id="faq-btn-2"
                 (click)="toggleFaq(2)"
+                [attr.aria-expanded]="activeFaq() === 2"
+                aria-controls="faq-panel-2"
                 class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center outline-none"
               >
                 <span>📅 What is your cancellation/rescheduling policy?</span>
@@ -871,11 +998,18 @@
                 }}</span>
               </button>
               @if (activeFaq() === 2) {
-                <p class="text-zinc-400 font-light leading-relaxed mt-2 pl-1 animate-fadeIn">
-                  We understand plans change! If you need to cancel or reschedule, please click the
-                  cancellation link in your approval email or call us directly at least 12 hours
-                  before your scheduled slot.
-                </p>
+                <div
+                  id="faq-panel-2"
+                  role="region"
+                  aria-labelledby="faq-btn-2"
+                  class="animate-fadeIn"
+                >
+                  <p class="text-zinc-400 font-light leading-relaxed mt-2 pl-1">
+                    We understand plans change! If you need to cancel or reschedule, please click
+                    the cancellation link in your approval email or call us directly at least 12
+                    hours before your scheduled slot.
+                  </p>
+                </div>
               }
             </div>
           </div>
@@ -915,7 +1049,23 @@
                   required
                   placeholder="e.g., 8f8d9b..."
                   class="form-control"
+                  [attr.aria-invalid]="
+                    cancelForm.controls['cancelBookingId']?.invalid ? 'true' : null
+                  "
+                  aria-describedby="cancelBookingId-error"
                 />
+                <span
+                  id="cancelBookingId-error"
+                  class="text-rose-400 text-[10px]"
+                  [style.display]="
+                    cancelForm.controls['cancelBookingId']?.invalid &&
+                    cancelForm.controls['cancelBookingId']?.touched
+                      ? 'block'
+                      : 'none'
+                  "
+                >
+                  Booking ID is required.
+                </span>
               </div>
               <div class="form-group flex flex-col gap-1.5">
                 <label
@@ -931,7 +1081,21 @@
                   required
                   placeholder="e.g., john@example.com"
                   class="form-control"
+                  [attr.aria-invalid]="cancelForm.controls['cancelEmail']?.invalid ? 'true' : null"
+                  aria-describedby="cancelEmail-error"
                 />
+                <span
+                  id="cancelEmail-error"
+                  class="text-rose-400 text-[10px]"
+                  [style.display]="
+                    cancelForm.controls['cancelEmail']?.invalid &&
+                    cancelForm.controls['cancelEmail']?.touched
+                      ? 'block'
+                      : 'none'
+                  "
+                >
+                  Valid email is required.
+                </span>
               </div>
             </div>
             <div class="flex justify-end pt-2">
@@ -972,7 +1136,23 @@
                   required
                   placeholder="e.g., 8f8d9b..."
                   class="form-control"
+                  [attr.aria-invalid]="
+                    reviewForm.controls['reviewPublicId']?.invalid ? 'true' : null
+                  "
+                  aria-describedby="reviewPublicId-error"
                 />
+                <span
+                  id="reviewPublicId-error"
+                  class="text-rose-400 text-[10px]"
+                  [style.display]="
+                    reviewForm.controls['reviewPublicId']?.invalid &&
+                    reviewForm.controls['reviewPublicId']?.touched
+                      ? 'block'
+                      : 'none'
+                  "
+                >
+                  Booking ID is required.
+                </span>
               </div>
               <div class="form-group flex flex-col gap-1.5">
                 <label
@@ -989,7 +1169,21 @@
                   min="1"
                   max="5"
                   class="form-control"
+                  [attr.aria-invalid]="reviewForm.controls['reviewRating']?.invalid ? 'true' : null"
+                  aria-describedby="reviewRating-error"
                 />
+                <span
+                  id="reviewRating-error"
+                  class="text-rose-400 text-[10px]"
+                  [style.display]="
+                    reviewForm.controls['reviewRating']?.invalid &&
+                    reviewForm.controls['reviewRating']?.touched
+                      ? 'block'
+                      : 'none'
+                  "
+                >
+                  Rating between 1 and 5 is required.
+                </span>
               </div>
               <div class="form-group flex flex-col gap-1.5">
                 <label
@@ -1029,8 +1223,11 @@
 
       <!-- Login/Register Modal Dialog -->
       @if (showAdminLoginModal) {
-        <div class="modal-overlay">
+        <div class="modal-overlay" (keydown.escape)="toggleAdminLoginModal(false)">
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Sign in"
             class="login-card modal-card animate-fadeIn p-8 rounded-3xl border border-white/10 shadow-2xl shadow-black/50"
           >
             <button class="modal-close" (click)="toggleAdminLoginModal(false)">&times;</button>
@@ -1085,7 +1282,26 @@
                     required
                     placeholder="John Doe"
                     class="form-control"
+                    [attr.aria-invalid]="
+                      loginForm.controls['regName']?.invalid &&
+                      loginForm.controls['regName']?.touched
+                        ? 'true'
+                        : null
+                    "
+                    aria-describedby="regName-error"
                   />
+                  <span
+                    id="regName-error"
+                    class="text-rose-400 text-[10px]"
+                    [style.display]="
+                      loginForm.controls['regName']?.invalid &&
+                      loginForm.controls['regName']?.touched
+                        ? 'block'
+                        : 'none'
+                    "
+                  >
+                    Full name is required.
+                  </span>
                 </div>
                 <div class="form-group flex flex-col gap-1.5">
                   <label
@@ -1118,7 +1334,26 @@
                   required
                   placeholder="e.g., admin"
                   class="form-control"
+                  [attr.aria-invalid]="
+                    loginForm.controls['username']?.invalid &&
+                    loginForm.controls['username']?.touched
+                      ? 'true'
+                      : null
+                  "
+                  aria-describedby="username-error"
                 />
+                <span
+                  id="username-error"
+                  class="text-rose-400 text-[10px]"
+                  [style.display]="
+                    loginForm.controls['username']?.invalid &&
+                    loginForm.controls['username']?.touched
+                      ? 'block'
+                      : 'none'
+                  "
+                >
+                  Username is required.
+                </span>
               </div>
 
               <div class="form-group flex flex-col gap-1.5">
@@ -1135,7 +1370,26 @@
                   required
                   placeholder="e.g., admin-password"
                   class="form-control"
+                  [attr.aria-invalid]="
+                    loginForm.controls['password']?.invalid &&
+                    loginForm.controls['password']?.touched
+                      ? 'true'
+                      : null
+                  "
+                  aria-describedby="password-error"
                 />
+                <span
+                  id="password-error"
+                  class="text-rose-400 text-[10px]"
+                  [style.display]="
+                    loginForm.controls['password']?.invalid &&
+                    loginForm.controls['password']?.touched
+                      ? 'block'
+                      : 'none'
+                  "
+                >
+                  Password is required.
+                </span>
               </div>
 
               <button
@@ -1164,8 +1418,11 @@
 
       <!-- Squire-Style Interactive Booking Confirmation Receipt Modal -->
       @if (showReceiptModal()) {
-        <div class="modal-overlay">
+        <div class="modal-overlay" (keydown.escape)="showReceiptModal.set(false)">
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Booking confirmation"
             class="login-card modal-card animate-fadeIn p-8 rounded-3xl border border-white/10 shadow-2xl shadow-black/50"
             style="max-width: 480px"
           >

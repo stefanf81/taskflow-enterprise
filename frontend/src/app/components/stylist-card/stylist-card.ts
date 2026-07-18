@@ -14,9 +14,14 @@ export interface StylistProfile {
   imports: [],
   template: `
     <div
+      tabindex="0"
+      role="button"
+      [attr.aria-label]="'Select stylist: ' + profile().name"
       class="card p-4 border border-white/5 bg-zinc-900/30 hover:border-indigo-500/30 hover:bg-indigo-500/5 flex items-center gap-4 cursor-pointer transition-all"
       [class.selected-service-item]="isSelected()"
       (click)="selected.emit()"
+      (keydown.enter)="selected.emit()"
+      (keydown.space)="selected.emit(); $event.preventDefault()"
     >
       <!-- Initial Avatar Circle -->
       <div

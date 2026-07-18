@@ -18,13 +18,19 @@
   </header>
 
   @if (errorMessage()) {
-    <div class="alert alert-error mb-6 py-3 px-4 rounded-xl text-xs border border-red-500/20">
+    <div
+      role="alert"
+      class="alert alert-error mb-6 py-3 px-4 rounded-xl text-xs border border-red-500/20"
+    >
       <span class="text-rose-400 leading-normal font-medium">{{ errorMessage() }}</span>
     </div>
   }
 
   @if (successMessage()) {
-    <div class="alert alert-success mb-6 py-3 px-4 rounded-xl text-xs border border-emerald-500/10">
+    <div
+      role="status"
+      class="alert alert-success mb-6 py-3 px-4 rounded-xl text-xs border border-emerald-500/10"
+    >
       <span class="text-emerald-400 leading-normal font-medium">{{ successMessage() }}</span>
     </div>
   }
