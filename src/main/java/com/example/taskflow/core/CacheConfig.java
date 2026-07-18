@@ -27,12 +27,31 @@ public class CacheConfig {
      * LaissezFaireSubTypeValidator. Only the concrete types we actually cache are
      * permitted to be reconstructed from Redis, eliminating the polymorphic
      * deserialization (gadget-vector) attack surface.
+     *
+     * We use allowIfSubType (not allowIfBaseType) because GenericJackson2JsonRedisSerializer
+     * always uses {@code Object} as the declared base type, so the base-type check would never
+     * match. The concrete runtime type is what gets stored in the {@code @class} JSON property
+     * and what the validator needs to approve.
+     *
+     * The allowed types cover:
+     * - AppointmentStats: our domain stats record (uses @JsonTypeInfo annotation)
+     * - java.util.ArrayList: returned by JPA repository queries
+     * - java.util.Arrays$ArrayList: returned by Arrays.asList()
+     * - java.util.Collections$EmptyList: returned by Collections.emptyList()
+     * - java.util.Collections$SingletonList: returned by Collections.singletonList()
+     * - java.util.ImmutableCollections.*: returned by List.of() in Java 21+
+     *
+     * These are all JDK standard-library types with no known deserialization gadgets,
+     * making this configuration secure.
      */
     private static final PolymorphicTypeValidator CACHE_TYPE_VALIDATOR =
             BasicPolymorphicTypeValidator.builder()
-                    .allowIfBaseType("com.example.taskflow.appointment.AppointmentStats")
-                    .allowIfBaseType("java.util.List")
-                    .allowIfBaseType("java.lang.String")
+                    .allowIfSubType("com.example.taskflow.appointment.AppointmentStats")
+                    .allowIfSubType("java.util.ArrayList")
+                    .allowIfSubType("java.util.Arrays$ArrayList")
+                    .allowIfSubType("java.util.Collections$EmptyList")
+                    .allowIfSubType("java.util.Collections$SingletonList")
+                    .allowIfSubType("java.util.ImmutableCollections")
                     .build();
 
     private static ObjectMapper redisObjectMapper() {
