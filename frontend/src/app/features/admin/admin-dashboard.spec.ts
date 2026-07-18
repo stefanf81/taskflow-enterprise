@@ -88,6 +88,8 @@ describe('AdminDashboard Component Quality Assurance Suite', () => {
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
 
+    TestBed.inject(AppointmentStore).isLoggedIn.set(true);
+
     fixture.detectChanges();
 
     // Flush the initial dashboard load.
@@ -123,6 +125,8 @@ describe('AdminDashboard Component Quality Assurance Suite', () => {
     expect(req.request.method).toBe('PUT');
     expect(req.request.body).toEqual({ status: 'APPROVED' });
     req.flush({ ...mockDashboard.page.content[0], status: 'APPROVED' });
+
+    fixture.detectChanges();
 
     // Subsequent list reload.
     const reload = httpMock.expectOne(
@@ -160,10 +164,12 @@ describe('AdminDashboard Component Quality Assurance Suite', () => {
     expect(component.selectedFilter()).toBe('approved');
     expect(component.currentPage()).toBe(0);
 
+    fixture.detectChanges();
+
     const req = httpMock.expectOne(
       (r) => r.url.includes('/api/v1/appointments') && r.url.includes('status=APPROVED'),
     );
-    expect(req.request.params.get('status')).toBe('APPROVED');
+    expect(req.request.url).toContain('status=APPROVED');
     req.flush(mockDashboard);
   });
 
@@ -187,9 +193,9 @@ describe('AdminDashboard Component Quality Assurance Suite', () => {
   });
 
   it('should flag past booking dates as overdue', () => {
-    expect(component.isOverdue({ bookingDate: '2020-01-01' })).toBe(true);
-    expect(component.isOverdue({ bookingDate: '2099-01-01' })).toBe(false);
-    expect(component.isOverdue({})).toBe(false);
+    expect(component.isOverdue({ bookingDate: '2020-01-01' } as any)).toBe(true);
+    expect(component.isOverdue({ bookingDate: '2099-01-01' } as any)).toBe(false);
+    expect(component.isOverdue({} as any)).toBe(false);
   });
 
   it('should surface a time-off write error on the action error signal', () => {
@@ -201,9 +207,7 @@ describe('AdminDashboard Component Quality Assurance Suite', () => {
     component.newTimeOffEndDate.set('2026-09-05');
     component.addTimeOff();
 
-    const req = httpMock.expectOne((r) =>
-      r.url.includes('/api/v1/barbers/1/time-off'),
-    );
+    const req = httpMock.expectOne((r) => r.url.includes('/api/v1/barbers/1/time-off'));
     expect(req.request.method).toBe('POST');
     req.error(new ProgressEvent('error'), { status: 400, statusText: 'Bad Request' });
 

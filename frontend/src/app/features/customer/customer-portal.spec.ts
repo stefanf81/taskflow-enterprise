@@ -85,9 +85,7 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
 
   it('should compile and render the customer portal', () => {
     expect(component).toBeTruthy();
-    expect(fixture.nativeElement.querySelector('h1')?.textContent).toContain(
-      'My Appointments',
-    );
+    expect(fixture.nativeElement.querySelector('h1')?.textContent).toContain('My Appointments');
   });
 
   it('should expose the loaded appointments', () => {
@@ -99,11 +97,11 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
     component.customerStore.cancelErrorMessage.set('stale error');
     component.customerStore.cancelAppointment(1);
 
-    const req = httpMock.expectOne((r) =>
-      r.url.includes('/api/v1/customer/appointments/1'),
-    );
+    const req = httpMock.expectOne((r) => r.url.includes('/api/v1/customer/appointments/1'));
     expect(req.request.method).toBe('DELETE');
     req.flush(null);
+
+    fixture.detectChanges();
 
     // Reload after success.
     const reload = httpMock.expectOne(
@@ -118,9 +116,7 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     component.customerStore.cancelAppointment(2);
 
-    const req = httpMock.expectOne((r) =>
-      r.url.includes('/api/v1/customer/appointments/2'),
-    );
+    const req = httpMock.expectOne((r) => r.url.includes('/api/v1/customer/appointments/2'));
     expect(req.request.method).toBe('DELETE');
     req.error(new ProgressEvent('error'), { status: 404, statusText: 'Not Found' });
 
