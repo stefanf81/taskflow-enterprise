@@ -1,0 +1,668 @@
+<div class="w-full px-4 sm:px-8 lg:px-16 pt-12">
+  <section
+    class="card bg-zinc-950 border border-white/10 rounded-3xl p-8 relative max-w-4xl mx-auto"
+  >
+    <h2 class="text-xl font-black text-zinc-100 tracking-tight uppercase mb-1">
+      📅 Booking Assistant
+    </h2>
+    <p class="text-xs text-zinc-400 font-light leading-relaxed mb-8">
+      Follow our step-by-step assistant to secure your premium stylist, date, and available slot
+      request.
+    </p>
+
+    <!-- STEP TIMELINE METRICS TRACKER -->
+    <div class="relative flex items-center justify-between mb-8 px-1">
+      <div class="absolute left-0 right-0 h-0.5 bg-white/5 z-0 top-1/2 -translate-y-1/2"></div>
+      <div
+        class="absolute left-0 h-0.5 bg-indigo-600 z-10 top-1/2 -translate-y-1/2 transition-all duration-300"
+        [style.width.%]="(activeStep() - 1) * 33.3"
+      ></div>
+
+      @for (stepNum of [1, 2, 3, 4]; track stepNum) {
+        <button
+          type="button"
+          (click)="booking.setStep(stepNum)"
+          class="wizard-step-node relative z-20 w-9 h-9 rounded-full border bg-zinc-950 text-zinc-500 text-xs font-black flex items-center justify-center cursor-pointer transition-all duration-300"
+          [class.active]="activeStep() === stepNum"
+          [class.completed]="activeStep() > stepNum"
+        >
+          @if (activeStep() > stepNum) {
+            ✓
+          } @else {
+            {{ stepNum }}
+          }
+        </button>
+      }
+    </div>
+
+    <!-- Active Step Indicator Badge label -->
+    <div class="text-center font-bold text-xs text-indigo-400 uppercase tracking-wider mb-6">
+      @if (activeStep() === 1) {
+        1. Select Treatment
+      } @else if (activeStep() === 2) {
+        2. Choose Your Stylist
+      } @else if (activeStep() === 3) {
+        3. Pick Date & Available Slot
+      } @else {
+        4. Customer Info & Submit
+      }
+    </div>
+
+    <!-- STATUS BANNERS -->
+    @if (errorMessage()) {
+      <div
+        class="alert alert-error mb-6 animate-fadeIn py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-red-500/20"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="2"
+          stroke="currentColor"
+          class="w-5 h-5 flex-shrink-0"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
+          />
+        </svg>
+        <span class="flex-1 leading-normal text-rose-400 font-medium">{{ errorMessage() }}</span>
+        <button
+          type="button"
+          class="text-base font-bold opacity-60 hover:opacity-100"
+          (click)="errorMessage.set(null)"
+        >
+          &times;
+        </button>
+      </div>
+    }
+
+    @if (successMessage()) {
+      <div
+        class="alert alert-success mb-6 animate-fadeIn py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-emerald-500/10"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="2"
+          stroke="currentColor"
+          class="w-5 h-5 flex-shrink-0"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
+        </svg>
+        <span class="flex-1 leading-normal text-emerald-400 font-medium">{{
+          successMessage()
+        }}</span>
+      </div>
+    }
+
+    <!-- STEP 1: TREATMENT SELECT -->
+    @if (activeStep() === 1) {
+      <div class="space-y-4 animate-fadeIn">
+        <div class="relative w-full">
+          <span class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500">🔍</span>
+          <input
+            type="text"
+            [ngModel]="serviceSearchQuery()"
+            (ngModelChange)="booking.setServiceSearchQuery($event)"
+            placeholder="Search treatments (e.g., fade, trim, shave)..."
+            class="w-full bg-black border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-xs text-zinc-100 placeholder-slate-400 outline-none focus:border-indigo-600 transition-all duration-200"
+          />
+        </div>
+
+        <div
+          class="flex bg-white/5 rounded-xl p-1 border border-white/5"
+          style="margin-bottom: 1.5rem"
+        >
+          <button
+            type="button"
+            (click)="booking.setServiceCategory('all')"
+            [class.bg-zinc-950]="selectedCategory() === 'all'"
+            [class.text-indigo-400]="selectedCategory() === 'all'"
+            class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
+          >
+            All
+          </button>
+          <button
+            type="button"
+            (click)="booking.setServiceCategory('hair')"
+            [class.bg-zinc-950]="selectedCategory() === 'hair'"
+            [class.text-indigo-400]="selectedCategory() === 'hair'"
+            class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
+          >
+            Hair
+          </button>
+          <button
+            type="button"
+            (click)="booking.setServiceCategory('beard')"
+            [class.bg-zinc-950]="selectedCategory() === 'beard'"
+            [class.text-indigo-400]="selectedCategory() === 'beard'"
+            class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
+          >
+            Beards
+          </button>
+          <button
+            type="button"
+            (click)="booking.setServiceCategory('combo')"
+            [class.bg-zinc-950]="selectedCategory() === 'combo'"
+            [class.text-indigo-400]="selectedCategory() === 'combo'"
+            class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
+          >
+            Combos
+          </button>
+        </div>
+
+        <div class="services-list max-h-[380px] overflow-y-auto pr-0.5 space-y-3">
+          @for (service of filteredServices(); track service.name) {
+            <div
+              class="card p-4 border border-white/5 bg-zinc-900/30 hover:border-indigo-500/30 cursor-pointer transition-all"
+              [class.selected-service-item]="bookingService() === service.name"
+              (click)="booking.selectService(service.name)"
+            >
+              <div class="flex justify-between items-center font-bold">
+                <span class="text-zinc-100 text-base flex items-center gap-1.5">
+                  @if (bookingService() === service.name) {
+                    <span class="text-indigo-400 text-sm">👑</span>
+                  }
+                  {{ service.name }}
+                </span>
+                <span class="text-indigo-400 text-lg">${{ service.price }}</span>
+              </div>
+              <p class="text-[10px] font-bold text-zinc-500 uppercase mt-0.5">
+                ⏱️ Duration: {{ service.durationMinutes }} mins
+              </p>
+              <p class="text-xs text-zinc-400 leading-relaxed font-light mt-1">
+                {{ service.description }}
+              </p>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- STEP 2: SELECT STYLIST -->
+    @if (activeStep() === 2) {
+      <div class="space-y-4 animate-fadeIn">
+        @for (profile of stylistProfiles(); track profile.name) {
+          <app-stylist-card
+            [profile]="profile"
+            [isSelected]="bookingBarber() === profile.name"
+            (selected)="booking.selectStylist(profile.name)"
+          />
+        }
+
+        <div
+          class="card p-4 border border-white/5 bg-zinc-900/30 hover:border-indigo-500/30 hover:bg-indigo-500/5 flex items-center gap-4 cursor-pointer transition-all"
+          [class.selected-service-item]="bookingBarber() === 'No Preference (First Available)'"
+          (click)="booking.selectStylist('No Preference (First Available)')"
+        >
+          <div
+            class="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-lg font-black text-indigo-400"
+          >
+            🚀
+          </div>
+          <div>
+            <h3 class="m-0 text-zinc-100 font-extrabold text-sm">No Preference</h3>
+            <p class="m-0 text-[11px] font-semibold text-zinc-500 mt-0.5">
+              Select Best First Available Stylist
+            </p>
+            <p class="text-xs text-zinc-500 font-light leading-relaxed mt-1">
+              Automatically pairs you with the first available professional for maximum scheduling
+              flexibility.
+            </p>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- STEP 3: PICK DATE & AVAILABLE TIME SLOT -->
+    @if (activeStep() === 3) {
+      <div class="space-y-6 animate-fadeIn">
+        <div class="form-group">
+          <label class="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-2"
+            >Select Date <span class="required">*</span></label
+          >
+          <div
+            style="
+              display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(75px, 1fr));
+              gap: 0.75rem;
+            "
+          >
+            @for (day of upcomingBookingDays(); track day.dateStr) {
+              <div
+                class="card slot-picker-btn"
+                [class.slot-selected]="bookingDate() === day.dateStr"
+                (click)="booking.selectBookingDate(day.dateStr)"
+                style="
+                  cursor: pointer;
+                  padding: 0.75rem 0.5rem;
+                  text-align: center;
+                  border-radius: var(--radius-md);
+                "
+              >
+                <span
+                  style="
+                    font-size: 0.75rem;
+                    text-transform: uppercase;
+                    color: var(--text-muted);
+                    font-weight: 700;
+                    display: block;
+                    pointer-events: none;
+                  "
+                  >{{ day.dayName }}</span
+                >
+                <span
+                  style="
+                    font-size: 1.35rem;
+                    font-weight: 900;
+                    color: #ffffff;
+                    display: block;
+                    margin: 0.15rem 0;
+                    pointer-events: none;
+                  "
+                  >{{ day.dayNum }}</span
+                >
+                <span
+                  style="
+                    font-size: 0.7rem;
+                    text-transform: uppercase;
+                    color: var(--gold-metallic-dim);
+                    font-weight: 700;
+                    display: block;
+                    pointer-events: none;
+                  "
+                  >{{ day.monthName }}</span
+                >
+              </div>
+            }
+          </div>
+        </div>
+
+        <div class="form-group" style="display: none">
+          <label for="bookingDate">Manual Date Fallback</label>
+          <input
+            type="text"
+            id="bookingDate"
+            name="bookingDate"
+            [ngModel]="bookingDate()"
+            (ngModelChange)="booking.selectBookingDate($event)"
+            required
+          />
+        </div>
+
+        @if (booking.isCheckingSlots()) {
+          <div style="text-align: center; padding: 2.5rem" class="animate-fadeIn">
+            <svg
+              class="icon-spin animate-spin"
+              style="
+                width: 2.25rem;
+                height: 2.25rem;
+                color: var(--primary-indigo);
+                margin: 0 auto;
+                display: block;
+              "
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+                style="opacity: 0.25"
+                stroke="rgba(79,70,229,0.2)"
+              ></circle>
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                style="opacity: 0.75"
+              ></path>
+            </svg>
+            <p
+              style="
+                font-size: 0.8rem;
+                color: var(--primary-indigo);
+                margin-top: 0.75rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+              "
+            >
+              Checking slot availability...
+            </p>
+          </div>
+        } @else if (bookingDate()) {
+          <div class="form-group" style="margin-top: 1.5rem">
+            <label class="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-2"
+              >Select Time Slot <span class="required">*</span></label
+            >
+            <div
+              class="time-slots-grid animate-fadeIn"
+              style="
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+                gap: 0.75rem;
+                margin-top: 0.5rem;
+              "
+            >
+              @for (slot of timeSlots; track slot) {
+                <button
+                  type="button"
+                  class="btn btn-secondary slot-picker-btn"
+                  [class.slot-busy]="busySlots().includes(slot)"
+                  [class.slot-selected]="bookingTime() === slot"
+                  [disabled]="busySlots().includes(slot)"
+                  (click)="booking.selectTimeSlot(slot)"
+                  style="
+                    padding: 0.65rem 0.5rem;
+                    font-size: 0.825rem;
+                    text-transform: none;
+                    font-weight: 600;
+                  "
+                >
+                  @if (busySlots().includes(slot)) {
+                    🚫 Taken
+                  } @else {
+                    {{ formatTime12Hour(slot) }}
+                  }
+                </button>
+              }
+            </div>
+          </div>
+        } @else {
+          <div
+            style="
+              text-align: center;
+              padding: 2.5rem 1rem;
+              color: var(--text-dim);
+              font-size: 0.9rem;
+              border: 1px dashed rgba(0, 0, 0, 0.06);
+              border-radius: var(--radius-md);
+              margin-top: 1.5rem;
+              background-color: #fafbfd;
+            "
+          >
+            📅 Select an upcoming date above to view available time slots
+          </div>
+        }
+      </div>
+    }
+
+    <!-- STEP 4: CUSTOMER CONTACT & CONFIRM -->
+    @if (activeStep() === 4) {
+      <div class="space-y-4 animate-fadeIn">
+        <form (ngSubmit)="onBookAppointment()" #bookingForm="ngForm" class="appointment-form">
+          <div class="form-group">
+            <label for="customerName">Your Full Name <span class="required">*</span></label>
+            <input
+              type="text"
+              id="customerName"
+              name="customerName"
+              [ngModel]="bookingName()"
+              (ngModelChange)="booking.bookingName.set($event)"
+              required
+              placeholder="e.g., John Doe"
+              class="form-control"
+            />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="customerEmail">Email Address <span class="required">*</span></label>
+              <input
+                type="email"
+                id="customerEmail"
+                name="customerEmail"
+                [ngModel]="bookingEmail()"
+                (ngModelChange)="booking.bookingEmail.set($event)"
+                required
+                placeholder="e.g., john@example.com"
+                class="form-control"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="customerPhone">Phone Number <span class="required">*</span></label>
+              <input
+                type="text"
+                id="customerPhone"
+                name="customerPhone"
+                [ngModel]="bookingPhone()"
+                (ngModelChange)="booking.bookingPhone.set($event)"
+                required
+                placeholder="e.g., 555-0199"
+                class="form-control"
+              />
+            </div>
+          </div>
+
+          <input
+            type="hidden"
+            name="bookingTime"
+            [ngModel]="bookingTime()"
+            (ngModelChange)="booking.bookingTime.set($event)"
+            required
+          />
+          <input
+            type="hidden"
+            name="bookingService"
+            [ngModel]="bookingService()"
+            (ngModelChange)="booking.bookingService.set($event)"
+            required
+          />
+          <input
+            type="hidden"
+            name="bookingBarber"
+            [ngModel]="bookingBarber()"
+            (ngModelChange)="booking.bookingBarber.set($event)"
+            required
+          />
+          <input
+            type="hidden"
+            name="bookingDate"
+            [ngModel]="bookingDate()"
+            (ngModelChange)="booking.bookingDate.set($event)"
+            required
+          />
+
+          <div
+            class="booking-summary-card card animate-fadeIn bg-zinc-900/50 border border-white/10 p-5 mt-6 rounded-2xl"
+          >
+            <h3
+              class="text-zinc-100 font-extrabold text-sm border-b border-white/10 pb-3 mb-4 flex items-center gap-1.5"
+            >
+              <span>📋 Reservation Summary</span>
+            </h3>
+            <div class="space-y-3 text-xs text-zinc-400 font-light">
+              <p class="flex justify-between">
+                <span>✂️ Treatment:</span>
+                <strong class="text-zinc-100 font-semibold">{{ bookingService() }}</strong>
+              </p>
+              <p class="flex justify-between">
+                <span>⏱️ Duration:</span>
+                <strong class="text-zinc-100 font-semibold"
+                  >{{ selectedServiceObj()?.durationMinutes }} mins</strong
+                >
+              </p>
+              <p class="flex justify-between">
+                <span>💈 Stylist:</span>
+                <strong class="text-zinc-100 font-semibold">{{ bookingBarber() }}</strong>
+              </p>
+              <p class="flex justify-between">
+                <span>📅 Scheduled:</span>
+                <strong class="text-zinc-100 font-semibold">
+                  {{ bookingDate() | date: 'mediumDate' }} at
+                  {{ formatTime12Hour(bookingTime()) }}
+                </strong>
+              </p>
+              @if (estimatedEndTime()) {
+                <p class="flex justify-between">
+                  <span>⏰ Est. End Time:</span>
+                  <strong class="text-indigo-400 font-bold">{{
+                    formatTime12Hour(estimatedEndTime())
+                  }}</strong>
+                </p>
+              }
+              <hr class="border-t border-white/10 my-2" />
+              <p class="flex justify-between">
+                <span>Subtotal:</span>
+                <span class="text-zinc-300">${{ checkoutSubtotal() }}.00</span>
+              </p>
+              <p class="flex justify-between">
+                <span>Platform Svc Fee:</span>
+                <span class="text-zinc-300">${{ checkoutFee() | number: '1.2-2' }}</span>
+              </p>
+              <p class="flex justify-between text-sm font-bold text-zinc-100 pt-1">
+                <span>Total Est. Price:</span>
+                <span class="text-indigo-400">${{ checkoutTotal() | number: '1.2-2' }}</span>
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            class="btn btn-submit login-btn w-full mt-6 py-3 text-sm font-bold tracking-wide uppercase transition-all duration-200"
+            [disabled]="bookingForm.invalid || isSubmitting()"
+          >
+            {{ isSubmitting() ? 'Securing Slot...' : 'Confirm & Request Booking' }}
+          </button>
+        </form>
+      </div>
+    }
+
+    <!-- Wizard Step Navigation Controls Footer -->
+    <div
+      class="wizard-footer-controls flex justify-between items-center mt-8 border-t border-white/5 pt-5"
+    >
+      <button
+        type="button"
+        class="btn btn-secondary text-xs"
+        [disabled]="activeStep() === 1"
+        (click)="booking.goToPrevStep()"
+        style="padding: 0.5rem 1.25rem"
+      >
+        &larr; Back
+      </button>
+
+      @if (activeStep() < 4) {
+        <button
+          type="button"
+          class="btn btn-submit text-xs"
+          [disabled]="!booking.isStepValid(activeStep())"
+          (click)="booking.goToNextStep()"
+          style="padding: 0.5rem 1.5rem"
+        >
+          Next &rarr;
+        </button>
+      }
+    </div>
+  </section>
+
+  <!-- Booking Confirmation Receipt Modal -->
+  @if (showReceiptModal()) {
+    <div class="modal-overlay">
+      <div
+        class="login-card modal-card animate-fadeIn p-8 rounded-3xl border border-white/10 shadow-2xl shadow-black/50"
+        style="max-width: 480px"
+      >
+        <button class="modal-close" (click)="showReceiptModal.set(false)">&times;</button>
+        <div class="login-header text-center mb-6">
+          <div
+            class="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-3"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="3"
+              stroke="currentColor"
+              class="w-6 h-6 text-emerald-600"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          </div>
+          <h2 class="text-xl font-black text-zinc-100 tracking-tight uppercase">
+            Reservation Requested!
+          </h2>
+          <p class="text-xs text-zinc-500 leading-normal mt-1">
+            Your luxury grooming slot has been successfully registered.
+          </p>
+        </div>
+
+        <div class="bg-black border border-white/10 rounded-2xl p-5 mb-5 animate-fadeIn">
+          <h3
+            class="text-center font-bold text-xs text-zinc-500 uppercase tracking-wider pb-3 border-b border-white/10 mb-4"
+          >
+            Receipt #{{ lastBookedAppointment()?.id }}
+          </h3>
+
+          <div class="space-y-3 text-xs text-zinc-400 font-light">
+            <p class="flex justify-between">
+              <span>🔑 Booking Code:</span>
+              <strong class="text-indigo-400 font-bold select-all">{{
+                lastBookedAppointment()?.publicId
+              }}</strong>
+            </p>
+            <p class="flex justify-between">
+              <span>👤 Customer:</span>
+              <strong class="text-zinc-100 font-semibold">{{
+                lastBookedAppointment()?.customerName
+              }}</strong>
+            </p>
+            <p class="flex justify-between">
+              <span>✂️ Service:</span>
+              <strong class="text-zinc-100 font-semibold">{{
+                lastBookedAppointment()?.serviceType
+              }}</strong>
+            </p>
+            <p class="flex justify-between">
+              <span>💈 Stylist:</span>
+              <strong class="text-zinc-100 font-semibold">{{
+                lastBookedAppointment()?.barberName
+              }}</strong>
+            </p>
+            <p class="flex justify-between">
+              <span>📅 Scheduled:</span>
+              <strong class="text-zinc-100 font-semibold"
+                >{{ lastBookedAppointment()?.bookingDate | date: 'mediumDate' }} at
+                {{ formatTime12Hour(lastBookedAppointment()?.bookingTime ?? '') }}</strong
+              >
+            </p>
+            <hr class="border-t border-dashed border-slate-300 my-2" />
+            <p class="flex justify-between text-sm font-bold text-zinc-100 pt-1">
+              <span>Estimated Price:</span>
+              <span class="text-indigo-400">${{ checkoutTotal() | number: '1.2-2' }}</span>
+            </p>
+          </div>
+        </div>
+
+        <div class="text-center text-[11px] text-zinc-500 leading-relaxed font-light mb-6">
+          <p class="font-bold text-zinc-300 mb-1">📝 What happens next?</p>
+          <p>
+            The shop owner will review your slot request. Once approved, you will automatically
+            receive a simulated SMTP email notification confirming your reservation details.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          class="btn btn-submit w-full py-3 font-bold tracking-wide uppercase"
+          (click)="showReceiptModal.set(false)"
+        >
+          Got It, Thanks!
+        </button>
+      </div>
+    </div>
+  }
+</div>
