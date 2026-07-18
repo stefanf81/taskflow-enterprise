@@ -6,13 +6,12 @@ import {
   AppointmentStats,
   AppointmentDashboardResponse,
 } from './appointment.service';
+import { AuthStore } from './auth.store';
 
 @Service()
 export class AppointmentStore {
   private readonly appointmentService = inject(AppointmentService);
-
-  // Authentication State
-  readonly isLoggedIn = signal<boolean>(!!sessionStorage.getItem('auth_token'));
+  private readonly auth = inject(AuthStore);
 
   // Pagination & Filter States
   readonly currentPage = signal<number>(0);
@@ -23,7 +22,7 @@ export class AppointmentStore {
   // Core Admin Reactive States (Declarative Signals via httpResource)
   private readonly appointmentsResource = httpResource<AppointmentDashboardResponse>(
     () => {
-      if (!this.isLoggedIn()) return undefined;
+      if (!this.auth.isLoggedIn()) return undefined;
       let url = `/api/v1/appointments?page=${this.currentPage()}&size=${this.pageSize}`;
       const filter = this.selectedFilter();
       if (filter && filter !== 'all') {
@@ -73,20 +72,11 @@ export class AppointmentStore {
   readonly errorMessage = signal<string | null>(null);
   readonly successMessage = signal<string | null>(null);
   readonly isSubmitting = signal<boolean>(false);
-  readonly isCheckingSlots = signal<boolean>(false);
-  readonly busySlots = signal<string[]>([]);
 
   // Compat method to force reload
   loadAppointments(selectedFilter?: string, searchQuery?: string): void {
     if (selectedFilter !== undefined) this.selectedFilter.set(selectedFilter);
     if (searchQuery !== undefined) this.searchQuery.set(searchQuery);
     this.appointmentsResource.reload();
-  }
-
-  // Handle Admin Logout
-  onLogout(): void {
-    sessionStorage.removeItem('auth_token');
-    this.isLoggedIn.set(false);
-    this.errorMessage.set(null);
   }
 }
