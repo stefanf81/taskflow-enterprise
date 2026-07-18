@@ -9,7 +9,7 @@
     <!-- Wrap the CONSOLE appender with an AsyncAppender -->
     <appender name="ASYNC_CONSOLE" class="ch.qos.logback.classic.AsyncAppender">
         <queueSize>16384</queueSize>
-        <discardingThreshold>0</discardingThreshold>
+        <discardingThreshold>1638</discardingThreshold>
         <appender-ref ref="CONSOLE" />
     </appender>
 

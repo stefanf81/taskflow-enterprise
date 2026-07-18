@@ -38,7 +38,7 @@ public class BusySlotsService {
         this.appointmentRepository = appointmentRepository;
     }
 
-    @Cacheable(value = "busySlots", key = "#barberName + '-' + #bookingDate")
+    @Cacheable(value = "busySlots", key = "#barberName + '-' + #bookingDate", sync = true)
     public List<String> getBusySlots(String barberName, String bookingDate) {
         try {
             LocalDate date = LocalDate.parse(bookingDate);
