@@ -32,7 +32,7 @@ spec:
       containers:
         - name: backend
           image: ghcr.io/stefanf81/taskflow-backend:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false

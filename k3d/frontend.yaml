@@ -16,7 +16,7 @@ spec:
       containers:
         - name: frontend
           image: ghcr.io/stefanf81/taskflow-frontend:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
