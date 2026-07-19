@@ -29,7 +29,7 @@ import com.example.taskflow.core.CacheConfig;
         "org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration",
         "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration",
         "org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration",
-        "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration",
+        "org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration",
         "org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration",
         "org.springframework.boot.actuate.autoconfigure.observation.ObservationAutoConfiguration",
         "org.springframework.boot.actuate.autoconfigure.tracing.MicrometerTracingAutoConfiguration",
