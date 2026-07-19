@@ -61,8 +61,8 @@ class RateLimiterConfigTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain filterChain = mock(FilterChain.class);
 
-        // Max requests for auth is 5, so returning 6 should block
-        when(valueOperations.increment(eq("rate_limit:192.168.1.1:auth"))).thenReturn(6L);
+        // Max requests for auth is 20, so returning 21 should block
+        when(valueOperations.increment(eq("rate_limit:192.168.1.1:auth"))).thenReturn(21L);
 
         filter.doFilter(request, response, filterChain);
 

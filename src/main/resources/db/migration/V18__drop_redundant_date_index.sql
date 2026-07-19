@@ -5,4 +5,4 @@
 -- confuses the planner. We drop the legacy V1 index (the V14 one is the
 -- canonical one). DROP INDEX IF EXISTS is supported by H2 and PostgreSQL and
 -- keeps this migration idempotent on re-apply.
-ALTER TABLE appointments DROP INDEX IF EXISTS idx_appointment_date;
+DROP INDEX IF EXISTS idx_appointment_date;
