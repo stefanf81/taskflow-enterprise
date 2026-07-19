@@ -275,7 +275,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     // page rather than rendering the dashboard.
     await page.goto('/admin');
     await expect(page).not.toHaveURL(/\/admin$/);
-    await expect(page).toHaveURL(/\/$|^\/\?/);
+    await expect(page).toHaveURL(/\/(\?.*)?$/);
     await expect(page.locator('h1').first()).toContainText('Luxury Barber Scheduler');
   });
 
@@ -293,9 +293,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
 
     const alert = page.locator('.alert-error');
     await expect(alert).toBeVisible();
-    await expect(alert).toContainText(
-      'Verification failed. Please check your Booking Code and Email.',
-    );
+    await expect(alert).toContainText('Appointment booking not found.');
   });
 
   test('should reject a review submission for an unknown or not-completed booking code', async ({
@@ -313,7 +311,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
 
     const alert = page.locator('.alert-error');
     await expect(alert).toBeVisible();
-    await expect(alert).toContainText('Failed to submit review.');
+    await expect(alert).toContainText('Appointment not found or not available for review.');
   });
 
   test('should reject an unauthenticated POST to a protected admin API', async ({ page }) => {
