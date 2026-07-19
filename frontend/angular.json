@@ -21,7 +21,7 @@
               "scripts": true,
               "styles": {
                 "minify": true,
-                "inlineCritical": true,
+                "inlineCritical": false,
                 "removeSpecialComments": true
               },
               "fonts": {
