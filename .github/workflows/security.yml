@@ -1,0 +1,163 @@
+name: Nightly Security Scans
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+env:
+  JAVA_VERSION: "21"
+  NODE_VERSION: "22"
+  TRIVY_VERSION: v0.72.0
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  ###########################################################
+  # CodeQL
+  ###########################################################
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        include:
+          - language: java
+            build-mode: autobuild
+
+          - language: javascript
+            build-mode: none
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        if: matrix.language == 'java'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        if: matrix.language == 'java'
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Autobuild
+        if: matrix.build-mode == 'autobuild'
+        uses: github/codeql-action/autobuild@v4
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+
+  ###########################################################
+  # Trivy Filesystem Scan
+  ###########################################################
+
+  trivy:
+    name: Trivy FS (${{ matrix.component.name }})
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        component:
+          - name: Backend
+            path: .
+
+          - name: Frontend
+            path: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      #####################################################
+      # Cache Trivy Database
+      #####################################################
+
+      - name: Compute Trivy Cache Key
+        id: trivy-cache-key
+        run: |
+          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Trivy Database
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/trivy
+          key: trivy-${{ runner.os }}-${{ env.TRIVY_VERSION }}-${{ steps.trivy-cache-key.outputs.week }}
+          restore-keys: |
+            trivy-${{ runner.os }}-${{ env.TRIVY_VERSION }}-
+
+      #####################################################
+      # Filesystem Scan
+      #####################################################
+
+      # NOTE ON SEVERITY GATING (intentional asymmetry):
+      # This filesystem/source scan is REPORT-ONLY (exit-code: 0) — it never
+      # fails the build. It's meant to surface vulnerable dependencies early
+      # (via the SARIF upload -> Code Scanning tab) without blocking PRs on
+      # every transitive CVE in source manifests, many of which never ship.
+      #
+      # The Docker image scan in the CI `docker-build` job is the hard
+      # gate (exit-code: 1, severity: HIGH,CRITICAL) — it blocks the build
+      # because that's the artifact that actually gets deployed.
+      #
+      # If you "fix" one of these to match the other, you will either start
+      # blocking every PR on unshipped source CVEs, or stop blocking on
+      # vulnerable images entirely. Keep them different on purpose.
+      - name: Trivy Filesystem Scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: fs
+          scan-ref: ${{ matrix.component.path }}
+          format: sarif
+          output: trivy-results.sarif
+
+          # Non-blocking scan — see note above. Do not change without
+          # also reconsidering the image scan's exit-code.
+          exit-code: 0
+
+      #####################################################
+      # Upload Results
+      #####################################################
+
+      - name: Upload SARIF
+        if: always() && hashFiles('trivy-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif

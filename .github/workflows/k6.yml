@@ -1,4 +1,4 @@
-name: Angular Browser Test
+name: k6 Browser Test
 
 on:
   workflow_dispatch:

@@ -10,17 +10,14 @@ on:
       - main
 
   schedule:
+    # Nightly regression: build, test, e2e, and Docker build+scan.
+    # Security-only scans (CodeQL, Trivy FS) moved to .github/workflows/security.yml.
     - cron: '0 2 * * *'
 
   workflow_dispatch:
     inputs:
       run_tests:
         description: Run all tests
-        type: boolean
-        default: true
-
-      run_security:
-        description: Run security scans
         type: boolean
         default: true
 
@@ -72,7 +69,6 @@ jobs:
       docker_frontend: ${{ steps.filter.outputs.docker_frontend }}
 
       docker_components: ${{ steps.components.outputs.matrix }}
-      security_components: ${{ steps.security.outputs.matrix }}
 
     steps:
       - name: Checkout
@@ -114,6 +110,7 @@ jobs:
           DOCKER_FRONTEND_CHANGED: ${{ steps.filter.outputs.docker_frontend }}
           IS_MAIN: ${{ github.ref == 'refs/heads/main' }}
           IS_MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+          IS_SCHEDULE: ${{ github.event_name == 'schedule' }}
 
         run: |
           components=()
@@ -121,49 +118,21 @@ jobs:
           if [[ "$BACKEND_CHANGED" == "true" || \
                 "$DOCKER_BACKEND_CHANGED" == "true" || \
                 "$IS_MAIN" == "true" || \
-                "$IS_MANUAL" == "true" ]]; then
+                "$IS_MANUAL" == "true" || \
+                "$IS_SCHEDULE" == "true" ]]; then
             components+=(backend)
           fi
 
           if [[ "$FRONTEND_CHANGED" == "true" || \
                 "$DOCKER_FRONTEND_CHANGED" == "true" || \
                 "$IS_MAIN" == "true" || \
-                "$IS_MANUAL" == "true" ]]; then
+                "$IS_MANUAL" == "true" || \
+                "$IS_SCHEDULE" == "true" ]]; then
             components+=(frontend)
           fi
 
           printf 'matrix=%s\n' \
             "$(printf '%s\n' "${components[@]}" | jq -R . | jq -s -c .)" \
-            >> "$GITHUB_OUTPUT"
-
-      - name: Select Security components
-        id: security
-        env:
-          BACKEND_CHANGED: ${{ steps.filter.outputs.backend }}
-          FRONTEND_CHANGED: ${{ steps.filter.outputs.frontend }}
-          DOCKER_CHANGED: ${{ steps.filter.outputs.docker }}
-          IS_MAIN: ${{ github.ref == 'refs/heads/main' }}
-          IS_MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
-
-        run: |
-          components=()
-
-          if [[ "$BACKEND_CHANGED" == "true" || \
-                "$DOCKER_CHANGED" == "true" || \
-                "$IS_MAIN" == "true" || \
-                "$IS_MANUAL" == "true" ]]; then
-            components+=('{"name":"Backend","path":"."}')
-          fi
-
-          if [[ "$FRONTEND_CHANGED" == "true" || \
-                "$DOCKER_CHANGED" == "true" || \
-                "$IS_MAIN" == "true" || \
-                "$IS_MANUAL" == "true" ]]; then
-            components+=('{"name":"Frontend","path":"frontend"}')
-          fi
-
-          printf 'matrix=%s\n' \
-            "$(printf '%s\n' "${components[@]}" | jq -s -c .)" \
             >> "$GITHUB_OUTPUT"
 
   ###########################################################
@@ -429,188 +398,6 @@ jobs:
           path: frontend/coverage
           if-no-files-found: ignore
           retention-days: 14
-
-  ###########################################################
-  # CodeQL
-  ###########################################################
-
-  codeql:
-    name: CodeQL
-
-    needs: changes
-
-    if: |
-      needs.changes.outputs.backend == 'true' ||
-      needs.changes.outputs.frontend == 'true' ||
-      github.event_name == 'schedule' ||
-      github.ref == 'refs/heads/main' ||
-      (
-        github.event_name == 'workflow_dispatch' &&
-        inputs.run_security == true
-      )
-
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
-
-    strategy:
-      fail-fast: false
-
-      matrix:
-        include:
-          - language: java
-            build-mode: autobuild
-
-          - language: javascript
-            build-mode: none
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Set up Java
-        if: matrix.language == 'java'
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - name: Set up Gradle
-        if: matrix.language == 'java'
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          cache-read-only: false
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
-        with:
-          languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
-
-      - name: Autobuild
-        if: matrix.build-mode == 'autobuild'
-        uses: github/codeql-action/autobuild@v4
-
-      - name: Analyze
-        uses: github/codeql-action/analyze@v4
-
-  ###########################################################
-  # Security
-  ###########################################################
-
-  security:
-    name: Security Scan (${{ matrix.component.name }})
-
-    needs: changes
-
-    if: |
-      (
-        needs.changes.outputs.backend == 'true' ||
-        needs.changes.outputs.frontend == 'true' ||
-        needs.changes.outputs.docker == 'true' ||
-        github.ref == 'refs/heads/main' ||
-        github.event_name == 'workflow_dispatch' ||
-        github.event_name == 'schedule'
-      ) &&
-      (
-        github.event_name != 'workflow_dispatch' ||
-        inputs.run_security == true
-      )
-
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    permissions:
-      contents: read
-      security-events: write
-      packages: read
-
-    strategy:
-      fail-fast: false
-
-      matrix:
-        component: ${{ fromJSON(needs.changes.outputs.security_components) }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      #####################################################
-      # Dependency Review
-      #####################################################
-
-      - name: Dependency Review
-        if: |
-          github.event_name == 'pull_request' &&
-          (
-            matrix.component.name == 'Backend' ||
-            (
-              matrix.component.name == 'Frontend' &&
-              needs.changes.outputs.backend != 'true'
-            )
-          )
-        uses: actions/dependency-review-action@v5
-
-      #####################################################
-      # Cache Trivy Database
-      #####################################################
-
-      - name: Compute Trivy Cache Key
-        id: trivy-cache-key
-        run: |
-          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Trivy Database
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/trivy
-          key: trivy-${{ runner.os }}-${{ env.TRIVY_VERSION }}-${{ steps.trivy-cache-key.outputs.week }}
-          restore-keys: |
-            trivy-${{ runner.os }}-${{ env.TRIVY_VERSION }}-
-
-      #####################################################
-      # Filesystem Scan
-      #####################################################
-
-      # NOTE ON SEVERITY GATING (intentional asymmetry):
-      # This filesystem/source scan is REPORT-ONLY (exit-code: 0) — it never
-      # fails the build. It's meant to surface vulnerable dependencies early
-      # (via the SARIF upload -> Code Scanning tab) without blocking PRs on
-      # every transitive CVE in source manifests, many of which never ship.
-      #
-      # The Docker image scan in the `docker-build` job below is the hard
-      # gate (exit-code: 1, severity: HIGH,CRITICAL) — it blocks the build
-      # because that's the artifact that actually gets deployed.
-      #
-      # If you "fix" one of these to match the other, you will either start
-      # blocking every PR on unshipped source CVEs, or stop blocking on
-      # vulnerable images entirely. Keep them different on purpose.
-      - name: Trivy Filesystem Scan
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          version: ${{ env.TRIVY_VERSION }}
-          scan-type: fs
-          scan-ref: ${{ matrix.component.path }}
-          format: sarif
-          output: trivy-results.sarif
-
-          # Non-blocking scan — see note above. Do not change without
-          # also reconsidering the image scan's exit-code.
-          exit-code: 0
-
-      #####################################################
-      # Upload Results
-      #####################################################
-
-      - name: Upload SARIF
-        if: always() && hashFiles('trivy-results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-results.sarif
 
   ###########################################################
   # End-to-End Tests
@@ -921,9 +708,10 @@ jobs:
       # NOTE ON SEVERITY GATING (intentional asymmetry):
       # This is the HARD GATE — exit-code: 1 with severity HIGH,CRITICAL
       # fails the build/push. This scan targets the actual image that gets
-      # deployed, unlike the source/filesystem Trivy scan in the `security`
-      # job, which is report-only (exit-code: 0) by design. Do not align
-      # the two exit-codes without deliberately reconsidering both.
+      # deployed, unlike the source/filesystem Trivy scan in
+      # `.github/workflows/security.yml`, which is report-only (exit-code: 0)
+      # by design. Do not align the two exit-codes without deliberately
+      # reconsidering both.
       - name: Scan Docker Image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
