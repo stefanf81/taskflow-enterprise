@@ -28,4 +28,4 @@ jobs:
             -v ${{ github.workspace }}:/work \
             -w /work \
             grafana/k6:master-with-browser \
-            k6 run k6/browser.js
+            run k6/browser.js
