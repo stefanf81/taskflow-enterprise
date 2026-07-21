@@ -20,6 +20,7 @@ import java.io.InputStream;
 import java.time.Duration;
 
 @Configuration
+@SuppressWarnings({"deprecation", "removal"})
 public class CacheConfig {
 
     /**
