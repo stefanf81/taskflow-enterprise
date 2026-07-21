@@ -2,8 +2,8 @@ name: Delete Old GitHub Actions Caches
 
 on:
   schedule:
-    # Runs every day at 02:00 UTC
-    - cron: "0 2 * * *"
+    # Runs every day at 04:00 UTC (staggered from other daily workflows)
+    - cron: "0 4 * * *"
   workflow_dispatch:
 
 permissions:

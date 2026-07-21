@@ -2,13 +2,16 @@ name: Cleanup Old Packages
 
 on:
   schedule:
-    # Run every day at 2:00 AM UTC
-    - cron: '0 2 * * *'
+    # Run every day at 3:00 AM UTC (staggered from other 02:00 workflows)
+    - cron: '0 3 * * *'
   workflow_dispatch: # Allow manual triggering
 
 env:
-  PACKAGE_NAME: "taskflow-backend" # TODO: Change this to your actual package name (e.g., taskflow-backend or taskflow-frontend)
+  # Container packages published by ci.yml's docker-build job.
+  # Iterate over both so neither GHCR package grows unbounded.
+  PACKAGE_NAMES: "taskflow-backend taskflow-frontend"
   PACKAGE_TYPE: "container" # Can be container, npm, maven, rubygems, docker, nuget
+  RETENTION_DAYS: "3"
 
 jobs:
   cleanup:
@@ -24,69 +27,79 @@ jobs:
         run: |
           echo "Determining account type for $OWNER..."
           ACCOUNT_TYPE=$(gh api /users/$OWNER -q '.type')
-          
+
           if [ "$ACCOUNT_TYPE" = "Organization" ]; then
             BASE_URL="/orgs/$OWNER"
           else
             BASE_URL="/users/$OWNER"
           fi
-          
-          echo "Fetching package versions for $OWNER/$PACKAGE_NAME..."
-          
-          # Fetch all versions for the package
-          # We use pagination (--paginate) to ensure we get all versions
-          # Continue on error (|| true) in case the package doesn't exist yet
-          versions_json=$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            $BASE_URL/packages/$PACKAGE_TYPE/$PACKAGE_NAME/versions \
-            --paginate || echo "[]")
 
-          if [ "$versions_json" = "[]" ] || [ -z "$versions_json" ]; then
-            echo "Package not found or has no versions."
-            exit 0
-          fi
-
-          # Calculate the cutoff date (3 days ago) in ISO 8601 format
-          cutoff_date=$(date -d "3 days ago" -u +"%Y-%m-%dT%H:%M:%SZ")
+          cutoff_date=$(date -d "${RETENTION_DAYS} days ago" -u +"%Y-%m-%dT%H:%M:%SZ")
           echo "Cutoff date for deletion: $cutoff_date"
 
-          # Use jq to filter the versions based on the criteria:
-          # 1. created_at is older than the cutoff_date
-          # 2. The metadata tags array does not contain 'latest'
-          # 3. The metadata tags array does not contain any semantic version tag (e.g., v1.0.0, 1.0.0)
-          version_ids_to_delete=$(echo "$versions_json" | jq -r --arg cutoff "$cutoff_date" '
-            .[] | 
-            select(.created_at < $cutoff) |
-            select(
-              .metadata.container.tags | 
-              (index("latest") | not) and 
-              (map(test("^v?[0-9]+(\\.[0-9]+)*$")) | any | not)
-            ) | 
-            .id
-          ')
+          # Iterate over every package published by the pipeline.
+          for PACKAGE_NAME in $PACKAGE_NAMES; do
+            echo ""
+            echo "========================================================"
+            echo "Fetching package versions for $OWNER/$PACKAGE_NAME..."
+            echo "========================================================"
 
-          if [ -z "$version_ids_to_delete" ]; then
-            echo "No packages found matching the deletion criteria."
-            exit 0
-          fi
-
-          echo "Found the following package version IDs to delete:"
-          echo "$version_ids_to_delete"
-
-          # Loop through the IDs and delete them in parallel (4 at a time) for massive performance improvements
-          echo "$version_ids_to_delete" | xargs -n 1 -P 4 -I {} bash -c '
-            echo "Deleting version ID: {}..."
-            gh api \
-              --silent \
-              --method DELETE \
+            # Fetch all versions for the package.
+            # --paginate ensures we get all versions; || echo "[]" lets
+            # us move on cleanly when a package does not exist yet.
+            versions_json=$(gh api \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              '"$BASE_URL"'/packages/'"$PACKAGE_TYPE"'/'"$PACKAGE_NAME"'/versions/{}
-            
-            if [ $? -eq 0 ]; then
-              echo "Successfully deleted version ID: {}"
-            else
-              echo "Failed to delete version ID: {}"
+              "$BASE_URL/packages/$PACKAGE_TYPE/$PACKAGE_NAME/versions" \
+              --paginate || echo "[]")
+
+            if [ "$versions_json" = "[]" ] || [ -z "$versions_json" ]; then
+              echo "Package $PACKAGE_NAME not found or has no versions, skipping."
+              continue
             fi
-          '
+
+            # Use jq to filter the versions based on the criteria:
+            # 1. created_at is older than the cutoff_date
+            # 2. The metadata tags array does not contain 'latest'
+            # 3. The metadata tags array does not contain any semantic version tag (e.g., v1.0.0, 1.0.0)
+            version_ids_to_delete=$(echo "$versions_json" | jq -r --arg cutoff "$cutoff_date" '
+              .[] |
+              select(.created_at < $cutoff) |
+              select(
+                .metadata.container.tags |
+                (index("latest") | not) and
+                (map(test("^v?[0-9]+(\\.[0-9]+)*$")) | any | not)
+              ) |
+              .id
+            ')
+
+            if [ -z "$version_ids_to_delete" ]; then
+              echo "No versions of $PACKAGE_NAME matched the deletion criteria."
+              continue
+            fi
+
+            echo "Found the following $PACKAGE_NAME version IDs to delete:"
+            echo "$version_ids_to_delete"
+
+            # Delete in parallel (4 at a time). Export the loop-scoped
+            # variables so the bash -c subshell can see them.
+            export BASE_URL PACKAGE_TYPE PACKAGE_NAME
+            echo "$version_ids_to_delete" | xargs -n 1 -P 4 -I {} bash -c '
+              echo "Deleting $PACKAGE_NAME version ID: {}..."
+              gh api \
+                --silent \
+                --method DELETE \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "$BASE_URL/packages/$PACKAGE_TYPE/$PACKAGE_NAME/versions/{}"
+
+              if [ $? -eq 0 ]; then
+                echo "Successfully deleted $PACKAGE_NAME version ID: {}"
+              else
+                echo "Failed to delete $PACKAGE_NAME version ID: {}"
+              fi
+            '
+          done
+
+          echo ""
+          echo "Package cleanup complete."

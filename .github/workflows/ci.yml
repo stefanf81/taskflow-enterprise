@@ -24,11 +24,6 @@ on:
         type: boolean
         default: true
 
-      run_dast:
-        description: Run DAST scan (OWASP ZAP)
-        type: boolean
-        default: false
-
       push_images:
         description: Push Docker images
         type: boolean
@@ -52,9 +47,6 @@ env:
 
   REGISTRY: ghcr.io
   IMAGE_TAG: ${{ github.sha }}
-
-  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/taskflow-backend
-  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/taskflow-frontend
 
   TRIVY_VERSION: v0.72.0
 
@@ -104,15 +96,15 @@ jobs:
             docker:
               - Dockerfile*
               - frontend/Dockerfile
-              - docker/**
+              - docker-compose.yml
+              - .env.example
 
             docker_backend:
               - Dockerfile*
-              - docker/**
+              - docker-compose.yml
 
             docker_frontend:
               - frontend/Dockerfile
-              - docker/**
 
       - name: Select Docker components
         id: components
@@ -213,7 +205,6 @@ jobs:
     needs: changes
 
     if: |
-      github.event_name == 'pull_request' ||
       needs.changes.outputs.backend == 'true' ||
       needs.changes.outputs.docker_backend == 'true' ||
       github.ref == 'refs/heads/main' ||
@@ -252,6 +243,10 @@ jobs:
           github.event_name == 'pull_request' ||
           github.event_name == 'schedule' ||
           (
+            github.event_name == 'push' &&
+            github.ref == 'refs/heads/main'
+          ) ||
+          (
             github.event_name == 'workflow_dispatch' &&
             inputs.run_tests == true
           )
@@ -268,6 +263,10 @@ jobs:
           always() && (
             github.event_name == 'pull_request' ||
             github.event_name == 'schedule' ||
+            (
+              github.event_name == 'push' &&
+              github.ref == 'refs/heads/main'
+            ) ||
             (
               github.event_name == 'workflow_dispatch' &&
               inputs.run_tests == true
@@ -338,7 +337,6 @@ jobs:
     needs: changes
 
     if: |
-      github.event_name == 'pull_request' ||
       needs.changes.outputs.frontend == 'true' ||
       needs.changes.outputs.docker_frontend == 'true' ||
       github.ref == 'refs/heads/main' ||
@@ -386,6 +384,10 @@ jobs:
           github.event_name == 'pull_request' ||
           github.event_name == 'schedule' ||
           (
+            github.event_name == 'push' &&
+            github.ref == 'refs/heads/main'
+          ) ||
+          (
             github.event_name == 'workflow_dispatch' &&
             inputs.run_tests == true
           )
@@ -412,6 +414,10 @@ jobs:
             github.event_name == 'pull_request' ||
             github.event_name == 'schedule' ||
             (
+              github.event_name == 'push' &&
+              github.ref == 'refs/heads/main'
+            ) ||
+            (
               github.event_name == 'workflow_dispatch' &&
               inputs.run_tests == true
             )
@@ -435,6 +441,8 @@ jobs:
     needs: changes
 
     if: |
+      needs.changes.outputs.backend == 'true' ||
+      needs.changes.outputs.frontend == 'true' ||
       github.event_name == 'schedule' ||
       github.ref == 'refs/heads/main' ||
       (
@@ -621,7 +629,9 @@ jobs:
       always() &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled') &&
+      !contains(needs.*.result, 'skipped') &&
       (
+        github.event_name == 'pull_request' ||
         github.ref == 'refs/heads/main' ||
         github.event_name == 'schedule' ||
         (
@@ -797,180 +807,6 @@ jobs:
           retention-days: 14
 
   ###########################################################
-  # DAST (OWASP ZAP)
-  ###########################################################
-
-  dast:
-    name: DAST Scan (OWASP ZAP)
-
-    needs:
-      - changes
-      - backend
-
-    if: |
-      github.event_name == 'schedule' ||
-      (
-        github.event_name == 'workflow_dispatch' &&
-        inputs.run_dast == true
-      )
-
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    services:
-      postgres:
-        image: postgres:17
-
-        env:
-          POSTGRES_DB: taskflow
-          POSTGRES_USER: taskflow
-          POSTGRES_PASSWORD: taskflow
-
-        ports:
-          - 5432:5432
-
-        options: >-
-          --health-cmd "pg_isready -U taskflow"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:7-alpine
-
-        ports:
-          - 6379:6379
-
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      SPRING_PROFILES_ACTIVE: prod
-      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/taskflow
-      SPRING_DATASOURCE_USERNAME: taskflow
-      SPRING_DATASOURCE_PASSWORD: taskflow
-      SPRING_DATA_REDIS_HOST: localhost
-      SPRING_DATA_REDIS_PORT: 6379
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-
-      ##########################################################
-      # Download Backend
-      ##########################################################
-
-      - name: Download Backend JAR
-        uses: actions/download-artifact@v8
-        with:
-          name: backend-jar
-          path: backend-jar-dir
-
-      ##########################################################
-      # Start Backend
-      ##########################################################
-
-      - name: Start Spring Boot
-        run: |
-          nohup java \
-            -Dspring.profiles.active=prod \
-            -jar backend-jar-dir/*.jar \
-            > spring.log 2>&1 < /dev/null &
-
-      ##########################################################
-      # Wait for Backend
-      ##########################################################
-
-      - name: Wait for Backend
-        run: |
-          echo "Waiting for Spring Boot..."
-
-          timeout=180
-
-          while (( timeout > 0 )); do
-            if curl -fs http://localhost:8080/actuator/health/liveness; then
-              echo "Backend ready"
-              exit 0
-            fi
-
-            sleep 2
-            timeout=$((timeout-2))
-          done
-
-          echo "Backend failed to start"
-          cat spring.log
-          exit 1
-
-      ##########################################################
-      # ZAP
-      ##########################################################
-
-      - name: Run OWASP ZAP API Scan
-        uses: zaproxy/action-api-scan@v0.10.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          format: openapi
-          target: http://localhost:8080/v3/api-docs
-          allow_issue_writing: false
-
-      - name: Generate Job Summary from ZAP Report
-        if: always() && hashFiles('report_md.md') != ''
-        run: |
-          cat report_md.md >> $GITHUB_STEP_SUMMARY
-
-      ##########################################################
-      # Convert SARIF
-      ##########################################################
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.x"
-
-      - name: Convert ZAP JSON to SARIF
-        if: always() && hashFiles('report_json.json') != ''
-        run: |
-          python scripts/zap2sarif.py \
-            report_json.json \
-            zap-results.sarif
-
-      ##########################################################
-      # Upload Results
-      ##########################################################
-
-      - name: Upload SARIF
-        if: always() && hashFiles('zap-results.sarif') != ''
-        continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: zap-results.sarif
-          category: dast-zap
-
-      - name: Upload DAST Report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: zap-dast-report
-          path: |
-            spring.log
-            report_html.html
-            report_json.json
-            report_md.md
-            zap-results.sarif
-          if-no-files-found: ignore
-          compression-level: 0
-          retention-days: 14
-
-  ###########################################################
   # Docker
   ###########################################################
 
@@ -1012,6 +848,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      ##########################################################
+      # GHCR uses lowercase owner. Compute image refs once here so
+      # mixed/uppercase repository owners don't break docker push
+      # or the Trivy image-ref resolution below.
+      ##########################################################
+      - name: Compute Image Refs
+        id: images
+        run: |
+          owner="$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "owner=$owner" >> "$GITHUB_OUTPUT"
+          echo "backend_image=ghcr.io/${owner}/taskflow-backend" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=ghcr.io/${owner}/taskflow-frontend" >> "$GITHUB_OUTPUT"
 
       ##########################################################
       # Download Artifacts
@@ -1062,8 +911,8 @@ jobs:
           load: ${{ !(github.event_name == 'workflow_dispatch' && inputs.push_images == true) }}
 
           tags: |
-            ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
-            ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:latest
+            ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:${{ env.IMAGE_TAG }}
+            ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:latest
 
           cache-from: |
             type=gha,scope=${{ matrix.component }}-main
@@ -1090,7 +939,7 @@ jobs:
         with:
           version: ${{ env.TRIVY_VERSION }}
 
-          image-ref: ${{ matrix.component == 'backend' && env.BACKEND_IMAGE || env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
+          image-ref: ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:${{ env.IMAGE_TAG }}
 
           scan-type: image
 
