@@ -147,7 +147,7 @@ jobs:
       ##########################################################
 
       - name: Run OWASP ZAP Full Scan
-        uses: zaproxy/action-full-scan@v0.12.0
+        uses: zaproxy/action-full-scan@v0.13.0
         with:
           target: http://localhost:8080
 
@@ -162,7 +162,7 @@ jobs:
       ##########################################################
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.x"
 
@@ -195,7 +195,7 @@ jobs:
 
       - name: Upload Reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zap-full-scan
           path: |

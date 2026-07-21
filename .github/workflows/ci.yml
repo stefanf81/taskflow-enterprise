@@ -85,7 +85,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Detect file changes
         id: filter
@@ -191,7 +191,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Lint Backend Dockerfile
         uses: hadolint/hadolint-action@v3.3.0
@@ -225,7 +225,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -273,7 +273,7 @@ jobs:
               inputs.run_tests == true
             )
           )
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-test-results
           path: |
@@ -283,7 +283,7 @@ jobs:
           retention-days: 14
 
       - name: Upload Backend JAR
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-jar
           path: |
@@ -317,7 +317,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -354,10 +354,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -374,7 +374,7 @@ jobs:
         run: npx prettier --check .
 
       - name: Cache Angular Build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: frontend/.angular/cache
           key: angular-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
@@ -399,7 +399,7 @@ jobs:
         run: npx ng build
 
       - name: Upload Frontend Bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-dist
           path: frontend/dist/frontend/browser
@@ -417,7 +417,7 @@ jobs:
             )
           )
 
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
 
         with:
           name: frontend-coverage
@@ -463,7 +463,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Java
         if: matrix.language == 'java'
@@ -530,7 +530,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       #####################################################
       # Dependency Review
@@ -558,7 +558,7 @@ jobs:
           echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Trivy Database
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/trivy
           key: trivy-${{ runner.os }}-${{ env.TRIVY_VERSION }}-${{ steps.trivy-cache-key.outputs.week }}
@@ -673,7 +673,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -682,7 +682,7 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -693,7 +693,7 @@ jobs:
       ##########################################################
 
       - name: Download Backend JAR
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: backend-jar
           path: backend-jar-dir
@@ -753,7 +753,7 @@ jobs:
       ##########################################################
 
       - name: Cache Playwright Browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
@@ -785,7 +785,7 @@ jobs:
 
       - name: Upload Playwright Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: |
@@ -857,7 +857,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -870,7 +870,7 @@ jobs:
       ##########################################################
 
       - name: Download Backend JAR
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: backend-jar
           path: backend-jar-dir
@@ -915,7 +915,7 @@ jobs:
       ##########################################################
 
       - name: Run OWASP ZAP API Scan
-        uses: zaproxy/action-api-scan@v0.9.0
+        uses: zaproxy/action-api-scan@v0.10.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           format: openapi
@@ -927,7 +927,7 @@ jobs:
       ##########################################################
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.x"
 
@@ -952,7 +952,7 @@ jobs:
 
       - name: Upload DAST Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zap-dast-report
           path: |
@@ -1006,7 +1006,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       ##########################################################
       # Download Artifacts
@@ -1014,14 +1014,14 @@ jobs:
 
       - name: Download Backend JAR
         if: matrix.component == 'backend'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: backend-jar
           path: build/libs
 
       - name: Download Frontend Bundle
         if: matrix.component == 'frontend'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: frontend-dist
           path: frontend/dist/frontend/browser
@@ -1037,7 +1037,7 @@ jobs:
         if: |
           github.event_name == 'workflow_dispatch' &&
           inputs.push_images == true
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -1048,7 +1048,7 @@ jobs:
       ##########################################################
 
       - name: Build and Push Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.component == 'backend' && '.' || 'frontend' }}
           file: ${{ matrix.component == 'backend' && 'Dockerfile.x64' || 'frontend/Dockerfile' }}
