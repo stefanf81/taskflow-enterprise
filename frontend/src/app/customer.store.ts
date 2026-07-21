@@ -1,5 +1,6 @@
-import { Service, signal, computed, inject } from '@angular/core';
+import { Service, signal, computed, inject, DestroyRef } from '@angular/core';
 import { httpResource } from '@angular/common/http';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppointmentService, AppointmentItem } from './appointment.service';
 
 @Service()
@@ -20,6 +21,7 @@ export class CustomerStore {
   // cancelled). Separate from the read-only load errors above.
   readonly cancelErrorMessage = signal<string | null>(null);
   readonly isCancelling = signal<boolean>(false);
+  private readonly destroyRef = inject(DestroyRef);
 
   loadAppointments(): void {
     this.appointmentsResource.reload();
@@ -30,7 +32,7 @@ export class CustomerStore {
 
     this.cancelErrorMessage.set(null);
     this.isCancelling.set(true);
-    this.appointmentService.cancelCustomerAppointment(id).subscribe({
+    this.appointmentService.cancelCustomerAppointment(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         this.isCancelling.set(false);
         this.cancelErrorMessage.set(null);

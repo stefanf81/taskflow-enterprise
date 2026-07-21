@@ -1,7 +1,6 @@
 package com.example.taskflow.core;
 
 import org.junit.jupiter.api.Test;
-import java.time.LocalDateTime;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -14,26 +13,12 @@ class ErrorResponseTest {
     void testErrorResponseWithoutValidationErrors() {
         ErrorResponse response = new ErrorResponse(404, "Not Found", "Item not found", "/api/test");
 
-        assertEquals(404, response.getStatus());
-        assertEquals("Not Found", response.getError());
-        assertEquals("Item not found", response.getMessage());
-        assertEquals("/api/test", response.getPath());
-        assertNotNull(response.getTimestamp());
-        assertNull(response.getValidationErrors());
-
-        // Test setters
-        LocalDateTime now = LocalDateTime.now();
-        response.setTimestamp(now);
-        response.setStatus(500);
-        response.setError("Internal Error");
-        response.setMessage("Server failed");
-        response.setPath("/api/error");
-
-        assertEquals(now, response.getTimestamp());
-        assertEquals(500, response.getStatus());
-        assertEquals("Internal Error", response.getError());
-        assertEquals("Server failed", response.getMessage());
-        assertEquals("/api/error", response.getPath());
+        assertEquals(404, response.status());
+        assertEquals("Not Found", response.error());
+        assertEquals("Item not found", response.message());
+        assertEquals("/api/test", response.path());
+        assertNotNull(response.timestamp());
+        assertNull(response.validationErrors());
     }
 
     @Test
@@ -41,17 +26,9 @@ class ErrorResponseTest {
         ErrorResponse.ValidationError validationError = new ErrorResponse.ValidationError("field", "message");
         ErrorResponse response = new ErrorResponse(400, "Bad Request", "Validation failed", "/api/test", Collections.singletonList(validationError));
 
-        assertEquals(400, response.getStatus());
-        assertEquals(1, response.getValidationErrors().size());
-
-        // Test ValidationError setters
-        validationError.setField("newField");
-        validationError.setMessage("newMessage");
-
-        assertEquals("newField", validationError.getField());
-        assertEquals("newMessage", validationError.getMessage());
-
-        response.setValidationErrors(null);
-        assertNull(response.getValidationErrors());
+        assertEquals(400, response.status());
+        assertEquals(1, response.validationErrors().size());
+        assertEquals("field", response.validationErrors().get(0).field());
+        assertEquals("message", response.validationErrors().get(0).message());
     }
 }

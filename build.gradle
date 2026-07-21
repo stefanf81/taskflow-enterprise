@@ -90,7 +90,9 @@ tasks.withType(org.springframework.boot.gradle.tasks.aot.ProcessAot).configureEa
 	environment "SPRING_DATASOURCE_PASSWORD", "postgres-password"
 }
 tasks.named("test") {
-	useJUnitPlatform()
+	useJUnitPlatform {
+		excludeTags 'benchmark', 'testcontainers'
+	}
 	maxParallelForks = Math.max(1, (int) (Runtime.runtime.availableProcessors() * 0.75))
 	environment "SPRING_SECURITY_PASSWORD", "admin-password"
 	systemProperty "spring.cache.type", "simple"

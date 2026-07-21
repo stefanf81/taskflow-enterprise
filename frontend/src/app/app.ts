@@ -4,12 +4,14 @@ import {
   signal,
   computed,
   inject,
+  DestroyRef,
   ChangeDetectionStrategy,
   ViewEncapsulation,
 } from '@angular/core';
-import { CommonModule, NgOptimizedImage } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { form, required, email, FormField, FormRoot } from '@angular/forms/signals';
+import { form, required, FormField, FormRoot } from '@angular/forms/signals';
 import { Router, RouterOutlet } from '@angular/router';
 import { AppointmentService, AppointmentItem } from './appointment.service';
 import { AuthState } from './auth.state';
@@ -18,6 +20,7 @@ import { ServiceCatalogStore } from './service-catalog.store';
 import { BarberStore } from './barber.store';
 import { NotificationStore } from './notification.store';
 import { ReviewStore } from './review.store';
+import { formatTime12Hour, isOverdue } from './time-utils';
 import { CustomerStore } from './customer.store';
 import { StylistCard } from './components/stylist-card/stylist-card';
 
@@ -51,17 +54,18 @@ export class App implements OnInit {
   readonly customerStore = inject(CustomerStore);
   private readonly router = inject(Router);
   private readonly authState = inject(AuthState);
+  private readonly destroyRef = inject(DestroyRef);
 
   // Authentication State delegated to the Store (Top-Tier DDD State management)
   // A1.2: role is held ONLY in memory via AuthState — never trusted from sessionStorage.
   readonly isLoggedIn = this.store.isLoggedIn;
   readonly userRole = this.authState.role;
-  showAdminLoginModal = false; // Toggles Admin/Customer Login Modal
-  loginUsername = '';
-  loginPassword = '';
-  isRegisterMode = false;
-  registerFullName = '';
-  registerPhone = '';
+  readonly showAdminLoginModal = signal(false);
+  readonly loginUsername = signal('');
+  readonly loginPassword = signal('');
+  readonly isRegisterMode = signal(false);
+  readonly registerFullName = signal('');
+  readonly registerPhone = signal('');
 
   // Booking Form Model Interface (public for test access)
   readonly bookingModel = signal<BookingFormModel>({
@@ -119,9 +123,9 @@ export class App implements OnInit {
   readonly isCheckingSlots = this.store.isCheckingSlots;
   readonly serviceSearchQuery = signal<string>('');
   readonly showReceiptModal = signal<boolean>(false);
-  readonly lastBookedAppointment = signal<any | null>(null);
-  cancelBookingId = '';
-  cancelEmail = '';
+  readonly lastBookedAppointment = signal<AppointmentItem | null>(null);
+  readonly cancelBookingId = signal('');
+  readonly cancelEmail = signal('');
 
   // Stylist Profiles with Dynamic Star Ratings
   readonly rawProfiles = [
@@ -237,12 +241,14 @@ export class App implements OnInit {
     this.reviewStore.loadRatings();
     // A1.2: restore UI role from the backend if a session cookie exists (survives
     // refresh). The role lives only in memory — never read from sessionStorage.
-    this.authState.bootstrap();
-    this.appointmentService.me().subscribe({
-      next: (me) => {
-        this.isLoggedIn.set(true);
-        this.loadAppointments();
-        this.router.navigateByUrl(this.authState.dashboardPathFor(me.role));
+    // bootstrap() calls me() internally and sets the role signal when complete.
+    this.authState.bootstrap().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (role) => {
+        if (role) {
+          this.isLoggedIn.set(true);
+          this.loadAppointments();
+          this.router.navigateByUrl(this.authState.dashboardPathFor(role));
+        }
       },
       error: () => {
         // No active session — stay logged out.
@@ -253,13 +259,13 @@ export class App implements OnInit {
 
   // Handle Admin/Customer Portal Login via JWT endpoint
   onLogin(): void {
-    if (this.isRegisterMode) {
+    if (this.isRegisterMode()) {
       this.onRegister();
       return;
     }
 
-    const user = this.loginUsername.trim();
-    const pass = this.loginPassword.trim();
+    const user = this.loginUsername().trim();
+    const pass = this.loginPassword().trim();
 
     if (!user || !pass) {
       this.errorMessage.set('Email and password are required.');
@@ -269,18 +275,18 @@ export class App implements OnInit {
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
 
-    this.appointmentService.login(user, pass).subscribe({
+    this.appointmentService.login(user, pass).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (response) => {
         // The JWT lives in an HttpOnly cookie set by the backend; nothing to store here.
         // A1.2: role is kept only in memory via AuthState.
         this.authState.applyRole(response.role);
         this.isLoggedIn.set(true);
         this.isSubmitting.set(false);
-        this.showAdminLoginModal = false;
+        this.showAdminLoginModal.set(false);
         this.errorMessage.set(null);
 
-        this.loginUsername = '';
-        this.loginPassword = '';
+        this.loginUsername.set('');
+        this.loginPassword.set('');
         this.showSuccess(response.role === 'ROLE_ADMIN' ? 'Welcome back, Owner!' : 'Welcome back!');
         this.loadAppointments(); // Load bookings
         this.router.navigateByUrl(this.authState.dashboardPathFor(response.role));
@@ -294,10 +300,10 @@ export class App implements OnInit {
   }
 
   onRegister(): void {
-    const email = this.loginUsername.trim();
-    const pass = this.loginPassword.trim();
-    const name = this.registerFullName.trim();
-    const phone = this.registerPhone.trim();
+    const email = this.loginUsername().trim();
+    const pass = this.loginPassword().trim();
+    const name = this.registerFullName().trim();
+    const phone = this.registerPhone().trim();
 
     if (!email || !pass || !name) {
       this.errorMessage.set('Name, email, and password are required.');
@@ -307,9 +313,9 @@ export class App implements OnInit {
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
 
-    this.appointmentService.register({ email, password: pass, fullName: name, phone }).subscribe({
+    this.appointmentService.register({ email, password: pass, fullName: name, phone }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
-        this.isRegisterMode = false;
+        this.isRegisterMode.set(false);
         this.isSubmitting.set(false);
         this.showSuccess('Account created! You can now log in.');
         this.errorMessage.set(null);
@@ -400,7 +406,7 @@ export class App implements OnInit {
       serviceType: model.serviceType,
     };
 
-    this.appointmentService.createAppointment(payload).subscribe({
+    this.appointmentService.createAppointment(payload).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (created) => {
         this.isSubmitting.set(false);
         this.lastBookedAppointment.set(created);
@@ -433,7 +439,7 @@ export class App implements OnInit {
 
   // Approve Booking
   approveAppointment(id: number): void {
-    this.appointmentService.updateAppointmentStatus(id, 'APPROVED').subscribe({
+    this.appointmentService.updateAppointmentStatus(id, 'APPROVED').pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         this.showSuccess('Appointment APPROVED! Client notification email dispatched.');
         this.loadAppointments();
@@ -444,7 +450,7 @@ export class App implements OnInit {
 
   // Deny Booking
   denyAppointment(id: number): void {
-    this.appointmentService.updateAppointmentStatus(id, 'DENIED').subscribe({
+    this.appointmentService.updateAppointmentStatus(id, 'DENIED').pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         this.showSuccess('Appointment DECLINED. Client notification email dispatched.');
         this.loadAppointments();
@@ -456,7 +462,7 @@ export class App implements OnInit {
   // Delete/Cancel Booking
   deleteAppointment(id: number): void {
     if (confirm('Are you sure you want to permanently delete/cancel this booking?')) {
-      this.appointmentService.deleteAppointment(id).subscribe({
+      this.appointmentService.deleteAppointment(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
         next: () => {
           this.showSuccess('Booking permanently deleted.');
           if (this.appointments().length === 1 && this.currentPage() > 0) {
@@ -527,7 +533,7 @@ export class App implements OnInit {
 
   // Toggle Admin Login Modal View
   toggleAdminLoginModal(show: boolean): void {
-    this.showAdminLoginModal = show;
+    this.showAdminLoginModal.set(show);
     this.errorMessage.set(null);
   }
 
@@ -593,9 +599,7 @@ export class App implements OnInit {
 
   // Check if an appointment is in the past
   isOverdue(appt: AppointmentItem): boolean {
-    if (!appt.bookingDate) return false;
-    const todayStr = new Date().toISOString().split('T')[0];
-    return appt.bookingDate < todayStr;
+    return isOverdue(appt);
   }
 
   // SOTA Helper methods for Luxury Barber Scheduler
@@ -613,19 +617,19 @@ export class App implements OnInit {
   });
 
   onPublicCancel(): void {
-    const publicId = this.cancelBookingId.trim();
-    const email = this.cancelEmail.trim();
+    const publicId = this.cancelBookingId().trim();
+    const email = this.cancelEmail().trim();
     if (!publicId || !email) {
       this.errorMessage.set('Please provide a valid Booking Code and Email address.');
       return;
     }
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
-    this.appointmentService.publicCancelAppointment(publicId, email).subscribe({
+    this.appointmentService.publicCancelAppointment(publicId, email).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         this.isSubmitting.set(false);
-        this.cancelBookingId = '';
-        this.cancelEmail = '';
+        this.cancelBookingId.set('');
+        this.cancelEmail.set('');
         this.showSuccess('🗑️ Reservation successfully cancelled and deleted from our calendar.');
         this.onBarberOrDateChange();
       },
@@ -656,7 +660,7 @@ export class App implements OnInit {
       }
 
       this.isCheckingSlots.set(true);
-      this.appointmentService.getBusySlots(barber, date).subscribe({
+      this.appointmentService.getBusySlots(barber, date).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
         next: (busy) => {
           this.busySlots.set(busy);
           this.isCheckingSlots.set(false);
@@ -691,18 +695,7 @@ export class App implements OnInit {
   }
 
   formatTime12Hour(time24: string): string {
-    if (!time24) return '';
-    try {
-      const parts = time24.split(':');
-      let hours = parseInt(parts[0], 10);
-      const minutes = parts[1] || '00';
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12;
-      hours = hours ? hours : 12;
-      return `${hours}:${minutes} ${ampm}`;
-    } catch (e) {
-      return time24;
-    }
+    return formatTime12Hour(time24);
   }
 
   private parseTimeToMinutes(timeStr: string): number {
@@ -734,29 +727,29 @@ export class App implements OnInit {
   }
 
   // --- Review Submission ---
-  reviewPublicId = '';
-  reviewRating = 5;
-  reviewComment = '';
+  readonly reviewPublicId = signal('');
+  readonly reviewRating = signal(5);
+  readonly reviewComment = signal('');
 
   submitReview(): void {
-    if (!this.reviewPublicId.trim()) {
+    if (!this.reviewPublicId().trim()) {
       this.errorMessage.set('Booking Code is required to submit a review.');
       return;
     }
 
     this.isSubmitting.set(true);
     this.appointmentService
-      .submitReview(this.reviewPublicId.trim(), {
-        rating: this.reviewRating,
-        comment: this.reviewComment,
+      .submitReview(this.reviewPublicId().trim(), {
+        rating: this.reviewRating(),
+        comment: this.reviewComment(),
       })
-      .subscribe({
+      .pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
         next: () => {
           this.isSubmitting.set(false);
           this.showSuccess('Thank you for your review! We appreciate your feedback.');
-          this.reviewPublicId = '';
-          this.reviewComment = '';
-          this.reviewRating = 5;
+          this.reviewPublicId.set('');
+          this.reviewComment.set('');
+          this.reviewRating.set(5);
           this.reviewStore.loadRatings();
         },
         error: (err) => {

@@ -645,7 +645,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:17
+        image: postgres:18.4
 
         env:
           POSTGRES_DB: taskflow

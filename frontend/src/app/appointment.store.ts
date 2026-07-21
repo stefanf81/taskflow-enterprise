@@ -1,5 +1,6 @@
-import { Service, signal, computed, inject } from '@angular/core';
+import { Service, signal, computed, inject, DestroyRef } from '@angular/core';
 import { httpResource } from '@angular/common/http';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   AppointmentService,
   AppointmentItem,
@@ -77,6 +78,7 @@ export class AppointmentStore {
   readonly isSubmitting = signal<boolean>(false);
   readonly isCheckingSlots = signal<boolean>(false);
   readonly busySlots = signal<string[]>([]);
+  private readonly destroyRef = inject(DestroyRef);
 
   // Compat method to force reload
   loadAppointments(selectedFilter?: string, searchQuery?: string): void {
@@ -87,7 +89,7 @@ export class AppointmentStore {
 
   // Handle Admin Logout — clear the HttpOnly cookie on the backend, then drop UI state.
   onLogout(): void {
-    this.appointmentService.logout().subscribe({
+    this.appointmentService.logout().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => this.resetAuthState(),
       error: () => this.resetAuthState(),
     });

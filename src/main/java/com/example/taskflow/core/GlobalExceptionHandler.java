@@ -161,7 +161,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleAuthenticationException(
             AuthenticationException ex, HttpServletRequest request) {
         
-        String safeMessage = ex.getMessage() != null ? ex.getMessage().replaceAll("[\\r\\n]", "") : "";
+        String safeMessage = LogSanitizer.stripNewlines(ex.getMessage());
         logger.warn("Authentication failed: {}", safeMessage);
         
         ErrorResponse errorResponse = new ErrorResponse(
@@ -177,7 +177,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleAccessDeniedException(
             AccessDeniedException ex, HttpServletRequest request) {
         
-        String safeMessage = ex.getMessage() != null ? ex.getMessage().replaceAll("[\\r\\n]", "") : "";
+        String safeMessage = LogSanitizer.stripNewlines(ex.getMessage());
         logger.warn("Access denied: {}", safeMessage);
         
         ErrorResponse errorResponse = new ErrorResponse(

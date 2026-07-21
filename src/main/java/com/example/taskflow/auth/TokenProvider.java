@@ -29,7 +29,7 @@ public class TokenProvider {
 
     public String generateToken(Authentication authentication) {
         Instant now = Instant.now();
-        long expiry = 86400L; // 24 hours in seconds
+        long expiry = 3600L; // 1 hour — must match the cookie maxAge in AuthController
 
         String scope = authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)

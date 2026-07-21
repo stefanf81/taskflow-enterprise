@@ -2,6 +2,7 @@ package com.example.taskflow.appointment;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -27,16 +28,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * HIGH-PERFORMANCE CONCURRENCY AND LATENCY BENCHMARK TEST (BARBER BOOKING DOMAIN)
- * 
+ *
  * Why this is used:
  * To proactively prevent performance regressions under simulated real-world customer traffic.
- * This test simulates multiple concurrent threads making asynchronous, paginated requests against 
+ * This test simulates multiple concurrent threads making asynchronous, paginated requests against
  * our booking database and validates that average latency remains below a threshold.
  */
+@Tag("benchmark")
 @SpringBootTest(properties = {"app.rate-limit.enabled=false", "app.stats.cache.ttl=0"})
 @AutoConfigureMockMvc
 @Import(TestSecurityConfig.class)
-public class AppointmentControllerBenchmarkExample {
+public class AppointmentControllerBenchmarkTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -93,13 +95,13 @@ public class AppointmentControllerBenchmarkExample {
         for (int i = 0; i < TOTAL_REQUESTS; i++) {
             futures.add(executorService.submit(() -> {
                 startLatch.await();
-                
+
                 long requestStart = System.nanoTime();
                 mockMvc.perform(get("/api/v1/appointments?page=0&size=10&status=PENDING")
                                 .header("Authorization", authHeader))
                         .andExpect(status().isOk());
                 long requestEnd = System.nanoTime();
-                
+
                 finishLatch.countDown();
                 return (requestEnd - requestStart) / 1_000_000; // Convert to milliseconds
             }));
@@ -127,7 +129,7 @@ public class AppointmentControllerBenchmarkExample {
         double throughput = (double) TOTAL_REQUESTS / (stopWatch.getTotalTimeSeconds());
 
         System.out.println("\n=========================================================================");
-        System.out.println("📊 TASKFLOW FULL-STACK REST API BENCHMARK METRICS");
+        System.out.println("\uD83D\uDCCA TASKFLOW FULL-STACK REST API BENCHMARK METRICS");
         System.out.println("=========================================================================");
         System.out.printf("  %-30s : %d items\n", "Pre-populated Data Volume", DATABASE_SIZE);
         System.out.printf("  %-30s : %d users\n", "Concurrent Users (Threads)", CONCURRENT_USERS);
@@ -142,7 +144,7 @@ public class AppointmentControllerBenchmarkExample {
 
         executorService.shutdown();
 
-        assertTrue(avgLatency < MAX_LATENCY_MS, 
+        assertTrue(avgLatency < MAX_LATENCY_MS,
                 String.format("Performance regression! Average latency of %.2fms exceeded the %dms SLA limit.", avgLatency, MAX_LATENCY_MS));
     }
 }

@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -41,7 +42,7 @@ public class AppointmentController {
             @Parameter(description = "Page number (0-indexed)")
             @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size")
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") @Max(100) int size) {
         
         AppointmentDashboardResponse response = appointmentService.getAllAppointments(status, search, page, size);
         return ResponseEntity.ok(response);

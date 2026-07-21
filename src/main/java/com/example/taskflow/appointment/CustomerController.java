@@ -5,14 +5,17 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Max;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/customer")
 @Tag(name = "Customer Dashboard", description = "Endpoints for logged-in customers")
+@Validated
 public class CustomerController {
 
     private final AppointmentService appointmentService;
@@ -30,7 +33,7 @@ public class CustomerController {
     public ResponseEntity<Page<AppointmentResponse>> getMyAppointments(
             Authentication authentication,
             @Parameter(description = "Page number (0-indexed)") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Page size") @RequestParam(defaultValue = "10") int size) {
+            @Parameter(description = "Page size") @RequestParam(defaultValue = "10") @Max(100) int size) {
         String email = authentication.getName();
         return ResponseEntity.ok(appointmentService.getMyAppointments(email, page, size));
     }

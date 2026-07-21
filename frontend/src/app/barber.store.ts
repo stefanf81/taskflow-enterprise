@@ -1,5 +1,6 @@
-import { Service, signal, computed, inject, effect } from '@angular/core';
+import { Service, signal, computed, inject, effect, DestroyRef } from '@angular/core';
 import { httpResource } from '@angular/common/http';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppointmentService, Barber, BarberTimeOff } from './appointment.service';
 
 @Service()
@@ -41,6 +42,7 @@ export class BarberStore {
   readonly actionErrorMessage = signal<string | null>(null);
   readonly actionSuccessMessage = signal<string | null>(null);
   readonly isSaving = signal<boolean>(false);
+  private readonly destroyRef = inject(DestroyRef);
 
   constructor() {
     effect(() => {
@@ -70,7 +72,7 @@ export class BarberStore {
 
     this.actionErrorMessage.set(null);
     this.isSaving.set(true);
-    this.appointmentService.addTimeOff(barberId, request).subscribe({
+    this.appointmentService.addTimeOff(barberId, request).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         this.isSaving.set(false);
         this.actionErrorMessage.set(null);

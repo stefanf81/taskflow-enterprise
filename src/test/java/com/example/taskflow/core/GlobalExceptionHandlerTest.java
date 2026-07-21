@@ -25,6 +25,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -47,9 +48,9 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals("Not found", response.getBody().getMessage());
-        assertEquals("/api/test", response.getBody().getPath());
-        assertEquals(404, response.getBody().getStatus());
+        assertEquals("Not found", response.getBody().message());
+        assertEquals("/api/test", response.getBody().path());
+        assertEquals(404, response.getBody().status());
     }
 
     @Test
@@ -65,10 +66,10 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals("Validation failed", response.getBody().getMessage());
-        assertEquals(1, response.getBody().getValidationErrors().size());
-        assertEquals("field", response.getBody().getValidationErrors().get(0).getField());
-        assertEquals("must not be blank", response.getBody().getValidationErrors().get(0).getMessage());
+        assertEquals("Validation failed", response.getBody().message());
+        assertEquals(1, response.getBody().validationErrors().size());
+        assertEquals("field", response.getBody().validationErrors().get(0).field());
+        assertEquals("must not be blank", response.getBody().validationErrors().get(0).message());
     }
 
     @Test
@@ -115,9 +116,9 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals("Validation failed", response.getBody().getMessage());
-        assertEquals(1, response.getBody().getValidationErrors().size());
-        assertEquals("field", response.getBody().getValidationErrors().get(0).getField());
+        assertEquals("Validation failed", response.getBody().message());
+        assertEquals(1, response.getBody().validationErrors().size());
+        assertEquals("field", response.getBody().validationErrors().get(0).field());
     }
 
     @Test
@@ -127,8 +128,8 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals(400, response.getBody().getStatus());
-        assertEquals("Bad Request: " + ex.getMessage(), response.getBody().getMessage());
+        assertEquals(400, response.getBody().status());
+        assertEquals("Bad Request: " + ex.getMessage(), response.getBody().message());
     }
 
     @Test
@@ -138,7 +139,7 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals(401, response.getBody().getStatus());
+        assertEquals(401, response.getBody().status());
     }
 
     @Test
@@ -148,7 +149,7 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals(403, response.getBody().getStatus());
+        assertEquals(403, response.getBody().status());
     }
 
     @Test
@@ -158,8 +159,8 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals(500, response.getBody().getStatus());
-        assertEquals("An unexpected error occurred. Please try again later.", response.getBody().getMessage());
+        assertEquals(500, response.getBody().status());
+        assertEquals("An unexpected error occurred. Please try again later.", response.getBody().message());
     }
 
     @Test
@@ -172,7 +173,7 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals("Malformed JSON request payload: Parse error detail", response.getBody().getMessage());
+        assertEquals("Malformed JSON request payload: Parse error detail", response.getBody().message());
     }
 
     @Test
@@ -183,7 +184,7 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals("Resource not found: Resource not found message", response.getBody().getMessage());
+        assertEquals("Resource not found: Resource not found message", response.getBody().message());
     }
 
     @Test
@@ -194,7 +195,7 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.METHOD_NOT_ALLOWED, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals("Method not allowed: Request method 'POST' is not supported", response.getBody().getMessage());
+        assertEquals("Method not allowed: Request method 'POST' is not supported", response.getBody().message());
     }
 
     @Test
@@ -205,6 +206,6 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.UNSUPPORTED_MEDIA_TYPE, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals("Unsupported media type: Content-Type 'text/plain' is not supported", response.getBody().getMessage());
+        assertEquals("Unsupported media type: Content-Type 'text/plain' is not supported", response.getBody().message());
     }
 }

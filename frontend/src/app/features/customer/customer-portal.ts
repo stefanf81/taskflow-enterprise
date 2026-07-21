@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AppointmentStore } from '../../appointment.store';
 import { CustomerStore } from '../../customer.store';
+import { formatTime12Hour } from '../../time-utils';
 
 /**
  * Lazy-loaded Customer dashboard (route: /customer). Extracted from the monolithic
@@ -28,18 +29,7 @@ export class CustomerPortal {
   readonly cancelErrorMessage = this.customerStore.cancelErrorMessage;
 
   formatTime12Hour(time24: string): string {
-    if (!time24) return '';
-    try {
-      const parts = time24.split(':');
-      let hours = parseInt(parts[0], 10);
-      const minutes = parts[1] || '00';
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12;
-      hours = hours ? hours : 12;
-      return `${hours}:${minutes} ${ampm}`;
-    } catch {
-      return time24;
-    }
+    return formatTime12Hour(time24);
   }
 
   onLogout(): void {

@@ -1,5 +1,6 @@
 package com.example.taskflow.appointment;
 
+import com.example.taskflow.core.LogSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.Cacheable;
@@ -7,7 +8,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +22,10 @@ import java.util.Optional;
 public class BusySlotsService {
 
     private static final Logger logger = LoggerFactory.getLogger(BusySlotsService.class);
+
+    /** All possible time slots — returned when the barber is unavailable. */
+    private static final List<String> ALL_SLOTS =
+            List.of("09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00");
 
     private final BarberRepository barberRepository;
     private final BarberScheduleRepository barberScheduleRepository;
@@ -52,7 +56,7 @@ public class BusySlotsService {
                 List<BarberTimeOff> timeOffs = barberTimeOffRepository.findTimeOffForBarberOnDate(barber.getId(), date);
                 if (!timeOffs.isEmpty()) {
                     // Barber is off, return all possible slots as busy
-                    return Arrays.asList("09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00");
+                    return ALL_SLOTS;
                 }
 
                 // 2. Check if barber is scheduled to work on this day of week
@@ -60,26 +64,15 @@ public class BusySlotsService {
                 Optional<BarberSchedule> scheduleOpt = barberScheduleRepository.findByBarberIdAndDayOfWeek(barber.getId(), dayOfWeek);
                 if (scheduleOpt.isEmpty()) {
                     // Not scheduled to work, return all possible slots as busy
-                    return Arrays.asList("09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00");
+                    return ALL_SLOTS;
                 }
             }
 
             // 3. Barber is scheduled and not off
             return appointmentRepository.findDistinctBookingTimes(barberName, date, "DENIED");
         } catch (Exception e) {
-            logger.error("Error parsing bookingDate in getBusySlots: {}", maskInput(bookingDate), e);
+            logger.error("Error parsing bookingDate in getBusySlots: {}", LogSanitizer.mask(bookingDate), e);
             return Collections.emptyList();
         }
-    }
-
-    private String maskInput(String input) {
-        if (input == null || input.length() <= 4) {
-            return "****";
-        }
-        String sanitized = input.replaceAll("[\\r\\n]", "");
-        if (sanitized.length() <= 4) {
-            return "****";
-        }
-        return sanitized.substring(0, 2) + "****" + sanitized.substring(sanitized.length() - 2);
     }
 }

@@ -1,5 +1,6 @@
 package com.example.taskflow.appointment;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -25,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * This test physically proves and benchmarks the performance breakthrough of Spring Boot 4.1.0's
  * "spring.datasource.connection-fetch=lazy" property under heavy connection-pool saturation.
  */
+@Tag("benchmark")
 @SpringBootTest(properties = {
         "app.rate-limit.enabled=false",
         "spring.datasource.hikari.maximum-pool-size=2",      // Pool size of 2 to avoid boot deadlocks

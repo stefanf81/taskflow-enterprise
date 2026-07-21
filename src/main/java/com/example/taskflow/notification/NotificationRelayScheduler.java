@@ -4,8 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -15,6 +13,11 @@ import java.util.List;
  *
  * <p>Delivery itself is performed by {@link NotificationSender}, which records the
  * truthful outcome (SENT / FAILED + incremented retry counter) against the row.
+ *
+ * <p>This class is intentionally NOT {@code @Transactional} as a whole: each
+ * {@link NotificationSender#process} call must run in its own transaction so that
+ * a transient failure on one outbox entry does not roll back previously-successful
+ * sends in the same batch.
  */
 @Component
 public class NotificationRelayScheduler {
@@ -31,7 +34,6 @@ public class NotificationRelayScheduler {
     }
 
     @Scheduled(fixedDelay = 30000)
-    @Transactional
     public void relay() {
         List<NotificationOutbox> due = new ArrayList<>();
         due.addAll(outboxRepository.findByStatus("PENDING"));

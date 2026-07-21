@@ -1,5 +1,6 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { Router } from '@angular/router';
+import { Observable, map, tap } from 'rxjs';
 import { AppointmentService, LoginResponse } from './appointment.service';
 
 /**
@@ -21,17 +22,20 @@ export class AuthState {
   private bootstrapDone = signal<boolean>(false);
 
   /** Restore the role from the server using the session cookie. Safe to call repeatedly. */
-  bootstrap(): void {
-    this.appointmentService.me().subscribe({
-      next: (me: LoginResponse) => {
-        this.applyRole(me.role);
-        this.bootstrapDone.set(true);
-      },
-      error: () => {
-        this.clear();
-        this.bootstrapDone.set(true);
-      },
-    });
+  bootstrap(): Observable<string> {
+    return this.appointmentService.me().pipe(
+      map((me: LoginResponse) => me.role),
+      tap({
+        next: (role) => {
+          this.applyRole(role);
+          this.bootstrapDone.set(true);
+        },
+        error: () => {
+          this.clear();
+          this.bootstrapDone.set(true);
+        },
+      }),
+    );
   }
 
   applyRole(role: string): void {

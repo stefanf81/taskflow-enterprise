@@ -23,12 +23,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     
     Page<Appointment> findByCustomerEmailIgnoreCase(String customerEmail, Pageable pageable);
     
-    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT a FROM Appointment a WHERE a.bookingDate = :date AND a.reminderSent = :reminderSent AND a.status = :status")
-    java.util.List<Appointment> findForReminderWithLock(@Param("date") LocalDate date, 
-                                                         @Param("reminderSent") boolean reminderSent, 
-                                                         @Param("status") String status);
-
     @Query("SELECT a.id FROM Appointment a WHERE a.bookingDate = :date AND a.reminderSent = :reminderSent AND a.status = :status")
     java.util.List<Long> findReminderIds(@Param("date") LocalDate date,
                                          @Param("reminderSent") boolean reminderSent,

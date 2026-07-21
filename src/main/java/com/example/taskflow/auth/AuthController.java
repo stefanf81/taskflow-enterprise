@@ -71,9 +71,9 @@ public class AuthController {
             @ApiResponse(responseCode = "201", description = "Account created successfully"),
             @ApiResponse(responseCode = "400", description = "Email already registered or invalid input")
     })
-    public ResponseEntity<?> registerUser(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<RegisterResponse> registerUser(@Valid @RequestBody RegisterRequest request) {
         if (userRepository.findByEmailIgnoreCase(request.email()).isPresent()) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse("Email is already registered."));
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new RegisterResponse("Email is already registered."));
         }
 
         AppUser user = new AppUser(
@@ -85,7 +85,7 @@ public class AuthController {
         );
         userRepository.save(user);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(new ErrorResponse("Account created successfully."));
+        return ResponseEntity.status(HttpStatus.CREATED).body(new RegisterResponse("Account created successfully."));
     }
 
     @GetMapping("/csrf")
@@ -153,6 +153,4 @@ public class AuthController {
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }
-
-    public record ErrorResponse(String message) {}
 }

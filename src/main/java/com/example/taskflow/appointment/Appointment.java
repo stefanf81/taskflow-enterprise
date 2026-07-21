@@ -27,9 +27,11 @@ public class Appointment {
     private Long id;
 
     @Column(name = "public_id", nullable = false, unique = true, length = 36)
+    @Size(max = 36)
     private String publicId;
 
     @Column(name = "idempotency_key", unique = true, length = 100)
+    @Size(max = 100)
     private String idempotencyKey;
 
     @NotBlank(message = "Customer name is required")
@@ -52,7 +54,7 @@ public class Appointment {
     @Column(name = "barber_name", nullable = false, length = 100)
     private String barberName;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "barber_id", foreignKey = @ForeignKey(name = "fk_appointment_barber"))
     private Barber barber;
 
@@ -70,7 +72,7 @@ public class Appointment {
     @Column(name = "service_type", nullable = false, length = 100)
     private String serviceType;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "service_id", foreignKey = @ForeignKey(name = "fk_appointment_service"))
     private ServiceItem service;
 

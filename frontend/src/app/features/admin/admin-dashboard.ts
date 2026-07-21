@@ -3,8 +3,10 @@ import {
   ChangeDetectionStrategy,
   ViewEncapsulation,
   inject,
+  DestroyRef,
   signal,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -13,6 +15,7 @@ import { AppointmentStore } from '../../appointment.store';
 import { BarberStore } from '../../barber.store';
 import { NotificationStore } from '../../notification.store';
 import { CustomerStore } from '../../customer.store';
+import { formatTime12Hour, isOverdue } from '../../time-utils';
 
 /**
  * Lazy-loaded Owner dashboard (route: /admin). Extracted from the monolithic
@@ -36,6 +39,7 @@ export class AdminDashboard {
   private readonly notificationStore = inject(NotificationStore);
   readonly customerStore = inject(CustomerStore);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly appointments = this.store.appointments;
   readonly searchQuery = this.store.searchQuery;
@@ -95,7 +99,7 @@ export class AdminDashboard {
   }
 
   approveAppointment(id: number): void {
-    this.appointmentService.updateAppointmentStatus(id, 'APPROVED').subscribe({
+    this.appointmentService.updateAppointmentStatus(id, 'APPROVED').pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         this.successMessage.set('Appointment APPROVED! Client notification email dispatched.');
         this.loadAppointments();
@@ -105,7 +109,7 @@ export class AdminDashboard {
   }
 
   denyAppointment(id: number): void {
-    this.appointmentService.updateAppointmentStatus(id, 'DENIED').subscribe({
+    this.appointmentService.updateAppointmentStatus(id, 'DENIED').pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         this.successMessage.set('Appointment DECLINED. Client notification email dispatched.');
         this.loadAppointments();
@@ -116,7 +120,7 @@ export class AdminDashboard {
 
   deleteAppointment(id: number): void {
     if (confirm('Are you sure you want to permanently delete/cancel this booking?')) {
-      this.appointmentService.deleteAppointment(id).subscribe({
+      this.appointmentService.deleteAppointment(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
         next: () => {
           this.successMessage.set('Booking permanently deleted.');
           if (this.appointments().length === 1 && this.currentPage() > 0) {
@@ -164,24 +168,11 @@ export class AdminDashboard {
   }
 
   isOverdue(appt: AppointmentItem): boolean {
-    if (!appt.bookingDate) return false;
-    const todayStr = new Date().toISOString().split('T')[0];
-    return appt.bookingDate < todayStr;
+    return isOverdue(appt);
   }
 
   formatTime12Hour(time24: string): string {
-    if (!time24) return '';
-    try {
-      const parts = time24.split(':');
-      let hours = parseInt(parts[0], 10);
-      const minutes = parts[1] || '00';
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12;
-      hours = hours ? hours : 12;
-      return `${hours}:${minutes} ${ampm}`;
-    } catch {
-      return time24;
-    }
+    return formatTime12Hour(time24);
   }
 
   onLogout(): void {

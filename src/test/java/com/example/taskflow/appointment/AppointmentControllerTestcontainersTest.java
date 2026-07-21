@@ -2,6 +2,7 @@ package com.example.taskflow.appointment;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -25,21 +26,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * STATE-OF-THE-ART (SOTA) INTEGRATION TEST EXAMPLE USING TESTCONTAINERS (BARBER BOOKING DOMAIN)
- * 
+ *
  * Why this is used:
  * In enterprise-grade applications, using an in-memory database like H2 for testing can lead to false
  * positives or negatives because H2 differs SQL-dialect and index-wise from PostgreSQL.
  * Testcontainers spins up a real, lightweight Docker container of PostgreSQL during the test execution,
  * ensuring that your tests run against the exact same engine used in production.
- * 
- * Note: This file is named "...Example.java" instead of "Test.java" so it is excluded from default 
- * offline Gradle test runs, preventing connection failures when the local Docker socket is unreachable.
  */
+@Tag("testcontainers")
 @SpringBootTest(properties = "app.rate-limit.enabled=false")
 @AutoConfigureMockMvc
 @Testcontainers
 @org.junit.jupiter.api.Disabled("Disabled locally to prevent build failures when the Docker socket is disconnected.")
-public class AppointmentControllerTestcontainersExample {
+public class AppointmentControllerTestcontainersTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -51,9 +50,9 @@ public class AppointmentControllerTestcontainersExample {
 
     private String authHeader;
 
-    // Define the PostgreSQL container matching our exact production version 17
+    // Define the PostgreSQL container matching our exact production version 18.4
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17-alpine")
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4-alpine")
             .withDatabaseName("taskflow_test")
             .withUsername("postgres")
             .withPassword("postgres-password");

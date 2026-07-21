@@ -617,18 +617,6 @@
                   </div>
                 </div>
 
-                <div class="form-group" style="display: none">
-                  <label for="bookingDate">Manual Date Fallback</label>
-                  <input
-                    type="text"
-                    id="bookingDate"
-                    name="bookingDate"
-                    [ngModel]="bookingDate()"
-                    (ngModelChange)="selectBookingDate($event)"
-                    required
-                  />
-                </div>
-
                 <!-- Interactive Available Slots Grid Picker with SOTA Loader States -->
                 @if (isCheckingSlots()) {
                   <div style="text-align: center; padding: 2.5rem" class="animate-fadeIn">
@@ -1045,7 +1033,8 @@
                   type="text"
                   id="cancelBookingId"
                   name="cancelBookingId"
-                  [(ngModel)]="cancelBookingId"
+                  [ngModel]="cancelBookingId()"
+                    (ngModelChange)="cancelBookingId.set($event)"
                   required
                   placeholder="e.g., 8f8d9b..."
                   class="form-control"
@@ -1077,7 +1066,8 @@
                   type="email"
                   id="cancelEmail"
                   name="cancelEmail"
-                  [(ngModel)]="cancelEmail"
+                  [ngModel]="cancelEmail()"
+                    (ngModelChange)="cancelEmail.set($event)"
                   required
                   placeholder="e.g., john@example.com"
                   class="form-control"
@@ -1132,7 +1122,8 @@
                   type="text"
                   id="reviewPublicId"
                   name="reviewPublicId"
-                  [(ngModel)]="reviewPublicId"
+                  [ngModel]="reviewPublicId()"
+                    (ngModelChange)="reviewPublicId.set($event)"
                   required
                   placeholder="e.g., 8f8d9b..."
                   class="form-control"
@@ -1164,7 +1155,8 @@
                   type="number"
                   id="reviewRating"
                   name="reviewRating"
-                  [(ngModel)]="reviewRating"
+                  [ngModel]="reviewRating()"
+                    (ngModelChange)="reviewRating.set(+$event)"
                   required
                   min="1"
                   max="5"
@@ -1194,7 +1186,8 @@
                 <textarea
                   id="reviewComment"
                   name="reviewComment"
-                  [(ngModel)]="reviewComment"
+                  [ngModel]="reviewComment()"
+                    (ngModelChange)="reviewComment.set($event)"
                   placeholder="Great haircut!"
                   class="form-control min-h-[60px]"
                 ></textarea>
@@ -1222,7 +1215,7 @@
       </footer>
 
       <!-- Login/Register Modal Dialog -->
-      @if (showAdminLoginModal) {
+      @if (showAdminLoginModal()) {
         <div class="modal-overlay" (keydown.escape)="toggleAdminLoginModal(false)">
           <div
             role="dialog"
@@ -1247,11 +1240,11 @@
                 />
               </svg>
               <h2 class="text-xl font-black text-zinc-100 tracking-tight uppercase">
-                {{ isRegisterMode ? 'Create Account' : 'Sign In' }}
+                {{ isRegisterMode() ? 'Create Account' : 'Sign In' }}
               </h2>
               <p class="text-xs text-zinc-500 leading-relaxed mt-1">
                 {{
-                  isRegisterMode
+                  isRegisterMode()
                     ? 'Register to manage your appointments.'
                     : 'Enter your credentials to access your dashboard.'
                 }}
@@ -1267,7 +1260,7 @@
             }
 
             <form (ngSubmit)="onLogin()" #loginForm="ngForm" class="space-y-4">
-              @if (isRegisterMode) {
+              @if (isRegisterMode()) {
                 <div class="form-group flex flex-col gap-1.5">
                   <label
                     for="regName"
@@ -1278,7 +1271,8 @@
                     type="text"
                     id="regName"
                     name="regName"
-                    [(ngModel)]="registerFullName"
+                    [ngModel]="registerFullName()"
+                    (ngModelChange)="registerFullName.set($event)"
                     required
                     placeholder="John Doe"
                     class="form-control"
@@ -1313,7 +1307,8 @@
                     type="text"
                     id="regPhone"
                     name="regPhone"
-                    [(ngModel)]="registerPhone"
+                    [ngModel]="registerPhone()"
+                    (ngModelChange)="registerPhone.set($event)"
                     placeholder="555-1234"
                     class="form-control"
                   />
@@ -1330,7 +1325,8 @@
                   type="text"
                   id="username"
                   name="username"
-                  [(ngModel)]="loginUsername"
+                  [ngModel]="loginUsername()"
+                    (ngModelChange)="loginUsername.set($event)"
                   required
                   placeholder="e.g., admin"
                   class="form-control"
@@ -1366,7 +1362,8 @@
                   type="password"
                   id="password"
                   name="password"
-                  [(ngModel)]="loginPassword"
+                  [ngModel]="loginPassword()"
+                    (ngModelChange)="loginPassword.set($event)"
                   required
                   placeholder="e.g., admin-password"
                   class="form-control"
@@ -1397,7 +1394,7 @@
                 class="btn btn-submit w-full mt-2 py-3 text-xs tracking-wide uppercase font-black"
                 [disabled]="loginForm.invalid || isSubmitting()"
               >
-                {{ isSubmitting() ? 'Processing...' : isRegisterMode ? 'Register' : 'Sign In' }}
+                {{ isSubmitting() ? 'Processing...' : isRegisterMode() ? 'Register' : 'Sign In' }}
               </button>
             </form>
 
@@ -1405,10 +1402,10 @@
               <button
                 type="button"
                 class="text-xs text-indigo-400 font-bold hover:text-white"
-                (click)="isRegisterMode = !isRegisterMode"
+                (click)="isRegisterMode.set(!isRegisterMode())"
               >
                 {{
-                  isRegisterMode ? 'Already have an account? Sign In' : 'Need an account? Register'
+                  isRegisterMode() ? 'Already have an account? Sign In' : 'Need an account? Register'
                 }}
               </button>
             </div>
@@ -1487,7 +1484,7 @@
                   <span>📅 Scheduled:</span>
                   <strong class="text-zinc-100 font-semibold"
                     >{{ lastBookedAppointment()?.bookingDate | date: 'mediumDate' }} at
-                    {{ formatTime12Hour(lastBookedAppointment()?.bookingTime) }}</strong
+                    {{ formatTime12Hour(lastBookedAppointment()?.bookingTime ?? '') }}</strong
                   >
                 </p>
                 <hr class="border-t border-dashed border-slate-300 my-2" />

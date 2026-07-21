@@ -24,7 +24,11 @@ public class NotificationController {
     @GetMapping
     @Operation(summary = "Get all notifications (Admin Only)")
     @ApiResponse(responseCode = "200", description = "List of notifications returned (newest first)")
-    public ResponseEntity<List<NotificationOutbox>> getNotifications() {
-        return ResponseEntity.ok(repository.findAllByOrderBySentAtDesc());
+    public ResponseEntity<List<NotificationOutboxResponse>> getNotifications() {
+        List<NotificationOutboxResponse> responses = repository.findAllByOrderBySentAtDesc()
+                .stream()
+                .map(NotificationOutboxResponse::fromEntity)
+                .toList();
+        return ResponseEntity.ok(responses);
     }
 }

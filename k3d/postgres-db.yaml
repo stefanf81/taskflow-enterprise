@@ -17,7 +17,7 @@ spec:
         fsGroup: 70
       containers:
         - name: postgres
-          image: postgres:17-alpine
+          image: postgres:18.4-alpine
           imagePullPolicy: IfNotPresent
           args:
             - "-c"

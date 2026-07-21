@@ -2,6 +2,7 @@ package com.example.taskflow.appointment;
 
 import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.catalog.ServiceItemRepository;
+import com.example.taskflow.core.LogSanitizer;
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,6 +52,20 @@ public class AppointmentServiceImpl implements AppointmentService {
         this.barberRepository = barberRepository;
         this.barberScheduleRepository = barberScheduleRepository;
         this.serviceItemRepository = serviceItemRepository;
+    }
+
+    /** Safely tag the current tracing span — swallowed on failure. */
+    private void tagSpan(String... keyValuePairs) {
+        try {
+            io.micrometer.tracing.Span span = tracer.currentSpan();
+            if (span != null) {
+                for (int i = 0; i < keyValuePairs.length - 1; i += 2) {
+                    span.tag(keyValuePairs[i], keyValuePairs[i + 1]);
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to add tracing tags: {}", LogSanitizer.stripNewlines(e.getMessage()));
+        }
     }
 
     @Override
@@ -140,7 +155,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         if (idempotencyKey != null && !idempotencyKey.trim().isEmpty()) {
             Appointment existing = appointmentRepository.findByIdempotencyKey(idempotencyKey);
             if (existing != null) {
-                logger.info("Idempotency key {} already exists. Returning existing appointment.", idempotencyKey.replaceAll("[\\r\\n]", ""));
+                logger.info("Idempotency key {} already exists. Returning existing appointment.", LogSanitizer.stripNewlines(idempotencyKey));
                 return AppointmentResponse.fromEntity(existing);
             }
         }
@@ -180,24 +195,18 @@ public class AppointmentServiceImpl implements AppointmentService {
             clearAppointmentStatsCache();
             clearBusySlotsCache(savedItem.getBarberName(), savedItem.getBookingDate());
 
-            try {
-                io.micrometer.tracing.Span currentSpan = tracer.currentSpan();
-                if (currentSpan != null) {
-                    currentSpan.tag("appointment.id", String.valueOf(savedItem.getId()));
-                    currentSpan.tag("appointment.customer", savedItem.getCustomerName());
-                    currentSpan.tag("appointment.status", savedItem.getStatus());
-                }
-            } catch (Exception e) {
-                String safeMsg = e.getMessage() != null ? e.getMessage().replaceAll("[\\r\\n]", "") : "";
-                logger.warn("Failed to add tracing tags: {}", safeMsg);
-            }
+            tagSpan(
+                "appointment.id", String.valueOf(savedItem.getId()),
+                "appointment.customer", savedItem.getCustomerName(),
+                "appointment.status", savedItem.getStatus()
+            );
 
             return AppointmentResponse.fromEntity(savedItem);
         } catch (org.springframework.dao.DataIntegrityViolationException ex) {
             Appointment existing = appointmentRepository.findByIdempotencyKey(idempotencyKey);
             if (existing != null) {
                 logger.info("Concurrent duplicate for idempotency key {}. Returning existing appointment.",
-                        idempotencyKey != null ? idempotencyKey.replaceAll("[\\r\\n]", "") : "<null>");
+                        LogSanitizer.stripNewlines(idempotencyKey));
                 return AppointmentResponse.fromEntity(existing);
             }
             throw ex;
@@ -252,16 +261,10 @@ public class AppointmentServiceImpl implements AppointmentService {
         clearAppointmentStatsCache();
         clearBusySlotsCache(savedItem.getBarberName(), savedItem.getBookingDate());
 
-        try {
-            io.micrometer.tracing.Span currentSpan = tracer.currentSpan();
-            if (currentSpan != null) {
-                currentSpan.tag("appointment.id", String.valueOf(savedItem.getId()));
-                currentSpan.tag("appointment.status", savedItem.getStatus());
-            }
-        } catch (Exception e) {
-            String safeMsg = e.getMessage() != null ? e.getMessage().replaceAll("[\\r\\n]", "") : "";
-            logger.warn("Failed to add tracing tags: {}", safeMsg);
-        }
+        tagSpan(
+            "appointment.id", String.valueOf(savedItem.getId()),
+            "appointment.status", savedItem.getStatus()
+        );
 
         // Publish the status-change event. The notification outbox entry is written
         // by the (separate) notification slice listener so the appointment slice
@@ -279,16 +282,10 @@ public class AppointmentServiceImpl implements AppointmentService {
         clearAppointmentStatsCache();
         clearBusySlotsCache(item.getBarberName(), item.getBookingDate());
 
-        try {
-            io.micrometer.tracing.Span currentSpan = tracer.currentSpan();
-            if (currentSpan != null) {
-                currentSpan.tag("appointment.id", String.valueOf(id));
-                currentSpan.tag("appointment.action", "delete");
-            }
-        } catch (Exception e) {
-            String safeMsg = e.getMessage() != null ? e.getMessage().replaceAll("[\\r\\n]", "") : "";
-            logger.warn("Failed to add tracing tags: {}", safeMsg);
-        }
+        tagSpan(
+            "appointment.id", String.valueOf(id),
+            "appointment.action", "delete"
+        );
     }
 
     @Override

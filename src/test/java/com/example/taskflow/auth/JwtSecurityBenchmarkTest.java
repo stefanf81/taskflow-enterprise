@@ -1,5 +1,6 @@
 package com.example.taskflow.auth;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -18,15 +19,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * STATE-OF-THE-ART ASYMMETRIC RSA-2048 JWT BENCHMARK
- * 
+ *
  * Why this is used:
  * In a stateless REST API, JWT signature parsing and verification occur on every single incoming HTTP call.
  * This makes cryptographic token parsing the primary CPU bottleneck of your backend security gateway.
  * Isolating this micro-benchmark from Database and network I/O allows us to measure the raw cryptographic
  * throughput (Operations per Second) of our native Spring Security OAuth2 resource server encoder/decoder layer under load.
  */
+@Tag("benchmark")
 @SpringBootTest(properties = {"app.rate-limit.enabled=false", "app.stats.cache.ttl=0"})
-public class JwtSecurityBenchmarkExample {
+public class JwtSecurityBenchmarkTest {
 
     @Autowired
     private JwtEncoder jwtEncoder;
@@ -82,7 +84,7 @@ public class JwtSecurityBenchmarkExample {
 
         // Print out a beautifully typeset cryptographic benchmark metrics table
         System.out.println("\n=========================================================================");
-        System.out.println("🔐 SECURITY LAYER: ASYMMETRIC RSA-2048 JWT BENCHMARK");
+        System.out.println("\uD83D\uDD10 SECURITY LAYER: ASYMMETRIC RSA-2048 JWT BENCHMARK");
         System.out.println("=========================================================================");
         System.out.printf("  %-35s : %d cycles\n", "Benchmark Operations Iterations", ITERATIONS);
         System.out.printf("  %-35s : %s\n", "Signature Algorithm", "Asymmetric RSA-2048");
@@ -97,9 +99,9 @@ public class JwtSecurityBenchmarkExample {
         System.out.println("=========================================================================");
 
         // Assert that parsing remains fast (strict SLA protection)
-        assertTrue(avgParseLatencyMs < MAX_PARSE_LATENCY_MS, 
+        assertTrue(avgParseLatencyMs < MAX_PARSE_LATENCY_MS,
                 String.format("Cryptographic regression! Average token verification of %.4fms exceeded the %.2fms SLA.", avgParseLatencyMs, MAX_PARSE_LATENCY_MS));
-        
+
         assertTrue(validCount == ITERATIONS, "Verification failed! Not all tokens were validated correctly.");
     }
 }
