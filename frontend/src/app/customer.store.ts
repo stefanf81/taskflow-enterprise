@@ -1,9 +1,9 @@
-import { Service, signal, computed, inject, DestroyRef } from '@angular/core';
+import { Injectable, signal, computed, inject, DestroyRef } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppointmentService, AppointmentItem } from './appointment.service';
 
-@Service()
+@Injectable({ providedIn: 'root' })
 export class CustomerStore {
   private readonly appointmentService = inject(AppointmentService);
   readonly currentPage = signal<number>(0);

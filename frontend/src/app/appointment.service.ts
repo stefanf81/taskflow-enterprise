@@ -1,4 +1,4 @@
-import { Service, inject } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
@@ -109,7 +109,7 @@ export interface ReviewRequest {
   comment: string;
 }
 
-@Service()
+@Injectable({ providedIn: 'root' })
 export class AppointmentService {
   private readonly http = inject(HttpClient);
   private readonly apiUrl = '/api/v1/appointments';
@@ -182,6 +182,15 @@ export class AppointmentService {
   // Returns the currently authenticated principal (used to restore UI role after a page refresh).
   me(): Observable<LoginResponse> {
     return this.http.get<LoginResponse>(`${this.authUrl}/me`);
+  }
+
+  // Fetches the CSRF token from the server, which causes Spring Security's
+  // CookieCsrfTokenRepository to set the XSRF-TOKEN cookie in the response.
+  // This ensures the cookie exists before any state-changing request that
+  // requires CSRF protection. Safe to call repeatedly — the backend re-issues
+  // the cookie on every response.
+  fetchCsrfToken(): Observable<void> {
+    return this.http.get<void>(`${this.authUrl}/csrf`);
   }
 
   // Clears the HttpOnly auth cookie on the backend.

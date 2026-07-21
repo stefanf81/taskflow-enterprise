@@ -2,6 +2,7 @@ package com.example.taskflow.notification;
 
 import com.example.taskflow.appointment.Appointment;
 import com.example.taskflow.appointment.AppointmentRepository;
+import com.example.taskflow.core.LogSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -43,7 +44,7 @@ public class AppointmentReminderScheduler {
                 processOne(appointmentId);
                 processed++;
             } catch (Exception e) {
-                String safeMsg = e.getMessage() != null ? e.getMessage().replaceAll("[\\r\\n]", "") : "";
+                String safeMsg = LogSanitizer.safeMessage(e);
                 logger.error("Failed to process reminder for appointment {}: {}", appointmentId, safeMsg);
             }
         }

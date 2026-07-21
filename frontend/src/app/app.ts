@@ -1,6 +1,7 @@
 import {
   Component,
   OnInit,
+  OnDestroy,
   signal,
   computed,
   inject,
@@ -44,7 +45,7 @@ interface BookingFormModel {
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
 })
-export class App implements OnInit {
+export class App implements OnInit, OnDestroy {
   private readonly appointmentService = inject(AppointmentService);
   private readonly store = inject(AppointmentStore);
   private readonly catalogStore = inject(ServiceCatalogStore);
@@ -237,6 +238,12 @@ export class App implements OnInit {
   });
 
   ngOnInit(): void {
+    // Ensure the XSRF-TOKEN cookie is set before any state-changing request.
+    // The backend's CookieCsrfTokenRepository sets the cookie on the response;
+    // subsequent POST/PUT/DELETE requests from Angular will read it and attach
+    // the X-XSRF-TOKEN header automatically via withXsrfConfiguration.
+    this.appointmentService.fetchCsrfToken().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
+
     this.catalogStore.loadServices();
     this.reviewStore.loadRatings();
     // A1.2: restore UI role from the backend if a session cookie exists (survives
@@ -507,6 +514,16 @@ export class App implements OnInit {
 
   // Search Input change handler (debounced to avoid a request per keystroke - P2)
   private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private successTimer: ReturnType<typeof setTimeout> | null = null;
+
+  ngOnDestroy(): void {
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+    }
+    if (this.successTimer) {
+      clearTimeout(this.successTimer);
+    }
+  }
 
   onSearchChange(value: string): void {
     this.searchQuery.set(value);
@@ -749,9 +766,13 @@ export class App implements OnInit {
 
   // Helper to show success alerts temporarily
   private showSuccess(msg: string): void {
+    if (this.successTimer) {
+      clearTimeout(this.successTimer);
+    }
     this.successMessage.set(msg);
-    setTimeout(() => {
+    this.successTimer = setTimeout(() => {
       this.successMessage.set(null);
+      this.successTimer = null;
     }, 4500);
   }
 

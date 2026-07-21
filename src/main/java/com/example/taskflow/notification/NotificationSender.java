@@ -1,5 +1,6 @@
 package com.example.taskflow.notification;
 
+import com.example.taskflow.core.LogSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -41,7 +42,7 @@ public class NotificationSender {
         try {
             outboxRepository.save(outbox);
         } catch (Exception e) {
-            String safeMsg = e.getMessage() != null ? e.getMessage().replaceAll("[\\r\\n]", "") : "";
+            String safeMsg = LogSanitizer.safeMessage(e);
             logger.error("Failed to persist notification outcome for outbox id={}: {}", outbox.getId(), safeMsg);
         }
     }

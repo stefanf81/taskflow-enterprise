@@ -17,5 +17,6 @@ public record RegisterRequest(
     @Size(min = 8, message = "Password must be at least 8 characters") 
     String password,
     
+    @Size(max = 50, message = "Phone must not exceed 50 characters")
     String phone
 ) {}

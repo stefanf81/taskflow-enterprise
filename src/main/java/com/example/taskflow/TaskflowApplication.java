@@ -16,11 +16,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableSpringDataWebSupport(pageSerializationMode = EnableSpringDataWebSupport.PageSerializationMode.VIA_DTO)
 public class TaskflowApplication {
 
-	static {
-		System.setProperty("io.netty.allocator.type", "pooled");
-		System.setProperty("io.netty.allocator.useCacheForAllThreads", "true");
-	}
-
 	public static void main(String[] args) {
 		SpringApplication.run(TaskflowApplication.class, args);
 	}

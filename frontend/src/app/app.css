@@ -1,7 +1,7 @@
 /* ==========================================
    💈 PREMIUM MINIMALIST SAAS DESIGN SYSTEM
    ==========================================
-   Theme: Crisp Slate, Royal Indigo & Off-White
+   Theme: Obsidian & Gold — dark slate background with warm metallic gold accents
    Features: Minimalist lines, clean whitespace, high typographic contrast
 */
 
@@ -9,10 +9,10 @@
   --bg-slate-light: #000000;
   --bg-white-card: #09090b;
 
-  --primary-indigo: #ffffff;
-  --primary-indigo-hover: #e4e4e7;
-  --primary-indigo-light: #18181b;
-  --primary-indigo-border: #27272a;
+  --primary-gold: #c5a059;
+  --primary-gold-hover: #d4af37;
+  --primary-gold-light: #1a1610;
+  --primary-gold-border: #3d3220;
 
   --text-main: #f4f4f5;
   --text-muted: #a1a1aa;
@@ -42,7 +42,7 @@
   --shadow-saas-lg:
     0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.5),
     0 0 0 1px rgba(255, 255, 255, 0.05);
-  --shadow-indigo-glow: 0 0 20px rgba(255, 255, 255, 0.1);
+  --shadow-gold-glow: 0 0 20px rgba(197, 160, 89, 0.15);
 
   /* Gold palette (mirrors --color-gold* defined in styles.css @theme) */
   --gold-metallic: #c5a059;
@@ -90,22 +90,22 @@ html {
 }
 
 .wizard-step-node.active {
-  border-color: var(--primary-indigo) !important;
-  color: var(--primary-indigo) !important;
-  box-shadow: var(--shadow-indigo-glow);
+  border-color: var(--primary-gold) !important;
+  color: var(--primary-gold) !important;
+  box-shadow: var(--shadow-gold-glow);
 }
 
 .wizard-step-node.completed {
-  background-color: var(--primary-indigo) !important;
-  border-color: var(--primary-indigo) !important;
+  background-color: var(--primary-gold) !important;
+  border-color: var(--primary-gold) !important;
   color: #000000 !important;
 }
 
 /* Selection highlights */
 .selected-service-item {
-  border-color: var(--primary-indigo) !important;
-  background-color: var(--primary-indigo-light) !important;
-  box-shadow: var(--shadow-indigo-glow) !important;
+  border-color: var(--primary-gold) !important;
+  background-color: var(--primary-gold-light) !important;
+  box-shadow: var(--shadow-gold-glow) !important;
 }
 
 .slot-picker-btn {
@@ -116,15 +116,15 @@ html {
 }
 
 .slot-picker-btn:hover:not(:disabled) {
-  border-color: var(--primary-indigo) !important;
-  color: var(--primary-indigo) !important;
-  background-color: var(--primary-indigo-light) !important;
+  border-color: var(--primary-gold) !important;
+  color: var(--primary-gold) !important;
+  background-color: var(--primary-gold-light) !important;
 }
 
 .slot-selected {
-  background: var(--primary-indigo) !important;
+  background: var(--primary-gold) !important;
   color: #000000 !important;
-  border-color: var(--primary-indigo) !important;
+  border-color: var(--primary-gold) !important;
   box-shadow: 0 0 15px rgba(255, 255, 255, 0.15) !important;
 }
 
@@ -169,15 +169,15 @@ html {
 }
 
 .btn-submit {
-  background-color: var(--primary-indigo);
+  background-color: var(--primary-gold);
   color: #000000;
-  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.15);
+  box-shadow: 0 2px 4px rgba(197, 160, 89, 0.15);
 }
 
 .btn-submit:hover:not(:disabled) {
-  background-color: var(--primary-indigo-hover);
+  background-color: var(--primary-gold-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
+  box-shadow: 0 4px 10px rgba(197, 160, 89, 0.25);
 }
 
 .btn-submit:disabled {
@@ -258,7 +258,7 @@ html {
 
 .search-input:focus {
   background-color: var(--bg-white-card);
-  border-color: var(--primary-indigo);
+  border-color: var(--primary-gold);
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
 }
 

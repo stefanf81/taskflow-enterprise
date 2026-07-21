@@ -21,6 +21,9 @@ export function formatTime12Hour(time24: string): string {
 /** Check if an appointment's booking date is in the past. */
 export function isOverdue(appt: { bookingDate?: string }): boolean {
   if (!appt.bookingDate) return false;
-  const todayStr = new Date().toISOString().split('T')[0];
+  // Use local date components to avoid UTC offset causing a date
+  // that is "today" in the user's timezone to appear as "yesterday" in UTC.
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   return appt.bookingDate < todayStr;
 }

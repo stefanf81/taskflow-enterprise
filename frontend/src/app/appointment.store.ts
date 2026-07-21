@@ -1,4 +1,4 @@
-import { Service, signal, computed, inject, DestroyRef } from '@angular/core';
+import { Injectable, signal, computed, inject, DestroyRef } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
@@ -8,7 +8,7 @@ import {
   AppointmentDashboardResponse,
 } from './appointment.service';
 
-@Service()
+@Injectable({ providedIn: 'root' })
 export class AppointmentStore {
   private readonly appointmentService = inject(AppointmentService);
 

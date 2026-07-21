@@ -1,8 +1,8 @@
-import { Service, computed } from '@angular/core';
+import { Injectable, computed } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { ServiceItem } from './appointment.service';
 
-@Service()
+@Injectable({ providedIn: 'root' })
 export class ServiceCatalogStore {
   private readonly servicesResource = httpResource<ServiceItem[]>(() => '/api/v1/catalog', {
     defaultValue: [],

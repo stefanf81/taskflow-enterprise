@@ -2,6 +2,7 @@ package com.example.taskflow.notification;
 
 import com.example.taskflow.appointment.Appointment;
 import com.example.taskflow.appointment.AppointmentStatusChangedEvent;
+import com.example.taskflow.core.LogSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -43,7 +44,7 @@ public class NotificationOutboxWriter {
                     "PENDING");
             outboxRepository.save(outbox);
         } catch (Exception e) {
-            String safeMsg = e.getMessage() != null ? e.getMessage().replaceAll("[\\r\\n]", "") : "";
+            String safeMsg = LogSanitizer.safeMessage(e);
             logger.error("Failed to enqueue status-change notification: {}", safeMsg);
         }
     }

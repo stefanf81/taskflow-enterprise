@@ -28,7 +28,7 @@ class RateLimiterConfigTest {
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
-        rateLimiterConfig = new RateLimiterConfig();
+        rateLimiterConfig = new RateLimiterConfig(100, 20);
         redisTemplate = mock(StringRedisTemplate.class);
         valueOperations = mock(ValueOperations.class);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);

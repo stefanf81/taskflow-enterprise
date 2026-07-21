@@ -30,4 +30,14 @@ public final class LogSanitizer {
         }
         return safe.substring(0, 2) + "****" + safe.substring(safe.length() - 2);
     }
+
+    /**
+     * Safely extract a loggable message from an exception, stripping newlines
+     * and falling back to the exception's class name when the message is null.
+     */
+    public static String safeMessage(Throwable t) {
+        if (t == null) return "unknown error";
+        String msg = t.getMessage();
+        return msg != null ? stripNewlines(msg) : t.getClass().getSimpleName();
+    }
 }

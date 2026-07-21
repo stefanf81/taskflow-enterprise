@@ -5,6 +5,7 @@ import {
   inject,
   DestroyRef,
   signal,
+  OnDestroy,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
@@ -32,7 +33,7 @@ import { formatTime12Hour, isOverdue } from '../../time-utils';
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
 })
-export class AdminDashboard {
+export class AdminDashboard implements OnDestroy {
   private readonly appointmentService = inject(AppointmentService);
   private readonly store = inject(AppointmentStore);
   private readonly barberStore = inject(BarberStore);
@@ -149,6 +150,12 @@ export class AdminDashboard {
   }
 
   private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  ngOnDestroy(): void {
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+    }
+  }
 
   onSearchChange(value: string): void {
     this.searchQuery.set(value);

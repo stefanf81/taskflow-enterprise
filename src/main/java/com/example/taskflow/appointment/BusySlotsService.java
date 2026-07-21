@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -71,8 +70,12 @@ public class BusySlotsService {
             // 3. Barber is scheduled and not off
             return appointmentRepository.findDistinctBookingTimes(barberName, date, "DENIED");
         } catch (Exception e) {
-            logger.error("Error parsing bookingDate in getBusySlots: {}", LogSanitizer.mask(bookingDate), e);
-            return Collections.emptyList();
+            // H12: On any failure, return ALL_SLOTS as a conservative safe default.
+            // Returning empty list would incorrectly show "all slots available",
+            // potentially allowing bookings during system errors.
+            logger.error("Error computing busy slots for {} on {}: {}", LogSanitizer.mask(barberName),
+                    LogSanitizer.mask(bookingDate), LogSanitizer.safeMessage(e), e);
+            return ALL_SLOTS;
         }
     }
 }

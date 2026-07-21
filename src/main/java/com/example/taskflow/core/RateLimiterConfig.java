@@ -22,8 +22,15 @@ public class RateLimiterConfig {
 
     private static final Logger log = LoggerFactory.getLogger(RateLimiterConfig.class);
     
-    private static final int MAX_REQUESTS_PER_MINUTE = 100;
-    private static final int AUTH_MAX_REQUESTS_PER_MINUTE = 20;
+    private final int maxRequestsPerMinute;
+    private final int authMaxRequestsPerMinute;
+
+    public RateLimiterConfig(
+            @Value("${app.rate-limit.max-requests-per-minute:100}") int maxRequestsPerMinute,
+            @Value("${app.rate-limit.auth-max-requests-per-minute:20}") int authMaxRequestsPerMinute) {
+        this.maxRequestsPerMinute = maxRequestsPerMinute;
+        this.authMaxRequestsPerMinute = authMaxRequestsPerMinute;
+    }
 
     @Bean
     public OncePerRequestFilter rateLimitFilter(StringRedisTemplate redisTemplate) {
@@ -40,7 +47,7 @@ public class RateLimiterConfig {
                 }
                 boolean isAuthEndpoint = path.startsWith("/api/v1/auth/");
                 
-                int maxRequests = isAuthEndpoint ? AUTH_MAX_REQUESTS_PER_MINUTE : MAX_REQUESTS_PER_MINUTE;
+                int maxRequests = isAuthEndpoint ? authMaxRequestsPerMinute : maxRequestsPerMinute;
                 
                 String redisKey = "rate_limit:" + clientIp + ":" + (isAuthEndpoint ? "auth" : "api");
                 

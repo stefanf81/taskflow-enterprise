@@ -1,9 +1,9 @@
 <!-- PREMIUM SAAS ANNOUNCEMENT BAR -->
 @if (!isLoggedIn()) {
   <div
-    class="w-full bg-zinc-900 border-b border-slate-800 py-2.5 px-4 text-center text-[11px] font-semibold text-indigo-400 tracking-wider uppercase animate-fade-in flex items-center justify-center gap-2"
+    class="w-full bg-zinc-900 border-b border-slate-800 py-2.5 px-4 text-center text-[11px] font-semibold text-gold tracking-wider uppercase animate-fade-in flex items-center justify-center gap-2"
   >
-    <span class="inline-flex h-2 w-2 rounded-full bg-indigo-400 animate-ping"></span>
+    <span class="inline-flex h-2 w-2 rounded-full bg-gold animate-ping"></span>
     <span
       >Special Highlight: Book 'The Executive Package' today and get 15% off any premium hair
       styling clay!</span
@@ -26,7 +26,7 @@
             viewBox="0 0 24 24"
             stroke-width="2.5"
             stroke="currentColor"
-            class="w-7 h-7 text-indigo-400"
+            class="w-7 h-7 text-gold"
           >
             <path
               stroke-linecap="round"
@@ -35,7 +35,7 @@
             />
           </svg>
           <span class="text-xl font-extrabold tracking-tight text-zinc-100 uppercase"
-            >TaskFlow <span class="text-indigo-400 font-light lowercase text-base">pro</span></span
+            >TaskFlow <span class="text-gold font-light lowercase text-base">pro</span></span
           >
         </div>
         <div class="flex items-center gap-4">
@@ -46,7 +46,7 @@
           </span>
           <button
             (click)="toggleAdminLoginModal(true)"
-            class="text-xs font-bold text-zinc-400 hover:text-indigo-400 tracking-wide uppercase transition-colors"
+            class="text-xs font-bold text-zinc-400 hover:text-gold tracking-wide uppercase transition-colors"
           >
             Owner Portal
           </button>
@@ -56,14 +56,14 @@
       <!-- HERO INTRO HEADER -->
       <header class="text-center mb-16 max-w-2xl mx-auto animate-fadeIn">
         <span
-          class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 uppercase tracking-widest mb-4"
+          class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-gold/10 text-gold border border-gold/20 uppercase tracking-widest mb-4"
         >
           Squire Integrated
         </span>
         <h1
           class="text-4xl sm:text-5xl font-black tracking-tight text-white uppercase mb-4 leading-none"
         >
-          Luxury Barber <span class="text-indigo-400">Scheduler</span>
+          Luxury Barber <span class="text-gold">Scheduler</span>
         </h1>
         <p class="text-base text-zinc-400 font-light leading-relaxed mb-6">
           Premium classic cuts, modern fades, hot towel straight-razor shaves, and beard sculpture
@@ -91,11 +91,11 @@
             (keydown.space)="
               selectLookbookStyle('Classic Haircut', 'hair'); $event.preventDefault()
             "
-            class="group p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-indigo-500/10 hover:border-indigo-500/30 hover:shadow-[0_0_15px_rgba(99,102,241,0.2)] cursor-pointer text-center transition-all duration-300"
+            class="group p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-gold/10 hover:border-gold/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
           >
             <span class="text-3xl block mb-3">👦🏻</span>
             <h4
-              class="font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-indigo-400 transition-colors"
+              class="font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-gold transition-colors"
             >
               Executive Pompadour
             </h4>
@@ -117,11 +117,11 @@
             (keydown.space)="
               selectLookbookStyle('Modern Skin Fade', 'hair'); $event.preventDefault()
             "
-            class="group p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-indigo-500/10 hover:border-indigo-500/30 hover:shadow-[0_0_15px_rgba(99,102,241,0.2)] cursor-pointer text-center transition-all duration-300"
+            class="group p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-gold/10 hover:border-gold/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
           >
             <span class="text-3xl block mb-3">👱🏽‍♂️</span>
             <h4
-              class="font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-indigo-400 transition-colors"
+              class="font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-gold transition-colors"
             >
               Midnight Skin Fade
             </h4>
@@ -143,11 +143,11 @@
             (keydown.space)="
               selectLookbookStyle('Beard Trim & Shave', 'beard'); $event.preventDefault()
             "
-            class="group p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-indigo-500/10 hover:border-indigo-500/30 hover:shadow-[0_0_15px_rgba(99,102,241,0.2)] cursor-pointer text-center transition-all duration-300"
+            class="group p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-gold/10 hover:border-gold/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
           >
             <span class="text-3xl block mb-3">🧔🏾</span>
             <h4
-              class="font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-indigo-400 transition-colors"
+              class="font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-gold transition-colors"
             >
               Bespoke Beard Sculpt
             </h4>
@@ -169,11 +169,11 @@
             (keydown.space)="
               selectLookbookStyle('The Executive Package', 'combo'); $event.preventDefault()
             "
-            class="group p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-indigo-500/10 hover:border-indigo-500/30 hover:shadow-[0_0_15px_rgba(99,102,241,0.2)] cursor-pointer text-center transition-all duration-300"
+            class="group p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-gold/10 hover:border-gold/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
           >
             <span class="text-3xl block mb-3">🤵🏼</span>
             <h4
-              class="font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-indigo-400 transition-colors"
+              class="font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-gold transition-colors"
             >
               Royal Executive
             </h4>
@@ -204,7 +204,7 @@
                 <div class="border-b border-white/5 pb-4 last:border-none last:pb-0">
                   <div class="flex justify-between items-center font-bold text-sm mb-1">
                     <span class="text-zinc-100">{{ service.name }}</span>
-                    <span class="text-indigo-400">${{ service.price }}</span>
+                    <span class="text-gold">${{ service.price }}</span>
                   </div>
                   <p class="text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-2">
                     ⏱️ Duration: {{ service.durationMinutes }} mins
@@ -238,7 +238,7 @@
 
             <!-- Grooming Clays -->
             <div
-              class="mt-6 rounded-2xl border border-white/10 bg-gradient-to-br from-white to-indigo-50/10 p-5"
+              class="mt-6 rounded-2xl border border-white/10 bg-gradient-to-br from-white to-gold-light/10 p-5"
             >
               <h3 class="text-zinc-100 font-bold text-xs uppercase tracking-wider mb-3">
                 🧴 Artisanal Products
@@ -246,7 +246,7 @@
               <div class="space-y-2 text-xs text-zinc-400 font-light">
                 <p class="flex justify-between">
                   <span>Styling Fiber Clay (100ml)</span>
-                  <span class="text-indigo-400 font-bold">$24.00</span>
+                  <span class="text-gold font-bold">$24.00</span>
                 </p>
                 <p class="flex justify-between">
                   <span>Sandalwood Beard Balm (60ml)</span>
@@ -298,7 +298,7 @@
                 class="absolute left-0 right-0 h-0.5 bg-white/5 z-0 top-1/2 -translate-y-1/2"
               ></div>
               <div
-                class="absolute left-0 h-0.5 bg-indigo-600 z-10 top-1/2 -translate-y-1/2 transition-all duration-300"
+                class="absolute left-0 h-0.5 bg-gold-dark z-10 top-1/2 -translate-y-1/2 transition-all duration-300"
                 [style.width.%]="(activeStep() - 1) * 33.3"
               ></div>
 
@@ -325,7 +325,7 @@
 
             <!-- Active Step Indicator Badge label -->
             <div
-              class="text-center font-bold text-xs text-indigo-400 uppercase tracking-wider mb-6"
+              class="text-center font-bold text-xs text-gold uppercase tracking-wider mb-6"
             >
               @if (activeStep() === 1) {
                 1. Select Treatment
@@ -375,6 +375,7 @@
             @if (successMessage()) {
               <div
                 role="status"
+                aria-live="polite"
                 class="alert alert-success mb-6 animate-fadeIn py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-emerald-500/10"
               >
                 <svg
@@ -413,7 +414,7 @@
                     [ngModel]="serviceSearchQuery()"
                     (ngModelChange)="serviceSearchQuery.set($event)"
                     placeholder="Search treatments (e.g., fade, trim, shave)..."
-                    class="w-full bg-black border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-xs text-zinc-100 placeholder-slate-400 outline-none focus:border-indigo-600 transition-all duration-200"
+                    class="w-full bg-black border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-xs text-zinc-100 placeholder-slate-400 outline-none focus:border-gold-dark transition-all duration-200"
                   />
                 </div>
 
@@ -426,7 +427,7 @@
                     type="button"
                     (click)="setServiceCategory('all')"
                     [class.bg-zinc-950]="selectedCategory() === 'all'"
-                    [class.text-indigo-400]="selectedCategory() === 'all'"
+                    [class.text-gold]="selectedCategory() === 'all'"
                     class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
                   >
                     All
@@ -435,7 +436,7 @@
                     type="button"
                     (click)="setServiceCategory('hair')"
                     [class.bg-zinc-950]="selectedCategory() === 'hair'"
-                    [class.text-indigo-400]="selectedCategory() === 'hair'"
+                    [class.text-gold]="selectedCategory() === 'hair'"
                     class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
                   >
                     Hair
@@ -444,7 +445,7 @@
                     type="button"
                     (click)="setServiceCategory('beard')"
                     [class.bg-zinc-950]="selectedCategory() === 'beard'"
-                    [class.text-indigo-400]="selectedCategory() === 'beard'"
+                    [class.text-gold]="selectedCategory() === 'beard'"
                     class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
                   >
                     Beards
@@ -453,7 +454,7 @@
                     type="button"
                     (click)="setServiceCategory('combo')"
                     [class.bg-zinc-950]="selectedCategory() === 'combo'"
-                    [class.text-indigo-400]="selectedCategory() === 'combo'"
+                    [class.text-gold]="selectedCategory() === 'combo'"
                     class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
                   >
                     Combos
@@ -465,7 +466,7 @@
                     <div
                       tabindex="0"
                       role="button"
-                      class="card p-4 border border-white/5 bg-zinc-900/30 hover:border-indigo-500/30 cursor-pointer transition-all"
+                      class="card p-4 border border-white/5 bg-zinc-900/30 hover:border-gold/30 cursor-pointer transition-all"
                       [class.selected-service-item]="bookingService() === service.name"
                       (click)="selectService(service.name)"
                       (keydown.enter)="selectService(service.name)"
@@ -474,11 +475,11 @@
                       <div class="flex justify-between items-center font-bold">
                         <span class="text-zinc-100 text-base flex items-center gap-1.5">
                           @if (bookingService() === service.name) {
-                            <span class="text-indigo-400 text-sm">👑</span>
+                            <span class="text-gold text-sm">👑</span>
                           }
                           {{ service.name }}
                         </span>
-                        <span class="text-indigo-400 text-lg">${{ service.price }}</span>
+                        <span class="text-gold text-lg">${{ service.price }}</span>
                       </div>
                       <p class="text-[10px] font-bold text-zinc-500 uppercase mt-0.5">
                         ⏱️ Duration: {{ service.durationMinutes }} mins
@@ -512,7 +513,7 @@
                 <div
                   tabindex="0"
                   role="button"
-                  class="card p-4 border border-white/5 bg-zinc-900/30 hover:border-indigo-500/30 hover:bg-indigo-500/5 flex items-center gap-4 cursor-pointer transition-all"
+                  class="card p-4 border border-white/5 bg-zinc-900/30 hover:border-gold/30 hover:bg-gold/5 flex items-center gap-4 cursor-pointer transition-all"
                   [class.selected-service-item]="
                     bookingBarber() === 'No Preference (First Available)'
                   "
@@ -523,7 +524,7 @@
                   "
                 >
                   <div
-                    class="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-lg font-black text-indigo-400"
+                    class="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-lg font-black text-gold"
                   >
                     🚀
                   </div>
@@ -625,7 +626,7 @@
                       style="
                         width: 2.25rem;
                         height: 2.25rem;
-                        color: var(--primary-indigo);
+                        color: var(--primary-gold);
                         margin: 0 auto;
                         display: block;
                       "
@@ -641,7 +642,7 @@
                         stroke="currentColor"
                         stroke-width="4"
                         style="opacity: 0.25"
-                        stroke="rgba(79,70,229,0.2)"
+                        stroke="rgba(197,160,89,0.2)"
                       ></circle>
                       <path
                         class="opacity-75"
@@ -653,7 +654,7 @@
                     <p
                       style="
                         font-size: 0.8rem;
-                        color: var(--primary-indigo);
+                        color: var(--primary-gold);
                         margin-top: 0.75rem;
                         font-weight: 700;
                         text-transform: uppercase;
@@ -840,7 +841,7 @@
                       @if (estimatedEndTime()) {
                         <p class="flex justify-between">
                           <span>⏰ Est. End Time:</span>
-                          <strong class="text-indigo-400 font-bold">{{
+                          <strong class="text-gold font-bold">{{
                             formatTime12Hour(estimatedEndTime())
                           }}</strong>
                         </p>
@@ -848,7 +849,7 @@
                       <hr class="border-t border-white/10 my-2" />
                       <p class="flex justify-between">
                         <span>Subtotal:</span>
-                        <span class="text-zinc-300">${{ checkoutSubtotal() }}.00</span>
+                        <span class="text-zinc-300">{{ checkoutSubtotal() | currency: 'USD' }}</span>
                       </p>
                       <p class="flex justify-between">
                         <span>Platform Svc Fee:</span>
@@ -856,7 +857,7 @@
                       </p>
                       <p class="flex justify-between text-sm font-bold text-zinc-100 pt-1">
                         <span>Total Est. Price:</span>
-                        <span class="text-indigo-400"
+                        <span class="text-gold"
                           >${{ checkoutTotal() | number: '1.2-2' }}</span
                         >
                       </p>
@@ -923,7 +924,7 @@
                 class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center outline-none"
               >
                 <span>⏰ How early should I arrive for my appointment?</span>
-                <span class="text-indigo-400 font-extrabold">{{
+                <span class="text-gold font-extrabold">{{
                   activeFaq() === 0 ? '−' : '+'
                 }}</span>
               </button>
@@ -952,7 +953,7 @@
                 class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center outline-none"
               >
                 <span>💳 Do you accept credit cards and contactless payments?</span>
-                <span class="text-indigo-400 font-extrabold">{{
+                <span class="text-gold font-extrabold">{{
                   activeFaq() === 1 ? '−' : '+'
                 }}</span>
               </button>
@@ -981,7 +982,7 @@
                 class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center outline-none"
               >
                 <span>📅 What is your cancellation/rescheduling policy?</span>
-                <span class="text-indigo-400 font-extrabold">{{
+                <span class="text-gold font-extrabold">{{
                   activeFaq() === 2 ? '−' : '+'
                 }}</span>
               </button>
@@ -1231,7 +1232,7 @@
                 viewBox="0 0 24 24"
                 stroke-width="2.5"
                 stroke="currentColor"
-                class="w-10 h-10 text-indigo-400 mx-auto mb-3"
+                class="w-10 h-10 text-gold mx-auto mb-3"
               >
                 <path
                   stroke-linecap="round"
@@ -1401,7 +1402,7 @@
             <div class="mt-4 text-center">
               <button
                 type="button"
-                class="text-xs text-indigo-400 font-bold hover:text-white"
+                class="text-xs text-gold font-bold hover:text-white"
                 (click)="isRegisterMode.set(!isRegisterMode())"
               >
                 {{
@@ -1460,7 +1461,7 @@
               <div class="space-y-3 text-xs text-zinc-400 font-light">
                 <p class="flex justify-between">
                   <span>🔑 Booking Code:</span>
-                  <strong class="text-indigo-400 font-bold select-all">{{
+                  <strong class="text-gold font-bold select-all">{{
                     lastBookedAppointment()?.publicId
                   }}</strong>
                 </p>
@@ -1492,7 +1493,7 @@
                 <hr class="border-t border-dashed border-slate-300 my-2" />
                 <p class="flex justify-between text-sm font-bold text-zinc-100 pt-1">
                   <span>Estimated Price:</span>
-                  <span class="text-indigo-400">${{ checkoutTotal() | number: '1.2-2' }}</span>
+                  <span class="text-gold">${{ checkoutTotal() | number: '1.2-2' }}</span>
                 </p>
               </div>
             </div>

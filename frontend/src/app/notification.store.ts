@@ -1,8 +1,8 @@
-import { Service, computed } from '@angular/core';
+import { Injectable, computed } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { NotificationItem } from './appointment.service';
 
-@Service()
+@Injectable({ providedIn: 'root' })
 export class NotificationStore {
   private readonly notificationsResource = httpResource<NotificationItem[]>(
     () => '/api/v1/notifications',

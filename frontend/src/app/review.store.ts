@@ -1,8 +1,8 @@
-import { Service, computed } from '@angular/core';
+import { Injectable, computed } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { BarberRating } from './appointment.service';
 
-@Service()
+@Injectable({ providedIn: 'root' })
 export class ReviewStore {
   private readonly ratingsResource = httpResource<BarberRating[]>(
     () => '/api/v1/reviews/public/barber-ratings',

@@ -29,6 +29,7 @@
   @if (successMessage()) {
     <div
       role="status"
+      aria-live="polite"
       class="alert alert-success mb-6 py-3 px-4 rounded-xl text-xs border border-emerald-500/10"
     >
       <span class="text-emerald-400 leading-normal font-medium">{{ successMessage() }}</span>
@@ -85,7 +86,7 @@
               <p class="text-xs text-zinc-400 font-light">
                 With <strong class="text-zinc-100">{{ appt.barberName }}</strong>
               </p>
-              <p class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mt-2">
+              <p class="text-[10px] font-bold text-gold uppercase tracking-wider mt-2">
                 📅 {{ appt.bookingDate | date: 'mediumDate' }} at
                 {{ formatTime12Hour(appt.bookingTime) }}
               </p>

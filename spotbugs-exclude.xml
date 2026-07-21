@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <FindBugsFilter>
-    <!-- We are building a stateless REST API with JWT, CSRF protection is not needed -->
+    <!-- CSRF protection is handled by Spring Security's CookieCsrfTokenRepository in SecurityConfig;
+         SpotBugs cannot detect the framework-level configuration, so the warning is suppressed here. -->
     <Match>
         <Bug pattern="SPRING_CSRF_PROTECTION_DISABLED"/>
     </Match>

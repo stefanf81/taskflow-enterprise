@@ -42,10 +42,18 @@ public class V16__ReseedPublicIds extends BaseJavaMigration {
 
             // 2. Any backfilled rows that used the 'temp-uuid-<id>' pattern.
             //    H2 uses LIKE; PostgreSQL also supports LIKE — portable.
-            try (PreparedStatement ps = context.getConnection().prepareStatement(
-                    "UPDATE appointments SET public_id = ? WHERE public_id LIKE 'temp-uuid-%'")) {
-                ps.setString(1, UUID.randomUUID().toString());
-                ps.executeUpdate();
+            //    Each row gets its own unique UUID to avoid violating the UNIQUE constraint.
+            try (ResultSet rs = stmt.executeQuery(
+                    "SELECT id FROM appointments WHERE public_id LIKE 'temp-uuid-%'")) {
+                try (PreparedStatement ps = context.getConnection().prepareStatement(
+                        "UPDATE appointments SET public_id = ? WHERE id = ?")) {
+                    while (rs.next()) {
+                        ps.setString(1, UUID.randomUUID().toString());
+                        ps.setLong(2, rs.getLong("id"));
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                }
             }
 
             // 3. Defensive: any remaining non-UUID public_id (NULL or not 36-char hex-dash).
