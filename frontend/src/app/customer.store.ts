@@ -32,21 +32,24 @@ export class CustomerStore {
 
     this.cancelErrorMessage.set(null);
     this.isCancelling.set(true);
-    this.appointmentService.cancelCustomerAppointment(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        this.isCancelling.set(false);
-        this.cancelErrorMessage.set(null);
-        this.loadAppointments();
-      },
-      error: (err) => {
-        this.isCancelling.set(false);
-        const detail = (err as { error?: { message?: string } })?.error?.message;
-        this.cancelErrorMessage.set(
-          detail && typeof detail === 'string'
-            ? detail
-            : 'Failed to cancel appointment. Please try again.',
-        );
-      },
-    });
+    this.appointmentService
+      .cancelCustomerAppointment(id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.isCancelling.set(false);
+          this.cancelErrorMessage.set(null);
+          this.loadAppointments();
+        },
+        error: (err) => {
+          this.isCancelling.set(false);
+          const detail = (err as { error?: { message?: string } })?.error?.message;
+          this.cancelErrorMessage.set(
+            detail && typeof detail === 'string'
+              ? detail
+              : 'Failed to cancel appointment. Please try again.',
+          );
+        },
+      });
   }
 }

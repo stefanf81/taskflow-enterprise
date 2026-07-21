@@ -20,20 +20,45 @@ describe('AppointmentStore', () => {
     page: {
       content: [
         {
-          id: 1, publicId: 'pub-1', customerName: 'Alice', customerEmail: 'alice@example.com',
-          customerPhone: '123', barberName: 'Alex', bookingDate: '2026-08-01', bookingTime: '09:00',
-          serviceType: 'Classic Haircut', status: 'PENDING', createdAt: '2026-07-01T00:00:00', updatedAt: '2026-07-01T00:00:00',
+          id: 1,
+          publicId: 'pub-1',
+          customerName: 'Alice',
+          customerEmail: 'alice@example.com',
+          customerPhone: '123',
+          barberName: 'Alex',
+          bookingDate: '2026-08-01',
+          bookingTime: '09:00',
+          serviceType: 'Classic Haircut',
+          status: 'PENDING',
+          createdAt: '2026-07-01T00:00:00',
+          updatedAt: '2026-07-01T00:00:00',
         },
       ],
-      totalPages: 3, totalElements: 6, size: 50, number: 0,
+      totalPages: 3,
+      totalElements: 6,
+      size: 50,
+      number: 0,
     },
-    stats: { total: 6, pending: 1, approved: 1, denied: 0, overdue: 0, progress: 50, approvedRevenue: 0 },
+    stats: {
+      total: 6,
+      pending: 1,
+      approved: 1,
+      denied: 0,
+      overdue: 0,
+      progress: 50,
+      approvedRevenue: 0,
+    },
   };
 
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [TestHost],
-      providers: [provideHttpClient(), provideHttpClientTesting(), AppointmentService, AppointmentStore],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        AppointmentService,
+        AppointmentStore,
+      ],
     });
 
     fixture = TestBed.createComponent(TestHost);

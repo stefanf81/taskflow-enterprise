@@ -72,20 +72,23 @@ export class BarberStore {
 
     this.actionErrorMessage.set(null);
     this.isSaving.set(true);
-    this.appointmentService.addTimeOff(barberId, request).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        this.isSaving.set(false);
-        this.actionErrorMessage.set(null);
-        this.actionSuccessMessage.set('Time off added successfully.');
-        this.timeOffsResource.reload();
-      },
-      error: (err) => {
-        this.isSaving.set(false);
-        this.actionErrorMessage.set(
-          this.extractError(err, 'Failed to add time off. Please try again.'),
-        );
-      },
-    });
+    this.appointmentService
+      .addTimeOff(barberId, request)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.isSaving.set(false);
+          this.actionErrorMessage.set(null);
+          this.actionSuccessMessage.set('Time off added successfully.');
+          this.timeOffsResource.reload();
+        },
+        error: (err) => {
+          this.isSaving.set(false);
+          this.actionErrorMessage.set(
+            this.extractError(err, 'Failed to add time off. Please try again.'),
+          );
+        },
+      });
   }
 
   private extractError(err: unknown, fallback: string): string {

@@ -19,9 +19,18 @@ describe('CustomerStore', () => {
   const mockAppointments = {
     content: [
       {
-        id: 1, publicId: 'pub-1', customerName: 'Alice', customerEmail: 'alice@example.com',
-        customerPhone: '123', barberName: 'Alex', bookingDate: '2026-08-01', bookingTime: '09:00',
-        serviceType: 'Classic Haircut', status: 'PENDING', createdAt: '2026-07-01T00:00:00', updatedAt: '2026-07-01T00:00:00',
+        id: 1,
+        publicId: 'pub-1',
+        customerName: 'Alice',
+        customerEmail: 'alice@example.com',
+        customerPhone: '123',
+        barberName: 'Alex',
+        bookingDate: '2026-08-01',
+        bookingTime: '09:00',
+        serviceType: 'Classic Haircut',
+        status: 'PENDING',
+        createdAt: '2026-07-01T00:00:00',
+        updatedAt: '2026-07-01T00:00:00',
       },
     ],
     totalPages: 1,
@@ -30,7 +39,12 @@ describe('CustomerStore', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [TestHost],
-      providers: [provideHttpClient(), provideHttpClientTesting(), AppointmentService, CustomerStore],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        AppointmentService,
+        CustomerStore,
+      ],
     });
 
     fixture = TestBed.createComponent(TestHost);
@@ -126,7 +140,10 @@ describe('CustomerStore', () => {
     store.cancelAppointment(1);
 
     const req = httpMock.expectOne((r) => r.url.includes('/api/v1/customer/appointments/1'));
-    req.flush({ message: 'Cannot cancel within 24 hours' }, { status: 400, statusText: 'Bad Request' });
+    req.flush(
+      { message: 'Cannot cancel within 24 hours' },
+      { status: 400, statusText: 'Bad Request' },
+    );
 
     expect(store.cancelErrorMessage()).toBeTruthy();
   });

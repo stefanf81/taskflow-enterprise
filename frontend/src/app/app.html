@@ -1034,7 +1034,7 @@
                   id="cancelBookingId"
                   name="cancelBookingId"
                   [ngModel]="cancelBookingId()"
-                    (ngModelChange)="cancelBookingId.set($event)"
+                  (ngModelChange)="cancelBookingId.set($event)"
                   required
                   placeholder="e.g., 8f8d9b..."
                   class="form-control"
@@ -1067,7 +1067,7 @@
                   id="cancelEmail"
                   name="cancelEmail"
                   [ngModel]="cancelEmail()"
-                    (ngModelChange)="cancelEmail.set($event)"
+                  (ngModelChange)="cancelEmail.set($event)"
                   required
                   placeholder="e.g., john@example.com"
                   class="form-control"
@@ -1123,7 +1123,7 @@
                   id="reviewPublicId"
                   name="reviewPublicId"
                   [ngModel]="reviewPublicId()"
-                    (ngModelChange)="reviewPublicId.set($event)"
+                  (ngModelChange)="reviewPublicId.set($event)"
                   required
                   placeholder="e.g., 8f8d9b..."
                   class="form-control"
@@ -1156,7 +1156,7 @@
                   id="reviewRating"
                   name="reviewRating"
                   [ngModel]="reviewRating()"
-                    (ngModelChange)="reviewRating.set(+$event)"
+                  (ngModelChange)="reviewRating.set(+$event)"
                   required
                   min="1"
                   max="5"
@@ -1187,7 +1187,7 @@
                   id="reviewComment"
                   name="reviewComment"
                   [ngModel]="reviewComment()"
-                    (ngModelChange)="reviewComment.set($event)"
+                  (ngModelChange)="reviewComment.set($event)"
                   placeholder="Great haircut!"
                   class="form-control min-h-[60px]"
                 ></textarea>
@@ -1326,7 +1326,7 @@
                   id="username"
                   name="username"
                   [ngModel]="loginUsername()"
-                    (ngModelChange)="loginUsername.set($event)"
+                  (ngModelChange)="loginUsername.set($event)"
                   required
                   placeholder="e.g., admin"
                   class="form-control"
@@ -1363,7 +1363,7 @@
                   id="password"
                   name="password"
                   [ngModel]="loginPassword()"
-                    (ngModelChange)="loginPassword.set($event)"
+                  (ngModelChange)="loginPassword.set($event)"
                   required
                   placeholder="e.g., admin-password"
                   class="form-control"
@@ -1405,7 +1405,9 @@
                 (click)="isRegisterMode.set(!isRegisterMode())"
               >
                 {{
-                  isRegisterMode() ? 'Already have an account? Sign In' : 'Need an account? Register'
+                  isRegisterMode()
+                    ? 'Already have an account? Sign In'
+                    : 'Need an account? Register'
                 }}
               </button>
             </div>

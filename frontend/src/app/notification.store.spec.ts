@@ -17,8 +17,22 @@ describe('NotificationStore', () => {
   let fixture: ComponentFixture<TestHost>;
 
   const mockNotifications: NotificationItem[] = [
-    { id: 1, recipient: 'alice@example.com', type: 'EMAIL', message: 'Your appointment is confirmed', sentAt: '2026-07-01T10:00:00', status: 'SENT' },
-    { id: 2, recipient: 'bob@example.com', type: 'EMAIL', message: 'Reminder: Appointment tomorrow', sentAt: '2026-07-02T08:00:00', status: 'SENT' },
+    {
+      id: 1,
+      recipient: 'alice@example.com',
+      type: 'EMAIL',
+      message: 'Your appointment is confirmed',
+      sentAt: '2026-07-01T10:00:00',
+      status: 'SENT',
+    },
+    {
+      id: 2,
+      recipient: 'bob@example.com',
+      type: 'EMAIL',
+      message: 'Reminder: Appointment tomorrow',
+      sentAt: '2026-07-02T08:00:00',
+      status: 'SENT',
+    },
   ];
 
   beforeEach(async () => {

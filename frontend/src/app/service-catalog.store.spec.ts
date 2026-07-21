@@ -17,9 +17,30 @@ describe('ServiceCatalogStore', () => {
   let fixture: ComponentFixture<TestHost>;
 
   const mockServices: ServiceItem[] = [
-    { id: 1, name: 'Classic Haircut', price: 25, durationMinutes: 30, category: 'hair', description: 'Desc' },
-    { id: 2, name: 'Modern Skin Fade', price: 30, durationMinutes: 45, category: 'hair', description: 'Desc' },
-    { id: 3, name: 'Beard Trim & Shave', price: 18, durationMinutes: 25, category: 'beard', description: 'Desc' },
+    {
+      id: 1,
+      name: 'Classic Haircut',
+      price: 25,
+      durationMinutes: 30,
+      category: 'hair',
+      description: 'Desc',
+    },
+    {
+      id: 2,
+      name: 'Modern Skin Fade',
+      price: 30,
+      durationMinutes: 45,
+      category: 'hair',
+      description: 'Desc',
+    },
+    {
+      id: 3,
+      name: 'Beard Trim & Shave',
+      price: 18,
+      durationMinutes: 25,
+      category: 'beard',
+      description: 'Desc',
+    },
   ];
 
   beforeEach(async () => {
@@ -34,9 +55,7 @@ describe('ServiceCatalogStore', () => {
     fixture.detectChanges();
 
     // Flush the initial auto-triggered httpResource request.
-    httpMock
-      .match((req) => req.url.includes('/api/v1/catalog'))
-      .forEach((req) => req.flush([]));
+    httpMock.match((req) => req.url.includes('/api/v1/catalog')).forEach((req) => req.flush([]));
     fixture.detectChanges();
     await fixture.whenStable();
   });

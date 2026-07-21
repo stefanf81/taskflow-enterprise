@@ -89,10 +89,13 @@ export class AppointmentStore {
 
   // Handle Admin Logout — clear the HttpOnly cookie on the backend, then drop UI state.
   onLogout(): void {
-    this.appointmentService.logout().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => this.resetAuthState(),
-      error: () => this.resetAuthState(),
-    });
+    this.appointmentService
+      .logout()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => this.resetAuthState(),
+        error: () => this.resetAuthState(),
+      });
   }
 
   // Reset local auth signals (also invoked on a 401 from the interceptor).

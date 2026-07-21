@@ -99,37 +99,46 @@ export class AdminDashboard {
   }
 
   approveAppointment(id: number): void {
-    this.appointmentService.updateAppointmentStatus(id, 'APPROVED').pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        this.successMessage.set('Appointment APPROVED! Client notification email dispatched.');
-        this.loadAppointments();
-      },
-      error: () => this.errorMessage.set('Failed to approve appointment.'),
-    });
+    this.appointmentService
+      .updateAppointmentStatus(id, 'APPROVED')
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.successMessage.set('Appointment APPROVED! Client notification email dispatched.');
+          this.loadAppointments();
+        },
+        error: () => this.errorMessage.set('Failed to approve appointment.'),
+      });
   }
 
   denyAppointment(id: number): void {
-    this.appointmentService.updateAppointmentStatus(id, 'DENIED').pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        this.successMessage.set('Appointment DECLINED. Client notification email dispatched.');
-        this.loadAppointments();
-      },
-      error: () => this.errorMessage.set('Failed to decline appointment.'),
-    });
+    this.appointmentService
+      .updateAppointmentStatus(id, 'DENIED')
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.successMessage.set('Appointment DECLINED. Client notification email dispatched.');
+          this.loadAppointments();
+        },
+        error: () => this.errorMessage.set('Failed to decline appointment.'),
+      });
   }
 
   deleteAppointment(id: number): void {
     if (confirm('Are you sure you want to permanently delete/cancel this booking?')) {
-      this.appointmentService.deleteAppointment(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-        next: () => {
-          this.successMessage.set('Booking permanently deleted.');
-          if (this.appointments().length === 1 && this.currentPage() > 0) {
-            this.currentPage.update((p) => p - 1);
-          }
-          this.loadAppointments();
-        },
-        error: () => this.errorMessage.set('Failed to delete booking.'),
-      });
+      this.appointmentService
+        .deleteAppointment(id)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: () => {
+            this.successMessage.set('Booking permanently deleted.');
+            if (this.appointments().length === 1 && this.currentPage() > 0) {
+              this.currentPage.update((p) => p - 1);
+            }
+            this.loadAppointments();
+          },
+          error: () => this.errorMessage.set('Failed to delete booking.'),
+        });
     }
   }
 

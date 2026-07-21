@@ -82,7 +82,9 @@ describe('ReviewStore', () => {
     // First load
     store.loadRatings();
     fixture.detectChanges();
-    httpMock.expectOne((r) => r.url.includes('/api/v1/reviews/public/barber-ratings')).flush(mockRatings);
+    httpMock
+      .expectOne((r) => r.url.includes('/api/v1/reviews/public/barber-ratings'))
+      .flush(mockRatings);
     await fixture.whenStable();
     fixture.detectChanges();
     expect(store.ratings().length).toBe(2);

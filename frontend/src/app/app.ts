@@ -242,19 +242,22 @@ export class App implements OnInit {
     // A1.2: restore UI role from the backend if a session cookie exists (survives
     // refresh). The role lives only in memory — never read from sessionStorage.
     // bootstrap() calls me() internally and sets the role signal when complete.
-    this.authState.bootstrap().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (role) => {
-        if (role) {
-          this.isLoggedIn.set(true);
-          this.loadAppointments();
-          this.router.navigateByUrl(this.authState.dashboardPathFor(role));
-        }
-      },
-      error: () => {
-        // No active session — stay logged out.
-        this.isLoggedIn.set(false);
-      },
-    });
+    this.authState
+      .bootstrap()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (role) => {
+          if (role) {
+            this.isLoggedIn.set(true);
+            this.loadAppointments();
+            this.router.navigateByUrl(this.authState.dashboardPathFor(role));
+          }
+        },
+        error: () => {
+          // No active session — stay logged out.
+          this.isLoggedIn.set(false);
+        },
+      });
   }
 
   // Handle Admin/Customer Portal Login via JWT endpoint
@@ -275,28 +278,33 @@ export class App implements OnInit {
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
 
-    this.appointmentService.login(user, pass).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (response) => {
-        // The JWT lives in an HttpOnly cookie set by the backend; nothing to store here.
-        // A1.2: role is kept only in memory via AuthState.
-        this.authState.applyRole(response.role);
-        this.isLoggedIn.set(true);
-        this.isSubmitting.set(false);
-        this.showAdminLoginModal.set(false);
-        this.errorMessage.set(null);
+    this.appointmentService
+      .login(user, pass)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          // The JWT lives in an HttpOnly cookie set by the backend; nothing to store here.
+          // A1.2: role is kept only in memory via AuthState.
+          this.authState.applyRole(response.role);
+          this.isLoggedIn.set(true);
+          this.isSubmitting.set(false);
+          this.showAdminLoginModal.set(false);
+          this.errorMessage.set(null);
 
-        this.loginUsername.set('');
-        this.loginPassword.set('');
-        this.showSuccess(response.role === 'ROLE_ADMIN' ? 'Welcome back, Owner!' : 'Welcome back!');
-        this.loadAppointments(); // Load bookings
-        this.router.navigateByUrl(this.authState.dashboardPathFor(response.role));
-      },
-      error: (err) => {
-        this.errorMessage.set('Invalid credentials. Please try again.');
-        this.isSubmitting.set(false);
-        console.error('Authentication error:', err);
-      },
-    });
+          this.loginUsername.set('');
+          this.loginPassword.set('');
+          this.showSuccess(
+            response.role === 'ROLE_ADMIN' ? 'Welcome back, Owner!' : 'Welcome back!',
+          );
+          this.loadAppointments(); // Load bookings
+          this.router.navigateByUrl(this.authState.dashboardPathFor(response.role));
+        },
+        error: (err) => {
+          this.errorMessage.set('Invalid credentials. Please try again.');
+          this.isSubmitting.set(false);
+          console.error('Authentication error:', err);
+        },
+      });
   }
 
   onRegister(): void {
@@ -313,18 +321,21 @@ export class App implements OnInit {
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
 
-    this.appointmentService.register({ email, password: pass, fullName: name, phone }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        this.isRegisterMode.set(false);
-        this.isSubmitting.set(false);
-        this.showSuccess('Account created! You can now log in.');
-        this.errorMessage.set(null);
-      },
-      error: (err) => {
-        this.errorMessage.set(err.error?.message || 'Failed to create account.');
-        this.isSubmitting.set(false);
-      },
-    });
+    this.appointmentService
+      .register({ email, password: pass, fullName: name, phone })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.isRegisterMode.set(false);
+          this.isSubmitting.set(false);
+          this.showSuccess('Account created! You can now log in.');
+          this.errorMessage.set(null);
+        },
+        error: (err) => {
+          this.errorMessage.set(err.error?.message || 'Failed to create account.');
+          this.isSubmitting.set(false);
+        },
+      });
   }
 
   // Admin View State
@@ -406,26 +417,29 @@ export class App implements OnInit {
       serviceType: model.serviceType,
     };
 
-    this.appointmentService.createAppointment(payload).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (created) => {
-        this.isSubmitting.set(false);
-        this.lastBookedAppointment.set(created);
-        this.showReceiptModal.set(true);
-        this.resetBookingForm();
-      },
-      error: (err) => {
-        console.error(
-          'CREATE APPT ERROR STATUS:',
-          err.status,
-          'MESSAGE:',
-          err.message,
-          'BODY:',
-          err.error,
-        );
-        this.errorMessage.set(err.error?.message || 'Failed to submit booking request.');
-        this.isSubmitting.set(false);
-      },
-    });
+    this.appointmentService
+      .createAppointment(payload)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (created) => {
+          this.isSubmitting.set(false);
+          this.lastBookedAppointment.set(created);
+          this.showReceiptModal.set(true);
+          this.resetBookingForm();
+        },
+        error: (err) => {
+          console.error(
+            'CREATE APPT ERROR STATUS:',
+            err.status,
+            'MESSAGE:',
+            err.message,
+            'BODY:',
+            err.error,
+          );
+          this.errorMessage.set(err.error?.message || 'Failed to submit booking request.');
+          this.isSubmitting.set(false);
+        },
+      });
   }
 
   // Load Paginated Bookings from Backend (Delegated to the Store)
@@ -439,39 +453,48 @@ export class App implements OnInit {
 
   // Approve Booking
   approveAppointment(id: number): void {
-    this.appointmentService.updateAppointmentStatus(id, 'APPROVED').pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        this.showSuccess('Appointment APPROVED! Client notification email dispatched.');
-        this.loadAppointments();
-      },
-      error: () => this.errorMessage.set('Failed to approve appointment.'),
-    });
+    this.appointmentService
+      .updateAppointmentStatus(id, 'APPROVED')
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.showSuccess('Appointment APPROVED! Client notification email dispatched.');
+          this.loadAppointments();
+        },
+        error: () => this.errorMessage.set('Failed to approve appointment.'),
+      });
   }
 
   // Deny Booking
   denyAppointment(id: number): void {
-    this.appointmentService.updateAppointmentStatus(id, 'DENIED').pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        this.showSuccess('Appointment DECLINED. Client notification email dispatched.');
-        this.loadAppointments();
-      },
-      error: () => this.errorMessage.set('Failed to decline appointment.'),
-    });
+    this.appointmentService
+      .updateAppointmentStatus(id, 'DENIED')
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.showSuccess('Appointment DECLINED. Client notification email dispatched.');
+          this.loadAppointments();
+        },
+        error: () => this.errorMessage.set('Failed to decline appointment.'),
+      });
   }
 
   // Delete/Cancel Booking
   deleteAppointment(id: number): void {
     if (confirm('Are you sure you want to permanently delete/cancel this booking?')) {
-      this.appointmentService.deleteAppointment(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-        next: () => {
-          this.showSuccess('Booking permanently deleted.');
-          if (this.appointments().length === 1 && this.currentPage() > 0) {
-            this.currentPage.update((p) => p - 1);
-          }
-          this.loadAppointments();
-        },
-        error: () => this.errorMessage.set('Failed to delete booking.'),
-      });
+      this.appointmentService
+        .deleteAppointment(id)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: () => {
+            this.showSuccess('Booking permanently deleted.');
+            if (this.appointments().length === 1 && this.currentPage() > 0) {
+              this.currentPage.update((p) => p - 1);
+            }
+            this.loadAppointments();
+          },
+          error: () => this.errorMessage.set('Failed to delete booking.'),
+        });
     }
   }
 
@@ -625,21 +648,24 @@ export class App implements OnInit {
     }
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
-    this.appointmentService.publicCancelAppointment(publicId, email).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        this.isSubmitting.set(false);
-        this.cancelBookingId.set('');
-        this.cancelEmail.set('');
-        this.showSuccess('🗑️ Reservation successfully cancelled and deleted from our calendar.');
-        this.onBarberOrDateChange();
-      },
-      error: (err) => {
-        this.errorMessage.set(
-          err.error?.message || 'Verification failed. Please check your Booking Code and Email.',
-        );
-        this.isSubmitting.set(false);
-      },
-    });
+    this.appointmentService
+      .publicCancelAppointment(publicId, email)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.isSubmitting.set(false);
+          this.cancelBookingId.set('');
+          this.cancelEmail.set('');
+          this.showSuccess('🗑️ Reservation successfully cancelled and deleted from our calendar.');
+          this.onBarberOrDateChange();
+        },
+        error: (err) => {
+          this.errorMessage.set(
+            err.error?.message || 'Verification failed. Please check your Booking Code and Email.',
+          );
+          this.isSubmitting.set(false);
+        },
+      });
   }
 
   onBarberOrDateChange(): void {
@@ -660,16 +686,19 @@ export class App implements OnInit {
       }
 
       this.isCheckingSlots.set(true);
-      this.appointmentService.getBusySlots(barber, date).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-        next: (busy) => {
-          this.busySlots.set(busy);
-          this.isCheckingSlots.set(false);
-        },
-        error: () => {
-          this.busySlots.set([]);
-          this.isCheckingSlots.set(false);
-        },
-      });
+      this.appointmentService
+        .getBusySlots(barber, date)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (busy) => {
+            this.busySlots.set(busy);
+            this.isCheckingSlots.set(false);
+          },
+          error: () => {
+            this.busySlots.set([]);
+            this.isCheckingSlots.set(false);
+          },
+        });
     } else {
       this.busySlots.set([]);
     }
@@ -743,7 +772,8 @@ export class App implements OnInit {
         rating: this.reviewRating(),
         comment: this.reviewComment(),
       })
-      .pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
         next: () => {
           this.isSubmitting.set(false);
           this.showSuccess('Thank you for your review! We appreciate your feedback.');
