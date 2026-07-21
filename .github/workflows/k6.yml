@@ -6,12 +6,20 @@ on:
 jobs:
   browser-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     env:
       BASE_URL: ${{ vars.BASE_URL }}
 
     steps:
       - uses: actions/checkout@v7
+
+      - name: Verify BASE_URL is set
+        run: |
+          if [ -z "$BASE_URL" ]; then
+            echo "::error::vars.BASE_URL is not set on this environment"
+            exit 1
+          fi
 
       - name: Run k6 browser test
         run: |
