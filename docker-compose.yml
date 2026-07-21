@@ -74,6 +74,12 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
+      # JVM sizing is owned by the deployment (JAVA_TOOL_OPTIONS), not the image
+      # CMD — see Dockerfile / Dockerfile.x64 for the sizing-agnostic rationale.
+      # This block mirrors the prod homelab/TF backend.yaml intent (modulo
+      # prod-only GC logging + heap-dump paths that would clutter a laptop).
+      # At 2560M limit × MaxRAMPercentage=50.0 → ~1.25 GiB heap, ~1.3 GiB off-heap.
+      - JAVA_TOOL_OPTIONS=-XX:+UseG1GC -XX:MaxRAMPercentage=50.0 -XX:MaxGCPauseMillis=100 -XX:+ExitOnOutOfMemoryError -XX:+UseStringDeduplication -XX:+AlwaysPreTouch -XX:+ParallelRefProcEnabled -XX:+DisableExplicitGC -XX:MaxDirectMemorySize=256m -XX:MaxMetaspaceSize=256m
     env_file:
       - .env
     networks:

@@ -1,7 +1,11 @@
 # =========================================================================================
 # STAGE 1: LAYER EXTRACTION
+#
+# linux/arm64 is pinned explicitly so this image always matches the local Apple
+# Silicon runtime. The extractor only runs `java -Djarmode=tools ...`, which is a
+# pure JRE operation — no JDK is needed.
 # =========================================================================================
-FROM eclipse-temurin:21-jre-alpine AS builder
+FROM --platform=linux/arm64 eclipse-temurin:21-jre-alpine AS extractor
 
 WORKDIR /app
 
@@ -31,7 +35,7 @@ RUN java -Djarmode=tools -jar /app/app.jar extract --layers --launcher --destina
 # A minimal Alpine-based JRE keeps the runtime image small while reducing the installed
 # operating system surface area.
 # =========================================================================================
-FROM eclipse-temurin:21-jre-alpine
+FROM --platform=linux/arm64 eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
@@ -43,17 +47,20 @@ WORKDIR /app
 # (eclipse-temurin:21-jre-alpine) is already kept up to date by the image
 # maintainer, and running upgrade inside the Dockerfile would make builds
 # non-reproducible by pulling unpredictable package versions.
-RUN apk update && apk upgrade --no-cache \
+#
+# Intentionally divergent from Dockerfile.x64 (which runs `apk upgrade` for
+# prod security patching) so local builds stay reproducible across rebuilds.
+RUN apk update --no-cache \
     && addgroup -g 10001 -S appgroup \
     && adduser -u 10001 -S appuser -G appgroup \
     && apk add --no-cache tini
 
 # Copy Spring Boot's extracted layers from least frequently changed to most frequently
 # changed to maximize Docker cache reuse.
-COPY --link --from=builder --chown=10001:10001 /app/extracted/dependencies/ ./
-COPY --link --from=builder --chown=10001:10001 /app/extracted/spring-boot-loader/ ./
-COPY --link --from=builder --chown=10001:10001 /app/extracted/snapshot-dependencies/ ./
-COPY --link --from=builder --chown=10001:10001 /app/extracted/application/ ./
+COPY --link --from=extractor --chown=10001:10001 /app/extracted/dependencies/ ./
+COPY --link --from=extractor --chown=10001:10001 /app/extracted/spring-boot-loader/ ./
+COPY --link --from=extractor --chown=10001:10001 /app/extracted/snapshot-dependencies/ ./
+COPY --link --from=extractor --chown=10001:10001 /app/extracted/application/ ./
 
 # Build a JVM Class Data Sharing (CDS) archive.
 #
@@ -77,7 +84,7 @@ COPY --link --from=builder --chown=10001:10001 /app/extracted/application/ ./
 # spring.context.exit=onRefresh terminates the application immediately after
 # the Spring context has fully initialized, allowing CDS to observe a complete
 # startup without leaving a server running during the Docker build.
-RUN OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4317 java -XX:ArchiveClassesAtExit=application.jsa \
+RUN java -XX:ArchiveClassesAtExit=application.jsa \
          -Dspring.aot.enabled=false \
          -Dloader.main=com.example.cdstraining.CdsTrainingApplication \
          -Dspring.context.exit=onRefresh \
@@ -99,77 +106,33 @@ USER 10001:10001
 EXPOSE 8080
 
 # =========================================================================================
-# JVM TUNING (Container-Portable Heap Sizing)
+# JVM TUNING — image- vs deployment-owned flags
 #
-# -Dspring.aot.enabled=true  : Enables Spring Boot's Ahead-of-Time generated classes,
-#                              reducing startup overhead by avoiding runtime reflection.
+# JVM sizing (heap, off-heap caps) is owned by the DEPLOYMENT via JAVA_TOOL_OPTIONS,
+# not the image. The image CMD carries only flags that must hold in every environment:
 #
-# -XX:InitialRAMPercentage=50.0
-# -XX:MaxRAMPercentage=50.0
+#   -Dspring.aot.enabled=true            : AOT-generated classes (startup).
+#   -XX:SharedArchiveFile=application.jsa: CDS archive generated at build time.
+#   -Xshare:auto                         : Use the CDS archive when compatible.
+#   -XX:+ExitOnOutOfMemoryError          : Safety invariant — fail fast on OOM.
 #
-#   These replace the old fixed -Xms1g / -Xmx1g so the same image adapts to any
-#   container memory limit (2 GB, 4 GB, 16 GB, ...) without a rebuild.
-#   50% (NOT the common 75% default) deliberately leaves ~half the container for
-#   off-heap: this app uses Netty (OTLP) + Lettuce (Redis) direct buffers, plus
-#   ~200 Tomcat thread stacks and the code cache. At the 2GiB taskflow limit,
-#   50% = 1GiB heap + 1GiB off-heap, which keeps the pod safely under its cgroup
-#   limit under load (75% would yield 1.5GiB heap and OOMKilled the 2Gi pod).
+# Heap / direct / metaspace sizing live in:
+#   - docker-compose.yml   (local dev stack)
+#   - homelab/TF/gitops/.../backend.yaml JAVA_TOOL_OPTIONS (prod)
 #
-#   NOTE: the deployment (gitops/apps/taskflow/backend.yaml) intentionally does
-#   NOT override these with -Xmx/-XX:MaxDirectMemorySize. Dockerfile CMD args win
-#   over JAVA_TOOL_OPTIONS for conflicting flags (JVM "last-wins"), so an env -Xmx
-#   would either be ignored (when RAM% is set) or silently override the direct-
-#   memory cap. The image is the single source of truth for JVM sizing.
+# Setting sizing flags here would silently win over JAVA_TOOL_OPTIONS (JVM
+# "last-wins" precedence for non-sticky flags) and recreate the precedence bug
+# where the deployment's tuning was a no-op. Keep this CMD sizing-agnostic.
 #
-# -XX:MaxDirectMemorySize    : Caps Netty's off-heap direct buffers (Lettuce Redis
-#                              client + OpenTelemetry). Without this the JVM default
-#                              lets direct memory track the heap size and the
-#                              container RSS blows past -Xmx and hits the cgroup
-#                              limit.
-#
-# -XX:MaxMetaspaceSize       : Caps class-metadata memory so a long-running
-#                              container cannot slowly creep upward.
-#
-# -XX:+ExitOnOutOfMemoryError: Terminates immediately on OOM so failures are
-#                              explicit instead of leaving the JVM in an unstable
-#                              state.
-#
-# Garbage Collector
-#
-# No collector is explicitly selected — JDK 21 defaults to G1GC.
-#
-# G1 targets predictable pause times (approximately 200 ms by default via
-# MaxGCPauseMillis) rather than maximizing raw throughput, making it a sensible
-# default for request/response services where latency generally matters more
-# than peak requests per second.
-#
-# ParallelGC was previously used here because local benchmarking on Apple M4 Pro
-# showed higher throughput numbers. However, inside Kubernetes containers the
-# workload is server-style (mixed young/old GC, variable request rates) where
-# G1's adaptive heuristics and pause-time control serve the application better.
-# The throughput advantage of ParallelGC on a 14-core laptop does not translate
-# to a contended container CPU-share in production.
-#
-# Deliberately NOT configured
-# ---------------------------
-#
-# -XX:+AlwaysPreTouch
-#
-#   Pretouching commits the entire initial heap during startup, which means every
-#   pod restart pays a measurable latency cost before serving traffic. In Kubernetes
-#   where pods are recycled regularly (rollouts, scaling events, node drains), fast
-#   startup matters more than shaving a few microseconds off the first request's
-#   page faults. Spring AOT and CDS already handle the bulk of startup optimisation.
+# Garbage collector: no collector is selected explicitly — JDK 21 defaults to G1GC,
+# the right choice for a latency-sensitive request/response service. Operators can
+# override via JAVA_TOOL_OPTIONS if a different collector is ever warranted.
 # =========================================================================================
 ENTRYPOINT ["/sbin/tini", "--", "java"]
 
 # Replace the shell with direct JVM execution.
 CMD [ \
     "-Dspring.aot.enabled=true", \
-    "-XX:InitialRAMPercentage=50.0", \
-    "-XX:MaxRAMPercentage=50.0", \
-    "-XX:MaxDirectMemorySize=256m", \
-    "-XX:MaxMetaspaceSize=256m", \
     "-XX:+ExitOnOutOfMemoryError", \
     "-XX:SharedArchiveFile=application.jsa", \
     "-Xshare:auto", \

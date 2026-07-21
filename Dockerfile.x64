@@ -18,11 +18,15 @@
 # linux/amd64 is pinned explicitly so builds on Apple Silicon cross-compile via
 # QEMU to match the target cloud runtime rather than accidentally producing
 # arm64 binaries.
+#
+# This stage only runs `java -Djarmode=tools ... extract`, a pure JRE operation
+# that splits the fat jar into deterministic Docker layers. No JDK is needed —
+# the JDK is dead weight here, especially under QEMU emulation.
 # =========================================================================================
 
 ARG PLATFORM=linux/amd64
 
-FROM --platform=$PLATFORM eclipse-temurin:21-jdk AS builder
+FROM --platform=$PLATFORM eclipse-temurin:21-jre-alpine AS extractor
 
 WORKDIR /app
 
@@ -42,6 +46,11 @@ WORKDIR /app
 #
 # Without the cache mount Gradle will download dependencies from scratch on
 # every build, significantly increasing build times.
+#
+# WARNING: the glob below must match exactly ONE jar. If both the bootJar and
+# the -plain.jar variant are present (e.g. after `./gradlew build` instead of
+# `./gradlew bootJar`), this COPY command will fail. Only the bootJar should
+# be in build/libs/ before building this image.
 
 COPY build/libs/*.jar /app/app.jar
 
@@ -52,8 +61,7 @@ COPY build/libs/*.jar /app/app.jar
 # Changes to application code typically invalidate only the top application
 # layer instead of forcing the entire image to be rebuilt.
 
-RUN --mount=type=cache,target=/tmp \
-    java \
+RUN java \
         -Djarmode=tools \
         -jar /app/app.jar \
         extract \
@@ -78,6 +86,11 @@ WORKDIR /app
 # A fixed numeric UID/GID is used instead of dynamically allocated IDs. This
 # avoids permission mismatches on mounted volumes and satisfies Kubernetes Pod
 # Security Standards requiring non-root containers.
+#
+# `apk upgrade` is run here (intentionally divergent from the local Dockerfile,
+# which skips it for reproducibility) so CI images built for prod pick up
+# Alpine's published security patches at every build. Reproducibility is traded
+# for hygiene on the prod image surface.
 
 RUN apk update && apk upgrade --no-cache \
  && addgroup -g 10001 -S appgroup \
@@ -93,10 +106,10 @@ RUN apk update && apk upgrade --no-cache \
 # cached across most builds, while application classes occupy the top layer and
 # are rebuilt most often.
 
-COPY --link --from=builder --chown=10001:10001 /app/extracted/dependencies/ ./
-COPY --link --from=builder --chown=10001:10001 /app/extracted/spring-boot-loader/ ./
-COPY --link --from=builder --chown=10001:10001 /app/extracted/snapshot-dependencies/ ./
-COPY --link --from=builder --chown=10001:10001 /app/extracted/application/ ./
+COPY --link --from=extractor --chown=10001:10001 /app/extracted/dependencies/ ./
+COPY --link --from=extractor --chown=10001:10001 /app/extracted/spring-boot-loader/ ./
+COPY --link --from=extractor --chown=10001:10001 /app/extracted/snapshot-dependencies/ ./
+COPY --link --from=extractor --chown=10001:10001 /app/extracted/application/ ./
 
 # Build a JVM Class Data Sharing (CDS) archive.
 #
@@ -119,7 +132,7 @@ COPY --link --from=builder --chown=10001:10001 /app/extracted/application/ ./
 # deployed container benefits from faster cold starts without paying the CDS
 # training cost repeatedly.
 
-RUN OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4317 java \
+RUN java \
     -XX:ArchiveClassesAtExit=application.jsa \
     -Dspring.aot.enabled=false \
     -Dloader.main=com.example.cdstraining.CdsTrainingApplication \
@@ -141,140 +154,33 @@ USER 10001:10001
 EXPOSE 8080
 
 # =========================================================================================
-# JVM TUNING
+# JVM TUNING — image- vs deployment-owned flags
 #
-# These options are intentionally chosen to remain portable across different
-# Kubernetes nodes and container memory limits rather than being tuned for a
-# single machine.
+# JVM sizing (heap, off-heap caps, GC behavioral tuning, AlwaysPreTouch) is owned
+# by the DEPLOYMENT via JAVA_TOOL_OPTIONS, not the image. The image CMD carries
+# only flags that must hold in every environment:
 #
-# Startup strategy:
+#   -Dspring.aot.enabled=true            : AOT-generated classes (startup).
+#   -XX:SharedArchiveFile=application.jsa: CDS archive generated at build time.
+#   -Xshare:auto                         : Use the CDS archive when compatible.
+#   -XX:+ExitOnOutOfMemoryError          : Safety invariant — fail fast on OOM.
 #
-# Spring AOT removes much of Spring's runtime reflection, bean discovery and
-# proxy generation, while JVM Class Data Sharing (CDS) reduces the JVM's own
-# class-loading overhead. They optimize different parts of startup and therefore
-# complement rather than replace one another.
+# Heap / direct / metaspace sizing + GC tuning live in:
+#   - homelab/TF/gitops/.../backend.yaml JAVA_TOOL_OPTIONS (prod)
 #
+# Setting sizing flags here would silently win over JAVA_TOOL_OPTIONS (JVM
+# "last-wins" precedence for non-sticky flags) and recreate the precedence bug
+# where the deployment's tuning was a no-op. Keep this CMD sizing-agnostic.
+#
+# Startup strategy: Spring AOT removes much of Spring's runtime reflection,
+# while JVM Class Data Sharing (CDS) reduces the JVM's own class-loading
+# overhead. They complement rather than replace one another.
+#
+# Garbage collector: no collector is selected explicitly — JDK 21 defaults to G1GC,
+# the right choice for a latency-sensitive request/response service. Operators
+# override via JAVA_TOOL_OPTIONS in the deployment if a different collector is
+# ever warranted.
 # =========================================================================================
-
-#
-# -Dspring.aot.enabled=true
-#
-# Enables the Ahead-of-Time (AOT) optimizations generated during the build.
-# Instead of discovering many beans and reflective access paths during startup,
-# Spring uses pre-generated code, reducing startup time and memory usage.
-#
-# -----------------------------------------------------------------------------
-
-#
-# -XX:MaxRAMPercentage=75.0
-#
-# Sizes the Java heap from the container's actual memory limit (cgroup-aware
-# since JDK 10+) rather than relying on a fixed -Xmx chosen for one particular
-# machine.
-#
-# 75% intentionally leaves headroom for metaspace, thread stacks, direct memory,
-# JNI allocations and other native JVM overhead so the container's total RSS
-# remains comfortably below its cgroup memory limit.
-#
-# -----------------------------------------------------------------------------
-
-#
-# -XX:+ExitOnOutOfMemoryError
-#
-# Terminates the JVM immediately on OutOfMemoryError instead of attempting to
-# continue in a potentially corrupted state. In Kubernetes, failing fast allows
-# the orchestrator to replace the pod rather than serving traffic from a
-# degraded process.
-#
-# -----------------------------------------------------------------------------
-
-#
-# -XX:MaxDirectMemorySize
-# -XX:MaxMetaspaceSize
-#
-# MaxRAMPercentage limits only the Java heap.
-#
-# Native memory used by direct ByteBuffers, Netty, Lettuce (Redis),
-# OpenTelemetry, thread stacks and other JVM components exists outside the heap
-# and therefore contributes to the container's RSS independently of -Xmx.
-#
-# Explicit limits prevent unbounded off-heap growth that could otherwise
-# exhaust the container memory limit despite the Java heap remaining within
-# bounds.
-#
-# 256 MB for each pool is sufficient for this workload's expected connection
-# counts and allocation characteristics.
-#
-# -----------------------------------------------------------------------------
-
-#
-# Garbage Collector
-#
-# No collector is selected explicitly, so JDK 21 uses G1 GC by default.
-#
-# G1 targets predictable pause times (approximately 200 ms by default via
-# MaxGCPauseMillis) rather than maximizing raw throughput, making it a sensible
-# default for request/response services where latency is generally more
-# important than peak requests per second.
-#
-# This omission is intentional because G1 is the desired collector today.
-# If the service later becomes throughput-bound instead of latency-sensitive,
-# specify -XX:+UseParallelGC explicitly rather than relying on whatever future
-# JDK releases choose as the default collector.
-#
-# =============================================================================
-# Deliberately NOT configured
-# =============================================================================
-
-#
-# -XX:ParallelGCThreads
-# -XX:UseAVX
-#
-# These options were previously pinned for one specific development machine.
-#
-# In production, CPU allocation varies between Kubernetes nodes and instance
-# types. Hard-coding GC thread counts can either underutilize available CPUs or
-# oversubscribe them, while forcing an AVX level risks SIGILL failures on
-# hardware that does not support the requested instruction set.
-#
-# Modern JVMs already detect container CPU limits and size GC worker threads
-# appropriately. Allow the JVM to make those decisions dynamically.
-#
-# -----------------------------------------------------------------------------
-
-#
-# -XX:+AlwaysPreTouch
-#
-# Pretouches every page of the initial heap during startup, trading slower
-# startup for fewer page faults once traffic arrives.
-#
-# This image is optimized for rapid startup and horizontal scaling using Spring
-# AOT, so the additional startup cost outweighs the runtime benefit.
-#
-# If this service eventually becomes a long-lived process where steady-state
-# latency matters more than startup time, reconsider enabling this option
-# together with:
-#
-#     -XX:InitialRAMPercentage=<same as MaxRAMPercentage>
-#
-# Otherwise the JVM pretouches only its small default initial heap rather than
-# the full heap intended for production.
-#
-# -----------------------------------------------------------------------------
-
-#
-# -XX:-UseAdaptiveSizePolicy
-#
-# Disabling adaptive sizing freezes the young/old generation split at startup.
-#
-# That is only beneficial after profiling a production workload and explicitly
-# selecting generation sizes (NewSize, MaxNewSize, NewRatio, etc.).
-#
-# Without those additional settings the JVM simply freezes whatever initial
-# guess it made, which is generally worse than allowing it to adapt
-# dynamically—especially when the overall heap itself varies according to
-# MaxRAMPercentage.
-#
 
 # Run the JVM under tini.
 #
@@ -291,9 +197,6 @@ EXPOSE 8080
 ENTRYPOINT ["/sbin/tini", "--", "java"]
 
 CMD ["-Dspring.aot.enabled=true", \
-     "-XX:MaxRAMPercentage=75.0", \
-     "-XX:MaxDirectMemorySize=256m", \
-     "-XX:MaxMetaspaceSize=256m", \
      "-XX:+ExitOnOutOfMemoryError", \
      "-XX:SharedArchiveFile=application.jsa", \
      "-Xshare:auto", \
