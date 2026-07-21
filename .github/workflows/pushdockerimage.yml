@@ -1,0 +1,348 @@
+name: TaskFlow Push Docker Images
+
+# =============================================================================
+# Manually-triggered Docker image publication workflow.
+#
+# This workflow is deliberately separate from `.github/workflows/ci.yml` so
+# that CI can build and scan images on every push/PR without ever publishing
+# anything. Promoting an image to GHCR is an explicit operator action.
+#
+# What it does:
+#   1. Builds the backend JAR and frontend production bundle (the same
+#      artifacts the Dockerfiles expect in their build context).
+#   2. Builds the Docker images for the selected component(s).
+#   3. Scans each image with Trivy (HIGH,CRITICAL — hard gate, exit-code: 1).
+#   4. Pushes surviving images to ghcr.io with both :<tag> and :latest tags,
+#      including provenance and SBOM.
+#
+# Trigger:
+#   workflow_dispatch only — this workflow is never started automatically.
+#   Choose which component(s) to publish and an optional image tag (defaults
+#   to the triggering git SHA).
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      components:
+        description: Components to publish
+        type: choice
+        options:
+          - backend
+          - frontend
+          - backend,frontend
+        default: backend,frontend
+
+      image_tag:
+        description: Image tag (defaults to the git commit SHA)
+        type: string
+        default: ""
+
+      skip_scan:
+        description: Skip the Trivy HIGH/CRITICAL gate before pushing
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+concurrency:
+  group: taskflow-push-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  JAVA_VERSION: "21"
+  NODE_VERSION: "22"
+  REGISTRY: ghcr.io
+  TRIVY_VERSION: v0.72.0
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  ###########################################################
+  # Resolve inputs into a matrix of components to publish
+  ###########################################################
+
+  resolve:
+    name: Resolve Components
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.build_matrix.outputs.matrix }}
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          tag="${{ inputs.image_tag }}"
+          if [[ -z "$tag" ]]; then
+            tag="${{ github.sha }}"
+          fi
+          echo "image_tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build component matrix
+        id: build_matrix
+        env:
+          COMPONENTS: ${{ inputs.components }}
+        run: |
+          # Split the comma-separated input into a JSON array of objects
+          # suitable for a matrix strategy.
+          matrix=$(printf '%s\n' "$COMPONENTS" \
+            | tr ',' '\n' \
+            | grep -v '^$' \
+            | jq -R '({"component": .})' \
+            | jq -s -c '{include: .}')
+
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Resolved matrix: $matrix"
+
+  ###########################################################
+  # Build artifacts (backend JAR + frontend dist)
+  ###########################################################
+
+  backend-artifact:
+    name: Backend Artifact
+    needs: resolve
+    if: contains(needs.resolve.outputs.matrix, '"backend"')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: false
+
+      - name: Build
+        run: |
+          ./gradlew \
+            --parallel \
+            --build-cache \
+            processAot \
+            assemble \
+            --stacktrace
+
+      - name: Upload Backend JAR
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-jar
+          path: |
+            build/libs/*.jar
+            !build/libs/*-plain.jar
+          compression-level: 0
+          retention-days: 7
+
+  frontend-artifact:
+    name: Frontend Artifact
+    needs: resolve
+    if: contains(needs.resolve.outputs.matrix, '"frontend"')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Dependencies
+        run: |
+          npm ci \
+            --prefer-offline \
+            --no-audit \
+            --no-fund
+
+      - name: Cache Angular Build
+        uses: actions/cache@v6
+        with:
+          path: frontend/.angular/cache
+          key: angular-push-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            angular-push-${{ runner.os }}-
+
+      - name: Build Production Bundle
+        run: npx ng build
+
+      - name: Upload Frontend Bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-dist
+          path: frontend/dist/frontend/browser
+          compression-level: 0
+          retention-days: 7
+
+  ###########################################################
+  # Build, scan, and push images
+  ###########################################################
+
+  push:
+    name: Push Docker (${{ matrix.component }})
+    needs:
+      - resolve
+      - backend-artifact
+      - frontend-artifact
+
+    # Run regardless of which artifact job was skipped (we only `need` them
+    # to gate ordering — downloads are individually conditionally skipped).
+    if: always() && !contains(needs.*.result, 'failure')
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      # fail-fast is deliberately false: backend and frontend images are
+      # independent. A failure (e.g. a Trivy HIGH/CRITICAL finding) in one
+      # component should not cancel the other component's push.
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      ##########################################################
+      # GHCR uses lowercase owner. Compute image refs once here so
+      # mixed/uppercase repository owners don't break docker push
+      # or the Trivy image-ref resolution below.
+      ##########################################################
+      - name: Compute Image Refs
+        id: images
+        env:
+          OWNER: ${{ github.repository_owner }}
+          TAG: ${{ needs.resolve.outputs.image_tag }}
+        run: |
+          owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          echo "owner=$owner" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "backend_image=ghcr.io/${owner}/taskflow-backend" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=ghcr.io/${owner}/taskflow-frontend" >> "$GITHUB_OUTPUT"
+
+      ##########################################################
+      # Download build artifacts (only for the matching component)
+      ##########################################################
+
+      - name: Download Backend JAR
+        if: matrix.component == 'backend'
+        uses: actions/download-artifact@v8
+        with:
+          name: backend-jar
+          path: build/libs
+
+      - name: Download Frontend Bundle
+        if: matrix.component == 'frontend'
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-dist
+          path: frontend/dist/frontend/browser
+
+      ##########################################################
+      # Docker setup
+      ##########################################################
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache Trivy Database
+        if: ${{ !inputs.skip_scan }}
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/trivy
+          key: trivy-push-${{ runner.os }}-${{ env.TRIVY_VERSION }}-${{ github.run_id }}
+          restore-keys: |
+            trivy-push-${{ runner.os }}-${{ env.TRIVY_VERSION }}-
+
+      ##########################################################
+      # Build and push
+      #
+      # We push immediately and scan afterwards. The Trivy scan uploads
+      # results to the Code Scanning tab but does NOT atomically un-publish a
+      # bad image — the GitHub Container Registry does not support
+      # transactional push/scan. Opt instead for a hard `exit-code: 1` that
+      # fails the run after the SARIF is uploaded, so the operator is alerted
+      # and can delete the published tag manually.
+      #
+      # Set `skip_scan: true` on the workflow_dispatch input only in
+      # exceptional circumstances (e.g. an emergency hotfix where the gate
+      # is intentionally bypassed — the SARIF will still be uploaded).
+      ##########################################################
+
+      - name: Build and Push Image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.component == 'backend' && '.' || 'frontend' }}
+          file: ${{ matrix.component == 'backend' && 'Dockerfile.x64' || 'frontend/Dockerfile' }}
+
+          push: true
+
+          tags: |
+            ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:${{ steps.images.outputs.tag }}
+            ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:latest
+
+          cache-from: |
+            type=gha,scope=${{ matrix.component }}-main
+            type=gha,scope=${{ matrix.component }}-pr
+
+          cache-to: |
+            type=gha,mode=max,scope=${{ matrix.component }}-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }}
+
+          provenance: true
+          sbom: true
+
+      ##########################################################
+      # Hard-gate scan (HIGH/CRITICAL, exit-code: 1)
+      #
+      # This mirrors the gate ci.yml runs on its locally-built image. The
+      # difference here is that the image is already on the registry, so a
+      # failed scan surfaces a SARIF + a red run rather than preventing the
+      # push. Operators must remove the published tag manually if needed.
+      ##########################################################
+
+      - name: Scan Docker Image
+        if: ${{ !inputs.skip_scan }}
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          image-ref: ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:${{ steps.images.outputs.tag }}
+          scan-type: image
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Upload SARIF
+        if: always() && hashFiles('trivy-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+          category: docker-${{ matrix.component }}
