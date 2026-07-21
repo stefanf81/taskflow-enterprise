@@ -97,7 +97,6 @@ k3d image import ghcr.io/stefanf81/taskflow-frontend:latest -c taskflow-cluster
 # 7. Apply Namespace Manifest First to Enforce Bootstrap Order
 # =========================================================================================
 echo "📄 Applying namespace manifest..."
-export KUBECONFIG="$(pwd)/k3d-kubeconfig.yaml"
 kubectl apply -f k3d/namespace.yaml
 
 # =========================================================================================
@@ -106,9 +105,11 @@ kubectl apply -f k3d/namespace.yaml
 # This ensures plaintext passwords are NEVER committed to version control.
 # =========================================================================================
 echo "🔑 Creating Kubernetes secrets from .env..."
-set -a
-[ -f .env ] && source .env
-set +a
+# Read only the specific vars needed from .env (avoids blanket export of all secrets)
+if [ -f .env ]; then
+  POSTGRES_PASSWORD="$(sed -n 's/^POSTGRES_PASSWORD=//p' .env)"
+  SPRING_SECURITY_PASSWORD="$(sed -n 's/^SPRING_SECURITY_PASSWORD=//p' .env)"
+fi
 kubectl create secret generic db-secret \
   --from-literal=POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres-password}" \
   --namespace=taskflow \
@@ -157,8 +158,11 @@ helm upgrade --install loki-stack grafana/loki-stack \
 # 10. Apply Remaining Kubernetes Manifests
 # Deploy the actual database, cache, tracing, backend, and frontend pods.
 # =========================================================================================
+echo "📄 Applying ConfigMap (must exist before backend Deployment)..."
+kubectl apply -f k3d/configmap.yaml
+
 echo "📄 Applying remaining Kubernetes manifests..."
-find k3d -maxdepth 1 -name "*.yaml" ! -name "k3d-config.yaml" | sort | xargs -I {} kubectl apply -f {}
+find k3d -maxdepth 1 -name "*.yaml" ! -name "k3d-config.yaml" ! -name "configmap.yaml" ! -name "namespace.yaml" | sort | xargs -I {} kubectl apply -f {}
 
 # =========================================================================================
 # 11. Wait for Rollouts to Complete

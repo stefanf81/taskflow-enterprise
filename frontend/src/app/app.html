@@ -324,9 +324,7 @@
             </div>
 
             <!-- Active Step Indicator Badge label -->
-            <div
-              class="text-center font-bold text-xs text-gold uppercase tracking-wider mb-6"
-            >
+            <div class="text-center font-bold text-xs text-gold uppercase tracking-wider mb-6">
               @if (activeStep() === 1) {
                 1. Select Treatment
               } @else if (activeStep() === 2) {
@@ -849,7 +847,9 @@
                       <hr class="border-t border-white/10 my-2" />
                       <p class="flex justify-between">
                         <span>Subtotal:</span>
-                        <span class="text-zinc-300">{{ checkoutSubtotal() | currency: 'USD' }}</span>
+                        <span class="text-zinc-300">{{
+                          checkoutSubtotal() | currency: 'USD'
+                        }}</span>
                       </p>
                       <p class="flex justify-between">
                         <span>Platform Svc Fee:</span>
@@ -857,9 +857,7 @@
                       </p>
                       <p class="flex justify-between text-sm font-bold text-zinc-100 pt-1">
                         <span>Total Est. Price:</span>
-                        <span class="text-gold"
-                          >${{ checkoutTotal() | number: '1.2-2' }}</span
-                        >
+                        <span class="text-gold">${{ checkoutTotal() | number: '1.2-2' }}</span>
                       </p>
                     </div>
                   </div>
@@ -924,9 +922,7 @@
                 class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center outline-none"
               >
                 <span>⏰ How early should I arrive for my appointment?</span>
-                <span class="text-gold font-extrabold">{{
-                  activeFaq() === 0 ? '−' : '+'
-                }}</span>
+                <span class="text-gold font-extrabold">{{ activeFaq() === 0 ? '−' : '+' }}</span>
               </button>
               @if (activeFaq() === 0) {
                 <div
@@ -953,9 +949,7 @@
                 class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center outline-none"
               >
                 <span>💳 Do you accept credit cards and contactless payments?</span>
-                <span class="text-gold font-extrabold">{{
-                  activeFaq() === 1 ? '−' : '+'
-                }}</span>
+                <span class="text-gold font-extrabold">{{ activeFaq() === 1 ? '−' : '+' }}</span>
               </button>
               @if (activeFaq() === 1) {
                 <div
@@ -982,9 +976,7 @@
                 class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center outline-none"
               >
                 <span>📅 What is your cancellation/rescheduling policy?</span>
-                <span class="text-gold font-extrabold">{{
-                  activeFaq() === 2 ? '−' : '+'
-                }}</span>
+                <span class="text-gold font-extrabold">{{ activeFaq() === 2 ? '−' : '+' }}</span>
               </button>
               @if (activeFaq() === 2) {
                 <div

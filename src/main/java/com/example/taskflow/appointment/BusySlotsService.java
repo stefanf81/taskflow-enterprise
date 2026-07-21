@@ -43,9 +43,17 @@ public class BusySlotsService {
 
     @Cacheable(value = "busySlots", key = "#barberName + '-' + #bookingDate", sync = true)
     public List<String> getBusySlots(String barberName, String bookingDate) {
+        if (bookingDate == null || bookingDate.trim().isEmpty() || bookingDate.length() < 10) {
+            return java.util.Collections.emptyList();
+        }
+        LocalDate date;
         try {
-            LocalDate date = LocalDate.parse(bookingDate);
+            date = LocalDate.parse(bookingDate);
+        } catch (java.time.format.DateTimeParseException e) {
+            return java.util.Collections.emptyList();
+        }
 
+        try {
             // Check if Barber exists
             Optional<Barber> barberOpt = barberRepository.findByName(barberName);
             if (barberOpt.isPresent()) {
