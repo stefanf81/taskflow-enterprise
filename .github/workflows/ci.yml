@@ -922,6 +922,11 @@ jobs:
           target: http://localhost:8080/v3/api-docs
           allow_issue_writing: false
 
+      - name: Generate Job Summary from ZAP Report
+        if: always() && hashFiles('report_md.md') != ''
+        run: |
+          cat report_md.md >> $GITHUB_STEP_SUMMARY
+
       ##########################################################
       # Convert SARIF
       ##########################################################

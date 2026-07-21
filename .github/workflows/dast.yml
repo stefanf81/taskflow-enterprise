@@ -157,6 +157,11 @@ jobs:
 
           artifact_name: zap-report
 
+      - name: Generate Job Summary from ZAP Report
+        if: always() && hashFiles('report_md.md') != ''
+        run: |
+          cat report_md.md >> $GITHUB_STEP_SUMMARY
+
       ##########################################################
       # Python
       ##########################################################
