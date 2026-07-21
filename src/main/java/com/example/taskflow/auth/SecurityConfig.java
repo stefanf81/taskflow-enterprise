@@ -113,7 +113,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/register").permitAll()
-                .requestMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()
+                .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness", "/actuator/prometheus").permitAll()
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments/public/busy-slots").permitAll()
                 .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*").permitAll()

@@ -128,7 +128,7 @@ jobs:
 
           while (( timeout > 0 )); do
 
-            if curl -fs http://localhost:8080/actuator/health; then
+            if curl -fs http://localhost:8080/actuator/health/liveness; then
               echo "Backend ready"
               exit 0
             fi

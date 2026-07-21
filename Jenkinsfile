@@ -197,7 +197,7 @@ pipeline {
 
                         // 2. Wait for Backend health endpoint to be green (mirrors GHA /actuator/health wait loop)
                         echo "Waiting for backend health to report UP..."
-                        sh 'docker run --rm --network host alpine/curl sh -c "for i in $(seq 1 45); do curl -fs http://localhost:8080/actuator/health && exit 0 || sleep 2; done; echo \"Backend failed to become healthy\"; exit 1"'
+                        sh 'docker run --rm --network host alpine/curl sh -c "for i in $(seq 1 45); do curl -fs http://localhost:8080/actuator/health/liveness && exit 0 || sleep 2; done; echo \"Backend failed to become healthy\"; exit 1"'
 
                         // 3. Run Playwright inside official Playwright container (browsers pre-installed, no npx install needed)
                         echo "Running Playwright E2E tests..."
