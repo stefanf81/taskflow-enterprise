@@ -7,10 +7,10 @@ This document explains the configuration of the `.github/workflows/ci.yml` file,
 ## 1. Trigger Configuration (`on`)
 The workflow is triggered on pushes and pull requests to the `main` branch. On Pull Requests, available test jobs are gated by path filtering (see below) — the backend test suite and frontend unit tests run when their respective stacks changed, and Playwright E2E runs when **both** stacks changed.
 
-It also includes a `workflow_dispatch` trigger with granular boolean inputs for manual runs:
+It also includes a `workflow_dispatch` trigger with a boolean input for manual runs:
 - `run_tests`: Toggles unit tests, integration tests, and Playwright E2E tests across both the frontend and backend on manual runs (default: true).
-- `run_security`: Toggles heavy dependency reviews and filesystem scans (default: true).
-- `push_images`: Toggles whether compiled Docker images should be uploaded to the GitHub Container Registry (GHCR) (default: false).
+
+A daily **schedule** (`0 2 * * *`) runs the full build, test, and Docker build+scan pipeline as a nightly regression suite. Security-only scans (CodeQL, Trivy filesystem) are handled by the separate `.github/workflows/security.yml` workflow (staggered to the same 02:00 UTC window).
 
 > **Gating behavior on PRs honors path filtering.** Single-stack PRs (frontend-only or backend-only) skip the jobs of the untouched stack. Playwright E2E tests run on a PR **only when both `backend` and `frontend` actually built** — i.e. dual-stack PRs — because E2E consumes both build artifacts. Unit/integration tests run on PRs, on direct pushes to `main`, on the daily schedule, and on manual `workflow_dispatch` runs with `run_tests: true`.
 
@@ -65,26 +65,30 @@ Submits the complete, deep Java and Gradle dependency tree directly to the GitHu
 - **Dependabot Integration:** Uses `gradle/actions/dependency-submission@v6` to extract, compile, and upload the full transitive dependency graph on pushes to the `main` branch. This empowers Dependabot to dynamically track package vulnerabilities and automatically generate hotfix pull requests the moment a CVE is disclosed.
 - **Caching & Permissions:** Explicitly configured with `contents: write` and `actions: write` permissions. The `actions: write` permission is crucial to allow the Gradle Action to save and restore dependencies caching successfully, preventing "cache write denied" warnings while maximizing the build execution speed on subsequent runs.
 
-## 8. Job: `security` (Unified Security Scan)
-Consolidates and collapses the previously redundant backend and frontend security scanning jobs into a single highly optimized matrix-driven job.
+## 8. Job: `security` — moved to `security.yml`
 
-- **Dynamic Matrix Execution:** Calculates a dynamic `security_components` array in the `changes` job based on which paths had modifications. If only frontend files changed, the backend filesystem scan is skipped; if only backend files changed, the frontend filesystem scan is skipped.
-- **Smart Job-Level Gating (Skip Optimization):** We applied a robust, job-level `if` conditional that checks path filters before a virtual runner VM is allocated. If a commit contains zero code changes (e.g. documentation-only pushes), GHA completely skips scheduling the job, saving substantial compute minutes and concurrent execution slots. We also completely eliminated the redundant `'none'` matrix fallback array.
-- **Trivy CLI Version Synchronization:** Rather than relying purely on GHA action tags (which can drift from the underlying CLI binary), we explicitly define `TRIVY_VERSION: v0.72.0` globally and pass it to the scanner using `version: ${{ env.TRIVY_VERSION }}`. This aligns the local CLI installation, database cache keys, and engine version flawlessly, avoiding any HTTP 404 download crashes.
-- **Expanded, Runs-Exactly-Once Dependency Review:** Runs the heavier GitHub `Dependency Review` action strictly on Pull Requests exactly once per run. It executes on the `Backend` loop, or falls back to the `Frontend` loop strictly if no backend changes are present in the PR, guaranteeing 100% scanning coverage of Angular NPM lockfile updates without redundant execution overhead.
-- **Centralized & Robust Trivy Database Cache:**
-  Shares a single cache configuration for the Trivy database between both scans, drastically reducing setup overhead. The cache key is bound to `TRIVY_VERSION`, ensuring the database is automatically and cleanly invalidated whenever the Trivy version is upgraded.
+> The Trivy filesystem scan and Dependency Review have been extracted to a dedicated nightly workflow, [`.github/workflows/security.yml`](security.yml). This keeps the CI/CD pipeline focused on build, test, and deployment, while security-only scans run independently on the nightly schedule (and on demand via `workflow_dispatch`).
 
-## 8a. Job: `codeql` (Parallelized CodeQL Analysis)
-Performs deep semantic security analysis of the codebase.
+See [`security.yml`](security.yml) for details on:
+- **Trivy Filesystem Scan:** Report-only (`exit-code: 0`) SARIF upload for both Backend (`.`) and Frontend (`frontend/`) source trees, surfaced in the Code Scanning tab. Severity asymmetry vs. the Docker image hard gate is deliberately maintained — see the inline notes.
+- **Trivy Database Caching:** Weekly cache key scoped to `TRIVY_VERSION`.
 
-- **Parallelized Critical Path:** The `codeql` job depends strictly on the `changes` step, running in parallel with the main `backend` and `frontend` compilation steps rather than being serialized behind them. Since CodeQL performs its own build tracking (autobuild/traced-build) and does not consume the production JARs or Web bundles, letting it run in parallel reduces the overall workflow critical path duration significantly.
+## 8a. Job: `codeql` — moved to `security.yml`
+
+> CodeQL analysis (Java + JavaScript) has also been extracted to `.github/workflows/security.yml`.
+
+Runs deep semantic security analysis in parallel for both languages on every nightly run:
+
+- **Java (`build-mode: autobuild`):** CodeQL performs its own Gradle build tracking — it does not consume the production JAR from the `backend` job, so there is no serialization bottleneck.
+- **JavaScript (`build-mode: none`):** Scans the Angular 22 TypeScript source without building, keeping the analysis lightweight.
+
+The standalone workflow has no change-detection dependency — it always scans both languages on every scheduled/manual run.
 
 ## 9. Job: `e2e` (End-to-End Tests)
 Runs Playwright E2E tests against a real, running backend and database.
 
 - **Decoupled dependencies (`needs: [changes, backend, frontend]`)**:
-  The E2E job depends strictly on `changes`, `backend`, and `frontend` (not `codeql` or `security`). This eliminates redundant bottlenecks (E2E tests don't have to wait for static CodeQL analysis) and completely prevents skip-cascading. If the `security` job is skipped on clean commits, GHA will no longer bypass E2E tests, allowing them to run reliably on every merge or push.
+  The E2E job depends strictly on `changes`, `backend`, and `frontend`. This eliminates redundant bottlenecks (E2E tests don't have to wait for static analysis) and completely prevents skip-cascading.
 - **Dual-Stack PR Gating:** On Pull Requests, E2E runs **only when both `backend` and `frontend` actually built** — i.e. when the PR touched both stacks. The `if` excludes `skipped` results so a single-stack PR (which skips one of the two build jobs via path filtering) cleanly skips E2E rather than running with a missing artifact. On direct pushes to `main`, the daily schedule, and manual `workflow_dispatch` runs with `run_tests: true`, E2E unconditionally runs (both stacks always build in those cases).
 - **Upgraded Playwright Browser Cache:** Playwright browsers are cached under a key tied directly to the `package-lock.json` file hash, guaranteeing that the cache is cleanly invalidated whenever the Playwright dependency version is modified. This also allowed us to remove the redundant `npx playwright --version` run step.
 - **Targeted Browser Installation:** Instead of installing all available major browsers (Chromium, Firefox, WebKit), we only install `chromium` (`npx playwright install --with-deps chromium`), which matches the Desktop Chrome browser used in `playwright.config.ts`. This reduces dependency download sizes and drastically speeds up the installation phase.
@@ -96,8 +100,8 @@ Runs Playwright E2E tests against a real, running backend and database.
 
 Runs an automated OWASP ZAP **full scan** against a live, running instance of the backend.
 
-- **Dynamic Environment Provisioning:** Provisions high-speed **PostgreSQL 17** and **Redis** service containers on the runner to provide a fully clean integration environment.
-- **Standalone Build:** Builds the backend with `./gradlew bootJar` and boots it with `SPRING_PROFILES_ACTIVE=prod`, then waits for the `/actuator/health/liveness` endpoint to be healthy before scanning.
+- **Dynamic Environment Provisioning:** Provisions high-speed **PostgreSQL 18.4** and **Redis** service containers on the runner to provide a fully clean integration environment.
+- **Standalone Build:** Builds the backend with `./gradlew processAot bootJar` (AOT-optimized, matching the production artifact) and boots it with `SPRING_PROFILES_ACTIVE=prod`, then waits for the `/actuator/health/liveness` endpoint to be healthy before scanning.
 - **OWASP ZAP Full Scan:** Uses `zaproxy/action-full-scan@v0.13.0` against `http://localhost:8080` with `fail_action: true`, covering the full web surface (not just the OpenAPI schema) of the running application.
 - **Interactive Security Reports:** Archives `report_html.html`, `report_json.json`, `report_md.md`, and `spring.log` as the `zap-full-scan` artifact (30-day retention).
 - **GitHub Security (GHAS) Code Scanning Integration:** Translates raw ZAP DAST findings into SARIF via the in-repo conversion utility `scripts/zap2sarif.py` and uploads them under the `dast-zap` category so they render natively on the **GitHub Security → Code Scanning** dashboard. The `upload-sarif` step uses `continue-on-error: true` so a SARIF ingestion failure never masks the scan results artifact.
@@ -105,24 +109,15 @@ Runs an automated OWASP ZAP **full scan** against a live, running instance of th
 ## 10. Job: `docker-build`
 Compiles secure, production-grade container images for the backend and frontend components.
 
+> **Image publication is intentionally excluded from CI.** Docker images are built and scanned locally in CI but never pushed to GHCR. Publication is an explicit operator action via the dedicated [`.github/workflows/pushdockerimage.yml`](pushdockerimage.yml) workflow — see that file for the push pipeline.
+
 - **Deduplicated Multi-Tag Builds:** Both the unique commit SHA (`IMAGE_TAG`) and `latest` tags are defined simultaneously in the `docker/build-push-action` step. This ensures Buildx executes a single build compilation graph, tagging the resulting local image under both tags at once.
 - **Lowercase GHCR Owner Guard:** GHCR rejects mixed/uppercase repository owners (`repository name must be lowercase`). A `Compute Image Refs` step lowercases `github.repository_owner` once and exhales fully-resolved `ghcr.io/<owner>/taskflow-{backend,frontend}` refs as step outputs, which `build-push-action` and the Trivy `image-ref` both consume. This prevents hard-failures for forks/orgs whose casing doesn't match the package's lowercase requirement.
-- **Single-Stage Build-and-Push with Conditional Attestations:**
-  To support local Trivy vulnerability scans, we must load the image into the local runner's daemon (`load: true`). However, GHA Buildx local loading does not support image index structures containing supply-chain annotations (SLSA provenance and SBOMs) and will crash. We solve this with a single `docker/build-push-action` call whose `push`/`load`/`provenance`/`sbom` flags are driven by one expression:
-  - When **not** pushing (`push: false`, `load: true`) — the default on PRs, pushes to `main`, and schedule — the image is loaded into the local daemon with `provenance: false` and `sbom: false` so Trivy can scan it as a hard release gate.
-  - When pushing (`push: true`, `load: false`, `provenance: true`, `sbom: true`) — only on manual `workflow_dispatch` with `push_images: true` — Buildx reuses the warm GHA cache from the local build and emits the registry artifact with SLSA provenance and SBOM attached.
-  This avoids the redundant second build graph of a two-stage pattern while still keeping attestations on pushed images.
+- **Local Load Only:** Images are built with `load: true`, `push: false`, `provenance: false`, `sbom: false`. GHA Buildx local loading does not support image index structures containing supply-chain annotations, so attestations are omitted. The `pushdockerimage.yml` workflow rebuilds with `provenance: true` / `sbom: true` when publishing.
 - **Dynamic Matrix Execution:** Instead of a hardcoded matrix that tries to build both components and fails when compilation is skipped, we use a dynamic `docker_components` output array calculated in the `changes` job. This only compiles and scans images that actually had changes.
 - **Smart Job-Level Gating (Skip Optimization):** We applied a robust, job-level `if` conditional that checks path filters before a virtual runner VM is allocated. If a commit contains zero code changes (e.g. documentation-only pushes), GHA completely skips scheduling the job, saving substantial compute minutes and concurrent execution slots. We also completely eliminated the redundant `'none'` matrix fallback array.
-- **Robust Security Scan Uploading:** Trivy security scanning uses `exit-code: 1` to fail on high or critical vulnerabilities. The final SARIF upload step utilizes `if: always()` to ensure scan results are successfully uploaded to the GitHub Security tab even if vulnerabilities cause the scanning step to fail.
-- **Manual-Only Image Pushing (No Auto-Push on `main`):** Image pushing is intentionally gated behind manual `workflow_dispatch` only:
-  ```yaml
-  push: ${{ github.event_name == 'workflow_dispatch' && inputs.push_images == true }}
-  load: ${{ !(github.event_name == 'workflow_dispatch' && inputs.push_images == true) }}
-  ```
-  * **Automated runs (push to `main`, schedule):** Build **and Trivy-scan** the images locally (`load: true`) but do **not** publish them. The k3d pipeline builds images locally for deploy, so publishing to GHCR is not required on every merge.
-  * **Manual dispatches:** Fully respect the `push_images` checkbox parameter, permitting developers to choose whether they wish to push images, on any branch.
-- **Skipped Docker Login When Not Pushing:** The `docker/login-action` step is gated under the same push condition as above, completely bypassing registry login steps during PR and `main` runs where no images are pushed.
+- **Hard-Gate Trivy Scan:** The image is scanned with `exit-code: 1` and `severity: HIGH,CRITICAL` — a blocking gate. This is the intentional counterpart to the report-only Trivy filesystem scan in `security.yml`. If a high/critical CVE is found, the build fails but the SARIF is still uploaded (via `if: always()`).
+- **GHA Cache for BuildKit:** The `cache-from` / `cache-to` directives use GitHub Actions cache (`type=gha`) with scoped keys per component and branch, so PR builds reuse layers from `main` when possible.
 - **Manual Trigger Bypass (`workflow_dispatch`):** Added the manual trigger check to all job-level `if` checks to ensure that clicking "Run workflow" in GitHub UI actually executes the pipeline on any branch, instead of silently skipping due to lack of file changes.
 
 ## 11. Container & JVM Hardening (SOTA)
@@ -147,7 +142,7 @@ Our Docker build configurations (`Dockerfile` and `Dockerfile.x64`) implement st
 
 ## 12. Repository & GHCR Setup
 
-The workflow pushes images to the GitHub Container Registry (GHCR) using the default `GITHUB_TOKEN`.
+The Docker push workflow (`.github/workflows/pushdockerimage.yml`) pushes images to the GitHub Container Registry (GHCR) using the default `GITHUB_TOKEN`.
 
 ### Workflow permissions
 1. Repository **Settings → Actions → General**.
@@ -160,13 +155,13 @@ If you previously pushed `taskflow-backend` / `taskflow-frontend` manually (e.g.
 2. **Package settings → Manage Actions access → Add repository**, select this repository, and grant **Write**.
 
 ### Personal Access Token fallback (`CR_PAT`)
-If organization policy blocks workflow write permissions, create a classic PAT with `write:packages` (and optionally `delete:packages`) and store it as a repository secret named `CR_PAT`. Then change the `docker/login-action` step in `ci.yml` to use `password: ${{ secrets.CR_PAT }}`.
+If organization policy blocks workflow write permissions, create a classic PAT with `write:packages` (and optionally `delete:packages`) and store it as a repository secret named `CR_PAT`. Then change the `docker/login-action` step in `pushdockerimage.yml` to use `password: ${{ secrets.CR_PAT }}`.
 
 > For the equivalent Jenkins pipeline, see [`JENKINS.md`](../JENKINS.md).
 
 ## 13. Troubleshooting
 
-### `denied: permission_denied: write_package` during `docker push`
+### `denied: permission_denied: write_package` during `docker push` (in `pushdockerimage.yml`)
 - Confirm **Read and write permissions** is enabled under **Settings → Actions → General**.
 - If the package already exists, link it to the repository as described above.
 - Otherwise fall back to the `CR_PAT` secret method.
