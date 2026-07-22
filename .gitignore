@@ -56,9 +56,6 @@ pnpm-debug.log*
 .env*
 !.env.example
 
-# Local cluster credentials
-k3d-kubeconfig.yaml
-
 # Local AI Configuration & Reports
 llm-config.json
 lmstudio-qwen-config.json

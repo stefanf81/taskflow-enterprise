@@ -9,7 +9,6 @@ out/
 .env
 .github
 *.log
-k3d/
 frontend/
 node_modules/
 .DS_Store
