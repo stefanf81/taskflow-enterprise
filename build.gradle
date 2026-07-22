@@ -114,7 +114,10 @@ tasks.named("test") {
 	systemProperty "spring.cache.type", "simple"
 	finalizedBy(tasks.jacocoTestReport)
 }
-tasks.named("processTestAot") {
+// Guard optional task lookups — some tasks (processTestAot, spotbugsAot) may not
+// exist depending on which plugins create them. Use matching/configureEach to avoid
+// UnknownTaskException on Gradle config cache reload.
+tasks.matching { it.name == "processTestAot" }.configureEach {
 	enabled = false
 }
 jacoco {
@@ -171,12 +174,9 @@ tasks.withType(JavaCompile).configureEach {
 		options.compilerArgs << "-Xlint:deprecation" << "-Xlint:unchecked"
 	}
 }
-tasks.named("spotbugsMain") {
+tasks.matching { it.name in ["spotbugsMain", "spotbugsTest"] }.configureEach {
 	enabled = true
 }
-tasks.named("spotbugsAot") {
+tasks.matching { it.name == "spotbugsAot" }.configureEach {
 	enabled = false
-}
-tasks.named("spotbugsTest") {
-	enabled = true
 }
