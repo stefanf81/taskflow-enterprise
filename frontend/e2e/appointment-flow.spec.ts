@@ -163,7 +163,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await expect(receiptModal).toContainText('Reservation Requested!');
 
     // Extract the unique Booking Code (publicId) from the receipt modal
-    const rawBookingCode = await page.locator('.modal-card strong.text-indigo-400').textContent();
+    const rawBookingCode = await page.locator('.modal-card strong.text-gold').textContent();
     const bookingCode = rawBookingCode?.trim() || '';
     console.log(`[E2E] Extracted Booking Reference Code: ${bookingCode}`);
     expect(bookingCode.length).toBeGreaterThan(5);

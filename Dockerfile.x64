@@ -91,7 +91,13 @@ WORKDIR /app
 # which skips it for reproducibility) so CI images built for prod pick up
 # Alpine's published security patches at every build. Reproducibility is traded
 # for hygiene on the prod image surface.
+#
+# APK_BUST is a cache-busting build arg that ensures this layer is never
+# served from Docker's layer cache. Without it, a cached `apk upgrade`
+# layer ships outdated OS packages with known CVEs even when Alpine has
+# published fixes. Pass `--build-arg APK_BUST=$(date +%s)` in CI.
 
+ARG APK_BUST=0
 RUN apk update && apk upgrade --no-cache \
  && addgroup -g 10001 -S appgroup \
  && adduser -u 10001 -S appuser -G appgroup \

@@ -701,6 +701,13 @@ jobs:
           provenance: false
           sbom: false
 
+          # Cache-busting: force `apk upgrade` to run on every CI
+          # build so the image always ships the latest Alpine
+          # security patches. Without this, a cached `apk upgrade`
+          # layer carries stale OS packages with known CVEs.
+          build-args: |
+            APK_BUST=${{ github.run_id }}-${{ github.run_attempt }}
+
       ##########################################################
       # Scan
       ##########################################################

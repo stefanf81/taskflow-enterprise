@@ -2,7 +2,12 @@
 FROM nginxinc/nginx-unprivileged:stable-alpine-slim
 
 USER root
-# Upgrade Alpine packages to resolve CVEs / security vulnerabilities
+# Upgrade Alpine packages to resolve CVEs / security vulnerabilities.
+# APK_BUST is a cache-busting build arg — pass a unique value (e.g.
+# `--build-arg APK_BUST=$(date +%s)`) so this layer is never served
+# from Docker's layer cache, ensuring the image always ships the
+# latest Alpine security patches.
+ARG APK_BUST=0
 RUN apk update && apk upgrade --no-cache
 USER 101
 

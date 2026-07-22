@@ -318,6 +318,11 @@ jobs:
           provenance: true
           sbom: true
 
+          # Cache-busting: force `apk upgrade` to run on every build
+          # so the image always ships the latest Alpine security patches.
+          build-args: |
+            APK_BUST=${{ github.run_id }}-${{ github.run_attempt }}
+
       ##########################################################
       # Hard-gate scan (HIGH/CRITICAL, exit-code: 1)
       #
