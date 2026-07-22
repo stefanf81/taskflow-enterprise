@@ -140,7 +140,6 @@ COPY --link --from=extractor --chown=10001:10001 /app/extracted/application/ ./
 
 RUN java \
     -XX:ArchiveClassesAtExit=application.jsa \
-    -Dspring.aot.enabled=false \
     -Dloader.main=com.example.cdstraining.CdsTrainingApplication \
     -Dspring.context.exit=onRefresh \
     -Dapp.cds-training=true \
@@ -166,7 +165,6 @@ EXPOSE 8080
 # by the DEPLOYMENT via JAVA_TOOL_OPTIONS, not the image. The image CMD carries
 # only flags that must hold in every environment:
 #
-#   -Dspring.aot.enabled=true            : AOT-generated classes (startup).
 #   -XX:SharedArchiveFile=application.jsa: CDS archive generated at build time.
 #   -Xshare:auto                         : Use the CDS archive when compatible.
 #   -XX:+ExitOnOutOfMemoryError          : Safety invariant — fail fast on OOM.
@@ -177,10 +175,6 @@ EXPOSE 8080
 # Setting sizing flags here would silently win over JAVA_TOOL_OPTIONS (JVM
 # "last-wins" precedence for non-sticky flags) and recreate the precedence bug
 # where the deployment's tuning was a no-op. Keep this CMD sizing-agnostic.
-#
-# Startup strategy: Spring AOT removes much of Spring's runtime reflection,
-# while JVM Class Data Sharing (CDS) reduces the JVM's own class-loading
-# overhead. They complement rather than replace one another.
 #
 # Garbage collector: no collector is selected explicitly — JDK 21 defaults to G1GC,
 # the right choice for a latency-sensitive request/response service. Operators
@@ -202,8 +196,7 @@ EXPOSE 8080
 
 ENTRYPOINT ["/sbin/tini", "--", "java"]
 
-CMD ["-Dspring.aot.enabled=true", \
-     "-XX:+ExitOnOutOfMemoryError", \
+CMD ["-XX:+ExitOnOutOfMemoryError", \
      "-XX:SharedArchiveFile=application.jsa", \
      "-Xshare:auto", \
      "org.springframework.boot.loader.launch.JarLauncher"]

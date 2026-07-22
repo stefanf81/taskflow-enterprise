@@ -133,7 +133,6 @@ jobs:
           ./gradlew \
             --parallel \
             --build-cache \
-            processAot \
             assemble \
             --stacktrace
 

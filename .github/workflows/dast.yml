@@ -105,7 +105,6 @@ jobs:
           ./gradlew \
             --parallel \
             --build-cache \
-            processAot \
             bootJar
 
       ##########################################################

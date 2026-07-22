@@ -91,28 +91,10 @@ spotbugs {
 	reportLevel = 'high'
 	excludeFilter = file("spotbugs-exclude.xml")
 }
-// Register processAot as a no-op fallback for CI when the GraalVM native plugin
-// (org.graalvm.buildtools.native) is not applied. Without it, SpringBootAotPlugin
-// is never applied, so processAot is never created. CI runs `processAot` explicitly.
-if (!tasks.findByName('processAot')) {
-	tasks.register('processAot') {
-		description = 'AOT processing placeholder (no-op) — enable by applying org.graalvm.buildtools.native'
-		enabled = false
-	}
-}
-tasks.register("writeAotClasspath") {
-	doLast {
-		file("build/aot-cp.txt").text = sourceSets.aot.runtimeClasspath.asPath
-	}
-}
 tasks.register("writeMainClasspath") {
 	doLast {
 		file("build/main-cp.txt").text = sourceSets.main.runtimeClasspath.asPath
 	}
-}
-tasks.withType(org.springframework.boot.gradle.tasks.aot.ProcessAot).configureEach {
-	environment "SPRING_SECURITY_PASSWORD", "admin-password"
-	environment "SPRING_DATASOURCE_PASSWORD", "postgres-password"
 }
 tasks.named("test") {
 	useJUnitPlatform {
@@ -123,12 +105,7 @@ tasks.named("test") {
 	systemProperty "spring.cache.type", "simple"
 	finalizedBy(tasks.jacocoTestReport)
 }
-// Guard optional task lookups — some tasks (processTestAot, spotbugsAot) may not
-// exist depending on which plugins create them. Use matching/configureEach to avoid
-// UnknownTaskException on Gradle config cache reload.
-tasks.matching { it.name == "processTestAot" }.configureEach {
-	enabled = false
-}
+
 jacoco {
 	toolVersion = "0.8.13"
 }
@@ -177,15 +154,8 @@ tasks.named("dependencyUpdates") {
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = "UTF-8"
 	options.incremental = true
-	if (name.contains("Aot")) {
-		options.compilerArgs << "-nowarn" << "-Xlint:none"
-	} else {
-		options.compilerArgs << "-Xlint:deprecation" << "-Xlint:unchecked"
-	}
+	options.compilerArgs << "-Xlint:deprecation" << "-Xlint:unchecked"
 }
 tasks.matching { it.name in ["spotbugsMain", "spotbugsTest"] }.configureEach {
 	enabled = true
-}
-tasks.matching { it.name == "spotbugsAot" }.configureEach {
-	enabled = false
 }

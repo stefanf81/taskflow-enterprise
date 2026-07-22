@@ -75,8 +75,6 @@ COPY --link --from=extractor --chown=10001:10001 /app/extracted/application/ ./
 #
 # Disable components that are irrelevant during CDS training to keep the
 # startup minimal and fast:
-#   - spring.aot.enabled=false              : Skip AOT-optimized path (training uses
-#                                             a different class-loading profile)
 #   - spring.cache.type=none                 : Don't attempt Redis connection
 #   - management.otlp.tracing.export.enabled=false : Don't attempt OTLP export
 #   - app.cds-training=true                  : Skips the admin-user CommandLineRunner
@@ -85,7 +83,6 @@ COPY --link --from=extractor --chown=10001:10001 /app/extracted/application/ ./
 # the Spring context has fully initialized, allowing CDS to observe a complete
 # startup without leaving a server running during the Docker build.
 RUN java -XX:ArchiveClassesAtExit=application.jsa \
-         -Dspring.aot.enabled=false \
          -Dloader.main=com.example.cdstraining.CdsTrainingApplication \
          -Dspring.context.exit=onRefresh \
          -Dapp.cds-training=true \
@@ -111,7 +108,6 @@ EXPOSE 8080
 # JVM sizing (heap, off-heap caps) is owned by the DEPLOYMENT via JAVA_TOOL_OPTIONS,
 # not the image. The image CMD carries only flags that must hold in every environment:
 #
-#   -Dspring.aot.enabled=true            : AOT-generated classes (startup).
 #   -XX:SharedArchiveFile=application.jsa: CDS archive generated at build time.
 #   -Xshare:auto                         : Use the CDS archive when compatible.
 #   -XX:+ExitOnOutOfMemoryError          : Safety invariant — fail fast on OOM.
@@ -132,7 +128,6 @@ ENTRYPOINT ["/sbin/tini", "--", "java"]
 
 # Replace the shell with direct JVM execution.
 CMD [ \
-    "-Dspring.aot.enabled=true", \
     "-XX:+ExitOnOutOfMemoryError", \
     "-XX:SharedArchiveFile=application.jsa", \
     "-Xshare:auto", \
