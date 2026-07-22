@@ -54,9 +54,12 @@ dependencies {
 	// (Dependabot does not resolve BOM property overrides set via ext.set()).
 	//   - jackson-databind 2.x / jackson-core 2.x: fixes 8 CVEs (HIGH: async parser bypass,
 	//     MEDIUM: @JsonIgnore/@JsonView bypasses, PTV bypass, SSRF, etc.)
+	//   - jackson-annotations 2.x: MUST be >= 2.22 for JsonApplyView used by Jackson 3.x
+	//     backward-compat module. 2.22 also includes 2.21.5 CVE fixes.
 	//   - jackson-databind 3.x: fixes CVE-2026-59889 (@JsonView bypass for @JsonUnwrapped)
 	implementation 'com.fasterxml.jackson.core:jackson-databind:2.21.5'
 	implementation 'com.fasterxml.jackson.core:jackson-core:2.21.5'
+	implementation 'com.fasterxml.jackson.core:jackson-annotations:2.22'
 	implementation 'tools.jackson.core:jackson-databind:3.2.1'
 	// Cache (Redis-backed via spring-boot-starter-data-redis; Caffeine was unused)
 	// Observability
