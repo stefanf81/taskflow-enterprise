@@ -77,7 +77,7 @@ spec:
               # Dockerfile for the rationale: inside a contended container CPU-share, G1's adaptive
               # pause-time control serves a server-style workload better than ParallelGC's raw
               # throughput bias measured on a 14-core laptop.
-              value: "-Dspring.aot.enabled=true -XX:MaxRAMPercentage=60.0 -XX:MaxDirectMemorySize=256m -XX:MaxMetaspaceSize=256m -XX:+ExitOnOutOfMemoryError"
+              value: "-XX:MaxRAMPercentage=60.0 -XX:MaxDirectMemorySize=256m -XX:MaxMetaspaceSize=256m -XX:+ExitOnOutOfMemoryError"
           ports:
             - containerPort: 8080
               name: http

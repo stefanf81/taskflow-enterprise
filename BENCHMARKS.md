@@ -20,8 +20,6 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Embedded Apache Tomcat 11**:
     *   **Thread Pre-Warming**: Pre-allocated `server.tomcat.threads.min-spare=20` to entirely bypass OS-level thread spawning overhead during sudden high-concurrency traffic bursts.
     *   **Keep-Alive Optimizations**: Raised threshold to `max-keep-alive-requests=100` and `timeout=60s` to reuse warm TCP connections directly.
-*   **Spring Boot 4.1 AOT (Ahead-of-Time)**:
-    *   Compiled bean metadata into static Java classes (`./gradlew processAot`) to bypass expensive runtime reflection and dynamic proxy generation.
 *   **Spring Security 7.1 & stateless JWT**:
     *   **Asymmetric Cryptography**: Standardized on RSA-2048 signing/verification using asymmetric key-pairs (`app.rsa.private-key` / `public-key`).
     *   **Zero-Trust Session Isolation**: Enforced stateless token authentication via session storage in the frontend, attaching authorization headers dynamically. Restricted all routes except public `/api/v1/auth/**`.
@@ -118,10 +116,9 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Testing Suites (Vitest, Playwright, Testcontainers)**:
     *   Managed browser-less unit tests under Angular via **Vitest** (with JSDom and v8 coverage) and robust end-to-end user journeys using headless **Playwright**.
     *   Leveraged real Dockerized PostgreSQL database containers within Spring Boot integration test environments via **Testcontainers** to guarantee perfect schema/SQL execution parity during compilation.
-*   **Gradle Build Velocity & GraalVM Support**:
+*   **Gradle Build Velocity**:
     *   **Incremental Compilation**: Enforced `options.incremental = true` for rapid local `javac` evaluations.
     *   **Parallel Test Execution**: Configured `maxParallelForks` to dynamically scale JVM test forks based on `availableProcessors() * 0.75` to saturate CI pipelines without starving the host (Testcontainers tests are I/O- and container-bound, not CPU-bound, so over-subscribing cores is safe).
-    *   **GraalVM Native Tools**: Integrated `org.graalvm.buildtools.native` to pave the road for future AOT native-image compilations.
 *   **Code Quality & Static Analysis Guards**:
     *   **SpotBugs & FindSecBugs**: Integrated `spotbugs` plugin with `findsecbugs-plugin` at `effort = 'max'` to automatically break CI builds on detected security anti-patterns.
     *   **JaCoCo Coverage Enforcement**: Defined strict validation rules (`minimum = 0.80` branch/line coverage) to fail pipelines on untested code paths.
@@ -238,19 +235,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 
 ---
 
-## ⚡ 9. Spring Boot AOT (Ahead-Of-Time)
-**Goal:** Measure the impact of bypassing runtime Spring proxy generation and classpath scanning.
-
-| Mode | Peak Throughput | Avg Latency |
-| :--- | :--- | :--- |
-| **Spring Boot AOT (Winner)** | **9,829 RPS** | **5.1 ms** |
-| Standard JVM (JIT Reflection) | 8,973 RPS | 5.5 ms |
-
-**Verdict:** Generating the Spring Application Context as hardcoded Java classes at build-time (`./gradlew processAot`) provided a massive **~9.5% RPS boost**. The JVM memory layout is cleaner, allowing the C2 compiler to aggressively inline method calls.
-
----
-
-## 🐧 10. Container OS & Security (Ubuntu vs. Alpine)
+## 🐧 9. Container OS & Security (Ubuntu vs. Alpine)
 **Goal:** Compare the heavy `glibc` (Ubuntu) against the lightweight `musl` (Alpine Linux) for Java 21.
 
 | Base OS Image | Peak Throughput | Image Size | OS CVEs (Trivy) |
@@ -262,7 +247,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 
 ---
 
-## 🐋 11. Docker Architecture (Fat JAR vs. Elite Layered)
+## 🐋 10. Docker Architecture (Fat JAR vs. Elite Layered)
 **Goal:** Optimize container image pushing and JVM extraction.
 
 | Architecture | Push Size (1 line code change) | Peak Throughput | Process Reaping |
@@ -274,7 +259,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 
 ---
 
-## 🛡️ 12. Nginx Reverse Proxy (Connection Pooling)
+## 🛡️ 11. Nginx Reverse Proxy (Connection Pooling)
 **Goal:** Eliminate TCP handshakes between the proxy and the backend container.
 
 | Configuration | Peak Throughput | Avg Latency |
@@ -286,7 +271,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 
 ---
 
-## 🍎 13. Apple M4 Pro Silicon Custom Tuning
+## 🍎 12. Apple M4 Pro Silicon Custom Tuning
 **Goal:** Maximize hardware utilization for the local host.
 
 Prior versions of this document claimed large wins from pinning `-XX:ParallelGCThreads=10` and `-XX:+UseSIMDForMemoryOps` on the M4 Pro. **These were re-tested and retracted**: on the real `/login` path (BCrypt-bound, see §1) the pinned ParallelGC config measured **~174 RPS vs ~189 RPS for default G1GC** — i.e. pinning was ~8% *slower*. The JVM's automatic container/hardware detection already sizes GC workers and chooses appropriate vectorization for Apple Silicon. We no longer set any of these flags.
@@ -295,14 +280,14 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 
 ---
 
-## 💻 14. x64 / AMD Ryzen 5 Custom Tuning
+## 💻 13. x64 / AMD Ryzen 5 Custom Tuning
 **Goal:** Maximize hardware utilization for an AMD Ryzen 5 7430U (Zen 3) deployment.
 
 **Retracted.** The previously published "33,983 RPS" Ryzen 5 figure (and the `2,424 RPS` baseline) was not reproducible and is inconsistent with the BCrypt-bound login bottleneck established in §1 (real peak ≈ 189 RPS on comparable hardware). The claimed `-XX:ParallelGCThreads=6` / `-XX:UseAVX=2` wins were also contradicted by the M4 re-test (pinning hurts). All such hardware-pinned GC flags have been **removed** from `Dockerfile.x64` and `k3d/backend.yaml`; the production image relies on G1GC + `MaxRAMPercentage` and lets the JVM size GC workers dynamically per node. If a genuinely allocation-bound workload emerges, re-benchmark on the actual target hardware before re-introducing any pin.
 
 ---
 
-## 🌐 15. Frontend-Backend Network Hyper-Optimization
+## 🌐 14. Frontend-Backend Network Hyper-Optimization
 **Goal:** Eliminate network latency between the Angular frontend browser client and the Spring Boot backend server.
 
 | Optimization Technique | Benefit | Mechanism |
@@ -317,7 +302,7 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 
 ---
 
-## 🐘 16. Gradle Build Tool (Developer Velocity Loop)
+## 🐘 15. Gradle Build Tool (Developer Velocity Loop)
 **Goal:** Maximize local compilation speed and minimize build overhead during active development.
 
 | Configuration Profile | compileJava Execution Time | Efficiency Boost | Description |
@@ -330,7 +315,7 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 
 ---
 
-## 🗄️ 17. PostgreSQL 17 Parallel Engine (Database Maintenance)
+## 🗄️ 16. PostgreSQL 17 Parallel Engine (Database Maintenance)
 **Goal:** Optimize background table maintenance and index vacuuming workloads.
 
 | Configuration | table-vacuum Execution Time | System CPU Cost | Efficiency Boost |
@@ -342,7 +327,7 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 
 ---
 
-## 🌐 18. Netty Off-Heap Memory Pooling (Socket I/O & Caching)
+## 🌐 17. Netty Off-Heap Memory Pooling (Socket I/O & Caching)
 **Goal:** Eliminate memory allocation synchronization bottlenecks between Tomcat HTTP threads and Netty during high-concurrency Redis caching requests.
 
 | Configuration Profile | Peak Cache Throughput | p99 Tail Latency | Efficiency Boost |
@@ -354,7 +339,7 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 
 ---
 
-## 🛢️ 19. PostgreSQL Client-Side PreparedStatement Caching (JDBC Parsing)
+## 🛢️ 18. PostgreSQL Client-Side PreparedStatement Caching (JDBC Parsing)
 **Goal:** Eliminate SQL parsing, validation, and query plan compilation costs on the PostgreSQL server for highly repetitive database read operations.
 
 | Configuration Profile | Database Read Throughput | Average Latency | Efficiency Boost |
@@ -366,7 +351,7 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 
 ---
 
-## 🔒 20. HikariCP Connection Pool (Leak Detection Overhead)
+## 🔒 19. HikariCP Connection Pool (Leak Detection Overhead)
 **Goal:** Verify whether enabling HikariCP database connection leak detection introduces any performance overhead or synchronization bottlenecks under extreme concurrent loads.
 
 | Configuration Profile | Peak Query Throughput | Average Latency | p99 Tail Latency | Performance Impact |
@@ -378,7 +363,7 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 
 ---
 
-## 🧵 21. Tomcat Embedded Server (Thread Pre-Warming & Burst Latency)
+## 🧵 20. Tomcat Embedded Server (Thread Pre-Warming & Burst Latency)
 **Goal:** Eliminate cold-start thread spawning latency during sudden traffic bursts.
 
 | Configuration Profile | Peak Throughput | Average Latency | Max Response Latency | p99 Tail Latency |
@@ -390,7 +375,7 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 
 ---
 
-## 📝 22. Jackson JSON Library (Serialization Format & Formatting Traps)
+## 📝 21. Jackson JSON Library (Serialization Format & Formatting Traps)
 **Goal:** Measure the impact of common JSON date-formatting options on peak JVM serialization throughput.
 
 | Configuration Profile | Peak JSON Throughput | Average Latency | p99 Tail Latency | Performance Impact |
@@ -402,7 +387,7 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 
 ---
 
-## 💥 23. Hibernate Query Engine (IN-Clause Cache Explosion)
+## 💥 22. Hibernate Query Engine (IN-Clause Cache Explosion)
 **Goal:** Prevent database cache thrashing and JVM memory exhaustion caused by dynamic array filtering.
 
 | Architecture Problem | Query Plan Cache Hit Rate | PreparedStatement Cache Usage | Consequence |
@@ -415,7 +400,7 @@ By setting `spring.jpa.properties.hibernate.query.in_clause_parameter_padding=tr
 
 ---
 
-## 🚀 24. Hibernate Query Plan Cache (AST Recompilation)
+## 🚀 23. Hibernate Query Plan Cache (AST Recompilation)
 **Goal:** Eliminate JVM CPU thrashing caused by Abstract Syntax Tree (AST) recompilation on highly dynamic JPQL queries.
 
 | Benchmark Scenario | Query Plan Cache Limit | Abstract Syntax Tree (AST) Compilation | Requests Per Second (RPS) |
@@ -427,7 +412,7 @@ By setting `spring.jpa.properties.hibernate.query.in_clause_parameter_padding=tr
 
 ---
 
-## 🐘 25. PostgreSQL Production Memory, Checkpoint & WAL Tuning
+## 🐘 24. PostgreSQL Production Memory, Checkpoint & WAL Tuning
 **Goal:** Close the single largest gap found when comparing our stack to top production-tuning guides (PostgreSQL official docs, AWS RDS tuning guide, r/PostgreSQL, Elysiate, *Advanced PostgreSQL 17 Tuning at Scale*).
 
 | Parameter | Previous | New (1 GB / 2 vCPU container) | Why |
@@ -451,7 +436,7 @@ By setting `spring.jpa.properties.hibernate.query.in_clause_parameter_padding=tr
 
 ---
 
-## 🔧 26. Hibernate Fetch Size, Query Timeout & Production Hardening
+## 🔧 25. Hibernate Fetch Size, Query Timeout & Production Hardening
 **Goal:** Apply the remaining JPA-level safeguards recommended across top Spring Boot production checklists.
 
 - `hibernate.jdbc.fetch_size=50` — streams large result sets from Postgres in batches instead of row-by-row.
@@ -461,7 +446,7 @@ By setting `spring.jpa.properties.hibernate.query.in_clause_parameter_padding=tr
 
 ---
 
-## 🅰️ 27. Angular Per-Chunk Bundle Budget
+## 🅰️ 26. Angular Per-Chunk Bundle Budget
 **Goal:** Extend the Angular build budget guard (top Angular 22 perf blogs) beyond the initial bundle and component styles.
 
 | Budget | Previous | New |
@@ -474,7 +459,7 @@ By setting `spring.jpa.properties.hibernate.query.in_clause_parameter_padding=tr
 
 ---
 
-## ⚡ 28. Nginx vs Tomcat Compression Offloading
+## ⚡ 27. Nginx vs Tomcat Compression Offloading
 **Goal:** Measure the throughput impact of compression placement and eliminate double-compression waste.
 
 | Compression Engine | Peak Throughput | Avg Latency | CPU Usage Focus |
@@ -488,7 +473,7 @@ Tomcat compression (`server.compression.enabled=true`) is kept enabled as a **fa
 
 ---
 
-## 🏎️ 29. Angular Client-Side Browser Benchmarks (Puppeteer)
+## 🏎️ 28. Angular Client-Side Browser Benchmarks (Puppeteer)
 **Goal:** Measure the real-world browser rendering speed of the fully compiled Angular payload.
 
 We navigated directly to the live Angular application, and extracted the raw V8 `window.performance.timing` metrics to prove our bundle budget limits and API optimizations translate to actual user experience.

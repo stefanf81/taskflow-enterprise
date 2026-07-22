@@ -94,7 +94,7 @@ pipeline {
 
         stage('🧪 Parallel Build & Test (RAM & Dependency Capped)') {
             parallel {
-                stage('Backend: Spring Boot AOT & Tests') {
+                stage('Backend: Build & Tests') {
                     when {
                         expression { env.BACKEND_CHANGED == 'true' }
                     }
@@ -102,11 +102,11 @@ pipeline {
                         script {
                             // Optimization: Map 'jenkins-gradle-cache' volume to gradle home. Saves minutes of downloading plugins/dependencies every run!
                             if (params.RUN_TESTS) {
-                                echo "Running JUnit, ArchUnit, SpotBugs, AOT compilation, and coverage reports..."
-                                sh 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v jenkins-gradle-cache:/root/.gradle -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}" eclipse-temurin:21-jdk ./gradlew clean check jacocoTestReport processAot bootJar --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"'
+                                echo "Running JUnit, ArchUnit, SpotBugs, and coverage reports..."
+                                sh 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v jenkins-gradle-cache:/root/.gradle -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}" eclipse-temurin:21-jdk ./gradlew clean check jacocoTestReport bootJar --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"'
                             } else {
-                                echo "Skipping tests, compiling Java & AOT assets only..."
-                                sh 'docker run --rm -v jenkins-gradle-cache:/root/.gradle -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}" eclipse-temurin:21-jdk ./gradlew clean processAot bootJar -x test -x spotbugsMain -x spotbugsTest -x spotbugsAot --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"'
+                                echo "Skipping tests, compiling Java only..."
+                                sh 'docker run --rm -v jenkins-gradle-cache:/root/.gradle -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}" eclipse-temurin:21-jdk ./gradlew clean bootJar -x test -x spotbugsMain -x spotbugsTest --no-daemon -Dorg.gradle.jvmargs="-Xmx1536m"'
                             }
                         }
                     }

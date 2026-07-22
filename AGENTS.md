@@ -3,9 +3,9 @@
 ## Project Structure
 
 - **Backend**: Spring Boot 4.1.0 / OpenJDK 21 / Gradle — `src/main/java/com/example/taskflow/`
-  - High-Performance Tunings: Spring Boot AOT enabled, container-portable heap sizing (deployment-owned via `JAVA_TOOL_OPTIONS`), Virtual Threads disabled (Platform threads used), Jackson 3, Lazy Connection Fetching, Asynchronous Logging, OpenTelemetry 10% sampling, Redis-backed caching (Spring Cache abstraction).
+  - High-Performance Tunings: Container-portable heap sizing (deployment-owned via `JAVA_TOOL_OPTIONS`), Virtual Threads disabled (Platform threads used), Jackson 3, Lazy Connection Fetching, Asynchronous Logging, OpenTelemetry 10% sampling, Redis-backed caching (Spring Cache abstraction).
   - Runtime Profiles & Multi-Arch JVM Optimization:
-    - **JVM sizing is deployment-owned.** Both Dockerfiles' image CMDs are sizing-agnostic: they carry only environment-invariant flags (`-Dspring.aot.enabled=true`, `-XX:SharedArchiveFile=application.jsa`, `-Xshare:auto`, `-XX:+ExitOnOutOfMemoryError`). Heap / off-heap / GC behavioral tuning live in `JAVA_TOOL_OPTIONS` of the runtime environment, NOT the image. Setting sizing in the CMD would silently win over the deployment env (JVM last-wins precedence for non-sticky flags) and recreate the precedence bug where the deployment's tuning was a no-op.
+    - **JVM sizing is deployment-owned.** Both Dockerfiles' image CMDs are sizing-agnostic: they carry only environment-invariant flags (`-XX:SharedArchiveFile=application.jsa`, `-Xshare:auto`, `-XX:+ExitOnOutOfMemoryError`). Heap / off-heap / GC behavioral tuning live in `JAVA_TOOL_OPTIONS` of the runtime environment, NOT the image. Setting sizing in the CMD would silently win over the deployment env (JVM last-wins precedence for non-sticky flags) and recreate the precedence bug where the deployment's tuning was a no-op.
     - **Local (Apple Silicon M4 Pro):** Native `Dockerfile` (`--platform=linux/arm64`) ships only runtime invariants. Heap / off-heap sizing and behavioral GC flags are set via `JAVA_TOOL_OPTIONS` in `docker-compose.yml` (50% × 2560M limit ≈ 1.25 GiB heap, G1GC + AlwaysPreTouch + MaxDirectMemorySize=256m + MaxMetaspaceSize=256m).
     - **Production (AMD Ryzen 5 7430U):** Cross-compiled via `Dockerfile.x64` (`--platform=linux/amd64`). The image is sizing-agnostic; JVM sizing is owned by `homelab/TF/gitops/apps/taskflow/backend.yaml` `JAVA_TOOL_OPTIONS`: `MaxRAMPercentage=50.0` (50% × 2Gi = 1 GiB heap, leaving 1 GiB for off-heap), `MaxDirectMemorySize=256m`, `MaxMetaspaceSize=256m`, plus behavioral GC flags (G1GC, `MaxGCPauseMillis=100`, AlwaysPreTouch) and heap-dump-on-OOM. CPU-pinned GC/AVX flags are deliberately omitted so the JVM reads the container's actual CPU allocation.
     - **Production manifests live in a separate repo** (`homelab/TF/gitops/apps/taskflow/`), not in this workspace. `k3d/backend.yaml` is only for local Kubernetes testing and is NOT the source of truth for prod JVM tuning.
@@ -25,7 +25,7 @@
 ./gradlew build          # compile + test
 ./gradlew test           # unit + integration tests (Testcontainers for PostgreSQL)
 ./gradlew check          # test + OWASP dependency check (fails on CVSS >= 7)
-./gradlew processAot bootJar # build AOT optimized application
+./gradlew bootJar           # build production JAR
 ./gradlew bootRun        # run backend locally (uses H2 by default)
 ```
 
