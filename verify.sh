@@ -29,4 +29,16 @@ if ! ./gradlew check test; then
   exit 1
 fi
 
+# 4. Run E2E Tests (requires a running backend on :8080 and Playwright browsers)
+echo "Running Playwright E2E tests..."
+if curl -fs --max-time 3 http://localhost:8080/actuator/health/liveness > /dev/null 2>&1; then
+  if ! (cd frontend && npm run e2e); then
+    echo -e "${RED}E2E tests failed!${NC}"
+    exit 1
+  fi
+else
+  echo -e "${RED}Backend is not running on http://localhost:8080 — start it first (e.g. ./gradlew bootRun)${NC}"
+  exit 1
+fi
+
 echo -e "${GREEN}All checks passed successfully! Safe to commit & push.${NC}"
