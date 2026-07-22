@@ -13,7 +13,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 ### ☕ 1. JVM & Runtime Layer
 *   **OpenJDK 21 (Eclipse Temurin Alpine)**:
     *   **GC Model (deliberately unspecified → G1GC default)**: The collector is left unpinned so the JVM uses **G1GC** (JDK 21 default). Empirically re-verified on this M4 Pro (see §1 benchmark below): G1GC and ParallelGC are **statistically identical** (~189 RPS on the real `/login` path), while *pinning* GC threads / AVX (`-XX:ParallelGCThreads`, `-XX:+UseSIMDForMemoryOps`, `-XX:UseAVX`) is measurably **worse** (~8% lower RPS, higher p99). The previous "ParallelGC wins" claim was not reproducible on the actual BCrypt-bound login path and has been retracted.
-    *   **Deterministic Heap Allocation (local)**: Sized to a static `1GB` (`-Xms1g -Xmx1g`) for local benchmarking to eliminate heap-expansion noise. Production uses container-portable `-XX:MaxRAMPercentage=60.0` (k3d) / `75.0` (Docker) bounds so the same image adapts to any cgroup limit.
+     *   **Deterministic Heap Allocation (local)**: Sized to a static `1GB` (`-Xms1g -Xmx1g`) for local benchmarking to eliminate heap-expansion noise. Production uses container-portable `-XX:MaxRAMPercentage=60.0` / `75.0` (Docker) bounds so the same image adapts to any cgroup limit.
     *   **Project Loom / Virtual Threads**: Intentionally disabled (`spring.threads.virtual.enabled=false`). Rationale below in §3 — Virtual Threads hurt the CPU-bound `/login` (Bcrypt/RSA) path under Loom scheduling.
 
 ### 🍃 2. Spring Boot 4.1.0 Application Layer
@@ -138,7 +138,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 
 | Configuration | Requests / Sec (RPS) | Avg Latency | Notes |
 | :--- | :--- | :--- | :--- |
-| **G1GC (default, chosen)** | **~189 RPS** | **~0.264 s** | No collector flag set. Matches Dockerfile/k3d. |
+| **G1GC (default, chosen)** | **~189 RPS** | **~0.264 s** | No collector flag set. Matches Dockerfile. |
 | ParallelGC | ~189 RPS | ~0.264 s | `-XX:+UseParallelGC`. Statistically identical to G1. |
 | ParallelGC `-UseAdaptiveSizePolicy` | ~190 RPS | ~0.263 s | No measurable benefit. |
 | ParallelGC + pinned `ParallelGCThreads=10` + `UseSIMDForMemoryOps` | ~174 RPS | ~0.288 s | **Worse** — pinning hurts on this workload. |
@@ -283,7 +283,7 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 ## 💻 13. x64 / AMD Ryzen 5 Custom Tuning
 **Goal:** Maximize hardware utilization for an AMD Ryzen 5 7430U (Zen 3) deployment.
 
-**Retracted.** The previously published "33,983 RPS" Ryzen 5 figure (and the `2,424 RPS` baseline) was not reproducible and is inconsistent with the BCrypt-bound login bottleneck established in §1 (real peak ≈ 189 RPS on comparable hardware). The claimed `-XX:ParallelGCThreads=6` / `-XX:UseAVX=2` wins were also contradicted by the M4 re-test (pinning hurts). All such hardware-pinned GC flags have been **removed** from `Dockerfile.x64` and `k3d/backend.yaml`; the production image relies on G1GC + `MaxRAMPercentage` and lets the JVM size GC workers dynamically per node. If a genuinely allocation-bound workload emerges, re-benchmark on the actual target hardware before re-introducing any pin.
+**Retracted.** The previously published "33,983 RPS" Ryzen 5 figure (and the `2,424 RPS` baseline) was not reproducible and is inconsistent with the BCrypt-bound login bottleneck established in §1 (real peak ≈ 189 RPS on comparable hardware). The claimed `-XX:ParallelGCThreads=6` / `-XX:UseAVX=2` wins were also contradicted by the M4 re-test (pinning hurts). All such hardware-pinned GC flags have been **removed** from `Dockerfile.x64`; the production image relies on G1GC + `MaxRAMPercentage` and lets the JVM size GC workers dynamically per node. If a genuinely allocation-bound workload emerges, re-benchmark on the actual target hardware before re-introducing any pin.
 
 ---
 

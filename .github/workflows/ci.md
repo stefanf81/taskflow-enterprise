@@ -157,7 +157,6 @@ If you previously pushed `taskflow-backend` / `taskflow-frontend` manually (e.g.
 ### Personal Access Token fallback (`CR_PAT`)
 If organization policy blocks workflow write permissions, create a classic PAT with `write:packages` (and optionally `delete:packages`) and store it as a repository secret named `CR_PAT`. Then change the `docker/login-action` step in `pushdockerimage.yml` to use `password: ${{ secrets.CR_PAT }}`.
 
-> For the equivalent Jenkins pipeline, see [`JENKINS.md`](../JENKINS.md).
 
 ## 13. Troubleshooting
 

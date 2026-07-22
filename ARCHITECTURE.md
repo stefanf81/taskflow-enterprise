@@ -116,51 +116,18 @@ Below is the complete sequence of an authenticated, paginated API query from the
 
 ## 🛡️ 4. Local DevSecOps & Platform Observability Ecosystem
 
-To shift security left, TaskFlow integrates a multi-layered local DevSecOps pipeline and platform-level observability directly inside your development and local Kubernetes (k3d) environments.
+To shift security left, TaskFlow integrates a multi-layered local DevSecOps pipeline and platform-level observability directly inside your development environment.
 
 ### 🛠️ A. Build-Time Static Analysis & Linting
 
 Before any application runs, three layers of security check your code, configurations, and containers:
 1. **FindSecBugs (Java SAST):** Integrated directly into `build.gradle` via the **SpotBugs** plugin. It scans the Spring Boot bytecode for OWASP Top 10 vulnerabilities (e.g. SQL Injection, insecure cryptography) on every `./gradlew check` run.
-2. **Hadolint (Dockerfile Linter):** Integrates automatically into `./start-docker.sh` and `./k3d/start-k3d.sh`. Pipes the backend and frontend `Dockerfiles` through a lightweight `hadolint` container to detect non-optimal or insecure operations (e.g., running as root, missing pinned package versions).
+2. **Hadolint (Dockerfile Linter):** Integrates automatically into `./start-docker.sh`. Pipes the backend and frontend `Dockerfiles` through a lightweight `hadolint` container to detect non-optimal or insecure operations (e.g., running as root, missing pinned package versions).
 3. **Trivy (Image Scanning):** Executed locally right after images compile. Automatically scans `taskflow-backend:latest` and `taskflow-frontend:latest` for known system library and application package CVEs before allowing orchestrations to launch.
 
-### ☸️ B. Kubernetes Platform-Level Addons (DevSecOps & Logging)
-
-When booting up the local cluster with `./k3d/start-k3d.sh`, Helm automatically provisions three platform-level engines:
-
-1. **Kyverno (Policy & Admission Controller):** Enforces declarative cluster guidelines (e.g., ensuring no container can run with privilege escalation or mount forbidden directories) by intercepting `kubectl` API submissions.
-2. **Trivy Operator (Vulnerability Auditor):** Runs a continuous background controller. Upon detecting pod replication events, it audits active workloads for CVEs and exposes live, queryable `VulnerabilityReport` custom resources inside the namespace.
-3. **Loki Stack (Grafana + Loki + Promtail):** 
-   - **Promtail:** Runs as a DaemonSet to automatically scrape container log directories.
-   - **Loki:** Acts as a lightweight, high-performance in-memory datastore for logs.
-   - **Grafana:** Visualizes all logs under a single dashboard GUI.
-
-#### 💡 DevSecOps Platform CLI Commands
-
-- **Retrieve Live Workload CVE Reports:**
-  ```bash
-  KUBECONFIG=k3d-kubeconfig.yaml kubectl get vulnerabilityreports -A
-  ```
-- **Inspect Specific Report Details (e.g., wait-for-db init container):**
-  ```bash
-  KUBECONFIG=k3d-kubeconfig.yaml kubectl describe vulnerabilityreport replicaset-taskflow-backend-<hash>-wait-for-db -n taskflow
-  ```
-- **View Kyverno Cluster-Level Security Policies:**
-  ```bash
-  KUBECONFIG=k3d-kubeconfig.yaml kubectl get clusterpolicies
-  ```
-- **Port-Forward and Launch Grafana Dashboard:**
-  ```bash
-  KUBECONFIG=k3d-kubeconfig.yaml kubectl port-forward -n loki svc/loki-stack-grafana 3000:80
-  ```
-  *(Browse `http://localhost:3000` to inspect logging)*
-- **Extract Grafana Admin Password:**
-  ```bash
-  KUBECONFIG=k3d-kubeconfig.yaml kubectl get secret --namespace loki loki-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
-  ```
-
 ---
+
+
 
 ## 🚀 5. Peak-Throughput Performance Optimizations
 
@@ -168,7 +135,7 @@ Through exhaustive benchmarking, the application has been tuned for maximum Requ
 
 1.  **JVM & Garbage Collection (Multi-Arch Tuning)**: Migrated from GraalVM JIT to **Standard OpenJDK 21** utilizing **ParallelGC**.
     - **Local Apple Silicon (M4 Pro ARM64):** The heap is strictly fixed at 1GB (`-Xms1g -Xmx1g`) with `-XX:+AlwaysPreTouch` for predictable startup. Off-heap memory is bounded via `-XX:MaxDirectMemorySize=256m` and `-XX:MaxMetaspaceSize=256m`.
-    - **Production Cloud (x64):** Hardware-pinned JVM arguments (fixed core counts or AVX flags) are left out so the JVM reads the container's actual CPU allocation. The heap dynamically scales to the orchestrator's limit (`-XX:MaxRAMPercentage`, 75% in the x64 image and overridden to 60% via `JAVA_TOOL_OPTIONS` in `k3d/backend.yaml`), and off-heap memory is bounded via `-XX:MaxDirectMemorySize=256m` and `-XX:MaxMetaspaceSize=256m` to keep the container RSS under its cgroup limit.
+    - **Production Cloud (x64):** Hardware-pinned JVM arguments (fixed core counts or AVX flags) are left out so the JVM reads the container's actual CPU allocation. The heap dynamically scales to the orchestrator's limit via `-XX:MaxRAMPercentage`), and off-heap memory is bounded via `-XX:MaxDirectMemorySize=256m` and `-XX:MaxMetaspaceSize=256m` to keep the container RSS under its cgroup limit.
 2.  **Double-Caching Docker Compilation**: Standardized optimized multi-stage `Dockerfile` structures. External dependencies are cached in a separate layer by running `./gradlew dependencies --no-daemon` *before* the application source code is copied. Any subsequent Java code change only rebuilds the final lightweight layers, decreasing pipeline build times to under 10 seconds.
 3.  **JVM Class Data Sharing (CDS)**: A CDS archive is generated during the Docker build by booting `CdsTrainingApplication` (which terminates at context refresh via `spring.context.exit=onRefresh`). At runtime, `-XX:SharedArchiveFile=application.jsa` + `-Xshare:auto` reduce class-loading overhead for faster cold starts.
     -   The training context runs with `spring.cache.type=redis` and imports `CacheConfig` so the `RedisCacheManager` / `GenericJackson2JsonRedisSerializer` bean graph is loaded (no real Redis connection is opened — Lettuce connects lazily and the context exits before any cache read/write). In dev, `spring.cache.type=simple` exercises the same `@Cacheable` / `CacheManager` paths without requiring Redis.
@@ -233,14 +200,14 @@ To optimize development iteration speed, full-stack reasoning precision, and dat
 │    │ (Speculative) │                               │ ├─ shell      │   │
 │    │               │                               │ ├─ postgres   │   │
 │    │ 4-bit KV Cache│                               │ ├─ puppeteer  │   │
-│    │ 65k Context   │                               │ ├─ k3d │   │
-│    └───────────────┘                               └───────┬───────┘   │
-│                                                            │           │
-└────────────────────────────────────────────────────────────┼───────────┘
-                                                             ▼
-                                                [ TARGET INFRASTRUCTURE ]
-                                                  TaskFlow Local DB,
-                                                  K3d Cluster, Nginx Proxy
+│    │ 65k Context   │                               └───────┬───────┘   │
+│    └───────────────┘                                        │           │
+│                                                             │           │
+└─────────────────────────────────────────────────────────────┼───────────┘
+                                                               ▼
+                                                  [ TARGET INFRASTRUCTURE ]
+                                                    TaskFlow Local DB,
+                                                    Nginx Proxy
 ```
 
 ### Step-by-Step AI Execution Loop:

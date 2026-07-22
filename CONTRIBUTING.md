@@ -53,7 +53,6 @@ cd frontend && npm run e2e  # Playwright E2E tests (starts its own dev server)
 ## Project Structure
 - `src/` — Spring Boot backend (Java 21, Gradle)
 - `frontend/` — Angular 22 SPA (TypeScript, Tailwind CSS)
-- `k3d/` — Kubernetes manifests for local k3d cluster
 - `docs/adr/` — Architecture Decision Records
 
 ## Branches & PRs
