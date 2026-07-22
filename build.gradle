@@ -91,6 +91,15 @@ spotbugs {
 	reportLevel = 'high'
 	excludeFilter = file("spotbugs-exclude.xml")
 }
+// Register processAot as a no-op fallback for CI when the GraalVM native plugin
+// (org.graalvm.buildtools.native) is not applied. Without it, SpringBootAotPlugin
+// is never applied, so processAot is never created. CI runs `processAot` explicitly.
+if (!tasks.findByName('processAot')) {
+	tasks.register('processAot') {
+		description = 'AOT processing placeholder (no-op) — enable by applying org.graalvm.buildtools.native'
+		enabled = false
+	}
+}
 tasks.register("writeAotClasspath") {
 	doLast {
 		file("build/aot-cp.txt").text = sourceSets.aot.runtimeClasspath.asPath
