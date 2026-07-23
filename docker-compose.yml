@@ -121,8 +121,22 @@ services:
         max-file: "3"
 
   redis:
-    image: redis:7.2-alpine
+    image: redis:8-alpine
     container_name: taskflow-redis
+    command:
+      - "redis-server"
+      - "--io-threads"          # Redis 8.0: multi-threaded network I/O
+      - "2"                     # 1 CPU allocated → 2 threads (main + 1 I/O)
+      - "--io-threads-do-reads" # Extend threading to read operations too
+      - "yes"
+      - "--lazyfree-lazy-expire" # Redis 8.0: async deletion of expired keys
+      - "yes"                    # Prevents latency spikes from rate-limit key churn
+      - "--maxmemory"           # Cap memory at 50% of container limit (512M)
+      - "256mb"
+      - "--maxmemory-policy"    # Only evict keys that have a TTL set
+      - "volatile-lru"          # Safe: rate-limit + cache keys all have TTLs
+      - "--stop-writes-on-bgsave-error" # Don't reject writes if persistence fails
+      - "no"                     # Cache/rate-limiter can lose data safely
     ports:
       - "6379:6379"
     volumes:
