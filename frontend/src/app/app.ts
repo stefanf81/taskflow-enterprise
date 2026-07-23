@@ -24,6 +24,9 @@ import { ReviewStore } from './review.store';
 import { formatTime12Hour, isOverdue } from './time-utils';
 import { CustomerStore } from './customer.store';
 import { StylistCard } from './components/stylist-card/stylist-card';
+import { LookbookComponent } from './components/lookbook/lookbook';
+import { PostBookingActionsComponent } from './components/post-booking-actions/post-booking-actions';
+import { AuthModalComponent } from './components/auth-modal/auth-modal';
 
 /** Model shape for the Signal Forms booking wizard. */
 interface BookingFormModel {
@@ -39,7 +42,17 @@ interface BookingFormModel {
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule, StylistCard, RouterOutlet, FormField, FormRoot],
+  imports: [
+    CommonModule,
+    FormsModule,
+    StylistCard,
+    RouterOutlet,
+    FormField,
+    FormRoot,
+    LookbookComponent,
+    PostBookingActionsComponent,
+    AuthModalComponent,
+  ],
   templateUrl: './app.html',
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -62,11 +75,6 @@ export class App implements OnInit, OnDestroy {
   readonly isLoggedIn = this.store.isLoggedIn;
   readonly userRole = this.authState.role;
   readonly showAdminLoginModal = signal(false);
-  readonly loginUsername = signal('');
-  readonly loginPassword = signal('');
-  readonly isRegisterMode = signal(false);
-  readonly registerFullName = signal('');
-  readonly registerPhone = signal('');
 
   // Booking Form Model Interface (public for test access)
   readonly bookingModel = signal<BookingFormModel>({
@@ -125,8 +133,7 @@ export class App implements OnInit, OnDestroy {
   readonly serviceSearchQuery = signal<string>('');
   readonly showReceiptModal = signal<boolean>(false);
   readonly lastBookedAppointment = signal<AppointmentItem | null>(null);
-  readonly cancelBookingId = signal('');
-  readonly cancelEmail = signal('');
+  // Signals moved to PostBookingActionsComponent (local state)
 
   // Stylist Profiles with Dynamic Star Ratings
   readonly rawProfiles = [
@@ -267,82 +274,11 @@ export class App implements OnInit, OnDestroy {
       });
   }
 
-  // Handle Admin/Customer Portal Login via JWT endpoint
-  onLogin(): void {
-    if (this.isRegisterMode()) {
-      this.onRegister();
-      return;
-    }
-
-    const user = this.loginUsername().trim();
-    const pass = this.loginPassword().trim();
-
-    if (!user || !pass) {
-      this.errorMessage.set('Email and password are required.');
-      return;
-    }
-
-    this.isSubmitting.set(true);
-    this.errorMessage.set(null);
-
-    this.appointmentService
-      .login(user, pass)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (response) => {
-          // The JWT lives in an HttpOnly cookie set by the backend; nothing to store here.
-          // A1.2: role is kept only in memory via AuthState.
-          this.authState.applyRole(response.role);
-          this.isLoggedIn.set(true);
-          this.isSubmitting.set(false);
-          this.showAdminLoginModal.set(false);
-          this.errorMessage.set(null);
-
-          this.loginUsername.set('');
-          this.loginPassword.set('');
-          this.showSuccess(
-            response.role === 'ROLE_ADMIN' ? 'Welcome back, Owner!' : 'Welcome back!',
-          );
-          this.loadAppointments(); // Load bookings
-          this.router.navigateByUrl(this.authState.dashboardPathFor(response.role));
-        },
-        error: (err) => {
-          this.errorMessage.set('Invalid credentials. Please try again.');
-          this.isSubmitting.set(false);
-          console.error('Authentication error:', err);
-        },
-      });
-  }
-
-  onRegister(): void {
-    const email = this.loginUsername().trim();
-    const pass = this.loginPassword().trim();
-    const name = this.registerFullName().trim();
-    const phone = this.registerPhone().trim();
-
-    if (!email || !pass || !name) {
-      this.errorMessage.set('Name, email, and password are required.');
-      return;
-    }
-
-    this.isSubmitting.set(true);
-    this.errorMessage.set(null);
-
-    this.appointmentService
-      .register({ email, password: pass, fullName: name, phone })
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: () => {
-          this.isRegisterMode.set(false);
-          this.isSubmitting.set(false);
-          this.showSuccess('Account created! You can now log in.');
-          this.errorMessage.set(null);
-        },
-        error: (err) => {
-          this.errorMessage.set(err.error?.message || 'Failed to create account.');
-          this.isSubmitting.set(false);
-        },
-      });
+  // Called after a successful login from the deferred AuthModalComponent.
+  onAuthLoginSuccess(role: string): void {
+    this.showSuccess(role === 'ROLE_ADMIN' ? 'Welcome back, Owner!' : 'Welcome back!');
+    this.loadAppointments();
+    this.router.navigateByUrl(this.authState.dashboardPathFor(role));
   }
 
   // Admin View State
@@ -571,12 +507,6 @@ export class App implements OnInit, OnDestroy {
     this.isSubmitting.set(false);
   }
 
-  // Toggle Admin Login Modal View
-  toggleAdminLoginModal(show: boolean): void {
-    this.showAdminLoginModal.set(show);
-    this.errorMessage.set(null);
-  }
-
   isStepValid(step: number): boolean {
     const m = this.bookingModel();
     if (step === 1) {
@@ -656,9 +586,7 @@ export class App implements OnInit, OnDestroy {
     return this.checkoutSubtotal() + this.checkoutFee();
   });
 
-  onPublicCancel(): void {
-    const publicId = this.cancelBookingId().trim();
-    const email = this.cancelEmail().trim();
+  onPublicCancel(publicId: string, email: string): void {
     if (!publicId || !email) {
       this.errorMessage.set('Please provide a valid Booking Code and Email address.');
       return;
@@ -671,8 +599,6 @@ export class App implements OnInit, OnDestroy {
       .subscribe({
         next: () => {
           this.isSubmitting.set(false);
-          this.cancelBookingId.set('');
-          this.cancelEmail.set('');
           this.showSuccess('🗑️ Reservation successfully cancelled and deleted from our calendar.');
           this.onBarberOrDateChange();
         },
@@ -777,30 +703,20 @@ export class App implements OnInit, OnDestroy {
   }
 
   // --- Review Submission ---
-  readonly reviewPublicId = signal('');
-  readonly reviewRating = signal(5);
-  readonly reviewComment = signal('');
-
-  submitReview(): void {
-    if (!this.reviewPublicId().trim()) {
+  submitReview(publicId: string, rating: number, comment: string): void {
+    if (!publicId) {
       this.errorMessage.set('Booking Code is required to submit a review.');
       return;
     }
 
     this.isSubmitting.set(true);
     this.appointmentService
-      .submitReview(this.reviewPublicId().trim(), {
-        rating: this.reviewRating(),
-        comment: this.reviewComment(),
-      })
+      .submitReview(publicId, { rating, comment })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
           this.isSubmitting.set(false);
           this.showSuccess('Thank you for your review! We appreciate your feedback.');
-          this.reviewPublicId.set('');
-          this.reviewComment.set('');
-          this.reviewRating.set(5);
           this.reviewStore.loadRatings();
         },
         error: (err) => {

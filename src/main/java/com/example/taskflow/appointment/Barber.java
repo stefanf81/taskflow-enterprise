@@ -1,9 +1,12 @@
 package com.example.taskflow.appointment;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.Cache;
+import org.hibernate.annotations.CacheConcurrencyStrategy;
 
 @Entity
 @Table(name = "barbers")
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "barbers")
 public class Barber {
 
     @Id

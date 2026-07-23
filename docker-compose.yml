@@ -41,7 +41,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
     networks:
       - backend-tier
     deploy:
@@ -163,13 +163,20 @@ services:
         max-file: "3"
 
   jaeger:
-    image: jaegertracing/all-in-one:1.57
+    image: jaegertracing/jaeger:2.20.0
     container_name: taskflow-jaeger
     profiles: ["observability"]
     ports:
-      - "16686:16686"
-      - "4317:4317"
-      - "4318:4318"
+      - "16686:16686"        # Jaeger UI (HTTP)
+      - "4317:4317"          # OTLP gRPC
+      - "4318:4318"          # OTLP HTTP
+      - "13133:13133"        # Health check (healthcheckv2 extension)
+    environment:
+      - JAEGER_LISTEN_HOST=0.0.0.0
+      - LOG_LEVEL=info
+    volumes:
+      - ./jaeger/jaeger-config.yaml:/etc/jaeger/jaeger-config.yaml:ro
+    command: ["--config", "/etc/jaeger/jaeger-config.yaml"]
     networks:
       - backend-tier
     deploy:
@@ -180,7 +187,7 @@ services:
         reservations:
           memory: 128M
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:16686/"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13133/status"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -203,9 +210,9 @@ services:
       - frontend-tier
     read_only: true
     tmpfs:
-      - /tmp
-      - /var/cache/nginx
-      - /var/run
+      - /tmp:uid=101,gid=101
+      - /var/cache/nginx:uid=101,gid=101
+      - /var/run:uid=101,gid=101
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -218,7 +225,7 @@ services:
         reservations:
           memory: 256M
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/"]
       interval: 30s
       timeout: 5s
       retries: 3

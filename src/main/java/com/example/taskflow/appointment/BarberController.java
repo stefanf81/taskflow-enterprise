@@ -33,8 +33,8 @@ public class BarberController {
     @GetMapping
     @Operation(summary = "Get all barbers")
     @ApiResponse(responseCode = "200", description = "List of all barbers returned")
-    public ResponseEntity<List<Barber>> getAllBarbers() {
-        return ResponseEntity.ok(barberRepository.findAll());
+    public ResponseEntity<List<BarberResponse>> getAllBarbers() {
+        return ResponseEntity.ok(barberRepository.findAllProjectedBy());
     }
 
     @PostMapping

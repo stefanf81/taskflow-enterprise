@@ -38,16 +38,14 @@ class BarberControllerTest {
 
     @Test
     void getAllBarbers_shouldReturnList() {
-        Barber barber = new Barber();
-        barber.setId(1L);
-        barber.setName("Alex");
-        when(barberRepository.findAll()).thenReturn(List.of(barber));
+        BarberResponse projected = new BarberResponse(1L, "Alex", "alex@test.com", "555-1234");
+        when(barberRepository.findAllProjectedBy()).thenReturn(List.of(projected));
 
-        ResponseEntity<List<Barber>> result = barberController.getAllBarbers();
+        ResponseEntity<List<BarberResponse>> result = barberController.getAllBarbers();
 
         assertEquals(HttpStatus.OK, result.getStatusCode());
         assertEquals(1, result.getBody().size());
-        assertEquals("Alex", result.getBody().get(0).getName());
+        assertEquals("Alex", result.getBody().get(0).name());
     }
 
     @Test

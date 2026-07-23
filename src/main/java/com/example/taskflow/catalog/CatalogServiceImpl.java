@@ -19,9 +19,7 @@ public class CatalogServiceImpl implements CatalogService {
     @Override
     @Transactional(readOnly = true)
     public List<ServiceItemResponse> getAllServices() {
-        return repository.findAll().stream()
-                .map(ServiceItemResponse::fromEntity)
-                .toList();
+        return repository.findAllProjectedBy();
     }
 
     @Override

@@ -2,10 +2,13 @@ package com.example.taskflow.review;
 
 import com.example.taskflow.appointment.Appointment;
 import jakarta.persistence.*;
+import org.hibernate.annotations.Cache;
+import org.hibernate.annotations.CacheConcurrencyStrategy;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "reviews")
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "reviews")
 public class Review {
 
     @Id

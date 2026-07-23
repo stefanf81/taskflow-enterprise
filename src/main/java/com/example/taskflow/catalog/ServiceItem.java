@@ -1,10 +1,13 @@
 package com.example.taskflow.catalog;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.Cache;
+import org.hibernate.annotations.CacheConcurrencyStrategy;
 import java.math.BigDecimal;
 
 @Entity
 @Table(name = "services")
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "services")
 public class ServiceItem {
 
     @Id

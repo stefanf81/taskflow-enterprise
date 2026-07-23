@@ -270,71 +270,12 @@ describe('App Component Quality Assurance Suite', () => {
     expect(app.isStepValid(4)).toBe(false);
   });
 
-  it('should handle onLogin success and failure', () => {
-    const httpMock = TestBed.inject(HttpTestingController);
-
-    // failure path
-    app.loginUsername.set('wrong');
-    app.loginPassword.set('wrong-password');
-    app.onLogin();
-
-    let reqs = httpMock.match((req) => req.url.includes('/api/v1/auth/login'));
-    expect(reqs.length).toBe(1);
-    reqs[0].error(new ProgressEvent('error'), { status: 401, statusText: 'Unauthorized' });
-    expect(app.errorMessage()).toBe('Invalid credentials. Please try again.');
-
-    // success path
-    app.loginUsername.set('admin');
-    app.loginPassword.set('admin-password');
-    app.onLogin();
-
-    reqs = httpMock.match((req) => req.url.includes('/api/v1/auth/login'));
-    expect(reqs.length).toBe(1);
-    reqs[0].flush({ username: 'admin', role: 'ROLE_ADMIN' });
-    expect(app.isLoggedIn()).toBe(true);
-    expect(app.userRole()).toBe('ROLE_ADMIN');
-    // A1.2: role must NOT be persisted to sessionStorage
-    expect(sessionStorage.getItem('auth_role')).toBeNull();
-  });
-
-  it('should handle onRegister success and failure', () => {
-    const httpMock = TestBed.inject(HttpTestingController);
-
-    app.isRegisterMode.set(true);
-    app.loginUsername.set('newuser@example.com');
-    app.loginPassword.set('password123');
-    app.registerFullName.set('New User');
-    app.registerPhone.set('555-1234');
-
-    app.onLogin(); // triggers onRegister when isRegisterMode is true
-
-    let reqs = httpMock.match((req) => req.url.includes('/api/v1/auth/register'));
-    expect(reqs.length).toBe(1);
-    reqs[0].flush({ message: 'Success' });
-
-    expect(app.isRegisterMode()).toBe(false);
-    expect(app.successMessage()).toBe('Account created! You can now log in.');
-
-    // error path
-    app.isRegisterMode.set(true);
-    app.loginUsername.set('newuser2@example.com');
-    app.loginPassword.set('password123');
-    app.registerFullName.set('New User 2');
-    app.registerPhone.set('555-1234');
-
-    app.onLogin();
-    reqs = httpMock.match((req) => req.url.includes('/api/v1/auth/register'));
-    expect(reqs.length).toBe(1);
-    reqs[0].error(new ProgressEvent('error'), { status: 400, statusText: 'Bad Request' });
-    expect(app.errorMessage()).toBe('Failed to create account.');
-  });
-
   it('should handle onPublicCancel success and failure', () => {
     const httpMock = TestBed.inject(HttpTestingController);
+    const testId = 'test-id';
+    const testEmail = 'test@example.com';
 
-    app.cancelBookingId.set('test-id');
-    app.cancelEmail.set('test@example.com');
-    app.onPublicCancel();
+    app.onPublicCancel(testId, testEmail);
 
     let reqs = httpMock.match((req) =>
       req.url.includes('/api/v1/appointments/public/cancel/test-id'),
@@ -346,13 +287,9 @@ describe('App Component Quality Assurance Suite', () => {
     expect(app.successMessage()).toBe(
       '🗑️ Reservation successfully cancelled and deleted from our calendar.',
     );
-    expect(app.cancelBookingId()).toBe('');
-    expect(app.cancelEmail()).toBe('');
 
     // error path
-    app.cancelBookingId.set('bad-id');
-    app.cancelEmail.set('test@example.com');
-    app.onPublicCancel();
+    app.onPublicCancel('bad-id', testEmail);
 
     reqs = httpMock.match((req) => req.url.includes('/api/v1/appointments/public/cancel/bad-id'));
     expect(reqs.length).toBe(1);
@@ -365,10 +302,7 @@ describe('App Component Quality Assurance Suite', () => {
   it('should handle submitReview success and failure', () => {
     const httpMock = TestBed.inject(HttpTestingController);
 
-    app.reviewPublicId.set('test-id');
-    app.reviewRating.set(4);
-    app.reviewComment.set('Great!');
-    app.submitReview();
+    app.submitReview('test-id', 4, 'Great!');
 
     let reqs = httpMock.match((req) => req.url.includes('/api/v1/reviews/public/test-id'));
     expect(reqs.length).toBe(1);
@@ -377,12 +311,9 @@ describe('App Component Quality Assurance Suite', () => {
     reqs[0].flush(null);
 
     expect(app.successMessage()).toBe('Thank you for your review! We appreciate your feedback.');
-    expect(app.reviewPublicId()).toBe('');
-    expect(app.reviewComment()).toBe('');
 
     // error path
-    app.reviewPublicId.set('bad-id');
-    app.submitReview();
+    app.submitReview('bad-id', 5, '');
 
     reqs = httpMock.match((req) => req.url.includes('/api/v1/reviews/public/bad-id'));
     expect(reqs.length).toBe(1);

@@ -43,7 +43,9 @@ class CatalogServiceImplTest {
 
     @Test
     void testGetAllServices() {
-        when(repository.findAll()).thenReturn(Arrays.asList(item1, item2));
+        var projected1 = new ServiceItemResponse(1L, "Haircut", BigDecimal.valueOf(30.0), 30, "Hair", "Basic haircut");
+        var projected2 = new ServiceItemResponse(2L, "Shave", BigDecimal.valueOf(20.0), 20, "Beard", "Classic shave");
+        when(repository.findAllProjectedBy()).thenReturn(List.of(projected1, projected2));
 
         List<ServiceItemResponse> result = catalogService.getAllServices();
 
@@ -51,7 +53,7 @@ class CatalogServiceImplTest {
         assertEquals(2, result.size());
         assertEquals("Haircut", result.get(0).name());
         assertEquals("Shave", result.get(1).name());
-        verify(repository, times(1)).findAll();
+        verify(repository, times(1)).findAllProjectedBy();
     }
 
     @Test

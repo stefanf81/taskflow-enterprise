@@ -12,7 +12,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 
 ### ☕ 1. JVM & Runtime Layer
 *   **OpenJDK 21 (Eclipse Temurin Alpine)**:
-    *   **GC Model (deliberately unspecified → G1GC default)**: The collector is left unpinned so the JVM uses **G1GC** (JDK 21 default). Empirically re-verified on this M4 Pro (see §1 benchmark below): G1GC and ParallelGC are **statistically identical** (~189 RPS on the real `/login` path), while *pinning* GC threads / AVX (`-XX:ParallelGCThreads`, `-XX:+UseSIMDForMemoryOps`, `-XX:UseAVX`) is measurably **worse** (~8% lower RPS, higher p99). The previous "ParallelGC wins" claim was not reproducible on the actual BCrypt-bound login path and has been retracted.
+    *   **GC Model (G1GC — verified against ZGC on allocation-heavy paths)**: The collector is left unpinned so the JVM uses **G1GC** (JDK 25 default on most configs). Earlier benchmarks (§1) showed G1GC and ParallelGC are **statistically identical** (~189 RPS on the CPU-bound `/login` path). A deeper **G1GC vs Generational ZGC** comparison on allocation-heavy endpoints (§30) confirms G1GC wins by **2–104% throughput** depending on allocation intensity, while ZGC's sub-millisecond pauses offer no practical advantage at this scale. G1GC remains the default.
      *   **Deterministic Heap Allocation (local)**: Sized to a static `1GB` (`-Xms1g -Xmx1g`) for local benchmarking to eliminate heap-expansion noise. Production uses container-portable `-XX:MaxRAMPercentage=60.0` / `75.0` (Docker) bounds so the same image adapts to any cgroup limit.
     *   **Project Loom / Virtual Threads**: Intentionally disabled (`spring.threads.virtual.enabled=false`). Rationale below in §3 — Virtual Threads hurt the CPU-bound `/login` (Bcrypt/RSA) path under Loom scheduling.
 
@@ -485,3 +485,169 @@ We navigated directly to the live Angular application, and extracted the raw V8 
 | **Total Page Load** | **147 ms** | All lazy/async resources and background preloads completed. |
 
 **Verdict:** Hitting **109ms** for DOM Ready on a fully fledged Enterprise Angular 22 application is world-class. Stripping out the heavy legacy `XMLHttpRequest` wrapper in favor of the native `fetch` API, combined with strict chunk size budgets, guarantees that the network delivers the application shell to the user nearly instantaneously.
+
+---
+
+## ⚡ 29. Brotli vs Gzip Edge Compression Benchmark
+
+**Goal:** Quantify the real payload-size savings and TTFB tradeoffs of Brotli over Gzip at the Nginx reverse-proxy edge for static Angular assets and proxied API JSON responses.
+
+All tests performed through the live Docker Nginx container (`taskflow-frontend`) with `Accept-Encoding: br` / `gzip` headers.
+
+### Implementation
+
+| Feature | Status | Mechanism |
+| :--- | :---: | :--- |
+| Brotli on-the-fly (L6) fallback | ✅ Deployed | `brotli on` in nginx `server` block |
+| **Pre-compressed Brotli (L11) — preferred path** | ✅ **Deployed** | `brotli_static on` + `RUN brotli --best` in Dockerfile |
+| Gzip fallback for legacy clients | ✅ Deployed | `gzip on` + `gzip_disable "MSIE [1-6]."` |
+| Static `.br` sidecar files | ✅ Generated at build time | `find ... -exec brotli --best {} \;` after `COPY` in Dockerfile |
+
+### Static Assets — Compression Ratio Comparison
+
+| Asset | Uncompressed | Gzip (L6, on-the-fly) | Brotli (L6, on-the-fly) | **Brotli (L11, pre-compressed)** | L11 saves vs Gzip |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| `main-ZEJSQWHQ.js` (432 KB) | 442 107 B | 130 541 B (−70%) | 123 055 B (−72%) | **113 242 B (−74%)** | **−13%** |
+| `styles-U7HH5K5P.css` (31 KB) | 31 374 B | 6 284 B (−80%) | 5 894 B (−81%) | **5 435 B (−83%)** | **−13%** |
+| `index.html` (1.8 KB) | 1 820 B | 1 021 B (−44%) | 916 B (−50%) | **837 B (−54%)** | **−18%** |
+
+### API JSON (Appointments, 50 items — 7.3 KB)
+
+| Encoding | Wire Size | TTFB | Total Time |
+| :--- | ---: | ---: | ---: |
+| Uncompressed | 7 278 B | 14.2 ms | 14.2 ms |
+| Gzip (L6) | 1 242 B (−83%) | 10.7 ms | 10.8 ms |
+| **Brotli (L6 — on-the-fly)** | **1 150 B (−84%)** | **9.3 ms** | **9.4 ms** |
+
+Note: API JSON is proxied from the backend and is compressed on-the-fly (no pre-compression possible). Even so, Brotli delivers slightly smaller payloads and completes faster than gzip.
+
+### TTFB Comparison (main.js — 432 KB)
+
+| Serving Mode | TTFB | vs Uncompressed |
+| :--- | ---: | ---: |
+| Uncompressed (file read) | 1.83 ms | — |
+| **Pre-compressed Brotli L11 (`brotli_static`)** | **2.16 ms** | **+0.3 ms** |
+| Gzip L6 (on-the-fly) | 9.10 ms | +7.3 ms |
+| Brotli L6 (on-the-fly) | 16.90 ms | +15.1 ms |
+
+### Key Insights
+
+1. **Pre-compressed Brotli L11 is the primary serving path** — the `brotli_static on` directive causes Nginx to check for `.br` sidecar files before compressing on-the-fly. Since the Docker build pre-compresses all JS/CSS/HTML at L11, the running container serves `.br` files as static files with **zero compression CPU cost**.
+
+2. **TTFB is indistinguishable from uncompressed** (2.16 ms vs 1.83 ms) — the 0.3 ms difference is just the extra kernel `open()` + `read()` of a second file. This compares to **16.9 ms** for on-the-fly Brotli L6 and **9.1 ms** for on-the-fly Gzip.
+
+3. **Brotli saves 13–18% more payload than Gzip** at L11, which means the `main.js` wire transfer on a 10 Mbps connection finishes ~14 ms faster than with gzip — on top of the TTFB saving.
+
+4. **On-the-fly Brotli L6 is retained as a fallback** for API JSON responses (which can't be pre-compressed) and for edge cases where a `.br` sidecar file is missing (e.g., after a config change without rebuild).
+
+5. **Gzip is retained for legacy HTTP/1.0 clients** that don't support `Accept-Encoding: br`. The `gzip_disable "MSIE [1-6]."` directive skips compression entirely for ancient IE versions that have broken gzip implementations.
+
+**Verdict:** Static assets are served via **pre-compressed Brotli level 11** with zero on-the-fly compression overhead — a pure win with no tradeoff. API JSON responses use on-the-fly Brotli L6, which is marginally faster than gzip (9.4 ms vs 10.8 ms total). Gzip sits as a legacy fallback only.
+
+---
+
+## ⚡ 30. G1GC vs Generational ZGC on Allocation-Heavy Endpoints
+
+**Goal:** Compare G1GC (JDK 25 default) against Generational ZGC on allocation-heavy REST endpoints — large DTO list mapping, JSON serialization, and synthetic allocation stress — where GC behavior, not CPU-bound cryptography, dominates.
+
+The earlier GC benchmark (§1) used the CPU-bound `/login` path (BCrypt hashing, few allocations), where G1GC and ParallelGC were statistically identical. This benchmark targets the opposite end of the spectrum.
+
+**Test Environment:** OpenJDK 25.0.2, Spring Boot 4.1.0, H2 in-memory, 5 000 seeded appointments with 100 barbers and 50 services. `GcComparisonBenchmarkTest` (`@Tag("benchmark")`).
+
+### Throughput Comparison
+
+| Benchmark | Workload | G1GC | ZGC | Winner |
+| :--- | :--- | ---: | ---: | :---: |
+| **Combined API** (DB→DTO→JSON) | 5 000 rows, full REST simulation | **59.8 ops/sec** | 58.6 ops/sec | G1GC (+2%) |
+| **Entity load + DTO map** | 5 000 appointments → `AppointmentResponse` | **99.5 ops/sec** | 97.8 ops/sec | G1GC (+2%) |
+| **JSON serialization** | Jackson 3.x on 5 000 records | **296.4 ops/sec** | 213.6 ops/sec | G1GC (+39%) |
+| **Allocation stress** | 500 000 `AppointmentResponse` constructions | **1.49M/sec** | 0.73M/sec | G1GC (+104%) |
+
+### GC Pause Time Comparison
+
+| Metric | G1GC | ZGC |
+| :--- | ---: | ---: |
+| **Combined API — avg pause** | **1.64 ms** | sub-1ms (0 ms JMX) |
+| **JSON serialization — avg pause** | **1.33 ms** | sub-1ms (0 ms JMX) |
+| **Allocation stress — avg pause** | **2.85 ms** | sub-1ms (0 ms JMX) |
+| **Allocation stress — total GC time** | **288 ms** (101 collections) | 2 654 ms (142 collections) |
+
+### Key Insights
+
+1. **Throughput: G1GC wins across all workloads.** On realistic API paths (DB→DTO→JSON), G1GC is 2% faster — marginal. On JSON serialization (moderate allocation), G1GC leads by 39%. On pure allocation stress, G1GC is **2× faster** than ZGC. This matches the known tradeoff: ZGC sacrifices throughput for lower pause times.
+
+2. **Pause times: ZGC delivers sub-millisecond.** ZGC Pauses registered **0 ms cumulative** at JMX resolution (each individual pause < 1 ms). G1GC averaged 1.3–2.9 ms per pause. However, G1GC's total pause time is lower across the benchmark because it collects **fewer bytes with less overhead**: 288 ms total GC time vs ZGC's 2 654 ms (mostly concurrent cycles, not pauses).
+
+3. **Concurrent cycle overhead: ZGC takes longer.** ZGC concurrent cycles ran 31–97 ms each vs G1GC's 1.5–2 ms concurrent cycles. While ZGC cycles don't pause application threads, they consume CPU that could otherwise serve requests — explaining the throughput gap.
+
+4. **Heap size context matters.** ZGC's pause-time advantage grows with heap size (16 GB+). At the sub-1 GB heap used by Spring Boot test containers, G1GC pauses are already well within web API tolerance (1–3 ms). ZGC's sub-ms pauses provide no practical benefit at this scale.
+
+5. **The BCrypt-bound /login finding still holds.** On CPU-bound authentication paths (§1), G1GC and ZGC would both be invisible — BCrypt dominates the latency budget. The GC choice only matters on allocation-heavy paths like listing endpoints with large result sets.
+
+**Verdict: G1GC remains the correct default for this workload.** It delivers 2–104% higher throughput across all allocation-heavy paths while keeping pauses under 3 ms — well within web API SLAs. ZGC's sub-millisecond pauses offer no practical advantage at this heap scale (sub-1 GB) and incur a significant throughput penalty, especially under allocation pressure. If heap sizes grow beyond 16 GB in future deployments, ZGC should be re-evaluated.
+
+---
+
+## ⚡ 31. Hibernate 2nd-Level Cache vs Spring @Cacheable vs No Cache
+
+**Goal:** Compare four caching strategies for read-mostly reference data endpoints (`GET /api/v1/barbers`, `GET /api/v1/catalog`) and single-entity lookups (`findById`):
+
+1. **No Cache (Baseline)** — JPQL DTO projection, full DB round-trip every call. Current production behavior for catalog services.
+2. **Spring @Cacheable** — Application-level ConcurrentHashMap stores the pre-mapped DTO list. Zero DB, zero mapping on hit.
+3. **Hibernate L2 + Query Cache** — JPQL DTO projection with Hibernate's query cache (`org.hibernate.cacheable=true`) and Caffeine-backed JCache region factory.
+4. **Hibernate L2 Entity Cache** — Single-entity lookup by ID via `findById()` after warming the entity cache. Entities annotated with `@Cache(usage=READ_WRITE)`.
+
+**Test Environment:** OpenJDK 21.0.11, Spring Boot 4.1.0, H2 in-memory (Hibernate ORM 7.4.1), 200 barbers × 200 services seeded. `HibernateL2CacheBenchmarkTest` (`@Tag("benchmark")`). Hibernate L2 + query cache enabled for all test strategies (No Cache and Spring @Cacheable use different code paths, so no interference).
+
+### Barbers List (200 rows) — Throughput
+
+| Strategy | Avg | vs No Cache | Ops/sec |
+| :--- | ---: | ---: | ---: |
+| **No Cache** (`findAllProjectedBy`) | **46.67 µs** | — | 21 429 |
+| **Spring @Cacheable** (ConcurrentHashMap) | **0.037 µs (37 ns)** | **−99.92%** | **27 014 907** |
+| Hibernate L2 + Query Cache | 110.42 µs | +137% | 9 056 |
+| Hibernate L2 Entity (by ID, 1 row) | 34.87 µs | −25% | 28 678 |
+
+### Services Catalog (200 rows) — Throughput
+
+| Strategy | Avg | vs No Cache | Ops/sec |
+| :--- | ---: | ---: | ---: |
+| **No Cache** (`findAllProjectedBy`) | **60.40 µs** | — | 16 555 |
+| **Spring @Cacheable** (ConcurrentHashMap) | **0.038 µs (38 ns)** | **−99.94%** | **26 166 640** |
+| Hibernate L2 + Query Cache | 199.02 µs | +229% | 5 025 |
+| Hibernate L2 Entity (by ID, 1 row) | 22.34 µs | −63% | 44 767 |
+
+### Single-Entity ID Lookup — Throughput
+
+| Strategy | Avg | vs Spring Cache |
+| :--- | ---: | ---: |
+| **Spring @Cacheable** (barbers list, 37 ns) | **0.037 µs** | — |
+| **Hibernate L2 Entity** (barber by ID) | **34.87 µs** | **+940× slower** |
+| **Hibernate L2 Entity** (service by ID) | **22.34 µs** | **+600× slower** |
+
+### Key Insights
+
+1. **Spring @Cacheable dominates.** At **37–38 ns** per operation vs **47–60 µs** for DB queries, application-level caching is **~1 200–1 400× faster** than the baseline. This is because the cache stores the **final pre-mapped DTO list** — zero DB interaction, zero DTO constructor overhead, zero Hibernate persistence context. A ConcurrentHashMap `get()` is essentially free at nanosecond scale.
+
+2. **Hibernate L2 + Query Cache is paradoxically slower than No Cache** (110–199 µs vs 47–60 µs). This is because:
+   - Each call opens and closes a new `EntityManager` (simulating stateless request-scoped behavior), which adds overhead.
+   - The `org.hibernate.cacheable=true` hint triggers query cache resolution logic that costs more than the raw JPQL execution against the in-memory H2 database.
+   - For DTO projection queries, Hibernate **re-evaluates the constructor expression** from cached scalar values on every hit — it does NOT short-circuit with a pre-built object.
+   - Cache hit/miss bookkeeping (region locks, timestamps) adds overhead absent in a plain JDBC query.
+   - **On a real PostgreSQL deployment** with higher baseline latency (5–50 ms per query), the EntityManager overhead becomes relatively smaller and the query cache WOULD show a net benefit — this benchmark's "slower than no-cache" finding is specific to the sub-100 µs H2 profile.
+
+3. **Hibernate L2 Entity Cache (by ID) provides modest benefit** for single-entity lookups (22–35 µs vs 47–60 µs for full list queries). The entity cache eliminates the SQL round-trip for `findById()`, but the 22–35 µs cost is dominated by EntityManager open/close and Hibernate's internal cache resolution logic — not by the actual cache `get()`.
+
+4. **The H2 database is artificially fast** for the baseline. The 47–60 µs baseline for a full 200-row DTO projection query reflects H2's in-memory processing plus the zero-latency JDBC connection (same process). On PostgreSQL over a network, the same query would take **5–50 ms** — at which point all caching strategies become relatively more valuable.
+
+### Recommendations
+
+| Strategy | List Endpoint | Single Entity | Recommendation |
+| :--- | :---: | :---: | :--- |
+| **Spring @Cacheable** | ⭐ **Best** (37 ns) | ⭐ **Best** (via caching facade) | **Implement** — add `@Cacheable("barbers")`/`@Cacheable("services")` to service methods with `@CacheEvict` on mutations |
+| **Hibernate L2 + Query Cache** | ❌ Slowest on H2; may help on PostgreSQL | N/A | **Hold** — re-benchmark on PostgreSQL before enabling; the EntityManager overhead makes it a net loss at sub-100µs latencies |
+| **Hibernate L2 Entity Cache** | N/A | ⚠️ Modest (35 µs vs 38 ns Spring cache) | **Optional** — helps when entities are loaded via `findById()` or lazy associations; configure `READ_ONLY` for truly immutable reference data only |
+
+**Verdict: Spring @Cacheable is the correct caching layer for reference data DTO endpoints.** It caches the final payload form (no mapping overhead), operates independently of Hibernate's query infrastructure, and delivers nanosecond-scale access. Hibernate's L2 cache is redundant when application-level caching already covers the hot paths — it adds complexity (region factory configuration, cache synchronization, eviction policies) with no throughput benefit for DTO-projected list endpoints. The one niche where Hibernate L2 cache helps is **cross-request entity identity**: if multiple queries reference the same `Barber` entity by ID across different API calls, the L2 cache prevents redundant SQL loads — but this is marginal when the primary serving path is DTO projections.
+
+The `@Cache(usage=READ_WRITE)` annotations on `Barber`, `ServiceItem`, and `Review` entities, and the `hibernate-jcache` + `caffeine-jcache` dependencies, are retained in the codebase as **opt-in infrastructure** — production continues with `hibernate.cache.use_second_level_cache=false`. Future deployments on PostgreSQL can enable L2 cache for specific entity regions by toggling the property, should entity-by-entity access patterns warrant it.

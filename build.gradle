@@ -16,12 +16,12 @@ ext {
 	// (Spring Boot 4.1.0 BOM ships 1.5.34 which is vulnerable; 1.5.35 fixes CVE-2026-13006,
 	//  1.5.36+ adds additional hardening for disallowed references)
 	set('logback.version', '1.5.38')
-	// Pin Jackson 2.x BOM to 2.21.5 to fix:
+	// Pin Jackson 2.x BOM to 2.22.1 to fix:
 	//   - CVE-2026-59888 (@JsonIgnore on Record bypassed with PropertyNamingStrategy)
 	//   - jackson-core: async parser maxNumberLength bypass (fixed in 2.21.4)
 	//   - CVE-2026-54512/13/14/15/16/17/18 (PTV bypass, @JsonView, SSRF, etc.)
 	// Spring Boot 4.1.0 BOM ships 2.21.4 by default.
-	set('jackson-2-bom.version', '2.21.5')
+	set('jackson-2-bom.version', '2.22.1')
 	// Pin Jackson 3.x BOM to 3.2.1 (latest) to fix CVE-2026-59889 (@JsonView bypass for
 	// @JsonUnwrapped container properties on deserialization). Spring Boot 4.1.0 BOM
 	// ships 3.1.4 which is vulnerable.
@@ -55,12 +55,15 @@ dependencies {
 	//   - jackson-databind 2.x / jackson-core 2.x: fixes 8 CVEs (HIGH: async parser bypass,
 	//     MEDIUM: @JsonIgnore/@JsonView bypasses, PTV bypass, SSRF, etc.)
 	//   - jackson-annotations 2.x: MUST be >= 2.22 for JsonApplyView used by Jackson 3.x
-	//     backward-compat module. 2.22 also includes 2.21.5 CVE fixes.
+	//     backward-compat module. 2.22 also includes 2.22.1 CVE fixes.
 	//   - jackson-databind 3.x: fixes CVE-2026-59889 (@JsonView bypass for @JsonUnwrapped)
-	implementation 'com.fasterxml.jackson.core:jackson-databind:2.21.5'
-	implementation 'com.fasterxml.jackson.core:jackson-core:2.21.5'
+	implementation 'com.fasterxml.jackson.core:jackson-databind:2.22.1'
+	implementation 'com.fasterxml.jackson.core:jackson-core:2.22.1'
 	implementation 'com.fasterxml.jackson.core:jackson-annotations:2.22'
 	implementation 'tools.jackson.core:jackson-databind:3.2.1'
+	// Hibernate 2nd-level cache with Caffeine JCache region factory
+	implementation 'org.hibernate.orm:hibernate-jcache'
+	implementation 'com.github.ben-manes.caffeine:jcache:3.2.0'
 	// Cache (Redis-backed via spring-boot-starter-data-redis; Caffeine was unused)
 	// Observability
 	implementation 'org.springframework.boot:spring-boot-micrometer-tracing-opentelemetry'
@@ -72,6 +75,8 @@ dependencies {
 	// Database migration
 	implementation 'org.springframework.boot:spring-boot-starter-flyway'
 	implementation 'org.flywaydb:flyway-database-postgresql:12.11.0'
+	// Pin flyway-core to match flyway-database-postgresql (Spring Boot 4.1.0 BOM ships 12.4.0)
+	implementation 'org.flywaydb:flyway-core:12.11.0'
 	// Runtime
 	runtimeOnly 'org.postgresql:postgresql:42.7.13'
 	runtimeOnly 'com.h2database:h2:2.4.240'
@@ -90,6 +95,8 @@ dependencies {
 spotbugs {
 	toolVersion = '4.10.3'
 	ignoreFailures = false
+	// TODO(Gradle 10): Replace string values with enum constants (Gradle 10 removes
+	// automatic String→Enum coercion for Gradle properties).
 	effort = 'max'
 	reportLevel = 'high'
 	excludeFilter = file("spotbugs-exclude.xml")
@@ -109,8 +116,28 @@ tasks.named("test") {
 	finalizedBy(tasks.jacocoTestReport)
 }
 
+tasks.register("benchmarkTest", Test) {
+	group = "benchmark"
+	description = "Runs benchmark tests (tagged @Tag('benchmark'))."
+	useJUnitPlatform {
+		includeTags 'benchmark'
+	}
+	testClassesDirs = sourceSets.test.output
+	classpath = sourceSets.test.runtimeClasspath
+	maxParallelForks = 1
+	environment "SPRING_SECURITY_PASSWORD", "admin-password"
+	systemProperty "spring.cache.type", "simple"
+	testLogging {
+		showStandardStreams = true
+		showExceptions = true
+		showCauses = true
+		showStackTraces = true
+		events "passed", "skipped", "failed"
+	}
+}
+
 jacoco {
-	toolVersion = "0.8.13"
+	toolVersion = "0.8.15"
 }
 jacocoTestReport {
 	dependsOn(tasks.test)
@@ -140,6 +167,10 @@ dependencyCheck {
 	formats = ['HTML', 'JSON']
 }
 tasks.named("dependencyUpdates") {
+	// Gradle 10 will enforce stricter configuration-cache rules that break the
+	// ben-manes plugin's internal task wiring. This is a dev-only task (never
+	// runs in CI), so excluding it from config cache is safe.
+	notCompatibleWithConfigurationCache()
 	rejectVersionIf {
 		if (it.currentVersion != null) {
 			def currentMajor = it.currentVersion.tokenize('.')[0]
