@@ -3,20 +3,16 @@ FROM nginxinc/nginx-unprivileged:stable-alpine-slim
 
 USER root
 ARG APK_BUST=0
-# Upgrade Alpine packages to resolve CVEs / security vulnerabilities.
+# Upgrade Alpine packages to resolve CVEs / security vulnerabilities and install
+# Brotli compression module for nginx from Alpine community, plus brotli CLI tool.
 # APK_BUST is a cache-busting build arg — pass a unique value (e.g.
-# `--build-arg APK_BUST=$(date +%s)`) so this layer is never served
-# from Docker's layer cache, ensuring the image always ships the
-# latest Alpine security patches.
-RUN apk update && apk upgrade --no-cache
-
-# Install Brotli compression module for nginx from Alpine community,
-# plus the brotli CLI tool for pre-compressing static assets at build time.
+# `--build-arg APK_BUST=$(date +%s)`) so this layer is never served from Docker's
+# layer cache, ensuring the image always ships the latest Alpine security patches.
 # The nginxinc image ships Alpine's nginx; the brotli module is ABI-compatible.
-# Insert load_module directives at the top of main nginx.conf (must precede
-# events block). This runs after `apk upgrade` so we patch the Alpine-native
-# config, not the one the nginxinc image originally shipped.
-RUN apk add --no-cache nginx-mod-http-brotli brotli && \
+# Insert load_module directives at top of main nginx.conf (must precede events block).
+# hadolint ignore=DL3018
+RUN apk update && apk upgrade --no-cache && \
+    apk add --no-cache nginx-mod-http-brotli brotli && \
     sed -i '1i load_module /usr/lib/nginx/modules/ngx_http_brotli_filter_module.so;' /etc/nginx/nginx.conf && \
     sed -i '1i load_module /usr/lib/nginx/modules/ngx_http_brotli_static_module.so;' /etc/nginx/nginx.conf
 

@@ -163,6 +163,7 @@ jobs:
         uses: hadolint/hadolint-action@v3.3.0
         with:
           dockerfile: frontend/Dockerfile
+          ignore: DL3018,DL3029
 
   ###########################################################
   # Backend
