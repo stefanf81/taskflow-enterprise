@@ -34,7 +34,7 @@ export default async function () {
     // prevent it from ever settling, causing flakes or hangs.
     await page.goto(__ENV.BASE_URL, {
       waitUntil: 'domcontentloaded',
-      timeout: '60s',
+      timeout: 60000,
     });
 
     const title = await page.title();

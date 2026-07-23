@@ -27,5 +27,5 @@ jobs:
             -e BASE_URL="$BASE_URL" \
             -v ${{ github.workspace }}:/work \
             -w /work \
-            grafana/k6:master-with-browser \
+            grafana/k6:latest-with-browser \
             run k6/browser.js
