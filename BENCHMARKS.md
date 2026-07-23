@@ -22,7 +22,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   **Keep-Alive Optimizations**: Raised threshold to `max-keep-alive-requests=100` and `timeout=60s` to reuse warm TCP connections directly.
 *   **Spring Security 7.1 & stateless JWT**:
     *   **Asymmetric Cryptography**: Standardized on RSA-2048 signing/verification using asymmetric key-pairs (`app.rsa.private-key` / `public-key`).
-    *   **Zero-Trust Session Isolation**: Enforced stateless token authentication via session storage in the frontend, attaching authorization headers dynamically. Restricted all routes except public `/api/v1/auth/**`.
+    *   **Zero-Trust Session Isolation**: Enforced stateless token authentication via HttpOnly, SameSite=Strict cookies set by the backend, restoring auth state via `GET /api/v1/auth/me` into an in-memory Signal (`AuthState`). Restricted all routes except public `/api/v1/auth/**`.
 *   **Springdoc OpenAPI 3 (Swagger UI)**:
     *   Integrated `springdoc-openapi-starter-webmvc-ui` version **`3.0.3`** for automated, interactive API documentation generation from code structures. Fully compatible with Spring Boot 4.1.0.
 *   **Spring Boot Validation**:

@@ -18,14 +18,14 @@ Below is the complete sequence of an authenticated, paginated API query from the
     ▼ (2. Request created)                               │
   appointment.service.ts (getAllAppointments)                   │
     │                                                    │
-    ▼ (3. Token appended)                                │
-  auth.interceptor.ts (Bearer JWT)                       │
+    ▼ (3. Cookie & CSRF header attached)                 │
+  auth.interceptor.ts (HttpOnly Cookie + XSRF Header)    │
     │                                                    │
     ▼ (4. HTTPS/TLS & CSP Headers)                       │
   Nginx Reverse Proxy (nginx.conf) ─────────────────────►│ (5. Request enters JRE)
-    │                                                    │   BearerTokenAuthenticationFilter
+    │                                                    │   BearerTokenAuthenticationFilter / CSRF Filter
     │                                                    │     │
-    │                                                    │     ▼ (6. Token validated statelessly)
+    │                                                    │     ▼ (6. Cookie JWT validated statelessly)
     │                                                    │   NimbusJwtDecoder (Asymmetric RSA-2048)
     │                                                    │     │
     │                                                    │     ▼ (7. Context set)
@@ -57,8 +57,8 @@ Below is the complete sequence of an authenticated, paginated API query from the
 ## 🧵 2. Step-by-Step Architectural Flow Analysis
 
 ### **Step 1: Client Landing & Route Security Guard**
-*   **Active Files**: `app.ts`, `app.html`, `auth.guard.ts`
-*   **The Flow**: When the user accesses the TaskFlow app, the Angular engine bootstraps. The functional `auth.guard.ts` verifies if a valid `auth_token` exists in the transient `sessionStorage`. If no token exists, the DOM is locked, and a beautiful, custom **Login Portal Card** is rendered in `app.html`.
+*   **Active Files**: `app.ts`, `app.html`, `auth.guard.ts`, `auth.state.ts`
+*   **The Flow**: When the user accesses the TaskFlow app, the Angular engine bootstraps. The functional `auth.guard.ts` verifies authentication using the in-memory `AuthState` Signal (restored from the backend via `GET /api/v1/auth/me`, which reads the HttpOnly session cookie). If unauthenticated, the DOM is locked, and a custom **Login Portal Card** is rendered in `app.html`.
 
 ### **Step 2: Authenticating & Issuing the Stateless JWT**
 *   **Active Files**: `app.ts` (Angular), `appointment.service.ts` (Angular), `SecurityConfig.java` (Spring Boot), `AuthController.java` (Spring Boot), `TokenProvider.java` (Spring Boot)
@@ -67,21 +67,21 @@ Below is the complete sequence of an authenticated, paginated API query from the
     2.  `appointment.service.ts` sends a `POST /api/v1/auth/login` containing the credentials.
     3.  On the backend, `SecurityConfig` recognizes `/api/v1/auth/**` as a publicly permitted endpoint and lets the request pass.
     4.  `AuthController` delegates authentication to the `AuthenticationManager`. It validates credentials against the secure in-memory `UserDetailsService` using a BCrypt password matcher.
-    5.  Once authenticated, `TokenProvider` generates a cryptographically signed JSON Web Token (JWT) using asymmetric RS256 (RSA 2048-bit keys) and returns it inside a `LoginResponse` DTO.
+    5.  Once authenticated, `TokenProvider` generates a cryptographically signed JSON Web Token (JWT) using asymmetric RS256 (RSA 2048-bit keys) and sets it as an `HttpOnly`, `SameSite=Strict` cookie (`access_token`). The backend also issues a readable `XSRF-TOKEN` cookie via `CookieCsrfTokenRepository` for double-submit CSRF protection.
 
 ### **Step 3: Storing and Intercepting Request Tokens**
-*   **Active Files**: `app.ts` (Angular), `auth.interceptor.ts` (Angular), `nginx.conf` (Nginx)
+*   **Active Files**: `app.ts` (Angular), `auth.interceptor.ts` (Angular), `app.config.ts` (Angular), `nginx.conf` (Nginx)
 *   **The Flow**:
-    1.  The frontend receives the JWT, stores it as `Bearer <token>` inside `sessionStorage`, and toggles the `isLoggedIn` signal to `true`. This unlocks the dashboard DOM.
+    1.  The frontend receives successful authentication, updates `AuthState` in memory, and unlocks the dashboard DOM. The JWT cookie is HttpOnly and completely inaccessible to JavaScript.
     2.  The frontend triggers `loadAppointments()`.
-    3.  **`auth.interceptor.ts`** intercepts this request. It dynamically reads the token from `sessionStorage`, clones the outgoing HTTP request, and injects the `Authorization: Bearer <token>` header automatically. This keeps all other service layer code 100% DRY and secure.
-    4.  At the web server layer, Nginx enforces strict **Content Security Policy (CSP)** and clickjacking headers (`X-Frame-Options`, `nosniff`), guaranteeing that unapproved external scripts cannot intercept this token.
+    3.  **`auth.interceptor.ts`** handles outgoing requests. Browsers automatically attach the HttpOnly `access_token` cookie for same-origin requests. Angular's `withXsrfConfiguration` reads the `XSRF-TOKEN` cookie and automatically attaches the `X-XSRF-TOKEN` header on state-changing requests.
+    4.  At the web server layer, Nginx enforces strict **Content Security Policy (CSP)** and clickjacking headers (`X-Frame-Options`, `nosniff`), guaranteeing that unapproved external scripts cannot interact with the application.
 
 ### **Step 4: Request Injection Filtering & Unprivileged Container Routing**
 *   **Active Files**: `docker-compose.yml`, `Dockerfile` (Backend), `SecurityConfig.java`
 *   **The Flow**:
     1.  The HTTP request passes the Docker container network boundary. The container runs under an unprivileged `taskflow` user with CPU/Memory limits, preventing system-level exploits.
-    2.  The request is processed by Spring Security's native **`BearerTokenAuthenticationFilter`** configured in `SecurityConfig.java`. It automatically extracts the `Bearer` token from the header, decodes and validates its signature statelessly using **`NimbusJwtDecoder`** (utilizing our RSA 2048-bit public key), and establishes the authenticated security session inside the `SecurityContextHolder`.
+    2.  Spring Security extracts the JWT from the HttpOnly `access_token` cookie, decodes and validates its signature statelessly using **`NimbusJwtDecoder`** (utilizing our RSA 2048-bit public key), checks the `X-XSRF-TOKEN` header against the CSRF token cookie on state-changing operations, and establishes the authenticated security session inside `SecurityContextHolder`.
 
 ### **Step 5: High-Performance Database Querying & Connection Protection**
 *   **Active Files**: `AppointmentController.java`, `AppointmentServiceImpl.java`, `AppointmentRepository.java`, `V1__init_schema.sql` (Flyway), `application-prod.properties`
@@ -107,7 +107,7 @@ Below is the complete sequence of an authenticated, paginated API query from the
 
 | Feature Integration | Why they influence each other | Alternative | Why the connected flow is better |
 |---|---|---|---|
-| **JWT Interceptor + sessionStorage** | The interceptor automatically extracts tokens from storage and attaches them, allowing `appointment.service` methods to be 100% clean and authentication-free. | Hardcoding headers inside individual service calls. | Centralizes auth, eliminates code repetition (DRY), and makes adding new endpoints 100% secure out-of-the-box. |
+| **HttpOnly JWT Cookie + In-Memory AuthState Signal** | The backend sets an HttpOnly session cookie and double-submit CSRF cookie. Frontend restores role state via `/api/v1/auth/me` into an in-memory Signal (`AuthState`). JavaScript never handles raw JWTs. | Storing JWT in `localStorage` or `sessionStorage`. | 100% XSS immunity (tokens cannot be stolen by scripts), built-in CSRF protection via double-submit token & `SameSite=Strict`, and zero token handling boilerplate in frontend code. |
 | **H2 Count Indexing + `open-in-view=false`** | Fast index counts inside the DB minimize query execution time. Disabling OSIV closes the connection immediately afterward. | Keeping Hibernate sessions open during JSON rendering with in-memory counting. | Completely prevents database connection pool starvation under heavy production traffic, keeping memory overhead close to zero. |
 | **Flyway Migrations + JPA Validation** | Flyway sets up schema/indexes during container boot. JPA uses `ddl-auto=validate` to confirm schema integrity before opening connection pools. | Relying on Hibernate's unpredictable `ddl-auto=update` during runtime. | Guarantees complete data integrity, prevents accidental drop tables/column corruption, and makes builds reproducible across dev and prod environments. |
 | **Unprivileged Docker + Non-Root Nginx** | Docker isolates host namespaces, while Alpine's unprivileged JRE and unprivileged Nginx run without host-root permissions. | Standard containers running as default root on port 80. | Completely blocks container-breakout privilege escalation exploits, protecting your physical host server from root compromise. |
@@ -133,21 +133,21 @@ Before any application runs, three layers of security check your code, configura
 
 Through exhaustive benchmarking, the application has been tuned for maximum Request-Per-Second (RPS) throughput and minimum overhead:
 
-1.  **JVM & Garbage Collection (Multi-Arch Tuning)**: Migrated from GraalVM JIT to **Standard OpenJDK 21** utilizing **ParallelGC**.
-    - **Local Apple Silicon (M4 Pro ARM64):** The heap is strictly fixed at 1GB (`-Xms1g -Xmx1g`) with `-XX:+AlwaysPreTouch` for predictable startup. Off-heap memory is bounded via `-XX:MaxDirectMemorySize=256m` and `-XX:MaxMetaspaceSize=256m`.
-    - **Production Cloud (x64):** Hardware-pinned JVM arguments (fixed core counts or AVX flags) are left out so the JVM reads the container's actual CPU allocation. The heap dynamically scales to the orchestrator's limit via `-XX:MaxRAMPercentage`), and off-heap memory is bounded via `-XX:MaxDirectMemorySize=256m` and `-XX:MaxMetaspaceSize=256m` to keep the container RSS under its cgroup limit.
+1.  **JVM & Garbage Collection (Multi-Arch Tuning)**: Standardized on **Standard OpenJDK 21** utilizing **G1GC** (JDK 21 default). Sizing and GC parameters are owned by the deployment environment (`JAVA_TOOL_OPTIONS`), keeping both `Dockerfile` and `Dockerfile.x64` sizing-agnostic.
+    - **Local Apple Silicon (M4 Pro ARM64):** Configured via `JAVA_TOOL_OPTIONS` in `docker-compose.yml` (`MaxRAMPercentage=50.0` ≈ 1.25 GiB heap, `-XX:+UseG1GC`, `-XX:+AlwaysPreTouch`, off-heap bounded via `-XX:MaxDirectMemorySize=256m` and `-XX:MaxMetaspaceSize=256m`).
+    - **Production Cloud (x64):** Configured via deployment manifest `JAVA_TOOL_OPTIONS` (`MaxRAMPercentage=50.0`, `-XX:+UseG1GC`, `-XX:MaxGCPauseMillis=100`, `-XX:+AlwaysPreTouch`), letting the JVM adapt dynamically to container CPU and memory allocations.
 2.  **Double-Caching Docker Compilation**: Standardized optimized multi-stage `Dockerfile` structures. External dependencies are cached in a separate layer by running `./gradlew dependencies --no-daemon` *before* the application source code is copied. Any subsequent Java code change only rebuilds the final lightweight layers, decreasing pipeline build times to under 10 seconds.
 3.  **JVM Class Data Sharing (CDS)**: A CDS archive is generated during the Docker build by booting `CdsTrainingApplication` (which terminates at context refresh via `spring.context.exit=onRefresh`). At runtime, `-XX:SharedArchiveFile=application.jsa` + `-Xshare:auto` reduce class-loading overhead for faster cold starts.
     -   The training context runs with `spring.cache.type=redis` and imports `CacheConfig` so the `RedisCacheManager` / `GenericJackson2JsonRedisSerializer` bean graph is loaded (no real Redis connection is opened — Lettuce connects lazily and the context exits before any cache read/write). In dev, `spring.cache.type=simple` exercises the same `@Cacheable` / `CacheManager` paths without requiring Redis.
-3.  **Threading Model**: Java 21 **Virtual Threads (Project Loom) have been disabled** in favor of standard Platform Threads. Because the authentication flow is highly CPU-bound (Bcrypt, RSA signing), avoiding Virtual Thread context-switching overhead yields significantly higher throughput.
-4.  **JSON Serialization**: Integrated the **Jackson Blackbird** module. This replaces Java reflection with ASM bytecode generation for DTO mapping, further reducing CPU overhead on JSON-heavy payloads.
-5.  **Database Connection Pooling**: **HikariCP** pool is sized at `maximum-pool-size=25` / `minimum-idle=10` in the `prod` profile (`spring.datasource.hikari.*`). The size is tuned for the expected concurrent request volume rather than left at the default of 10.
-6.  **Asynchronous Logging**: Synchronous I/O locking has been eliminated by wrapping the Logback `FileAppender` inside an `AsyncAppender` with a massive non-blocking queue.
-7.  **Observability Taxonomy**: OpenTelemetry distributed tracing sampling was reduced from 100% to **10%** (`management.tracing.sampling.probability=0.1`), recovering peak RPS while retaining statistical observability.
-8.  **Distributed Caching**: Read-heavy operations (e.g., retrieving busy slots) are annotated with `@Cacheable` and backed by **Redis** (`spring.cache.type=redis` in the `prod` profile) to prevent database exhaustion under heavy load while staying shared across replicas. A local `simple` (ConcurrentHashMap-backed) cache is used in dev so the `@Cacheable` / `CacheManager` code paths are exercised without requiring Redis. Each cache region has a bounded TTL — `appointmentStats` expires after 5 minutes, `busySlots` after 2 minutes — with key-scoped eviction on mutation to prevent cache stampedes.
-9.  **Upstream Connection Pooling (Nginx Keepalives)**: Configured a persistent TCP connection pool (`keepalive 64`) inside Nginx's proxy upstream block. Rather than tearing down the TCP connection after every single request, Nginx reuse connections, eliminating handshake latency entirely. This yielded a **7.1x increase in throughput (from 350 RPS to 2,505 RPS)** and slashed average proxy latency from 141.4ms to **19.8ms** during heavy end-to-end load tests.
-10. **Frontend-Backend Multiplexing & ETag Caching**: Enabled HTTP/2 in Spring Boot and configured Tomcat Keep-Alives (`server.tomcat.max-keep-alive-requests=100`) to let the browser execute concurrent requests over a single TCP connection. We also added a `ShallowEtagHeaderFilter` (restricted to GET requests only — POST/PUT/DELETE skip ETag buffering entirely) so the backend returns an instant `304 Not Modified` if the JSON payload hasn't changed.
-11. **Browser Preloading & View Transitions**: Configured the Angular 22 Router with `withPreloading(PreloadAllModules)` to silently download JavaScript chunks in the background. Combined with the native `withViewTransitions()` API, the perceived latency for the end-user drops to virtually zero.
+4.  **Threading Model**: Java 21 **Virtual Threads (Project Loom) have been disabled** in favor of standard Platform Threads. Because the authentication flow is highly CPU-bound (Bcrypt, RSA signing), avoiding Virtual Thread context-switching overhead yields significantly higher throughput.
+5.  **JSON Serialization**: Integrated Jackson 3.x with explicit version pins for low-latency serialization and CVE resolution.
+6.  **Database Connection Pooling**: **HikariCP** pool is sized at `maximum-pool-size=25` / `minimum-idle=10` in the `prod` profile (`spring.datasource.hikari.*`). The size is tuned for the expected concurrent request volume rather than left at the default of 10.
+7.  **Asynchronous Logging**: Synchronous I/O locking has been eliminated by wrapping the Logback `FileAppender` inside an `AsyncAppender` with a massive non-blocking queue.
+8.  **Observability Taxonomy**: OpenTelemetry distributed tracing sampling was reduced from 100% to **10%** (`management.tracing.sampling.probability=0.1`), recovering peak RPS while retaining statistical observability.
+9.  **Distributed Caching**: Read-heavy operations (e.g., retrieving busy slots) are annotated with `@Cacheable` and backed by **Redis** (`spring.cache.type=redis` in the `prod` profile) to prevent database exhaustion under heavy load while staying shared across replicas. A local `simple` (ConcurrentHashMap-backed) cache is used in dev so the `@Cacheable` / `CacheManager` code paths are exercised without requiring Redis. Each cache region has a bounded TTL — `appointmentStats` expires after 5 minutes, `busySlots` after 2 minutes — with key-scoped eviction on mutation to prevent cache stampedes.
+10. **Upstream Connection Pooling (Nginx Keepalives)**: Configured a persistent TCP connection pool (`keepalive 64`) inside Nginx's proxy upstream block. Rather than tearing down the TCP connection after every single request, Nginx reuse connections, eliminating handshake latency entirely. This yielded a **7.1x increase in throughput (from 350 RPS to 2,505 RPS)** and slashed average proxy latency from 141.4ms to **19.8ms** during heavy end-to-end load tests.
+11. **Frontend-Backend Multiplexing & ETag Caching**: Enabled HTTP/2 in Spring Boot and configured Tomcat Keep-Alives (`server.tomcat.max-keep-alive-requests=100`) to let the browser execute concurrent requests over a single TCP connection. We also added a `ShallowEtagHeaderFilter` (restricted to GET requests only — POST/PUT/DELETE skip ETag buffering entirely) so the backend returns an instant `304 Not Modified` if the JSON payload hasn't changed.
+12. **Browser Preloading & View Transitions**: Configured the Angular 22 Router with `withPreloading(PreloadAllModules)` to silently download JavaScript chunks in the background. Combined with the native `withViewTransitions()` API, the perceived latency for the end-user drops to virtually zero.
 
 ---
 
@@ -161,8 +161,8 @@ To comply with the absolute highest standards in production-grade container arch
 4.  **Signal Management & Init System**: We integrated `tini` as PID 1 inside the JRE container. `tini` acts as a lightweight init system, forwarding OS termination signals (like `SIGTERM` on Kubernetes scaling events) flawlessly to the JVM to trigger clean resource flushes, and reaping zombie child processes automatically to prevent slow memory leaks.
 5.  **Strict Numeric UIDs**: Rather than using string-based names (like `USER appuser`), we hardcoded explicit numeric user and group IDs (`USER 10001:10001`) in the Dockerfile, instantly satisfying **Strict Kubernetes Pod Security Standards (PSS)** without runtime translation overhead.
 6.  **Dual-Dockerfile Strategy (Dev/Benchmarking vs. Production Cloud)**: To achieve optimal throughput locally and standard portability in the cloud, the container layers are separated into two specialized specifications:
-    *   **Local Developer / Throughput Benchmarking (`Dockerfile`):** Targets the local Apple Silicon hardware. It hardcodes fixed heap allocations (`-Xms1g -Xmx1g`), uses the throughput-oriented Parallel Garbage Collector (`-XX:+UseParallelGC`), and enables memory pretouching (`-XX:+AlwaysPreTouch`) to commit the entire heap on startup. This completely eliminates runtime heap expansion and contraction, guaranteeing maximum RPS stability during performance testing.
-    *   **Production Cloud / K8s Portability (`Dockerfile.x64`):** Cross-compiles using the pinned platform flag `--platform=linux/amd64` to prevent architecture mismatch crashes. It utilizes cgroup-aware dynamic heap limits (`-XX:MaxRAMPercentage=75.0`), defaults to the low-latency G1 collector for consistent request/response p99 durations, and disables `AlwaysPreTouch` to enable lightning-fast container startup and agile scaling inside orchestrators.
+    *   **Local Developer (`Dockerfile`):** Targets local Apple Silicon (`--platform=linux/arm64`). Ships sizing-agnostic invariants in `CMD` (`-XX:SharedArchiveFile=application.jsa`, `-Xshare:auto`, `-XX:+ExitOnOutOfMemoryError`), while runtime heap and GC tuning are supplied via `JAVA_TOOL_OPTIONS` in `docker-compose.yml`.
+    *   **Production Cloud (`Dockerfile.x64`):** Cross-compiles using `--platform=linux/amd64`. Sizing-agnostic image; JVM sizing and GC parameters are owned by production deployment manifests (`backend.yaml` `JAVA_TOOL_OPTIONS`), adapting dynamically to cgroup memory limits.
 
 ---
 

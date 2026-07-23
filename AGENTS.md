@@ -71,7 +71,7 @@ Security scans (filesystem lints, container image vulnerability scans, and DAST 
   - **Read-Only Root**: Containers mount read-only filesystems with ephemeral directories mounted as `tmpfs` (e.g., `/tmp`, `/var/cache/nginx`), preventing runtime binary tampering.
   - **Dropped Capabilities**: All services completely drop kernel privileges (`cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`).
 - **OSIV is off** (`spring.jpa.open-in-view=false`) — connections return to Hikari pool immediately after service methods.
-- **Auth**: Stateless JWT (Asymmetric RSA-2048 signing via OAuth2 Resource Server). Frontend stores token in `sessionStorage`, `auth.interceptor.ts` attaches `Authorization: Bearer` to every request. `/api/v1/auth/**` is the only public endpoint path.
+- **Auth**: Stateless JWT in an HttpOnly `access_token` cookie (Asymmetric RSA-2048 signing via OAuth2 Resource Server). Role/identity is restored via `GET /api/v1/auth/me` into an in-memory Signal (`AuthState`) and never stored in `sessionStorage`/`localStorage`. CSRF protection via double-submit `XSRF-TOKEN` cookie. `/api/v1/auth/**` is the only public endpoint path.
 - **Frontend uses Angular 22 Signals** (no Zone.js digest loops). Styles use Tailwind with custom `gold`/`obsidian` color palette.
 - **Prettier** is the formatter (100 char width, single quotes). Run `npx prettier --write <file>` in `frontend/`.
 - **Testcontainers** are used for PostgreSQL integration tests. They require Docker to be running.
