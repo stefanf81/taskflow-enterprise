@@ -39,6 +39,10 @@ out/
 # Test execution results
 /test-results/
 
+# k6 browser test screenshots (keep directory structure)
+k6/screenshots/*
+!k6/screenshots/.gitkeep
+
 ### Angular Frontend / Node.js ###
 frontend/node_modules/
 frontend/dist/
