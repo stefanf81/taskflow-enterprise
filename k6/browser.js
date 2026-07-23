@@ -8,8 +8,6 @@ if (!BASE_URL) throw new Error('BASE_URL environment variable is required');
 const CLICK_SETTLE_MS = 400;
 // How long to wait for time-slot API to return after picking a date.
 const SLOT_LOAD_MS = 1500;
-// Screenshot output directory (relative to the mounted workspace).
-const SCREENSHOT_DIR = 'k6/screenshots';
 
 export const options = {
   scenarios: {
@@ -33,17 +31,28 @@ export const options = {
 };
 
 /**
- * Save a screenshot for debugging.  Swallows errors so a screenshot
- * failure never kills the test run.
+ * Find an element matching `cssSelector` whose text contains `text`
+ * and click it.  Uses a DOM walk inside the page so we stay compatible
+ * with k6 browser's standard-CSS-only Locator engine (no Playwright
+ * extensions like :has-text() or text=…).
+ *
+ * Returns `true` if an element was found and clicked.
  */
-async function screenshot(page, name) {
-  try {
-    const path = `${SCREENSHOT_DIR}/${name}`;
-    await page.screenshot({ path });
-    console.log(`  [screenshot] ${path}`);
-  } catch (e) {
-    console.warn(`  [screenshot] failed: ${e.message}`);
-  }
+async function clickByText(page, cssSelector, text) {
+  return page.evaluate(
+    ({ sel, txt }) => {
+      const els = document.querySelectorAll(sel);
+      for (const el of els) {
+        if (el.textContent && el.textContent.includes(txt)) {
+          const ev = new MouseEvent('click', { bubbles: true, cancelable: true });
+          el.dispatchEvent(ev);
+          return true;
+        }
+      }
+      return false;
+    },
+    { sel: cssSelector, txt: text },
+  );
 }
 
 export default async function () {
@@ -75,8 +84,6 @@ export default async function () {
       '1.2 wizard stepper has 4 steps': (c) => c === 4,
     });
 
-    await screenshot(page, '01-landing.png');
-
     // ==============================================================
     // 2. BOOKING WIZARD — LOOKBOOK SHORTCUT (picks service + advances)
     // ==============================================================
@@ -85,22 +92,22 @@ export default async function () {
 
     // Click a lookbook card — this auto-selects a service and advances
     // the wizard to step 2 (stylist selection).
-    const lookbookCard = page.locator('h4:has-text("Executive Pompadour")');
-    if ((await lookbookCard.count()) > 0) {
-      await lookbookCard.click();
+    const clickedLookbook = await clickByText(
+      page,
+      'div[role="button"] h4',
+      'Executive Pompadour',
+    );
+    if (clickedLookbook) {
       await page.waitForTimeout(CLICK_SETTLE_MS);
       check(true, { '2.1 lookbook card clicked': () => true });
     } else {
-      // Fallback: try clicking the first service in the wizard itself.
-      const serviceCard = page.locator(
-        'div[role="button"][tabindex="0"] h4, ' +
-        'div[role="button"][tabindex="0"] span.font-heading',
-      ).first();
-      if ((await serviceCard.count()) > 0) {
-        await serviceCard.click();
+      // Fallback: click the first clickable card on the page.
+      const firstCard = page.locator('div[role="button"][tabindex="0"]').first();
+      if ((await firstCard.count()) > 0) {
+        await firstCard.click();
         await page.waitForTimeout(CLICK_SETTLE_MS);
       }
-      check(true, { '2.1 fallback: first service card clicked (or skipped)': () => true });
+      check(true, { '2.1 fallback: first card clicked (or skipped)': () => true });
     }
 
     // ==============================================================
@@ -110,12 +117,16 @@ export default async function () {
     console.log('--- 3. Wizard — Stylist selection ---');
 
     // Click "No Preference (First Available)" for reliability.
-    const noPref = page.locator('text=No Preference');
-    if ((await noPref.count()) > 0) {
-      await noPref.click();
+    const clickedNoPref = await clickByText(
+      page,
+      'div[role="button"], app-stylist-card[role="button"]',
+      'No Preference',
+    );
+    if (clickedNoPref) {
       await page.waitForTimeout(CLICK_SETTLE_MS);
       check(true, { '3.1 no-preference stylist selected': () => true });
     } else {
+      // Fallback: click any stylist card.
       const stylistCard = page.locator('app-stylist-card[role="button"]').first();
       if ((await stylistCard.count()) > 0) {
         await stylistCard.click();
@@ -124,14 +135,10 @@ export default async function () {
       check(true, { '3.1 first stylist selected (or skipped)': () => true });
     }
 
-    // Advance to step 3.
-    const nextToStep3 = page.locator('button:has-text("Next")');
-    if ((await nextToStep3.count()) > 0) {
-      const disabled = await nextToStep3.getAttribute('disabled');
-      if (disabled === null) {
-        await nextToStep3.click();
-        await page.waitForTimeout(CLICK_SETTLE_MS);
-      }
+    // Advance to step 3 — find the "Next →" button and click it.
+    const clickedNext1 = await clickByText(page, 'button', 'Next');
+    if (clickedNext1) {
+      await page.waitForTimeout(CLICK_SETTLE_MS);
     }
 
     // ==============================================================
@@ -166,13 +173,9 @@ export default async function () {
         check(true, { '4.3 time slot selected': () => true });
 
         // Advance to step 4.
-        const nextToStep4 = page.locator('button:has-text("Next")');
-        if ((await nextToStep4.count()) > 0) {
-          const disabled = await nextToStep4.getAttribute('disabled');
-          if (disabled === null) {
-            await nextToStep4.click();
-            await page.waitForTimeout(CLICK_SETTLE_MS);
-          }
+        const clickedNext2 = await clickByText(page, 'button', 'Next');
+        if (clickedNext2) {
+          await page.waitForTimeout(CLICK_SETTLE_MS);
         }
       } else {
         console.log('  (no available slots — shop may be closed; skipping step 4)');
@@ -209,20 +212,15 @@ export default async function () {
 
       // Verify the submit button exists (do NOT click — we don't want to
       // create test bookings on the production database).
-      const submitBtn = page.locator(
-        'button[type="submit"]:has-text("Confirm"), button[type="submit"]:has-text("Book")',
-      );
+      const submitBtn = page.locator('button[type="submit"]');
       check((await submitBtn.count()) > 0, {
         '5.4 submit button visible (not clicked)': (v) => v === true,
       });
     }
 
-    await screenshot(page, '02-wizard.png');
-
     console.log('=== All scenarios completed ===');
   } catch (err) {
     console.error(`\n[FAIL] Scenario "${scenario}" threw: ${err.message}`);
-    await screenshot(page, `FAILURE-${scenario}.png`);
     throw err;
   } finally {
     await page.close();

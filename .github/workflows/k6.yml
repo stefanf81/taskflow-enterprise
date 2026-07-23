@@ -29,11 +29,3 @@ jobs:
             -w /work \
             grafana/k6:latest-with-browser \
             run k6/browser.js
-
-      - name: Upload k6 screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: k6-screenshots
-          path: k6/screenshots/*.png
-          retention-days: 7
