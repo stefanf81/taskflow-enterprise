@@ -34,6 +34,14 @@ java {
 		languageVersion = JavaLanguageVersion.of(21)
 	}
 }
+
+// Disable the plain jar artifact. Only the Spring Boot executable jar (build by
+// the `bootJar` task) is produced in build/libs/, so the Dockerfiles' wildcard
+// `COPY build/libs/*.jar` always matches exactly one file instead of failing
+// when a `-plain.jar` is also present (e.g. after `./gradlew build`).
+jar {
+	enabled = false
+}
 repositories {
 	mavenCentral()
 }

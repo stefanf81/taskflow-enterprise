@@ -75,7 +75,11 @@ COPY --link --from=extractor --chown=10001:10001 /app/extracted/application/ ./
 #
 # Disable components that are irrelevant during CDS training to keep the
 # startup minimal and fast:
-#   - spring.cache.type=none                 : Don't attempt Redis connection
+#   - spring.cache.type=redis                : Instantiate RedisCacheManager so its
+#                                               classes (and the JSON serializer graph)
+#                                               are baked into the CDS archive. No real
+#                                               Redis connection is opened: Lettuce is
+#                                               lazy and the context exits at refresh.
 #   - management.otlp.tracing.export.enabled=false : Don't attempt OTLP export
 #   - app.cds-training=true                  : Skips the admin-user CommandLineRunner
 #
@@ -87,7 +91,7 @@ RUN java -XX:ArchiveClassesAtExit=application.jsa \
          -Dspring.context.exit=onRefresh \
          -Dapp.cds-training=true \
          -Dspring.flyway.enabled=false \
-         -Dspring.cache.type=none \
+         -Dspring.cache.type=redis \
          -Dmanagement.tracing.enabled=false \
          -Dmanagement.otlp.tracing.export.enabled=false \
          -Dotel.sdk.disabled=true \
