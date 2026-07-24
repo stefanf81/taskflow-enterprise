@@ -20,7 +20,8 @@ export const authApi = {
     await apiClient.post('/api/v1/auth/logout');
   },
 
-  fetchCsrfToken: async (): Promise<void> => {
-    await apiClient.get('/api/v1/auth/csrf');
+  fetchCsrfToken: async (): Promise<string> => {
+    const response = await apiClient.get<{ token: string }>('/api/v1/auth/csrf');
+    return response.data.token;
   },
 };

@@ -26,6 +26,9 @@ ext {
 	// @JsonUnwrapped container properties on deserialization). Spring Boot 4.1.0 BOM
 	// ships 3.1.4 which is vulnerable.
 	set('jackson-bom.version', '3.2.1')
+	// Pin Netty to 4.2.16.Final to fix GHSA-mfg7-5gfp-c4w3 (Memory Leak in DNS Record Decoder
+	// via Malformed Domain Names). Spring Boot 4.1.0 BOM ships 4.2.15.Final which is vulnerable.
+	set('netty.version', '4.2.16.Final')
 }
 
 
@@ -58,6 +61,11 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	// Netty — explicit pins so Dependabot's Gradle parser sees the correct versions
+	// (Dependabot does not resolve BOM property overrides set via ext.set()).
+	// Fixes GHSA-mfg7-5gfp-c4w3 (Memory Leak in DNS Record Decoder via Malformed Domain Names).
+	implementation platform('io.netty:netty-bom:4.2.16.Final')
+	implementation 'io.netty:netty-codec-dns:4.2.16.Final'
 	// Jackson — explicit pins so Dependabot's Gradle parser sees the correct versions
 	// (Dependabot does not resolve BOM property overrides set via ext.set()).
 	//   - jackson-databind 2.x / jackson-core 2.x: fixes 8 CVEs (HIGH: async parser bypass,

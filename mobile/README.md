@@ -1,6 +1,6 @@
 # TaskFlow Mobile Application
 
-A cross-platform mobile application for TaskFlow built with **React Native**, **Expo**, **TypeScript**, and **NativeWind** (Tailwind CSS). Runs natively on **Android** (phones & tablets) and **iOS** (iPhone & iPad).
+A cross-platform mobile application for TaskFlow built with **React Native**, **Expo**, and **TypeScript**. Runs natively on **Android** (phones & tablets) and **iOS** (iPhone & iPad).
 
 ## Target Architecture
 
@@ -18,18 +18,24 @@ React Native + Expo Mobile Application
            Database
 ```
 
-## Stack Overview
+## Backend Connectivity & Security Model
 
-* **Framework:** React Native, Expo ~52, TypeScript
-* **Navigation:** `@react-navigation/native`, `@react-navigation/bottom-tabs`, `@react-navigation/native-stack`
-* **API Layer:** Axios with Bearer token & cookie support (`src/api/client.ts`)
-* **Server State:** TanStack Query (`@tanstack/react-query`) for all backend data (appointments, catalog, barbers, time-offs, notifications, reviews)
-* **Client App State:** Zustand (`useAuthStore`, `useUIStore`)
-* **Styling:** NativeWind / Tailwind CSS with Gold & Obsidian luxury salon design system
-* **Forms & Validation:** `react-hook-form` & `zod`
-* **Secure Token Storage:** `expo-secure-store` (iOS Keychain / Android Keystore)
-* **Testing:** Jest, React Native Testing Library (`@testing-library/react-native`)
-* **Build Services:** Expo Application Services (EAS Build) (`eas.json`)
+The mobile app connects to the Spring Boot REST API (`taskflow-backend`).
+
+### Local Development Setup (`mobile/.env`)
+* **iOS Simulator**: `http://localhost:8080`
+* **Android Emulator**: `http://10.0.2.2:8080` (or leave `EXPO_PUBLIC_API_URL` empty for auto-detection)
+* **Physical Device**: `http://<YOUR_MAC_LAN_IP>:8080`
+
+### Production Connection
+To connect local simulators, emulators, or production builds to a live production backend:
+```bash
+# Override API URL directly when starting Metro
+EXPO_PUBLIC_API_URL=https://api.yourdomain.com npx expo start -c
+```
+Production environments enforce TLS/HTTPS encryption, hardware token encryption in **iOS Keychain** / **Android Keystore** via `expo-secure-store`, and Redis IP rate-limiting.
+
+---
 
 ## Directory Structure
 

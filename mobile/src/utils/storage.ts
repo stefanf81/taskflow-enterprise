@@ -64,10 +64,14 @@ export const storage = {
       } else {
         json = await SecureStore.getItemAsync(USER_KEY);
       }
-      return json ? JSON.parse(json) : null;
+      return json ? (JSON.parse(json) as T) : null;
     } catch {
-      const json = memoryStore.get(USER_KEY);
-      return json ? JSON.parse(json) : null;
+      try {
+        const json = memoryStore.get(USER_KEY);
+        return json ? (JSON.parse(json) as T) : null;
+      } catch {
+        return null;
+      }
     }
   },
 

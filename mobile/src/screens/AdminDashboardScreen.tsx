@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   ScrollView,
   Animated,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../components/common/Card';
@@ -30,6 +31,9 @@ import { formatTime12Hour, isOverdue } from '../utils/time-utils';
 const FILTERS = ['all', 'pending', 'approved', 'overdue', 'denied'];
 
 export const AdminDashboardScreen: React.FC = () => {
+  const { width } = useWindowDimensions();
+  const isNarrowScreen = width < 480;
+
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
@@ -191,9 +195,9 @@ export const AdminDashboardScreen: React.FC = () => {
         )}
 
         {/* ===== MAIN LAYOUT: Guidelines sidebar + List ===== */}
-        <View style={styles.mainLayout}>
+        <View style={[styles.mainLayout, isNarrowScreen && styles.mainLayoutStacked]}>
           {/* SIDEBAR: Owner Guidelines */}
-          <View style={styles.sidebar}>
+          <View style={[styles.sidebar, isNarrowScreen && styles.sidebarStacked]}>
             <Card style={styles.guidelinesCard}>
               <Text style={styles.guidelinesTitle}>Owner Guidelines</Text>
               <Text style={styles.guidelinesDesc}>
@@ -495,9 +499,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
+  mainLayoutStacked: {
+    flexDirection: 'column',
+  },
   // Sidebar
   sidebar: {
     width: 180,
+  },
+  sidebarStacked: {
+    width: '100%',
   },
   guidelinesCard: {
     padding: 12,

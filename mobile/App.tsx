@@ -1,27 +1,38 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { NavigationContainer } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RootNavigator } from './src/navigation/RootNavigator';
+import { ErrorBoundary } from './src/components/common/ErrorBoundary';
+import { authApi } from './src/api/auth';
+import { setCsrfToken } from './src/api/client';
 
 export default function App() {
-  const queryClientRef = useRef<QueryClient>(
-    new QueryClient({
-      defaultOptions: {
-        queries: {
-          retry: 1,
-          refetchOnWindowFocus: false,
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            retry: 1,
+            refetchOnWindowFocus: false,
+          },
         },
-      },
-    })
+      }),
   );
 
+  useEffect(() => {
+    // Pre-fetch CSRF token on startup so first state-changing request
+    // doesn't incur the one-time lazy-fetch latency.
+    authApi.fetchCsrfToken().then(setCsrfToken).catch(() => {
+      // CSRF unavailable — the interceptor will lazily fetch it.
+    });
+  }, []);
+
   return (
-    <QueryClientProvider client={queryClientRef.current}>
-      <NavigationContainer>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
         <StatusBar style="light" />
         <RootNavigator />
-      </NavigationContainer>
-    </QueryClientProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

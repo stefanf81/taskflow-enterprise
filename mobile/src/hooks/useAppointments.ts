@@ -14,7 +14,7 @@ export const useBusySlots = (barberName: string, bookingDate: string) => {
   return useQuery({
     queryKey: ['busySlots', barberName, bookingDate],
     queryFn: () => appointmentsApi.getBusySlots(barberName, bookingDate),
-    enabled: !!barberName && !!bookingDate,
+    enabled: !!barberName && barberName.length > 0 && !!bookingDate,
     staleTime: 5000,
   });
 };

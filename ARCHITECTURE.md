@@ -203,6 +203,10 @@ The mobile client architecture mirrors the Angular web functionality while optim
 3.  **Client Application State via Zustand (`src/store/`):** In-memory client states (active filter selections, search queries, active booking step) and JWT authentication credentials are handled by lightweight Zustand stores (`useAuthStore`, `useUIStore`).
 4.  **Hardware Secure Storage (`src/utils/storage.ts`):** JWT credentials and user session payloads are stored securely inside platform hardware stores (**iOS Keychain** and **Android Keystore**) via `expo-secure-store`.
 5.  **Styling & Design System (`src/theme/`):** Built with NativeWind (Tailwind CSS for React Native) adhering strictly to TaskFlow's Gold & Obsidian luxury salon color palette.
+6.  **Backend Connectivity & Zero-Trust Security:**
+    *   **Local Routing**: iOS Simulator (`http://localhost:8080`), Android Emulator (`http://10.0.2.2:8080`), and Physical LAN Devices (`http://<LAN_IP>:8080`).
+    *   **Production Deployment**: Replaces local API endpoints with public HTTPS domains (e.g. `https://api.taskflow.example.com`) via `EXPO_PUBLIC_API_URL` environment injection in `eas.json` or CLI flags (`EXPO_PUBLIC_API_URL=https://api.domain.com npx expo start -c`).
+    *   **Security Layers**: Asymmetric RSA-2048 JWT authentication, double-submit CSRF headers, Redis rate-limiting (max 20 auth reqs/min per IP), and mandatory TLS 1.3/1.2 encryption.
 
 ---
 

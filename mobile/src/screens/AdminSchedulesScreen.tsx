@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -27,7 +27,7 @@ export const AdminSchedulesScreen: React.FC = () => {
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (barbers.length > 0 && selectedBarberId === null) {
       setSelectedBarberId(barbers[0].id);
     }

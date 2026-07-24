@@ -16,8 +16,8 @@ React Native (Expo)
 
 Spring Boot Backend
   ├── OAuth2 Resource Server (RSA-2048 JWT)
-  ├── Bearer token accepted (cookieBearerTokenResolver fallback)
-  └── CSRF auto-deferred for Bearer-token requests
+  ├── JWT in HttpOnly `access_token` cookie (with Bearer header fallback)
+  └── CSRF double-submit cookie pattern — `XSRF-TOKEN` cookie + `X-XSRF-TOKEN` header required on all POST/PUT/DELETE (except public guest endpoints)
 ```
 
 **Important:** The app uses `expo-secure-store` which is a native module. Expo Go **cannot** run it — you must use a development build.
@@ -59,26 +59,39 @@ This creates the `ios/` directory with the Xcode workspace. It only needs to be 
 
 ---
 
-## Backend Connectivity
+## Backend Connectivity & Security Model
 
-The mobile app connects to the Spring Boot backend. Configuration is in `.env`:
+The mobile app connects to the Spring Boot backend (`taskflow-backend`).
 
-```
+### 1. Backend Security Architecture (Zero-Trust)
+
+The backend is secured using enterprise-grade DevSecOps controls:
+* **Network Isolation**: The database (`taskflow-db`) and cache (`taskflow-redis`) are strictly isolated on an internal `backend-tier` network. Only `taskflow-backend` bridges the `frontend-tier` and `backend-tier`.
+* **Stateless Asymmetric JWT (RSA-2048)**: Requests to protected endpoints must present an asymmetric RSA-2048 signed token via `Authorization: Bearer <token>`.
+* **Role-Based Access Control (RBAC)**: Public guest endpoints (`GET /api/v1/catalog`, `GET /api/v1/barbers`, `POST /api/v1/auth/login`) are open. Admin endpoints (`/api/v1/notifications/**`, catalog/staff management) strictly require `ROLE_ADMIN`.
+* **Redis-Backed Rate Limiting**: All client IPs are rate-limited per minute (capped at 20 req/min on `/api/v1/auth/*`) to prevent brute-force attacks and DoS.
+* **Double-Submit CSRF**: State-changing endpoints (`POST`, `PUT`, `DELETE`) require a matching `X-XSRF-TOKEN` header validated against the `XSRF-TOKEN` cookie (auto-fetched lazily by `src/api/client.ts`).
+* **Container Hardening**: Unprivileged numeric user (`10001:10001`), read-only root filesystem (`read_only: true`), and complete Linux capability dropping (`cap_drop: [ALL]`).
+
+---
+
+### 2. Local Backend Connectivity Matrix
+
+Configuration is defined in `mobile/.env`:
+
+```env
 EXPO_PUBLIC_API_URL=http://localhost:8080
 ```
 
-Copy `.env.example` → `.env` and adjust:
-
-| Platform | Default | Override needed? |
-|----------|---------|-------------------|
-| iOS Simulator | `http://localhost:8080` | No (shares host network) |
-| Android Emulator | `http://10.0.2.2:8080` | No (auto-detected) |
-| Physical iPhone | — | **Yes** — set to your Mac's LAN IP |
-| Physical Android | — | **Yes** — set to your Mac's LAN IP |
+| Platform / Environment | Recommended `EXPO_PUBLIC_API_URL` | Override Needed? | Notes |
+|:---|:---|:---|:---|
+| **iOS Simulator** | `http://localhost:8080` | No | Shares host network loopback directly. |
+| **Android Emulator** | `http://10.0.2.2:8080` | Optional | `client.ts` auto-detects Android and uses `10.0.2.2` if `EXPO_PUBLIC_API_URL` is omitted. |
+| **Physical iPhone / Android** | `http://<MAC_LAN_IP>:8080` | **Yes** | Replace with your computer's local Wi-Fi IP (e.g. `http://192.168.1.50:8080`). |
 
 Find your Mac's LAN IP: `ifconfig | grep "inet " | grep -v 127.0.0.1`
 
-The backend **must be running** before the mobile app. Start it first:
+The backend **must be running** before launching the mobile app:
 
 ```bash
 # From project root
@@ -87,7 +100,57 @@ The backend **must be running** before the mobile app. Start it first:
 docker compose up -d db redis backend
 ```
 
-Verify the backend is reachable: `curl http://localhost:8080/api/v1/catalog`
+Verify backend reachability: `curl http://localhost:8080/api/v1/catalog`
+
+---
+
+### 3. Connecting Simulators & Mobile Apps to Production
+
+To connect iOS Simulators, Android Emulators, or production mobile builds to a **Production Environment** (e.g., `https://api.taskflow.example.com`):
+
+#### Method A: Local `.env` Override (Quickest for Local Simulators)
+1. Edit `mobile/.env`:
+   ```env
+   EXPO_PUBLIC_API_URL=https://api.taskflow.example.com
+   ```
+2. Clear the Metro cache and launch Expo:
+   ```bash
+   npx expo start -c
+   ```
+3. Press `i` (iOS Simulator) or `a` (Android Emulator).
+
+#### Method B: One-Time CLI Override
+```bash
+EXPO_PUBLIC_API_URL=https://api.taskflow.example.com npx expo start -c
+```
+
+#### Method C: EAS Build Profiles (`eas.json`)
+For standalone production builds or preview binaries shared with testers, configure the environment variable in `mobile/eas.json`:
+
+```json
+"preview": {
+  "distribution": "internal",
+  "env": {
+    "EXPO_PUBLIC_API_URL": "https://api.taskflow.example.com"
+  }
+},
+"production": {
+  "distribution": "store",
+  "env": {
+    "EXPO_PUBLIC_API_URL": "https://api.taskflow.example.com"
+  }
+}
+```
+
+Trigger the build:
+```bash
+eas build --profile preview --platform ios
+```
+
+#### Production Security Requirements:
+1. **Valid HTTPS / TLS Certificate**: Production backends must serve a valid TLS certificate (e.g., Let's Encrypt / Cloudflare). iOS App Transport Security (ATS) and Android Network Security block plain HTTP or invalid/self-signed SSL certificates in production builds.
+2. **Hardware Enclave Tokens**: Production builds store session JWTs in hardware-encrypted storage (`expo-secure-store` via iOS **Keychain** / Android **Keystore**).
+3. **Production Credentials**: Use production database credentials (e.g., admin user generated at deployment), as local H2/dev seed data will not exist in production.
 
 ---
 
@@ -246,7 +309,7 @@ Harmless — the iOS Simulator doesn't include haptic feedback files. Ignore.
 
 ### Package version warnings
 ```
-react-native@0.76.5 - expected version: 0.76.9
+react-native@0.86.0 - expected version: 0.86.x
 ```
 Non-blocking. The current versions work. Update when convenient via `npx expo install --fix`.
 

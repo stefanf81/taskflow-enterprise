@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { storage } from '../utils/storage';
 import { authApi } from '../api/auth';
+import { setCsrfToken } from '../api/client';
 import { LoginRequest, LoginResponse, RegisterRequest } from '../types/api';
 
 interface AuthState {
@@ -32,6 +33,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         await storage.setToken(res.token);
       }
       await storage.setUserData({ username: res.username, role: res.role });
+
+      // Re-fetch the CSRF token — the session cookie may have changed
+      // after authentication.
+      try {
+        const newToken = await authApi.fetchCsrfToken();
+        setCsrfToken(newToken);
+      } catch {
+        // Non-fatal; the interceptor will lazily fetch it.
+      }
 
       set({
         isAuthenticated: true,
@@ -78,6 +88,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } finally {
       await storage.removeToken();
       await storage.removeUserData();
+      setCsrfToken(null);
       set({
         isAuthenticated: false,
         isLoading: false,
@@ -93,6 +104,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const res = await authApi.me();
       if (res.username && res.role) {
+        // Server confirmed identity — fully authenticated
+        await storage.setUserData({ username: res.username, role: res.role });
         set({
           isAuthenticated: true,
           isLoading: false,
@@ -103,21 +116,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return;
       }
     } catch {
-      // Fallback check stored user data if me fails offline
-      const stored = await storage.getUserData<{ username: string; role: string }>();
-      const token = await storage.getToken();
-      if (token && stored) {
-        set({
-          isAuthenticated: true,
-          isLoading: false,
-          username: stored.username,
-          role: stored.role as AuthState['role'],
-          error: null,
-        });
-        return;
-      }
+      // Server unreachable — do NOT trust locally cached role.
+      // Clear auth state so the user must re-authenticate against the server.
     }
 
+    // Either /me returned no data, or the request failed.
+    // Wipe local credentials to force a fresh login.
+    await storage.removeToken();
+    await storage.removeUserData();
     set({
       isAuthenticated: false,
       isLoading: false,

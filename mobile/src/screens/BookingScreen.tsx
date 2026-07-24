@@ -111,9 +111,12 @@ export const BookingScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [receiptAppointment, setReceiptAppointment] = useState<AppointmentItem | null>(null);
 
-  // Real-time busy slots query
+  // Real-time busy slots query — when "No Preference" is selected, show no busy indicators
+  // since the backend will assign the first available barber automatically
+  const effectiveBarber =
+    selectedBarber === 'No Preference (First Available)' ? '' : selectedBarber;
   const { data: busySlots = [], isLoading: checkingSlots } = useBusySlots(
-    selectedBarber === 'No Preference (First Available)' ? barberNames[1] || 'Alex the Barber' : selectedBarber,
+    effectiveBarber,
     selectedDate
   );
 

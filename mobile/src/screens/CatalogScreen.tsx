@@ -11,19 +11,26 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { CompositeNavigationProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card } from '../components/common/Card';
 import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { LoadingIndicator } from '../components/common/LoadingIndicator';
 import { EmptyState } from '../components/common/EmptyState';
 import { useCatalog } from '../hooks/useCatalog';
-import { GuestTabParamList } from '../types/navigation';
+import { GuestTabParamList, RootStackParamList } from '../types/navigation';
 import { colors } from '../theme/colors';
 
-const CATEGORIES = ['all', 'HAIRCUTS', 'BEARD_BEARD_TRIM', 'SHAVES', 'TREATMENTS'];
+const CATEGORIES = ['all', 'HAIRCUTS', 'BEARD_TRIM', 'SHAVES', 'TREATMENTS'];
+
+type CatalogNavProp = CompositeNavigationProp<
+  BottomTabNavigationProp<GuestTabParamList, 'Catalog'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 export const CatalogScreen: React.FC = () => {
-  const navigation = useNavigation<BottomTabNavigationProp<GuestTabParamList>>();
+  const navigation = useNavigation<CatalogNavProp>();
   const { data: services = [], isLoading } = useCatalog();
 
   const [selectedCategory, setSelectedCategory] = useState('all');
