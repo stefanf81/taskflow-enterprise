@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "TaskFlow Mobile",
+    "slug": "taskflow-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F0F11"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.taskflow.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "TaskFlow requires camera access to scan booking QR codes or take profile pictures.",
+        "NSFaceIDUsageDescription": "TaskFlow uses Face ID for fast and secure staff and customer login."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F0F11"
+      },
+      "package": "com.taskflow.mobile"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "Allow TaskFlow to use Face ID for fast authentication."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "taskflow-mobile-app"
+      }
+    }
+  }
+}

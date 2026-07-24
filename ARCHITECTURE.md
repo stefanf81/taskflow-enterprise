@@ -127,8 +127,6 @@ Before any application runs, three layers of security check your code, configura
 
 ---
 
-
-
 ## 🚀 5. Peak-Throughput Performance Optimizations
 
 Through exhaustive benchmarking, the application has been tuned for maximum Request-Per-Second (RPS) throughput and minimum overhead:
@@ -178,7 +176,37 @@ To match the clean code patterns of leading Angular repositories, we refactored 
 
 ---
 
-## 🤖 8. Local Developer AI & Model Context Protocol (MCP) Architecture
+## 📱 8. Cross-Platform Mobile Application Architecture (`mobile/`)
+
+The mobile client architecture mirrors the Angular web functionality while optimizing for native Android & iOS interaction patterns:
+
+```
+[ MOBILE CLIENT RUNTIME ]                                [ SPRING BOOT BACKEND ]
+  React Native / Expo App                                  REST API Controller
+    │                                                        │
+    ▼ (1. Screen Event / Gesture)                            │
+  HomeScreen / BookingScreen / Dashboard                     │
+    │                                                        │
+    ▼ (2. TanStack Query Hook Trigger)                       │
+  useAppointments / useCatalog / useCustomer                 │
+    │                                                        │
+    ▼ (3. Axios Request + Bearer Interceptor)                │
+  apiClient (src/api/client.ts) ────────────────────────────►│ (4. REST API Endpoint)
+    │                                                        │   Spring Security Filter
+    ▼ (Reads JWT from Secure Storage)                        │   JWT Validation
+  expo-secure-store (iOS Keychain / Android Keystore)        │
+```
+
+### Key Mobile Architectural Design Choices:
+1.  **Native Navigation Flow (`src/navigation/`):** Utilizes React Navigation 6 with specialized Bottom Tab Navigators for Guests (`GuestTabNavigator`), Customers (`CustomerTabNavigator`), and Administrators (`AdminTabNavigator`) wrapped in a root `NativeStack`.
+2.  **Server State Management via TanStack Query (`src/hooks/`):** All asynchronous API states (appointments, service catalog, barbers, time-off, notifications, ratings) use TanStack Query for caching, retries, background refreshes, and mutation invalidations.
+3.  **Client Application State via Zustand (`src/store/`):** In-memory client states (active filter selections, search queries, active booking step) and JWT authentication credentials are handled by lightweight Zustand stores (`useAuthStore`, `useUIStore`).
+4.  **Hardware Secure Storage (`src/utils/storage.ts`):** JWT credentials and user session payloads are stored securely inside platform hardware stores (**iOS Keychain** and **Android Keystore**) via `expo-secure-store`.
+5.  **Styling & Design System (`src/theme/`):** Built with NativeWind (Tailwind CSS for React Native) adhering strictly to TaskFlow's Gold & Obsidian luxury salon color palette.
+
+---
+
+## 🤖 9. Local Developer AI & Model Context Protocol (MCP) Architecture
 
 To optimize development iteration speed, full-stack reasoning precision, and data privacy, the TaskFlow workspace features a SOTA **Local Developer AI and MCP orchestrator loop**. It connects local AI inference with a suite of unprivileged, sandboxed tools to automate file operations, tests, database queries, and browser rendering:
 
@@ -204,7 +232,8 @@ To optimize development iteration speed, full-stack reasoning precision, and dat
 │    └───────────────┘                                        │           │
 │                                                             │           │
 └─────────────────────────────────────────────────────────────┼───────────┘
-                                                               ▼
+                                                              │           │
+                                                              ▼           │
                                                   [ TARGET INFRASTRUCTURE ]
                                                     TaskFlow Local DB,
                                                     Nginx Proxy

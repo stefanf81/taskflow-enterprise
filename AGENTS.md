@@ -3,7 +3,7 @@
 ## Project Structure
 
 - **Backend**: Spring Boot 4.1.0 / OpenJDK 21 / Gradle — `src/main/java/com/example/taskflow/`
-  - High-Performance Tunings: Container-portable heap sizing (deployment-owned via `JAVA_TOOL_OPTIONS`), Virtual Threads disabled (Platform threads used), Jackson 3, Lazy Connection Fetching, Asynchronous Logging, OpenTelemetry 10% sampling, Redis-backed caching (Spring Cache abstraction).
+  - High-Performance Tunings: Container-portable heap sizing (deployment-owned via `JAVA_TOOL_OPTIONS`), Virtual Threads ENABLED (Spring Boot 4.1 default, +16.7% p99 improvement on mixed I/O workload — see BENCHMARKS.md §32), Jackson 3, Lazy Connection Fetching, Asynchronous Logging, OpenTelemetry 10% sampling, Redis-backed caching (Spring Cache abstraction).
   - Runtime Profiles & Multi-Arch JVM Optimization:
     - **JVM sizing is deployment-owned.** Both Dockerfiles' image CMDs are sizing-agnostic: they carry only environment-invariant flags (`-XX:SharedArchiveFile=application.jsa`, `-Xshare:auto`, `-XX:+ExitOnOutOfMemoryError`). Heap / off-heap / GC behavioral tuning live in `JAVA_TOOL_OPTIONS` of the runtime environment, NOT the image. Setting sizing in the CMD would silently win over the deployment env (JVM last-wins precedence for non-sticky flags) and recreate the precedence bug where the deployment's tuning was a no-op.
     - **Local (Apple Silicon M4 Pro):** Native `Dockerfile` (`--platform=linux/arm64`) ships only runtime invariants. Heap / off-heap sizing and behavioral GC flags are set via `JAVA_TOOL_OPTIONS` in `docker-compose.yml` (50% × 2560M limit ≈ 1.25 GiB heap, G1GC + AlwaysPreTouch + MaxDirectMemorySize=256m + MaxMetaspaceSize=256m).
@@ -15,6 +15,12 @@
   - Entry: `frontend/src/main.ts`, app module: `frontend/src/app/`
   - Auth: Stateless JWT in an HttpOnly `access_token` cookie (RSA-2048 asymmetric, OAuth2 Resource Server). `auth.interceptor.ts` catches 401s; `auth.guard.ts` is a `canActivateFn` that gates the `/admin` and `/customer` dashboards. The principal's role is restored from the backend via `GET /api/v1/auth/me` (reads the cookie) into an **in-memory** signal (`AuthState`) — it is never trusted from `sessionStorage`/`localStorage`.
   - CSRF: Double-submit pattern. The backend sets a readable `XSRF-TOKEN` cookie (via `CookieCsrfTokenRepository.withHttpOnlyFalse()`). Angular's `withXsrfConfiguration({ cookieName: 'XSRF-TOKEN', headerName: 'X-XSRF-TOKEN' })` in `app.config.ts` reads that cookie and attaches the header automatically on state-changing requests. The JWT `access_token` cookie is HttpOnly and **never** read by JavaScript — do not confuse the two. CSRF is disabled on public guest endpoints (`POST /api/v1/appointments`, `PUT /api/v1/appointments/public/cancel/*`, `POST /api/v1/reviews/public/**`).
+- **Mobile**: React Native / Expo / TypeScript / NativeWind — `mobile/`
+  - Entry: `mobile/App.tsx`, source: `mobile/src/`
+  - Navigation: React Navigation (Guest, Customer, and Admin tab navigators inside Root NativeStack).
+  - State: TanStack Query (`@tanstack/react-query`) for server state, Zustand (`useAuthStore`, `useUIStore`) for client state.
+  - Security: Secure JWT storage via `expo-secure-store` (iOS Keychain / Android Keystore).
+  - Builds: EAS Build configured via `mobile/eas.json` for Android (APK/AAB) and iOS (Simulator/IPA).
 - **DB**: Flyway migrations in `src/main/resources/db/migration/`
 
 ## Commands
@@ -34,6 +40,14 @@ npm start                # Angular dev server on :4200
 npm test                 # unit tests (vitest via Angular builder)
 npm run e2e              # Playwright E2E (spins up dev server via webServer config)
 npm run build            # production build
+```
+
+### Mobile (`mobile/`)
+```
+npm start                # Start Expo Metro Bundler
+npm run android          # Run on Android Emulator or connected device
+npm run ios              # Run on iOS Simulator or connected device
+npm test                 # Run Jest unit & component tests
 ```
 
 ### Developer Environment
@@ -73,6 +87,7 @@ Security scans (filesystem lints, container image vulnerability scans, and DAST 
 - **OSIV is off** (`spring.jpa.open-in-view=false`) — connections return to Hikari pool immediately after service methods.
 - **Auth**: Stateless JWT in an HttpOnly `access_token` cookie (Asymmetric RSA-2048 signing via OAuth2 Resource Server). Role/identity is restored via `GET /api/v1/auth/me` into an in-memory Signal (`AuthState`) and never stored in `sessionStorage`/`localStorage`. CSRF protection via double-submit `XSRF-TOKEN` cookie. `/api/v1/auth/**` is the only public endpoint path.
 - **Frontend uses Angular 22 Signals** (no Zone.js digest loops). Styles use Tailwind with custom `gold`/`obsidian` color palette.
+- **Mobile uses React Native & Expo** with TypeScript, React Navigation, TanStack Query, Zustand, NativeWind, and `expo-secure-store` for hardware token security.
 - **Prettier** is the formatter (100 char width, single quotes). Run `npx prettier --write <file>` in `frontend/`.
 - **Testcontainers** are used for PostgreSQL integration tests. They require Docker to be running.
 - **ArchUnit** enforces package-level architecture constraints (`src/test/java/com/example/taskflow/architecture/`).

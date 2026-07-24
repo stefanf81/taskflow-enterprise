@@ -1,6 +1,6 @@
-# ADR-001: Virtual Threads Disabled
+# ADR-001: Virtual Threads — Superseded
 
-**Status:** Accepted
+**Status:** Superseded by §32/§33 benchmark results. Virtual threads are now **enabled**.
 
 ## Context
 
@@ -8,11 +8,11 @@ Spring Boot 3.5+ provides built-in support for Virtual Threads (Project Loom). V
 
 The application is database-bound, making heavy use of HikariCP connection pooling, JPA repositories, and transactional service methods. Each request typically involves one or more database queries.
 
-## Decision
+## Original Decision (Now Superseded)
 
-Virtual threads are **disabled**. The application uses platform threads with a fixed thread pool instead.
+Virtual threads were originally **disabled**. The application used platform threads with a fixed thread pool instead.
 
-The key concern is the interaction between virtual threads and connection pooling. With virtual threads enabled, every incoming request creates a new virtual thread. When that thread tries to acquire a connection from the HikariCP pool, it may be blocked if all connections are in use. However, the servlet container does not bound the number of virtual threads, so the application can accept an unbounded number of requests — all of which pile up waiting for a database connection. This leads to:
+The key concern was the interaction between virtual threads and connection pooling. With virtual threads enabled, every incoming request creates a new virtual thread. When that thread tries to acquire a connection from the HikariCP pool, it may be blocked if all connections are in use. However, the servlet container does not bound the number of virtual threads, so the application can accept an unbounded number of requests — all of which pile up waiting for a database connection. This leads to:
 
 - Connection pool saturation under load
 - Unbounded memory pressure from queued virtual threads
@@ -20,13 +20,11 @@ The key concern is the interaction between virtual threads and connection poolin
 
 Platform threads, combined with a bounded Tomcat thread pool (`server.tomcat.threads.max`), provide a natural backpressure mechanism: once the thread pool is full, the server stops accepting requests, giving the existing requests a chance to complete and release connections.
 
-## Consequences
+## Why This Was Superseded
 
-### Positive
-- **Predictable thread behavior** — the fixed thread pool acts as a circuit breaker, preventing unbounded concurrency.
-- **Easier debugging** — platform threads produce familiar thread dumps that can be analyzed with standard JVM tooling.
-- **Compatibility** — all JVM and library features work without virtual-thread-specific bugs or limitations.
+Benchmark §32 (Virtual Threads vs Platform Threads, I/O-Bound Mixed Workload) and §33 (HikariCP Pool Size Sweep Under Virtual Threads) demonstrated that:
 
-### Negative
-- **Slightly higher per-thread memory overhead** — each platform thread has a larger stack (~1 MB) compared to virtual threads (negotiable small stacks).
-- **Fewer concurrent requests** — the fixed thread pool limits how many requests can be handled simultaneously, whereas virtual threads could theoretically handle thousands more.
+1. **Virtual threads are enabled by default in Spring Boot 4.1.0** — `spring.threads.virtual.enabled=true` is the framework default.
+2. **Throughput scales linearly with HikariCP pool size under VT** — pool=50 delivers 5,648 req/s vs PT baseline of 1,908 req/s (2.96× improvement).
+3. **The original connection pool saturation concern is mitigated** by increasing `maximum-pool-size` from 10 to 25 for production PostgreSQL.
+4. **The CPU-bound `/login` (BCrypt) regression is absorbed** by the read-heavy workload mix in production (70% reads, 30% writes).
