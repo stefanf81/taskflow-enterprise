@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,15 +14,40 @@ import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { LoadingIndicator } from '../components/common/LoadingIndicator';
 import { EmptyState } from '../components/common/EmptyState';
+import { ErrorMessage } from '../components/common/ErrorMessage';
 import { useCustomerAppointments, useCancelCustomerAppointment } from '../hooks/useCustomer';
 import { useAuthStore } from '../store/useAuthStore';
 import { colors } from '../theme/colors';
+import { formatTime12Hour } from '../utils/time-utils';
 
 export const CustomerPortalScreen: React.FC = () => {
   const [page, setPage] = useState(0);
-  const { data, isLoading } = useCustomerAppointments(page, 10);
+  const { data, isLoading, refetch } = useCustomerAppointments(page, 10);
   const cancelMutation = useCancelCustomerAppointment();
   const { username, logout } = useAuthStore();
+
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Auto-dismiss
+  const alertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (alertTimer.current) clearTimeout(alertTimer.current);
+    };
+  }, []);
+
+  const showSuccess = (msg: string) => {
+    setSuccessMsg(msg);
+    if (alertTimer.current) clearTimeout(alertTimer.current);
+    alertTimer.current = setTimeout(() => setSuccessMsg(null), 4500);
+  };
+
+  const showError = (msg: string) => {
+    setErrorMsg(msg);
+    if (alertTimer.current) clearTimeout(alertTimer.current);
+    alertTimer.current = setTimeout(() => setErrorMsg(null), 4500);
+  };
 
   const handleCancel = (id: number) => {
     Alert.alert(
@@ -33,9 +58,17 @@ export const CustomerPortalScreen: React.FC = () => {
         {
           text: 'Yes, Cancel',
           style: 'destructive',
-          onPress: () => cancelMutation.mutate(id),
+          onPress: () => {
+            cancelMutation.mutate(id, {
+              onSuccess: () => {
+                showSuccess('Appointment cancelled successfully.');
+                refetch();
+              },
+              onError: () => showError('Failed to cancel appointment.'),
+            });
+          },
         },
-      ]
+      ],
     );
   };
 
@@ -57,6 +90,18 @@ export const CustomerPortalScreen: React.FC = () => {
             <Text style={styles.logoutText}>Sign Out</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Alert Banners */}
+        <ErrorMessage message={errorMsg || ''} />
+        {successMsg && (
+          <View style={styles.successBanner}>
+            <Ionicons name="checkmark-circle-outline" size={18} color={colors.status.approved} />
+            <Text style={styles.successText}>{successMsg}</Text>
+            <TouchableOpacity onPress={() => setSuccessMsg(null)}>
+              <Text style={styles.dismissBtn}>×</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <Text style={styles.sectionTitle}>My Bookings</Text>
 
@@ -90,7 +135,7 @@ export const CustomerPortalScreen: React.FC = () => {
                 <View style={styles.detailRow}>
                   <Ionicons name="time-outline" size={14} color={colors.gold.main} />
                   <Text style={styles.detailText}>
-                    Date: {item.bookingDate} @ {item.bookingTime}
+                    Date: {item.bookingDate} @ {formatTime12Hour(item.bookingTime)}
                   </Text>
                 </View>
 
@@ -149,7 +194,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.obsidian.border,
     paddingBottom: 16,
@@ -175,6 +220,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginLeft: 4,
+  },
+  // Alert banners
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(52, 211, 153, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(52, 211, 153, 0.3)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  successText: {
+    color: colors.status.approved,
+    fontSize: 12,
+    flex: 1,
+    marginLeft: 6,
+    fontWeight: '500',
+  },
+  dismissBtn: {
+    color: colors.status.approved,
+    fontSize: 18,
+    fontWeight: '700',
+    marginLeft: 8,
   },
   sectionTitle: {
     color: colors.text.primary,

@@ -1,10 +1,10 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, screen } from '@testing-library/react-native';
 import { StylistCard } from '../src/components/booking/StylistCard';
 
 describe('StylistCard Component', () => {
-  it('renders stylist details correctly', () => {
-    const { getByText } = render(
+  it('renders stylist details correctly', async () => {
+    await render(
       <StylistCard
         name="Alex the Barber"
         title="Master Stylist"
@@ -14,15 +14,15 @@ describe('StylistCard Component', () => {
       />
     );
 
-    expect(getByText('Alex the Barber')).toBeTruthy();
-    expect(getByText('Master Stylist')).toBeTruthy();
-    expect(getByText('Classic Scissor Cuts')).toBeTruthy();
-    expect(getByText('4.9 ★')).toBeTruthy();
+    expect(screen.getByText('Alex the Barber')).toBeTruthy();
+    expect(screen.getByText('Master Stylist')).toBeTruthy();
+    expect(screen.getByText('Classic Scissor Cuts')).toBeTruthy();
+    expect(screen.getByText('4.9 ★')).toBeTruthy();
   });
 
-  it('triggers onSelect callback when button pressed', () => {
+  it('triggers onSelect callback when button pressed', async () => {
     const onSelectMock = jest.fn();
-    const { getByText } = render(
+    await render(
       <StylistCard
         name="Sara the Stylist"
         title="Skin Fade Expert"
@@ -31,7 +31,7 @@ describe('StylistCard Component', () => {
       />
     );
 
-    fireEvent.press(getByText('Select'));
+    fireEvent.press(screen.getByText('Select'));
     expect(onSelectMock).toHaveBeenCalledTimes(1);
   });
 });

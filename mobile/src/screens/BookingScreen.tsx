@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ScrollView,
   View,
   Text,
   TouchableOpacity,
+  TextInput,
   StyleSheet,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
@@ -24,6 +26,7 @@ import { useBusySlots, useCreateAppointment } from '../hooks/useAppointments';
 import { GuestTabParamList, RootStackParamList } from '../types/navigation';
 import { AppointmentItem } from '../types/api';
 import { colors } from '../theme/colors';
+import { formatTime12Hour, computeEstimatedEndTime } from '../utils/time-utils';
 
 type RouteProps = RouteProp<GuestTabParamList, 'Booking'>;
 
@@ -41,6 +44,8 @@ const BARBERS_FALLBACK = [
 
 const TIME_SLOTS = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'];
 
+const CATEGORIES = ['all', 'HAIRCUTS', 'BEARD_TRIM', 'SHAVES', 'COMBOS'];
+
 // Compute next 7 working days (excluding Sundays)
 const getUpcomingDays = () => {
   const days = [];
@@ -53,7 +58,6 @@ const getUpcomingDays = () => {
     nextDate.setDate(today.getDate() + offset);
 
     if (nextDate.getDay() !== 0) {
-      // Skip Sundays
       const dateStr = nextDate.toISOString().split('T')[0];
       days.push({
         dateStr,
@@ -83,6 +87,10 @@ export const BookingScreen: React.FC = () => {
     ? ['No Preference (First Available)', ...apiBarbers.map((b) => b.name)]
     : BARBERS_FALLBACK;
 
+  // Service search & category state
+  const [serviceSearchQuery, setServiceSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+
   // Form State
   const [step, setStep] = useState<number>(1);
   const [selectedBarber, setSelectedBarber] = useState<string>(
@@ -104,7 +112,38 @@ export const BookingScreen: React.FC = () => {
   const [receiptAppointment, setReceiptAppointment] = useState<AppointmentItem | null>(null);
 
   // Real-time busy slots query
-  const { data: busySlots = [] } = useBusySlots(selectedBarber, selectedDate);
+  const { data: busySlots = [], isLoading: checkingSlots } = useBusySlots(
+    selectedBarber === 'No Preference (First Available)' ? barberNames[1] || 'Alex the Barber' : selectedBarber,
+    selectedDate
+  );
+
+  // Filtered services
+  const filteredServices = useMemo(() => {
+    let list = services;
+    if (selectedCategory !== 'all') {
+      list = list.filter((s) => s.category === selectedCategory);
+    }
+    const query = serviceSearchQuery.trim().toLowerCase();
+    if (query) {
+      list = list.filter(
+        (s) =>
+          s.name.toLowerCase().includes(query) ||
+          s.description.toLowerCase().includes(query),
+      );
+    }
+    return list;
+  }, [services, selectedCategory, serviceSearchQuery]);
+
+  // Selected service object for pricing
+  const selectedServiceObj = services.find((s) => s.name === selectedService);
+
+  // Computed pricing
+  const checkoutSubtotal = selectedServiceObj?.price ?? 0;
+  const checkoutFee = 2.5;
+  const checkoutTotal = checkoutSubtotal + checkoutFee;
+
+  // Estimated end time
+  const estimatedEnd = computeEstimatedEndTime(selectedTime, selectedServiceObj?.durationMinutes ?? 0);
 
   useEffect(() => {
     if (services.length > 0 && !selectedService) {
@@ -164,28 +203,51 @@ export const BookingScreen: React.FC = () => {
     }
   };
 
-  const selectedServiceObj = services.find((s) => s.name === selectedService);
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Wizard Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Book Appointment</Text>
-          <Text style={styles.subtitle}>Step {step} of 3</Text>
+          <Text style={styles.title}>Booking Assistant</Text>
+          <Text style={styles.subtitle}>Follow our step-by-step assistant to secure your slot</Text>
 
-          {/* Step Indicator */}
-          <View style={styles.stepBar}>
-            {[1, 2, 3].map((s) => (
-              <View
-                key={s}
-                style={[
-                  styles.stepSegment,
-                  s <= step && styles.stepActive,
-                ]}
-              />
-            ))}
+          {/* Step Timeline */}
+          <View style={styles.stepTimeline}>
+            <View style={styles.timelineBg} />
+            <View style={[styles.timelineProgress, { width: `${((step - 1) / 2) * 100}%` }]} />
+            <View style={styles.stepNodes}>
+              {[1, 2, 3].map((s) => {
+                const isActive = step === s;
+                const isCompleted = step > s;
+                return (
+                  <View
+                    key={s}
+                    style={[
+                      styles.stepNode,
+                      isActive && styles.stepNodeActive,
+                      isCompleted && styles.stepNodeCompleted,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.stepNodeText,
+                        (isActive || isCompleted) && styles.stepNodeTextActive,
+                      ]}
+                    >
+                      {isCompleted ? '✓' : s}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
           </View>
+
+          {/* Step label */}
+          <Text style={styles.stepLabel}>
+            {step === 1 ? '1. Select Service & Barber' :
+             step === 2 ? '2. Pick Date & Available Slot' :
+             '3. Customer Info & Submit'}
+          </Text>
         </View>
 
         <ErrorMessage message={error || ''} />
@@ -193,10 +255,39 @@ export const BookingScreen: React.FC = () => {
         {/* STEP 1: SERVICE & BARBER */}
         {step === 1 && (
           <View>
-            <Text style={styles.stepTitle}>1. Select Service & Barber</Text>
+            {/* Service Search */}
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={16} color={colors.text.muted} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search treatments (fade, trim, shave)..."
+                placeholderTextColor={colors.text.muted}
+                value={serviceSearchQuery}
+                onChangeText={setServiceSearchQuery}
+              />
+            </View>
+
+            {/* Category Tabs */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catScroll}>
+              {CATEGORIES.map((cat) => {
+                const isSel = selectedCategory === cat;
+                const displayLabel = cat === 'all' ? 'All' : cat.replace('_', ' ');
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.catChip, isSel && styles.catChipSelected]}
+                    onPress={() => setSelectedCategory(cat)}
+                  >
+                    <Text style={[styles.catText, isSel && styles.catTextSelected]}>
+                      {displayLabel}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
 
             <Text style={styles.label}>Choose Service</Text>
-            {services.map((svc) => {
+            {filteredServices.map((svc) => {
               const isSel = selectedService === svc.name;
               return (
                 <TouchableOpacity
@@ -205,8 +296,12 @@ export const BookingScreen: React.FC = () => {
                   onPress={() => setSelectedService(svc.name)}
                 >
                   <View style={styles.optionInfo}>
-                    <Text style={styles.optionTitle}>{svc.name}</Text>
-                    <Text style={styles.optionSub}>{svc.durationMinutes} mins</Text>
+                    <View style={styles.optionRow}>
+                      {isSel && <Text style={styles.crownIcon}>👑</Text>}
+                      <Text style={styles.optionTitle}>{svc.name}</Text>
+                    </View>
+                    <Text style={styles.optionSub}>Duration: {svc.durationMinutes} mins</Text>
+                    <Text style={styles.optionDesc}>{svc.description}</Text>
                   </View>
                   <Text style={styles.optionPrice}>${svc.price.toFixed(2)}</Text>
                 </TouchableOpacity>
@@ -268,12 +363,23 @@ export const BookingScreen: React.FC = () => {
             </ScrollView>
 
             <Text style={[styles.label, { marginTop: 20 }]}>Available Time Slots</Text>
-            <TimeSlotPicker
-              slots={TIME_SLOTS}
-              selectedSlot={selectedTime}
-              busySlots={busySlots}
-              onSelectSlot={setSelectedTime}
-            />
+            {checkingSlots ? (
+              <View style={styles.checkingContainer}>
+                <ActivityIndicator size="large" color={colors.gold.main} />
+                <Text style={styles.checkingText}>Checking slot availability...</Text>
+              </View>
+            ) : selectedDate ? (
+              <TimeSlotPicker
+                slots={TIME_SLOTS}
+                selectedSlot={selectedTime}
+                busySlots={busySlots}
+                onSelectSlot={setSelectedTime}
+              />
+            ) : (
+              <View style={styles.noDatePrompt}>
+                <Text style={styles.noDateText}>📅 Select an upcoming date above to view available time slots</Text>
+              </View>
+            )}
 
             <View style={styles.navRow}>
               <Button title="Back" variant="secondary" onPress={() => setStep(1)} style={styles.halfBtn} />
@@ -289,11 +395,18 @@ export const BookingScreen: React.FC = () => {
 
             {/* Summary Card */}
             <Card style={styles.summaryCard} variant="goldBorder">
-              <Text style={styles.summaryTitle}>Booking Summary</Text>
+              <Text style={styles.summaryTitle}>Reservation Summary</Text>
+
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Service:</Text>
+                <Text style={styles.summaryLabel}>Treatment:</Text>
                 <Text style={styles.summaryVal}>{selectedService}</Text>
               </View>
+              {selectedServiceObj && (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Duration:</Text>
+                  <Text style={styles.summaryVal}>{selectedServiceObj.durationMinutes} mins</Text>
+                </View>
+              )}
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Barber:</Text>
                 <Text style={styles.summaryVal}>{selectedBarber}</Text>
@@ -301,15 +414,30 @@ export const BookingScreen: React.FC = () => {
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Date & Time:</Text>
                 <Text style={styles.summaryVal}>
-                  {selectedDate} @ {selectedTime}
+                  {selectedDate} @ {formatTime12Hour(selectedTime)}
                 </Text>
               </View>
-              {selectedServiceObj && (
+              {estimatedEnd ? (
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Total Price:</Text>
-                  <Text style={styles.priceVal}>${selectedServiceObj.price.toFixed(2)}</Text>
+                  <Text style={styles.summaryLabel}>Est. End Time:</Text>
+                  <Text style={styles.estEndVal}>{formatTime12Hour(estimatedEnd)}</Text>
                 </View>
-              )}
+              ) : null}
+
+              <View style={styles.divider} />
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Subtotal:</Text>
+                <Text style={styles.priceVal}>${checkoutSubtotal.toFixed(2)}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Platform Svc Fee:</Text>
+                <Text style={styles.priceVal}>${checkoutFee.toFixed(2)}</Text>
+              </View>
+              <View style={[styles.summaryRow, styles.totalRow]}>
+                <Text style={styles.totalLabel}>Total Est. Price:</Text>
+                <Text style={styles.totalPrice}>${checkoutTotal.toFixed(2)}</Text>
+              </View>
             </Card>
 
             <Input
@@ -339,7 +467,7 @@ export const BookingScreen: React.FC = () => {
             <View style={styles.navRow}>
               <Button title="Back" variant="secondary" onPress={() => setStep(2)} style={styles.halfBtn} />
               <Button
-                title="Confirm & Reserve"
+                title="Confirm & Request Booking"
                 variant="primary"
                 loading={createMutation.isPending}
                 onPress={handleSubmitBooking}
@@ -354,6 +482,7 @@ export const BookingScreen: React.FC = () => {
       <ReceiptModal
         visible={!!receiptAppointment}
         appointment={receiptAppointment}
+        checkoutTotal={checkoutTotal}
         onClose={() => {
           setReceiptAppointment(null);
           navigation.navigate('Home');
@@ -380,34 +509,133 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text.primary,
-    fontSize: 24,
-    fontWeight: '800',
+    fontSize: 22,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   subtitle: {
-    color: colors.gold.main,
-    fontSize: 13,
-    fontWeight: '600',
+    color: colors.text.secondary,
+    fontSize: 12,
     marginTop: 2,
   },
-  stepBar: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
+  // Step Timeline
+  stepTimeline: {
+    position: 'relative',
+    height: 36,
+    marginTop: 16,
+    marginBottom: 8,
   },
-  stepSegment: {
-    flex: 1,
-    height: 4,
+  timelineBg: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 16,
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 2,
-    backgroundColor: colors.obsidian.border,
   },
-  stepActive: {
-    backgroundColor: colors.gold.main,
+  timelineProgress: {
+    position: 'absolute',
+    left: 0,
+    top: 16,
+    height: 3,
+    backgroundColor: colors.gold.dark,
+    borderRadius: 2,
+    zIndex: 1,
+  },
+  stepNodes: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    position: 'relative',
+    zIndex: 2,
+  },
+  stepNode: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.obsidian.border,
+    backgroundColor: colors.obsidian.bg,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepNodeActive: {
+    borderColor: colors.gold.main,
+    backgroundColor: colors.obsidian.card,
+  },
+  stepNodeCompleted: {
+    borderColor: colors.gold.dark,
+    backgroundColor: colors.gold.dark,
+  },
+  stepNodeText: {
+    color: colors.text.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  stepNodeTextActive: {
+    color: colors.gold.main,
+  },
+  stepLabel: {
+    textAlign: 'center',
+    color: colors.gold.main,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 16,
   },
   stepTitle: {
     color: colors.text.primary,
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 16,
+  },
+  // Search
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#000000',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    color: colors.text.primary,
+    fontSize: 13,
+    paddingVertical: 10,
+  },
+  // Category Tabs
+  catScroll: {
+    maxHeight: 36,
+    marginBottom: 16,
+  },
+  catChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+    marginRight: 6,
+  },
+  catChipSelected: {
+    backgroundColor: colors.obsidian.card,
+    borderColor: colors.gold.main,
+  },
+  catText: {
+    color: colors.text.secondary,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  catTextSelected: {
+    color: colors.gold.main,
   },
   label: {
     color: colors.text.secondary,
@@ -434,6 +662,14 @@ const styles = StyleSheet.create({
   optionInfo: {
     flex: 1,
   },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  crownIcon: {
+    fontSize: 14,
+  },
   optionTitle: {
     color: colors.text.primary,
     fontSize: 15,
@@ -441,14 +677,23 @@ const styles = StyleSheet.create({
   },
   optionSub: {
     color: colors.text.muted,
-    fontSize: 12,
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginTop: 4,
+  },
+  optionDesc: {
+    color: colors.text.secondary,
+    fontSize: 11,
     marginTop: 2,
+    lineHeight: 15,
   },
   optionPrice: {
     color: colors.gold.main,
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
   },
+  // Days
   daysScroll: {
     marginBottom: 12,
   },
@@ -485,6 +730,31 @@ const styles = StyleSheet.create({
   dayTextSel: {
     color: colors.obsidian.bg,
   },
+  // Checking indicator
+  checkingContainer: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  checkingText: {
+    color: colors.gold.main,
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginTop: 8,
+  },
+  noDatePrompt: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 8,
+    padding: 24,
+    alignItems: 'center',
+  },
+  noDateText: {
+    color: colors.text.muted,
+    fontSize: 13,
+  },
+  // Navigation
   navRow: {
     flexDirection: 'row',
     gap: 12,
@@ -493,6 +763,7 @@ const styles = StyleSheet.create({
   halfBtn: {
     flex: 1,
   },
+  // Summary
   summaryCard: {
     marginBottom: 16,
   },
@@ -516,9 +787,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  priceVal: {
-    color: colors.gold.bright,
-    fontSize: 15,
+  estEndVal: {
+    color: colors.gold.main,
+    fontSize: 13,
     fontWeight: '700',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    marginVertical: 8,
+  },
+  priceVal: {
+    color: '#d4d4d8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  totalRow: {
+    marginTop: 4,
+  },
+  totalLabel: {
+    color: colors.text.primary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  totalPrice: {
+    color: colors.gold.bright,
+    fontSize: 16,
+    fontWeight: '800',
   },
 });

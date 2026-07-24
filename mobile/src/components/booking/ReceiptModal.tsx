@@ -9,6 +9,7 @@ import { colors } from '../../theme/colors';
 interface ReceiptModalProps {
   visible: boolean;
   appointment: AppointmentItem | null;
+  checkoutTotal?: number;
   onClose: () => void;
   onOpenPublicActions?: (publicId: string) => void;
 }
@@ -16,6 +17,7 @@ interface ReceiptModalProps {
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   visible,
   appointment,
+  checkoutTotal,
   onClose,
   onOpenPublicActions,
 }) => {
@@ -67,6 +69,13 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             <Text style={styles.label}>Date & Time</Text>
             <Text style={styles.value}>
               {appointment.bookingDate} @ {appointment.bookingTime}
+            </Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.row}>
+            <Text style={styles.label}>Estimated Price</Text>
+            <Text style={[styles.value, { color: colors.gold.bright, fontWeight: '800' }]}>
+              ${(checkoutTotal ?? 0).toFixed(2)}
             </Text>
           </View>
         </View>
