@@ -36,6 +36,14 @@ class AppointmentControllerIntegrationTest {
 
     private String authHeader;
 
+    private LocalDate getNextWorkingDate() {
+        LocalDate date = LocalDate.now().plusDays(1);
+        while (date.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+            date = date.plusDays(1);
+        }
+        return date;
+    }
+
     @BeforeEach
     void setUp() throws Exception {
         appointmentRepository.deleteAll();
@@ -63,7 +71,7 @@ class AppointmentControllerIntegrationTest {
         request.put("customerEmail", "john.doe@example.com");
         request.put("customerPhone", "555-1234");
         request.put("barberName", "Sara the Stylist");
-        request.put("bookingDate", LocalDate.now().plusDays(2).toString());
+        request.put("bookingDate", getNextWorkingDate().toString());
         request.put("bookingTime", "10:30");
         request.put("serviceType", "Beard Trim & Shave");
 
@@ -92,7 +100,7 @@ class AppointmentControllerIntegrationTest {
         request.put("customerEmail", "invalid-email");
         request.put("customerPhone", "555-1234");
         request.put("barberName", "Sara the Stylist");
-        request.put("bookingDate", LocalDate.now().plusDays(2).toString());
+        request.put("bookingDate", getNextWorkingDate().toString());
         request.put("bookingTime", "10:30");
         request.put("serviceType", "Beard Trim & Shave");
 
@@ -180,13 +188,14 @@ class AppointmentControllerIntegrationTest {
 
     @Test
     void shouldReturnBusySlotsSuccessfully() throws Exception {
-        Appointment item = new Appointment("Alex", "alex@test.com", "123", "Barber Alex", LocalDate.now(), "10:00", "Haircut");
+        LocalDate testDate = getNextWorkingDate();
+        Appointment item = new Appointment("Alex", "alex@test.com", "123", "Barber Alex", testDate, "10:00", "Haircut");
         item.setStatus("APPROVED");
         appointmentRepository.save(item);
 
         mockMvc.perform(get("/api/v1/appointments/public/busy-slots")
                         .param("barberName", "Barber Alex")
-                        .param("bookingDate", LocalDate.now().toString()))
+                        .param("bookingDate", testDate.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0]", is("10:00")));

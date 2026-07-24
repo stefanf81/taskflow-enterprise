@@ -50,6 +50,14 @@ public class AppointmentControllerTestcontainersTest {
 
     private String authHeader;
 
+    private LocalDate getNextWorkingDate() {
+        LocalDate date = LocalDate.now().plusDays(1);
+        while (date.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+            date = date.plusDays(1);
+        }
+        return date;
+    }
+
     // Define the PostgreSQL container matching our exact production version 18.4
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4-alpine")
@@ -95,7 +103,7 @@ public class AppointmentControllerTestcontainersTest {
         request.put("customerEmail", "john.doe@example.com");
         request.put("customerPhone", "555-1234");
         request.put("barberName", "Sara the Stylist");
-        request.put("bookingDate", LocalDate.now().plusDays(2).toString());
+        request.put("bookingDate", getNextWorkingDate().toString());
         request.put("bookingTime", "10:30");
         request.put("serviceType", "Beard Trim & Shave");
 
