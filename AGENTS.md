@@ -39,6 +39,7 @@
 npm start                # Angular dev server on :4200
 npm test                 # unit tests (vitest via Angular builder)
 npm run e2e              # Playwright E2E (spins up dev server via webServer config)
+npm run e2e:docker       # Playwright E2E with full Docker stack spin-up and auto-teardown
 npm run build            # production build
 ```
 
@@ -71,6 +72,7 @@ To maintain absolute data privacy, cost efficiency, and low-latency development 
 ```
 ./start-docker.sh        # docker compose up (db → backend → frontend, health-checked)
 ./stop-docker.sh         # docker compose down
+./verify.sh              # full-stack quality check (auto-starts Docker if needed, cleans up on exit)
 ```
 
 ### Security
@@ -84,6 +86,7 @@ Security scans (filesystem lints, container image vulnerability scans, and DAST 
   - **Zero-Trust Networks**: `docker-compose.yml` isolates the DB and Cache on the `backend-tier` network. The Nginx reverse proxy is on the `frontend-tier`. The backend bridges both. The frontend cannot physically talk to the database.
   - **Read-Only Root**: Containers mount read-only filesystems with ephemeral directories mounted as `tmpfs` (e.g., `/tmp`, `/var/cache/nginx`), preventing runtime binary tampering.
   - **Dropped Capabilities**: All services completely drop kernel privileges (`cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`).
+  - **Container Lifecycle**: `docker-compose.yml` uses `restart: "no"` so containers do not linger across system/Docker reboots. Verification and E2E scripts (`./verify.sh`, `npm run e2e:docker`) use exit traps (`./stop-docker.sh`) to automatically stop containers after test completion.
 - **OSIV is off** (`spring.jpa.open-in-view=false`) — connections return to Hikari pool immediately after service methods.
 - **Auth**: Stateless JWT in an HttpOnly `access_token` cookie (Asymmetric RSA-2048 signing via OAuth2 Resource Server). Role/identity is restored via `GET /api/v1/auth/me` into an in-memory Signal (`AuthState`) and never stored in `sessionStorage`/`localStorage`. CSRF protection via double-submit `XSRF-TOKEN` cookie. `/api/v1/auth/**` is the only public endpoint path.
 - **Frontend uses Angular 22 Signals** (no Zone.js digest loops). Styles use Tailwind with custom `gold`/`obsidian` color palette.

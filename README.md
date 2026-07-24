@@ -63,6 +63,7 @@ The suite comprises three core components:
 ├── docker-compose.yml            # Local Docker orchestrator
 ├── start-docker.sh               # One-click Docker launcher script
 ├── stop-docker.sh                # Docker cleanup script
+├── verify.sh                     # Full-stack quality verification (with auto-docker lifecycle)
 └── ARCHITECTURE.md               # End-to-End Architectural Blueprint
 ```
 
@@ -79,6 +80,8 @@ This launches the PostgreSQL database, Redis cache, Spring Boot backend, and Ngi
 * **Web UI:** `http://localhost:4200`
 * **Backend API:** `http://localhost:8080`
 * **Prometheus Metrics:** `http://localhost:8080/actuator/prometheus`
+* **Stop Application Stack:** `./stop-docker.sh`
+* **Full-Stack Automated Verification:** `./verify.sh` (automatically starts Docker if needed and cleans up on exit)
 
 ---
 
@@ -132,6 +135,7 @@ npm start
 * **Zero-Trust Networks:** Docker Compose isolates PostgreSQL and Redis on `backend-tier`. Nginx lives on `frontend-tier`. Only Spring Boot bridges both.
 * **Read-Only Filesystems:** Containers run with `read_only: true` with ephemeral `/tmp` mounted as `tmpfs`.
 * **Dropped Kernel Capabilities:** All containers explicitly execute with `cap_drop: [ALL]` and `no-new-privileges:true`.
+* **Container Lifecycle:** Services use `restart: "no"` in `docker-compose.yml` to prevent lingering background containers. Verification and test scripts (`./verify.sh`, `npm run e2e:docker`) register exit traps to automatically stop containers upon completion.
 * **Hardware Token Security:** Mobile app stores JWT tokens in **iOS Keychain** & **Android Keystore** via `expo-secure-store`.
 * **HttpOnly Cookies:** Web app uses `HttpOnly`, `SameSite=Strict` cookies with double-submit CSRF token protection.
 

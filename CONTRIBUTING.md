@@ -36,13 +36,17 @@ npm start                # Dev server on :4200 (proxies /api to :8080)
 ### Full-Stack Docker
 ```bash
 ./start-docker.sh        # Builds and starts all services via docker-compose
+./stop-docker.sh         # Stops all docker-compose services
+./verify.sh              # Runs full-stack verification (auto-starts Docker if needed & cleans up on exit)
 ```
 
 ### Testing
 ```bash
-./gradlew test           # Backend tests (requires Docker for Testcontainers)
-cd frontend && npm test  # Frontend unit tests
+./gradlew test              # Backend tests (requires Docker for Testcontainers)
+cd frontend && npm test     # Frontend unit tests
 cd frontend && npm run e2e  # Playwright E2E tests (starts its own dev server)
+cd frontend && npm run e2e:docker  # Playwright E2E with auto-spinup and teardown of Docker stack
+./verify.sh                 # Full verification suite with auto-start and auto-cleanup of Docker
 ```
 
 ### Code Quality

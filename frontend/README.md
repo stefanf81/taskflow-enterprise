@@ -101,11 +101,17 @@ Unit testing is executed via **Vitest** rather than heavy legacy Karma/Jasmine e
 
 Full-stack E2E testing is powered by **Playwright**.
 
-- **Run Playwright E2E tests:**
+- **Run Playwright E2E tests against an already running backend:**
   ```bash
   npm run e2e
   ```
-  _Note: Ensure the backend is running (`./gradlew bootRun`) before initiating the E2E tests, as Playwright executes real transactional flows against the Spring Boot database!_
+  _Note: Ensure the backend is running (`./gradlew bootRun` or `./start-docker.sh`) before initiating `npm run e2e`._
+
+- **Run Playwright E2E tests with automated Docker lifecycle:**
+  ```bash
+  npm run e2e:docker
+  ```
+  _Note: Automatically starts the full-stack Docker environment via `./start-docker.sh` and registers an exit hook (`./stop-docker.sh`) to tear down containers upon completion._
 
 ---
 

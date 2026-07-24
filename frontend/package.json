@@ -9,7 +9,8 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:docker": "bash -c 'cd .. && ./start-docker.sh && trap ./stop-docker.sh EXIT && cd frontend && playwright test'"
   },
   "private": true,
   "packageManager": "npm@11.18.0",
