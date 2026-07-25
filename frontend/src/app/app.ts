@@ -21,12 +21,15 @@ import { ServiceCatalogStore } from './service-catalog.store';
 import { BarberStore } from './barber.store';
 import { NotificationStore } from './notification.store';
 import { ReviewStore } from './review.store';
-import { formatTime12Hour, isOverdue } from './time-utils';
+import { formatTime12Hour, isOverdue, DEFAULT_TIME_SLOTS } from './time-utils';
 import { CustomerStore } from './customer.store';
 import { StylistCard } from './components/stylist-card/stylist-card';
 import { LookbookComponent } from './components/lookbook/lookbook';
 import { PostBookingActionsComponent } from './components/post-booking-actions/post-booking-actions';
 import { AuthModalComponent } from './components/auth-modal/auth-modal';
+import { AnnouncementBarComponent } from './components/announcement-bar/announcement-bar';
+import { FaqSectionComponent } from './components/faq-section/faq-section';
+import { ReceiptModalComponent } from './components/receipt-modal/receipt-modal';
 
 /** Model shape for the Signal Forms booking wizard. */
 interface BookingFormModel {
@@ -52,6 +55,9 @@ interface BookingFormModel {
     LookbookComponent,
     PostBookingActionsComponent,
     AuthModalComponent,
+    AnnouncementBarComponent,
+    FaqSectionComponent,
+    ReceiptModalComponent,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -72,7 +78,7 @@ export class App implements OnInit, OnDestroy {
 
   // Authentication State delegated to the Store (Top-Tier DDD State management)
   // A1.2: role is held ONLY in memory via AuthState — never trusted from sessionStorage.
-  readonly isLoggedIn = this.store.isLoggedIn;
+  readonly isLoggedIn = this.authState.isLoggedIn;
   readonly userRole = this.authState.role;
   readonly showAdminLoginModal = signal(false);
 
@@ -183,7 +189,7 @@ export class App implements OnInit, OnDestroy {
     'Sara the Stylist',
     'Marcus Master Blade',
   ];
-  readonly timeSlots = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'];
+  readonly timeSlots = DEFAULT_TIME_SLOTS;
   readonly services = this.catalogStore.services;
 
   // SOTA Signals-based Reactive Computations
@@ -265,14 +271,13 @@ export class App implements OnInit, OnDestroy {
       .subscribe({
         next: (role) => {
           if (role) {
-            this.isLoggedIn.set(true);
             this.loadAppointments();
             this.router.navigateByUrl(this.authState.dashboardPathFor(role));
           }
         },
         error: () => {
           // No active session — stay logged out.
-          this.isLoggedIn.set(false);
+          this.authState.clear();
         },
       });
   }
@@ -334,7 +339,6 @@ export class App implements OnInit, OnDestroy {
   onLogout(): void {
     this.store.onLogout();
     this.authState.clear();
-    this.isLoggedIn.set(false);
     this.showSuccess('Logged out successfully.');
   }
 

@@ -1,14 +1,6 @@
 <!-- PREMIUM SAAS ANNOUNCEMENT BAR -->
 @if (!isLoggedIn()) {
-  <div
-    class="w-full bg-zinc-900 border-b border-slate-800 py-2.5 px-4 text-center text-[11px] font-semibold text-gold tracking-wider uppercase animate-fade-in flex items-center justify-center gap-2"
-  >
-    <span class="inline-flex h-2 w-2 rounded-full bg-gold animate-ping"></span>
-    <span
-      >Special Highlight: Book 'The Executive Package' today and get 15% off any premium hair
-      styling clay!</span
-    >
-  </div>
+  <app-announcement-bar />
 }
 
 <div class="min-h-screen bg-faint-barber text-zinc-100 font-sans antialiased pb-24">
@@ -792,96 +784,7 @@
 
       <!-- Defer loading of non-critical FAQ sections to maximize First Contentful Paint speed -->
       @defer (on idle) {
-        <section class="card bg-zinc-950 border border-white/10 rounded-3xl p-8 mt-16">
-          <h2
-            class="text-center text-lg font-extrabold text-zinc-100 uppercase tracking-tight mb-6"
-          >
-            💬 Frequently Asked Questions
-          </h2>
-          <div class="space-y-4 max-w-3xl mx-auto text-xs">
-            <div class="border-b border-white/5 pb-4">
-              <button
-                type="button"
-                id="faq-btn-0"
-                (click)="toggleFaq(0)"
-                [attr.aria-expanded]="activeFaq() === 0"
-                aria-controls="faq-panel-0"
-                class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center outline-none"
-              >
-                <span>⏰ How early should I arrive for my appointment?</span>
-                <span class="text-gold font-extrabold">{{ activeFaq() === 0 ? '−' : '+' }}</span>
-              </button>
-              @if (activeFaq() === 0) {
-                <div
-                  id="faq-panel-0"
-                  role="region"
-                  aria-labelledby="faq-btn-0"
-                  class="animate-fadeIn"
-                >
-                  <p class="text-zinc-400 font-light leading-relaxed mt-2 pl-1">
-                    We recommend arriving 5–10 minutes early. This gives you plenty of time to enjoy
-                    a complimentary beverage (premium coffee, cold beer, or water) and settle in
-                    before your service begins.
-                  </p>
-                </div>
-              }
-            </div>
-            <div class="border-b border-white/5 pb-4">
-              <button
-                type="button"
-                id="faq-btn-1"
-                (click)="toggleFaq(1)"
-                [attr.aria-expanded]="activeFaq() === 1"
-                aria-controls="faq-panel-1"
-                class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center outline-none"
-              >
-                <span>💳 Do you accept credit cards and contactless payments?</span>
-                <span class="text-gold font-extrabold">{{ activeFaq() === 1 ? '−' : '+' }}</span>
-              </button>
-              @if (activeFaq() === 1) {
-                <div
-                  id="faq-panel-1"
-                  role="region"
-                  aria-labelledby="faq-btn-1"
-                  class="animate-fadeIn"
-                >
-                  <p class="text-zinc-400 font-light leading-relaxed mt-2 pl-1">
-                    Yes! We accept all major credit cards, Apple Pay, Google Pay, and standard
-                    contactless payments at check-out. No prepayment is required when submitting
-                    your booking request online.
-                  </p>
-                </div>
-              }
-            </div>
-            <div class="border-b border-white/5 pb-4">
-              <button
-                type="button"
-                id="faq-btn-2"
-                (click)="toggleFaq(2)"
-                [attr.aria-expanded]="activeFaq() === 2"
-                aria-controls="faq-panel-2"
-                class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center outline-none"
-              >
-                <span>📅 What is your cancellation/rescheduling policy?</span>
-                <span class="text-gold font-extrabold">{{ activeFaq() === 2 ? '−' : '+' }}</span>
-              </button>
-              @if (activeFaq() === 2) {
-                <div
-                  id="faq-panel-2"
-                  role="region"
-                  aria-labelledby="faq-btn-2"
-                  class="animate-fadeIn"
-                >
-                  <p class="text-zinc-400 font-light leading-relaxed mt-2 pl-1">
-                    We understand plans change! If you need to cancel or reschedule, please click
-                    the cancellation link in your approval email or call us directly at least 12
-                    hours before your scheduled slot.
-                  </p>
-                </div>
-              }
-            </div>
-          </div>
-        </section>
+        <app-faq-section />
       } @placeholder {
         <div
           class="text-center text-zinc-500 font-light py-12 border border-dashed border-white/10 rounded-3xl mt-16"
@@ -918,104 +821,11 @@
 
       <!-- Squire-Style Interactive Booking Confirmation Receipt Modal -->
       @if (showReceiptModal()) {
-        <div class="modal-overlay" (keydown.escape)="showReceiptModal.set(false)">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Booking confirmation"
-            class="login-card modal-card animate-fadeIn p-8 rounded-3xl border border-white/10 shadow-2xl shadow-black/50"
-            style="max-width: 480px"
-          >
-            <button class="modal-close" (click)="showReceiptModal.set(false)">&times;</button>
-            <div class="login-header text-center mb-6">
-              <div
-                class="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-3"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="3"
-                  stroke="currentColor"
-                  class="w-6 h-6 text-emerald-600"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                </svg>
-              </div>
-              <h2 class="text-xl font-black text-zinc-100 tracking-tight uppercase">
-                Reservation Requested!
-              </h2>
-              <p class="text-xs text-zinc-500 leading-normal mt-1">
-                Your luxury grooming slot has been successfully registered.
-              </p>
-            </div>
-
-            <!-- Receipt ticket Card -->
-            <div class="bg-black border border-white/10 rounded-2xl p-5 mb-5 animate-fadeIn">
-              <h3
-                class="text-center font-bold text-xs text-zinc-500 uppercase tracking-wider pb-3 border-b border-white/10 mb-4"
-              >
-                Receipt #{{ lastBookedAppointment()?.id }}
-              </h3>
-
-              <div class="space-y-3 text-xs text-zinc-400 font-light">
-                <p class="flex justify-between">
-                  <span>🔑 Booking Code:</span>
-                  <strong class="text-gold font-bold select-all">{{
-                    lastBookedAppointment()?.publicId
-                  }}</strong>
-                </p>
-                <p class="flex justify-between">
-                  <span>👤 Customer:</span>
-                  <strong class="text-zinc-100 font-semibold">{{
-                    lastBookedAppointment()?.customerName
-                  }}</strong>
-                </p>
-                <p class="flex justify-between">
-                  <span>✂️ Service:</span>
-                  <strong class="text-zinc-100 font-semibold">{{
-                    lastBookedAppointment()?.serviceType
-                  }}</strong>
-                </p>
-                <p class="flex justify-between">
-                  <span>💈 Stylist:</span>
-                  <strong class="text-zinc-100 font-semibold">{{
-                    lastBookedAppointment()?.barberName
-                  }}</strong>
-                </p>
-                <p class="flex justify-between">
-                  <span>📅 Scheduled:</span>
-                  <strong class="text-zinc-100 font-semibold"
-                    >{{ lastBookedAppointment()?.bookingDate | date: 'mediumDate' }} at
-                    {{ formatTime12Hour(lastBookedAppointment()?.bookingTime ?? '') }}</strong
-                  >
-                </p>
-                <hr class="border-t border-dashed border-slate-300 my-2" />
-                <p class="flex justify-between text-sm font-bold text-zinc-100 pt-1">
-                  <span>Estimated Price:</span>
-                  <span class="text-gold">${{ checkoutTotal() | number: '1.2-2' }}</span>
-                </p>
-              </div>
-            </div>
-
-            <!-- Instruction steps -->
-            <div class="text-center text-[11px] text-zinc-500 leading-relaxed font-light mb-6">
-              <p class="font-bold text-zinc-300 mb-1">📝 What happens next?</p>
-              <p>
-                The shop owner will review your slot request. Once approved, you will automatically
-                receive a simulated SMTP email notification confirming your reservation details.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              class="btn btn-submit w-full py-3 font-bold tracking-wide uppercase"
-              (click)="showReceiptModal.set(false)"
-            >
-              Got It, Thanks!
-            </button>
-          </div>
-        </div>
+        <app-receipt-modal
+          [appointment]="lastBookedAppointment()"
+          [checkoutTotal]="checkoutTotal()"
+          (close)="showReceiptModal.set(false)"
+        />
       }
     </div>
   }

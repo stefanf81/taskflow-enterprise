@@ -22,8 +22,11 @@ public class BusySlotsService {
 
     private static final Logger logger = LoggerFactory.getLogger(BusySlotsService.class);
 
-    /** All possible time slots — returned when the barber is unavailable. */
-    private static final List<String> ALL_SLOTS =
+    /**
+     * All possible operating time slots (09:00 - 17:00, with a 1-hour lunch break at 12:00).
+     * Synchronized with shared frontend/mobile tokens (DEFAULT_TIME_SLOTS).
+     */
+    public static final List<String> ALL_SLOTS =
             List.of("09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00");
 
     private final BarberRepository barberRepository;

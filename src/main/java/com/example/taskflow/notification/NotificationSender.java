@@ -48,8 +48,8 @@ public class NotificationSender {
     }
 
     /**
-     * Simulated SMTP dispatch. Always succeeds in this environment. Compose the
-     * recipient mask for the audit log from the already-stored message/recipient.
+     * Simulated SMTP dispatch. Succeeds by default, but supports simulated failure
+     * when the recipient email starts with "fail" or "invalid" to exercise retry paths.
      */
     boolean simulateSend(NotificationOutbox outbox) {
         logger.info("=========================================================================");
@@ -58,6 +58,14 @@ public class NotificationSender {
         logger.info("To: {}", maskEmail(outbox.getRecipient()));
         logger.info("{}", outbox.getMessage());
         logger.info("=========================================================================");
+
+        if (outbox != null && outbox.getRecipient() != null) {
+            String recipient = outbox.getRecipient().toLowerCase().trim();
+            if (recipient.startsWith("fail") || recipient.startsWith("invalid")) {
+                logger.warn("Simulated SMTP dispatch failure for recipient: {}", maskEmail(outbox.getRecipient()));
+                return false;
+            }
+        }
         return true;
     }
 

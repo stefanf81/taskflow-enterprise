@@ -10,6 +10,12 @@ out/
 .github
 *.log
 frontend/
+mobile/
+shared/
+docs/
+k6/
+scripts/
+jaeger/
 node_modules/
 .DS_Store
 *.class

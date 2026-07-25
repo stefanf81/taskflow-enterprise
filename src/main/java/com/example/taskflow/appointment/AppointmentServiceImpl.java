@@ -21,7 +21,6 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 
 @Service
-@Transactional
 public class AppointmentServiceImpl implements AppointmentService {
 
     private static final Logger logger = LoggerFactory.getLogger(AppointmentServiceImpl.class);
@@ -75,11 +74,11 @@ public class AppointmentServiceImpl implements AppointmentService {
         Page<Appointment> itemPage;
 
         if (status != null && !status.trim().isEmpty() && "OVERDUE".equalsIgnoreCase(status.trim())) {
-            itemPage = appointmentRepository.findByStatusAndBookingDateBefore("PENDING", LocalDate.now(), pageable);
+            itemPage = appointmentRepository.findByStatusAndBookingDateBefore(AppointmentStatus.PENDING, LocalDate.now(), pageable);
         } else if (status != null && !status.trim().isEmpty() && searchName != null && !searchName.trim().isEmpty()) {
-            itemPage = appointmentRepository.findByStatusAndCustomerNameContainingIgnoreCase(status.trim(), searchName.trim(), pageable);
+            itemPage = appointmentRepository.findByStatusAndCustomerNameContainingIgnoreCase(AppointmentStatus.fromString(status.trim()), searchName.trim(), pageable);
         } else if (status != null && !status.trim().isEmpty()) {
-            itemPage = appointmentRepository.findByStatus(status.trim(), pageable);
+            itemPage = appointmentRepository.findByStatus(AppointmentStatus.fromString(status.trim()), pageable);
         } else if (searchName != null && !searchName.trim().isEmpty()) {
             itemPage = appointmentRepository.findByCustomerNameContainingIgnoreCase(searchName.trim(), pageable);
         } else {
@@ -89,14 +88,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         Page<AppointmentResponse> responsePage = itemPage.map(AppointmentResponse::fromEntity);
 
         AppointmentStats stats = getAppointmentStatsCached();
-        int progress = stats.total() > 0 ? (int) Math.round(((double) stats.approved() / stats.total()) * 100) : 0;
-        
-        AppointmentStats updatedStats = new AppointmentStats(
-                stats.total(), stats.pending(), stats.approved(), stats.denied(), 
-                stats.overdue(), progress, stats.approvedRevenue()
-        );
-
-        return new AppointmentDashboardResponse(responsePage, updatedStats);
+        return new AppointmentDashboardResponse(responsePage, stats);
     }
 
     public AppointmentStats getAppointmentStatsCached() {
@@ -141,6 +133,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
+    @Transactional
     public void cancelMyAppointment(Long id, String email) {
         Appointment appointment = appointmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found or unauthorized."));
@@ -151,6 +144,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
+    @Transactional
     public AppointmentResponse createAppointment(AppointmentCreateRequest request, String idempotencyKey) {
         if (idempotencyKey != null && !idempotencyKey.trim().isEmpty()) {
             Appointment existing = appointmentRepository.findByIdempotencyKey(idempotencyKey);
@@ -203,13 +197,22 @@ public class AppointmentServiceImpl implements AppointmentService {
 
             return AppointmentResponse.fromEntity(savedItem);
         } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            // Idempotency-key collision: return the already-persisted row.
             Appointment existing = appointmentRepository.findByIdempotencyKey(idempotencyKey);
             if (existing != null) {
                 logger.info("Concurrent duplicate for idempotency key {}. Returning existing appointment.",
                         LogSanitizer.stripNewlines(idempotencyKey));
                 return AppointmentResponse.fromEntity(existing);
             }
-            throw ex;
+            // Slot was booked between our busy-slots check and save (TOCTOU).
+            // The partial unique index idx_appointment_slot_active caught it.
+            // Return a clear 400 message instead of a 500 constraint-violation error.
+            logger.warn("Slot collision for {} at {} on {} — request raced with another booking.",
+                    LogSanitizer.stripNewlines(request.barberName()),
+                    request.bookingTime(),
+                    request.bookingDate());
+            throw new IllegalArgumentException(
+                    "This time slot was just booked by someone else. Please select a different time.");
         }
     }
 
@@ -252,6 +255,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
+    @Transactional
     public AppointmentResponse updateAppointmentStatus(Long id, AppointmentUpdateRequest request) {
         Appointment item = appointmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found with id: " + id));
@@ -275,6 +279,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
+    @Transactional
     public void deleteAppointment(Long id) {
         Appointment item = appointmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found with id: " + id));
@@ -295,6 +300,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
+    @Transactional
     public void publicCancelAppointment(String publicId, String email) {
         Appointment item = appointmentRepository.findByPublicId(publicId);
         if (item == null) {

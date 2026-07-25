@@ -7,6 +7,7 @@ import java.util.List;
 
 @Repository
 public interface NotificationOutboxRepository extends JpaRepository<NotificationOutbox, Long> {
+    List<NotificationOutbox> findTop100ByOrderBySentAtDesc();
     List<NotificationOutbox> findAllByOrderBySentAtDesc();
 
     // Rows queued for (first) delivery.

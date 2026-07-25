@@ -112,34 +112,34 @@ class AppointmentServiceImplTest {
     @Test
     void testGetAllAppointments_OverdueStatus() {
         Page<Appointment> page = new PageImpl<>(Collections.singletonList(testAppointment));
-        when(appointmentRepository.findByStatusAndBookingDateBefore(eq("PENDING"), any(LocalDate.class), any(Pageable.class))).thenReturn(page);
+        when(appointmentRepository.findByStatusAndBookingDateBefore(eq(AppointmentStatus.PENDING), any(LocalDate.class), any(Pageable.class))).thenReturn(page);
         when(appointmentRepository.getAppointmentStats(any(LocalDate.class))).thenReturn(new AppointmentStats(0L,0L,0L,0L,0L,0,0.0));
 
         appointmentService.getAllAppointments("OVERDUE", null, 0, 10);
 
-        verify(appointmentRepository).findByStatusAndBookingDateBefore(eq("PENDING"), any(LocalDate.class), any(Pageable.class));
+        verify(appointmentRepository).findByStatusAndBookingDateBefore(eq(AppointmentStatus.PENDING), any(LocalDate.class), any(Pageable.class));
     }
 
     @Test
     void testGetAllAppointments_StatusAndSearch() {
         Page<Appointment> page = new PageImpl<>(Collections.singletonList(testAppointment));
-        when(appointmentRepository.findByStatusAndCustomerNameContainingIgnoreCase(eq("PENDING"), eq("John"), any(Pageable.class))).thenReturn(page);
+        when(appointmentRepository.findByStatusAndCustomerNameContainingIgnoreCase(eq(AppointmentStatus.PENDING), eq("John"), any(Pageable.class))).thenReturn(page);
         when(appointmentRepository.getAppointmentStats(any(LocalDate.class))).thenReturn(new AppointmentStats(0L,0L,0L,0L,0L,0,0.0));
 
         appointmentService.getAllAppointments("PENDING", "John", 0, 10);
 
-        verify(appointmentRepository).findByStatusAndCustomerNameContainingIgnoreCase(eq("PENDING"), eq("John"), any(Pageable.class));
+        verify(appointmentRepository).findByStatusAndCustomerNameContainingIgnoreCase(eq(AppointmentStatus.PENDING), eq("John"), any(Pageable.class));
     }
 
     @Test
     void testGetAllAppointments_StatusOnly() {
         Page<Appointment> page = new PageImpl<>(Collections.singletonList(testAppointment));
-        when(appointmentRepository.findByStatus(eq("PENDING"), any(Pageable.class))).thenReturn(page);
+        when(appointmentRepository.findByStatus(eq(AppointmentStatus.PENDING), any(Pageable.class))).thenReturn(page);
         when(appointmentRepository.getAppointmentStats(any(LocalDate.class))).thenReturn(new AppointmentStats(0L,0L,0L,0L,0L,0,0.0));
 
         appointmentService.getAllAppointments("PENDING", "  ", 0, 10);
 
-        verify(appointmentRepository).findByStatus(eq("PENDING"), any(Pageable.class));
+        verify(appointmentRepository).findByStatus(eq(AppointmentStatus.PENDING), any(Pageable.class));
     }
 
     @Test
@@ -224,15 +224,21 @@ class AppointmentServiceImplTest {
         when(appointmentRepository.findById(2L)).thenReturn(Optional.of(appt));
         when(appointmentRepository.save(any(Appointment.class))).thenReturn(appt);
         
-        appointmentService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("OTHER"));
+        AppointmentResponse res1 = appointmentService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("OTHER"));
+        assertNotNull(res1);
         
         appt.setCustomerEmail("a@"); // edge case
         appt.setCustomerName("ab"); // edge case
-        appointmentService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("OTHER"));
+        AppointmentResponse res2 = appointmentService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("OTHER"));
+        assertNotNull(res2);
         
         appt.setCustomerEmail("a"); // edge case
         appt.setCustomerName(""); // edge case
-        appointmentService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("APPROVED"));
+        AppointmentResponse res3 = appointmentService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("APPROVED"));
+        assertNotNull(res3);
+        
+        verify(appointmentRepository, times(3)).save(any(Appointment.class));
+        verify(eventPublisher, times(3)).publishEvent(any(AppointmentStatusChangedEvent.class));
     }
 
     @Test

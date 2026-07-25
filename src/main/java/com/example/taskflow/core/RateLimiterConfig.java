@@ -51,19 +51,23 @@ public class RateLimiterConfig {
                 
                 String redisKey = "rate_limit:" + clientIp + ":" + (isAuthEndpoint ? "auth" : "api");
                 
-                Long currentCount = redisTemplate.opsForValue().increment(redisKey);
-                if (currentCount != null && currentCount == 1) {
-                    redisTemplate.expire(redisKey, Duration.ofMinutes(1));
-                }
+                try {
+                    Long currentCount = redisTemplate.opsForValue().increment(redisKey);
+                    if (currentCount != null && currentCount == 1) {
+                        redisTemplate.expire(redisKey, Duration.ofMinutes(1));
+                    }
 
-                if (currentCount != null && currentCount > maxRequests) {
-                    String safePath = path.replaceAll("[\\r\\n]", "");
-                    log.warn("Rate limit exceeded for IP {} on path {}", clientIp, safePath);
-                    response.setStatus(429);
-                    response.setHeader("Retry-After", "60");
-                    response.setContentType("application/json");
-                    response.getWriter().write("{\"error\":\"Too many requests. Please try again later.\"}");
-                    return;
+                    if (currentCount != null && currentCount > maxRequests) {
+                        String safePath = path.replaceAll("[\\r\\n]", "");
+                        log.warn("Rate limit exceeded for IP {} on path {}", clientIp, safePath);
+                        response.setStatus(429);
+                        response.setHeader("Retry-After", "60");
+                        response.setContentType("application/json");
+                        response.getWriter().write("{\"error\":\"Too many requests. Please try again later.\"}");
+                        return;
+                    }
+                } catch (Exception e) {
+                    log.warn("Rate limiter failed open due to Redis error: {}", LogSanitizer.safeMessage(e));
                 }
 
                 filterChain.doFilter(request, response);

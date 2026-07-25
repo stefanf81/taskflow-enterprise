@@ -1,34 +1,27 @@
 # ADR-002: ParallelGC vs G1GC
 
-**Status:** Accepted
+**Status:** Superseded (Superseded by G1GC configuration in production and local runtime)
 
 ## Context
 
-The Java Virtual Machine defaults to G1GC (Garbage-First Garbage Collector) since JDK 9. G1GC is a region-based, low-pause collector designed for large heaps and predictable pause times. ParallelGC is a throughput-oriented collector that freezes application threads during collection but completes the work faster overall.
+The Java Virtual Machine defaults to G1GC (Garbage-First Garbage Collector) since JDK 9. G1GC is a region-based, low-pause collector designed for predictable pause times.
 
-TaskFlow is an I/O-bound web application. The majority of request processing time is spent waiting on database queries, Redis cache lookups, and network I/O — not on CPU-bound computation or object allocation. The local development environment runs on Apple Silicon M4 Pro with a fixed 1 GB heap (`-Xms1g -Xmx1g`). Production runs in a container with heap scaled via `MaxRAMPercentage=60.0`.
+TaskFlow was initially evaluated under ParallelGC. However, as Virtual Threads were enabled in Spring Boot 4.1 / OpenJDK 21, predictable pause times became paramount to prevent carrier thread starvation under high concurrency.
 
-## Decision
+## Decision (Superseded)
 
-**ParallelGC** was chosen over G1GC for the following reasons:
+**G1GC with `-XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+AlwaysPreTouch`** was adopted across `docker-compose.yml` and GitOps Kubernetes deployment manifests (`JAVA_TOOL_OPTIONS`).
 
-1. **I/O-bound workload** — the application spends most of its time waiting for I/O (database, Redis, network), not allocating objects. GC pressure is minimal regardless of the collector, so the advanced heuristics of G1GC provide little benefit.
-
-2. **Lower CPU overhead for small heaps** — ParallelGC uses a simpler collection algorithm with fewer concurrent threads and less bookkeeping than G1GC. On a 1 GB heap, G1GC's region-based tracking and concurrent marking consume CPU cycles that ParallelGC avoids entirely.
-
-3. **Simpler tuning** — ParallelGC has fewer tuning knobs. With a fixed heap size (`-Xms1g -Xmx1g`), the only meaningful parameters are `-XX:ParallelGCThreads` and `-XX:+UseAdaptiveSizePolicy`. G1GC requires tuning `-XX:G1HeapRegionSize`, `-XX:MaxGCPauseMillis`, `-XX:G1NewSizePercent`, and others to achieve optimal behavior.
-
-4. **Marginal G1GC benefit at 1 GB** — G1GC shines with multi-GB heaps where its region-based collection can collect incrementally without full GCs. At 1 GB, the heap is small enough that a full ParallelGC collection completes in milliseconds.
-
-5. **Production consistency** — Production uses the same collector (`ParallelGC`) with `MaxRAMPercentage=60.0`. The container orchestrator's CPU allocation determines parallelism, not hardcoded thread counts.
+Key factors for selecting G1GC:
+1. **Low Pause Time SLA** — `-XX:MaxGCPauseMillis=100` guarantees sub-100ms GC pauses, preventing Virtual Thread carrier thread stalls.
+2. **Concurrent Marking** — G1GC handles heap marking concurrently alongside Virtual Thread execution.
+3. **Container Heap Sizing** — Memory limits managed via `MaxRAMPercentage=50.0` (1 GiB heap on 2 GiB container) with `AlwaysPreTouch` for eager page allocation.
 
 ## Consequences
 
 ### Positive
-- **Lower CPU overhead** — less CPU time spent on GC bookkeeping for the same workload.
-- **Simpler GC log analysis** — ParallelGC logs are straightforward: young collections and full collections, with clear timings.
-- **Consistent behavior** — the same collector across dev and prod environments.
+- **Predictable carrier thread latency** — sub-100ms pause target prevents tail latency spikes.
+- **Concurrent GC cycles** — background collection minimizes stop-the-world pauses.
 
 ### Negative
-- **Longer full GC pauses** — ParallelGC performs full GCs as a single "stop-the-world" event, whereas G1GC can spread them across multiple incremental steps. In practice, full GCs are rare for this I/O-bound workload.
-- **Not adaptable to very large heap growth** — if the heap were to grow to 8 GB+, G1GC would likely outperform ParallelGC. The application's data model is not expected to require such growth.
+- Higher GC metadata memory footprint (~10-15% of total RAM), accounted for by reserving 50% RAM for off-heap / Metaspace / DirectMemory.

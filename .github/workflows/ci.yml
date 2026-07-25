@@ -27,11 +27,8 @@ on:
 # pushes to GHCR. Run `pushdockerimage.yml` manually when you want to publish.
 
 permissions:
-  contents: write
+  contents: read
   security-events: write
-  actions: write
-  pull-requests: read
-  checks: write
 
 concurrency:
   group: taskflow-${{ github.workflow }}-${{ github.ref }}

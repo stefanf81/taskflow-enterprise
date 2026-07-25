@@ -46,6 +46,7 @@ export class AuthState {
   clear(): void {
     this.role.set('');
     this.isLoggedIn.set(false);
+    this.bootstrapDone.set(false);
   }
 
   /** Where a user of the given role should land after login / bootstrap. */

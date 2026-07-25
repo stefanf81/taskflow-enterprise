@@ -2,9 +2,11 @@ package com.example.taskflow.notification;
 
 import com.example.taskflow.appointment.Appointment;
 import com.example.taskflow.appointment.AppointmentRepository;
+import com.example.taskflow.appointment.AppointmentStatus;
 import com.example.taskflow.core.LogSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,10 +22,14 @@ public class AppointmentReminderScheduler {
     
     private final AppointmentRepository appointmentRepository;
     private final NotificationOutboxRepository notificationOutboxRepository;
+    private final ObjectProvider<AppointmentReminderScheduler> selfProvider;
 
-    public AppointmentReminderScheduler(AppointmentRepository appointmentRepository, NotificationOutboxRepository notificationOutboxRepository) {
+    public AppointmentReminderScheduler(AppointmentRepository appointmentRepository,
+                                        NotificationOutboxRepository notificationOutboxRepository,
+                                        ObjectProvider<AppointmentReminderScheduler> selfProvider) {
         this.appointmentRepository = appointmentRepository;
         this.notificationOutboxRepository = notificationOutboxRepository;
+        this.selfProvider = selfProvider;
     }
 
     // Runs every 15 minutes. The outer sweep is NOT transactional: it only loads
@@ -36,12 +42,18 @@ public class AppointmentReminderScheduler {
         LocalDate tomorrow = LocalDate.now().plusDays(1);
         logger.info("Scanning for appointments needing 24-hour reminders for date: {}", tomorrow);
 
-        List<Long> upcomingAppointmentIds = appointmentRepository.findReminderIds(tomorrow, false, "APPROVED");
+        List<Long> upcomingAppointmentIds = appointmentRepository.findReminderIds(tomorrow, false, AppointmentStatus.APPROVED);
 
         int processed = 0;
+        AppointmentReminderScheduler self = selfProvider.getIfAvailable();
         for (Long appointmentId : upcomingAppointmentIds) {
             try {
-                processOne(appointmentId);
+                // Call through the proxy provider so @Transactional on processOne is honored
+                if (self != null) {
+                    self.processOne(appointmentId);
+                } else {
+                    processOne(appointmentId);
+                }
                 processed++;
             } catch (Exception e) {
                 String safeMsg = LogSanitizer.safeMessage(e);

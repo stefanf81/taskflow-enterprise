@@ -6,6 +6,7 @@ import { provideRouter } from '@angular/router';
 import { AdminDashboard } from './admin-dashboard';
 import { AppointmentService } from '../../appointment.service';
 import { AppointmentStore } from '../../appointment.store';
+import { AuthState } from '../../auth.state';
 import { BarberStore } from '../../barber.store';
 import { NotificationStore } from '../../notification.store';
 import { CustomerStore } from '../../customer.store';
@@ -88,7 +89,7 @@ describe('AdminDashboard Component Quality Assurance Suite', () => {
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
 
-    TestBed.inject(AppointmentStore).isLoggedIn.set(true);
+    TestBed.inject(AuthState).isLoggedIn.set(true);
 
     fixture.detectChanges();
 

@@ -7,6 +7,7 @@ import { CustomerPortal } from './customer-portal';
 import { AppointmentService } from '../../appointment.service';
 import { AppointmentStore } from '../../appointment.store';
 import { CustomerStore } from '../../customer.store';
+import { AuthState } from '../../auth.state';
 
 /**
  * TE1: Component-level QA suite for the Customer dashboard.
@@ -138,6 +139,6 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
     expect(req.request.method).toBe('POST');
     req.flush(null);
     // On logout the store clears auth state.
-    expect(component['store'].isLoggedIn()).toBe(false);
+    expect(TestBed.inject(AuthState).isLoggedIn()).toBe(false);
   });
 });

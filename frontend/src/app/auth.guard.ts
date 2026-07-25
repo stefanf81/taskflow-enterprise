@@ -1,6 +1,6 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
-import { map, tap } from 'rxjs';
+import { catchError, map, of } from 'rxjs';
 import { AuthState } from './auth.state';
 
 /**
@@ -35,21 +35,16 @@ export const authGuard: CanActivateFn = (_route, state) => {
   // No role in memory yet — try to restore from the server once.
   if (!auth.isBootstrapDone()) {
     return auth.bootstrap().pipe(
-      tap({
-        next: (resolvedRole) => {
-          if (resolvedRole === 'ROLE_ADMIN') {
-            router.navigate(['/admin']);
-          } else if (resolvedRole === 'ROLE_CUSTOMER') {
-            router.navigate(['/customer']);
-          } else {
-            router.navigate(['']);
-          }
-        },
-        error: () => {
-          router.navigate(['']);
-        },
+      map((resolvedRole) => {
+        if (resolvedRole === 'ROLE_ADMIN') {
+          return router.createUrlTree(['/admin']);
+        }
+        if (resolvedRole === 'ROLE_CUSTOMER') {
+          return router.createUrlTree(['/customer']);
+        }
+        return router.createUrlTree(['']);
       }),
-      map(() => true),
+      catchError(() => of(router.createUrlTree(['']))),
     );
   }
 

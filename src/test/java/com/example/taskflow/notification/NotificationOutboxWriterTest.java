@@ -53,11 +53,11 @@ class NotificationOutboxWriterTest {
     }
 
     @Test
-    void writerDoesNotThrowWhenRepositoryFails() {
+    void writerThrowsWhenRepositoryFailsToEnsureRollback() {
         when(outboxRepository.save(any(NotificationOutbox.class))).thenThrow(new RuntimeException("db error"));
 
         appointment.setStatus("DENIED");
-        assertDoesNotThrow(() ->
+        assertThrows(RuntimeException.class, () ->
                 writer.handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, appointment)));
     }
 }

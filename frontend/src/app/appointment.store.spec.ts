@@ -5,6 +5,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { AppointmentStore } from './appointment.store';
 import { AppointmentService } from './appointment.service';
+import { AuthState } from './auth.state';
 
 @Component({ standalone: true, template: '' })
 class TestHost {
@@ -13,6 +14,7 @@ class TestHost {
 
 describe('AppointmentStore', () => {
   let store: AppointmentStore;
+  let authState: AuthState;
   let httpMock: HttpTestingController;
   let fixture: ComponentFixture<TestHost>;
 
@@ -63,6 +65,7 @@ describe('AppointmentStore', () => {
 
     fixture = TestBed.createComponent(TestHost);
     store = fixture.componentInstance.store;
+    authState = TestBed.inject(AuthState);
     httpMock = TestBed.inject(HttpTestingController);
     fixture.detectChanges();
   });
@@ -72,7 +75,7 @@ describe('AppointmentStore', () => {
   });
 
   it('should initialize with default signal values', () => {
-    expect(store.isLoggedIn()).toBe(false);
+    expect(authState.isLoggedIn()).toBe(false);
     expect(store.currentPage()).toBe(0);
     expect(store.selectedFilter()).toBe('all');
     expect(store.searchQuery()).toBe('');
@@ -87,7 +90,7 @@ describe('AppointmentStore', () => {
   });
 
   it('should load appointments when logged in', async () => {
-    store.isLoggedIn.set(true);
+    authState.isLoggedIn.set(true);
     fixture.detectChanges();
 
     const req = httpMock.expectOne(
@@ -110,7 +113,7 @@ describe('AppointmentStore', () => {
   });
 
   it('should handle onLogout by calling the logout API and clearing state', () => {
-    store.isLoggedIn.set(true);
+    authState.isLoggedIn.set(true);
     fixture.detectChanges();
     httpMock.match(() => true).forEach((r) => r.flush(mockDashboard));
     fixture.detectChanges();
@@ -121,30 +124,30 @@ describe('AppointmentStore', () => {
     expect(req.request.method).toBe('POST');
     req.flush(null);
 
-    expect(store.isLoggedIn()).toBe(false);
+    expect(authState.isLoggedIn()).toBe(false);
   });
 
   it('should call onLogout that resets state even on API failure', () => {
-    store.isLoggedIn.set(true);
+    authState.isLoggedIn.set(true);
     store.onLogout();
 
     const req = httpMock.expectOne((r) => r.url.includes('/api/v1/auth/logout'));
     req.error(new ProgressEvent('error'), { status: 500, statusText: 'Server Error' });
 
-    expect(store.isLoggedIn()).toBe(false);
+    expect(authState.isLoggedIn()).toBe(false);
   });
 
   it('should reset auth state via resetAuthState', () => {
-    store.isLoggedIn.set(true);
+    authState.isLoggedIn.set(true);
     store.errorMessage.set('Some error');
     store.resetAuthState();
 
-    expect(store.isLoggedIn()).toBe(false);
+    expect(authState.isLoggedIn()).toBe(false);
     expect(store.errorMessage()).toBeNull();
   });
 
   it('should support pagination and update URL accordingly', async () => {
-    store.isLoggedIn.set(true);
+    authState.isLoggedIn.set(true);
     fixture.detectChanges();
     httpMock.expectOne(() => true).flush(mockDashboard);
     await fixture.whenStable();
@@ -167,7 +170,7 @@ describe('AppointmentStore', () => {
   });
 
   it('should handle search query encoding', () => {
-    store.isLoggedIn.set(true);
+    authState.isLoggedIn.set(true);
     fixture.detectChanges();
     httpMock.expectOne(() => true).flush(mockDashboard);
     fixture.detectChanges();

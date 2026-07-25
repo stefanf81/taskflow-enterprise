@@ -11,4 +11,10 @@ public record AppointmentStats(
     long overdue,
     int progress,
     double approvedRevenue
-) {}
+) {
+    public AppointmentStats {
+        if (progress == 0 && total > 0 && approved > 0) {
+            progress = (int) Math.round(((double) approved / total) * 100);
+        }
+    }
+}

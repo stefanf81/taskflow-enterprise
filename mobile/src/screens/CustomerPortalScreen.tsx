@@ -139,7 +139,7 @@ export const CustomerPortalScreen: React.FC = () => {
                   </Text>
                 </View>
 
-                {item.status !== 'CANCELLED' && item.status !== 'DENIED' && (
+                {item.status !== 'DENIED' && (
                   <Button
                     title="Cancel Booking"
                     variant="outline"

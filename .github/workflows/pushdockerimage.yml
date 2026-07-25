@@ -10,10 +10,10 @@ name: TaskFlow Push Docker Images
 # What it does:
 #   1. Builds the backend JAR and frontend production bundle (the same
 #      artifacts the Dockerfiles expect in their build context).
-#   2. Builds the Docker images for the selected component(s).
+#   2. Builds the Docker images for the selected component(s) (load only).
 #   3. Scans each image with Trivy (HIGH,CRITICAL — hard gate, exit-code: 1).
-#   4. Pushes surviving images to ghcr.io with both :<tag> and :latest tags,
-#      including provenance and SBOM.
+#   4. Pushes images to ghcr.io with both :<tag> and :latest tags only if
+#      the scan passes (or skip_scan is set), including provenance and SBOM.
 #
 # Trigger:
 #   workflow_dispatch only — this workflow is never started automatically.
@@ -278,28 +278,19 @@ jobs:
             trivy-push-${{ runner.os }}-${{ env.TRIVY_VERSION }}-
 
       ##########################################################
-      # Build and push
-      #
-      # We push immediately and scan afterwards. The Trivy scan uploads
-      # results to the Code Scanning tab but does NOT atomically un-publish a
-      # bad image — the GitHub Container Registry does not support
-      # transactional push/scan. Opt instead for a hard `exit-code: 1` that
-      # fails the run after the SARIF is uploaded, so the operator is alerted
-      # and can delete the published tag manually.
-      #
-      # Set `skip_scan: true` on the workflow_dispatch input only in
-      # exceptional circumstances (e.g. an emergency hotfix where the gate
-      # is intentionally bypassed — the SARIF will still be uploaded).
+      # Build (load only — the scan runs against the local image
+      # before we push to the registry)
       ##########################################################
 
-      - name: Build and Push Image
+      - name: Build Image
         id: build
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.component == 'backend' && '.' || 'frontend' }}
           file: ${{ matrix.component == 'backend' && 'Dockerfile.x64' || 'frontend/Dockerfile' }}
 
-          push: true
+          push: false
+          load: true
 
           tags: |
             ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:${{ steps.images.outputs.tag }}
@@ -323,10 +314,11 @@ jobs:
       ##########################################################
       # Hard-gate scan (HIGH/CRITICAL, exit-code: 1)
       #
-      # This mirrors the gate ci.yml runs on its locally-built image. The
-      # difference here is that the image is already on the registry, so a
-      # failed scan surfaces a SARIF + a red run rather than preventing the
-      # push. Operators must remove the published tag manually if needed.
+      # Scans the locally-built image BEFORE pushing. If the scan
+      # fails with exit-code: 1, the Push step below is automatically
+      # skipped (GitHub defaults: a step runs only if all previous
+      # required steps succeeded). Set `skip_scan: true` on the
+      # workflow_dispatch input only in exceptional circumstances.
       ##########################################################
 
       - name: Scan Docker Image
@@ -341,6 +333,16 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: 1
+
+      ##########################################################
+      # Push (only runs if all previous steps succeeded — meaning
+      # the scan passed or was explicitly skipped)
+      ##########################################################
+
+      - name: Push Image
+        run: |
+          docker push ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:${{ steps.images.outputs.tag }}
+          docker push ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:latest
 
       - name: Upload SARIF
         if: always() && hashFiles('trivy-results.sarif') != ''

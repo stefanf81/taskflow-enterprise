@@ -268,7 +268,6 @@ export class AuthModalComponent {
       .subscribe({
         next: (response) => {
           this.authState.applyRole(response.role);
-          this.store.isLoggedIn.set(true);
           this.isSubmitting.set(false);
           this.errorMessage.set(null);
 

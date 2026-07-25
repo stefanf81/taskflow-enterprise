@@ -2,6 +2,7 @@ package com.example.taskflow.notification;
 
 import com.example.taskflow.appointment.Appointment;
 import com.example.taskflow.appointment.AppointmentRepository;
+import com.example.taskflow.appointment.AppointmentStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -9,6 +10,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -28,6 +31,9 @@ class AppointmentReminderSchedulerTest {
 
     @Mock
     private NotificationOutboxRepository notificationOutboxRepository;
+
+    @Mock
+    private ObjectProvider<AppointmentReminderScheduler> selfProvider;
 
     @InjectMocks
     private AppointmentReminderScheduler reminderScheduler;
@@ -66,8 +72,9 @@ class AppointmentReminderSchedulerTest {
 
     @Test
     void testProcessReminders_Success() {
+        when(selfProvider.getIfAvailable()).thenReturn(reminderScheduler);
         LocalDate tomorrow = LocalDate.now().plusDays(1);
-        when(appointmentRepository.findReminderIds(tomorrow, false, "APPROVED"))
+        when(appointmentRepository.findReminderIds(tomorrow, false, AppointmentStatus.APPROVED))
                 .thenReturn(Arrays.asList(1L, 2L));
         when(appointmentRepository.findByIdForUpdate(1L)).thenReturn(java.util.Optional.of(app1));
         when(appointmentRepository.findByIdForUpdate(2L)).thenReturn(java.util.Optional.of(app2));
@@ -87,7 +94,7 @@ class AppointmentReminderSchedulerTest {
         verify(appointmentRepository, times(1)).save(app2);
 
         // Verify the per-appointment ID loader is used (A5: lock released per row)
-        verify(appointmentRepository, times(1)).findReminderIds(tomorrow, false, "APPROVED");
+        verify(appointmentRepository, times(1)).findReminderIds(tomorrow, false, AppointmentStatus.APPROVED);
         verify(appointmentRepository, times(1)).findByIdForUpdate(1L);
         verify(appointmentRepository, times(1)).findByIdForUpdate(2L);
     }
@@ -95,7 +102,7 @@ class AppointmentReminderSchedulerTest {
     @Test
     void testProcessReminders_EmptyList() {
         LocalDate tomorrow = LocalDate.now().plusDays(1);
-        when(appointmentRepository.findReminderIds(tomorrow, false, "APPROVED"))
+        when(appointmentRepository.findReminderIds(tomorrow, false, AppointmentStatus.APPROVED))
                 .thenReturn(Collections.emptyList());
 
         reminderScheduler.processReminders();

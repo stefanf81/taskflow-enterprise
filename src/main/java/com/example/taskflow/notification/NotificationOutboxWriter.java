@@ -6,9 +6,7 @@ import com.example.taskflow.core.LogSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
@@ -30,9 +28,11 @@ public class NotificationOutboxWriter {
         this.outboxRepository = outboxRepository;
     }
 
-    @Async
+    /**
+     * Synchronously enqueues an outbox row within the caller's transaction — if the
+     * outbox save fails, the entire transaction rolls back atomically.
+     */
     @EventListener
-    @Transactional
     public void handleAppointmentStatusChanged(AppointmentStatusChangedEvent event) {
         Appointment appointment = event.getAppointment();
         try {
@@ -46,6 +46,9 @@ public class NotificationOutboxWriter {
         } catch (Exception e) {
             String safeMsg = LogSanitizer.safeMessage(e);
             logger.error("Failed to enqueue status-change notification: {}", safeMsg);
+            // Rethrow so the async error handler sees this and the transaction
+            // rolls back — the NotificationRelayScheduler will retry from its own sweep.
+            throw new RuntimeException("Failed to enqueue notification", e);
         }
     }
 

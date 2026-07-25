@@ -3,6 +3,19 @@
  */
 
 /**
+ * Standard operating time slots (09:00 - 17:00, 1h lunch gap at 12:00).
+ */
+export const DEFAULT_TIME_SLOTS: readonly string[] = [
+  '09:00',
+  '10:00',
+  '11:00',
+  '13:00',
+  '14:00',
+  '15:00',
+  '16:00',
+];
+
+/**
  * Format "HH:MM" 24h time string to "h:MM AM/PM" 12h format.
  */
 export function formatTime12Hour(time24: string): string {

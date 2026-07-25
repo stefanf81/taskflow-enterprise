@@ -24,7 +24,7 @@ import java.util.List;
 public class NotificationRelayScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(NotificationRelayScheduler.class);
-    private static final int MAX_RETRIES = 5;
+    private static final int MAX_RETRIES = 10;
 
     private final NotificationOutboxRepository outboxRepository;
     private final NotificationSender sender;

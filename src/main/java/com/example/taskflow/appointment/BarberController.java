@@ -18,23 +18,17 @@ import java.util.List;
 @Tag(name = "Barber Management", description = "Operations for managing barbers, schedules, and time-off")
 public class BarberController {
 
-    private final BarberRepository barberRepository;
-    private final BarberScheduleRepository scheduleRepository;
-    private final BarberTimeOffRepository timeOffRepository;
+    private final BarberService barberService;
 
-    public BarberController(BarberRepository barberRepository, 
-                            BarberScheduleRepository scheduleRepository, 
-                            BarberTimeOffRepository timeOffRepository) {
-        this.barberRepository = barberRepository;
-        this.scheduleRepository = scheduleRepository;
-        this.timeOffRepository = timeOffRepository;
+    public BarberController(BarberService barberService) {
+        this.barberService = barberService;
     }
 
     @GetMapping
     @Operation(summary = "Get all barbers")
     @ApiResponse(responseCode = "200", description = "List of all barbers returned")
     public ResponseEntity<List<BarberResponse>> getAllBarbers() {
-        return ResponseEntity.ok(barberRepository.findAllProjectedBy());
+        return ResponseEntity.ok(barberService.getAllBarbers());
     }
 
     @PostMapping
@@ -44,7 +38,7 @@ public class BarberController {
             @ApiResponse(responseCode = "400", description = "Invalid barber data")
     })
     public ResponseEntity<Barber> createBarber(@Valid @RequestBody BarberRequest request) {
-        return new ResponseEntity<>(barberRepository.save(request.toEntity()), HttpStatus.CREATED);
+        return new ResponseEntity<>(barberService.createBarber(request), HttpStatus.CREATED);
     }
 
     @GetMapping("/{barberId}/time-off")
@@ -54,8 +48,7 @@ public class BarberController {
             @ApiResponse(responseCode = "404", description = "Barber not found")
     })
     public ResponseEntity<List<BarberTimeOff>> getTimeOff(@Parameter(description = "Barber database ID") @PathVariable Long barberId) {
-        List<BarberTimeOff> timeOffs = timeOffRepository.findByBarberId(barberId);
-        return ResponseEntity.ok(timeOffs);
+        return ResponseEntity.ok(barberService.getTimeOff(barberId));
     }
 
     @PostMapping("/{barberId}/time-off")
@@ -66,11 +59,6 @@ public class BarberController {
             @ApiResponse(responseCode = "404", description = "Barber not found")
     })
     public ResponseEntity<BarberTimeOff> addTimeOff(@Parameter(description = "Barber database ID") @PathVariable Long barberId, @Valid @RequestBody BarberTimeOffRequest request) {
-        Barber barber = barberRepository.findById(barberId)
-                .orElseThrow(() -> new ResourceNotFoundException("Barber not found with id: " + barberId));
-        if (!request.isDateRangeValid()) {
-            throw new IllegalArgumentException("End date must not be before start date.");
-        }
-        return new ResponseEntity<>(timeOffRepository.save(request.toEntity(barber)), HttpStatus.CREATED);
+        return new ResponseEntity<>(barberService.addTimeOff(barberId, request), HttpStatus.CREATED);
     }
 }

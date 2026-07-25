@@ -5,6 +5,14 @@
 -- about (PENDING -> SENT | FAILED | RETRYING) and cap retry_count so a stuck row
 -- cannot loop forever. retry_count defaults to 0 (added in V13), satisfying the
 -- lower bound. CHECK constraints are supported by H2 and PostgreSQL.
+
+-- First, normalize any unexpected status values that may exist in production
+-- data. Without this cleanup, the ADD CONSTRAINT below would fail if a bug
+-- previously persisted an invalid status (e.g. 'PROCESSING', 'DISPATCHED').
+UPDATE notification_outbox
+SET status = 'FAILED'
+WHERE status NOT IN ('PENDING', 'SENT', 'FAILED', 'RETRYING');
+
 ALTER TABLE notification_outbox
     DROP CONSTRAINT IF EXISTS chk_outbox_status;
 

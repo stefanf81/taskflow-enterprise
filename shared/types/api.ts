@@ -13,7 +13,7 @@ export interface AppointmentItem {
   bookingDate: string;
   bookingTime: string;
   serviceType: string;
-  status: 'PENDING' | 'APPROVED' | 'DENIED' | 'CANCELLED';
+  status: 'PENDING' | 'APPROVED' | 'DENIED';
   createdAt: string;
   updatedAt: string;
 }

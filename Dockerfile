@@ -95,8 +95,6 @@ RUN java -XX:ArchiveClassesAtExit=application.jsa \
          -Dmanagement.tracing.enabled=false \
          -Dmanagement.otlp.tracing.export.enabled=false \
          -Dotel.sdk.disabled=true \
-         -Dotel.exporter.otlp.endpoint=http://localhost:4317 \
-         -Dotel.exporter.otlp.traces.endpoint=http://localhost:4317 \
          org.springframework.boot.loader.launch.PropertiesLauncher \
     && test -s application.jsa \
     && chown 10001:10001 application.jsa

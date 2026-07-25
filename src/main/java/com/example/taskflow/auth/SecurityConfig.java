@@ -133,6 +133,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/api/v1/catalog/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/catalog/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/notifications/**").hasRole("ADMIN")
+                .requestMatchers("/api/v1/customer/**").hasAnyRole("CUSTOMER", "ADMIN")
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2
@@ -239,11 +240,6 @@ public class SecurityConfig {
             configuration.setAllowCredentials(true);
         } else {
             configuration.setAllowedOrigins(Arrays.asList(allowedOrigins.split(",")));
-            configuration.setAllowedOriginPatterns(Arrays.asList(
-                "http://localhost:*",
-                "http://127.0.0.1:*",
-                "http://10.0.2.2:*"
-            ));
             configuration.setAllowCredentials(true);
         }
 
@@ -281,7 +277,7 @@ public class SecurityConfig {
             KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
             keyPairGenerator.initialize(2048);
             KeyPair kp = keyPairGenerator.generateKeyPair();
-            logger.warn("Generated ephemeral RSA key pair (keys will be lost on restart). Set APP_RSA_PRIVATE_KEY and APP_RSA_PUBLIC_KEY env vars for persistence.");
+            logger.error("*** EPHEMERAL RSA KEY IN USE *** All JWT tokens invalidated on restart. Set APP_RSA_PRIVATE_KEY and APP_RSA_PUBLIC_KEY env vars for persistent signing.");
             return kp;
         } catch (Exception e) {
             throw new IllegalStateException("Failed to generate RSA key pair", e);

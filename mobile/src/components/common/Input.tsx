@@ -17,6 +17,7 @@ export const Input: React.FC<InputProps> = ({ label, error, icon, style, ...prop
         <TextInput
           style={[styles.input, style]}
           placeholderTextColor={colors.text.muted}
+          accessibilityLabel={label || props.placeholder}
           {...props}
         />
       </View>

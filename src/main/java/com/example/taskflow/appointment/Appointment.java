@@ -76,10 +76,9 @@ public class Appointment {
     @JoinColumn(name = "service_id", foreignKey = @ForeignKey(name = "fk_appointment_service"))
     private ServiceItem service;
 
-    @NotBlank(message = "Status is required")
-    @Size(max = 50)
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
-    private String status = "PENDING";
+    private AppointmentStatus status = AppointmentStatus.PENDING;
 
     @Column(name = "reminder_sent", nullable = false)
     private Boolean reminderSent = false;
@@ -214,11 +213,19 @@ public class Appointment {
     }
 
     public String getStatus() {
+        return status != null ? status.name() : AppointmentStatus.PENDING.name();
+    }
+
+    public AppointmentStatus getStatusEnum() {
         return status;
     }
 
     public void setStatus(String status) {
-        this.status = status;
+        this.status = AppointmentStatus.fromString(status);
+    }
+
+    public void setStatus(AppointmentStatus status) {
+        this.status = status != null ? status : AppointmentStatus.PENDING;
     }
 
     public Boolean getReminderSent() {

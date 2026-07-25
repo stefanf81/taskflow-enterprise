@@ -38,8 +38,9 @@
       ]
     ],
     "extra": {
+      "apiUrl": "http://localhost:8080",
       "eas": {
-        "projectId": "taskflow-mobile-app"
+        "projectId": "11111111-2222-3333-4444-555555555555"
       }
     }
   }
