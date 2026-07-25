@@ -37,6 +37,9 @@ const isCsrfExempt = (url: string, method?: string): boolean => {
 
 const getBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_API_URL) {
+    if (Platform.OS === 'android' && process.env.EXPO_PUBLIC_API_URL.includes('localhost')) {
+      return process.env.EXPO_PUBLIC_API_URL.replace('localhost', '10.0.2.2');
+    }
     return process.env.EXPO_PUBLIC_API_URL;
   }
   // Android Emulator maps localhost to 10.0.2.2

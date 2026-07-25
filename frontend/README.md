@@ -2,7 +2,7 @@
 
 Welcome to the **TaskFlow Enterprise Frontend**! This client application is engineered with **Angular 22** utilizing the state-of-the-art **Angular Signals** architecture for Zone-free, lightweight, and modern state management.
 
-The UI is custom-styled with **Tailwind CSS v4** in a premium enterprise **gold & obsidian** design system.
+The UI is custom-styled with **Tailwind CSS v4** in a premium enterprise **gold & obsidian** design system linked to `shared/theme/tokens.json`.
 
 ---
 
@@ -20,11 +20,12 @@ This project uses **Tailwind CSS v4** (`^4.3.1`) natively within Angular 22's mo
       }
     }
     ```
-2.  **Global Theme Variables (`src/styles.css`):** Imports Tailwind CSS v4 natively and declares the custom brand colors inside the modern `@theme` directive:
+2.  **Global Theme Variables (`src/styles.css`):** Imports Tailwind CSS v4 natively and declares custom brand colors linked to `shared/theme/tokens.json`:
 
     ```css
     @import 'tailwindcss';
 
+    /* Linked to Shared Theme Tokens: shared/theme/tokens.json */
     @theme {
       --color-gold-light: #e5c185;
       --color-gold: #c5a059;
@@ -32,6 +33,10 @@ This project uses **Tailwind CSS v4** (`^4.3.1`) natively within Angular 22's mo
       --color-obsidian-light: #1e293b;
       --color-obsidian: #090d16;
       --color-obsidian-dark: #030712;
+      --color-status-pending: #fbbf24;
+      --color-status-approved: #34d399;
+      --color-status-denied: #f87171;
+      --color-status-info: #3b82f6;
     }
     ```
 
@@ -46,7 +51,17 @@ This project uses **Tailwind CSS v4** (`^4.3.1`) natively within Angular 22's mo
 
 ---
 
-## 🚀 2. Local Development & Setup
+## 🔁 2. Shared Single Source of Truth Linkage
+
+The frontend connects directly to the workspace-level `shared/` contract directory:
+
+* **API Types (`src/app/appointment.service.ts`)**: Imports API contracts (`AppointmentItem`, `ServiceItem`, `Barber`, `LoginResponse`, etc.) directly from `shared/types/api.ts`.
+* **Pure Time Utilities (`src/app/time-utils.ts`)**: Re-exports pure time formatting and date validation functions from `shared/utils/time-utils.ts`.
+* **Design Tokens (`src/styles.css`)**: Sourced from `shared/theme/tokens.json`.
+
+---
+
+## 🚀 3. Local Development & Setup
 
 ### Prerequisites
 
@@ -71,7 +86,7 @@ _Note: The Angular application is configured to proxy API requests to `http://lo
 
 ---
 
-## 🧪 3. Quality Gates, Testing, & Formatting
+## 🧪 4. Quality Gates, Testing, & Formatting
 
 We implement strict quality gates to guarantee compile-time and runtime compliance:
 
@@ -117,7 +132,7 @@ Full-stack E2E testing is powered by **Playwright**.
 
 ---
 
-## 🏗️ 4. Production Asset Bundling
+## 🏗️ 5. Production Asset Bundling
 
 To compile and bundle the application into optimized, production-ready static assets:
 
@@ -129,8 +144,8 @@ The resulting assets are generated in the `dist/` directory. These assets are th
 
 ---
 
-## 📁 5. Key Architecture Conventions
+## 📁 6. Key Architecture Conventions
 
 - **Signals-Only State:** Component state, inputs, and outputs use native Angular Signals (`signal()`, `computed()`, `input()`, `model()`) instead of raw RxJS streams where applicable, eliminating Zone.js change-detection overhead.
-- **Bearer JWT Interceptor:** The application stores active sessions in `sessionStorage`. The `auth.interceptor.ts` automatically intercepts every outgoing HttpClient request to attach the `Authorization: Bearer <Token>` header.
+- **Stateless JWT Cookie Authentication:** Auth state is managed via HttpOnly JWT cookies set by the backend. Role identity is restored into an in-memory Signal (`AuthState`) via `GET /api/v1/auth/me`.
 - **Route Preloading:** Modern lazy-loading is coupled with the `PreloadAllModules` strategy, allowing the browser to download feature chunks in the background while the user is idle, delivering near-instant navigation speeds.

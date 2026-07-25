@@ -141,16 +141,19 @@ export class App implements OnInit, OnDestroy {
       name: 'Alex the Barber',
       title: 'Master Stylist',
       specialty: 'Classic Scissor Cuts',
+      badge: 'Top Rated',
     },
     {
       name: 'Sara the Stylist',
       title: 'Skin Fade Expert',
       specialty: 'Skin Fades & Tapers',
+      badge: 'Featured',
     },
     {
       name: 'Marcus Master Blade',
       title: 'Director Barber',
       specialty: 'Razor Shaves & Beards',
+      badge: 'Master Barber',
     },
   ];
 

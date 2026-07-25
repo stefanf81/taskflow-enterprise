@@ -5,9 +5,9 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   Animated,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { CompositeNavigationProp } from '@react-navigation/native';
@@ -67,10 +67,10 @@ export const HomeScreen: React.FC = () => {
   ];
   const barbers = apiBarbers.length > 0 ? apiBarbers : fallbackBarbers;
 
-  const barberMeta: Record<string, { title: string; specialty: string }> = {
-    'Alex the Barber': { title: 'Master Stylist', specialty: 'Classic Scissor Cuts' },
-    'Sara the Stylist': { title: 'Skin Fade Expert', specialty: 'Skin Fades & Tapers' },
-    'Marcus Master Blade': { title: 'Director Barber', specialty: 'Razor Shaves & Beards' },
+  const barberMeta: Record<string, { title: string; specialty: string; badge?: string }> = {
+    'Alex the Barber': { title: 'Master Stylist', specialty: 'Classic Scissor Cuts', badge: 'Top Rated' },
+    'Sara the Stylist': { title: 'Skin Fade Expert', specialty: 'Skin Fades & Tapers', badge: 'Featured' },
+    'Marcus Master Blade': { title: 'Director Barber', specialty: 'Razor Shaves & Beards', badge: 'Master Barber' },
   };
 
   const faqs = [
@@ -257,6 +257,7 @@ export const HomeScreen: React.FC = () => {
                 specialty={meta.specialty}
                 rating={ratingText}
                 reviewsCount={reviewsCount}
+                badge={meta.badge}
                 onSelect={() => navigation.navigate('Booking', { preselectedBarber: b.name })}
               />
             );

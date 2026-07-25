@@ -11,6 +11,7 @@ interface StylistProps {
   specialty: string;
   rating?: string;
   reviewsCount?: string;
+  badge?: string;
   onSelect?: () => void;
   isSelected?: boolean;
 }
@@ -21,6 +22,7 @@ export const StylistCard: React.FC<StylistProps> = ({
   specialty,
   rating = '5.0 ★',
   reviewsCount = 'New',
+  badge,
   onSelect,
   isSelected = false,
 }) => {
@@ -30,7 +32,14 @@ export const StylistCard: React.FC<StylistProps> = ({
         <Ionicons name="person" size={28} color={colors.gold.main} />
       </View>
       <View style={styles.info}>
-        <Text style={styles.name}>{name}</Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.name}>{name}</Text>
+          {badge && (
+            <View style={styles.badgeContainer}>
+              <Text style={styles.badgeText}>{badge}</Text>
+            </View>
+          )}
+        </View>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.specialty}>{specialty}</Text>
 
@@ -76,10 +85,31 @@ const styles = StyleSheet.create({
   info: {
     flex: 1,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
   name: {
     color: colors.text.primary,
     fontSize: 16,
     fontWeight: '700',
+  },
+  badgeContainer: {
+    backgroundColor: colors.gold.dim,
+    borderColor: colors.gold.border,
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  badgeText: {
+    color: colors.gold.main,
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   title: {
     color: colors.gold.main,

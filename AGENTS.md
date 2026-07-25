@@ -21,21 +21,44 @@
   - State: TanStack Query (`@tanstack/react-query`) for server state, Zustand (`useAuthStore`, `useUIStore`) for client state.
   - Security: Secure JWT storage via `expo-secure-store` (iOS Keychain / Android Keystore).
   - Builds: EAS Build configured via `mobile/eas.json` for Android (APK/AAB) and iOS (Simulator/IPA).
+- **Shared Single Source of Truth**: `shared/`
+  - `shared/types/api.ts`: Centralized API DTO contracts synced with backend OpenAPI spec.
+  - `shared/theme/tokens.json`: Obsidian & Gold design system tokens shared by Web Tailwind CSS and Mobile NativeWind.
+  - `shared/utils/time-utils.ts`: Pure 12h/24h time and date utilities.
+  - `shared/component-map.json`: Cross-platform feature component mapping matrix.
 - **DB**: Flyway migrations in `src/main/resources/db/migration/`
+
+## Cross-Platform AI Feature Synchronization Workflow
+
+When modifying or porting a feature between Web (`frontend/`) and Mobile (`mobile/`):
+1. **Lookup Component Mapping**: Inspect `shared/component-map.json` to identify target files on both platforms.
+2. **Use Opencode Sync Skill**: Reference `.opencode/skills/sync-to-mobile.md` for exact framework translation rules:
+   * **State**: Angular Signals (`signal()`, `computed()`) $\rightarrow$ TanStack Query (`useQuery`) / Zustand (`useAuthStore`).
+   * **Templates**: Angular `@if`/`@for` $\rightarrow$ React Native JSX conditionals & `FlatList`/`map()`.
+   * **Theme**: Ensure color tokens originate from `shared/theme/tokens.json` (`colors.ts`).
+3. **Sync API Contracts**: If backend endpoints/DTOs change, run `npm run sync:api-types` to update `shared/types/api.ts`.
+4. **Verify**: Run `npm run lint:all` and `npm run test:all`.
 
 ## Commands
 
-### Backend (root)
+### Monorepo Workspace Commands (root)
+```bash
+npm run sync:api-types   # pull OpenAPI spec from Spring Boot and update shared/types/api.ts
+npm run test:all         # run unit tests across both Angular Web and React Native Mobile
+npm run lint:all         # run TypeScript type check on mobile and web
 ```
+
+### Backend (root)
+```bash
 ./gradlew build          # compile + test
 ./gradlew test           # unit + integration tests (Testcontainers for PostgreSQL)
 ./gradlew check          # test + OWASP dependency check (fails on CVSS >= 7)
-./gradlew bootJar           # build production JAR
+./gradlew bootJar        # build production JAR
 ./gradlew bootRun        # run backend locally (uses H2 by default)
 ```
 
 ### Frontend (`frontend/`)
-```
+```bash
 npm start                # Angular dev server on :4200
 npm test                 # unit tests (vitest via Angular builder)
 npm run e2e              # Playwright E2E (spins up dev server via webServer config)
@@ -44,7 +67,7 @@ npm run build            # production build
 ```
 
 ### Mobile (`mobile/`)
-```
+```bash
 npm start                # Start Expo Metro Bundler
 npm run android          # Run on Android Emulator or connected device
 npm run ios              # Run on iOS Simulator or connected device
@@ -52,7 +75,7 @@ npm test                 # Run Jest unit & component tests
 ```
 
 ### Developer Environment
-```
+```bash
 ./update-mcp.sh          # High-performance, concurrent OpenCode MCP and developer tool updater (Go, NPM, uv). Uses strict mode and atomic execution locks.
 ```
 
@@ -69,7 +92,7 @@ To maintain absolute data privacy, cost efficiency, and low-latency development 
     - LM Studio Model loading parameters: Saved in `lmstudio-qwen-config.json`
 
 ### Full-stack Docker
-```
+```bash
 ./start-docker.sh        # docker compose up (db → backend → frontend, health-checked)
 ./stop-docker.sh         # docker compose down
 ./verify.sh              # full-stack quality check (auto-starts Docker if needed, cleans up on exit)
@@ -89,8 +112,8 @@ Security scans (filesystem lints, container image vulnerability scans, and DAST 
   - **Container Lifecycle**: `docker-compose.yml` uses `restart: "no"` so containers do not linger across system/Docker reboots. Verification and E2E scripts (`./verify.sh`, `npm run e2e:docker`) use exit traps (`./stop-docker.sh`) to automatically stop containers after test completion.
 - **OSIV is off** (`spring.jpa.open-in-view=false`) — connections return to Hikari pool immediately after service methods.
 - **Auth**: Stateless JWT in an HttpOnly `access_token` cookie (Asymmetric RSA-2048 signing via OAuth2 Resource Server). Role/identity is restored via `GET /api/v1/auth/me` into an in-memory Signal (`AuthState`) and never stored in `sessionStorage`/`localStorage`. CSRF protection via double-submit `XSRF-TOKEN` cookie. `/api/v1/auth/**` is the only public endpoint path.
-- **Frontend uses Angular 22 Signals** (no Zone.js digest loops). Styles use Tailwind with custom `gold`/`obsidian` color palette.
-- **Mobile uses React Native & Expo** with TypeScript, React Navigation, TanStack Query, Zustand, NativeWind, and `expo-secure-store` for hardware token security.
+- **Frontend uses Angular 22 Signals** (no Zone.js digest loops). Styles use Tailwind with custom `gold`/`obsidian` color palette from `shared/theme/tokens.json`.
+- **Mobile uses React Native & Expo** with TypeScript, React Navigation, TanStack Query, Zustand, NativeWind, and `expo-secure-store` for hardware token security. Theme colors import from `shared/theme/tokens.json`.
 - **Prettier** is the formatter (100 char width, single quotes). Run `npx prettier --write <file>` in `frontend/`.
 - **Testcontainers** are used for PostgreSQL integration tests. They require Docker to be running.
 - **ArchUnit** enforces package-level architecture constraints (`src/test/java/com/example/taskflow/architecture/`).

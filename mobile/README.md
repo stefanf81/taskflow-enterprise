@@ -18,6 +18,18 @@ React Native + Expo Mobile Application
            Database
 ```
 
+---
+
+## 🔁 Shared Single Source of Truth Linkage
+
+The mobile app links directly into the workspace-level `shared/` contract directory:
+
+* **API Types (`src/types/api.ts`)**: Re-exports unified API contracts from `shared/types/api.ts` (synced with Spring Boot OpenAPI via `npm run sync:api-types`).
+* **Design System (`src/theme/colors.ts`)**: Dynamically imports theme tokens (`obsidian`, `gold`, `status`, `text`) from `shared/theme/tokens.json`.
+* **Pure Time Utilities (`src/utils/time-utils.ts`)**: Re-exports pure 12h/24h time formatting and `isOverdue` calculations from `shared/utils/time-utils.ts`.
+
+---
+
 ## Backend Connectivity & Security Model
 
 The mobile app connects to the Spring Boot REST API (`taskflow-backend`).
@@ -60,9 +72,9 @@ mobile/
 │   ├── navigation/          # React Navigation Navigators (Guest, Customer, Admin, Root)
 │   ├── screens/             # HomeScreen, BookingScreen, CatalogScreen, LookbookScreen, LoginScreen, RegisterScreen, PublicActionsScreen, CustomerPortalScreen, AdminDashboardScreen, AdminCatalogScreen, AdminSchedulesScreen, AdminNotificationsScreen
 │   ├── store/               # Zustand state stores (useAuthStore, useUIStore)
-│   ├── theme/               # Gold & Obsidian palette & colors
-│   ├── types/               # TypeScript models & Navigation ParamLists
-│   └── utils/               # SecureStorage wrapper
+│   ├── theme/               # Gold & Obsidian palette & colors (imports shared/theme/tokens.json)
+│   ├── types/               # TypeScript models (re-exports shared/types/api.ts) & Navigation ParamLists
+│   └── utils/               # SecureStorage wrapper & time-utils (re-exports shared/utils/time-utils.ts)
 ├── __tests__/               # Jest & React Native Testing Library test suites
 ├── App.tsx                  # Application entry point
 ├── app.json                 # Expo configuration

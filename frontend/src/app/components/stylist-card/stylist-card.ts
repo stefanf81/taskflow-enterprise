@@ -6,6 +6,7 @@ export interface StylistProfile {
   rating: string;
   reviews: string;
   specialty: string;
+  badge?: string;
 }
 
 @Component({
@@ -31,7 +32,14 @@ export interface StylistProfile {
       </div>
       <div class="flex-1 min-width-0">
         <div class="flex justify-between items-center">
-          <h3 class="m-0 text-zinc-100 font-extrabold text-sm">{{ profile().name }}</h3>
+          <div class="flex items-center gap-2">
+            <h3 class="m-0 text-zinc-100 font-extrabold text-sm">{{ profile().name }}</h3>
+            @if (profile().badge) {
+              <span class="text-[9px] uppercase font-black tracking-wider px-1.5 py-0.5 rounded bg-gold/20 text-gold border border-gold/30">
+                {{ profile().badge }}
+              </span>
+            }
+          </div>
           <span class="text-xs font-bold text-gold"
             >{{ profile().rating }}
             <span class="text-[10px] text-zinc-500 font-light"

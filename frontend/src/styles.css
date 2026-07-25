@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 
+/* Linked to Shared Theme Tokens: shared/theme/tokens.json */
 @theme {
   --color-gold-light: #e5c185;
   --color-gold: #c5a059;
@@ -7,6 +8,10 @@
   --color-obsidian-light: #1e293b;
   --color-obsidian: #090d16;
   --color-obsidian-dark: #030712;
+  --color-status-pending: #fbbf24;
+  --color-status-approved: #34d399;
+  --color-status-denied: #f87171;
+  --color-status-info: #3b82f6;
 }
 
 /* Custom base styles or variables can go here if needed */

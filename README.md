@@ -2,10 +2,11 @@
 
 **TaskFlow** is a modern, high-performance, full-stack appointment management and luxury salon booking platform.
 
-The suite comprises three core components:
-1. **Spring Boot 3.5 Backend (Java 21):** REST API server providing business logic, authentication, PostgreSQL persistence, Flyway migrations, and Redis caching.
-2. **Angular 22 Web Frontend:** Modern Angular Signals web application with Tailwind CSS gold & obsidian design system.
+The suite comprises three core components and a shared single-source-of-truth layer:
+1. **Spring Boot 3.5 Backend (Java 21):** REST API server providing business logic, OpenAPI specs, authentication, PostgreSQL persistence, Flyway migrations, and Redis caching.
+2. **Angular 22 Web Frontend (`frontend/`):** Modern Angular Signals web application with Tailwind CSS gold & obsidian design system.
 3. **React Native + Expo Mobile Application (`mobile/`):** Cross-platform native mobile application for Android (phones & tablets) and iOS (iPhone & iPad).
+4. **Shared Single Source of Truth Contracts (`shared/`):** Centralized TypeScript API types, theme design tokens, pure business utilities, and cross-platform feature mapping matrix.
 
 ---
 
@@ -13,22 +14,27 @@ The suite comprises three core components:
 
 ```text
                                ┌──────────────────────────────────┐
-                               │     Angular 22 Web Frontend      │
-                               │        (frontend/ - Port 4200)   │
+                               │  Spring Boot 3.5 Backend REST    │
+                               │        (Java 21 - Port 8080)     │
+                               │        http://localhost:8080     │
                                └────────────────┬─────────────────┘
                                                 │
-                                                │ REST API (JSON)
+                                                │ OpenAPI Spec (GET /v3/api-docs)
                                                 ▼
-┌──────────────────────────────────┐  ┌──────────────────────────────────┐
-│  React Native Mobile Application │  │   Spring Boot 3.5 Backend REST   │
-│     (mobile/ - Android & iOS)    ├─►│         (Java 21 - Port 8080)    │
-└──────────────────────────────────┘  └────────────────┬─────────────────┘
-                                                       │
-                                          ┌────────────┴────────────┐
-                                          ▼                         ▼
-                                ┌──────────────────┐      ┌──────────────────┐
-                                │ PostgreSQL 16 DB │      │   Redis Cache    │
-                                └──────────────────┘      └──────────────────┘
+                               ┌──────────────────────────────────┐
+                               │     Single Source Contracts      │
+                               │   • shared/types/api.ts          │
+                               │   • shared/theme/tokens.json     │
+                               │   • shared/utils/time-utils.ts   │
+                               │   • shared/component-map.json    │
+                               └────────┬─────────────────┬───────┘
+                                        │                 │
+                  ┌─────────────────────┘                 └─────────────────────┐
+                  ▼                                                             ▼
+┌──────────────────────────────────┐                           ┌──────────────────────────────────┐
+│     Angular 22 Web Frontend      │                           │  React Native Mobile Application │
+│      (frontend/ - Port 4200)     │                           │     (mobile/ - Android & iOS)    │
+└──────────────────────────────────┘                           └──────────────────────────────────┘
 ```
 
 ---
@@ -58,6 +64,16 @@ The suite comprises three core components:
 │   │   └── utils/                # expo-secure-store wrapper
 │   ├── app.json                  # Expo App configuration
 │   └── eas.json                  # EAS Build profiles (Android APK/AAB, iOS IPA)
+├── shared/                       # Single Source of Truth Contracts & Utilities
+│   ├── types/api.ts              # Unified API contracts (OpenAPI aligned)
+│   ├── theme/tokens.json         # Obsidian & Gold theme design tokens
+│   ├── utils/time-utils.ts       # Shared 12h/24h time formatting & date logic
+│   └── component-map.json        # Cross-platform Web ↔ Mobile feature mapping
+├── scripts/                      # Workspace utility scripts
+│   └── sync-api-types.js         # OpenAPI contract synchronizer
+├── .opencode/skills/             # AI Developer Agent Workflows
+│   └── sync-to-mobile.md         # Angular Web → React Native Mobile sync skill
+├── package.json                  # Root monorepo workspace scripts
 ├── docs/                         # Architectural Decision Records (ADRs)
 │   └── adr/
 ├── docker-compose.yml            # Local Docker orchestrator
@@ -66,6 +82,19 @@ The suite comprises three core components:
 ├── verify.sh                     # Full-stack quality verification (with auto-docker lifecycle)
 └── ARCHITECTURE.md               # End-to-End Architectural Blueprint
 ```
+
+---
+
+## 🚀 Workspace Commands
+
+| Command | Description |
+| :--- | :--- |
+| `npm run sync:api-types` | Pulls live OpenAPI spec from Spring Boot (`/v3/api-docs`) and updates `shared/types/api.ts` |
+| `npm run test:all` | Executes test suites across both Angular Web (`frontend/`) and React Native Mobile (`mobile/`) |
+| `npm run lint:all` | Performs TypeScript static type checks across both projects |
+| `./start-docker.sh` | Launches PostgreSQL, Redis, Spring Boot backend, and Nginx frontend in health-checked Docker stack |
+| `./stop-docker.sh` | Safely tears down local Docker stack |
+| `./verify.sh` | Full-stack end-to-end verification check |
 
 ---
 

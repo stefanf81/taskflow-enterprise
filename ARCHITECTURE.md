@@ -202,7 +202,7 @@ The mobile client architecture mirrors the Angular web functionality while optim
 2.  **Server State Management via TanStack Query (`src/hooks/`):** All asynchronous API states (appointments, service catalog, barbers, time-off, notifications, ratings) use TanStack Query for caching, retries, background refreshes, and mutation invalidations.
 3.  **Client Application State via Zustand (`src/store/`):** In-memory client states (active filter selections, search queries, active booking step) and JWT authentication credentials are handled by lightweight Zustand stores (`useAuthStore`, `useUIStore`).
 4.  **Hardware Secure Storage (`src/utils/storage.ts`):** JWT credentials and user session payloads are stored securely inside platform hardware stores (**iOS Keychain** and **Android Keystore**) via `expo-secure-store`.
-5.  **Styling & Design System (`src/theme/`):** Built with NativeWind (Tailwind CSS for React Native) adhering strictly to TaskFlow's Gold & Obsidian luxury salon color palette.
+5.  **Styling & Design System (`src/theme/`):** Built with NativeWind (Tailwind CSS for React Native) adhering strictly to TaskFlow's Gold & Obsidian luxury salon color palette sourced from `shared/theme/tokens.json`.
 6.  **Backend Connectivity & Zero-Trust Security:**
     *   **Local Routing**: iOS Simulator (`http://localhost:8080`), Android Emulator (`http://10.0.2.2:8080`), and Physical LAN Devices (`http://<LAN_IP>:8080`).
     *   **Production Deployment**: Replaces local API endpoints with public HTTPS domains (e.g. `https://api.taskflow.example.com`) via `EXPO_PUBLIC_API_URL` environment injection in `eas.json` or CLI flags (`EXPO_PUBLIC_API_URL=https://api.domain.com npx expo start -c`).
@@ -210,7 +210,44 @@ The mobile client architecture mirrors the Angular web functionality while optim
 
 ---
 
-## 🤖 9. Local Developer AI & Model Context Protocol (MCP) Architecture
+## 🔁 9. Single Source of Truth Contracts & AI Synchronization Framework
+
+To prevent architectural drift between the Web Frontend (`frontend/`) and Mobile App (`mobile/`), TaskFlow implements a **Single Source of Truth** contract layer in `shared/`:
+
+```text
+ ┌─────────────────────────────────────────────────────────────┐
+ │                 Spring Boot OpenAPI Spec                    │
+ │               (http://localhost:8080/v3/api-docs)          │
+ └──────────────────────────────┬──────────────────────────────┘
+                                │
+                                │ npm run sync:api-types
+                                ▼
+ ┌─────────────────────────────────────────────────────────────┐
+ │             Single Source Contracts (shared/)               │
+ │  • shared/types/api.ts          (Unified DTO Contracts)     │
+ │  • shared/theme/tokens.json     (Obsidian & Gold Palette)   │
+ │  • shared/utils/time-utils.ts   (Pure Time Formatting)      │
+ │  • shared/component-map.json    (Feature Matrix)            │
+ └──────────────┬──────────────────────────────┬───────────────┘
+                │                              │
+                ▼                              ▼
+ ┌──────────────────────────────┐ ┌──────────────────────────────┐
+ │     Web Frontend (@frontend) │ │     Mobile App (@mobile)     │
+ │  • Angular 22 Signals        │ │  • React Native + Expo       │
+ │  • Tailwind CSS (@theme)     │ │  • NativeWind + Query        │
+ └──────────────────────────────┘ └──────────────────────────────┘
+```
+
+### Components of the Sync Framework:
+1. **API Contract Generator (`scripts/sync-api-types.js`)**: Fetches OpenAPI specs from Spring Boot (`/v3/api-docs`) and updates `shared/types/api.ts`. Both `frontend/src/app/appointment.service.ts` and `mobile/src/types/api.ts` import from this file.
+2. **Design Tokens (`shared/theme/tokens.json`)**: Centralizes theme color hex values and translucent highlights. Sourced by `frontend/src/styles.css` (`@theme`) and `mobile/src/theme/colors.ts`.
+3. **Pure Business Utilities (`shared/utils/time-utils.ts`)**: Holds 12h/24h time formatting and `isOverdue` calculations. Re-exported by `frontend/src/app/time-utils.ts` and `mobile/src/utils/time-utils.ts`.
+4. **Feature Mapping Matrix (`shared/component-map.json`)**: Maps feature domains (e.g. Stylist Cards, Booking Wizard, Customer Portal, Admin Dashboard) directly between Angular Web components/stores and React Native screens/hooks.
+5. **Opencode AI Skill (`.opencode/skills/sync-to-mobile.md`)**: Instructs AI agents on framework translation rules (Angular Signals $\rightarrow$ TanStack Query / Zustand; Angular HTML $\rightarrow$ React Native JSX components).
+
+---
+
+## 🤖 10. Local Developer AI & Model Context Protocol (MCP) Architecture
 
 To optimize development iteration speed, full-stack reasoning precision, and data privacy, the TaskFlow workspace features a SOTA **Local Developer AI and MCP orchestrator loop**. It connects local AI inference with a suite of unprivileged, sandboxed tools to automate file operations, tests, database queries, and browser rendering:
 
