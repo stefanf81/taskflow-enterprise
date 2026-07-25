@@ -55,9 +55,9 @@ This project uses **Tailwind CSS v4** (`^4.3.1`) natively within Angular 22's mo
 
 The frontend connects directly to the workspace-level `shared/` contract directory:
 
-* **API Types (`src/app/appointment.service.ts`)**: Imports API contracts (`AppointmentItem`, `ServiceItem`, `Barber`, `LoginResponse`, etc.) directly from `shared/types/api.ts`.
-* **Pure Time Utilities (`src/app/time-utils.ts`)**: Re-exports pure time formatting and date validation functions from `shared/utils/time-utils.ts`.
-* **Design Tokens (`src/styles.css`)**: Sourced from `shared/theme/tokens.json`.
+- **API Types (`src/app/appointment.service.ts`)**: Imports API contracts (`AppointmentItem`, `ServiceItem`, `Barber`, `LoginResponse`, etc.) directly from `shared/types/api.ts`.
+- **Pure Time Utilities (`src/app/time-utils.ts`)**: Re-exports pure time formatting and date validation functions from `shared/utils/time-utils.ts`.
+- **Design Tokens (`src/styles.css`)**: Sourced from `shared/theme/tokens.json`.
 
 ---
 

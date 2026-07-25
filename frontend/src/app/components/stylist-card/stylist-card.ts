@@ -35,7 +35,9 @@ export interface StylistProfile {
           <div class="flex items-center gap-2">
             <h3 class="m-0 text-zinc-100 font-extrabold text-sm">{{ profile().name }}</h3>
             @if (profile().badge) {
-              <span class="text-[9px] uppercase font-black tracking-wider px-1.5 py-0.5 rounded bg-gold/20 text-gold border border-gold/30">
+              <span
+                class="text-[9px] uppercase font-black tracking-wider px-1.5 py-0.5 rounded bg-gold/20 text-gold border border-gold/30"
+              >
                 {{ profile().badge }}
               </span>
             }

@@ -62,7 +62,7 @@ public class AuthController {
 
         addAuthCookie(response, jwt);
 
-        return ResponseEntity.ok(new LoginResponse(authentication.getName(), role, jwt));
+        return ResponseEntity.ok(new LoginResponse(authentication.getName(), role));
     }
 
     @PostMapping("/register")
