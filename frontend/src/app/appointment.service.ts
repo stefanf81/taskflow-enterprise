@@ -62,8 +62,8 @@ export class AppointmentService {
     );
   }
 
-  cancelCustomerAppointment(id: number): Observable<void> {
-    return this.http.delete<void>(`${this.customerUrl}/appointments/${id}`);
+  cancelCustomerAppointment(publicId: string): Observable<void> {
+    return this.http.delete<void>(`${this.customerUrl}/appointments/${publicId}`);
   }
 
   // --- Reviews API ---

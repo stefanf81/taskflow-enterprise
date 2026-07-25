@@ -38,16 +38,16 @@ public class CustomerController {
         return ResponseEntity.ok(appointmentService.getMyAppointments(email, page, size));
     }
 
-    @DeleteMapping("/appointments/{id}")
+    @DeleteMapping("/appointments/{publicId}")
     @Operation(summary = "Cancel my appointment")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Appointment cancelled successfully"),
             @ApiResponse(responseCode = "401", description = "Not authenticated"),
             @ApiResponse(responseCode = "404", description = "Appointment not found or not owned by user")
     })
-    public ResponseEntity<Void> cancelMyAppointment(@Parameter(description = "Appointment database ID") @PathVariable Long id, Authentication authentication) {
+    public ResponseEntity<Void> cancelMyAppointment(@Parameter(description = "Appointment public UUID") @PathVariable String publicId, Authentication authentication) {
         String email = authentication.getName();
-        appointmentService.cancelMyAppointment(id, email);
+        appointmentService.cancelMyAppointment(publicId, email);
         return ResponseEntity.noContent().build();
     }
 }

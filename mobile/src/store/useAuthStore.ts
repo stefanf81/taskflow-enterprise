@@ -29,9 +29,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const res = await authApi.login(credentials);
-      if (res.token) {
-        await storage.setToken(res.token);
-      }
+      // The backend issues the JWT via an HttpOnly, SameSite=Strict cookie
+      // (LoginResponse only carries username + role — no token in the body).
+      // Mobile auth therefore rides on the cookie via withCredentials; the JWT
+      // is never held in JavaScript, mirroring the XSS-safe web flow.
       await storage.setUserData({ username: res.username, role: res.role });
 
       // Re-fetch the CSRF token — the session cookie may have changed
@@ -106,6 +107,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (res.username && res.role) {
         // Server confirmed identity — fully authenticated
         await storage.setUserData({ username: res.username, role: res.role });
+
+        // Eagerly pre-fetch the CSRF token so the first state-changing request
+        // doesn't have to wait for a separate /auth/csrf round-trip (the
+        // request interceptor would otherwise lazy-fetch it and could fail
+        // silently, leaving subsequent POSTs with a stale/missing token).
+        try {
+          const csrf = await authApi.fetchCsrfToken();
+          setCsrfToken(csrf);
+        } catch {
+          // Non-fatal; the interceptor will lazily fetch it.
+        }
+
         set({
           isAuthenticated: true,
           isLoading: false,

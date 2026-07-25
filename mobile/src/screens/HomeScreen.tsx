@@ -24,6 +24,36 @@ import { useAuthStore } from '../store/useAuthStore';
 import { RootStackParamList, GuestTabParamList } from '../types/navigation';
 import { colors } from '../theme/colors';
 
+// Module-level constants — defined outside the component to avoid
+// re-creation on every render (P1: memoization of static data).
+
+const FALLBACK_BARBERS = [
+  { id: 1, name: 'Alex the Barber', email: '', phone: '' },
+  { id: 2, name: 'Sara the Stylist', email: '', phone: '' },
+  { id: 3, name: 'Marcus Master Blade', email: '', phone: '' },
+];
+
+const BARBER_META: Record<string, { title: string; specialty: string; badge?: string }> = {
+  'Alex the Barber': { title: 'Master Stylist', specialty: 'Classic Scissor Cuts', badge: 'Top Rated' },
+  'Sara the Stylist': { title: 'Skin Fade Expert', specialty: 'Skin Fades & Tapers', badge: 'Featured' },
+  'Marcus Master Blade': { title: 'Director Barber', specialty: 'Razor Shaves & Beards', badge: 'Master Barber' },
+};
+
+const FAQS = [
+  {
+    q: 'Do I need an account to book an appointment?',
+    a: 'No! You can book instantly as a guest. We will issue a unique Public Reference ID for tracking, cancellations, and reviews.',
+  },
+  {
+    q: 'What is your cancellation policy?',
+    a: 'You can cancel up to 2 hours prior to your scheduled slot using your Public Reference ID and Email.',
+  },
+  {
+    q: 'How does payment work?',
+    a: 'Payment is collected in-salon upon service completion. All major cards and cash are accepted.',
+  },
+];
+
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<GuestTabParamList, 'Home'>,
   NativeStackNavigationProp<RootStackParamList>
@@ -59,34 +89,8 @@ export const HomeScreen: React.FC = () => {
     return () => animation.stop();
   }, [pingAnim]);
 
-  // Fallback static data used when the API hasn't loaded yet
-  const fallbackBarbers = [
-    { id: 1, name: 'Alex the Barber', email: '', phone: '' },
-    { id: 2, name: 'Sara the Stylist', email: '', phone: '' },
-    { id: 3, name: 'Marcus Master Blade', email: '', phone: '' },
-  ];
-  const barbers = apiBarbers.length > 0 ? apiBarbers : fallbackBarbers;
-
-  const barberMeta: Record<string, { title: string; specialty: string; badge?: string }> = {
-    'Alex the Barber': { title: 'Master Stylist', specialty: 'Classic Scissor Cuts', badge: 'Top Rated' },
-    'Sara the Stylist': { title: 'Skin Fade Expert', specialty: 'Skin Fades & Tapers', badge: 'Featured' },
-    'Marcus Master Blade': { title: 'Director Barber', specialty: 'Razor Shaves & Beards', badge: 'Master Barber' },
-  };
-
-  const faqs = [
-    {
-      q: 'Do I need an account to book an appointment?',
-      a: 'No! You can book instantly as a guest. We will issue a unique Public Reference ID for tracking, cancellations, and reviews.',
-    },
-    {
-      q: 'What is your cancellation policy?',
-      a: 'You can cancel up to 2 hours prior to your scheduled slot using your Public Reference ID and Email.',
-    },
-    {
-      q: 'How does payment work?',
-      a: 'Payment is collected in-salon upon service completion. All major cards and cash are accepted.',
-    },
-  ];
+  // Use module-level constants (P1: no re-creation per render)
+  const barbers = apiBarbers.length > 0 ? apiBarbers : FALLBACK_BARBERS;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -247,7 +251,7 @@ export const HomeScreen: React.FC = () => {
             const dbRating = ratings.find((r) => r.barberName === b.name);
             const ratingText = dbRating ? `${dbRating.averageRating.toFixed(1)} ★` : '5.0 ★';
             const reviewsCount = dbRating ? `${dbRating.reviewCount} reviews` : 'New';
-            const meta = barberMeta[b.name] || { title: 'Stylist', specialty: 'Salon Services' };
+            const meta = BARBER_META[b.name] || { title: 'Stylist', specialty: 'Salon Services' };
 
             return (
               <StylistCard
@@ -267,7 +271,7 @@ export const HomeScreen: React.FC = () => {
         {/* ===== FAQS ===== */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
-          {faqs.map((f, idx) => {
+          {FAQS.map((f, idx) => {
             const isOpen = activeFaq === idx;
             return (
               <TouchableOpacity

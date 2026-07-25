@@ -102,9 +102,11 @@ describe('CustomerStore', () => {
   it('should cancel an appointment via cancelAppointment', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    store.cancelAppointment(1);
+    store.cancelAppointment('test-public-uuid');
 
-    const req = httpMock.expectOne((r) => r.url.includes('/api/v1/customer/appointments/1'));
+    const req = httpMock.expectOne((r) =>
+      r.url.includes('/api/v1/customer/appointments/test-public-uuid'),
+    );
     expect(req.request.method).toBe('DELETE');
     req.flush(null);
 
@@ -115,7 +117,7 @@ describe('CustomerStore', () => {
   it('should skip cancellation if the user does not confirm', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false);
 
-    store.cancelAppointment(1);
+    store.cancelAppointment('uuid-1');
 
     httpMock.expectNone((r) => r.url.includes('/api/v1/customer/appointments'));
     expect(store.isCancelling()).toBe(false);
@@ -124,9 +126,9 @@ describe('CustomerStore', () => {
   it('should surface a cancel error on API failure', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    store.cancelAppointment(1);
+    store.cancelAppointment('uuid-2');
 
-    const req = httpMock.expectOne((r) => r.url.includes('/api/v1/customer/appointments/1'));
+    const req = httpMock.expectOne((r) => r.url.includes('/api/v1/customer/appointments/uuid-2'));
     req.error(new ProgressEvent('error'), { status: 400, statusText: 'Bad Request' });
 
     expect(store.isCancelling()).toBe(false);
@@ -137,9 +139,9 @@ describe('CustomerStore', () => {
   it('should extract error detail from backend response (error case)', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    store.cancelAppointment(1);
+    store.cancelAppointment('uuid-3');
 
-    const req = httpMock.expectOne((r) => r.url.includes('/api/v1/customer/appointments/1'));
+    const req = httpMock.expectOne((r) => r.url.includes('/api/v1/customer/appointments/uuid-3'));
     req.flush(
       { message: 'Cannot cancel within 24 hours' },
       { status: 400, statusText: 'Bad Request' },

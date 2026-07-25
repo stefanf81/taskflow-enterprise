@@ -277,13 +277,13 @@ public class FeaturesIntegrationTest {
         String bobToken = "Bearer " + bobCookie;
 
         // Bob tries to cancel Jane's appointment (should fail with 404 Not Found / Unauthorized)
-        mockMvc.perform(delete("/api/v1/customer/appointments/" + apptMap.get("id"))
+        mockMvc.perform(delete("/api/v1/customer/appointments/" + publicId)
                         .header("Authorization", bobToken))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message", is("Appointment not found or unauthorized.")));
 
         // Jane cancels her own appointment successfully (returns 204 No Content)
-        mockMvc.perform(delete("/api/v1/customer/appointments/" + apptMap.get("id"))
+        mockMvc.perform(delete("/api/v1/customer/appointments/" + publicId)
                         .header("Authorization", customerToken))
                 .andExpect(status().isNoContent());
     }

@@ -231,12 +231,6 @@ describe('App Component Quality Assurance Suite', () => {
   });
 
   it('should support non-HTTP simple helper methods', () => {
-    app.setAdminView('notifications');
-    expect(app.adminView()).toBe('notifications');
-
-    app.setAdminView('schedules');
-    expect(app.adminView()).toBe('schedules');
-
     expect(app.isOverdue({ bookingDate: '2020-01-01' } as any)).toBe(true);
     expect(app.isOverdue({ bookingDate: '2099-12-31' } as any)).toBe(false);
     expect(app.isOverdue({} as any)).toBe(false);

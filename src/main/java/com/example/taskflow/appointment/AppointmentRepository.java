@@ -31,11 +31,20 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     @Query("SELECT a FROM Appointment a WHERE a.id = :id")
     java.util.Optional<Appointment> findByIdForUpdate(@Param("id") Long id);
     
-    @Query(value = "SELECT DISTINCT a.booking_time FROM appointments a WHERE a.barber_name = :barberName AND a.booking_date = :bookingDate AND a.status <> :status ORDER BY a.booking_time LIMIT 500", 
-           nativeQuery = true)
+    // V22 migrated booking_time from VARCHAR to TIME. PostgreSQL's substr()
+    // does not accept TIME arguments, so we must first CAST the column to a
+    // character type before applying SUBSTRING.
+    @Query("""
+        SELECT DISTINCT SUBSTRING(CAST(a.bookingTime AS string), 1, 5)
+        FROM Appointment a
+        WHERE a.barberName = :barberName
+          AND a.bookingDate = :bookingDate
+          AND a.status <> :status
+        ORDER BY SUBSTRING(CAST(a.bookingTime AS string), 1, 5)
+    """)
     java.util.List<String> findDistinctBookingTimes(@Param("barberName") String barberName, 
                                                      @Param("bookingDate") LocalDate bookingDate, 
-                                                     @Param("status") String status);
+                                                     @Param("status") AppointmentStatus status);
     
     @Query("SELECT new com.example.taskflow.appointment.AppointmentStats(" +
             "COUNT(a), " +

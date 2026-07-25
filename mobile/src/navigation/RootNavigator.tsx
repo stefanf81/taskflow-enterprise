@@ -38,10 +38,17 @@ export const RootNavigator: React.FC = () => {
       prev.role !== role
     ) {
       prevAuthRef.current = { isAuthenticated, role };
+
+      // Route to the correct navigator based on new auth state,
+      // rather than always resetting to GuestTabs (which caused a UX flash).
+      const targetRoute = isAuthenticated
+        ? (role === 'ROLE_CUSTOMER' ? 'CustomerTabs' : 'AdminTabs')
+        : 'GuestTabs';
+
       navigationRef.current?.dispatch(
         CommonActions.reset({
           index: 0,
-          routes: [{ name: 'GuestTabs' }],
+          routes: [{ name: targetRoute as keyof RootStackParamList }],
         }),
       );
     }

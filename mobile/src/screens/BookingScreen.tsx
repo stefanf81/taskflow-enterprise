@@ -80,7 +80,8 @@ export const BookingScreen: React.FC = () => {
   const { data: apiBarbers = [] } = useBarbers();
   const createMutation = useCreateAppointment();
 
-  const upcomingDays = getUpcomingDays();
+  // Memoize upcoming days — they only change at midnight (P1: avoid recompute per render)
+  const upcomingDays = useMemo(() => getUpcomingDays(), []);
 
   // Build barber list from API, fallback to static names
   const barberNames = apiBarbers.length > 0

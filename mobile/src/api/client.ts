@@ -37,10 +37,18 @@ const isCsrfExempt = (url: string, method?: string): boolean => {
 
 const getBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_API_URL) {
-    if (Platform.OS === 'android' && process.env.EXPO_PUBLIC_API_URL.includes('localhost')) {
-      return process.env.EXPO_PUBLIC_API_URL.replace('localhost', '10.0.2.2');
+    let url = process.env.EXPO_PUBLIC_API_URL;
+    if (Platform.OS === 'android' && url.includes('localhost')) {
+      url = url.replace('localhost', '10.0.2.2');
     }
-    return process.env.EXPO_PUBLIC_API_URL;
+    // Enforce HTTPS in production builds (not dev — localhost is fine for development)
+    if (!__DEV__ && url.startsWith('http://')) {
+      throw new Error(
+        'Production API URL must use HTTPS. Found: ' + url +
+        '. Set EXPO_PUBLIC_API_URL to an https:// URL in your production .env file.',
+      );
+    }
+    return url;
   }
   // Android Emulator maps localhost to 10.0.2.2
   if (Platform.OS === 'android') {

@@ -79,7 +79,7 @@ public class BusySlotsService {
             }
 
             // 3. Barber is scheduled and not off
-            return appointmentRepository.findDistinctBookingTimes(barberName, date, "DENIED");
+            return appointmentRepository.findDistinctBookingTimes(barberName, date, AppointmentStatus.DENIED);
         } catch (Exception e) {
             // H12: On any failure, return ALL_SLOTS as a conservative safe default.
             // Returning empty list would incorrectly show "all slots available",

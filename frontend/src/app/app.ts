@@ -8,6 +8,7 @@ import {
   DestroyRef,
   ChangeDetectionStrategy,
   ViewEncapsulation,
+  isDevMode,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
@@ -18,8 +19,6 @@ import { AppointmentService, AppointmentItem } from './appointment.service';
 import { AuthState } from './auth.state';
 import { AppointmentStore } from './appointment.store';
 import { ServiceCatalogStore } from './service-catalog.store';
-import { BarberStore } from './barber.store';
-import { NotificationStore } from './notification.store';
 import { ReviewStore } from './review.store';
 import { formatTime12Hour, isOverdue, DEFAULT_TIME_SLOTS } from './time-utils';
 import { CustomerStore } from './customer.store';
@@ -68,8 +67,6 @@ export class App implements OnInit, OnDestroy {
   private readonly appointmentService = inject(AppointmentService);
   private readonly store = inject(AppointmentStore);
   private readonly catalogStore = inject(ServiceCatalogStore);
-  private readonly barberStore = inject(BarberStore);
-  private readonly notificationStore = inject(NotificationStore);
   private readonly reviewStore = inject(ReviewStore);
   readonly customerStore = inject(CustomerStore);
   private readonly router = inject(Router);
@@ -289,51 +286,9 @@ export class App implements OnInit, OnDestroy {
     this.router.navigateByUrl(this.authState.dashboardPathFor(role));
   }
 
-  // Admin View State
-  readonly adminView = signal<'appointments' | 'services' | 'schedules' | 'notifications'>(
-    'appointments',
-  );
+  // Admin View State (moved to AdminDashboard; kept here only for showAdminLoginModal)
 
-  setAdminView(view: 'appointments' | 'services' | 'schedules' | 'notifications'): void {
-    this.adminView.set(view);
-    if (view === 'schedules') {
-      this.barberStore.loadBarbers();
-    } else if (view === 'notifications') {
-      this.notificationStore.loadNotifications();
-    }
-  }
-
-  // --- Barber Schedule Admin ---
-  readonly barbersList = this.barberStore.barbers;
-  readonly timeOffs = this.barberStore.timeOffs;
-  readonly selectedBarberId = this.barberStore.selectedBarberId;
-
-  readonly newTimeOffStartDate = signal('');
-  readonly newTimeOffEndDate = signal('');
-  readonly newTimeOffReason = signal('');
-
-  addTimeOff(): void {
-    if (!this.newTimeOffStartDate() || !this.newTimeOffEndDate()) {
-      this.errorMessage.set('Start and end dates are required.');
-      return;
-    }
-    this.barberStore.addTimeOff({
-      startDate: this.newTimeOffStartDate(),
-      endDate: this.newTimeOffEndDate(),
-      reason: this.newTimeOffReason(),
-    });
-    this.showSuccess('Time off added successfully.');
-    this.newTimeOffStartDate.set('');
-    this.newTimeOffEndDate.set('');
-    this.newTimeOffReason.set('');
-  }
-
-  selectAdminBarber(id: number): void {
-    this.barberStore.selectBarber(id);
-  }
-
-  // --- Notification Outbox Admin ---
-  readonly notificationsList = this.notificationStore.notifications;
+  // --- Notification Outbox Admin (moved to AdminDashboard) ---
 
   // Handle Admin Logout delegated to the Store
   onLogout(): void {
@@ -378,14 +333,19 @@ export class App implements OnInit, OnDestroy {
           this.resetBookingForm();
         },
         error: (err) => {
-          console.error(
-            'CREATE APPT ERROR STATUS:',
-            err.status,
-            'MESSAGE:',
-            err.message,
-            'BODY:',
-            err.error,
-          );
+          // Verbose error logging only in dev builds to avoid leaking backend
+          // error details (validation field names, partial payloads) into the
+          // production browser console.
+          if (isDevMode()) {
+            console.error(
+              'CREATE APPT ERROR STATUS:',
+              err.status,
+              'MESSAGE:',
+              err.message,
+              'BODY:',
+              err.error,
+            );
+          }
           this.errorMessage.set(err.error?.message || 'Failed to submit booking request.');
           this.isSubmitting.set(false);
         },
@@ -401,52 +361,8 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  // Approve Booking
-  approveAppointment(id: number): void {
-    this.appointmentService
-      .updateAppointmentStatus(id, 'APPROVED')
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: () => {
-          this.showSuccess('Appointment APPROVED! Client notification email dispatched.');
-          this.loadAppointments();
-        },
-        error: () => this.errorMessage.set('Failed to approve appointment.'),
-      });
-  }
-
-  // Deny Booking
-  denyAppointment(id: number): void {
-    this.appointmentService
-      .updateAppointmentStatus(id, 'DENIED')
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: () => {
-          this.showSuccess('Appointment DECLINED. Client notification email dispatched.');
-          this.loadAppointments();
-        },
-        error: () => this.errorMessage.set('Failed to decline appointment.'),
-      });
-  }
-
-  // Delete/Cancel Booking
-  deleteAppointment(id: number): void {
-    if (confirm('Are you sure you want to permanently delete/cancel this booking?')) {
-      this.appointmentService
-        .deleteAppointment(id)
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe({
-          next: () => {
-            this.showSuccess('Booking permanently deleted.');
-            if (this.appointments().length === 1 && this.currentPage() > 0) {
-              this.currentPage.update((p) => p - 1);
-            }
-            this.loadAppointments();
-          },
-          error: () => this.errorMessage.set('Failed to delete booking.'),
-        });
-    }
-  }
+  // Admin actions (approve/deny/delete) have been moved to AdminDashboard.
+  // The App component no longer duplicates them — see src/app/features/admin/admin-dashboard.ts.
 
   // Set Admin Dashboard Filters
   setFilter(filter: string): void {
@@ -591,6 +507,26 @@ export class App implements OnInit, OnDestroy {
 
   readonly checkoutTotal = computed(() => {
     return this.checkoutSubtotal() + this.checkoutFee();
+  });
+
+  // Zoneless-safe formatted signals (replaces Angular pipes on Signal values)
+  readonly formattedBookingDate = computed(() => {
+    const d = this.bookingDate();
+    if (!d) return '';
+    const date = new Date(d + 'T00:00:00');
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  });
+
+  readonly formattedSubtotal = computed(() => {
+    return `$${this.checkoutSubtotal().toFixed(2)}`;
+  });
+
+  readonly formattedFee = computed(() => {
+    return this.checkoutFee().toFixed(2);
+  });
+
+  readonly formattedTotal = computed(() => {
+    return this.checkoutTotal().toFixed(2);
   });
 
   onPublicCancel(publicId: string, email: string): void {

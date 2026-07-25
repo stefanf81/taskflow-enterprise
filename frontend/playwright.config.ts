@@ -21,6 +21,14 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:4200',
     trace: 'on',
     screenshot: 'only-on-failure',
+    // Playwright injects inline automation scripts into the page context.
+    // When the frontend is served through the Docker nginx reverse proxy
+    // (which sets a strict Content-Security-Policy: script-src 'self'),
+    // those scripts are blocked and all page-interaction tests fail.
+    // bypassCSP tells Chromium to ignore CSP headers during testing —
+    // the CSP itself is validated by the project's DAST security scanner
+    // (`.github/workflows/dast.yml`), not by E2E tests.
+    bypassCSP: true,
   },
 
   projects: [

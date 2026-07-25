@@ -15,20 +15,16 @@ import java.util.List;
 @Tag(name = "Notification Outbox", description = "View history of sent SMS/Emails")
 public class NotificationController {
 
-    private final NotificationOutboxRepository repository;
+    private final NotificationService notificationService;
 
-    public NotificationController(NotificationOutboxRepository repository) {
-        this.repository = repository;
+    public NotificationController(NotificationService notificationService) {
+        this.notificationService = notificationService;
     }
 
     @GetMapping
     @Operation(summary = "Get all notifications (Admin Only)")
     @ApiResponse(responseCode = "200", description = "List of notifications returned (newest first, capped at top 100)")
     public ResponseEntity<List<NotificationOutboxResponse>> getNotifications() {
-        List<NotificationOutboxResponse> responses = repository.findTop100ByOrderBySentAtDesc()
-                .stream()
-                .map(NotificationOutboxResponse::fromEntity)
-                .toList();
-        return ResponseEntity.ok(responses);
+        return ResponseEntity.ok(notificationService.getRecentNotifications());
     }
 }

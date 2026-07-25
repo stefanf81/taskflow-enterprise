@@ -65,7 +65,6 @@ export interface LoginRequest {
 export interface LoginResponse {
   username: string;
   role: 'ROLE_ADMIN' | 'ROLE_CUSTOMER';
-  token?: string;
 }
 
 export interface RegisterRequest {

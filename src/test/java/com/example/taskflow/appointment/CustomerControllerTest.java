@@ -51,9 +51,9 @@ class CustomerControllerTest {
     @Test
     void cancelMyAppointment_shouldSucceed() {
         when(authentication.getName()).thenReturn("user@test.com");
-        doNothing().when(appointmentService).cancelMyAppointment(1L, "user@test.com");
+        doNothing().when(appointmentService).cancelMyAppointment("test-uuid-123", "user@test.com");
 
-        ResponseEntity<Void> result = customerController.cancelMyAppointment(1L, authentication);
+        ResponseEntity<Void> result = customerController.cancelMyAppointment("test-uuid-123", authentication);
 
         assertEquals(HttpStatus.NO_CONTENT, result.getStatusCode());
     }

@@ -19,9 +19,6 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
@@ -42,8 +39,6 @@ import java.security.KeyPairGenerator;
 import java.util.List;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.UUID;
 
 @Configuration
@@ -54,7 +49,6 @@ public class SecurityConfig {
 
     private final String adminUsername;
     private final String adminPassword;
-    private final String allowedOrigins;
     private final KeyPair keyPair;
     private final RSAKey rsaKey;
     private final DataSource dataSource;
@@ -64,7 +58,6 @@ public class SecurityConfig {
     public SecurityConfig(
             @Value("${spring.security.user.name:admin}") String adminUsername,
             @Value("${spring.security.user.password}") String adminPassword,
-            @Value("${app.cors.allowed-origins:*}") String allowedOrigins,
             @Value("${app.rsa.private-key:#{null}}") String privateKeyB64,
             @Value("${app.rsa.public-key:#{null}}") String publicKeyB64,
             @Value("${app.jwt.issuer:taskflow}") String jwtIssuer,
@@ -72,7 +65,6 @@ public class SecurityConfig {
             DataSource dataSource) {
         this.adminUsername = adminUsername;
         this.adminPassword = adminPassword;
-        this.allowedOrigins = allowedOrigins;
         this.dataSource = dataSource;
         this.jwtIssuer = jwtIssuer;
         this.jwtAudience = jwtAudience;
@@ -107,7 +99,7 @@ public class SecurityConfig {
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
             )
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .cors(cors -> {})  // CorsConfigurationSource is provided by CorsConfig @Bean auto-detection
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
@@ -231,27 +223,12 @@ public class SecurityConfig {
         }
     }
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        
-        if ("*".equals(allowedOrigins)) {
-            configuration.setAllowedOriginPatterns(Collections.singletonList("*"));
-            configuration.setAllowCredentials(true);
-        } else {
-            configuration.setAllowedOrigins(Arrays.asList(allowedOrigins.split(",")));
-            configuration.setAllowCredentials(true);
-        }
-
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Collections.singletonList("*"));
-        configuration.setExposedHeaders(Arrays.asList("Authorization", "Set-Cookie", "X-XSRF-TOKEN"));
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-        return source;
-    }
-
+    /**
+     * Load a persistent RSA keypair from APP_RSA_PRIVATE_KEY / APP_RSA_PUBLIC_KEY
+     * environment variables (base64-encoded DER). Falls back to a freshly generated
+     * ephemeral key when the env vars are absent (logged at WARN — JWT tokens become
+     * invalid on restart in this case).
+     */
     private static KeyPair loadOrGenerateRsaKeyPair(String privateKeyB64, String publicKeyB64) {
         if (privateKeyB64 != null && !privateKeyB64.isBlank() && 
             publicKeyB64 != null && !publicKeyB64.isBlank()) {
@@ -277,7 +254,8 @@ public class SecurityConfig {
             KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
             keyPairGenerator.initialize(2048);
             KeyPair kp = keyPairGenerator.generateKeyPair();
-            logger.error("*** EPHEMERAL RSA KEY IN USE *** All JWT tokens invalidated on restart. Set APP_RSA_PRIVATE_KEY and APP_RSA_PUBLIC_KEY env vars for persistent signing.");
+            logger.warn("*** EPHEMERAL RSA KEY IN USE *** All JWT tokens invalidated on restart. "
+                    + "Set APP_RSA_PRIVATE_KEY and APP_RSA_PUBLIC_KEY env vars for persistent signing.");
             return kp;
         } catch (Exception e) {
             throw new IllegalStateException("Failed to generate RSA key pair", e);

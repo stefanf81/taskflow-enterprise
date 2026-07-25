@@ -40,8 +40,8 @@ describe('customerApi', () => {
   describe('cancelAppointment', () => {
     it('sends DELETE for customer appointment', async () => {
       mockedDelete.mockResolvedValueOnce({});
-      await customerApi.cancelAppointment(3);
-      expect(mockedDelete).toHaveBeenCalledWith('/api/v1/customer/appointments/3');
+      await customerApi.cancelAppointment('test-uuid-abc');
+      expect(mockedDelete).toHaveBeenCalledWith('/api/v1/customer/appointments/test-uuid-abc');
     });
   });
 });

@@ -90,7 +90,7 @@ class BusySlotsServiceTest {
                 .thenReturn(Collections.emptyList());
         when(barberScheduleRepository.findByBarberIdAndDayOfWeek(eq(1L), eq(TEST_DATE.getDayOfWeek().getValue())))
                 .thenReturn(Optional.of(schedule));
-        when(appointmentRepository.findDistinctBookingTimes(eq(TEST_BARBER), eq(TEST_DATE), eq("DENIED")))
+        when(appointmentRepository.findDistinctBookingTimes(eq(TEST_BARBER), eq(TEST_DATE), eq(AppointmentStatus.DENIED)))
                 .thenReturn(List.of("10:00", "14:00"));
 
         List<String> slots = busySlotsService.getBusySlots(TEST_BARBER, TEST_DATE_STR);
@@ -102,7 +102,7 @@ class BusySlotsServiceTest {
     void getBusySlots_shouldHandleUnknownBarberGracefully() {
         when(barberRepository.findByName("Unknown")).thenReturn(Optional.empty());
 
-        when(appointmentRepository.findDistinctBookingTimes(eq("Unknown"), any(LocalDate.class), eq("DENIED")))
+        when(appointmentRepository.findDistinctBookingTimes(eq("Unknown"), any(LocalDate.class), eq(AppointmentStatus.DENIED)))
                 .thenReturn(Collections.emptyList());
 
         List<String> slots = busySlotsService.getBusySlots("Unknown", TEST_DATE_STR);
@@ -131,7 +131,7 @@ class BusySlotsServiceTest {
                 .thenReturn(Collections.emptyList());
         when(barberScheduleRepository.findByBarberIdAndDayOfWeek(eq(1L), eq(TEST_DATE.getDayOfWeek().getValue())))
                 .thenReturn(Optional.of(schedule));
-        when(appointmentRepository.findDistinctBookingTimes(eq(TEST_BARBER), eq(TEST_DATE), eq("DENIED")))
+        when(appointmentRepository.findDistinctBookingTimes(eq(TEST_BARBER), eq(TEST_DATE), eq(AppointmentStatus.DENIED)))
                 .thenReturn(Collections.emptyList());
 
         List<String> slots = busySlotsService.getBusySlots(TEST_BARBER, TEST_DATE_STR);

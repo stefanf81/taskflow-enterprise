@@ -13,7 +13,7 @@ export const customerApi = {
     return response.data;
   },
 
-  cancelAppointment: async (id: number): Promise<void> => {
-    await apiClient.delete(`/api/v1/customer/appointments/${id}`);
+  cancelAppointment: async (publicId: string): Promise<void> => {
+    await apiClient.delete(`/api/v1/customer/appointments/${publicId}`);
   },
 };

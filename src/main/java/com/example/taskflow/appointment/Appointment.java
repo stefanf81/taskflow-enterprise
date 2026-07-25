@@ -1,9 +1,11 @@
 package com.example.taskflow.appointment;
 
 import com.example.taskflow.catalog.ServiceItem;
+import com.example.taskflow.core.StringTimeConverter;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -12,13 +14,15 @@ import java.util.UUID;
 @Entity
 @Table(name = "appointments", indexes = {
     @Index(name = "idx_appointment_status", columnList = "status"),
-    @Index(name = "idx_appointment_date", columnList = "booking_date"),
+    @Index(name = "idx_appointments_booking_date", columnList = "booking_date"),
     @Index(name = "idx_appointment_public_id", columnList = "public_id", unique = true),
-    @Index(name = "idx_appointment_barber_date_status", columnList = "barber_name,booking_date,status"),
-    @Index(name = "idx_appointment_status_customer_name", columnList = "status,customer_name"),
+    @Index(name = "idx_appointment_barber_date", columnList = "barber_name,booking_date"),
+    @Index(name = "idx_appointment_customer_name", columnList = "customer_name"),
     @Index(name = "idx_appointment_status_date", columnList = "status,booking_date"),
-    @Index(name = "idx_appointment_barber_id", columnList = "barber_id"),
-    @Index(name = "idx_appointment_service_id", columnList = "service_id")
+    @Index(name = "idx_appointments_customer_email", columnList = "customer_email"),
+    @Index(name = "idx_appointments_service_type", columnList = "service_type"),
+    @Index(name = "idx_appointments_barber_id", columnList = "barber_id"),
+    @Index(name = "idx_appointments_service_id", columnList = "service_id")
 })
 public class Appointment {
 
@@ -63,8 +67,9 @@ public class Appointment {
     private LocalDate bookingDate;
 
     @NotBlank(message = "Booking time is required")
-    @Size(max = 50)
-    @Column(name = "booking_time", nullable = false, length = 50)
+    @Pattern(regexp = "^(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?$", message = "Booking time must be in HH:mm or HH:mm:ss format")
+    @Convert(converter = StringTimeConverter.class)
+    @Column(name = "booking_time", nullable = false, columnDefinition = "TIME")
     private String bookingTime;
 
     @NotBlank(message = "Service type is required")

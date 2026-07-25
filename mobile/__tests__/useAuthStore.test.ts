@@ -55,7 +55,6 @@ describe('useAuthStore (enhanced)', () => {
     (authApi.login as jest.Mock).mockResolvedValueOnce({
       username: 'admin',
       role: 'ROLE_ADMIN',
-      token: 'mock-jwt',
     });
     (authApi.fetchCsrfToken as jest.Mock).mockResolvedValueOnce('new-csrf');
 
@@ -66,7 +65,8 @@ describe('useAuthStore (enhanced)', () => {
     expect(state.username).toBe('admin');
     expect(state.role).toBe('ROLE_ADMIN');
     expect(state.error).toBeNull();
-    expect(storage.setToken).toHaveBeenCalledWith('mock-jwt');
+    // The JWT is HttpOnly-cookie-based — it must never be stored client-side.
+    expect(storage.setToken).not.toHaveBeenCalled();
     expect(storage.setUserData).toHaveBeenCalledWith({ username: 'admin', role: 'ROLE_ADMIN' });
     expect(setCsrfToken).toHaveBeenCalledWith('new-csrf');
   });
@@ -75,7 +75,6 @@ describe('useAuthStore (enhanced)', () => {
     (authApi.login as jest.Mock).mockResolvedValueOnce({
       username: 'customer1',
       role: 'ROLE_CUSTOMER',
-      token: 'customer-jwt',
     });
     (authApi.fetchCsrfToken as jest.Mock).mockResolvedValueOnce('csrf-2');
 
@@ -87,11 +86,10 @@ describe('useAuthStore (enhanced)', () => {
     expect(state.username).toBe('customer1');
   });
 
-  it('handles login without token gracefully', async () => {
+  it('never persists a JWT to client storage (cookie-only auth)', async () => {
     (authApi.login as jest.Mock).mockResolvedValueOnce({
       username: 'admin',
       role: 'ROLE_ADMIN',
-      // no token
     });
 
     await useAuthStore.getState().login({ username: 'admin', password: 'password' });
@@ -195,6 +193,8 @@ describe('useAuthStore (enhanced)', () => {
       username: 'admin',
       role: 'ROLE_ADMIN',
     });
+    // checkAuth eagerly pre-fetches the CSRF token on a successful restore.
+    (authApi.fetchCsrfToken as jest.Mock).mockResolvedValueOnce('csrf-restored');
 
     await useAuthStore.getState().checkAuth();
 
@@ -203,6 +203,7 @@ describe('useAuthStore (enhanced)', () => {
     expect(state.username).toBe('admin');
     expect(state.role).toBe('ROLE_ADMIN');
     expect(state.isLoading).toBe(false);
+    expect(setCsrfToken).toHaveBeenCalledWith('csrf-restored');
   });
 
   it('clears auth state when /me fails', async () => {

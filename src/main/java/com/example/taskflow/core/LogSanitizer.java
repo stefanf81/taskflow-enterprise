@@ -19,6 +19,13 @@ public final class LogSanitizer {
     /**
      * Mask a string to "XX****XX" — useful for logging tokens, IDs, and
      * other sensitive identifiers without leaking full values.
+     *
+     * <p>Edge cases: inputs of length {@code <= 4} (including null) return
+     * {@code "****"}. After stripping newlines, the length is re-checked
+     * because {@code stripNewlines} can shrink a string that was long only
+     * due to embedded CR/LF characters. For a 5-character string (the
+     * shortest non-masked input), e.g. {@code "abcde"} produces
+     * {@code "ab****de"} — indices [0,1] and [3,4] with the middle dropped.
      */
     public static String mask(String input) {
         if (input == null || input.length() <= 4) {

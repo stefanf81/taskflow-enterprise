@@ -6,6 +6,7 @@ import {
   DestroyRef,
   ChangeDetectionStrategy,
   ViewEncapsulation,
+  isDevMode,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
@@ -280,7 +281,11 @@ export class AuthModalComponent {
         error: (err) => {
           this.errorMessage.set('Invalid credentials. Please try again.');
           this.isSubmitting.set(false);
-          console.error('Authentication error:', err);
+          // Verbose error logging only in dev builds to avoid leaking backend
+          // error details into the production browser console.
+          if (isDevMode()) {
+            console.error('Authentication error:', err);
+          }
         },
       });
   }

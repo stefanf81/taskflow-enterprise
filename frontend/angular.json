@@ -29,7 +29,7 @@
               }
             },
             "security": {
-              "autoCsp": false
+              "autoCsp": true
             },
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",

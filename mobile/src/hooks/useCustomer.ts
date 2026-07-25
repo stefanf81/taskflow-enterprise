@@ -12,7 +12,7 @@ export const useCustomerAppointments = (page = 0, size = 10) => {
 export const useCancelCustomerAppointment = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => customerApi.cancelAppointment(id),
+    mutationFn: (publicId: string) => customerApi.cancelAppointment(publicId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customerAppointments'] });
     },

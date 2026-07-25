@@ -18,7 +18,7 @@ describe('authApi', () => {
 
   describe('login', () => {
     it('sends POST with credentials and returns LoginResponse', async () => {
-      const mockResponse = { username: 'admin', role: 'ROLE_ADMIN', token: 'jwt-token' };
+      const mockResponse = { username: 'admin', role: 'ROLE_ADMIN' };
       mockedPost.mockResolvedValueOnce({ data: mockResponse });
 
       const result = await authApi.login({ username: 'admin', password: 'admin-password' });

@@ -4,6 +4,7 @@ import com.example.taskflow.core.LogSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -26,9 +27,12 @@ public class NotificationSender {
 
     /**
      * Send a single outbox entry and persist the truthful outcome. Runs in its own
-     * transaction so a failure resolving one row does not roll back the whole relay batch.
+     * transaction (REQUIRES_NEW) so a failure resolving one row does not roll back
+     * the whole relay batch. REQUIRES_NEW is explicit so that even if a caller
+     * happens to be transactional, the send is committed (or rolled back) in a
+     * dedicated transaction — matching the relay's "each entry in isolation" design.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void process(NotificationOutbox outbox) {
         boolean delivered = simulateSend(outbox);
 

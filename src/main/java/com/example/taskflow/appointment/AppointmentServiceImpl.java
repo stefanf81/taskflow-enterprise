@@ -7,14 +7,14 @@ import com.example.taskflow.core.ResourceNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
 import io.micrometer.tracing.Tracer;
 
 import java.time.LocalDate;
@@ -28,7 +28,7 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     private final AppointmentRepository appointmentRepository;
     private final ApplicationEventPublisher eventPublisher;
-    private final CacheManager cacheManager;
+    private final AppointmentStatsService statsService;
     private final Tracer tracer;
     private final BusySlotsService busySlotsService;
     private final BarberRepository barberRepository;
@@ -37,7 +37,7 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     public AppointmentServiceImpl(AppointmentRepository appointmentRepository,
                                   ApplicationEventPublisher eventPublisher,
-                                  CacheManager cacheManager,
+                                  AppointmentStatsService statsService,
                                    Tracer tracer,
                                    BusySlotsService busySlotsService,
                                    BarberRepository barberRepository,
@@ -45,7 +45,7 @@ public class AppointmentServiceImpl implements AppointmentService {
                                    ServiceItemRepository serviceItemRepository) {
         this.appointmentRepository = appointmentRepository;
         this.eventPublisher = eventPublisher;
-        this.cacheManager = cacheManager;
+        this.statsService = statsService;
         this.tracer = tracer;
         this.busySlotsService = busySlotsService;
         this.barberRepository = barberRepository;
@@ -87,32 +87,8 @@ public class AppointmentServiceImpl implements AppointmentService {
 
         Page<AppointmentResponse> responsePage = itemPage.map(AppointmentResponse::fromEntity);
 
-        AppointmentStats stats = getAppointmentStatsCached();
+        AppointmentStats stats = statsService.getStatsCached(appointmentRepository);
         return new AppointmentDashboardResponse(responsePage, stats);
-    }
-
-    public AppointmentStats getAppointmentStatsCached() {
-        Cache cache = cacheManager.getCache("appointmentStats");
-        if (cache != null) {
-            return cache.get(LocalDate.now(), () -> appointmentRepository.getAppointmentStats(LocalDate.now()));
-        }
-        return appointmentRepository.getAppointmentStats(LocalDate.now());
-    }
-
-    private void clearAppointmentStatsCache() {
-        Cache cache = cacheManager.getCache("appointmentStats");
-        if (cache != null) {
-            // Evict only the current day's stats to prevent cache stampede
-            // (clear() would wipe all cached days and cause a thundering herd on the next read)
-            cache.evict(LocalDate.now());
-        }
-    }
-
-    private void clearBusySlotsCache(String barberName, LocalDate bookingDate) {
-        Cache cache = cacheManager.getCache("busySlots");
-        if (cache != null) {
-            cache.evict(barberName + "-" + bookingDate);
-        }
     }
 
     @Override
@@ -134,13 +110,13 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     @Override
     @Transactional
-    public void cancelMyAppointment(Long id, String email) {
-        Appointment appointment = appointmentRepository.findById(id)
+    public void cancelMyAppointment(String publicId, String email) {
+        Appointment appointment = Optional.ofNullable(appointmentRepository.findByPublicId(publicId))
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found or unauthorized."));
         if (!appointment.getCustomerEmail().equalsIgnoreCase(email)) {
             throw new ResourceNotFoundException("Appointment not found or unauthorized.");
         }
-        deleteAppointment(id);
+        deleteAppointment(appointment.getId());
     }
 
     @Override
@@ -186,8 +162,8 @@ public class AppointmentServiceImpl implements AppointmentService {
         // already-persisted row instead of surfacing a 500.
         try {
             Appointment savedItem = appointmentRepository.save(item);
-            clearAppointmentStatsCache();
-            clearBusySlotsCache(savedItem.getBarberName(), savedItem.getBookingDate());
+            statsService.clearStatsCache();
+            statsService.clearBusySlotsCache(savedItem.getBarberName(), savedItem.getBookingDate());
 
             tagSpan(
                 "appointment.id", String.valueOf(savedItem.getId()),
@@ -262,8 +238,8 @@ public class AppointmentServiceImpl implements AppointmentService {
 
         item.setStatus(request.status().toUpperCase());
         Appointment savedItem = appointmentRepository.save(item);
-        clearAppointmentStatsCache();
-        clearBusySlotsCache(savedItem.getBarberName(), savedItem.getBookingDate());
+        statsService.clearStatsCache();
+        statsService.clearBusySlotsCache(savedItem.getBarberName(), savedItem.getBookingDate());
 
         tagSpan(
             "appointment.id", String.valueOf(savedItem.getId()),
@@ -284,8 +260,8 @@ public class AppointmentServiceImpl implements AppointmentService {
         Appointment item = appointmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found with id: " + id));
         appointmentRepository.delete(item);
-        clearAppointmentStatsCache();
-        clearBusySlotsCache(item.getBarberName(), item.getBookingDate());
+        statsService.clearStatsCache();
+        statsService.clearBusySlotsCache(item.getBarberName(), item.getBookingDate());
 
         tagSpan(
             "appointment.id", String.valueOf(id),
@@ -309,9 +285,17 @@ public class AppointmentServiceImpl implements AppointmentService {
         if (!item.getCustomerEmail().equalsIgnoreCase(email.trim())) {
             throw new IllegalArgumentException("Verification failed: The provided email address does not match this booking ID.");
         }
+        // Publish event BEFORE deletion so listeners can read the entity fields.
+        // This ensures notification outbox entries are written for the cancellation.
+        eventPublisher.publishEvent(new AppointmentStatusChangedEvent(this, item));
         appointmentRepository.delete(item);
-        clearAppointmentStatsCache();
-        clearBusySlotsCache(item.getBarberName(), item.getBookingDate());
+        statsService.clearStatsCache();
+        statsService.clearBusySlotsCache(item.getBarberName(), item.getBookingDate());
+
+        tagSpan(
+            "appointment.publicId", LogSanitizer.stripNewlines(publicId),
+            "appointment.action", "publicCancel"
+        );
     }
 
     @Override

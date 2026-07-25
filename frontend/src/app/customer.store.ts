@@ -27,13 +27,13 @@ export class CustomerStore {
     this.appointmentsResource.reload();
   }
 
-  cancelAppointment(id: number): void {
+  cancelAppointment(publicId: string): void {
     if (!confirm('Are you sure you want to cancel this appointment?')) return;
 
     this.cancelErrorMessage.set(null);
     this.isCancelling.set(true);
     this.appointmentService
-      .cancelCustomerAppointment(id)
+      .cancelCustomerAppointment(publicId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {

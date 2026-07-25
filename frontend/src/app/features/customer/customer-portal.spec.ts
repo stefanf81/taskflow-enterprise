@@ -96,9 +96,11 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
   it('should cancel an appointment successfully and clear the error', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     component.customerStore.cancelErrorMessage.set('stale error');
-    component.customerStore.cancelAppointment(1);
+    component.customerStore.cancelAppointment('test-public-uuid');
 
-    const req = httpMock.expectOne((r) => r.url.includes('/api/v1/customer/appointments/1'));
+    const req = httpMock.expectOne((r) =>
+      r.url.includes('/api/v1/customer/appointments/test-public-uuid'),
+    );
     expect(req.request.method).toBe('DELETE');
     req.flush(null);
 
@@ -115,9 +117,11 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
 
   it('should surface a cancel failure on the cancel error signal', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    component.customerStore.cancelAppointment(2);
+    component.customerStore.cancelAppointment('another-uuid');
 
-    const req = httpMock.expectOne((r) => r.url.includes('/api/v1/customer/appointments/2'));
+    const req = httpMock.expectOne((r) =>
+      r.url.includes('/api/v1/customer/appointments/another-uuid'),
+    );
     expect(req.request.method).toBe('DELETE');
     req.error(new ProgressEvent('error'), { status: 404, statusText: 'Not Found' });
 

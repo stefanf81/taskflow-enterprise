@@ -15,7 +15,12 @@ export const storage = {
       } else {
         await SecureStore.setItemAsync(TOKEN_KEY, token);
       }
-    } catch {
+    } catch (err) {
+      console.warn(
+        '[storage] SecureStore.setToken failed, falling back to in-memory storage. ' +
+        'Token will be lost on app restart. Error:',
+        err instanceof Error ? err.message : err,
+      );
       memoryStore.set(TOKEN_KEY, token);
     }
   },
@@ -26,7 +31,11 @@ export const storage = {
         return memoryStore.get(TOKEN_KEY) || null;
       }
       return await SecureStore.getItemAsync(TOKEN_KEY);
-    } catch {
+    } catch (err) {
+      console.warn(
+        '[storage] SecureStore.getToken failed, falling back to in-memory storage. Error:',
+        err instanceof Error ? err.message : err,
+      );
       return memoryStore.get(TOKEN_KEY) || null;
     }
   },
@@ -38,7 +47,11 @@ export const storage = {
       } else {
         await SecureStore.deleteItemAsync(TOKEN_KEY);
       }
-    } catch {
+    } catch (err) {
+      console.warn(
+        '[storage] SecureStore.removeToken failed, falling back to in-memory removal. Error:',
+        err instanceof Error ? err.message : err,
+      );
       memoryStore.delete(TOKEN_KEY);
     }
   },
@@ -51,7 +64,11 @@ export const storage = {
       } else {
         await SecureStore.setItemAsync(USER_KEY, json);
       }
-    } catch {
+    } catch (err) {
+      console.warn(
+        '[storage] SecureStore.setUserData failed, falling back to in-memory storage. Error:',
+        err instanceof Error ? err.message : err,
+      );
       memoryStore.set(USER_KEY, json);
     }
   },
@@ -65,7 +82,11 @@ export const storage = {
         json = await SecureStore.getItemAsync(USER_KEY);
       }
       return json ? (JSON.parse(json) as T) : null;
-    } catch {
+    } catch (err) {
+      console.warn(
+        '[storage] SecureStore.getUserData failed, falling back to in-memory storage. Error:',
+        err instanceof Error ? err.message : err,
+      );
       try {
         const json = memoryStore.get(USER_KEY);
         return json ? (JSON.parse(json) as T) : null;
@@ -82,7 +103,11 @@ export const storage = {
       } else {
         await SecureStore.deleteItemAsync(USER_KEY);
       }
-    } catch {
+    } catch (err) {
+      console.warn(
+        '[storage] SecureStore.removeUserData failed, falling back to in-memory removal. Error:',
+        err instanceof Error ? err.message : err,
+      );
       memoryStore.delete(USER_KEY);
     }
   }

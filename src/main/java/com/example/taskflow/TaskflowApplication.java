@@ -22,10 +22,14 @@ public class TaskflowApplication {
 
 	@Bean
 	public FlywayMigrationStrategy flywayMigrationStrategy() {
-		return flyway -> {
-			flyway.repair();
-			flyway.migrate();
-		};
+		// Only migrate — do NOT call flyway.repair() in the default strategy.
+		// repair() silently removes failed migration entries from
+		// flyway_schema_history and retries, which can cause data corruption
+		// if a migration failed due to a real issue (not just a checksum
+		// mismatch). If a repair is genuinely needed (e.g. after correcting a
+		// checksum), run it as a deliberate manual operation via the Flyway CLI
+		// or a throwaway Spring Boot profile — never automatically on every boot.
+		return flyway -> flyway.migrate();
 	}
 
 }

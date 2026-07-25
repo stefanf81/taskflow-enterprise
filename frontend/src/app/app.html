@@ -711,7 +711,7 @@
                       <p class="flex justify-between">
                         <span>📅 Scheduled:</span>
                         <strong class="text-zinc-100 font-semibold">
-                          {{ bookingDate() | date: 'mediumDate' }} at
+                          {{ formattedBookingDate() }} at
                           {{ formatTime12Hour(bookingTime()) }}
                         </strong>
                       </p>
@@ -726,17 +726,15 @@
                       <hr class="border-t border-white/10 my-2" />
                       <p class="flex justify-between">
                         <span>Subtotal:</span>
-                        <span class="text-zinc-300">{{
-                          checkoutSubtotal() | currency: 'USD'
-                        }}</span>
+                        <span class="text-zinc-300">{{ formattedSubtotal() }}</span>
                       </p>
                       <p class="flex justify-between">
                         <span>Platform Svc Fee:</span>
-                        <span class="text-zinc-300">${{ checkoutFee() | number: '1.2-2' }}</span>
+                        <span class="text-zinc-300">${{ formattedFee() }}</span>
                       </p>
                       <p class="flex justify-between text-sm font-bold text-zinc-100 pt-1">
                         <span>Total Est. Price:</span>
-                        <span class="text-gold">${{ checkoutTotal() | number: '1.2-2' }}</span>
+                        <span class="text-gold">${{ formattedTotal() }}</span>
                       </p>
                     </div>
                   </div>

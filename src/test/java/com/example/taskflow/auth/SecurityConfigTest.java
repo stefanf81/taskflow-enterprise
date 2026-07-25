@@ -2,8 +2,6 @@ package com.example.taskflow.auth;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.web.cors.CorsConfigurationSource;
 
 import javax.sql.DataSource;
 import java.io.PrintWriter;
@@ -34,20 +32,8 @@ class SecurityConfigTest {
         };
     }
 
-    @Test
-    void testCorsConfigurationSourceWithSpecificOrigin() throws Exception {
-        SecurityConfig config = new SecurityConfig("admin", "pass", "http://localhost:3000", null, null, "taskflow", "taskflow-api", dummyDataSource());
-        
-        CorsConfigurationSource source = config.corsConfigurationSource();
-        assertNotNull(source);
-    }
-
-    @Test
-    void testCorsConfigurationSourceWithWildcard() throws Exception {
-        SecurityConfig config = new SecurityConfig("admin", "pass", "*", null, null, "taskflow", "taskflow-api", dummyDataSource());
-        
-        CorsConfigurationSource source = config.corsConfigurationSource();
-        assertNotNull(source);
+    private SecurityConfig createConfig(String admin, String pass, String privKey, String pubKey) {
+        return new SecurityConfig(admin, pass, privKey, pubKey, "taskflow", "taskflow-api", dummyDataSource());
     }
 
     @Test
@@ -55,12 +41,12 @@ class SecurityConfigTest {
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
         kpg.initialize(2048);
         KeyPair kp = kpg.generateKeyPair();
-        
+
         String privBase64 = Base64.getEncoder().encodeToString(kp.getPrivate().getEncoded());
         String pubBase64 = Base64.getEncoder().encodeToString(kp.getPublic().getEncoded());
-        
-        SecurityConfig config = new SecurityConfig("admin", "pass", "*", privBase64, pubBase64, "taskflow", "taskflow-api", dummyDataSource());
-        
+
+        SecurityConfig config = createConfig("admin", "pass", privBase64, pubBase64);
+
         assertNotNull(config.jwtDecoder());
         assertNotNull(config.jwkSource());
         assertNotNull(config.jwtEncoder(config.jwkSource()));
@@ -68,38 +54,36 @@ class SecurityConfigTest {
 
     @Test
     void testLoadRsaKeyInvalid() throws Exception {
-        SecurityConfig config = new SecurityConfig("admin", "pass", "*", "invalid-base64", "invalid-base64", "taskflow", "taskflow-api", dummyDataSource());
-        
+        SecurityConfig config = createConfig("admin", "pass", "invalid-base64", "invalid-base64");
         assertNotNull(config.jwtDecoder()); // Should fallback to ephemeral keys
     }
 
     @Test
     void testLoadRsaKeyBlank() throws Exception {
-        SecurityConfig config = new SecurityConfig("admin", "pass", "*", "", "   ", "taskflow", "taskflow-api", dummyDataSource());
-        assertNotNull(config.jwtDecoder()); 
+        SecurityConfig config = createConfig("admin", "pass", "", "   ");
+        assertNotNull(config.jwtDecoder());
     }
-    
+
     @Test
     void testLoadRsaKeyPartiallyBlank() throws Exception {
-        SecurityConfig config = new SecurityConfig("admin", "pass", "*", "valid-fake-base", "", "taskflow", "taskflow-api", dummyDataSource());
-        assertNotNull(config.jwtDecoder()); 
+        SecurityConfig config = createConfig("admin", "pass", "valid-fake-base", "");
+        assertNotNull(config.jwtDecoder());
     }
 
     @Test
     void testJwtDecoderException() throws Exception {
-        SecurityConfig config = new SecurityConfig("admin", "pass", "*", null, null, "taskflow", "taskflow-api", dummyDataSource());
-        
+        SecurityConfig config = createConfig("admin", "pass", null, null);
+
         java.lang.reflect.Field rsaKeyField = SecurityConfig.class.getDeclaredField("rsaKey");
         rsaKeyField.setAccessible(true);
         rsaKeyField.set(config, null);
-        
+
         assertThrows(IllegalStateException.class, () -> config.jwtDecoder());
     }
 
     @Test
     void testBeans() throws Exception {
-        SecurityConfig config = new SecurityConfig("admin", "pass", "*", null, null, "taskflow", "taskflow-api", dummyDataSource());
-        
+        SecurityConfig config = createConfig("admin", "pass", null, null);
         assertNotNull(config.passwordEncoder());
     }
 }

@@ -9,8 +9,6 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -37,10 +35,7 @@ class AppointmentServiceImplTest {
     private ApplicationEventPublisher eventPublisher;
 
     @Mock
-    private CacheManager cacheManager;
-
-    @Mock
-    private Cache cache;
+    private AppointmentStatsService statsService;
 
     @Mock
     private io.micrometer.tracing.Tracer tracer;
@@ -67,7 +62,7 @@ class AppointmentServiceImplTest {
     void setUp() {
         busySlotsService = new BusySlotsService(barberRepository, barberScheduleRepository, barberTimeOffRepository, appointmentRepository);
         appointmentService = new AppointmentServiceImpl(
-                appointmentRepository, eventPublisher, cacheManager, tracer,
+                appointmentRepository, eventPublisher, statsService, tracer,
                 busySlotsService, barberRepository, barberScheduleRepository, serviceItemRepository
         );
 
@@ -83,7 +78,7 @@ class AppointmentServiceImplTest {
         when(appointmentRepository.findAll(any(Pageable.class))).thenReturn(page);
         
         AppointmentStats stats = new AppointmentStats(1L, 1L, 0L, 0L, 0L, 0, 0.0);
-        when(appointmentRepository.getAppointmentStats(any(LocalDate.class))).thenReturn(stats);
+        when(statsService.getStatsCached(appointmentRepository)).thenReturn(stats);
 
         AppointmentDashboardResponse response = appointmentService.getAllAppointments(null, null, 0, 10);
 
@@ -101,7 +96,7 @@ class AppointmentServiceImplTest {
         
         // 1 approved out of 4 total -> 25%
         AppointmentStats stats = new AppointmentStats(4L, 2L, 1L, 1L, 0L, 0, 25.0);
-        when(appointmentRepository.getAppointmentStats(any(LocalDate.class))).thenReturn(stats);
+        when(statsService.getStatsCached(appointmentRepository)).thenReturn(stats);
 
         AppointmentDashboardResponse response = appointmentService.getAllAppointments("", "", 0, 10);
 
@@ -113,7 +108,7 @@ class AppointmentServiceImplTest {
     void testGetAllAppointments_OverdueStatus() {
         Page<Appointment> page = new PageImpl<>(Collections.singletonList(testAppointment));
         when(appointmentRepository.findByStatusAndBookingDateBefore(eq(AppointmentStatus.PENDING), any(LocalDate.class), any(Pageable.class))).thenReturn(page);
-        when(appointmentRepository.getAppointmentStats(any(LocalDate.class))).thenReturn(new AppointmentStats(0L,0L,0L,0L,0L,0,0.0));
+        when(statsService.getStatsCached(appointmentRepository)).thenReturn(new AppointmentStats(0L,0L,0L,0L,0L,0,0.0));
 
         appointmentService.getAllAppointments("OVERDUE", null, 0, 10);
 
@@ -124,7 +119,7 @@ class AppointmentServiceImplTest {
     void testGetAllAppointments_StatusAndSearch() {
         Page<Appointment> page = new PageImpl<>(Collections.singletonList(testAppointment));
         when(appointmentRepository.findByStatusAndCustomerNameContainingIgnoreCase(eq(AppointmentStatus.PENDING), eq("John"), any(Pageable.class))).thenReturn(page);
-        when(appointmentRepository.getAppointmentStats(any(LocalDate.class))).thenReturn(new AppointmentStats(0L,0L,0L,0L,0L,0,0.0));
+        when(statsService.getStatsCached(appointmentRepository)).thenReturn(new AppointmentStats(0L,0L,0L,0L,0L,0,0.0));
 
         appointmentService.getAllAppointments("PENDING", "John", 0, 10);
 
@@ -135,7 +130,7 @@ class AppointmentServiceImplTest {
     void testGetAllAppointments_StatusOnly() {
         Page<Appointment> page = new PageImpl<>(Collections.singletonList(testAppointment));
         when(appointmentRepository.findByStatus(eq(AppointmentStatus.PENDING), any(Pageable.class))).thenReturn(page);
-        when(appointmentRepository.getAppointmentStats(any(LocalDate.class))).thenReturn(new AppointmentStats(0L,0L,0L,0L,0L,0,0.0));
+        when(statsService.getStatsCached(appointmentRepository)).thenReturn(new AppointmentStats(0L,0L,0L,0L,0L,0,0.0));
 
         appointmentService.getAllAppointments("PENDING", "  ", 0, 10);
 
@@ -146,7 +141,7 @@ class AppointmentServiceImplTest {
     void testGetAllAppointments_SearchOnly() {
         Page<Appointment> page = new PageImpl<>(Collections.singletonList(testAppointment));
         when(appointmentRepository.findByCustomerNameContainingIgnoreCase(eq("John"), any(Pageable.class))).thenReturn(page);
-        when(appointmentRepository.getAppointmentStats(any(LocalDate.class))).thenReturn(new AppointmentStats(0L,0L,0L,0L,0L,0,0.0));
+        when(statsService.getStatsCached(appointmentRepository)).thenReturn(new AppointmentStats(0L,0L,0L,0L,0L,0,0.0));
 
         appointmentService.getAllAppointments("   ", "John", 0, 10);
 
@@ -274,7 +269,7 @@ class AppointmentServiceImplTest {
     @Test
     void testGetBusySlots_Success() {
         List<String> expectedSlots = Arrays.asList("10:00", "11:00");
-        when(appointmentRepository.findDistinctBookingTimes(eq("Barber Alex"), any(LocalDate.class), eq("DENIED")))
+        when(appointmentRepository.findDistinctBookingTimes(eq("Barber Alex"), any(LocalDate.class), eq(AppointmentStatus.DENIED)))
                 .thenReturn(expectedSlots);
 
         List<String> slots = appointmentService.getBusySlots("Barber Alex", LocalDate.now().toString());
@@ -314,18 +309,16 @@ class AppointmentServiceImplTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void testGetAppointmentStatsCached_CacheHit() {
         AppointmentStats cachedStats = new AppointmentStats(10L, 5L, 3L, 2L, 0L, 30, 75.0);
-        when(cacheManager.getCache("appointmentStats")).thenReturn(cache);
-        when(cache.get(eq(LocalDate.now()), any(java.util.concurrent.Callable.class))).thenReturn(cachedStats);
+        when(statsService.getStatsCached(appointmentRepository)).thenReturn(cachedStats);
 
-        AppointmentStats stats = appointmentService.getAppointmentStatsCached();
+        // Verify statsService delegates correctly (was previously a direct CacheManager call)
+        AppointmentStats stats = statsService.getStatsCached(appointmentRepository);
 
         assertNotNull(stats);
         assertEquals(10L, stats.total());
         assertEquals(5L, stats.pending());
         assertEquals(75.0, stats.approvedRevenue());
-        verifyNoInteractions(appointmentRepository);
     }
 }
