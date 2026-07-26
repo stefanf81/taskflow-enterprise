@@ -157,13 +157,20 @@ export const BookingScreen: React.FC = () => {
 
   const handleNextStep = () => {
     if (step === 1) {
-      if (!selectedService || !selectedBarber) {
-        setError('Please select a service and a barber.');
+      if (!selectedService) {
+        setError('Please select a treatment.');
         return;
       }
       setError(null);
       setStep(2);
     } else if (step === 2) {
+      if (!selectedBarber) {
+        setError('Please select a barber.');
+        return;
+      }
+      setError(null);
+      setStep(3);
+    } else if (step === 3) {
       if (!selectedDate || !selectedTime) {
         setError('Please select a date and time slot.');
         return;
@@ -173,7 +180,7 @@ export const BookingScreen: React.FC = () => {
         return;
       }
       setError(null);
-      setStep(3);
+      setStep(4);
     }
   };
 
@@ -209,7 +216,7 @@ export const BookingScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView testID="booking-scroll-view" contentContainerStyle={styles.scrollContent}>
         {/* Wizard Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Booking Assistant</Text>
@@ -218,9 +225,9 @@ export const BookingScreen: React.FC = () => {
           {/* Step Timeline */}
           <View style={styles.stepTimeline}>
             <View style={styles.timelineBg} />
-            <View style={[styles.timelineProgress, { width: `${((step - 1) / 2) * 100}%` }]} />
+            <View style={[styles.timelineProgress, { width: `${((step - 1) / 3) * 100}%` }]} />
             <View style={styles.stepNodes}>
-              {[1, 2, 3].map((s) => {
+              {[1, 2, 3, 4].map((s) => {
                 const isActive = step === s;
                 const isCompleted = step > s;
                 return (
@@ -248,15 +255,16 @@ export const BookingScreen: React.FC = () => {
 
           {/* Step label */}
           <Text style={styles.stepLabel}>
-            {step === 1 ? '1. Select Service & Barber' :
-             step === 2 ? '2. Pick Date & Available Slot' :
-             '3. Customer Info & Submit'}
+            {step === 1 ? '1. Select Treatment' :
+             step === 2 ? '2. Choose Your Stylist' :
+             step === 3 ? '3. Pick Date & Available Slot' :
+             '4. Customer Info & Submit'}
           </Text>
         </View>
 
         <ErrorMessage message={error || ''} />
 
-        {/* STEP 1: SERVICE & BARBER */}
+        {/* STEP 1: SERVICE SELECTION */}
         {step === 1 && (
           <View>
             {/* Service Search */}
@@ -312,7 +320,22 @@ export const BookingScreen: React.FC = () => {
               );
             })}
 
-            <Text style={[styles.label, { marginTop: 20 }]}>Select Barber</Text>
+            <Button
+              title="Continue to Stylist"
+              variant="primary"
+              size="lg"
+              onPress={handleNextStep}
+              style={{ marginTop: 24 }}
+            />
+          </View>
+        )}
+
+        {/* STEP 2: CHOOSE YOUR STYLIST */}
+        {step === 2 && (
+          <View>
+            <Text style={styles.stepTitle}>2. Choose Your Stylist</Text>
+
+            <Text style={styles.label}>Select Barber</Text>
             {barberNames.map((b) => {
               const isSel = selectedBarber === b;
               return (
@@ -333,20 +356,17 @@ export const BookingScreen: React.FC = () => {
               );
             })}
 
-            <Button
-              title="Continue to Date & Time"
-              variant="primary"
-              size="lg"
-              onPress={handleNextStep}
-              style={{ marginTop: 24 }}
-            />
+            <View style={styles.navRow}>
+              <Button title="Back" variant="secondary" onPress={() => setStep(1)} style={styles.halfBtn} />
+              <Button title="Continue" variant="primary" onPress={handleNextStep} style={styles.halfBtn} />
+            </View>
           </View>
         )}
 
-        {/* STEP 2: DATE & TIME */}
-        {step === 2 && (
+        {/* STEP 3: DATE & TIME */}
+        {step === 3 && (
           <View>
-            <Text style={styles.stepTitle}>2. Select Date & Time</Text>
+            <Text style={styles.stepTitle}>3. Pick Date & Available Slot</Text>
 
             <Text style={styles.label}>Select Operating Day</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.daysScroll}>
@@ -386,16 +406,16 @@ export const BookingScreen: React.FC = () => {
             )}
 
             <View style={styles.navRow}>
-              <Button title="Back" variant="secondary" onPress={() => setStep(1)} style={styles.halfBtn} />
+              <Button title="Back" variant="secondary" onPress={() => setStep(2)} style={styles.halfBtn} />
               <Button title="Continue" variant="primary" onPress={handleNextStep} style={styles.halfBtn} />
             </View>
           </View>
         )}
 
-        {/* STEP 3: CUSTOMER DETAILS & CONFIRM */}
-        {step === 3 && (
+        {/* STEP 4: CUSTOMER DETAILS & CONFIRM */}
+        {step === 4 && (
           <View>
-            <Text style={styles.stepTitle}>3. Contact Details & Summary</Text>
+            <Text style={styles.stepTitle}>4. Contact Details & Summary</Text>
 
             {/* Summary Card */}
             <Card style={styles.summaryCard} variant="goldBorder">
@@ -449,6 +469,7 @@ export const BookingScreen: React.FC = () => {
               placeholder="e.g. John Doe"
               value={customerName}
               onChangeText={setCustomerName}
+              testID="customer-name-input"
             />
 
             <Input
@@ -458,6 +479,7 @@ export const BookingScreen: React.FC = () => {
               onChangeText={setCustomerEmail}
               keyboardType="email-address"
               autoCapitalize="none"
+              testID="customer-email-input"
             />
 
             <Input
@@ -466,10 +488,11 @@ export const BookingScreen: React.FC = () => {
               value={customerPhone}
               onChangeText={setCustomerPhone}
               keyboardType="phone-pad"
+              testID="customer-phone-input"
             />
 
             <View style={styles.navRow}>
-              <Button title="Back" variant="secondary" onPress={() => setStep(2)} style={styles.halfBtn} />
+              <Button title="Back" variant="secondary" onPress={() => setStep(3)} style={styles.halfBtn} />
               <Button
                 title="Confirm & Request Booking"
                 variant="primary"

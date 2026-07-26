@@ -94,7 +94,7 @@ export const HomeScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView testID="home-scroll-view" contentContainerStyle={styles.scrollContent}>
         {/* ===== ANNOUNCEMENT BAR ===== */}
         <View style={styles.announcementBar}>
           <Animated.View style={[styles.pingDot, { opacity: pingAnim }]} />
@@ -141,6 +141,7 @@ export const HomeScreen: React.FC = () => {
 
           <View style={styles.heroButtons}>
             <Button
+              testID="home-book-appointment-btn"
               title="Book Appointment"
               variant="primary"
               size="lg"

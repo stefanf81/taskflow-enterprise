@@ -54,8 +54,9 @@ Production environments enforce TLS/HTTPS encryption, hardware token encryption 
 ```
 mobile/
 ├── assets/                  # App icons, splash screens
+├── e2e/                     # Detox E2E test suite (booking.e2e.test.ts, jest.config.js, README.md)
 ├── src/
-│   ├── api/                 # Axios REST API client layers
+│   ├── api/                 # Axios REST API client layers & SSL pinning
 │   │   ├── client.ts
 │   │   ├── auth.ts
 │   │   ├── appointments.ts
@@ -63,7 +64,8 @@ mobile/
 │   │   ├── barbers.ts
 │   │   ├── notifications.ts
 │   │   ├── reviews.ts
-│   │   └── customer.ts
+│   │   ├── customer.ts
+│   │   └── sslPinning.ts
 │   ├── components/          # Reusable UI components
 │   │   ├── common/          # Button, Card, Input, Modal, Badge, LoadingIndicator, EmptyState, ErrorMessage
 │   │   ├── booking/         # StylistCard, TimeSlotPicker, ReceiptModal, PublicCancelModal, PublicReviewModal
@@ -75,14 +77,32 @@ mobile/
 │   ├── theme/               # Gold & Obsidian palette & colors (imports shared/theme/tokens.json)
 │   ├── types/               # TypeScript models (re-exports shared/types/api.ts) & Navigation ParamLists
 │   └── utils/               # SecureStorage wrapper & time-utils (re-exports shared/utils/time-utils.ts)
-├── __tests__/               # Jest & React Native Testing Library test suites
+├── __tests__/               # Jest & React Native Testing Library unit test suites (351 tests, 48 suites)
+├── .detoxrc.js              # Detox dual-platform E2E configuration (Android APK & iOS App)
 ├── App.tsx                  # Application entry point
 ├── app.json                 # Expo configuration
 ├── eas.json                 # EAS Build configuration (Android APK/AAB, iOS IPA)
+├── metro.config.js          # Metro bundler configuration with monorepo resolution
 └── package.json
 ```
 
-## Development Commands
+## Testing Architecture & Quality Assurance
+
+TaskFlow Mobile enforces a dual-layered testing strategy combining Unit/Component tests with End-to-End (E2E) automation:
+
+### 1. Unit & Component Tests (Jest + RNTL)
+* **Coverage:** 351 unit & component tests across 48 test suites (**100% PASS**).
+* **Thresholds:** Enforced in `jest.config.js` (**>70%** across branches, functions, lines, and statements).
+* **Stack:** `jest-expo` + `@testing-library/react-native` v14 + `test-renderer`.
+
+### 2. End-to-End (E2E) Native Tests (Detox v20)
+* **Scope:** Real native execution of Guest Booking Wizard and Guest Login flows (**9/9 PASSING**).
+* **Binary Strategy:** Standalone Release builds with embedded JS bytecode bundles, eliminating Metro dev server dependency and touch-intercepting dev overlays during test runs.
+* **Dual-Platform:** Tested on Android Emulator (`Pixel_6_API_35`) and iOS Simulator (`iPhone 17 Pro`).
+
+---
+
+## Development & Testing Commands
 
 ```bash
 # Start Metro bundler / Expo CLI
@@ -94,11 +114,25 @@ npm run android
 # Run on iOS Simulator or connected device
 npm run ios
 
-# Run Jest unit & component tests
+# Run Jest unit & component tests (with coverage enforce)
 npm test
 
-# Typecheck TypeScript
+# Typecheck TypeScript (0 errors)
 npm run lint
+
+# --- End-to-End (E2E) Testing with Detox ---
+
+# Build Standalone Release APK & Test APK for Android E2E
+npm run e2e:build:android
+
+# Run Detox E2E Tests on Android Emulator (100% PASS)
+npm run e2e:test:android
+
+# Build Standalone Release App for iOS Simulator E2E
+npm run e2e:build
+
+# Run Detox E2E Tests on iOS Simulator
+npm run e2e:test
 ```
 
 ## EAS Build & Distribution

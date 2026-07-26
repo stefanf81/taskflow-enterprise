@@ -49,7 +49,7 @@ export const CustomerPortalScreen: React.FC = () => {
     alertTimer.current = setTimeout(() => setErrorMsg(null), 4500);
   };
 
-  const handleCancel = (id: number) => {
+  const handleCancel = (publicId: string) => {
     Alert.alert(
       'Cancel Appointment',
       'Are you sure you want to cancel this booking?',
@@ -59,7 +59,7 @@ export const CustomerPortalScreen: React.FC = () => {
           text: 'Yes, Cancel',
           style: 'destructive',
           onPress: () => {
-            cancelMutation.mutate(id, {
+            cancelMutation.mutate(publicId, {
               onSuccess: () => {
                 showSuccess('Appointment cancelled successfully.');
                 refetch();
@@ -145,7 +145,7 @@ export const CustomerPortalScreen: React.FC = () => {
                     variant="outline"
                     size="sm"
                     loading={cancelMutation.isPending}
-                    onPress={() => handleCancel(item.id)}
+                    onPress={() => handleCancel(item.publicId)}
                     style={styles.cancelBtn}
                   />
                 )}

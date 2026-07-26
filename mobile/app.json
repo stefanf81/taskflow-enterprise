@@ -35,7 +35,8 @@
         {
           "faceIDPermission": "Allow TaskFlow to use Face ID for fast authentication."
         }
-      ]
+      ],
+      "@config-plugins/detox"
     ],
     "extra": {
       "apiUrl": "http://localhost:8080",

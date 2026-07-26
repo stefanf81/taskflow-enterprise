@@ -8,7 +8,6 @@ import {
   StyleSheet,
   ScrollView,
   Animated,
-  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,9 +30,6 @@ import { formatTime12Hour, isOverdue } from '../utils/time-utils';
 const FILTERS = ['all', 'pending', 'approved', 'overdue', 'denied'];
 
 export const AdminDashboardScreen: React.FC = () => {
-  const { width } = useWindowDimensions();
-  const isNarrowScreen = width < 480;
-
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
@@ -124,10 +120,10 @@ export const AdminDashboardScreen: React.FC = () => {
             <Text style={styles.title}>Owner Panel</Text>
           </View>
           <View style={styles.headerActions}>
-            <TouchableOpacity onPress={() => { refetch(); showSuccess('Database synced.'); }} style={styles.syncBtn}>
+            <TouchableOpacity onPress={() => { refetch(); showSuccess('Database synced.'); }} style={styles.syncBtn} accessibilityLabel="Sync">
               <Ionicons name="refresh-outline" size={18} color={colors.gold.main} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => logout()} style={styles.logoutBtn}>
+            <TouchableOpacity onPress={() => logout()} style={styles.logoutBtn} accessibilityLabel="Logout">
               <Ionicons name="log-out-outline" size={20} color={colors.status.denied} />
             </TouchableOpacity>
           </View>
@@ -194,39 +190,8 @@ export const AdminDashboardScreen: React.FC = () => {
           </Card>
         )}
 
-        {/* ===== MAIN LAYOUT: Guidelines sidebar + List ===== */}
-        <View style={[styles.mainLayout, isNarrowScreen && styles.mainLayoutStacked]}>
-          {/* SIDEBAR: Owner Guidelines */}
-          <View style={[styles.sidebar, isNarrowScreen && styles.sidebarStacked]}>
-            <Card style={styles.guidelinesCard}>
-              <Text style={styles.guidelinesTitle}>Owner Guidelines</Text>
-              <Text style={styles.guidelinesDesc}>
-                Welcome, boss! Use this dashboard to manage customer appointment requests:
-              </Text>
-              <View style={styles.guidelinesList}>
-                <Text style={styles.guidelineItem}>• Review customer contact details before approving.</Text>
-                <Text style={styles.guidelineItem}>• Status updates auto-trigger SMTP email notifications.</Text>
-                <Text style={styles.guidelineItem}>• Check the "Pending" tab regularly to keep the schedule optimized!</Text>
-              </View>
-              <View style={styles.legend}>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: colors.status.pending }]} />
-                  <Text style={styles.legendText}>Pending Approval</Text>
-                </View>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: colors.status.approved }]} />
-                  <Text style={styles.legendText}>Approved Reservation</Text>
-                </View>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: colors.status.denied }]} />
-                  <Text style={styles.legendText}>Denied Request</Text>
-                </View>
-              </View>
-            </Card>
-          </View>
-
-          {/* MAIN CONTENT */}
-          <View style={styles.mainContent}>
+        {/* ===== MAIN CONTENT ===== */}
+        <View style={styles.mainContent}>
             {/* Search Input */}
             <Input
               placeholder="Search by name, email, phone, or public ID..."
@@ -366,7 +331,6 @@ export const AdminDashboardScreen: React.FC = () => {
             )}
           </View>
         </View>
-      </View>
     </SafeAreaView>
   );
 };
@@ -492,66 +456,6 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: colors.gold.main,
     borderRadius: 3,
-  },
-  // Layout
-  mainLayout: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: 12,
-  },
-  mainLayoutStacked: {
-    flexDirection: 'column',
-  },
-  // Sidebar
-  sidebar: {
-    width: 180,
-  },
-  sidebarStacked: {
-    width: '100%',
-  },
-  guidelinesCard: {
-    padding: 12,
-  },
-  guidelinesTitle: {
-    color: colors.text.primary,
-    fontSize: 13,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  guidelinesDesc: {
-    color: colors.text.muted,
-    fontSize: 11,
-    lineHeight: 16,
-    marginBottom: 8,
-  },
-  guidelinesList: {
-    marginBottom: 12,
-  },
-  guidelineItem: {
-    color: colors.text.secondary,
-    fontSize: 10,
-    lineHeight: 16,
-    marginBottom: 4,
-  },
-  legend: {
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.05)',
-    paddingTop: 8,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-    gap: 6,
-  },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  legendText: {
-    color: colors.text.secondary,
-    fontSize: 10,
   },
   // Main content area
   mainContent: {

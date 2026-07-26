@@ -38,7 +38,7 @@ export const GuestTabNavigator: React.FC = () => {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: 'Home' }} />
-      <Tab.Screen name="Booking" component={BookingScreen} options={{ tabBarLabel: 'Book' }} />
+      <Tab.Screen name="Booking" component={BookingScreen} options={{ tabBarLabel: 'Book', tabBarButtonTestID: 'tab-booking' }} />
       <Tab.Screen name="Catalog" component={CatalogScreen} options={{ tabBarLabel: 'Catalog' }} />
       <Tab.Screen name="Lookbook" component={LookbookScreen} options={{ tabBarLabel: 'Styles' }} />
     </Tab.Navigator>

@@ -58,6 +58,7 @@ export const LoginScreen: React.FC = () => {
             onChangeText={setUsername}
             autoCapitalize="none"
             icon={<Ionicons name="person-outline" size={18} color={colors.text.muted} />}
+            testID="login-email-input"
           />
 
           <Input
@@ -67,6 +68,7 @@ export const LoginScreen: React.FC = () => {
             onChangeText={setPassword}
             secureTextEntry
             icon={<Ionicons name="key-outline" size={18} color={colors.text.muted} />}
+            testID="login-password-input"
           />
 
           <Button
@@ -76,6 +78,7 @@ export const LoginScreen: React.FC = () => {
             loading={loading}
             onPress={handleLogin}
             style={styles.submitBtn}
+            testID="login-submit-btn"
           />
         </Card>
 

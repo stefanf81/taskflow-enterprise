@@ -20,10 +20,14 @@
     },
     {
       "feature": "Booking Wizard & Slot Picker",
+      "description": "4-step wizard: Treatment → Stylist → Date/Slot → Contact (aligned across both platforms)",
       "webComponent": "frontend/src/app/app.ts",
       "webTemplate": "frontend/src/app/app.html",
       "mobileComponent": "mobile/src/screens/BookingScreen.tsx",
-      "mobileSlotPicker": "mobile/src/components/booking/TimeSlotPicker.tsx",
+      "mobileSubComponents": [
+        "mobile/src/components/booking/TimeSlotPicker.tsx",
+        "mobile/src/components/booking/ReceiptModal.tsx"
+      ],
       "storeHook": {
         "web": "frontend/src/app/appointment.store.ts",
         "mobile": "mobile/src/hooks/useAppointments.ts"
@@ -96,6 +100,23 @@
         "web": "frontend/src/app/auth.state.ts",
         "mobile": "mobile/src/store/useAuthStore.ts"
       }
+    },
+    {
+      "feature": "FAQ Section",
+      "webComponent": "frontend/src/app/components/faq-section/faq-section.ts",
+      "mobileComponent": "mobile/src/screens/HomeScreen.tsx",
+      "notes": "FAQ is inline in the HomeScreen on mobile (not a separate component)"
+    },
+    {
+      "feature": "Announcement Bar",
+      "webComponent": "frontend/src/app/components/announcement-bar/announcement-bar.ts",
+      "mobileComponent": "mobile/src/screens/HomeScreen.tsx",
+      "notes": "Announcement bar is inline in the HomeScreen on mobile (not a separate component)"
+    },
+    {
+      "feature": "Receipt Modal (Booking Confirmation)",
+      "webComponent": "frontend/src/app/components/receipt-modal/receipt-modal.ts",
+      "mobileComponent": "mobile/src/components/booking/ReceiptModal.tsx"
     }
   ],
   "sharedContracts": {

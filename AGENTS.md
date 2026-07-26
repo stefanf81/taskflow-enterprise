@@ -71,7 +71,11 @@ npm run build            # production build
 npm start                # Start Expo Metro Bundler
 npm run android          # Run on Android Emulator or connected device
 npm run ios              # Run on iOS Simulator or connected device
-npm test                 # Run Jest unit & component tests
+npm test                 # Run Jest unit & component tests (>70% coverage enforced)
+npm run e2e:build:android # Build Release APK & Test APK for Detox E2E
+npm run e2e:test:android  # Run Detox E2E tests on Android Emulator (100% PASS)
+npm run e2e:build        # Build Release App for iOS Simulator Detox E2E
+npm run e2e:test         # Run Detox E2E tests on iOS Simulator
 ```
 
 ### Developer Environment

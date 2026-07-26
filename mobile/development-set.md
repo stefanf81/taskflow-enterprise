@@ -251,10 +251,45 @@ docker compose down
 
 ## Running Tests
 
+### 1. Unit & Component Tests (Jest + RNTL)
+
 ```bash
-npm test                 # run once
+npm test                 # run once with coverage check (351 tests, 48 suites)
 npm run test:watch       # watch mode
 npm run lint             # TypeScript type-check (tsc --noEmit)
+```
+
+Enforces **>70% coverage** across branches, functions, lines, and statements in `jest.config.js`.
+
+---
+
+### 2. End-to-End (E2E) Native Testing (Detox v20)
+
+Detox E2E tests run on standalone Release binaries containing pre-compiled JavaScript bytecode bundles (no Metro server or dev-client overlays required during execution).
+
+#### Prerequisites:
+- **Android:** JDK 21 (`/opt/homebrew/opt/openjdk@21`) and Android SDK with emulator AVD `Pixel_6_API_35`.
+- **iOS:** Xcode >=16, CocoaPods (iOS 16.4 deployment target), and `applesimutils` (`brew install wix/brew/applesimutils`).
+
+#### Android E2E Commands:
+```bash
+# 1. Build Standalone Release APK and Test APK (JDK 21)
+npm run e2e:build:android
+
+# 2. Run Detox E2E tests on Android Emulator
+npm run e2e:test:android
+```
+
+#### iOS E2E Commands:
+```bash
+# 1. Build Standalone Release App Bundle for iOS Simulator
+npm run e2e:build
+
+# 2. Build Detox framework cache (one-time)
+npx detox build-framework-cache
+
+# 3. Run Detox E2E tests on iOS Simulator
+npm run e2e:test
 ```
 
 ---

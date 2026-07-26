@@ -19,3 +19,4 @@ web-build/
 # Native build artifacts
 android/
 ios/
+coverage/

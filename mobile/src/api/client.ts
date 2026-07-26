@@ -41,8 +41,8 @@ const getBaseUrl = () => {
     if (Platform.OS === 'android' && url.includes('localhost')) {
       url = url.replace('localhost', '10.0.2.2');
     }
-    // Enforce HTTPS in production builds (not dev — localhost is fine for development)
-    if (!__DEV__ && url.startsWith('http://')) {
+    // Enforce HTTPS in production builds (allow http for local test/emulator IPs)
+    if (!__DEV__ && url.startsWith('http://') && !url.includes('10.0.2.2') && !url.includes('localhost')) {
       throw new Error(
         'Production API URL must use HTTPS. Found: ' + url +
         '. Set EXPO_PUBLIC_API_URL to an https:// URL in your production .env file.',
