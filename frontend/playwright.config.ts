@@ -18,7 +18,13 @@ export default defineConfig({
   reporter: 'html',
 
   use: {
-    baseURL: 'http://127.0.0.1:4200',
+    // Must match the backend's CORS allowed origin (app.cors.allowed-origins).
+    // Spring Security rejects state-changing requests whose Origin header isn't
+    // in the allow-list with 403 "Invalid CORS request" — GETs slip through
+    // (no Origin header on same-origin GET) but every POST/PUT fails. Using
+    // `localhost` keeps the browser Origin aligned with the prod default
+    // `http://localhost:4200`. docker-compose also whitelists 127.0.0.1.
+    baseURL: 'http://localhost:4200',
     trace: 'on',
     screenshot: 'only-on-failure',
     // Playwright injects inline automation scripts into the page context.
@@ -41,7 +47,7 @@ export default defineConfig({
   /* Automatically spin up the Angular dev server during E2E testing */
   webServer: {
     command: 'npm start',
-    url: 'http://127.0.0.1:4200',
+    url: 'http://localhost:4200',
     reuseExistingServer: !process.env['CI'],
     timeout: 120_000, // 2 minutes timeout for slow startup
   },

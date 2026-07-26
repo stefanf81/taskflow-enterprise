@@ -74,6 +74,11 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
+      # CORS: same-origin SPA→nginx→backend requests bypass CORS entirely, but
+      # state-changing POST/PUT still carry an Origin header that Spring checks
+      # against this list. Whitelist both loopback hostnames so the E2E stack
+      # passes whether Playwright drives the browser via localhost or 127.0.0.1.
+      - APP_CORS_ALLOWED_ORIGINS=http://localhost:4200,http://127.0.0.1:4200
       # JVM sizing is owned by the deployment (JAVA_TOOL_OPTIONS), not the image
       # CMD — see Dockerfile / Dockerfile.x64 for the sizing-agnostic rationale.
       # This block mirrors the prod homelab/TF backend.yaml intent (modulo
