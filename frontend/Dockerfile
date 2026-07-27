@@ -11,7 +11,9 @@ ARG APK_BUST=0
 # The nginxinc image ships Alpine's nginx; the brotli module is ABI-compatible.
 # Insert load_module directives at top of main nginx.conf (must precede events block).
 # hadolint ignore=DL3018
-RUN apk update && apk upgrade --no-cache && \
+RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
+    : "${APK_BUST}" && \
+    apk update && apk upgrade --no-cache && \
     apk add --no-cache nginx-mod-http-brotli brotli && \
     sed -i '1i load_module /usr/lib/nginx/modules/ngx_http_brotli_filter_module.so;' /etc/nginx/nginx.conf && \
     sed -i '1i load_module /usr/lib/nginx/modules/ngx_http_brotli_static_module.so;' /etc/nginx/nginx.conf
