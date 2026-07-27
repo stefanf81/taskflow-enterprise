@@ -79,7 +79,7 @@ jobs:
             backend:
               - src/**
               - shared/**
-              - *.gradle
+              - '*.gradle'
               - gradle.properties
               - gradlew
               - gradle/**
