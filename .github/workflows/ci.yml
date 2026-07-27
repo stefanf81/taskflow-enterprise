@@ -78,12 +78,15 @@ jobs:
           filters: |
             backend:
               - src/**
-              - build.gradle
-              - settings.gradle
+              - shared/**
+              - *.gradle
+              - gradle.properties
+              - gradlew
               - gradle/**
 
             frontend:
               - frontend/**
+              - shared/**
 
             docker:
               - Dockerfile*
@@ -142,7 +145,8 @@ jobs:
 
     if: |
       needs.changes.outputs.docker == 'true' ||
-      github.event_name == 'schedule'
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
 
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -495,8 +499,9 @@ jobs:
 
       - name: Start Spring Boot
         run: |
+          # SPRING_PROFILES_ACTIVE is set in the job env block above;
+          # no -D override needed here — keep the java command minimal.
           nohup java \
-            -Dspring.profiles.active=prod \
             -jar backend-jar-dir/*.jar \
             > spring.log 2>&1 < /dev/null &
 
@@ -702,6 +707,27 @@ jobs:
           # layer carries stale OS packages with known CVEs.
           build-args: |
             APK_BUST=${{ github.run_id }}-${{ github.run_attempt }}
+
+      ##########################################################
+      # Trivy Database Cache
+      #
+      # Weekly cache key (ISO week) so the Trivy vulnerability DB is
+      # reused across CI runs within the same week — avoids re-downloading
+      # a ~200 MB DB on every build.
+      ##########################################################
+
+      - name: Compute Trivy Cache Key
+        id: trivy-cache-key
+        run: |
+          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Trivy Database
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/trivy
+          key: trivy-${{ runner.os }}-${{ env.TRIVY_VERSION }}-${{ steps.trivy-cache-key.outputs.week }}
+          restore-keys: |
+            trivy-${{ runner.os }}-${{ env.TRIVY_VERSION }}-
 
       ##########################################################
       # Scan

@@ -10,10 +10,11 @@ name: TaskFlow Push Docker Images
 # What it does:
 #   1. Builds the backend JAR and frontend production bundle (the same
 #      artifacts the Dockerfiles expect in their build context).
-#   2. Builds the Docker images for the selected component(s) (load only).
+#   2. Builds and pushes Docker images to a temporary scan tag on GHCR
+#      (:<tag>-scan) with provenance and SBOM attestations enabled.
 #   3. Scans each image with Trivy (HIGH,CRITICAL — hard gate, exit-code: 1).
-#   4. Pushes images to ghcr.io with both :<tag> and :latest tags only if
-#      the scan passes (or skip_scan is set), including provenance and SBOM.
+#   4. Promotes images to :<tag> and :latest using `docker buildx imagetools create`
+#      only if the scan passes (or skip_scan is set), ensuring bit-for-bit identity.
 #
 # Trigger:
 #   workflow_dispatch only — this workflow is never started automatically.
@@ -268,18 +269,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Compute Trivy Cache Key
+        if: ${{ !inputs.skip_scan }}
+        id: trivy-cache-key
+        run: |
+          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
       - name: Cache Trivy Database
         if: ${{ !inputs.skip_scan }}
         uses: actions/cache@v6
         with:
           path: ~/.cache/trivy
-          key: trivy-push-${{ runner.os }}-${{ env.TRIVY_VERSION }}-${{ github.run_id }}
+          key: trivy-${{ runner.os }}-${{ env.TRIVY_VERSION }}-${{ steps.trivy-cache-key.outputs.week }}
           restore-keys: |
-            trivy-push-${{ runner.os }}-${{ env.TRIVY_VERSION }}-
+            trivy-${{ runner.os }}-${{ env.TRIVY_VERSION }}-
 
       ##########################################################
-      # Build (load only — the scan runs against the local image
-      # before we push to the registry)
+      # Build and Push to temporary scan tag (:tag-scan) with
+      # provenance and SBOM enabled. Single build pass avoids rebuilding.
       ##########################################################
 
       - name: Build Image
@@ -289,12 +296,10 @@ jobs:
           context: ${{ matrix.component == 'backend' && '.' || 'frontend' }}
           file: ${{ matrix.component == 'backend' && 'Dockerfile.x64' || 'frontend/Dockerfile' }}
 
-          push: false
-          load: true
+          push: true
 
           tags: |
-            ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:${{ steps.images.outputs.tag }}
-            ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:latest
+            ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:${{ steps.images.outputs.tag }}-scan
 
           cache-from: |
             type=gha,scope=${{ matrix.component }}-main
@@ -303,8 +308,8 @@ jobs:
           cache-to: |
             type=gha,mode=max,scope=${{ matrix.component }}-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }}
 
-          provenance: false
-          sbom: false
+          provenance: true
+          sbom: true
 
           # Cache-busting: force `apk upgrade` to run on every build
           # so the image always ships the latest Alpine security patches.
@@ -314,11 +319,10 @@ jobs:
       ##########################################################
       # Hard-gate scan (HIGH/CRITICAL, exit-code: 1)
       #
-      # Scans the locally-built image BEFORE pushing. If the scan
-      # fails with exit-code: 1, the Push step below is automatically
-      # skipped (GitHub defaults: a step runs only if all previous
-      # required steps succeeded). Set `skip_scan: true` on the
-      # workflow_dispatch input only in exceptional circumstances.
+      # Scans the published scan image BEFORE promoting. If the scan
+      # fails with exit-code: 1, the Promote step below is automatically
+      # skipped. Set `skip_scan: true` on workflow_dispatch only in
+      # exceptional circumstances.
       ##########################################################
 
       - name: Scan Docker Image
@@ -326,7 +330,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           version: ${{ env.TRIVY_VERSION }}
-          image-ref: ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:${{ steps.images.outputs.tag }}
+          image-ref: ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:${{ steps.images.outputs.tag }}-scan
           scan-type: image
           format: sarif
           output: trivy-results.sarif
@@ -335,33 +339,21 @@ jobs:
           exit-code: 1
 
       ##########################################################
-      # Push (only runs if all previous steps succeeded — meaning
+      # Promote (only runs if all previous steps succeeded — meaning
       # the scan passed or was explicitly skipped)
+      # Uses `docker buildx imagetools create` to instantly tag the
+      # scanned artifact on GHCR without rebuilding.
       ##########################################################
 
-      - name: Push Image
-        uses: docker/build-push-action@v7
-        with:
-          context: ${{ matrix.component == 'backend' && '.' || 'frontend' }}
-          file: ${{ matrix.component == 'backend' && 'Dockerfile.x64' || 'frontend/Dockerfile' }}
-
-          push: true
-
-          tags: |
-            ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:${{ steps.images.outputs.tag }}
-            ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:latest
-
-          cache-from: |
-            type=gha,scope=${{ matrix.component }}-main
-            type=gha,scope=${{ matrix.component }}-pr
-
-          provenance: true
-          sbom: true
-
-          # Cache-busting: force `apk upgrade` to run on every build
-          # so the image always ships the latest Alpine security patches.
-          build-args: |
-            APK_BUST=${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Promote Image to Final Tags
+        env:
+          IMAGE: ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}
+          TAG: ${{ steps.images.outputs.tag }}
+        run: |
+          docker buildx imagetools create \
+            --tag "${IMAGE}:${TAG}" \
+            --tag "${IMAGE}:latest" \
+            "${IMAGE}:${TAG}-scan"
 
       - name: Upload SARIF
         if: always() && hashFiles('trivy-results.sarif') != ''

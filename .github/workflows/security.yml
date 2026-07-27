@@ -2,13 +2,22 @@ name: Nightly Security Scans
 
 on:
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '15 2 * * *'
 
   workflow_dispatch:
 
 permissions:
   contents: read
   security-events: write
+
+# Prevent a manual workflow_dispatch run from colliding with the nightly
+# schedule (and vice-versa). cancel-in-progress: false keeps both runs
+# serialized rather than racing for the same runner/scanner resources,
+# since SARIF uploads to the same Code Scanning category can otherwise
+# interleave and clobber each other.
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   JAVA_VERSION: "21"
@@ -95,11 +104,15 @@ jobs:
 
       matrix:
         component:
+          # Backend scans the repo root but skips frontend/ so npm findings
+          # are not double-reported under both Trivy FS categories.
           - name: Backend
             path: .
+            skip-dirs: frontend
 
           - name: Frontend
             path: frontend
+            skip-dirs: ""
 
     steps:
       - name: Checkout
@@ -145,6 +158,7 @@ jobs:
           version: ${{ env.TRIVY_VERSION }}
           scan-type: fs
           scan-ref: ${{ matrix.component.path }}
+          skip-dirs: ${{ matrix.component.skip-dirs }}
           format: sarif
           output: trivy-results.sarif
 
@@ -156,8 +170,12 @@ jobs:
       # Upload Results
       #####################################################
 
+      # Distinct category per matrix component is required: GitHub Code
+      # Scanning rejects (or overwrites) multiple SARIF uploads from the
+      # same tool with the same category in one workflow run.
       - name: Upload SARIF
         if: always() && hashFiles('trivy-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
+          category: trivy-fs-${{ matrix.component.name }}

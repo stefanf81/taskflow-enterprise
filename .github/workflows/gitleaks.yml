@@ -10,8 +10,8 @@ on:
       - main
 
   schedule:
-    # Every night at 03:00 UTC
-    - cron: "0 3 * * *"
+    # Every night at 02:45 UTC (staggered from other daily workflows)
+    - cron: "45 2 * * *"
 
   workflow_dispatch:
 
@@ -46,7 +46,7 @@ jobs:
       ##########################################################
 
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

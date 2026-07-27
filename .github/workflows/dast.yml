@@ -113,8 +113,9 @@ jobs:
 
       - name: Start Spring Boot
         run: |
+          # SPRING_PROFILES_ACTIVE is set in the job env block above;
+          # no -D override needed here — keep the java command minimal.
           nohup java \
-            -Dspring.profiles.active=prod \
             -jar build/libs/*.jar \
             > spring.log 2>&1 < /dev/null &
 
@@ -169,6 +170,7 @@ jobs:
       ##########################################################
 
       - name: Set up Python
+        if: always()
         uses: actions/setup-python@v7
         with:
           python-version: "3.x"

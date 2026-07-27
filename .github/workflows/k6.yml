@@ -3,6 +3,14 @@ name: k6 Browser Test
 on:
   workflow_dispatch:
 
+# Least-privilege: this workflow only checks out the repo and runs a k6
+# browser test against an external BASE_URL. It must NOT inherit the
+# repository-wide "Read and write" default (required by pushdockerimage.yml
+# for GHCR pushes) — that would silently grant packages:write, contents:write,
+# etc. to a job that needs none of them.
+permissions:
+  contents: read
+
 jobs:
   browser-test:
     runs-on: ubuntu-latest
