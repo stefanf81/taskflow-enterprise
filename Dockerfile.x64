@@ -30,44 +30,14 @@ FROM --platform=$PLATFORM eclipse-temurin:21-jre-alpine AS extractor
 
 WORKDIR /app
 
-# Copy the pre-built executable Spring Boot jar from the build context.
-#
-# NOTE on build performance:
-#
-# This project intentionally separates compilation (performed by the CI runner)
-# from packaging (performed by Docker). Java dependencies have already been
-# resolved before the Docker build begins, keeping image creation fast.
-#
-# If compilation is ever moved into this Dockerfile (a monolithic multi-stage
-# build), leverage BuildKit cache mounts so Gradle dependencies and compiler
-# plugins survive between builds:
-#
-#     RUN --mount=type=cache,target=/root/.gradle ./gradlew bootJar
-#
-# Without the cache mount Gradle will download dependencies from scratch on
-# every build, significantly increasing build times.
-#
-# WARNING: the glob below must match exactly ONE jar. If both the bootJar and
-# the -plain.jar variant are present (e.g. after `./gradlew build` instead of
-# `./gradlew bootJar`), this COPY command will fail. Only the bootJar should
-# be in build/libs/ before building this image.
-
-COPY build/libs/*.jar /app/app.jar
-
-# Extract the executable Spring Boot jar into deterministic Docker layers.
-#
-# Separating framework dependencies, snapshot dependencies, the Spring Boot
-# loader and application classes maximizes Docker layer cache reuse.
-# Changes to application code typically invalidate only the top application
-# layer instead of forcing the entire image to be rebuilt.
+COPY build/libs/taskflow.jar application.jar
 
 RUN java \
-        -Djarmode=tools \
-        -jar /app/app.jar \
-        extract \
-        --layers \
-        --launcher \
-        --destination extracted
+    -Djarmode=tools \
+    -jar application.jar \
+    extract \
+    --layers \
+    --destination extracted
 
 # =========================================================================================
 # STAGE 2: RUNTIME
@@ -97,13 +67,13 @@ WORKDIR /app
 # layer ships outdated OS packages with known CVEs even when Alpine has
 # published fixes. Pass `--build-arg APK_BUST=$(date +%s)` in CI.
 
-ARG APK_BUST=0
-RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
-    : "${APK_BUST}" \
+ARG APK_BUST=stable
+
+RUN : "${APK_BUST}" \
  && apk upgrade --no-cache \
+ && apk add --no-cache tini \
  && addgroup -g 10001 -S appgroup \
- && adduser -u 10001 -S appuser -G appgroup \
- && apk add --no-cache tini
+ && adduser -u 10001 -S appuser -G appgroup
 
 # Copy the extracted layers in dependency order.
 #
@@ -148,15 +118,12 @@ COPY --link --from=extractor --chown=10001:10001 /app/extracted/application/ ./
 
 RUN java \
     -XX:ArchiveClassesAtExit=application.jsa \
-    -Dloader.main=com.example.cdstraining.CdsTrainingApplication \
     -Dspring.context.exit=onRefresh \
-    -Dapp.cds-training=true \
     -Dspring.flyway.enabled=false \
-    -Dspring.cache.type=redis \
     -Dmanagement.tracing.enabled=false \
     -Dmanagement.otlp.tracing.export.enabled=false \
     -Dotel.sdk.disabled=true \
-    org.springframework.boot.loader.launch.PropertiesLauncher \
+    -jar application.jar \
  && test -s application.jsa \
  && chown 10001:10001 application.jsa
 
@@ -205,4 +172,5 @@ ENTRYPOINT ["/sbin/tini", "--", "java"]
 CMD ["-XX:+ExitOnOutOfMemoryError", \
      "-XX:SharedArchiveFile=application.jsa", \
      "-Xshare:auto", \
-     "org.springframework.boot.loader.launch.JarLauncher"]
+     "-jar", \
+     "application.jar"]
