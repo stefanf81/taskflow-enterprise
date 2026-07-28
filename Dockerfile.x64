@@ -30,7 +30,18 @@ FROM --platform=$PLATFORM eclipse-temurin:21-jre-alpine AS extractor
 
 WORKDIR /app
 
-COPY build/libs/taskflow.jar application.jar
+# Copy the pre-built jar from the build context.
+#
+# A wildcard is used instead of a hardcoded filename (e.g. taskflow.jar) because:
+#   1. Spring Boot's bootJar task includes the project version in the archive name
+#      (taskflow-0.0.1-SNAPSHOT.jar), which changes with every release.
+#   2. CI artifact download (actions/download-artifact) may preserve directory
+#      prefixes differently across workflow versions.
+#
+# This glob must match exactly ONE jar. Only the bootJar should be in build/libs/
+# before building this image (the plain jar is disabled via `jar { enabled = false }`
+# in build.gradle).
+COPY build/libs/*.jar application.jar
 
 RUN java \
     -Djarmode=tools \
