@@ -82,16 +82,20 @@ RUN addgroup \
 #
 # Therefore, do not insert load_module directives manually.
 
+# Create the static HTML root and pre-create temp directories with correct
+# ownership. At runtime, the /var/cache/nginx tmpfs mount in docker-compose
+# hides these directories, so docker-entrypoint.sh recreates them on every
+# container start.
 RUN mkdir -p \
         /usr/share/nginx/html \
-        /tmp/nginx/client_temp \
-        /tmp/nginx/proxy_temp \
-        /tmp/nginx/fastcgi_temp \
-        /tmp/nginx/uwsgi_temp \
-        /tmp/nginx/scgi_temp \
+        /var/cache/nginx/client_temp \
+        /var/cache/nginx/proxy_temp \
+        /var/cache/nginx/fastcgi_temp \
+        /var/cache/nginx/uwsgi_temp \
+        /var/cache/nginx/scgi_temp \
     && chown -R "${NGINX_UID}:${NGINX_GID}" \
         /usr/share/nginx/html \
-        /tmp/nginx
+        /var/cache/nginx
 
 COPY --from=compression \
     --chown=${NGINX_UID}:${NGINX_GID} \
@@ -104,6 +108,11 @@ COPY nginx-main.conf /etc/nginx/nginx.conf
 # Your existing HTTP server block
 COPY nginx.conf /etc/nginx/http.d/default.conf
 
+# Startup entrypoint: recreates temp directories on every container start
+# (the /var/cache/nginx tmpfs mount hides image-layer directories), then
+# execs nginx. PID 1 becomes nginx so it receives signals correctly.
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/
+
 # Validate module loading and the complete configuration during the build.
 RUN nginx -t
 
@@ -113,4 +122,4 @@ USER ${NGINX_UID}:${NGINX_GID}
 
 STOPSIGNAL SIGQUIT
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/usr/local/bin/docker-entrypoint.sh"]

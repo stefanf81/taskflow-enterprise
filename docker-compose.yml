@@ -215,9 +215,9 @@ services:
       - frontend-tier
     read_only: true
     tmpfs:
-      - /tmp:uid=101,gid=101
-      - /var/cache/nginx:uid=101,gid=101
-      - /var/run:uid=101,gid=101
+      - /tmp:uid=10001,gid=10001
+      - /var/cache/nginx:uid=10001,gid=10001
+      - /var/run:uid=10001,gid=10001
     security_opt:
       - no-new-privileges:true
     cap_drop:
