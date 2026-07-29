@@ -188,8 +188,9 @@ EXPOSE 8080
 
 ENTRYPOINT ["/sbin/tini", "--", "java"]
 
-CMD ["-XX:+ExitOnOutOfMemoryError", \
-     "-XX:SharedArchiveFile=application.jsa", \
-     "-Xshare:auto", \
-     "-jar", \
-     "application.jar"]
+CMD [ \
+    "-XX:+ExitOnOutOfMemoryError", \
+    "-XX:SharedArchiveFile=application.jsa", \
+    "-Xshare:auto", \
+    "org.springframework.boot.loader.launch.JarLauncher" \
+]
