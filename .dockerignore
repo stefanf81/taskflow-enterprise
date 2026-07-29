@@ -27,7 +27,7 @@ gradle.properties
 build/*
 !build/libs/
 build/libs/*
-!build/libs/taskflow.jar
+!build/libs/taskflow*.jar
 
 frontend/
 mobile/
