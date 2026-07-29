@@ -24,10 +24,18 @@ settings.gradle
 settings.gradle.kts
 gradle.properties
 
-build/*
-!build/libs/
-build/libs/*
-!build/libs/taskflow*.jar
+# Exclude build subdirectories explicitly rather than using `build/*` because
+# Docker BuildKit does not reliably re-include directories excluded by a
+# parent wildcard pattern (observed with docker-container driver on Docker
+# 28.x).  `build/libs/` is never excluded so the pre-built JAR is always
+# included in the build context.
+build/classes/
+build/generated/
+build/reports/
+build/resources/
+build/tmp/
+build/test-results/
+build/main-cp.txt
 
 frontend/
 mobile/

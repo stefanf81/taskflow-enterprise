@@ -491,6 +491,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: backend-jar
+          path: backend-jar-dir
 
       ##########################################################
       # Start Backend
@@ -501,7 +502,7 @@ jobs:
           # SPRING_PROFILES_ACTIVE is set in the job env block above;
           # no -D override needed here — keep the java command minimal.
           nohup java \
-            -jar build/libs/*.jar \
+            -jar backend-jar-dir/*.jar \
             > spring.log 2>&1 < /dev/null &
 
       ##########################################################
@@ -656,6 +657,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: backend-jar
+          path: build/libs
 
       - name: Download Frontend Bundle
         if: matrix.component == 'frontend'
