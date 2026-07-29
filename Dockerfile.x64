@@ -48,6 +48,7 @@ RUN java \
     -jar application.jar \
     extract \
     --layers \
+    --launcher \
     --destination extracted
 
 # =========================================================================================
@@ -102,23 +103,28 @@ COPY --link --from=extractor --chown=10001:10001 /app/extracted/application/ ./
 
 # Build a JVM Class Data Sharing (CDS) archive.
 #
-# The application is started once during the image build so the JVM records the
-# classes actually loaded during startup. That archive is reused at runtime
-# (-Xshare:auto), reducing class-loading work and improving cold-start latency.
+# Uses PropertiesLauncher with -Dloader.main to delegate to
+# CdsTrainingApplication (com.example.cdstraining), which sits outside the
+# production component-scan hierarchy and explicitly excludes auto-configuration
+# requiring external infrastructure (database, OTLP collector, etc.), so this
+# runs successfully during Docker build before any containers are started.
+#
+# PropertiesLauncher is used instead of JarLauncher because it supports the
+# loader.main property for specifying an alternative main class.
+#
+# Disable components that are irrelevant during CDS training to keep the
+# startup minimal and fast:
+#   - spring.cache.type=redis                : Instantiate RedisCacheManager so its
+#                                              classes (and the JSON serializer graph)
+#                                              are baked into the CDS archive. No real
+#                                              Redis connection is opened: Lettuce is
+#                                              lazy and the context exits at refresh.
+#   - management.otlp.tracing.export.enabled=false : Don't attempt OTLP export
+#   - app.cds-training=true                  : Skips the admin-user CommandLineRunner
 #
 # spring.context.exit=onRefresh terminates the application immediately after
 # the Spring context has fully initialized, allowing CDS to observe a complete
 # startup without leaving a server running during the Docker build.
-#
-# This keeps the training startup deterministic and independent of external
-# infrastructure while still loading the majority of framework classes needed
-# for production startup.
-#
-# spring.cache.type is set to redis (matching application-prod.properties) so
-# that RedisCacheManager and the GenericJackson2JsonRedisSerializer bean graph
-# are instantiated during training and baked into the CDS archive. No real
-# Redis connection is opened: Lettuce connects lazily and the context exits at
-# refresh before any cache read/write executes.
 #
 # NOTE:
 #
@@ -127,16 +133,18 @@ COPY --link --from=extractor --chown=10001:10001 /app/extracted/application/ ./
 # deployed container benefits from faster cold starts without paying the CDS
 # training cost repeatedly.
 
-RUN java \
-    -XX:ArchiveClassesAtExit=application.jsa \
-    -Dspring.context.exit=onRefresh \
-    -Dspring.flyway.enabled=false \
-    -Dmanagement.tracing.enabled=false \
-    -Dmanagement.otlp.tracing.export.enabled=false \
-    -Dotel.sdk.disabled=true \
-    -jar application.jar \
- && test -s application.jsa \
- && chown 10001:10001 application.jsa
+RUN java -XX:ArchiveClassesAtExit=application.jsa \
+         -Dloader.main=com.example.cdstraining.CdsTrainingApplication \
+         -Dspring.context.exit=onRefresh \
+         -Dapp.cds-training=true \
+         -Dspring.flyway.enabled=false \
+         -Dspring.cache.type=redis \
+         -Dmanagement.tracing.enabled=false \
+         -Dmanagement.otlp.tracing.export.enabled=false \
+         -Dotel.sdk.disabled=true \
+         org.springframework.boot.loader.launch.PropertiesLauncher \
+    && test -s application.jsa \
+    && chown 10001:10001 application.jsa
 
 USER 10001:10001
 
