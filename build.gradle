@@ -4,7 +4,7 @@ plugins {
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'org.owasp.dependencycheck' version '12.2.2'
 	id 'jacoco'
-	id 'com.github.ben-manes.versions' version '0.54.0'
+	id 'com.github.ben-manes.versions' version '0.56.0'
 	id 'com.github.spotbugs' version '6.5.9'
 }
 group = 'com.example'
@@ -78,8 +78,8 @@ dependencies {
 	implementation 'com.fasterxml.jackson.core:jackson-annotations:2.22'
 	implementation 'tools.jackson.core:jackson-databind:3.2.1'
 	// Hibernate 2nd-level cache with Caffeine JCache region factory
-	implementation 'org.hibernate.orm:hibernate-jcache'
-	implementation 'com.github.ben-manes.caffeine:jcache:3.2.0'
+	implementation 'org.hibernate.orm:hibernate-jcache:7.4.5.Final'
+	implementation 'com.github.ben-manes.caffeine:jcache:3.2.4'
 	// Cache (Redis-backed via spring-boot-starter-data-redis; Caffeine was unused)
 	// Observability
 	implementation 'org.springframework.boot:spring-boot-micrometer-tracing-opentelemetry'
@@ -104,7 +104,7 @@ dependencies {
 	testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
 	testImplementation 'org.testcontainers:testcontainers-postgresql'
 	testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.2'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher:6.1.2'
 	// Static analysis
 	spotbugsPlugins 'com.h3xstream.findsecbugs:findsecbugs-plugin:1.14.0'
 }
