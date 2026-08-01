@@ -21,7 +21,6 @@ import { AppointmentStore } from './appointment.store';
 import { ServiceCatalogStore } from './service-catalog.store';
 import { ReviewStore } from './review.store';
 import { formatTime12Hour, isOverdue, DEFAULT_TIME_SLOTS } from './time-utils';
-import { CustomerStore } from './customer.store';
 import { StylistCard } from './components/stylist-card/stylist-card';
 import { LookbookComponent } from './components/lookbook/lookbook';
 import { PostBookingActionsComponent } from './components/post-booking-actions/post-booking-actions';
@@ -68,7 +67,6 @@ export class App implements OnInit, OnDestroy {
   private readonly store = inject(AppointmentStore);
   private readonly catalogStore = inject(ServiceCatalogStore);
   private readonly reviewStore = inject(ReviewStore);
-  readonly customerStore = inject(CustomerStore);
   private readonly router = inject(Router);
   private readonly authState = inject(AuthState);
   private readonly destroyRef = inject(DestroyRef);
@@ -109,16 +107,9 @@ export class App implements OnInit, OnDestroy {
   readonly bookingService = computed(() => this.bookingModel().serviceType);
 
   // Core Admin Reactive States delegated to the Store
-  readonly appointments = this.store.appointments;
-  readonly searchQuery = this.store.searchQuery;
-  readonly selectedFilter = this.store.selectedFilter;
-
-  // Pagination State delegated to the Store
-  readonly currentPage = this.store.currentPage;
-  readonly totalPages = this.store.totalPages;
-
-  // Global Dashboard Stats delegated to the Store
-  readonly stats = this.store.stats;
+  // (appointments/stats/filter/pagination now live only in AppointmentStore —
+  // the dashboard components read them directly; these aliases were removed as
+  // dead code since the guest template never referenced them.)
 
   // Alerts & Loading State delegated to the Store
   readonly errorMessage = this.store.errorMessage;
@@ -263,8 +254,8 @@ export class App implements OnInit, OnDestroy {
     // the X-XSRF-TOKEN header automatically via withXsrfConfiguration.
     this.appointmentService.fetchCsrfToken().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
 
-    this.catalogStore.loadServices();
-    this.reviewStore.loadRatings();
+    // Catalog + ratings are fetched eagerly by their httpResources at boot —
+    // no manual reload here (would duplicate every request, B3).
     // A1.2: restore UI role from the backend if a session cookie exists (survives
     // refresh). The role lives only in memory — never read from sessionStorage.
     // bootstrap() calls me() internally and sets the role signal when complete.
@@ -274,7 +265,9 @@ export class App implements OnInit, OnDestroy {
       .subscribe({
         next: (role) => {
           if (role) {
-            this.loadAppointments();
+            // Appointments fetch reactively once AuthState flips to logged-in
+            // (the admin/customer resources read isLoggedIn) — no explicit
+            // reload needed here (avoids a duplicate request, B1).
             this.router.navigateByUrl(this.authState.dashboardPathFor(role));
           }
         },
@@ -288,7 +281,7 @@ export class App implements OnInit, OnDestroy {
   // Called after a successful login from the deferred AuthModalComponent.
   onAuthLoginSuccess(role: string): void {
     this.showSuccess(role === 'ROLE_ADMIN' ? 'Welcome back, Owner!' : 'Welcome back!');
-    this.loadAppointments();
+    // Appointments load reactively via the resources' isLoggedIn dependency.
     this.router.navigateByUrl(this.authState.dashboardPathFor(role));
   }
 
@@ -312,6 +305,15 @@ export class App implements OnInit, OnDestroy {
 
     if (!name || !email || !phone || !model.bookingDate) {
       this.errorMessage.set('Please fill out all required fields to secure your slot.');
+      return;
+    }
+
+    // The slot may have been taken by another guest since the last availability
+    // check — refuse the stale slot and refresh the grid instead of submitting
+    // blindly (B4).
+    if (this.busySlots().includes(model.bookingTime)) {
+      this.errorMessage.set('That time slot was just taken. Please pick another slot.');
+      this.onBarberOrDateChange();
       return;
     }
 
@@ -359,64 +361,10 @@ export class App implements OnInit, OnDestroy {
   }
 
   // Load Paginated Bookings from Backend (Delegated to the Store)
-  loadAppointments(): void {
-    if (this.userRole() === 'ROLE_CUSTOMER') {
-      this.customerStore.loadAppointments();
-    } else {
-      this.store.loadAppointments(this.selectedFilter(), this.searchQuery());
-    }
-  }
-
-  // Admin actions (approve/deny/delete) have been moved to AdminDashboard.
-  // The App component no longer duplicates them — see src/app/features/admin/admin-dashboard.ts.
-
-  // Set Admin Dashboard Filters
-  setFilter(filter: string): void {
-    this.selectedFilter.set(filter);
-    this.currentPage.set(0); // Reset page
-    this.loadAppointments();
-  }
-
-  // Search Input change handler (debounced to avoid a request per keystroke - P2)
-  private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private successTimer: ReturnType<typeof setTimeout> | null = null;
-
-  ngOnDestroy(): void {
-    if (this.searchDebounceTimer) {
-      clearTimeout(this.searchDebounceTimer);
-    }
-    if (this.successTimer) {
-      clearTimeout(this.successTimer);
-    }
-  }
-
-  onSearchChange(value: string): void {
-    this.searchQuery.set(value);
-    this.currentPage.set(0); // Reset page
-
-    if (this.searchDebounceTimer) {
-      clearTimeout(this.searchDebounceTimer);
-    }
-    this.searchDebounceTimer = setTimeout(() => {
-      this.loadAppointments();
-    }, 300);
-  }
-
-  // Page Controls
-  setPage(page: number): void {
-    if (page >= 0 && page < this.totalPages()) {
-      this.currentPage.set(page);
-      this.loadAppointments();
-    }
-  }
-
-  nextPage(): void {
-    this.setPage(this.currentPage() + 1);
-  }
-
-  prevPage(): void {
-    this.setPage(this.currentPage() - 1);
-  }
+  // NOTE: admin filter/search/page handlers (setFilter/onSearchChange/setPage/
+  // nextPage/prevPage) were removed — they were dead code since the guest
+  // template does not render the admin list. The dashboard owns them now
+  // (admin-dashboard.ts delegates straight to AppointmentStore).
 
   // Reset Guest Form (mutate model — convenience signals reflect automatically)
   resetBookingForm(): void {
@@ -431,6 +379,7 @@ export class App implements OnInit, OnDestroy {
       serviceType: defaultService,
     });
     this.selectedCategory.set('all');
+    this.busySlotsRequestSeq++; // invalidate any in-flight slot lookup
     this.busySlots.set([]);
     this.activeStep.set(1);
     this.isSubmitting.set(false);
@@ -560,6 +509,13 @@ export class App implements OnInit, OnDestroy {
       });
   }
 
+  /**
+   * Monotonic sequence for busy-slot lookups. Responses are ignored unless
+   * they belong to the latest request, so a slow response for an earlier date
+   * can never overwrite the slots of the currently selected date (B4).
+   */
+  private busySlotsRequestSeq = 0;
+
   onBarberOrDateChange(): void {
     const barber = this.bookingBarber();
     const date = this.bookingDate();
@@ -569,6 +525,8 @@ export class App implements OnInit, OnDestroy {
       const dayOfWeek = selectedDateObj.getUTCDay();
       if (dayOfWeek === 0) {
         // 0 represents Sunday
+        this.busySlotsRequestSeq++; // invalidate any in-flight lookup
+        this.isCheckingSlots.set(false);
         this.errorMessage.set(
           'Our shop is closed on Sundays. Please select a Monday through Saturday slot!',
         );
@@ -577,21 +535,26 @@ export class App implements OnInit, OnDestroy {
         return;
       }
 
+      const seq = ++this.busySlotsRequestSeq;
       this.isCheckingSlots.set(true);
       this.appointmentService
         .getBusySlots(barber, date)
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({
           next: (busy) => {
+            if (seq !== this.busySlotsRequestSeq) return; // stale response
             this.busySlots.set(busy);
             this.isCheckingSlots.set(false);
           },
           error: () => {
+            if (seq !== this.busySlotsRequestSeq) return; // stale response
             this.busySlots.set([]);
             this.isCheckingSlots.set(false);
           },
         });
     } else {
+      this.busySlotsRequestSeq++; // invalidate any in-flight lookup
+      this.isCheckingSlots.set(false);
       this.busySlots.set([]);
     }
   }
@@ -637,6 +600,14 @@ export class App implements OnInit, OnDestroy {
     const hrStr = hours < 10 ? '0' + hours : hours.toString();
     const minStr = minutes < 10 ? '0' + minutes : minutes.toString();
     return `${hrStr}:${minStr}`;
+  }
+
+  private successTimer: ReturnType<typeof setTimeout> | null = null;
+
+  ngOnDestroy(): void {
+    if (this.successTimer) {
+      clearTimeout(this.successTimer);
+    }
   }
 
   // Helper to show success alerts temporarily

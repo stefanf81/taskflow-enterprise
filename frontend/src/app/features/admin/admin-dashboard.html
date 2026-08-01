@@ -390,7 +390,7 @@
                       [class.text-rose-400]="appt.status === 'PENDING' && isOverdue(appt)"
                     >
                       <span
-                        >📅 {{ appt.bookingDate | date: 'mediumDate' }} at
+                        >📅 {{ formatLocalDate(appt.bookingDate) }} at
                         {{ formatTime12Hour(appt.bookingTime) }}</span
                       >
                     </div>
@@ -479,6 +479,67 @@
                   </button>
                 </div>
               }
+            }
+          </div>
+        }
+
+        @if (adminView() === 'services') {
+          <div class="space-y-6 animate-fadeIn">
+            <h3 class="text-white font-bold text-lg">Service Catalog</h3>
+            <p class="text-xs text-zinc-400 font-light">
+              Read-only view of the grooming services offered for booking.
+            </p>
+
+            @if (catalogStore.isLoading()) {
+              <div
+                class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20"
+              >
+                <span class="text-3xl block mb-2">⏳</span>
+                <h3 class="text-white font-bold text-sm">Loading catalog&hellip;</h3>
+              </div>
+            } @else if (catalogStore.errorMessage()) {
+              <div
+                class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20"
+              >
+                <span class="text-3xl block mb-2">⚠️</span>
+                <h3 class="text-white font-bold text-sm">{{ catalogStore.errorMessage() }}</h3>
+              </div>
+            } @else if (catalogStore.services().length === 0) {
+              <div
+                class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20"
+              >
+                <span class="text-3xl block mb-2">📦</span>
+                <h3 class="text-white font-bold text-sm">No services in the catalog yet</h3>
+                <p class="text-xs text-zinc-500 font-light mt-1">
+                  Services added to the backend catalog will appear here.
+                </p>
+              </div>
+            } @else {
+              <div class="grid md:grid-cols-2 gap-4">
+                @for (service of catalogStore.services(); track service.id) {
+                  <div class="p-4 rounded-xl border border-white/5 bg-zinc-900/50">
+                    <div class="flex justify-between items-start gap-2">
+                      <div>
+                        <p class="text-sm font-bold text-white">{{ service.name }}</p>
+                        <p
+                          class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mt-1"
+                        >
+                          {{ service.category }}
+                        </p>
+                      </div>
+                      <p class="text-sm font-bold text-gold whitespace-nowrap">
+                        ${{ service.price }}
+                      </p>
+                    </div>
+                    <p class="text-[11px] text-zinc-400 mt-2 font-light">
+                      ⏱️ Duration: {{ service.durationMinutes }} mins
+                    </p>
+                    <p class="text-xs text-zinc-500 mt-1.5 font-light leading-relaxed">
+                      {{ service.description }}
+                    </p>
+                  </div>
+                }
+              </div>
             }
           </div>
         }
@@ -628,7 +689,8 @@
                         >
                           <div>
                             <p class="text-sm font-bold text-rose-400">
-                              ⛔ {{ to.startDate | date }} &rarr; {{ to.endDate | date }}
+                              ⛔ {{ formatLocalDate(to.startDate) }} &rarr;
+                              {{ formatLocalDate(to.endDate) }}
                             </p>
                             <p class="text-[11px] text-zinc-400 mt-1 font-light">
                               {{ to.reason }}

@@ -70,6 +70,10 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
 
+    // B2: the CustomerStore resource is gated on auth — log in so the initial
+    // appointments fetch fires.
+    TestBed.inject(AuthState).isLoggedIn.set(true);
+
     fixture.detectChanges();
 
     // Flush the initial customer appointments load.

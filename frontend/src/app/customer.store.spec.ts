@@ -5,6 +5,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { CustomerStore } from './customer.store';
 import { AppointmentService } from './appointment.service';
+import { AuthState } from './auth.state';
 
 @Component({ standalone: true, template: '' })
 class TestHost {
@@ -50,6 +51,10 @@ describe('CustomerStore', () => {
     fixture = TestBed.createComponent(TestHost);
     store = fixture.componentInstance.store;
     httpMock = TestBed.inject(HttpTestingController);
+
+    // B2: the resource is gated on auth — log in so the initial fetch fires.
+    TestBed.inject(AuthState).isLoggedIn.set(true);
+
     fixture.detectChanges();
 
     // Flush the initial auto-triggered httpResource request
@@ -148,5 +153,15 @@ describe('CustomerStore', () => {
     );
 
     expect(store.cancelErrorMessage()).toBeTruthy();
+  });
+
+  it('should NOT fetch appointments when logged out (B2 auth gate)', () => {
+    TestBed.inject(AuthState).isLoggedIn.set(false);
+    fixture.detectChanges();
+
+    store.loadAppointments();
+    fixture.detectChanges();
+
+    httpMock.expectNone((r) => r.url.includes('/api/v1/customer/appointments'));
   });
 });

@@ -9,10 +9,25 @@ import {
   AppointmentDashboardResponse,
 } from './appointment.service';
 
+/**
+ * Admin appointment list state.
+ *
+ * Fetch orchestration notes (B1):
+ * - `httpResource` re-fires automatically whenever the signals read inside its
+ *   request function change (and cancels any in-flight request). Filter and
+ *   page changes therefore MUST NOT call `reload()` as well — that would fire
+ *   two identical requests per action.
+ * - Search is debounced: the input binds to `searchQuery`, but the resource
+ *   reads the separate `searchDebounced` signal, so typing does not trigger a
+ *   request per keystroke and the 300ms coalescing window actually works.
+ * - `reload()` is reserved for cases where no reactive signal changed but the
+ *   server data may have (approve/deny/delete success, Sync DB button, login).
+ */
 @Injectable({ providedIn: 'root' })
 export class AppointmentStore {
   private readonly appointmentService = inject(AppointmentService);
   private readonly authState = inject(AuthState);
+  private readonly destroyRef = inject(DestroyRef);
 
   // Authentication State — delegates to AuthState (single source of truth).
   // The JWT is held in an HttpOnly cookie (not readable by JS). The UI auth
@@ -23,6 +38,8 @@ export class AppointmentStore {
   readonly pageSize = 50;
   readonly selectedFilter = signal<string>('all');
   readonly searchQuery = signal<string>('');
+  /** Debounced copy of searchQuery — the only search signal the resource reads. */
+  readonly searchDebounced = signal<string>('');
 
   // Core Admin Reactive States (Declarative Signals via httpResource)
   private readonly appointmentsResource = httpResource<AppointmentDashboardResponse>(
@@ -33,7 +50,7 @@ export class AppointmentStore {
       if (filter && filter !== 'all') {
         url += `&status=${filter.toUpperCase()}`;
       }
-      const search = this.searchQuery();
+      const search = this.searchDebounced();
       if (search) {
         url += `&search=${encodeURIComponent(search)}`;
       }
@@ -79,12 +96,73 @@ export class AppointmentStore {
   readonly isSubmitting = signal<boolean>(false);
   readonly isCheckingSlots = signal<boolean>(false);
   readonly busySlots = signal<string[]>([]);
-  private readonly destroyRef = inject(DestroyRef);
 
-  // Compat method to force reload
+  private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor() {
+    // React to 401s anywhere in the app by clearing client-side auth state.
+    // Register cleanup via DestroyRef so the listener is removed when the
+    // injector is destroyed (e.g. on hot-reload or lazy-module teardown).
+    if (typeof window !== 'undefined') {
+      const handler = () => this.resetAuthState();
+      window.addEventListener('auth:unauthorized', handler);
+      this.destroyRef.onDestroy(() => window.removeEventListener('auth:unauthorized', handler));
+    }
+    this.destroyRef.onDestroy(() => {
+      if (this.searchDebounceTimer) {
+        clearTimeout(this.searchDebounceTimer);
+      }
+    });
+  }
+
+  /**
+   * Debounced search entry point (bound to the search input). Only
+   * `searchDebounced` drives the resource, so a typing burst coalesces into a
+   * single request after 300ms of inactivity.
+   */
+  onSearchChange(value: string): void {
+    this.searchQuery.set(value);
+    this.currentPage.set(0); // Reset page
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+    }
+    this.searchDebounceTimer = setTimeout(() => {
+      this.searchDebounceTimer = null;
+      this.searchDebounced.set(value);
+    }, 300);
+  }
+
+  /** Filter change — resource reactivity refetches; no manual reload (avoids double fetch). */
+  setFilter(filter: string): void {
+    this.selectedFilter.set(filter);
+    this.currentPage.set(0);
+  }
+
+  /** Page change — resource reactivity refetches; no manual reload. */
+  setPage(page: number): void {
+    if (page >= 0 && page < this.totalPages()) {
+      this.currentPage.set(page);
+    }
+  }
+
+  nextPage(): void {
+    this.setPage(this.currentPage() + 1);
+  }
+
+  prevPage(): void {
+    this.setPage(this.currentPage() - 1);
+  }
+
+  /**
+   * Forces an explicit refetch — used when the server data changed without any
+   * reactive signal changing (approve/deny/delete success, Sync DB button).
+   */
   loadAppointments(selectedFilter?: string, searchQuery?: string): void {
     if (selectedFilter !== undefined) this.selectedFilter.set(selectedFilter);
-    if (searchQuery !== undefined) this.searchQuery.set(searchQuery);
+    if (searchQuery !== undefined) {
+      this.searchQuery.set(searchQuery);
+      this.searchDebounced.set(searchQuery);
+    }
     this.appointmentsResource.reload();
   }
 
@@ -103,16 +181,5 @@ export class AppointmentStore {
   resetAuthState(): void {
     this.authState.clear();
     this.errorMessage.set(null);
-  }
-
-  constructor() {
-    // React to 401s anywhere in the app by clearing client-side auth state.
-    // Register cleanup via DestroyRef so the listener is removed when the
-    // injector is destroyed (e.g. on hot-reload or lazy-module teardown).
-    if (typeof window !== 'undefined') {
-      const handler = () => this.resetAuthState();
-      window.addEventListener('auth:unauthorized', handler);
-      this.destroyRef.onDestroy(() => window.removeEventListener('auth:unauthorized', handler));
-    }
   }
 }

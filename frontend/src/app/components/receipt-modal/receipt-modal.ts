@@ -1,7 +1,7 @@
 import { Component, ChangeDetectionStrategy, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AppointmentItem } from '../../appointment.service';
-import { formatTime12Hour } from '../../time-utils';
+import { formatTime12Hour, formatLocalDate } from '../../time-utils';
 
 @Component({
   selector: 'app-receipt-modal',
@@ -73,7 +73,7 @@ import { formatTime12Hour } from '../../time-utils';
             <p class="flex justify-between">
               <span>📅 Scheduled:</span>
               <strong class="text-zinc-100 font-semibold"
-                >{{ appointment?.bookingDate | date: 'mediumDate' }} at
+                >{{ formatLocalDate(appointment?.bookingDate ?? '') }} at
                 {{ formatTime12Hour(appointment?.bookingTime ?? '') }}</strong
               >
             </p>
@@ -111,5 +111,9 @@ export class ReceiptModalComponent {
 
   formatTime12Hour(timeStr: string): string {
     return formatTime12Hour(timeStr);
+  }
+
+  formatLocalDate(dateStr: string): string {
+    return formatLocalDate(dateStr);
   }
 }

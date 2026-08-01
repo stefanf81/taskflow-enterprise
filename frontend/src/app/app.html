@@ -64,8 +64,12 @@
         </p>
       </header>
 
-      <!-- INTERACTIVE LOOKBOOK SHOWCASE -->
-      <app-lookbook (styleSelected)="selectLookbookStyle($event.serviceName, $event.category)" />
+      <!-- INTERACTIVE LOOKBOOK SHOWCASE (lazy: below hero, non-critical for FCP — P1) -->
+      @defer (on idle; on viewport) {
+        <app-lookbook (styleSelected)="selectLookbookStyle($event.serviceName, $event.category)" />
+      } @placeholder {
+        <div class="h-64 mb-16"></div>
+      }
 
       <!-- TWO-COLUMN WORKSPACE GRID -->
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -791,12 +795,16 @@
         </div>
       }
 
-      <!-- POST-BOOKING ACTIONS: Cancel & Review -->
-      <app-post-booking-actions
-        [isSubmitting]="isSubmitting()"
-        (cancelRequested)="onPublicCancel($event.publicId, $event.email)"
-        (reviewSubmitted)="submitReview($event.publicId, $event.rating, $event.comment)"
-      />
+      <!-- POST-BOOKING ACTIONS: Cancel & Review (lazy — below the fold, P1) -->
+      @defer (on idle; on viewport) {
+        <app-post-booking-actions
+          [isSubmitting]="isSubmitting()"
+          (cancelRequested)="onPublicCancel($event.publicId, $event.email)"
+          (reviewSubmitted)="submitReview($event.publicId, $event.rating, $event.comment)"
+        />
+      } @placeholder {
+        <div class="h-24"></div>
+      }
       <!-- Guest Footer -->
       <footer class="mt-20 pt-10 border-t border-white/10 text-center">
         <p class="text-xs text-zinc-500 font-light leading-normal">
@@ -817,13 +825,17 @@
         <!-- defer loads on first click of the "Owner Portal" button -->
       }
 
-      <!-- Squire-Style Interactive Booking Confirmation Receipt Modal -->
-      @if (showReceiptModal()) {
-        <app-receipt-modal
-          [appointment]="lastBookedAppointment()"
-          [checkoutTotal]="checkoutTotal()"
-          (close)="showReceiptModal.set(false)"
-        />
+      <!-- Squire-Style Interactive Booking Confirmation Receipt Modal (lazy chunk — P1).
+           @defer (when ...) loads the chunk the first time a booking completes; the inner
+           @if still controls show/hide so closing the modal removes it from the DOM. -->
+      @defer (when showReceiptModal()) {
+        @if (showReceiptModal()) {
+          <app-receipt-modal
+            [appointment]="lastBookedAppointment()"
+            [checkoutTotal]="checkoutTotal()"
+            (close)="showReceiptModal.set(false)"
+          />
+        }
       }
     </div>
   }

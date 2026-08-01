@@ -87,7 +87,7 @@
                 With <strong class="text-zinc-100">{{ appt.barberName }}</strong>
               </p>
               <p class="text-[10px] font-bold text-gold uppercase tracking-wider mt-2">
-                📅 {{ appt.bookingDate | date: 'mediumDate' }} at
+                📅 {{ formatLocalDate(appt.bookingDate) }} at
                 {{ formatTime12Hour(appt.bookingTime) }}
               </p>
               <p class="text-[10px] text-zinc-600 mt-1">

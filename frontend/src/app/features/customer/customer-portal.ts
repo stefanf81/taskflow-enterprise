@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AppointmentStore } from '../../appointment.store';
 import { CustomerStore } from '../../customer.store';
-import { formatTime12Hour } from '../../time-utils';
+import { formatTime12Hour, formatLocalDate } from '../../time-utils';
 
 /**
  * Lazy-loaded Customer dashboard (route: /customer). Extracted from the monolithic
@@ -30,6 +30,10 @@ export class CustomerPortal {
 
   formatTime12Hour(time24: string): string {
     return formatTime12Hour(time24);
+  }
+
+  formatLocalDate(dateStr: string): string {
+    return formatLocalDate(dateStr);
   }
 
   onLogout(): void {

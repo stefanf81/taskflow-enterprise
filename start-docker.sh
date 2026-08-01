@@ -40,7 +40,7 @@ echo "🔨 Building backend JAR on the host..."
 ./gradlew bootJar --no-daemon
 
 echo "🔨 Building frontend production bundle on the host..."
-(cd frontend && npm ci --prefer-offline --no-audit --no-fund && npm run build)
+(cd frontend && npm ci --ignore-scripts --prefer-offline --no-audit --no-fund && npm run build)
 
 echo "📦 Building images..."
 docker compose build

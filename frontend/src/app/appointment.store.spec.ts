@@ -169,19 +169,46 @@ describe('AppointmentStore', () => {
     expect(store.totalPages()).toBe(3);
   });
 
-  it('should handle search query encoding', () => {
+  it('should debounce search and encode the query in the URL (B1)', async () => {
     authState.isLoggedIn.set(true);
     fixture.detectChanges();
     httpMock.expectOne(() => true).flush(mockDashboard);
     fixture.detectChanges();
 
-    store.searchQuery.set('Alice Smith');
-    fixture.detectChanges();
+    vi.useFakeTimers();
+    try {
+      store.onSearchChange('Alice Smith');
 
-    const req = httpMock.expectOne(
-      (r) => r.url.includes('/api/v1/appointments') && r.method === 'GET',
-    );
-    expect(req.request.url).toContain('search=Alice%20Smith');
-    req.flush(mockDashboard);
+      // No request fires while the 300ms debounce window is still open.
+      fixture.detectChanges();
+      expect(httpMock.match((r) => r.url.includes('search='))).toHaveLength(0);
+
+      // Elapse the window -> searchDebounced updates -> resource refetches once.
+      vi.advanceTimersByTime(300);
+      await Promise.resolve(); // flush the resource effect microtask
+      fixture.detectChanges();
+
+      const req = httpMock.expectOne(
+        (r) => r.url.includes('/api/v1/appointments') && r.method === 'GET',
+      );
+      expect(req.request.url).toContain('search=Alice%20Smith');
+      expect(req.request.url).toContain('page=0');
+      req.flush(mockDashboard);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('should set the search query immediately and debounce the fetch (B1)', () => {
+    store.onSearchChange('Bob');
+    expect(store.searchQuery()).toBe('Bob');
+    expect(store.searchDebounced()).toBe('');
+  });
+
+  it('should reset page to 0 on filter change (B1)', () => {
+    store.currentPage.set(2);
+    store.setFilter('approved');
+    expect(store.selectedFilter()).toBe('approved');
+    expect(store.currentPage()).toBe(0);
   });
 });

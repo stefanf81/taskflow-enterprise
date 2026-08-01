@@ -51,6 +51,25 @@ export function computeEstimatedEndTime(startTime: string, durationMinutes: numb
   return formatMinutesToTimeString(startMin + durationMinutes);
 }
 
+/**
+ * Formats a date-only string (YYYY-MM-DD) in the LOCAL timezone.
+ *
+ * Unlike the Angular `date` pipe — which parses date-only strings as UTC
+ * midnight and can shift the displayed day back by one in negative-offset
+ * zones (e.g. US/EU after 8 PM EDT) — appending `T00:00:00` parses as local
+ * midnight, so the rendered day always matches the stored date.
+ */
+export function formatLocalDate(dateStr: string): string {
+  if (!dateStr) return '';
+  const date = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return dateStr;
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
 export function isOverdue(input: { bookingDate?: string } | string): boolean {
   if (!input) return false;
   const bookingDate = typeof input === 'string' ? input : input.bookingDate;

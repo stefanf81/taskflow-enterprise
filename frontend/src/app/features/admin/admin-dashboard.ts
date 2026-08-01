@@ -5,7 +5,6 @@ import {
   inject,
   DestroyRef,
   signal,
-  OnDestroy,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
@@ -16,7 +15,8 @@ import { AppointmentStore } from '../../appointment.store';
 import { BarberStore } from '../../barber.store';
 import { NotificationStore } from '../../notification.store';
 import { CustomerStore } from '../../customer.store';
-import { formatTime12Hour, isOverdue } from '../../time-utils';
+import { ServiceCatalogStore } from '../../service-catalog.store';
+import { formatTime12Hour, formatLocalDate, isOverdue } from '../../time-utils';
 
 /**
  * Lazy-loaded Owner dashboard (route: /admin). Extracted from the monolithic
@@ -33,7 +33,7 @@ import { formatTime12Hour, isOverdue } from '../../time-utils';
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
 })
-export class AdminDashboard implements OnDestroy {
+export class AdminDashboard {
   private readonly appointmentService = inject(AppointmentService);
   private readonly store = inject(AppointmentStore);
   private readonly barberStore = inject(BarberStore);
@@ -41,6 +41,9 @@ export class AdminDashboard implements OnDestroy {
   readonly customerStore = inject(CustomerStore);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+
+  /** Eager httpResource — services are already loaded at app boot; the tab just reads them. */
+  readonly catalogStore = inject(ServiceCatalogStore);
 
   readonly appointments = this.store.appointments;
   readonly searchQuery = this.store.searchQuery;
@@ -143,44 +146,28 @@ export class AdminDashboard implements OnDestroy {
     }
   }
 
+  // Filter / search / pagination delegate straight to the store: the
+  // httpResource refetches reactively when the signals it reads change, so any
+  // extra reload() here would fire a duplicate request per action (B1). Search
+  // debouncing also lives in the store.
   setFilter(filter: string): void {
-    this.selectedFilter.set(filter);
-    this.currentPage.set(0);
-    this.loadAppointments();
-  }
-
-  private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-  ngOnDestroy(): void {
-    if (this.searchDebounceTimer) {
-      clearTimeout(this.searchDebounceTimer);
-    }
+    this.store.setFilter(filter);
   }
 
   onSearchChange(value: string): void {
-    this.searchQuery.set(value);
-    this.currentPage.set(0);
-    if (this.searchDebounceTimer) {
-      clearTimeout(this.searchDebounceTimer);
-    }
-    this.searchDebounceTimer = setTimeout(() => {
-      this.loadAppointments();
-    }, 300);
+    this.store.onSearchChange(value);
   }
 
   setPage(page: number): void {
-    if (page >= 0 && page < this.totalPages()) {
-      this.currentPage.set(page);
-      this.loadAppointments();
-    }
+    this.store.setPage(page);
   }
 
   nextPage(): void {
-    this.setPage(this.currentPage() + 1);
+    this.store.nextPage();
   }
 
   prevPage(): void {
-    this.setPage(this.currentPage() - 1);
+    this.store.prevPage();
   }
 
   isOverdue(appt: AppointmentItem): boolean {
@@ -189,6 +176,10 @@ export class AdminDashboard implements OnDestroy {
 
   formatTime12Hour(time24: string): string {
     return formatTime12Hour(time24);
+  }
+
+  formatLocalDate(dateStr: string): string {
+    return formatLocalDate(dateStr);
   }
 
   onLogout(): void {
