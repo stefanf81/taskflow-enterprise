@@ -30,7 +30,7 @@ export const AdminCatalogScreen: React.FC = () => {
                   <Text style={styles.name}>{item.name}</Text>
                   <Text style={styles.price}>${item.price.toFixed(2)}</Text>
                 </View>
-                <Text style={styles.category}>{item.category.replace('_', ' ')}</Text>
+                <Text style={styles.category}>{item.category.toUpperCase()}</Text>
                 <Text style={styles.description}>{item.description}</Text>
                 <Text style={styles.duration}>Duration: {item.durationMinutes} mins</Text>
               </Card>

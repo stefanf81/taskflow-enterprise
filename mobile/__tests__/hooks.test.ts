@@ -247,7 +247,7 @@ describe('Hooks', () => {
   // ==================== CATALOG ====================
   describe('useCatalog', () => {
     it('fetches all services', async () => {
-      mockGetAllServicesFn.mockResolvedValueOnce([{ id: 1, name: 'Haircut', price: 45, durationMinutes: 30, category: 'HAIRCUTS', description: '' }]);
+      mockGetAllServicesFn.mockResolvedValueOnce([{ id: 1, name: 'Haircut', price: 45, durationMinutes: 30, category: 'hair', description: '' }]);
 
       await renderHook(() => useCatalog(), { wrapper: createWrapper() });
 

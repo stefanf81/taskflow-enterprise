@@ -203,7 +203,13 @@ export class App implements OnInit, OnDestroy {
       const dayOfWeek = nextDate.getDay();
       if (dayOfWeek !== 0) {
         // Skip Sundays since we are closed
-        const dateStr = nextDate.toISOString().split('T')[0];
+        // Use local date components to avoid UTC shift across timezones.
+        // toISOString() would serialize to UTC, producing tomorrow's date in
+        // US/EU timezones after midnight UTC (as early as 8 PM EDT).
+        const year = nextDate.getFullYear();
+        const month = String(nextDate.getMonth() + 1).padStart(2, '0');
+        const day = String(nextDate.getDate()).padStart(2, '0');
+        const dateStr = `${year}-${month}-${day}`;
         days.push({
           dateStr: dateStr,
           dayName: nextDate.toLocaleDateString('en-US', { weekday: 'short' }),

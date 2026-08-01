@@ -148,4 +148,4 @@ The resulting assets are generated in the `dist/` directory. These assets are th
 
 - **Signals-Only State:** Component state, inputs, and outputs use native Angular Signals (`signal()`, `computed()`, `input()`, `model()`) instead of raw RxJS streams where applicable, eliminating Zone.js change-detection overhead.
 - **Stateless JWT Cookie Authentication:** Auth state is managed via HttpOnly JWT cookies set by the backend. Role identity is restored into an in-memory Signal (`AuthState`) via `GET /api/v1/auth/me`.
-- **Route Preloading:** Modern lazy-loading is coupled with the `PreloadAllModules` strategy, allowing the browser to download feature chunks in the background while the user is idle, delivering near-instant navigation speeds.
+- **Lazy-loaded Routes:** Feature dashboards (`/admin`, `/customer`) use lazy-loaded standalone components via `loadComponent()`, keeping the initial bundle small. View transitions and in-memory scroll restoration are enabled via Angular's `withViewTransitions()` and `withInMemoryScrolling()`.

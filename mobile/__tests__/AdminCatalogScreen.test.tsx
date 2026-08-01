@@ -5,8 +5,8 @@ import { AdminCatalogScreen } from '../src/screens/AdminCatalogScreen';
 jest.mock('../src/hooks/useCatalog', () => ({
   useCatalog: () => ({
     data: [
-      { id: 1, name: 'Premium Haircut', price: 65, durationMinutes: 45, category: 'HAIRCUTS', description: 'Premium cut' },
-      { id: 2, name: 'Royal Shave', price: 40, durationMinutes: 30, category: 'SHAVES', description: 'Royal treatment' },
+      { id: 1, name: 'Premium Haircut', price: 65, durationMinutes: 45, category: 'hair', description: 'Premium cut' },
+      { id: 2, name: 'Royal Shave', price: 40, durationMinutes: 30, category: 'beard', description: 'Royal treatment' },
     ],
     isLoading: false,
   }),

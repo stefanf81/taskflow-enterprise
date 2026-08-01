@@ -5,11 +5,22 @@ import { storage } from '../utils/storage';
 const getBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_API_URL) {
     let url = process.env.EXPO_PUBLIC_API_URL;
-    if (Platform.OS === 'android' && url.includes('localhost')) {
-      url = url.replace('localhost', '10.0.2.2');
+    const isHttp = url.startsWith('http://');
+    // Exact hostname (never substring) so `localhost.evil.com` cannot bypass
+    // the production HTTPS guard or hijack the emulator host rewrite.
+    let hostname = '';
+    try {
+      hostname = new URL(url).hostname;
+    } catch {
+      hostname = ''; // unparseable — treat as non-local below
     }
-    // Enforce HTTPS in production builds (allow http for local test/emulator IPs)
-    if (!__DEV__ && url.startsWith('http://') && !url.includes('10.0.2.2') && !url.includes('localhost')) {
+    if (Platform.OS === 'android' && hostname === 'localhost') {
+      url = url.replace(hostname, '10.0.2.2');
+      hostname = '10.0.2.2';
+    }
+    // Enforce HTTPS in production builds (allow http only for local
+    // test/emulator hosts, matched exactly).
+    if (!__DEV__ && isHttp && hostname !== '10.0.2.2' && hostname !== 'localhost') {
       throw new Error(
         'Production API URL must use HTTPS. Found: ' + url +
         '. Set EXPO_PUBLIC_API_URL to an https:// URL in your production .env file.',

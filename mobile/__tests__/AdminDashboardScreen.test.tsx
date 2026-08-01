@@ -8,13 +8,17 @@ let mockIsLoading: boolean;
 let mockAppointmentsData: any;
 let mockUpdateMutate: jest.Mock;
 let mockDeleteMutate: jest.Mock;
+let mockHookArgs: any[] | null;
 
 jest.mock('../src/hooks/useAppointments', () => ({
-  useAppointments: () => ({
-    data: mockAppointmentsData,
-    isLoading: mockIsLoading,
-    refetch: mockRefetch,
-  }),
+  useAppointments: (...args: any[]) => {
+    mockHookArgs = args;
+    return {
+      data: mockAppointmentsData,
+      isLoading: mockIsLoading,
+      refetch: mockRefetch,
+    };
+  },
   useUpdateAppointmentStatus: () => ({ mutate: mockUpdateMutate, isPending: false }),
   useDeleteAppointment: () => ({ mutate: mockDeleteMutate, isPending: false }),
 }));
@@ -55,6 +59,7 @@ describe('AdminDashboardScreen', () => {
     mockAppointmentsData = buildData();
     mockUpdateMutate = jest.fn();
     mockDeleteMutate = jest.fn();
+    mockHookArgs = null;
   });
 
   // ============ RENDERING ============
@@ -141,11 +146,22 @@ describe('AdminDashboardScreen', () => {
     expect(input).toBeTruthy();
   });
 
-  it('calls refetch when search text changes', async () => {
+  it('does not send the search term to the hook before the debounce window', async () => {
     await render(<AdminDashboardScreen />);
     const input = screen.getByPlaceholderText('Search by name, email, phone, or public ID...');
     await fireEvent.changeText(input, 'John');
-    expect(mockRefetch).not.toHaveBeenCalled(); // refetch is called via hook, not directly
+    // The hook still receives the previous (empty) search term immediately —
+    // the backend must not be hit on every keystroke.
+    expect(mockHookArgs?.[1]).toBe('');
+  });
+
+  it('sends the debounced search term to the hook after 300ms', async () => {
+    await render(<AdminDashboardScreen />);
+    const input = screen.getByPlaceholderText('Search by name, email, phone, or public ID...');
+    await fireEvent.changeText(input, 'John');
+    await waitFor(() => {
+      expect(mockHookArgs?.[1]).toBe('John');
+    });
   });
 
   // ============ SYNC & LOGOUT ============

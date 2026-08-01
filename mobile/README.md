@@ -137,6 +137,11 @@ npm run e2e:test
 
 ## EAS Build & Distribution
 
+> **Before first EAS build:** `app.json` → `extra.eas.projectId` contains a
+> placeholder UUID. Replace it with the real project ID from
+> `npx eas-cli login && npx eas-cli project:init` (or the EAS web dashboard).
+> OTA updates (`eas update`) will fail with an invalid projectId.
+
 ```bash
 # Build Android Development APK
 eas build --platform android --profile development

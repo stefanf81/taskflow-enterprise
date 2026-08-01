@@ -1,12 +1,21 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import { BookingScreen } from '../src/screens/BookingScreen';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { BookingScreen, getPostBookingDestination } from '../src/screens/BookingScreen';
 
 // ==================== Mock navigation ====================
 const mockNavigate = jest.fn();
+const mockDispatch = jest.fn();
+let mockRouteNames: string[];
 jest.mock('@react-navigation/native', () => ({
   useRoute: () => ({ params: {} }),
-  useNavigation: () => ({ navigate: mockNavigate }),
+  useNavigation: () => ({
+    navigate: mockNavigate,
+    dispatch: mockDispatch,
+    getState: () => ({ routes: mockRouteNames.map((name) => ({ name })) }),
+  }),
+  CommonActions: {
+    navigate: (payload: unknown) => ({ type: 'NAVIGATE', payload }),
+  },
   CompositeNavigationProp: jest.fn(),
 }));
 
@@ -17,14 +26,19 @@ jest.mock('@react-navigation/native', () => ({
 let mockMutateAsync: jest.Mock;
 let mockBusySlotsData: string[];
 let mockBusySlotsLoading: boolean;
+let mockCatalogData: any[] | null;
+
+// Backend category values (V5__create_service_catalog.sql): hair | beard | combo
+const DEFAULT_CATALOG = [
+  { id: 1, name: 'Classic Haircut', price: 45, durationMinutes: 30, category: 'hair', description: 'A classic cut.' },
+  { id: 2, name: 'Beard Trim', price: 25, durationMinutes: 20, category: 'beard', description: 'Neat beard trim.' },
+  { id: 3, name: 'Royal Shave', price: 35, durationMinutes: 25, category: 'beard', description: 'Luxury shave.' },
+  { id: 4, name: 'The Executive Package', price: 80, durationMinutes: 60, category: 'combo', description: 'Haircut + beard + shave.' },
+];
 
 jest.mock('../src/hooks/useCatalog', () => ({
   useCatalog: () => ({
-    data: [
-      { id: 1, name: 'Classic Haircut', price: 45, durationMinutes: 30, category: 'HAIRCUTS', description: 'A classic cut.' },
-      { id: 2, name: 'Beard Trim', price: 25, durationMinutes: 20, category: 'BEARD_TRIM', description: 'Neat beard trim.' },
-      { id: 3, name: 'Royal Shave', price: 35, durationMinutes: 25, category: 'SHAVES', description: 'Luxury shave.' },
-    ],
+    data: mockCatalogData ?? DEFAULT_CATALOG,
   }),
 }));
 
@@ -47,8 +61,19 @@ jest.mock('../src/hooks/useAppointments', () => {
   };
 });
 
+// Capture the props the screen passes to ReceiptModal so tests can drive
+// the onClose callback (receipt → post-booking navigation).
+let mockReceiptProps: {
+  appointment: unknown;
+  onClose: () => void;
+  onOpenPublicActions: (publicId: string) => void;
+} | null = null;
+
 jest.mock('../src/components/booking/ReceiptModal', () => ({
-  ReceiptModal: () => <>{null}</>,
+  ReceiptModal: (props: any) => {
+    mockReceiptProps = props;
+    return <>{null}</>;
+  },
 }));
 
 // ==================== Tests ====================
@@ -57,6 +82,9 @@ describe('BookingScreen', () => {
     jest.clearAllMocks();
     mockBusySlotsData = ['10:00'];
     mockBusySlotsLoading = false;
+    mockCatalogData = null;
+    mockRouteNames = ['Home', 'Booking', 'Catalog', 'Lookbook'];
+    mockReceiptProps = null;
     // Call methods on the EXISTING mockMutateAsync reference (created by
     // the factory) instead of reassigning the variable, which would not
     // affect the function reference captured by the component.
@@ -200,12 +228,50 @@ describe('BookingScreen', () => {
     expect(getByText('Royal Shave')).toBeTruthy();
   });
 
-  it('filters services by category', async () => {
+  it('filters services by category chip (backend category values)', async () => {
     const { getByText, queryByText } = await render(<BookingScreen />);
-    await fireEvent.press(getByText('SHAVES'));
+    await fireEvent.press(getByText('Beards & Shaves'));
+    expect(getByText('Beard Trim')).toBeTruthy();
     expect(getByText('Royal Shave')).toBeTruthy();
     expect(queryByText('Classic Haircut')).toBeNull();
+    expect(queryByText('The Executive Package')).toBeNull();
+  });
+
+  it('filters services by combo category chip', async () => {
+    const { getByText, queryByText } = await render(<BookingScreen />);
+    await fireEvent.press(getByText('Combos'));
+    expect(getByText('The Executive Package')).toBeTruthy();
+    expect(queryByText('Classic Haircut')).toBeNull();
     expect(queryByText('Beard Trim')).toBeNull();
+  });
+
+  it('filters services by haircut category chip', async () => {
+    const { getByText, queryByText } = await render(<BookingScreen />);
+    await fireEvent.press(getByText('Haircuts'));
+    expect(getByText('Classic Haircut')).toBeTruthy();
+    expect(queryByText('Beard Trim')).toBeNull();
+    expect(queryByText('Royal Shave')).toBeNull();
+  });
+
+  it('shows all services on the default All chip', async () => {
+    const { getByText } = await render(<BookingScreen />);
+    expect(getByText('Classic Haircut')).toBeTruthy();
+    expect(getByText('The Executive Package')).toBeTruthy();
+  });
+
+  it('falls back to the first catalog service when the hardcoded default is absent', async () => {
+    mockCatalogData = [
+      { id: 9, name: 'Signature Cut', price: 50, durationMinutes: 30, category: 'hair', description: 'Tailored.' },
+    ];
+    const { getByText, findByText } = await render(<BookingScreen />);
+    // Navigate to step 4 — the summary must show the auto-selected service
+    // (previously it stayed on 'Classic Haircut' and priced $0.00)
+    await fireEvent.press(getByText('Continue to Stylist'));
+    await fireEvent.press(getByText('Continue'));
+    mockBusySlotsData = [];
+    await fireEvent.press(getByText('Continue'));
+    await findByText('4. Contact Details & Summary');
+    expect(getByText('Signature Cut')).toBeTruthy();
   });
 
   // ============ BUSY SLOTS INDICATOR ============
@@ -267,6 +333,45 @@ describe('BookingScreen', () => {
     expect(await findByText(/time slot no longer available/i)).toBeTruthy();
   });
 
+  // ============ POST-BOOKING RECEIPT NAVIGATION ============
+  const submitValidBooking = async (getByText: any, getByPlaceholderText: any) => {
+    await fireEvent.press(getByText('Continue to Stylist'));
+    await fireEvent.press(getByText('Continue'));
+    mockBusySlotsData = [];
+    await fireEvent.press(getByText('Continue'));
+    await fireEvent.changeText(getByPlaceholderText(/john doe/i), 'John Smith');
+    await fireEvent.changeText(getByPlaceholderText(/john\.doe/i), 'john@example.com');
+    await fireEvent.changeText(getByPlaceholderText(/\+1 \(555\)/i), '+15551234567');
+    await fireEvent.press(getByText('Confirm & Request Booking'));
+    await waitFor(() => expect(mockReceiptProps?.appointment).toBeTruthy());
+  };
+
+  it('navigates to Home after booking in the guest flow', async () => {
+    mockRouteNames = ['Home', 'Booking', 'Catalog', 'Lookbook'];
+    const { getByText, getByPlaceholderText } = await render(<BookingScreen />);
+    await submitValidBooking(getByText, getByPlaceholderText);
+    await act(async () => {
+      mockReceiptProps?.onClose();
+    });
+    expect(mockDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: { name: 'Home' } }),
+    );
+  });
+
+  it('navigates to CustomerAppointments after booking in the customer flow', async () => {
+    // Customer tab navigator has no 'Home' route — navigating there would
+    // crash with "action NAVIGATE with name Home was not handled".
+    mockRouteNames = ['CustomerAppointments', 'NewBooking', 'CustomerCatalog'];
+    const { getByText, getByPlaceholderText } = await render(<BookingScreen />);
+    await submitValidBooking(getByText, getByPlaceholderText);
+    await act(async () => {
+      mockReceiptProps?.onClose();
+    });
+    expect(mockDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: { name: 'CustomerAppointments' } }),
+    );
+  });
+
   // ============ SUMMARY ============
   it('shows reservation summary with pricing on step 4', async () => {
     const { getByText } = await render(<BookingScreen />);
@@ -279,5 +384,24 @@ describe('BookingScreen', () => {
     expect(getByText('$45.00')).toBeTruthy();  // subtotal
     expect(getByText('$2.50')).toBeTruthy();  // fee
     expect(getByText('$47.50')).toBeTruthy(); // total
+  });
+});
+
+// ==================== getPostBookingDestination (pure helper) ====================
+describe('getPostBookingDestination', () => {
+  it('returns Home when the Home route exists (guest flow)', () => {
+    expect(
+      getPostBookingDestination(['Home', 'Booking', 'Catalog', 'Lookbook']),
+    ).toBe('Home');
+  });
+
+  it('returns CustomerAppointments when Home is absent (customer flow)', () => {
+    expect(
+      getPostBookingDestination(['CustomerAppointments', 'NewBooking', 'CustomerCatalog']),
+    ).toBe('CustomerAppointments');
+  });
+
+  it('returns CustomerAppointments for an empty route list', () => {
+    expect(getPostBookingDestination([])).toBe('CustomerAppointments');
   });
 });

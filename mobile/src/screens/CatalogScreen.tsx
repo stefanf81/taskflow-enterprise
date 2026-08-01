@@ -22,7 +22,15 @@ import { useCatalog } from '../hooks/useCatalog';
 import { GuestTabParamList, RootStackParamList } from '../types/navigation';
 import { colors } from '../theme/colors';
 
-const CATEGORIES = ['all', 'HAIRCUTS', 'BEARD_TRIM', 'SHAVES', 'TREATMENTS'];
+// Backend category values (V5__create_service_catalog.sql): hair | beard | combo
+const CATEGORIES = ['all', 'hair', 'beard', 'combo'];
+
+const CATEGORY_LABELS: Record<string, string> = {
+  all: 'All Services',
+  hair: 'Haircuts',
+  beard: 'Beards & Shaves',
+  combo: 'Combos',
+};
 
 type CatalogNavProp = CompositeNavigationProp<
   BottomTabNavigationProp<GuestTabParamList, 'Catalog'>,
@@ -70,7 +78,7 @@ export const CatalogScreen: React.FC = () => {
         >
           {CATEGORIES.map((cat) => {
             const isSel = selectedCategory === cat;
-            const displayLabel = cat === 'all' ? 'All Services' : cat.replace('_', ' ');
+            const displayLabel = CATEGORY_LABELS[cat] ?? cat;
 
             return (
               <TouchableOpacity
@@ -106,7 +114,9 @@ export const CatalogScreen: React.FC = () => {
                   <View style={styles.titleContainer}>
                     <Text style={styles.serviceName}>{item.name}</Text>
                     <View style={styles.badge}>
-                      <Text style={styles.badgeText}>{item.category.replace('_', ' ')}</Text>
+                      <Text style={styles.badgeText}>
+                        {CATEGORY_LABELS[item.category] ?? item.category}
+                      </Text>
                     </View>
                   </View>
                   <Text style={styles.price}>${item.price.toFixed(2)}</Text>

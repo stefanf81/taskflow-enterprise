@@ -17,7 +17,7 @@ describe('catalogApi', () => {
   describe('getAllServices', () => {
     it('fetches all services', async () => {
       const mockServices = [
-        { id: 1, name: 'Classic Haircut', price: 45, durationMinutes: 30, category: 'HAIRCUTS', description: 'A classic cut.' },
+        { id: 1, name: 'Classic Haircut', price: 45, durationMinutes: 30, category: 'hair', description: 'A classic cut.' },
       ];
       mockedGet.mockResolvedValueOnce({ data: mockServices });
 

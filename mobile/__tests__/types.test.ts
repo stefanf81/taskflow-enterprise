@@ -88,7 +88,7 @@ describe('types/api', () => {
   });
 
   it('ServiceItem has pricing fields', () => {
-    const svc: ServiceItem = { id: 1, name: 'Cut', price: 45, durationMinutes: 30, category: 'HAIRCUTS', description: '' };
+    const svc: ServiceItem = { id: 1, name: 'Cut', price: 45, durationMinutes: 30, category: 'hair', description: '' };
     expect(svc.price).toBe(45);
   });
 

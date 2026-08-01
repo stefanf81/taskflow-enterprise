@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
+import { useRoute, RouteProp, useNavigation, CommonActions } from '@react-navigation/native';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -26,7 +26,12 @@ import { useBusySlots, useCreateAppointment } from '../hooks/useAppointments';
 import { GuestTabParamList, RootStackParamList } from '../types/navigation';
 import { AppointmentItem } from '../types/api';
 import { colors } from '../theme/colors';
-import { formatTime12Hour, computeEstimatedEndTime } from '../utils/time-utils';
+import {
+  formatTime12Hour,
+  computeEstimatedEndTime,
+  getUpcomingDays,
+  toLocalDateString,
+} from '../utils/time-utils';
 
 type RouteProps = RouteProp<GuestTabParamList, 'Booking'>;
 
@@ -44,33 +49,28 @@ const BARBERS_FALLBACK = [
 
 const TIME_SLOTS = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'];
 
-const CATEGORIES = ['all', 'HAIRCUTS', 'BEARD_TRIM', 'SHAVES', 'COMBOS'];
+// Backend category values (V5__create_service_catalog.sql): hair | beard | combo
+const CATEGORIES = ['all', 'hair', 'beard', 'combo'];
 
-// Compute next 7 working days (excluding Sundays)
-const getUpcomingDays = () => {
-  const days = [];
-  const today = new Date();
-  let count = 0;
-  let offset = 0;
-
-  while (count < 7 && offset < 14) {
-    const nextDate = new Date(today);
-    nextDate.setDate(today.getDate() + offset);
-
-    if (nextDate.getDay() !== 0) {
-      const dateStr = nextDate.toISOString().split('T')[0];
-      days.push({
-        dateStr,
-        dayName: nextDate.toLocaleDateString('en-US', { weekday: 'short' }),
-        dayNum: nextDate.getDate(),
-        monthName: nextDate.toLocaleDateString('en-US', { month: 'short' }),
-      });
-      count++;
-    }
-    offset++;
-  }
-  return days;
+const CATEGORY_LABELS: Record<string, string> = {
+  all: 'All',
+  hair: 'Haircuts',
+  beard: 'Beards & Shaves',
+  combo: 'Combos',
 };
+
+/** Destination after the booking receipt closes.
+ *
+ * BookingScreen is mounted in BOTH the guest tab navigator (route 'Booking',
+ * sibling 'Home') and the customer tab navigator (route 'NewBooking', no
+ * 'Home' route). Navigating to 'Home' from the customer flow would crash with
+ * "action 'NAVIGATE' with name 'Home' was not handled". Pure helper — the
+ * current tab navigator's route names decide the target.
+ */
+export const getPostBookingDestination = (
+  routeNames: readonly string[],
+): 'Home' | 'CustomerAppointments' =>
+  routeNames.includes('Home') ? 'Home' : 'CustomerAppointments';
 
 export const BookingScreen: React.FC = () => {
   const route = useRoute<RouteProps>();
@@ -80,8 +80,37 @@ export const BookingScreen: React.FC = () => {
   const { data: apiBarbers = [] } = useBarbers();
   const createMutation = useCreateAppointment();
 
-  // Memoize upcoming days — they only change at midnight (P1: avoid recompute per render)
-  const upcomingDays = useMemo(() => getUpcomingDays(), []);
+  // Recompute the day list when the local calendar date rolls over at midnight
+  // (memo dep on todayKey, not the effect itself). Drift-free: the timeout is
+  // scheduled to the next local midnight and re-armed on every rollover.
+  const [todayKey, setTodayKey] = useState(() => toLocalDateString(new Date()));
+  const upcomingDays = useMemo(() => getUpcomingDays(new Date()), [todayKey]);
+
+  useEffect(() => {
+    const now = new Date();
+    const nextMidnight = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1,
+      0,
+      0,
+      0,
+      0,
+    );
+    const timer = setTimeout(() => {
+      setTodayKey(toLocalDateString(new Date()));
+    }, nextMidnight.getTime() - now.getTime());
+    return () => clearTimeout(timer);
+  }, [todayKey]);
+
+  // Destination for the receipt close button (guest vs customer tab navigator)
+  const postBookingDestination = useMemo(
+    () =>
+      getPostBookingDestination(
+        navigation.getState?.()?.routes.map((r) => r.name) ?? [],
+      ),
+    [navigation],
+  );
 
   // Build barber list from API, fallback to static names
   const barberNames = apiBarbers.length > 0
@@ -149,11 +178,21 @@ export const BookingScreen: React.FC = () => {
   // Estimated end time
   const estimatedEnd = computeEstimatedEndTime(selectedTime, selectedServiceObj?.durationMinutes ?? 0);
 
+  // Keep a valid service selected once the catalog loads:
+  // - honor a route-preselected service only if it exists in the catalog
+  // - otherwise fall back to the first catalog entry (never a hardcoded name
+  //   that may not exist, which left the summary showing $0.00)
   useEffect(() => {
-    if (services.length > 0 && !selectedService) {
-      setSelectedService(services[0].name);
-    }
-  }, [services]);
+    if (services.length === 0) return;
+    const preselected = route.params?.preselectedService;
+    const candidate =
+      preselected && services.some((s) => s.name === preselected)
+        ? preselected
+        : services[0].name;
+    setSelectedService((current) =>
+      current && services.some((s) => s.name === current) ? current : candidate,
+    );
+  }, [services, route.params?.preselectedService]);
 
   const handleNextStep = () => {
     if (step === 1) {
@@ -283,7 +322,7 @@ export const BookingScreen: React.FC = () => {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catScroll}>
               {CATEGORIES.map((cat) => {
                 const isSel = selectedCategory === cat;
-                const displayLabel = cat === 'all' ? 'All' : cat.replace('_', ' ');
+                const displayLabel = CATEGORY_LABELS[cat] ?? cat;
                 return (
                   <TouchableOpacity
                     key={cat}
@@ -512,7 +551,9 @@ export const BookingScreen: React.FC = () => {
         checkoutTotal={checkoutTotal}
         onClose={() => {
           setReceiptAppointment(null);
-          navigation.navigate('Home');
+          navigation.dispatch(
+            CommonActions.navigate({ name: postBookingDestination }),
+          );
         }}
         onOpenPublicActions={(publicId) => {
           setReceiptAppointment(null);

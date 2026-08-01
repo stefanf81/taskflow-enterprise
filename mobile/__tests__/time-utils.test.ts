@@ -4,6 +4,8 @@ import {
   formatMinutesToTimeString,
   computeEstimatedEndTime,
   isOverdue,
+  toLocalDateString,
+  getUpcomingDays,
   DEFAULT_TIME_SLOTS,
 } from '../src/utils/time-utils';
 
@@ -153,6 +155,51 @@ describe('time-utils', () => {
 
     it('returns false for object with missing bookingDate', () => {
       expect(isOverdue({})).toBe(false);
+    });
+  });
+
+  // ==================== toLocalDateString ====================
+  describe('toLocalDateString', () => {
+    it('formats a local date as YYYY-MM-DD', () => {
+      expect(toLocalDateString(new Date(2026, 7, 15, 12, 0))).toBe('2026-08-15');
+    });
+
+    it('pads single-digit months and days', () => {
+      expect(toLocalDateString(new Date(2026, 0, 5))).toBe('2026-01-05');
+    });
+
+    it('stays on the local calendar date near midnight', () => {
+      // 23:30 local on Aug 15 must still render Aug 15 in ANY timezone
+      // (toISOString() would drift to Aug 16 in timezones behind UTC).
+      expect(toLocalDateString(new Date(2026, 7, 15, 23, 30))).toBe('2026-08-15');
+    });
+  });
+
+  // ==================== getUpcomingDays ====================
+  describe('getUpcomingDays', () => {
+    it('returns 7 consecutive days starting from a Monday', () => {
+      const days = getUpcomingDays(new Date(2026, 7, 10, 12, 0)); // Mon Aug 10 2026
+      expect(days).toHaveLength(7);
+      expect(days[0].dateStr).toBe('2026-08-10');
+      expect(days[6].dateStr).toBe('2026-08-17');
+    });
+
+    it('skips Sundays', () => {
+      const days = getUpcomingDays(new Date(2026, 7, 16, 12, 0)); // Sun Aug 16 2026
+      expect(days).toHaveLength(7);
+      expect(days[0].dateStr).toBe('2026-08-17'); // Monday after the Sunday
+      expect(days.some((d) => d.dateStr === '2026-08-16')).toBe(false);
+      expect(days.some((d) => d.dateStr === '2026-08-23')).toBe(false);
+    });
+
+    it('exposes day metadata for the day cards', () => {
+      const days = getUpcomingDays(new Date(2026, 7, 10, 12, 0));
+      expect(days[0]).toEqual({
+        dateStr: '2026-08-10',
+        dayName: 'Mon',
+        dayNum: 10,
+        monthName: 'Aug',
+      });
     });
   });
 });

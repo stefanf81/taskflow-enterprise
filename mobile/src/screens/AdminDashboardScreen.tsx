@@ -36,7 +36,15 @@ export const AdminDashboardScreen: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const { data, isLoading, refetch } = useAppointments(filter, search, page, 10);
+  // Debounce the search term before it reaches the query hook so the admin
+  // dashboard does not fire a backend request on every keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const { data, isLoading, refetch } = useAppointments(filter, debouncedSearch, page, 10);
   const updateStatusMutation = useUpdateAppointmentStatus();
   const deleteMutation = useDeleteAppointment();
   const { logout } = useAuthStore();
