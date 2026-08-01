@@ -48,14 +48,19 @@ sudo xcodebuild -license accept
 ```bash
 cd mobile
 
-# Install JS dependencies (peer-deps workaround needed for react-test-renderer)
-npm install --legacy-peer-deps
+# Install locked JS dependencies. mobile/.npmrc records the required peer
+# compatibility setting for @config-plugins/detox@11.0.0 with Expo 57.
+npm ci
 
 # Generate native iOS project + install CocoaPods
 npx expo prebuild --platform ios
 ```
 
 This creates the `ios/` directory with the Xcode workspace. It only needs to be done once (or after adding/removing native modules).
+
+The generated `ios/` directory, including `Podfile.lock`, is ignored by Git. CocoaPods
+therefore uses the lockfile locally when present, while clean CI runs resolve pods with
+`pod install --no-repo-update` and report that the pod graph is not fully locked.
 
 ---
 

@@ -72,13 +72,16 @@ jest.mock('../src/api/reviews', () => ({
 // ============================================================
 // Test wrapper with QueryClient
 // ============================================================
+const queryClients = new Set<QueryClient>();
+
 function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: 0 },
-      mutations: { retry: false },
+      mutations: { retry: false, gcTime: 0 },
     },
   });
+  queryClients.add(queryClient);
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return React.createElement(QueryClientProvider, { client: queryClient }, children);
   };
@@ -94,6 +97,11 @@ import { useBarberRatings, useSubmitReview } from '../src/hooks/useReviews';
 describe('Hooks', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    queryClients.forEach((queryClient) => queryClient.clear());
+    queryClients.clear();
   });
 
   // ==================== APPOINTMENTS ====================
