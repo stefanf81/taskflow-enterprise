@@ -20,13 +20,13 @@ React Native + Expo Mobile Application
 
 ---
 
-## 🔁 Shared Single Source of Truth Linkage
+## 🔁 Platform-local Contract Linkage
 
-The mobile app links directly into the workspace-level `shared/` contract directory:
+The mobile app owns its platform-local contract directory under `src/`:
 
-* **API Types (`src/types/api.ts`)**: Re-exports unified API contracts from `shared/types/api.ts` (synced with Spring Boot OpenAPI via `npm run sync:api-types`).
-* **Design System (`src/theme/colors.ts`)**: Dynamically imports theme tokens (`obsidian`, `gold`, `status`, `text`) from `shared/theme/tokens.json`.
-* **Pure Time Utilities (`src/utils/time-utils.ts`)**: Re-exports pure 12h/24h time formatting and `isOverdue` calculations from `shared/utils/time-utils.ts`.
+* **API Types (`src/types/api.ts`)**: Owns API contracts synced with Spring Boot OpenAPI via `npm run sync:api-types`.
+* **Design System (`src/theme/colors.ts`)**: Imports theme tokens (`obsidian`, `gold`, `status`, `text`) from `src/theme/tokens.json`.
+* **Pure Time Utilities (`src/utils/time-utils.ts`)**: Owns pure 12h/24h time formatting and `isOverdue` calculations.
 
 ---
 
@@ -74,9 +74,9 @@ mobile/
 │   ├── navigation/          # React Navigation Navigators (Guest, Customer, Admin, Root)
 │   ├── screens/             # HomeScreen, BookingScreen, CatalogScreen, LookbookScreen, LoginScreen, RegisterScreen, PublicActionsScreen, CustomerPortalScreen, AdminDashboardScreen, AdminCatalogScreen, AdminSchedulesScreen, AdminNotificationsScreen
 │   ├── store/               # Zustand state stores (useAuthStore, useUIStore)
-│   ├── theme/               # Gold & Obsidian palette & colors (imports shared/theme/tokens.json)
-│   ├── types/               # TypeScript models (re-exports shared/types/api.ts) & Navigation ParamLists
-│   └── utils/               # SecureStorage wrapper & time-utils (re-exports shared/utils/time-utils.ts)
+│   ├── theme/               # Gold & Obsidian palette, tokens, and colors
+│   ├── types/               # TypeScript API models & Navigation ParamLists
+│   └── utils/               # SecureStorage wrapper & time utilities
 ├── __tests__/               # Jest & React Native Testing Library unit test suites (351 tests, 48 suites)
 ├── .detoxrc.js              # Detox dual-platform E2E configuration (Android APK & iOS App)
 ├── App.tsx                  # Application entry point

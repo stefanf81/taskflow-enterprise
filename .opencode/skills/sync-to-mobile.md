@@ -8,7 +8,7 @@ description: Synchronizes feature, UI, or design changes made in the Angular 22 
 Use this skill when a user asks to port or synchronize a new feature, component modification, or design update from the Angular 22 Web Frontend (`frontend/`) to the React Native Expo Mobile app (`mobile/`).
 
 ## Feature Component Mapping Matrix
-Refer to `shared/component-map.json` to identify exact target files for each feature domain:
+Refer to `frontend/src/component-map.json` or `mobile/src/component-map.json` to identify exact target files for each feature domain:
 * **Stylist Cards**: `frontend/src/app/components/stylist-card/stylist-card.ts` ↔ `mobile/src/components/booking/StylistCard.tsx`
 * **Booking Wizard**: `frontend/src/app/app.ts` / `app.html` ↔ `mobile/src/screens/BookingScreen.tsx`
 * **Customer Portal**: `frontend/src/app/features/customer/` ↔ `mobile/src/screens/CustomerPortalScreen.tsx`
@@ -21,7 +21,7 @@ Refer to `shared/component-map.json` to identify exact target files for each fea
 * **Angular Signals & Stores (`*.store.ts`)**:
   * Angular 22 uses `signal()`, `computed()`, and RxJS stores.
   * Map these to React Native **TanStack Query** custom hooks (`mobile/src/hooks/use*.ts`) for server state, or **Zustand** (`mobile/src/store/use*.ts`) for client state.
-  * API contracts are unified in `shared/types/api.ts` (sync via `npm run sync:api-types`).
+* API contracts are kept in `frontend/src/app/types/api.ts` and `mobile/src/types/api.ts` (sync via `npm run sync:api-types`).
 
 ### 2. UI Component Structure
 * **Angular HTML Templates (`*.html` or inline)**:
@@ -31,7 +31,7 @@ Refer to `shared/component-map.json` to identify exact target files for each fea
   * `<input>` -> `<Input>` from `mobile/src/components/common/Input.tsx`
 
 ### 3. Design System & Theme Tokens
-* Colors are synchronized via `shared/theme/tokens.json`.
+* Colors are synchronized via the platform-local `frontend/src/theme/tokens.json` and `mobile/src/theme/tokens.json`.
 * Always use theme tokens from `mobile/src/theme/colors.ts`:
   * Obsidian Slate: `colors.obsidian.bg`, `colors.obsidian.card`, `colors.obsidian.surface`
   * Gold Metallic: `colors.gold.main`, `colors.gold.bright`, `colors.gold.dim`, `colors.gold.border`

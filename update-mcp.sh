@@ -96,6 +96,7 @@ check_cmd() {
         echo -e "${YELLOW}⚠️  Warning: Command '$1' is missing. Tasks depending on it will be skipped.${NC}"
     fi
 }
+check_cmd "node"
 check_cmd "npm"
 check_cmd "uv"
 

@@ -1,0 +1,130 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "name": "TaskFlow Cross-Platform Feature Mapping Matrix",
+  "description": "Used by AI agents and developer workflows to map features between Web Frontend (@frontend/) and Mobile App (@mobile/).",
+  "mappings": [
+    {
+      "feature": "Stylist Card & Profiles",
+      "webComponent": "frontend/src/app/components/stylist-card/stylist-card.ts",
+      "mobileComponent": "mobile/src/components/booking/StylistCard.tsx",
+      "storeHook": {
+        "web": "frontend/src/app/barber.store.ts",
+        "mobile": "mobile/src/hooks/useBarbers.ts"
+      }
+    },
+    {
+      "feature": "Lookbook & Style Showcase",
+      "webComponent": "frontend/src/app/components/lookbook/lookbook.ts",
+      "mobileComponent": "mobile/src/screens/LookbookScreen.tsx",
+      "mobileSubComponent": "mobile/src/components/lookbook/LookbookGallery.tsx"
+    },
+    {
+      "feature": "Booking Wizard & Slot Picker",
+      "description": "4-step wizard: Treatment → Stylist → Date/Slot → Contact (aligned across both platforms)",
+      "webComponent": "frontend/src/app/app.ts",
+      "webTemplate": "frontend/src/app/app.html",
+      "mobileComponent": "mobile/src/screens/BookingScreen.tsx",
+      "mobileSubComponents": [
+        "mobile/src/components/booking/TimeSlotPicker.tsx",
+        "mobile/src/components/booking/ReceiptModal.tsx"
+      ],
+      "storeHook": {
+        "web": "frontend/src/app/appointment.store.ts",
+        "mobile": "mobile/src/hooks/useAppointments.ts"
+      }
+    },
+    {
+      "feature": "Customer Portal & History",
+      "webComponent": "frontend/src/app/features/customer/customer-portal.ts",
+      "webTemplate": "frontend/src/app/features/customer/customer-portal.html",
+      "mobileComponent": "mobile/src/screens/CustomerPortalScreen.tsx",
+      "storeHook": {
+        "web": "frontend/src/app/customer.store.ts",
+        "mobile": "mobile/src/hooks/useCustomer.ts"
+      }
+    },
+    {
+      "feature": "Admin Dashboard & Management",
+      "webComponent": "frontend/src/app/features/admin/admin-dashboard.ts",
+      "webTemplate": "frontend/src/app/features/admin/admin-dashboard.html",
+      "mobileComponent": "mobile/src/screens/AdminDashboardScreen.tsx",
+      "storeHook": {
+        "web": "frontend/src/app/appointment.store.ts",
+        "mobile": "mobile/src/hooks/useAppointments.ts"
+      }
+    },
+    {
+      "feature": "Admin Service Catalog Management",
+      "webComponent": "frontend/src/app/features/admin/admin-dashboard.ts",
+      "mobileComponent": "mobile/src/screens/AdminCatalogScreen.tsx",
+      "storeHook": {
+        "web": "frontend/src/app/service-catalog.store.ts",
+        "mobile": "mobile/src/hooks/useCatalog.ts"
+      }
+    },
+    {
+      "feature": "Admin Staff Schedules & Time Off",
+      "webComponent": "frontend/src/app/features/admin/admin-dashboard.ts",
+      "mobileComponent": "mobile/src/screens/AdminSchedulesScreen.tsx",
+      "storeHook": {
+        "web": "frontend/src/app/barber.store.ts",
+        "mobile": "mobile/src/hooks/useBarbers.ts"
+      }
+    },
+    {
+      "feature": "Admin Notification Outbox",
+      "webComponent": "frontend/src/app/features/admin/admin-dashboard.ts",
+      "mobileComponent": "mobile/src/screens/AdminNotificationsScreen.tsx",
+      "storeHook": {
+        "web": "frontend/src/app/notification.store.ts",
+        "mobile": "mobile/src/hooks/useNotifications.ts"
+      }
+    },
+    {
+      "feature": "Public Guest Cancellation & Reviews",
+      "webComponent": "frontend/src/app/components/post-booking-actions/post-booking-actions.ts",
+      "mobileComponent": "mobile/src/screens/PublicActionsScreen.tsx",
+      "mobileCancelModal": "mobile/src/components/booking/PublicCancelModal.tsx",
+      "mobileReviewModal": "mobile/src/components/booking/PublicReviewModal.tsx",
+      "storeHook": {
+        "web": "frontend/src/app/review.store.ts",
+        "mobile": "mobile/src/hooks/useReviews.ts"
+      }
+    },
+    {
+      "feature": "Auth & Login Modal",
+      "webComponent": "frontend/src/app/components/auth-modal/auth-modal.ts",
+      "mobileComponent": "mobile/src/screens/LoginScreen.tsx",
+      "mobileRegister": "mobile/src/screens/RegisterScreen.tsx",
+      "storeHook": {
+        "web": "frontend/src/app/auth.state.ts",
+        "mobile": "mobile/src/store/useAuthStore.ts"
+      }
+    },
+    {
+      "feature": "FAQ Section",
+      "webComponent": "frontend/src/app/components/faq-section/faq-section.ts",
+      "mobileComponent": "mobile/src/screens/HomeScreen.tsx",
+      "notes": "FAQ is inline in the HomeScreen on mobile (not a separate component)"
+    },
+    {
+      "feature": "Announcement Bar",
+      "webComponent": "frontend/src/app/components/announcement-bar/announcement-bar.ts",
+      "mobileComponent": "mobile/src/screens/HomeScreen.tsx",
+      "notes": "Announcement bar is inline in the HomeScreen on mobile (not a separate component)"
+    },
+    {
+      "feature": "Receipt Modal (Booking Confirmation)",
+      "webComponent": "frontend/src/app/components/receipt-modal/receipt-modal.ts",
+      "mobileComponent": "mobile/src/components/booking/ReceiptModal.tsx"
+    }
+  ],
+  "platformContracts": {
+    "webApiTypes": "frontend/src/app/types/api.ts",
+    "mobileApiTypes": "mobile/src/types/api.ts",
+    "webThemeTokens": "frontend/src/theme/tokens.json",
+    "mobileThemeTokens": "mobile/src/theme/tokens.json",
+    "webTimeUtils": "frontend/src/app/time-utils.ts",
+    "mobileTimeUtils": "mobile/src/utils/time-utils.ts"
+  }
+}

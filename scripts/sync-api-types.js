@@ -3,7 +3,7 @@
  * TaskFlow OpenAPI to TypeScript Contract Synchronizer
  *
  * Fetches the backend OpenAPI spec (GET /v3/api-docs) and generates
- * TypeScript interface definitions in shared/types/api.ts.
+ * TypeScript interface definitions in both platform clients.
  *
  * Usage: node scripts/sync-api-types.js [optional_openapi_url_or_file]
  */
@@ -14,7 +14,10 @@ const http = require('http');
 const https = require('https');
 
 const DEFAULT_URL = 'http://localhost:8080/v3/api-docs';
-const TARGET_FILE = path.resolve(__dirname, '../shared/types/api.ts');
+const TARGET_FILES = [
+  path.resolve(__dirname, '../frontend/src/app/types/api.ts'),
+  path.resolve(__dirname, '../mobile/src/types/api.ts'),
+];
 
 // ---------------------------------------------------------------------------
 // JSON Schema → TypeScript type mapping
@@ -133,10 +136,14 @@ async function main() {
     console.log(`✅ OpenAPI Spec (${spec.info?.title || 'unknown'} ${spec.info?.version || ''}) retrieved — ${schemaCount} schemas.`);
 
     const generated = generateTypesFromSchemas(schemas);
-    fs.writeFileSync(TARGET_FILE, generated, 'utf8');
-    console.log(`✨ Generated TypeScript types → ${TARGET_FILE}`);
+    for (const targetFile of TARGET_FILES) {
+      fs.writeFileSync(targetFile, generated, 'utf8');
+      console.log(`✨ Generated TypeScript types → ${targetFile}`);
+    }
   } catch (err) {
-    console.warn(`⚠️  Backend not reachable (${err.message}). Existing ${TARGET_FILE} preserved.`);
+    console.warn(
+      `⚠️  Backend not reachable (${err.message}). Existing platform contract files preserved.`,
+    );
   }
 }
 

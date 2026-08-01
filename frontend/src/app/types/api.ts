@@ -1,6 +1,6 @@
 /**
- * Single Source of Truth API Contracts for TaskFlow.
- * Auto-aligned with Backend OpenAPI schema (GET /v3/api-docs).
+ * API contracts for the Angular web client.
+ * Auto-aligned with the backend OpenAPI schema (GET /v3/api-docs).
  */
 
 export interface AppointmentItem {
@@ -63,6 +63,14 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
+  username: string;
+  role: 'ROLE_ADMIN' | 'ROLE_CUSTOMER';
+}
+
+export interface MobileLoginResponse {
+  accessToken: string;
+  tokenType: 'Bearer';
+  expiresIn: number;
   username: string;
   role: 'ROLE_ADMIN' | 'ROLE_CUSTOMER';
 }

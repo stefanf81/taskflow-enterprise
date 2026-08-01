@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 
-/* Linked to Shared Theme Tokens: shared/theme/tokens.json */
+/* Platform-local design tokens: frontend/src/theme/tokens.json */
 @theme {
   --color-gold-light: #e5c185;
   --color-gold: #c5a059;

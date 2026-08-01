@@ -3,7 +3,7 @@
 ## Project Structure
 
 - **Backend**: Spring Boot 4.1.0 / OpenJDK 21 / Gradle — `src/main/java/com/example/taskflow/`
-  - High-Performance Tunings: Container-portable heap sizing (deployment-owned via `JAVA_TOOL_OPTIONS`), Virtual Threads ENABLED (Spring Boot 4.1 default, +16.7% p99 improvement on mixed I/O workload — see BENCHMARKS.md §32), Jackson 3, Lazy Connection Fetching, Asynchronous Logging, OpenTelemetry 10% sampling, Redis-backed caching (Spring Cache abstraction).
+  - High-Performance Tunings: Container-portable heap sizing (deployment-owned via `JAVA_TOOL_OPTIONS`), Virtual Threads explicitly ENABLED (`spring.threads.virtual.enabled=true`, with `spring.main.keep-alive=true`; see BENCHMARKS.md §32), Jackson 3, Lazy Connection Fetching, Asynchronous Logging, OpenTelemetry 10% sampling, Redis-backed caching (Spring Cache abstraction).
   - Runtime Profiles & Multi-Arch JVM Optimization:
     - **JVM sizing is deployment-owned.** Both Dockerfiles' image CMDs are sizing-agnostic: they carry only environment-invariant flags (`-XX:SharedArchiveFile=application.jsa`, `-Xshare:auto`, `-XX:+ExitOnOutOfMemoryError`). Heap / off-heap / GC behavioral tuning live in `JAVA_TOOL_OPTIONS` of the runtime environment, NOT the image. Setting sizing in the CMD would silently win over the deployment env (JVM last-wins precedence for non-sticky flags) and recreate the precedence bug where the deployment's tuning was a no-op.
     - **Local (Apple Silicon M4 Pro):** Native `Dockerfile` (`--platform=linux/arm64`) ships only runtime invariants. Heap / off-heap sizing and behavioral GC flags are set via `JAVA_TOOL_OPTIONS` in `docker-compose.yml` (50% × 2560M limit ≈ 1.25 GiB heap, G1GC + AlwaysPreTouch + MaxDirectMemorySize=256m + MaxMetaspaceSize=256m).
@@ -19,31 +19,31 @@
   - Entry: `mobile/App.tsx`, source: `mobile/src/`
   - Navigation: React Navigation (Guest, Customer, and Admin tab navigators inside Root NativeStack).
   - State: TanStack Query (`@tanstack/react-query`) for server state, Zustand (`useAuthStore`, `useUIStore`) for client state.
-  - Security: Secure JWT storage via `expo-secure-store` (iOS Keychain / Android Keystore).
+  - Security: Native bearer login via `POST /api/v1/auth/mobile/login`, bearer tokens stored via `expo-secure-store` (iOS Keychain / Android Keystore), and no reliance on a native cookie jar. Bearer-only state-changing requests are CSRF-exempt; web cookie requests retain double-submit CSRF protection.
   - Builds: EAS Build configured via `mobile/eas.json` for Android (APK/AAB) and iOS (Simulator/IPA).
-- **Shared Single Source of Truth**: `shared/`
-  - `shared/types/api.ts`: Centralized API DTO contracts synced with backend OpenAPI spec.
-  - `shared/theme/tokens.json`: Obsidian & Gold design system tokens shared by Web Tailwind CSS and Mobile NativeWind.
-  - `shared/utils/time-utils.ts`: Pure 12h/24h time and date utilities.
-  - `shared/component-map.json`: Cross-platform feature component mapping matrix.
+- **Platform-local contracts**:
+  - `frontend/src/app/types/api.ts` and `mobile/src/types/api.ts`: API DTO contracts synced with backend OpenAPI spec.
+  - `frontend/src/theme/tokens.json` and `mobile/src/theme/tokens.json`: Obsidian & Gold design system tokens.
+  - `frontend/src/app/time-utils.ts` and `mobile/src/utils/time-utils.ts`: Pure 12h/24h time and date utilities.
+  - `frontend/src/component-map.json` and `mobile/src/component-map.json`: Cross-platform feature component mapping metadata.
 - **DB**: Flyway migrations in `src/main/resources/db/migration/`
 
 ## Cross-Platform AI Feature Synchronization Workflow
 
 When modifying or porting a feature between Web (`frontend/`) and Mobile (`mobile/`):
-1. **Lookup Component Mapping**: Inspect `shared/component-map.json` to identify target files on both platforms.
+1. **Lookup Component Mapping**: Inspect `frontend/src/component-map.json` or `mobile/src/component-map.json` to identify target files on both platforms.
 2. **Use Opencode Sync Skill**: Reference `.opencode/skills/sync-to-mobile.md` for exact framework translation rules:
    * **State**: Angular Signals (`signal()`, `computed()`) $\rightarrow$ TanStack Query (`useQuery`) / Zustand (`useAuthStore`).
    * **Templates**: Angular `@if`/`@for` $\rightarrow$ React Native JSX conditionals & `FlatList`/`map()`.
-   * **Theme**: Ensure color tokens originate from `shared/theme/tokens.json` (`colors.ts`).
-3. **Sync API Contracts**: If backend endpoints/DTOs change, run `npm run sync:api-types` to update `shared/types/api.ts`.
+   * **Theme**: Ensure color tokens originate from the platform-local token files (`mobile/src/theme/colors.ts`).
+3. **Sync API Contracts**: If backend endpoints/DTOs change, run `npm run sync:api-types` to update both platform API contract files.
 4. **Verify**: Run `npm run lint:all` and `npm run test:all`.
 
 ## Commands
 
 ### Monorepo Workspace Commands (root)
 ```bash
-npm run sync:api-types   # pull OpenAPI spec from Spring Boot and update shared/types/api.ts
+npm run sync:api-types   # pull OpenAPI spec from Spring Boot and update both platform API contract files
 npm run test:all         # run unit tests across both Angular Web and React Native Mobile
 npm run lint:all         # run TypeScript type check on mobile and web
 ```
@@ -51,7 +51,8 @@ npm run lint:all         # run TypeScript type check on mobile and web
 ### Backend (root)
 ```bash
 ./gradlew build          # compile + test
-./gradlew test           # unit + integration tests (Testcontainers for PostgreSQL)
+./gradlew test           # unit + H2-backed integration tests
+./gradlew testcontainersTest # tagged PostgreSQL integration tests (requires Docker)
 ./gradlew check          # test + OWASP dependency check (fails on CVSS >= 7)
 ./gradlew bootJar        # build production JAR
 ./gradlew bootRun        # run backend locally (uses H2 by default)
@@ -115,9 +116,10 @@ Security scans (filesystem lints, container image vulnerability scans, and DAST 
   - **Dropped Capabilities**: All services completely drop kernel privileges (`cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`).
   - **Container Lifecycle**: `docker-compose.yml` uses `restart: "no"` so containers do not linger across system/Docker reboots. Verification and E2E scripts (`./verify.sh`, `npm run e2e:docker`) use exit traps (`./stop-docker.sh`) to automatically stop containers after test completion.
 - **OSIV is off** (`spring.jpa.open-in-view=false`) — connections return to Hikari pool immediately after service methods.
-- **Auth**: Stateless JWT in an HttpOnly `access_token` cookie (Asymmetric RSA-2048 signing via OAuth2 Resource Server). Role/identity is restored via `GET /api/v1/auth/me` into an in-memory Signal (`AuthState`) and never stored in `sessionStorage`/`localStorage`. CSRF protection via double-submit `XSRF-TOKEN` cookie. `/api/v1/auth/**` is the only public endpoint path.
-- **Frontend uses Angular 22 Signals** (no Zone.js digest loops). Styles use Tailwind with custom `gold`/`obsidian` color palette from `shared/theme/tokens.json`.
-- **Mobile uses React Native & Expo** with TypeScript, React Navigation, TanStack Query, Zustand, NativeWind, and `expo-secure-store` for hardware token security. Theme colors import from `shared/theme/tokens.json`.
+- **Web Auth**: Stateless JWT in an HttpOnly `access_token` cookie (Asymmetric RSA-2048 signing via OAuth2 Resource Server). Role/identity is restored via `GET /api/v1/auth/me` into an in-memory Signal (`AuthState`) and never stored in `sessionStorage`/`localStorage`. CSRF protection uses the double-submit `XSRF-TOKEN` cookie.
+- **Mobile Auth**: Native clients use `POST /api/v1/auth/mobile/login` and store the returned bearer token in `expo-secure-store`. The shared `/api/v1/auth/me` endpoint confirms the token on startup. Bearer-only requests do not require browser CSRF tokens; requests carrying the web `access_token` cookie remain protected.
+- **Frontend uses Angular 22 Signals** (no Zone.js digest loops). Styles use Tailwind with custom `gold`/`obsidian` color palette from `frontend/src/theme/tokens.json`.
+- **Mobile uses React Native & Expo** with TypeScript, React Navigation, TanStack Query, Zustand, NativeWind, and `expo-secure-store` for hardware token security. Theme colors import from `mobile/src/theme/tokens.json`.
 - **Prettier** is the formatter (100 char width, single quotes). Run `npx prettier --write <file>` in `frontend/`.
 - **Testcontainers** are used for PostgreSQL integration tests. They require Docker to be running.
 - **ArchUnit** enforces package-level architecture constraints (`src/test/java/com/example/taskflow/architecture/`).

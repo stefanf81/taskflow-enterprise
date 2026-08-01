@@ -12,70 +12,50 @@ const mockedPost = apiClient.post as jest.Mock;
 const mockedGet = apiClient.get as jest.Mock;
 
 describe('authApi', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+  beforeEach(() => jest.clearAllMocks());
+
+  it('uses the native bearer login endpoint', async () => {
+    const mockResponse = {
+      accessToken: 'mobile-jwt',
+      tokenType: 'Bearer',
+      expiresIn: 3600,
+      username: 'admin',
+      role: 'ROLE_ADMIN',
+    };
+    mockedPost.mockResolvedValueOnce({ data: mockResponse });
+
+    const result = await authApi.login({ username: 'admin', password: 'admin-password' });
+
+    expect(mockedPost).toHaveBeenCalledWith('/api/v1/auth/mobile/login', {
+      username: 'admin',
+      password: 'admin-password',
+    });
+    expect(result).toEqual(mockResponse);
   });
 
-  describe('login', () => {
-    it('sends POST with credentials and returns LoginResponse', async () => {
-      const mockResponse = { username: 'admin', role: 'ROLE_ADMIN' };
-      mockedPost.mockResolvedValueOnce({ data: mockResponse });
-
-      const result = await authApi.login({ username: 'admin', password: 'admin-password' });
-
-      expect(mockedPost).toHaveBeenCalledWith('/api/v1/auth/login', {
-        username: 'admin',
-        password: 'admin-password',
-      });
-      expect(result).toEqual(mockResponse);
-    });
-
-    it('propagates error on failure', async () => {
-      mockedPost.mockRejectedValueOnce(new Error('Network Error'));
-      await expect(authApi.login({ username: 'admin', password: 'wrong' })).rejects.toThrow();
-    });
+  it('propagates login errors', async () => {
+    mockedPost.mockRejectedValueOnce(new Error('Network Error'));
+    await expect(authApi.login({ username: 'admin', password: 'wrong' })).rejects.toThrow();
   });
 
-  describe('me', () => {
-    it('sends GET and returns current user', async () => {
-      const mockResponse = { username: 'admin', role: 'ROLE_ADMIN' };
-      mockedGet.mockResolvedValueOnce({ data: mockResponse });
+  it('returns the server-confirmed current user', async () => {
+    const mockResponse = { username: 'admin', role: 'ROLE_ADMIN' };
+    mockedGet.mockResolvedValueOnce({ data: mockResponse });
 
-      const result = await authApi.me();
-      expect(mockedGet).toHaveBeenCalledWith('/api/v1/auth/me');
-      expect(result).toEqual(mockResponse);
-    });
+    await expect(authApi.me()).resolves.toEqual(mockResponse);
+    expect(mockedGet).toHaveBeenCalledWith('/api/v1/auth/me');
   });
 
-  describe('register', () => {
-    it('sends POST with registration data', async () => {
-      mockedPost.mockResolvedValueOnce({});
-      const registerData = {
-        fullName: 'Jane Smith',
-        email: 'jane@example.com',
-        password: 'password123',
-        phone: '+1-555-0000',
-      };
+  it('registers without requiring a cookie session', async () => {
+    const registerData = {
+      fullName: 'Jane Smith',
+      email: 'jane@example.com',
+      password: 'password123',
+      phone: '+1-555-0000',
+    };
+    mockedPost.mockResolvedValueOnce({});
 
-      await authApi.register(registerData);
-      expect(mockedPost).toHaveBeenCalledWith('/api/v1/auth/register', registerData);
-    });
-  });
-
-  describe('logout', () => {
-    it('sends POST to logout endpoint', async () => {
-      mockedPost.mockResolvedValueOnce({});
-      await authApi.logout();
-      expect(mockedPost).toHaveBeenCalledWith('/api/v1/auth/logout');
-    });
-  });
-
-  describe('fetchCsrfToken', () => {
-    it('sends GET and returns token string', async () => {
-      mockedGet.mockResolvedValueOnce({ data: { token: 'csrf-token-xyz' } });
-      const result = await authApi.fetchCsrfToken();
-      expect(mockedGet).toHaveBeenCalledWith('/api/v1/auth/csrf');
-      expect(result).toBe('csrf-token-xyz');
-    });
+    await authApi.register(registerData);
+    expect(mockedPost).toHaveBeenCalledWith('/api/v1/auth/register', registerData);
   });
 });

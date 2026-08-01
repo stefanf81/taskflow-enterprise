@@ -14,7 +14,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **OpenJDK 21 (Eclipse Temurin Alpine)**:
     *   **GC Model (G1GC — verified against ZGC on allocation-heavy paths)**: The collector is left unpinned so the JVM uses **G1GC** (JDK 25 default on most configs). Earlier benchmarks (§1) showed G1GC and ParallelGC are **statistically identical** (~189 RPS on the CPU-bound `/login` path). A deeper **G1GC vs Generational ZGC** comparison on allocation-heavy endpoints (§30) confirms G1GC wins by **2–104% throughput** depending on allocation intensity, while ZGC's sub-millisecond pauses offer no practical advantage at this scale. G1GC remains the default.
      *   **Deterministic Heap Allocation (local)**: Sized to a static `1GB` (`-Xms1g -Xmx1g`) for local benchmarking to eliminate heap-expansion noise. Production uses container-portable `-XX:MaxRAMPercentage=60.0` / `75.0` (Docker) bounds so the same image adapts to any cgroup limit.
-    *   **Project Loom / Virtual Threads**: Enabled by default (`spring.threads.virtual.enabled=true`, Spring Boot 4.1.0 default). §32 benchmarks the full I/O-bound mixed workload — VT delivers marginal gains on H2 in-memory (+0.4% throughput) but significantly higher throughput on PostgreSQL when combined with larger HikariCP pool sizes (§33). The earlier §3 finding that VT hurts the CPU-bound `/login` (BCrypt/RSA) path is absorbed by the read-heavy workload mix in production.
+    *   **Project Loom / Virtual Threads**: Explicitly enabled with `spring.threads.virtual.enabled=true` and kept alive with `spring.main.keep-alive=true`. §32 benchmarks the full I/O-bound mixed workload — VT delivers marginal gains on H2 in-memory (+0.4% throughput) but significantly higher throughput on PostgreSQL when combined with larger HikariCP pool sizes (§33). The earlier §3 finding that VT hurts the CPU-bound `/login` (BCrypt/RSA) path is absorbed by the read-heavy workload mix in production.
 
 ### 🍃 2. Spring Boot 4.1.0 Application Layer
 *   **Embedded Apache Tomcat 11**:
@@ -169,7 +169,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 | Undertow + Platform Threads | 6,973 RPS | 7.17 ms |
 | Tomcat + Virtual Threads | 6,929 RPS | 7.21 ms |
 
-**Verdict:** The `/login` endpoint is heavily CPU-bound (Bcrypt/RSA). Virtual Threads actually *hurt* performance here due to context-switching overhead without any I/O blocking benefits. We **disabled Virtual Threads** and kept Tomcat.
+**Verdict:** The `/login` endpoint is heavily CPU-bound (Bcrypt/RSA). Virtual Threads can hurt performance on this isolated path due to context-switching overhead without I/O blocking benefits. The application nevertheless explicitly enables Virtual Threads for the mixed I/O workload validated in §32.
 
 ---
 
@@ -682,9 +682,9 @@ The `@Cache(usage=READ_WRITE)` annotations on `Barber`, `ServiceItem`, and `Revi
 
 3. **HikariCP pool size dominates under VT.** The real VT benefit emerges when combined with larger connection pools — see §33. With VT enabled and pool=50, throughput reaches 5,648 req/s (2.96× the PT baseline of 1,908 req/s at pool=10).
 
-4. **VT is enabled in production.** `spring.threads.virtual.enabled=true` is the Spring Boot 4.1.0 default. The earlier §3 benchmark found VT hurt the CPU-bound `/login` (BCrypt) path, but §32 shows that on the full mixed I/O workload, VT is a net positive. The BCrypt-specific regression is absorbed by the read-heavy workload mix.
+4. **VT is enabled in production.** `spring.threads.virtual.enabled=true` is explicitly configured; it is not assumed to be a Spring Boot default. The earlier §3 benchmark found VT hurt the CPU-bound `/login` (BCrypt) path, but §32 shows that on the full mixed I/O workload, VT is a net positive. The BCrypt-specific regression is absorbed by the read-heavy workload mix.
 
-**Verdict:** Virtual threads are enabled by default in Spring Boot 4.1.0 and provide marginal improvement on H2 in-memory benchmarks. The real benefit materializes on PostgreSQL with real I/O latency, especially when combined with larger HikariCP pool sizes (§33).
+**Verdict:** Virtual threads are explicitly enabled by TaskFlow and provide marginal improvement on H2 in-memory benchmarks. The real benefit materializes on PostgreSQL with real I/O latency, especially when combined with larger HikariCP pool sizes (§33).
 
 ---
 

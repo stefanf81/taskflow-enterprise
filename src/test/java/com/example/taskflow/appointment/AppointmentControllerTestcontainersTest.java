@@ -37,7 +37,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = "app.rate-limit.enabled=false")
 @AutoConfigureMockMvc
 @Testcontainers
-@org.junit.jupiter.api.Disabled("Disabled locally to prevent build failures when the Docker socket is disconnected.")
 public class AppointmentControllerTestcontainersTest {
 
     @Autowired

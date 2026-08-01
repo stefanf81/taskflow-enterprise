@@ -2,7 +2,7 @@
 
 Welcome to the **TaskFlow Enterprise Frontend**! This client application is engineered with **Angular 22** utilizing the state-of-the-art **Angular Signals** architecture for Zone-free, lightweight, and modern state management.
 
-The UI is custom-styled with **Tailwind CSS v4** in a premium enterprise **gold & obsidian** design system linked to `shared/theme/tokens.json`.
+The UI is custom-styled with **Tailwind CSS v4** in a premium enterprise **gold & obsidian** design system defined by the frontend-local `src/theme/tokens.json`.
 
 ---
 
@@ -20,12 +20,12 @@ This project uses **Tailwind CSS v4** (`^4.3.1`) natively within Angular 22's mo
       }
     }
     ```
-2.  **Global Theme Variables (`src/styles.css`):** Imports Tailwind CSS v4 natively and declares custom brand colors linked to `shared/theme/tokens.json`:
+2.  **Global Theme Variables (`src/styles.css`):** Imports Tailwind CSS v4 natively and declares custom brand colors defined by the frontend-local `src/theme/tokens.json`:
 
     ```css
     @import 'tailwindcss';
 
-    /* Linked to Shared Theme Tokens: shared/theme/tokens.json */
+    /* Platform-local Theme Tokens: src/theme/tokens.json */
     @theme {
       --color-gold-light: #e5c185;
       --color-gold: #c5a059;
@@ -51,13 +51,13 @@ This project uses **Tailwind CSS v4** (`^4.3.1`) natively within Angular 22's mo
 
 ---
 
-## 🔁 2. Shared Single Source of Truth Linkage
+## 🔁 2. Platform-local Contract Linkage
 
-The frontend connects directly to the workspace-level `shared/` contract directory:
+The frontend owns its contract files under `src/`:
 
-- **API Types (`src/app/appointment.service.ts`)**: Imports API contracts (`AppointmentItem`, `ServiceItem`, `Barber`, `LoginResponse`, etc.) directly from `shared/types/api.ts`.
-- **Pure Time Utilities (`src/app/time-utils.ts`)**: Re-exports pure time formatting and date validation functions from `shared/utils/time-utils.ts`.
-- **Design Tokens (`src/styles.css`)**: Sourced from `shared/theme/tokens.json`.
+- **API Types (`src/app/types/api.ts`)**: Owns API contracts (`AppointmentItem`, `ServiceItem`, `Barber`, `LoginResponse`, etc.).
+- **Pure Time Utilities (`src/app/time-utils.ts`)**: Owns pure time formatting and date validation functions.
+- **Design Tokens (`src/theme/tokens.json`)**: Defines the frontend's Gold & Obsidian theme values used by `src/styles.css`.
 
 ---
 

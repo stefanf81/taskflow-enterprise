@@ -8,10 +8,8 @@ module.exports = {
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
-    // Include the shared time-utils source file so Istanbul tracks its
-    // functions (the barrel re-export at src/utils/time-utils.ts has no
-    // executable code and shows as 0/0 without affecting the averages).
-    '<rootDir>/../shared/utils/time-utils.ts',
+    // Explicitly include the platform-local utility source in coverage.
+    '<rootDir>/src/utils/time-utils.ts',
   ],
   coverageThreshold: {
     global: {

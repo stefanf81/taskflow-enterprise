@@ -119,9 +119,12 @@
       "mobileComponent": "mobile/src/components/booking/ReceiptModal.tsx"
     }
   ],
-  "sharedContracts": {
-    "apiTypes": "shared/types/api.ts",
-    "themeTokens": "shared/theme/tokens.json",
-    "timeUtils": "shared/utils/time-utils.ts"
+  "platformContracts": {
+    "webApiTypes": "frontend/src/app/types/api.ts",
+    "mobileApiTypes": "mobile/src/types/api.ts",
+    "webThemeTokens": "frontend/src/theme/tokens.json",
+    "mobileThemeTokens": "mobile/src/theme/tokens.json",
+    "webTimeUtils": "frontend/src/app/time-utils.ts",
+    "mobileTimeUtils": "mobile/src/utils/time-utils.ts"
   }
 }

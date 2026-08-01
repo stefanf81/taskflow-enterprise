@@ -16,7 +16,7 @@ import {
   NotificationItem,
   BarberRating,
   ReviewRequest,
-} from '../../../shared/types/api';
+} from './types/api';
 
 export type {
   AppointmentItem,

@@ -132,6 +132,28 @@ tasks.named("test") {
 	finalizedBy(tasks.jacocoTestReport)
 }
 
+// PostgreSQL parity suite. The default test task intentionally stays Docker-
+// independent, while this explicit task runs the tagged Testcontainers tests
+// against the production database engine and migration dialect.
+tasks.register("testcontainersTest", Test) {
+	group = "verification"
+	description = "Runs PostgreSQL Testcontainers integration tests."
+	useJUnitPlatform {
+		includeTags 'testcontainers'
+	}
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	maxParallelForks = 1
+	environment "SPRING_SECURITY_PASSWORD", "admin-password"
+	systemProperty "spring.cache.type", "simple"
+	testLogging {
+		showExceptions = true
+		showCauses = true
+		showStackTraces = true
+		events "passed", "skipped", "failed"
+	}
+}
+
 tasks.register("benchmarkTest", Test) {
 	group = "benchmark"
 	description = "Runs benchmark tests (tagged @Tag('benchmark'))."

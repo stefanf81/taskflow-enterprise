@@ -20,11 +20,10 @@ Two critical architectural alignments were identified and resolved to ensure run
 
 ## 🔍 2. Detailed Findings & Resolutions
 
-### Finding 1: High-Performance Threading Model Realignment (Virtual Threads vs. ParallelGC)
+### Finding 1: Explicit Virtual-Thread Configuration
 *   **Location:** `/src/main/resources/application-prod.properties`
-*   **Issue:** The production configuration specified `spring.threads.virtual.enabled=true`. However, the JVM is strictly configured via `Dockerfile` to run with **Parallel Garbage Collector (`-XX:+UseParallelGC`)** and a hardware-pinned core allocation (`-XX:ParallelGCThreads=10`). 
-*   **The Conflict:** ParallelGC is a non-concurrent, stop-the-world collector designed for maximum pure Request-Per-Second (RPS) throughput under traditional platform-thread architectures. Running Virtual Threads (Project Loom) on ParallelGC creates carrier thread pinning vulnerabilities under high database or I/O blocks, defeating both GC efficiency and Loom's multiplexing model.
-*   **Resolution:** Aligned the production properties with the GC tuning guidelines of the platform by setting `spring.threads.virtual.enabled=false`. The application now relies on fully-tuned, high-performance platform thread pools, eliminating carrier pinning overhead.
+*   **Issue:** Virtual threads were documented inconsistently as both enabled and disabled, and the property was not explicitly present in the runtime configuration.
+*   **Resolution:** Spring Boot 4.1 does not implicitly enable virtual threads. The application now explicitly sets `spring.threads.virtual.enabled=true` and `spring.main.keep-alive=true`, while retaining deployment-owned G1GC and heap tuning. Platform-thread benchmarks remain available as a controlled comparison.
 
 ### Finding 2: Java 25 Compatibility Crash of SpotBugs Engine
 *   **Location:** `/build.gradle` (SpotBugs Configuration)
@@ -79,8 +78,8 @@ Two critical architectural alignments were identified and resolved to ensure run
 *   **Location:** `/Dockerfile`, `/Dockerfile.x64`
 *   **Issue:** In previous stages, local benchmarking properties and production cloud configurations were co-mingled in a single, un-optimized Docker configuration. Running fixed throughput parameters in the cloud led to resource allocation imbalances, while running dynamic, un-tuned containers locally introduced performance variance during local hardware testing.
 *   **Resolution:** Codified a rigid separation of concerns by establishing a dual-Dockerfile strategy:
-    *   **Local dev & benchmarking (`Dockerfile`):** Retains hardware-specific parallel GC optimization (`-XX:+UseParallelGC`), fixed 1GB JVM heap limits (`-Xms1g -Xmx1g`), and pre-committed heap pages (`-XX:+AlwaysPreTouch`) to maximize consistent RPS output on developer machines.
-    *   **Production & orchestrator deployments (`Dockerfile.x64`):** Leverages container-portable, cgroup-aware scaling via `-XX:MaxRAMPercentage=75.0`, relies on standard low-latency G1 GC for stable p99 latencies, and cross-compiles explicitly under `--platform=linux/amd64` to match cloud runtimes without risk of architecture compatibility crashes.
+    *   **Local dev & benchmarking (`Dockerfile`):** Ships sizing-agnostic JVM invariants; local heap and G1GC behavior are supplied by `JAVA_TOOL_OPTIONS` in Compose.
+    *   **Production & orchestrator deployments (`Dockerfile.x64`):** Ships the same sizing-agnostic runtime model; cgroup-aware heap sizing and G1GC behavior are supplied by the deployment environment and the image cross-compiles explicitly under `--platform=linux/amd64`.
 
 ### Finding 10: Asymmetric DevSecOps Scanning Policy (Filesystem vs. Container Gating)
 *   **Location:** `.github/workflows/ci.yml` (Filesystem Scan vs. Scan Docker Image Steps)

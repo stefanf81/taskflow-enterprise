@@ -14,6 +14,8 @@ import java.util.stream.Collectors;
 @Component
 public class TokenProvider {
 
+    public static final long TOKEN_LIFETIME_SECONDS = 3600L;
+
     private final JwtEncoder encoder;
     private final String issuer;
     private final String audience;
@@ -29,7 +31,6 @@ public class TokenProvider {
 
     public String generateToken(Authentication authentication) {
         Instant now = Instant.now();
-        long expiry = 3600L; // 1 hour — must match the cookie maxAge in AuthController
 
         String scope = authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
@@ -39,11 +40,15 @@ public class TokenProvider {
                 .issuer(issuer)
                 .audience(java.util.List.of(audience))
                 .issuedAt(now)
-                .expiresAt(now.plusSeconds(expiry))
+                .expiresAt(now.plusSeconds(TOKEN_LIFETIME_SECONDS))
                 .subject(authentication.getName())
                 .claim("scope", scope)
                 .build();
 
         return this.encoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
+    }
+
+    public long getTokenLifetimeSeconds() {
+        return TOKEN_LIFETIME_SECONDS;
     }
 }

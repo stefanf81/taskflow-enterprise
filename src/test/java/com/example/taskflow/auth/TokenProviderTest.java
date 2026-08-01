@@ -127,4 +127,9 @@ class TokenProviderTest {
         assertNotNull(issuedAt);
         assertEquals(3600L, expiresAt.getEpochSecond() - issuedAt.getEpochSecond());
     }
+
+    @Test
+    void getTokenLifetimeSeconds_shouldMatchJwtLifetime() {
+        assertEquals(3600L, tokenProvider.getTokenLifetimeSeconds());
+    }
 }

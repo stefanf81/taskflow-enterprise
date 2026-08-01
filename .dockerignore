@@ -11,6 +11,9 @@ out/
 node_modules/
 *.class
 *.jar
+# The backend Dockerfiles consume the pre-built Spring Boot executable JAR.
+# Keep only the boot artifact in the Docker build context.
+!build/libs/*.jar
 *.war
 
 src/

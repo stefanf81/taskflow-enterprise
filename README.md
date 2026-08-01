@@ -2,11 +2,11 @@
 
 **TaskFlow** is a modern, high-performance, full-stack appointment management and luxury salon booking platform.
 
-The suite comprises three core components and a shared single-source-of-truth layer:
-1. **Spring Boot 3.5 Backend (Java 21):** REST API server providing business logic, OpenAPI specs, authentication, PostgreSQL persistence, Flyway migrations, and Redis caching.
+The suite comprises three core components with platform-local contracts and design tokens:
+1. **Spring Boot 4.1 Backend (Java 21):** REST API server providing business logic, OpenAPI specs, authentication, PostgreSQL persistence, Flyway migrations, and Redis caching.
 2. **Angular 22 Web Frontend (`frontend/`):** Modern Angular Signals web application with Tailwind CSS gold & obsidian design system.
 3. **React Native + Expo Mobile Application (`mobile/`):** Cross-platform native mobile application for Android (phones & tablets) and iOS (iPhone & iPad).
-4. **Shared Single Source of Truth Contracts (`shared/`):** Centralized TypeScript API types, theme design tokens, pure business utilities, and cross-platform feature mapping matrix.
+4. **Platform-local contracts:** The web and mobile clients each own their TypeScript API types, theme tokens, time utilities, and feature mapping metadata.
 
 ---
 
@@ -14,7 +14,7 @@ The suite comprises three core components and a shared single-source-of-truth la
 
 ```text
                                ┌──────────────────────────────────┐
-                               │  Spring Boot 3.5 Backend REST    │
+                               │  Spring Boot 4.1 Backend REST    │
                                │        (Java 21 - Port 8080)     │
                                │        http://localhost:8080     │
                                └────────────────┬─────────────────┘
@@ -22,11 +22,11 @@ The suite comprises three core components and a shared single-source-of-truth la
                                                 │ OpenAPI Spec (GET /v3/api-docs)
                                                 ▼
                                ┌──────────────────────────────────┐
-                               │     Single Source Contracts      │
-                               │   • shared/types/api.ts          │
-                               │   • shared/theme/tokens.json     │
-                               │   • shared/utils/time-utils.ts   │
-                               │   • shared/component-map.json    │
+                                │     Platform Client Contracts   │
+                                │   • frontend/src/app/types/api.ts│
+                                │   • mobile/src/types/api.ts       │
+                                │   • frontend/src/theme/tokens.json│
+                                │   • mobile/src/theme/tokens.json │
                                └────────┬─────────────────┬───────┘
                                         │                 │
                   ┌─────────────────────┘                 └─────────────────────┐
@@ -43,7 +43,7 @@ The suite comprises three core components and a shared single-source-of-truth la
 
 ```text
 .
-├── src/                          # Spring Boot 3.5 Backend (Java 21 / Gradle)
+├── src/                          # Spring Boot 4.1 Backend (Java 21 / Gradle)
 │   └── main/java/com/example/taskflow/
 │       ├── appointment/          # Appointment domain, controllers, services
 │       ├── auth/                 # RSA-2048 JWT authentication & security config
@@ -64,10 +64,15 @@ The suite comprises three core components and a shared single-source-of-truth la
 │   │   └── utils/                # expo-secure-store wrapper
 │   ├── app.json                  # Expo App configuration
 │   └── eas.json                  # EAS Build profiles (Android APK/AAB, iOS IPA)
-├── shared/                       # Single Source of Truth Contracts & Utilities
-│   ├── types/api.ts              # Unified API contracts (OpenAPI aligned)
-│   ├── theme/tokens.json         # Obsidian & Gold theme design tokens
-│   ├── utils/time-utils.ts       # Shared 12h/24h time formatting & date logic
+├── frontend/src/                 # Web-owned contracts, theme, utilities, and map
+│   ├── app/types/api.ts          # Web API contracts (OpenAPI aligned)
+│   ├── app/time-utils.ts         # Web 12h/24h time formatting and date logic
+│   ├── theme/tokens.json         # Web Obsidian & Gold theme tokens
+│   └── component-map.json        # Cross-platform Web ↔ Mobile feature mapping
+├── mobile/src/                   # Mobile-owned contracts, theme, utilities, and map
+│   ├── types/api.ts              # Mobile API contracts (OpenAPI aligned)
+│   ├── utils/time-utils.ts       # Mobile 12h/24h time formatting and date logic
+│   ├── theme/tokens.json         # Mobile Obsidian & Gold theme tokens
 │   └── component-map.json        # Cross-platform Web ↔ Mobile feature mapping
 ├── scripts/                      # Workspace utility scripts
 │   └── sync-api-types.js         # OpenAPI contract synchronizer
@@ -89,7 +94,7 @@ The suite comprises three core components and a shared single-source-of-truth la
 
 | Command | Description |
 | :--- | :--- |
-| `npm run sync:api-types` | Pulls live OpenAPI spec from Spring Boot (`/v3/api-docs`) and updates `shared/types/api.ts` |
+| `npm run sync:api-types` | Pulls live OpenAPI spec from Spring Boot (`/v3/api-docs`) and updates both web and mobile API contract files |
 | `npm run test:all` | Executes test suites across both Angular Web (`frontend/`) and React Native Mobile (`mobile/`) |
 | `npm run lint:all` | Performs TypeScript static type checks across both projects |
 | `./start-docker.sh` | Launches PostgreSQL, Redis, Spring Boot backend, and Nginx frontend in health-checked Docker stack |
@@ -167,6 +172,7 @@ npm start
 * **Container Lifecycle:** Services use `restart: "no"` in `docker-compose.yml` to prevent lingering background containers. Verification and test scripts (`./verify.sh`, `npm run e2e:docker`) register exit traps to automatically stop containers upon completion.
 * **Hardware Token Security:** Mobile app stores JWT tokens in **iOS Keychain** & **Android Keystore** via `expo-secure-store`.
 * **HttpOnly Cookies:** Web app uses `HttpOnly`, `SameSite=Strict` cookies with double-submit CSRF token protection.
+* **Native Mobile Auth:** Mobile uses `POST /api/v1/auth/mobile/login` and sends the SecureStore token as an `Authorization: Bearer` header; it does not depend on native cookie persistence.
 
 ---
 

@@ -12,6 +12,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.CacheControl;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -65,6 +66,31 @@ public class AuthController {
         return ResponseEntity.ok(new LoginResponse(authentication.getName(), role));
     }
 
+    @PostMapping("/mobile/login")
+    @Operation(summary = "Authenticate a native client and issue a bearer token")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Login successful — bearer token returned"),
+            @ApiResponse(responseCode = "401", description = "Invalid username or password")
+    })
+    public ResponseEntity<MobileLoginResponse> authenticateMobileUser(
+            @Valid @RequestBody LoginRequest loginRequest) {
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(loginRequest.username(), loginRequest.password())
+        );
+
+        MobileLoginResponse response = new MobileLoginResponse(
+                tokenProvider.generateToken(authentication),
+                "Bearer",
+                tokenProvider.getTokenLifetimeSeconds(),
+                authentication.getName(),
+                extractRole(authentication)
+        );
+
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(response);
+    }
+
     @PostMapping("/register")
     @Operation(summary = "Register a new customer account")
     @ApiResponses(value = {
@@ -99,7 +125,7 @@ public class AuthController {
     @Operation(summary = "Return the currently authenticated principal's role")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Authenticated user's role returned"),
-            @ApiResponse(responseCode = "401", description = "No valid session cookie present")
+            @ApiResponse(responseCode = "401", description = "No valid cookie or bearer token present")
     })
     public ResponseEntity<LoginResponse> currentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -149,7 +175,7 @@ public class AuthController {
                 .secure(cookieSecure)
                 .sameSite("Strict")
                 .path("/")
-                .maxAge(Duration.ofHours(1))
+                .maxAge(Duration.ofSeconds(tokenProvider.getTokenLifetimeSeconds()))
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }

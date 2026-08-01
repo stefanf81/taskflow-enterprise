@@ -18,6 +18,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
@@ -91,10 +92,12 @@ public class SecurityConfig {
                 // admin POST/PUT/DELETE) retain CSRF protection.
                 .ignoringRequestMatchers(
                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/login"),
+                    PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/mobile/login"),
                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/register"),
                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/appointments"),
                     PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*"),
-                    PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/reviews/public/**")
+                    PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/reviews/public/**"),
+                    bearerOnlyRequestMatcher()
                 )
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
@@ -104,7 +107,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/register").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/mobile/login", "/api/v1/auth/register").permitAll()
                 .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness", "/actuator/prometheus").permitAll()
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments/public/busy-slots").permitAll()
@@ -159,6 +162,34 @@ public class SecurityConfig {
                 }
             }
             return headerResolver.resolve(request);
+        };
+    }
+
+    /**
+     * Native bearer requests do not carry ambient browser credentials and are
+     * therefore not exposed to the CSRF threat model. Browser requests that
+     * carry the HttpOnly access_token cookie remain protected, even if a
+     * caller also supplies an Authorization header.
+     */
+    RequestMatcher bearerOnlyRequestMatcher() {
+        return request -> {
+            String authorization = request.getHeader("Authorization");
+            if (authorization == null || !authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
+                return false;
+            }
+
+            jakarta.servlet.http.Cookie[] cookies = request.getCookies();
+            if (cookies == null) {
+                return true;
+            }
+            for (jakarta.servlet.http.Cookie cookie : cookies) {
+                if ("access_token".equals(cookie.getName())
+                        && cookie.getValue() != null
+                        && !cookie.getValue().isBlank()) {
+                    return false;
+                }
+            }
+            return true;
         };
     }
 

@@ -72,6 +72,30 @@ class AuthControllerTest {
     }
 
     @Test
+    void authenticateMobileUser_shouldReturnBearerResponseWithoutCookie() {
+        LoginRequest loginRequest = new LoginRequest("admin@test.com", "password");
+
+        Authentication authentication = mock(Authentication.class);
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenReturn(authentication);
+        when(authentication.getName()).thenReturn("admin@test.com");
+        GrantedAuthority authority = () -> "ROLE_ADMIN";
+        when(authentication.getAuthorities()).thenAnswer(invocation -> List.of(authority));
+        when(tokenProvider.generateToken(authentication)).thenReturn("mobile-jwt");
+        when(tokenProvider.getTokenLifetimeSeconds()).thenReturn(3600L);
+
+        ResponseEntity<MobileLoginResponse> result = authController.authenticateMobileUser(loginRequest);
+
+        assertEquals(HttpStatus.OK, result.getStatusCode());
+        assertEquals("mobile-jwt", result.getBody().accessToken());
+        assertEquals("Bearer", result.getBody().tokenType());
+        assertEquals(3600L, result.getBody().expiresIn());
+        assertEquals("admin@test.com", result.getBody().username());
+        assertEquals("ROLE_ADMIN", result.getBody().role());
+        verify(response, never()).addHeader(eq("Set-Cookie"), anyString());
+    }
+
+    @Test
     void registerUser_shouldCreateAccount() {
         RegisterRequest request = new RegisterRequest("New User", "new@test.com", "password123", "555-1234");
         when(userRepository.findByEmailIgnoreCase("new@test.com")).thenReturn(Optional.empty());

@@ -1,6 +1,7 @@
 package com.example.taskflow.auth;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import javax.sql.DataSource;
@@ -13,8 +14,10 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.util.Base64;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SecurityConfigTest {
 
@@ -85,5 +88,24 @@ class SecurityConfigTest {
     void testBeans() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", null, null);
         assertNotNull(config.passwordEncoder());
+    }
+
+    @Test
+    void bearerOnlyRequestIsExemptFromCsrf() {
+        SecurityConfig config = createConfig("admin", "pass", null, null);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer native-token");
+
+        assertTrue(config.bearerOnlyRequestMatcher().matches(request));
+    }
+
+    @Test
+    void cookieBearingRequestRemainsProtectedEvenWithBearerHeader() {
+        SecurityConfig config = createConfig("admin", "pass", null, null);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer native-token");
+        request.setCookies(new jakarta.servlet.http.Cookie("access_token", "web-token"));
+
+        assertFalse(config.bearerOnlyRequestMatcher().matches(request));
     }
 }

@@ -137,7 +137,7 @@ Through exhaustive benchmarking, the application has been tuned for maximum Requ
 2.  **Double-Caching Docker Compilation**: Standardized optimized multi-stage `Dockerfile` structures. External dependencies are cached in a separate layer by running `./gradlew dependencies --no-daemon` *before* the application source code is copied. Any subsequent Java code change only rebuilds the final lightweight layers, decreasing pipeline build times to under 10 seconds.
 3.  **JVM Class Data Sharing (CDS)**: A CDS archive is generated during the Docker build by booting `CdsTrainingApplication` (which terminates at context refresh via `spring.context.exit=onRefresh`). At runtime, `-XX:SharedArchiveFile=application.jsa` + `-Xshare:auto` reduce class-loading overhead for faster cold starts.
     -   The training context runs with `spring.cache.type=redis` and imports `CacheConfig` so the `RedisCacheManager` / `GenericJackson2JsonRedisSerializer` bean graph is loaded (no real Redis connection is opened — Lettuce connects lazily and the context exits before any cache read/write). In dev, `spring.cache.type=simple` exercises the same `@Cacheable` / `CacheManager` paths without requiring Redis.
-4.  **Threading Model**: Java 21 **Virtual Threads (Project Loom) have been disabled** in favor of standard Platform Threads. Because the authentication flow is highly CPU-bound (Bcrypt, RSA signing), avoiding Virtual Thread context-switching overhead yields significantly higher throughput.
+4.  **Threading Model**: Java 21 **Virtual Threads (Project Loom) are explicitly enabled** through `spring.threads.virtual.enabled=true`, with `spring.main.keep-alive=true` so daemon virtual-thread schedulers do not terminate the application. The decision is based on the mixed I/O benchmark; the CPU-bound BCrypt/RSA login path remains a separate benchmark concern.
 5.  **JSON Serialization**: Integrated Jackson 3.x with explicit version pins for low-latency serialization and CVE resolution.
 6.  **Database Connection Pooling**: **HikariCP** pool is sized at `maximum-pool-size=25` / `minimum-idle=10` in the `prod` profile (`spring.datasource.hikari.*`). The size is tuned for the expected concurrent request volume rather than left at the default of 10.
 7.  **Asynchronous Logging**: Synchronous I/O locking has been eliminated by wrapping the Logback `FileAppender` inside an `AsyncAppender` with a massive non-blocking queue.
@@ -202,17 +202,17 @@ The mobile client architecture mirrors the Angular web functionality while optim
 2.  **Server State Management via TanStack Query (`src/hooks/`):** All asynchronous API states (appointments, service catalog, barbers, time-off, notifications, ratings) use TanStack Query for caching, retries, background refreshes, and mutation invalidations.
 3.  **Client Application State via Zustand (`src/store/`):** In-memory client states (active filter selections, search queries, active booking step) and JWT authentication credentials are handled by lightweight Zustand stores (`useAuthStore`, `useUIStore`).
 4.  **Hardware Secure Storage (`src/utils/storage.ts`):** JWT credentials and user session payloads are stored securely inside platform hardware stores (**iOS Keychain** and **Android Keystore**) via `expo-secure-store`.
-5.  **Styling & Design System (`src/theme/`):** Built with NativeWind (Tailwind CSS for React Native) adhering strictly to TaskFlow's Gold & Obsidian luxury salon color palette sourced from `shared/theme/tokens.json`.
+5.  **Styling & Design System (`src/theme/`):** Built with NativeWind (Tailwind CSS for React Native) adhering strictly to TaskFlow's Gold & Obsidian luxury salon color palette sourced from the mobile-local `src/theme/tokens.json`.
 6.  **Backend Connectivity & Zero-Trust Security:**
     *   **Local Routing**: iOS Simulator (`http://localhost:8080`), Android Emulator (`http://10.0.2.2:8080`), and Physical LAN Devices (`http://<LAN_IP>:8080`).
     *   **Production Deployment**: Replaces local API endpoints with public HTTPS domains (e.g. `https://api.taskflow.example.com`) via `EXPO_PUBLIC_API_URL` environment injection in `eas.json` or CLI flags (`EXPO_PUBLIC_API_URL=https://api.domain.com npx expo start -c`).
-    *   **Security Layers**: Asymmetric RSA-2048 JWT authentication, double-submit CSRF headers, Redis rate-limiting (max 20 auth reqs/min per IP), and mandatory TLS 1.3/1.2 encryption.
+    *   **Security Layers**: Asymmetric RSA-2048 JWT authentication, native bearer tokens stored in SecureStore, bearer-only CSRF exemption for non-browser requests, web double-submit CSRF headers, Redis rate-limiting (max 20 auth reqs/min per IP), and mandatory TLS 1.3/1.2 encryption.
 
 ---
 
-## 🔁 9. Single Source of Truth Contracts & AI Synchronization Framework
+## 🔁 9. Platform-local Contracts & AI Synchronization Framework
 
-To prevent architectural drift between the Web Frontend (`frontend/`) and Mobile App (`mobile/`), TaskFlow implements a **Single Source of Truth** contract layer in `shared/`:
+To prevent architectural drift between the Web Frontend (`frontend/`) and Mobile App (`mobile/`), TaskFlow keeps synchronized, platform-local contract files. The OpenAPI document remains the source of truth for API shapes:
 
 ```text
  ┌─────────────────────────────────────────────────────────────┐
@@ -223,11 +223,11 @@ To prevent architectural drift between the Web Frontend (`frontend/`) and Mobile
                                 │ npm run sync:api-types
                                 ▼
  ┌─────────────────────────────────────────────────────────────┐
- │             Single Source Contracts (shared/)               │
- │  • shared/types/api.ts          (Unified DTO Contracts)     │
- │  • shared/theme/tokens.json     (Obsidian & Gold Palette)   │
- │  • shared/utils/time-utils.ts   (Pure Time Formatting)      │
- │  • shared/component-map.json    (Feature Matrix)            │
+  │             Platform Client Contracts                      │
+  │  • frontend/src/app/types/api.ts (Web DTO Contracts)       │
+  │  • mobile/src/types/api.ts        (Mobile DTO Contracts)    │
+  │  • frontend/src/theme/tokens.json / mobile/src/theme/...   │
+  │  • frontend/src/app/time-utils.ts / mobile/src/utils/...   │
  └──────────────┬──────────────────────────────┬───────────────┘
                 │                              │
                 ▼                              ▼
@@ -239,10 +239,10 @@ To prevent architectural drift between the Web Frontend (`frontend/`) and Mobile
 ```
 
 ### Components of the Sync Framework:
-1. **API Contract Generator (`scripts/sync-api-types.js`)**: Fetches OpenAPI specs from Spring Boot (`/v3/api-docs`) and updates `shared/types/api.ts`. Both `frontend/src/app/appointment.service.ts` and `mobile/src/types/api.ts` import from this file.
-2. **Design Tokens (`shared/theme/tokens.json`)**: Centralizes theme color hex values and translucent highlights. Sourced by `frontend/src/styles.css` (`@theme`) and `mobile/src/theme/colors.ts`.
-3. **Pure Business Utilities (`shared/utils/time-utils.ts`)**: Holds 12h/24h time formatting and `isOverdue` calculations. Re-exported by `frontend/src/app/time-utils.ts` and `mobile/src/utils/time-utils.ts`.
-4. **Feature Mapping Matrix (`shared/component-map.json`)**: Maps feature domains (e.g. Stylist Cards, Booking Wizard, Customer Portal, Admin Dashboard) directly between Angular Web components/stores and React Native screens/hooks.
+1. **API Contract Generator (`scripts/sync-api-types.js`)**: Fetches OpenAPI specs from Spring Boot (`/v3/api-docs`) and updates both `frontend/src/app/types/api.ts` and `mobile/src/types/api.ts`.
+2. **Design Tokens**: `frontend/src/theme/tokens.json` and `mobile/src/theme/tokens.json` keep platform build inputs local while preserving the same Gold & Obsidian palette. They are consumed by `frontend/src/styles.css` (`@theme`) and `mobile/src/theme/colors.ts`.
+3. **Pure Business Utilities**: `frontend/src/app/time-utils.ts` and `mobile/src/utils/time-utils.ts` each contain the client-local 12h/24h time formatting and `isOverdue` calculations.
+4. **Feature Mapping Matrix**: `frontend/src/component-map.json` and `mobile/src/component-map.json` map feature domains (e.g. Stylist Cards, Booking Wizard, Customer Portal, Admin Dashboard) between Angular Web components/stores and React Native screens/hooks.
 5. **Opencode AI Skill (`.opencode/skills/sync-to-mobile.md`)**: Instructs AI agents on framework translation rules (Angular Signals $\rightarrow$ TanStack Query / Zustand; Angular HTML $\rightarrow$ React Native JSX components).
 
 ---

@@ -224,6 +224,7 @@ jobs:
             --parallel \
             --build-cache \
             test \
+            testcontainersTest \
             jacocoTestReport \
             --stacktrace
 

@@ -53,6 +53,25 @@ class AuthCookieTest {
     }
 
     @Test
+    void mobileLoginReturnsNoStoreBearerResponseAndNoCookie() throws Exception {
+        when(tokenProvider.generateToken(any())).thenReturn("mobile-test-jwt");
+        when(tokenProvider.getTokenLifetimeSeconds()).thenReturn(3600L);
+
+        mockMvc.perform(post("/api/v1/auth/mobile/login")
+                        .contentType("application/json")
+                        .content("{\"username\":\"admin\",\"password\":\"admin-password\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("mobile-test-jwt"))
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.expiresIn").value(3600))
+                .andExpect(jsonPath("$.username").value("admin"))
+                .andExpect(jsonPath("$.role").value("ROLE_ADMIN"))
+                .andExpect(cookie().doesNotExist("access_token"))
+                .andExpect(result -> org.junit.jupiter.api.Assertions.assertEquals(
+                        "no-store", result.getResponse().getHeader("Cache-Control")));
+    }
+
+    @Test
     void meReturnsUnauthorizedWhenAnonymous() throws Exception {
         mockMvc.perform(get("/api/v1/auth/me").with(csrf()))
                 .andExpect(status().isUnauthorized());
