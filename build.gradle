@@ -4,7 +4,7 @@ plugins {
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'org.owasp.dependencycheck' version '12.2.2'
 	id 'jacoco'
-	id 'com.github.ben-manes.versions' version '0.56.0'
+	id 'io.github.ben-manes.versions' version '0.56.0'
 	id 'com.github.spotbugs' version '6.5.9'
 }
 group = 'com.example'
@@ -111,10 +111,8 @@ dependencies {
 spotbugs {
 	toolVersion = '4.10.3'
 	ignoreFailures = false
-	// TODO(Gradle 10): Replace string values with enum constants (Gradle 10 removes
-	// automatic String→Enum coercion for Gradle properties).
-	effort = 'max'
-	reportLevel = 'high'
+	effort = com.github.spotbugs.snom.Effort.valueOf('MAX')
+	reportLevel = com.github.spotbugs.snom.Confidence.valueOf('HIGH')
 	excludeFilter = file("spotbugs-exclude.xml")
 }
 tasks.register("writeMainClasspath") {

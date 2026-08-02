@@ -197,9 +197,24 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     // Select Barber (Alex the Barber)
     await page.click('p:has-text("Alex the Barber")');
 
-    // Populate and save Time-Off details
-    await schedulesContainer.locator('input[type="date"]').first().fill('2026-08-01');
-    await schedulesContainer.locator('input[type="date"]').nth(1).fill('2026-08-05');
+    // Populate and save Time-Off details. Dates are computed relative to today
+    // because the backend enforces @FutureOrPresent on the start date — a
+    // hardcoded date would silently drift into the past and fail with 400.
+    const toDateInputValue = (d: Date): string =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+        d.getDate(),
+      ).padStart(2, '0')}`;
+    const timeOffStart = new Date();
+    const timeOffEnd = new Date();
+    timeOffEnd.setDate(timeOffEnd.getDate() + 4);
+    await schedulesContainer
+      .locator('input[type="date"]')
+      .first()
+      .fill(toDateInputValue(timeOffStart));
+    await schedulesContainer
+      .locator('input[type="date"]')
+      .nth(1)
+      .fill(toDateInputValue(timeOffEnd));
     await page.fill('input[placeholder="e.g. Vacation"]', 'Annual Summer Vacation');
     await page.click('button:has-text("Save Time-Off")');
 
