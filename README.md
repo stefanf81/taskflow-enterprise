@@ -44,12 +44,14 @@ The suite comprises three core components with platform-local contracts and desi
 ```text
 .
 ├── src/                          # Spring Boot 4.1 Backend (Java 21 / Gradle)
-│   └── main/java/com/example/taskflow/
-│       ├── appointment/          # Appointment domain, controllers, services
-│       ├── auth/                 # RSA-2048 JWT authentication & security config
-│       ├── catalog/              # Service catalog management
-│       ├── notification/         # Notification outbox relay
-│       └── review/               # Barber ratings & review management
+│   ├── main/java/com/example/taskflow/
+│   │   ├── appointment/          # Appointment domain, controllers, services
+│   │   ├── auth/                 # RSA-2048 JWT authentication & security config
+│   │   ├── catalog/              # Service catalog management
+│   │   ├── core/                 # Shared configuration, errors, and rate limiting
+│   │   ├── notification/         # Notification outbox relay
+│   │   └── review/               # Barber ratings & review management
+│   └── main/java/db/migration/   # Java-based Flyway migrations
 ├── frontend/                     # Angular 22 Web Application (TypeScript / Tailwind CSS)
 │   ├── src/app/                  # Angular components, signals, stores, services
 │   └── nginx.conf                # Production Nginx reverse proxy configuration
@@ -60,7 +62,7 @@ The suite comprises three core components with platform-local contracts and desi
 │   │   ├── hooks/                # TanStack Query custom hooks
 │   │   ├── navigation/           # React Navigation (Guest, Customer, Admin tabs)
 │   │   ├── screens/              # HomeScreen, BookingScreen, CatalogScreen, etc.
-│   │   ├── store/                # Zustand stores (useAuthStore, useUIStore)
+│   │   ├── store/                # Zustand store (useAuthStore)
 │   │   └── utils/                # expo-secure-store wrapper
 │   ├── app.json                  # Expo App configuration
 │   └── eas.json                  # EAS Build profiles (Android APK/AAB, iOS IPA)
@@ -182,9 +184,10 @@ npm start
 * [AGENTS.md](AGENTS.md) — Developer guidelines and AI agent instructions
 * [SYSTEM-HARDENING.md](SYSTEM-HARDENING.md) — Zero-trust security & container hardening policy
 * [docs/adr/](docs/adr/) — Architecture Decision Records (ADRs)
-  * `ADR-001` — Virtual Threads Disabled
-  * `ADR-002` — Parallel GC Selection
+  * `ADR-001` — Virtual Threads — Enabled Explicitly
+  * `ADR-002` — ParallelGC vs G1GC
   * `ADR-003` — Denormalized Customer Name
   * `ADR-004` — Redis for Distributed Caching
   * `ADR-005` — JWT in HttpOnly Cookie
   * `ADR-006` — Migration to React Native & Expo Mobile Application
+  * `ADR-007` — Dedicated Mobile Bearer Authentication

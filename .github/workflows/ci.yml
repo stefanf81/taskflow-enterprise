@@ -78,7 +78,6 @@ jobs:
           filters: |
             backend:
               - src/**
-              - shared/**
               - '*.gradle'
               - gradle.properties
               - gradlew
@@ -86,7 +85,6 @@ jobs:
 
             frontend:
               - frontend/**
-              - shared/**
 
             docker:
               - Dockerfile*

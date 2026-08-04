@@ -13,7 +13,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 ### ☕ 1. JVM & Runtime Layer
 *   **OpenJDK 21 (Eclipse Temurin Alpine)**:
     *   **GC Model (G1GC — verified against ZGC on allocation-heavy paths)**: The collector is left unpinned so the JVM uses **G1GC** (JDK 25 default on most configs). Earlier benchmarks (§1) showed G1GC and ParallelGC are **statistically identical** (~189 RPS on the CPU-bound `/login` path). A deeper **G1GC vs Generational ZGC** comparison on allocation-heavy endpoints (§30) confirms G1GC wins by **2–104% throughput** depending on allocation intensity, while ZGC's sub-millisecond pauses offer no practical advantage at this scale. G1GC remains the default.
-     *   **Deterministic Heap Allocation (local)**: Sized to a static `1GB` (`-Xms1g -Xmx1g`) for local benchmarking to eliminate heap-expansion noise. Production uses container-portable `-XX:MaxRAMPercentage=60.0` / `75.0` (Docker) bounds so the same image adapts to any cgroup limit.
+     *   **Deterministic Heap Allocation (local benchmark)**: Sized to a static `1GB` (`-Xms1g -Xmx1g`) for local benchmarking to eliminate heap-expansion noise. Runtime images do not embed heap sizing; Docker Compose and production deployment manifests use `-XX:MaxRAMPercentage=50.0`, with the local 2560M limit yielding approximately 1.25 GiB of heap.
     *   **Project Loom / Virtual Threads**: Explicitly enabled with `spring.threads.virtual.enabled=true` and kept alive with `spring.main.keep-alive=true`. §32 benchmarks the full I/O-bound mixed workload — VT delivers marginal gains on H2 in-memory (+0.4% throughput) but significantly higher throughput on PostgreSQL when combined with larger HikariCP pool sizes (§33). The earlier §3 finding that VT hurts the CPU-bound `/login` (BCrypt/RSA) path is absorbed by the read-heavy workload mix in production.
 
 ### 🍃 2. Spring Boot 4.1.0 Application Layer
@@ -24,7 +24,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   **Asymmetric Cryptography**: Standardized on RSA-2048 signing/verification using asymmetric key-pairs (`app.rsa.private-key` / `public-key`).
     *   **Zero-Trust Session Isolation**: Enforced stateless token authentication via HttpOnly, SameSite=Strict cookies set by the backend, restoring auth state via `GET /api/v1/auth/me` into an in-memory Signal (`AuthState`). Restricted all routes except public `/api/v1/auth/**`.
 *   **Springdoc OpenAPI 3 (Swagger UI)**:
-    *   Integrated `springdoc-openapi-starter-webmvc-ui` version **`3.0.3`** for automated, interactive API documentation generation from code structures. Fully compatible with Spring Boot 4.1.0.
+    *   Integrated `springdoc-openapi-starter-webmvc-ui` version **`3.1.0`** for automated, interactive API documentation generation from code structures. Fully compatible with Spring Boot 4.1.0.
 *   **Spring Boot Validation**:
     *   Integrated `spring-boot-starter-validation` (Hibernate Validator 9) for rigorous JSR-380 input sanitization and boundary enforcement.
 *   **Flyway Database Migrations**:
@@ -97,7 +97,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **OpenTelemetry Tracing**:
     *   Integrated OTel 1.62.0 tracing with a 10% sampling probability (`management.tracing.sampling.probability=0.1`) to achieve robust coverage while stripping only ~0.7% overhead.
 *   **Jaeger Server & Micrometer**:
-    *   Collected traces via a Dockerized Jaeger `1.57` backend with trace propagation, mapped to Prometheus/Micrometer metrics.
+    *   Collected traces via a Dockerized Jaeger `2.20.0` backend with trace propagation, mapped to Prometheus/Micrometer metrics.
 
 ### 🐳 7. Proxy, Containers, Build Tools & CI/CD
 *   **Nginx (Alpine-Unprivileged)**:
@@ -111,8 +111,8 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   **Hardening**: Secured via non-root UIDs (`10001:10001`), completely dropped Linux capabilities (`cap_drop: [ALL]`), read-only root filesystems, and ephemeral `/tmp` paths mapped as RAM-backed `tmpfs` mounts. `tini` configured as PID 1 to reap zombie processes safely.
 *   **Docker Multi-Network Isolation**:
     *   Isolated database traffic natively by creating independent `backend-tier` and `frontend-tier` virtual bridges. The client frontend can never physically establish a network path to the database.
-*   **Kubernetes (k3d Cluster)**:
-    *   Assembled a strict security context profile with restricted pod capabilities, network policies mapping isolated namespace routes, and automated probe-driven rollouts.
+*   **Kubernetes Deployment (external GitOps)**:
+    *   Production manifests are maintained in the separate `homelab/TF/gitops/apps/taskflow/` repository; this workspace does not include a local Kubernetes cluster.
 *   **Testing Suites (Vitest, Playwright, Testcontainers)**:
     *   Managed browser-less unit tests under Angular via **Vitest** (with JSDom and v8 coverage) and robust end-to-end user journeys using headless **Playwright**.
     *   Leveraged real Dockerized PostgreSQL database containers within Spring Boot integration test environments via **Testcontainers** to guarantee perfect schema/SQL execution parity during compilation.
@@ -127,7 +127,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   **OWASP Vulnerability Scanners**: Configured Gradle to check and break the build on upstream dependencies with known CVE scores `CVSS >= 7` via **Dependency-Check**, paired with automated **OWASP ZAP DAST** scanning against the OpenAPI spec.
 *   **Trivy & Hadolint Container Security**: Automated CI/CD pipelines run **Hadolint** for Dockerfile best-practice enforcement and **Trivy** for deep filesystem and container image vulnerability scanning.
 *   **Prettier**: Enforced strict, automated formatting rules across the frontend codebase to prevent style regressions.
-*   **CI/CD Pipeline Caching**: Maximized CI/CD velocity across GitHub Actions and Jenkins by explicitly caching `npm`, `gradle`, `trivy` databases, and utilizing **Docker BuildKit** multi-arch layer caching.
+*   **CI/CD Pipeline Caching**: Maximized CI/CD velocity across GitHub Actions by explicitly caching `npm`, `gradle`, and `trivy` databases, and utilizing **Docker BuildKit** multi-arch layer caching.
 
 ---
 
