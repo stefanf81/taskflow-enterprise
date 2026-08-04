@@ -1,5 +1,7 @@
 # TaskFlow — Full Project Audit Report
 
+> **Historical document:** This report reflects the repository state on 2026-07-25. Some findings and file references may no longer apply to the current codebase.
+
 **Date:** 2026-07-25
 **Scope:** Backend (Spring Boot), Frontend (Angular 22), Mobile (React Native/Expo), Shared, CI/CD, Scripts, Docs
 

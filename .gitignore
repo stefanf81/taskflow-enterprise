@@ -39,6 +39,9 @@ out/
 # Test execution results
 /test-results/
 
+# Playwright MCP session snapshots
+.playwright-mcp/
+
 ### Angular Frontend / Node.js ###
 frontend/node_modules/
 frontend/dist/

@@ -4,7 +4,7 @@
 
 ### Prerequisites
 - Java 21 (OpenJDK)
-- Node.js 20+
+- Node.js 22+
 - Docker Desktop (for Testcontainers and docker-compose)
 - npm 11+
 
@@ -33,6 +33,15 @@ npm install              # Install dependencies
 npm start                # Dev server on :4200 (proxies /api to :8080)
 ```
 
+### Mobile (React Native / Expo)
+```bash
+cd mobile
+npm install
+npm start                # Start Expo Metro Bundler
+npm test                 # Run Jest unit and component tests
+npm run lint             # Typecheck TypeScript
+```
+
 ### Full-Stack Docker
 ```bash
 ./start-docker.sh        # Builds and starts all services via docker-compose
@@ -57,6 +66,7 @@ cd frontend && npm run e2e:docker  # Playwright E2E with auto-spinup and teardow
 ## Project Structure
 - `src/` — Spring Boot backend (Java 21, Gradle)
 - `frontend/` — Angular 22 SPA (TypeScript, Tailwind CSS)
+- `mobile/` — React Native / Expo application (TypeScript)
 - `docs/adr/` — Architecture Decision Records
 
 ## Branches & PRs

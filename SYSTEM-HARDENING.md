@@ -1,5 +1,7 @@
 # TaskFlow Enterprise — System Hardening & Quality Report
 
+> **Historical document:** This report records changes and findings from an earlier project state. Verify all references against the current codebase before relying on them.
+
 This document records the system hardening, JVM performance alignment, and compatibility upgrades executed during the project-wide architectural audit. All system changes adhere to enterprise-grade DevSecOps principles and Spring Boot 4.1.0 + Angular 22 high-performance best practices.
 
 ---

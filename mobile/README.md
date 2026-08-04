@@ -56,7 +56,7 @@ mobile/
 ├── assets/                  # App icons, splash screens
 ├── e2e/                     # Detox E2E test suite (booking.e2e.test.ts, jest.config.js, README.md)
 ├── src/
-│   ├── api/                 # Axios REST API client layers & SSL pinning
+│   ├── api/                 # Axios REST API client layers
 │   │   ├── client.ts
 │   │   ├── auth.ts
 │   │   ├── appointments.ts
@@ -65,7 +65,6 @@ mobile/
 │   │   ├── notifications.ts
 │   │   ├── reviews.ts
 │   │   ├── customer.ts
-│   │   └── sslPinning.ts
 │   ├── components/          # Reusable UI components
 │   │   ├── common/          # Button, Card, Input, Modal, Badge, LoadingIndicator, EmptyState, ErrorMessage
 │   │   ├── booking/         # StylistCard, TimeSlotPicker, ReceiptModal, PublicCancelModal, PublicReviewModal
@@ -73,10 +72,10 @@ mobile/
 │   ├── hooks/               # TanStack Query custom hooks
 │   ├── navigation/          # React Navigation Navigators (Guest, Customer, Admin, Root)
 │   ├── screens/             # HomeScreen, BookingScreen, CatalogScreen, LookbookScreen, LoginScreen, RegisterScreen, PublicActionsScreen, CustomerPortalScreen, AdminDashboardScreen, AdminCatalogScreen, AdminSchedulesScreen, AdminNotificationsScreen
-│   ├── store/               # Zustand state stores (useAuthStore, useUIStore)
+│   ├── store/               # Zustand state store (useAuthStore)
 │   ├── theme/               # Gold & Obsidian palette, tokens, and colors
 │   ├── types/               # TypeScript API models & Navigation ParamLists
-│   └── utils/               # SecureStorage wrapper & time utilities
+│   └── utils/               # Secure storage, time utilities, and optional SSL pinning
 ├── __tests__/               # Jest & React Native Testing Library unit test suites (351 tests, 48 suites)
 ├── .detoxrc.js              # Detox dual-platform E2E configuration (Android APK & iOS App)
 ├── App.tsx                  # Application entry point
