@@ -1,0 +1,238 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - link "Skip to content" [ref=e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=e6]:
+      - heading "Navigation Menu" [level=2] [ref=e7]
+      - generic [ref=e8]:
+        - link "Homepage" [ref=e10] [cursor=pointer]:
+          - /url: /
+        - generic [ref=e13]:
+          - navigation "Global" [ref=e16]:
+            - list [ref=e17]:
+              - listitem [ref=e18]:
+                - button "Platform" [ref=e20] [cursor=pointer]
+              - listitem [ref=e23]:
+                - button "Solutions" [ref=e25] [cursor=pointer]
+              - listitem [ref=e28]:
+                - button "Resources" [ref=e30] [cursor=pointer]
+              - listitem [ref=e33]:
+                - button "Open Source" [ref=e35] [cursor=pointer]
+              - listitem [ref=e38]:
+                - button "Enterprise" [ref=e40] [cursor=pointer]
+              - listitem [ref=e43]:
+                - link "Pricing" [ref=e44] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+          - generic [ref=e46]:
+            - button "Search or jump to…" [ref=e49] [cursor=pointer]
+            - link "Sign in" [ref=e54] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Fstefanf81%2Ftaskflow-enterprise%2Factions%2Fruns%2F30897431963
+            - link "Sign up" [ref=e55] [cursor=pointer]:
+              - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Factions%2Fworkflow_runs%2Fshow&source=header-repo&source_repo=stefanf81%2Ftaskflow-enterprise
+            - button "Appearance settings" [ref=e58] [cursor=pointer]
+  - main [ref=e62]:
+    - generic [ref=e63]:
+      - generic [ref=e64]:
+        - generic [ref=e65]:
+          - generic [ref=e67]:
+            - link "stefanf81" [ref=e71] [cursor=pointer]:
+              - /url: /stefanf81
+            - generic [ref=e72]: /
+            - strong [ref=e73]:
+              - link "taskflow-enterprise" [ref=e74] [cursor=pointer]:
+                - /url: /stefanf81/taskflow-enterprise
+            - generic [ref=e75]: Public
+          - generic [ref=e76]:
+            - list:
+              - listitem [ref=e77]:
+                - link "You must be signed in to change notification settings" [ref=e78] [cursor=pointer]:
+                  - /url: /login?return_to=%2Fstefanf81%2Ftaskflow-enterprise
+                  - text: Notifications
+              - listitem [ref=e81]:
+                - link "Fork 0" [ref=e82] [cursor=pointer]:
+                  - /url: /login?return_to=%2Fstefanf81%2Ftaskflow-enterprise
+                  - text: Fork
+                  - generic "0" [ref=e85]
+              - listitem [ref=e86]:
+                - link "You must be signed in to star a repository" [ref=e88] [cursor=pointer]:
+                  - /url: /login?return_to=%2Fstefanf81%2Ftaskflow-enterprise
+                  - text: Star
+                  - generic "1 user starred this repository" [ref=e91]: "1"
+        - navigation "Repository" [ref=e92]:
+          - list [ref=e93]:
+            - listitem [ref=e94]:
+              - link "Code" [ref=e95] [cursor=pointer]:
+                - /url: /stefanf81/taskflow-enterprise
+            - listitem [ref=e99]:
+              - link "Issues" [ref=e100] [cursor=pointer]:
+                - /url: /stefanf81/taskflow-enterprise/issues
+            - listitem [ref=e105]:
+              - link "Pull requests" [ref=e106] [cursor=pointer]:
+                - /url: /stefanf81/taskflow-enterprise/pulls
+            - listitem [ref=e111]:
+              - link "Actions" [ref=e112] [cursor=pointer]:
+                - /url: /stefanf81/taskflow-enterprise/actions
+            - listitem [ref=e116]:
+              - link "Security and quality" [ref=e117] [cursor=pointer]:
+                - /url: /stefanf81/taskflow-enterprise/security
+            - listitem [ref=e121]:
+              - link "Insights" [ref=e122] [cursor=pointer]:
+                - /url: /stefanf81/taskflow-enterprise/pulse
+      - generic [ref=e130]:
+        - generic [ref=e133]:
+          - link "React Native CI" [ref=e136] [cursor=pointer]:
+            - /url: /stefanf81/taskflow-enterprise/actions/workflows/react-native-ci.yml
+          - generic [ref=e140]:
+            - generic [ref=e141]:
+              - img "failed:" [ref=e145]
+              - 'heading "React Native CI #7" [level=1] [ref=e147]'
+            - link "Sign in to view logs" [ref=e151] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Fstefanf81%2Ftaskflow-enterprise%2Factions%2Fruns%2F30897431963
+        - generic [ref=e152]:
+          - navigation "Workflow run" [ref=e158]:
+            - list [ref=e159]:
+              - listitem [ref=e160]:
+                - link "Summary" [ref=e161] [cursor=pointer]:
+                  - /url: /stefanf81/taskflow-enterprise/actions/runs/30897431963
+              - generic [ref=e164]:
+                - heading "All jobs" [level=4] [ref=e165]
+                - button "Filter by job status" [ref=e166] [cursor=pointer]
+              - listitem [ref=e169]
+              - listitem [ref=e170]:
+                - list [ref=e171]:
+                  - listitem [ref=e172]:
+                    - generic "Loading" [ref=e173]
+              - listitem [ref=e182]
+              - listitem [ref=e183]:
+                - heading "Run details" [level=3] [ref=e185]
+                - list "Run details" [ref=e186]:
+                  - listitem [ref=e187]:
+                    - link "Usage" [ref=e188] [cursor=pointer]:
+                      - /url: /stefanf81/taskflow-enterprise/actions/runs/30897431963/usage
+                  - listitem [ref=e191]:
+                    - link "Workflow file" [ref=e192] [cursor=pointer]:
+                      - /url: /stefanf81/taskflow-enterprise/actions/runs/30897431963/workflow
+          - generic [ref=e196]:
+            - region "Workflow run summary" [ref=e197]:
+              - generic [ref=e198]:
+                - generic [ref=e199]:
+                  - generic [ref=e200]: Manually triggered August 4, 2026 09:416 minutes ago
+                  - generic [ref=e201]:
+                    - link [ref=e202] [cursor=pointer]:
+                      - /url: /stefanf81
+                      - img "@stefanf81" [ref=e203]
+                      - text: stefanf81
+                    - generic [ref=e204]:
+                      - text: ⁠
+                      - link "87764a2" [ref=e205] [cursor=pointer]:
+                        - /url: /stefanf81/taskflow-enterprise/commit/87764a258191fbdbf8097555ee012a86fd4c5a6f
+                    - link "main" [ref=e208] [cursor=pointer]:
+                      - /url: /stefanf81/taskflow-enterprise/tree/refs/heads/main
+                - generic [ref=e209]:
+                  - generic [ref=e210]: Status
+                  - text: Failure
+                - generic [ref=e211]:
+                  - generic [ref=e212]: Total duration
+                  - link "5m 46s" [ref=e213] [cursor=pointer]:
+                    - /url: /stefanf81/taskflow-enterprise/actions/runs/30897431963/usage
+                - generic [ref=e214]:
+                  - generic [ref=e215]: Artifacts
+                  - link "3" [ref=e216] [cursor=pointer]:
+                    - /url: "#artifacts"
+            - region "Workflow run graph" [ref=e217]:
+              - generic [ref=e219]:
+                - generic [ref=e221]:
+                  - heading [level=2] [ref=e222]:
+                    - link "react-native-ci.yml" [ref=e223] [cursor=pointer]:
+                      - /url: /stefanf81/taskflow-enterprise/actions/runs/30897431963/workflow
+                  - generic [ref=e224]: "on: workflow_dispatch"
+                - generic [ref=e226]:
+                  - generic [ref=e229]:
+                    - 'link "failed: TypeScript and Jest 25s" [ref=e231] [cursor=pointer]':
+                      - /url: /stefanf81/taskflow-enterprise/actions/runs/30897431963/job/91953591173
+                      - generic [ref=e233]:
+                        - img "failed:" [ref=e235]
+                        - generic [ref=e237]: TypeScript and Jest
+                        - generic [ref=e239]: 25s
+                    - 'link "failed: Android build and test 5m 40s" [ref=e241] [cursor=pointer]':
+                      - /url: /stefanf81/taskflow-enterprise/actions/runs/30897431963/job/91953591156
+                      - generic [ref=e243]:
+                        - img "failed:" [ref=e245]
+                        - generic [ref=e247]: Android build and test
+                        - generic [ref=e249]: 5m 40s
+                    - 'link "completed successfully: iOS simulator build 5m 2s" [ref=e251] [cursor=pointer]':
+                      - /url: /stefanf81/taskflow-enterprise/actions/runs/30897431963/job/91953591224
+                      - generic [ref=e253]:
+                        - img "completed successfully:" [ref=e255]
+                        - generic [ref=e257]: iOS simulator build
+                        - generic [ref=e259]: 5m 2s
+                  - generic [ref=e260]:
+                    - paragraph [ref=e261]: Oh hello! Nice to see you.
+                    - paragraph [ref=e262]:
+                      - text: Made with ❤️ by
+                      - link [ref=e263] [cursor=pointer]:
+                        - /url: https://actions.github.io/humans.txt
+                        - text: humans.txt
+                - generic [ref=e264]:
+                  - button "Fit to window" [disabled] [ref=e265]
+                  - generic [ref=e266]:
+                    - button "Zoom out" [disabled] [ref=e268]
+                    - button "Zoom in" [disabled] [ref=e270]
+            - region "Annotations" [ref=e271]:
+              - generic [ref=e272]:
+                - generic [ref=e274]:
+                  - heading "Annotations" [level=2] [ref=e275]
+                  - generic [ref=e276]: 2 errors
+                - table [ref=e277]:
+                  - rowgroup [ref=e278]:
+                    - row [ref=e279]:
+                      - cell "TypeScript and Jest Process completed with exit code 1." [ref=e280]:
+                        - generic [ref=e285]:
+                          - link [ref=e286] [cursor=pointer]:
+                            - /url: /stefanf81/taskflow-enterprise/actions/runs/30897431963/job/91953591173#step:5:15
+                            - strong [ref=e287]: TypeScript and Jest
+                          - generic [ref=e288]: Process completed with exit code 1.
+                    - row [ref=e291]:
+                      - cell "Android build and test Process completed with exit code 1." [ref=e292]:
+                        - generic [ref=e297]:
+                          - link [ref=e298] [cursor=pointer]:
+                            - /url: /stefanf81/taskflow-enterprise/actions/runs/30897431963/job/91953591156#step:10:867
+                            - strong [ref=e299]: Android build and test
+                          - generic [ref=e300]: Process completed with exit code 1.
+            - region "Artifacts" [ref=e303]:
+              - generic [ref=e304]:
+                - generic [ref=e306]:
+                  - heading "Artifacts" [level=2] [ref=e307]
+                  - generic [ref=e308]: Produced during runtime
+                - table [ref=e309]:
+                  - rowgroup [ref=e310]:
+                    - row [ref=e311]:
+                      - columnheader "Name" [ref=e312]
+                      - columnheader "Size" [ref=e313]
+                      - columnheader "Digest" [ref=e314]
+                      - cell [ref=e315]
+                  - rowgroup [ref=e316]:
+                    - row [ref=e317]:
+                      - cell "android-reports" [ref=e318]
+                      - cell "74.5 KB" [ref=e324]
+                      - cell [ref=e325]:
+                        - generic [ref=e326]:
+                          - code [ref=e327]: sha256:2d5f6f8a81e7bdb54b13d964cd77afe7083cd1be9be08ba595df45f1d3acb437
+                          - button "Copy artifact digest" [ref=e329] [cursor=pointer]
+                      - cell [ref=e334]
+                    - row [ref=e335]:
+                      - cell "ios-xcresult" [ref=e336]
+                      - cell "343 KB" [ref=e342]
+                      - cell [ref=e343]:
+                        - generic [ref=e344]:
+                          - code [ref=e345]: sha256:a0381a9194eadc9e3679eb154da515d29cc7ba93ad963c937694f6cac0099be7
+                          - button "Copy artifact digest" [ref=e347] [cursor=pointer]
+                      - cell [ref=e352]
+                    - row [ref=e353]:
+                      - cell "taskflow-ios-simulator" [ref=e354]
+                      - cell "92.2 MB" [ref=e360]
+                      - cell [ref=e361]:
+                        - generic [ref=e362]:
+                          - code [ref=e363]: sha256:400f58b612cf831272234e68b47d13304345b06e1d4f3d8cf2495f8d205fd0d5
+                          - button "Copy artifact digest" [ref=e365] [cursor=pointer]
+                      - cell [ref=e370]
