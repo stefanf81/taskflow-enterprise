@@ -11,10 +11,12 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
+  // The local backend rate-limits authentication and CSRF endpoints. Running
+  // independent browser contexts concurrently causes artificial 429 failures.
+  fullyParallel: false,
   forbidOnly: !!process.env['CI'],
   retries: process.env['CI'] ? 2 : 0,
-  workers: process.env['CI'] ? 1 : undefined,
+  workers: 1,
   reporter: 'html',
 
   use: {

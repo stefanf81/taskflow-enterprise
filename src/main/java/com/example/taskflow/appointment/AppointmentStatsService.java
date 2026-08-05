@@ -1,4 +1,5 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
 
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;

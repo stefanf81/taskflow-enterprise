@@ -1,10 +1,12 @@
 package com.example.taskflow.catalog;
+import com.example.taskflow.catalog.internal.ServiceItemRepository;
 
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @Transactional
@@ -61,5 +63,16 @@ public class CatalogServiceImpl implements CatalogService {
         ServiceItem item = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Service not found with id: " + id));
         repository.delete(item);
+    }
+
+    /**
+     * Public module API for cross-module lookups by display name. Delegates to
+     * the module-private repository so callers never depend on
+     * {@code catalog.internal.ServiceItemRepository} (Spring Modulith boundary).
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<ServiceItem> findServiceByName(String name) {
+        return repository.findByName(name);
     }
 }

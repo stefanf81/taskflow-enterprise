@@ -1,5 +1,6 @@
-package com.example.taskflow.appointment;
+package com.example.taskflow.appointment.internal;
 
+import com.example.taskflow.appointment.BarberTimeOff;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

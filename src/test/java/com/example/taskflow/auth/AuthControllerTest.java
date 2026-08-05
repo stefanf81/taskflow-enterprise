@@ -1,4 +1,5 @@
 package com.example.taskflow.auth;
+import com.example.taskflow.auth.internal.UserRepository;
 
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.BeforeEach;

@@ -1,7 +1,11 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
+import com.example.taskflow.appointment.internal.BarberScheduleRepository;
+import com.example.taskflow.appointment.internal.BarberRepository;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
 
+import com.example.taskflow.catalog.CatalogService;
 import com.example.taskflow.catalog.ServiceItem;
-import com.example.taskflow.catalog.ServiceItemRepository;
 import com.example.taskflow.core.LogSanitizer;
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.slf4j.Logger;
@@ -43,7 +47,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     private final BarberRepository barberRepository;
     private final BarberScheduleRepository barberScheduleRepository;
     private final BarberTimeOffRepository barberTimeOffRepository;
-    private final ServiceItemRepository serviceItemRepository;
+    private final CatalogService catalogService;
 
     public AppointmentServiceImpl(AppointmentRepository appointmentRepository,
                                   ApplicationEventPublisher eventPublisher,
@@ -53,7 +57,7 @@ public class AppointmentServiceImpl implements AppointmentService {
                                    BarberRepository barberRepository,
                                    BarberScheduleRepository barberScheduleRepository,
                                    BarberTimeOffRepository barberTimeOffRepository,
-                                   ServiceItemRepository serviceItemRepository) {
+                                   CatalogService catalogService) {
         this.appointmentRepository = appointmentRepository;
         this.eventPublisher = eventPublisher;
         this.statsService = statsService;
@@ -62,7 +66,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         this.barberRepository = barberRepository;
         this.barberScheduleRepository = barberScheduleRepository;
         this.barberTimeOffRepository = barberTimeOffRepository;
-        this.serviceItemRepository = serviceItemRepository;
+        this.catalogService = catalogService;
     }
 
     /** Safely tag the current tracing span — swallowed on failure. */
@@ -287,7 +291,7 @@ public class AppointmentServiceImpl implements AppointmentService {
                                     + "'. Please select a barber from the list."));
             item.setBarber(barber);
         }
-        ServiceItem service = serviceItemRepository.findByName(serviceType)
+        ServiceItem service = catalogService.findServiceByName(serviceType)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Unknown service: '" + LogSanitizer.stripNewlines(serviceType)
                                 + "'. Please select a service from the catalog."));
@@ -365,6 +369,24 @@ public class AppointmentServiceImpl implements AppointmentService {
     @Override
     public Appointment findByPublicId(String publicId) {
         return appointmentRepository.findByPublicId(publicId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<Long> findAppointmentIdsNeedingReminders(LocalDate tomorrow) {
+        return appointmentRepository.findReminderIds(tomorrow, false, AppointmentStatus.APPROVED);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Optional<Appointment> lockForReminder(Long id) {
+        return appointmentRepository.findByIdForUpdate(id);
+    }
+
+    @Override
+    @Transactional
+    public void save(Appointment appointment) {
+        appointmentRepository.save(appointment);
     }
 
     /**

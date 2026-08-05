@@ -1,4 +1,5 @@
 package com.example.taskflow.auth;
+import com.example.taskflow.auth.internal.UserRepository;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;

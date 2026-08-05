@@ -1,13 +1,11 @@
 package com.example.taskflow.notification;
 
 import com.example.taskflow.appointment.Appointment;
-import com.example.taskflow.appointment.AppointmentRepository;
-import com.example.taskflow.appointment.AppointmentStatus;
+import com.example.taskflow.appointment.AppointmentService;
+import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -16,18 +14,24 @@ import org.springframework.beans.factory.ObjectProvider;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
+/**
+ * Tests {@link AppointmentReminderScheduler}. The scheduler was refactored to
+ * access appointments through the {@link AppointmentService} public module API
+ * instead of the appointment module's internal {@code AppointmentRepository}
+ * (Spring Modulith module boundary), so these tests mock the service rather
+ * than the repository.
+ */
 @ExtendWith(MockitoExtension.class)
 class AppointmentReminderSchedulerTest {
 
     @Mock
-    private AppointmentRepository appointmentRepository;
+    private AppointmentService appointmentService;
 
     @Mock
     private NotificationOutboxRepository notificationOutboxRepository;
@@ -35,7 +39,6 @@ class AppointmentReminderSchedulerTest {
     @Mock
     private ObjectProvider<AppointmentReminderScheduler> selfProvider;
 
-    @InjectMocks
     private AppointmentReminderScheduler reminderScheduler;
 
     private Appointment app1;
@@ -43,6 +46,9 @@ class AppointmentReminderSchedulerTest {
 
     @BeforeEach
     void setUp() {
+        reminderScheduler = new AppointmentReminderScheduler(
+                appointmentService, notificationOutboxRepository, selfProvider);
+
         app1 = new Appointment(
                 "John Doe",
                 "john.doe@example.com",
@@ -74,13 +80,13 @@ class AppointmentReminderSchedulerTest {
     void testProcessReminders_Success() {
         when(selfProvider.getIfAvailable()).thenReturn(reminderScheduler);
         LocalDate tomorrow = LocalDate.now().plusDays(1);
-        when(appointmentRepository.findReminderIds(tomorrow, false, AppointmentStatus.APPROVED))
+        when(appointmentService.findAppointmentIdsNeedingReminders(tomorrow))
                 .thenReturn(Arrays.asList(1L, 2L));
-        when(appointmentRepository.findByIdForUpdate(1L)).thenReturn(java.util.Optional.of(app1));
-        when(appointmentRepository.findByIdForUpdate(2L)).thenReturn(java.util.Optional.of(app2));
+        when(appointmentService.lockForReminder(1L)).thenReturn(Optional.of(app1));
+        when(appointmentService.lockForReminder(2L)).thenReturn(Optional.of(app2));
 
-        when(notificationOutboxRepository.save(any(NotificationOutbox.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(appointmentRepository.save(any(Appointment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(notificationOutboxRepository.save(any(NotificationOutbox.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         reminderScheduler.processReminders();
 
@@ -88,26 +94,27 @@ class AppointmentReminderSchedulerTest {
         assertTrue(app1.getReminderSent());
         assertTrue(app2.getReminderSent());
 
-        // Check save calls
+        // The scheduler marks each appointment via the appointment module's
+        // public save() API (no longer touching the internal repository).
         verify(notificationOutboxRepository, times(2)).save(any(NotificationOutbox.class));
-        verify(appointmentRepository, times(1)).save(app1);
-        verify(appointmentRepository, times(1)).save(app2);
+        verify(appointmentService, times(1)).save(app1);
+        verify(appointmentService, times(1)).save(app2);
 
         // Verify the per-appointment ID loader is used (A5: lock released per row)
-        verify(appointmentRepository, times(1)).findReminderIds(tomorrow, false, AppointmentStatus.APPROVED);
-        verify(appointmentRepository, times(1)).findByIdForUpdate(1L);
-        verify(appointmentRepository, times(1)).findByIdForUpdate(2L);
+        verify(appointmentService, times(1)).findAppointmentIdsNeedingReminders(tomorrow);
+        verify(appointmentService, times(1)).lockForReminder(1L);
+        verify(appointmentService, times(1)).lockForReminder(2L);
     }
 
     @Test
     void testProcessReminders_EmptyList() {
         LocalDate tomorrow = LocalDate.now().plusDays(1);
-        when(appointmentRepository.findReminderIds(tomorrow, false, AppointmentStatus.APPROVED))
+        when(appointmentService.findAppointmentIdsNeedingReminders(tomorrow))
                 .thenReturn(Collections.emptyList());
 
         reminderScheduler.processReminders();
 
         verify(notificationOutboxRepository, never()).save(any(NotificationOutbox.class));
-        verify(appointmentRepository, never()).save(any(Appointment.class));
+        verify(appointmentService, never()).save(any(Appointment.class));
     }
 }

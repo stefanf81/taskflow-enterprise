@@ -1,4 +1,5 @@
 package com.example.taskflow.notification;
+import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 
 import com.example.taskflow.core.LogSanitizer;
 import org.slf4j.Logger;

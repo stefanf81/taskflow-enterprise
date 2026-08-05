@@ -1,4 +1,8 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
+import com.example.taskflow.appointment.internal.BarberScheduleRepository;
+import com.example.taskflow.appointment.internal.BarberRepository;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

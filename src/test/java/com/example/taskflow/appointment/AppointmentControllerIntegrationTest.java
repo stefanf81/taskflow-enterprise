@@ -1,4 +1,5 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
 
 import com.example.taskflow.auth.TestSecurityConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;

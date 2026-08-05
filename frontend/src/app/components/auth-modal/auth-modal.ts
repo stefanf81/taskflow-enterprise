@@ -10,11 +10,19 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { form, required, FormField } from '@angular/forms/signals';
 import { Router } from '@angular/router';
 import { AppointmentService } from '../../appointment.service';
 import { AuthState } from '../../auth.state';
 import { AppointmentStore } from '../../appointment.store';
+
+/** Model shape for the Signal Forms login / register wizard. */
+interface AuthFormModel {
+  username: string;
+  password: string;
+  fullName: string;
+  phone: string;
+}
 
 /**
  * Standalone Login / Register modal component.
@@ -22,11 +30,16 @@ import { AppointmentStore } from '../../appointment.store';
  * Displays an overlay dialog with sign-in and create-account forms.
  * Designed for @defer lazy-loading since the modal only appears on-demand
  * when the user clicks "Owner Portal".
+ *
+ * Migrated to Angular 22 Signal Forms (`@angular/forms/signals`) to match
+ * the booking wizard in `app.ts`: a single signal-backed model is bound to
+ * the form via `[formRoot]` and each input via `[formField]`, replacing the
+ * legacy template-driven `FormsModule` + `ngModel` + `#form="ngForm"` pattern.
  */
 @Component({
   selector: 'app-auth-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormField],
   template: `
     <div class="modal-overlay" (keydown.escape)="closeModal()">
       <div
@@ -79,7 +92,7 @@ import { AppointmentStore } from '../../appointment.store';
           </div>
         }
 
-        <form (ngSubmit)="onLogin()" #loginForm="ngForm" class="space-y-4">
+        <form (submit)="$event.preventDefault(); onLogin()" class="space-y-4">
           @if (isRegisterMode()) {
             <div class="form-group flex flex-col gap-1.5">
               <label for="regName" class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
@@ -88,30 +101,21 @@ import { AppointmentStore } from '../../appointment.store';
               <input
                 type="text"
                 id="regName"
-                name="regName"
-                [ngModel]="registerFullName()"
-                (ngModelChange)="registerFullName.set($event)"
-                required
+                [formField]="authForm.fullName"
                 placeholder="John Doe"
                 class="form-control"
                 [attr.aria-invalid]="
-                  loginForm.controls['regName']?.invalid && loginForm.controls['regName']?.touched
+                  isRegisterMode() && authForm.fullName().touched() && !authModel().fullName.trim()
                     ? 'true'
                     : null
                 "
                 aria-describedby="regName-error"
               />
-              <span
-                id="regName-error"
-                class="text-rose-400 text-[10px]"
-                [style.display]="
-                  loginForm.controls['regName']?.invalid && loginForm.controls['regName']?.touched
-                    ? 'block'
-                    : 'none'
-                "
-              >
-                Full name is required.
-              </span>
+              @if (authForm.fullName().touched() && !authModel().fullName.trim()) {
+                <span id="regName-error" class="text-rose-400 text-[10px]">
+                  Full name is required.
+                </span>
+              }
             </div>
             <div class="form-group flex flex-col gap-1.5">
               <label for="regPhone" class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
@@ -120,9 +124,7 @@ import { AppointmentStore } from '../../appointment.store';
               <input
                 type="text"
                 id="regPhone"
-                name="regPhone"
-                [ngModel]="registerPhone()"
-                (ngModelChange)="registerPhone.set($event)"
+                [formField]="authForm.phone"
                 placeholder="555-1234"
                 class="form-control"
               />
@@ -136,30 +138,19 @@ import { AppointmentStore } from '../../appointment.store';
             <input
               type="text"
               id="username"
-              name="username"
-              [ngModel]="loginUsername()"
-              (ngModelChange)="loginUsername.set($event)"
-              required
+              [formField]="authForm.username"
               placeholder="e.g., admin"
               class="form-control"
               [attr.aria-invalid]="
-                loginForm.controls['username']?.invalid && loginForm.controls['username']?.touched
-                  ? 'true'
-                  : null
+                authForm.username().touched() && authForm.username().invalid() ? 'true' : null
               "
               aria-describedby="username-error"
             />
-            <span
-              id="username-error"
-              class="text-rose-400 text-[10px]"
-              [style.display]="
-                loginForm.controls['username']?.invalid && loginForm.controls['username']?.touched
-                  ? 'block'
-                  : 'none'
-              "
-            >
-              Username is required.
-            </span>
+            @if (authForm.username().touched() && authForm.username().invalid()) {
+              <span id="username-error" class="text-rose-400 text-[10px]">
+                Username is required.
+              </span>
+            }
           </div>
 
           <div class="form-group flex flex-col gap-1.5">
@@ -169,36 +160,25 @@ import { AppointmentStore } from '../../appointment.store';
             <input
               type="password"
               id="password"
-              name="password"
-              [ngModel]="loginPassword()"
-              (ngModelChange)="loginPassword.set($event)"
-              required
+              [formField]="authForm.password"
               placeholder="e.g., admin-password"
               class="form-control"
               [attr.aria-invalid]="
-                loginForm.controls['password']?.invalid && loginForm.controls['password']?.touched
-                  ? 'true'
-                  : null
+                authForm.password().touched() && authForm.password().invalid() ? 'true' : null
               "
               aria-describedby="password-error"
             />
-            <span
-              id="password-error"
-              class="text-rose-400 text-[10px]"
-              [style.display]="
-                loginForm.controls['password']?.invalid && loginForm.controls['password']?.touched
-                  ? 'block'
-                  : 'none'
-              "
-            >
-              Password is required.
-            </span>
+            @if (authForm.password().touched() && authForm.password().invalid()) {
+              <span id="password-error" class="text-rose-400 text-[10px]">
+                Password is required.
+              </span>
+            }
           </div>
 
           <button
             type="submit"
             class="btn btn-submit w-full mt-2 py-3 text-xs tracking-wide uppercase font-black"
-            [disabled]="loginForm.invalid || isSubmitting()"
+            [disabled]="isSubmitting()"
           >
             {{ isSubmitting() ? 'Processing...' : isRegisterMode() ? 'Register' : 'Sign In' }}
           </button>
@@ -233,14 +213,25 @@ export class AuthModalComponent {
   /** Emitted after a successful login with the user's role. */
   readonly loginSuccess = output<string>();
 
-  // Form state
-  readonly loginUsername = signal('');
-  readonly loginPassword = signal('');
-  readonly isRegisterMode = signal(false);
-  readonly registerFullName = signal('');
-  readonly registerPhone = signal('');
+  // Form state — a single signal-backed model bound to the Signal Form.
+  // The previous pattern used four separate signals (`loginUsername`,
+  // `loginPassword`, `registerFullName`, `registerPhone`) plus a separate
+  // `#loginForm="ngForm"` template ref for validity ARIA. Signal Forms
+  // replaces all of that with one model + computed form-level validation.
+  readonly authModel = signal<AuthFormModel>({
+    username: '',
+    password: '',
+    fullName: '',
+    phone: '',
+  });
 
-  // Feedback state
+  readonly authForm = form(this.authModel, (f) => {
+    required(f.username);
+    required(f.password);
+  });
+
+  // UI / mode toggle state (not bound to the form model).
+  readonly isRegisterMode = signal(false);
   readonly errorMessage = signal<string | null>(null);
   readonly successMessage = signal<string | null>(null);
   readonly isSubmitting = signal(false);
@@ -252,8 +243,8 @@ export class AuthModalComponent {
       return;
     }
 
-    const user = this.loginUsername().trim();
-    const pass = this.loginPassword().trim();
+    const user = this.authModel().username.trim();
+    const pass = this.authModel().password.trim();
 
     if (!user || !pass) {
       this.errorMessage.set('Email and password are required.');
@@ -272,8 +263,7 @@ export class AuthModalComponent {
           this.isSubmitting.set(false);
           this.errorMessage.set(null);
 
-          this.loginUsername.set('');
-          this.loginPassword.set('');
+          this.authModel.set({ username: '', password: '', fullName: '', phone: '' });
 
           this.loginSuccess.emit(response.role);
           this.close.emit();
@@ -292,10 +282,10 @@ export class AuthModalComponent {
 
   /** Handle registration submission. */
   onRegister(): void {
-    const email = this.loginUsername().trim();
-    const pass = this.loginPassword().trim();
-    const name = this.registerFullName().trim();
-    const phone = this.registerPhone().trim();
+    const email = this.authModel().username.trim();
+    const pass = this.authModel().password.trim();
+    const name = this.authModel().fullName.trim();
+    const phone = this.authModel().phone.trim();
 
     if (!email || !pass || !name) {
       this.errorMessage.set('Name, email, and password are required.');

@@ -1,7 +1,8 @@
 package com.example.taskflow.review;
+import com.example.taskflow.review.internal.ReviewRepository;
 
 import com.example.taskflow.appointment.Appointment;
-import com.example.taskflow.appointment.AppointmentRepository;
+import com.example.taskflow.appointment.AppointmentService;
 import com.example.taskflow.appointment.AppointmentStatus;
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.slf4j.Logger;
@@ -17,11 +18,11 @@ public class ReviewServiceImpl implements ReviewService {
     private static final Logger logger = LoggerFactory.getLogger(ReviewServiceImpl.class);
 
     private final ReviewRepository reviewRepository;
-    private final AppointmentRepository appointmentRepository;
+    private final AppointmentService appointmentService;
 
-    public ReviewServiceImpl(ReviewRepository reviewRepository, AppointmentRepository appointmentRepository) {
+    public ReviewServiceImpl(ReviewRepository reviewRepository, AppointmentService appointmentService) {
         this.reviewRepository = reviewRepository;
-        this.appointmentRepository = appointmentRepository;
+        this.appointmentService = appointmentService;
     }
 
     @Override
@@ -33,7 +34,10 @@ public class ReviewServiceImpl implements ReviewService {
     @Override
     @Transactional
     public void submitReview(String publicId, ReviewRequest request) {
-        Appointment appointment = appointmentRepository.findByPublicId(publicId);
+        // Resolve the appointment through the appointment module's public API
+        // instead of reaching into its internal AppointmentRepository
+        // (Spring Modulith module boundary).
+        Appointment appointment = appointmentService.findByPublicId(publicId);
         if (appointment == null) {
             // Do not echo the publicId — that would let an attacker enumerate which
             // IDs exist (information disclosure / enumeration oracle).

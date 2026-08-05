@@ -1,5 +1,7 @@
-package com.example.taskflow.appointment;
+package com.example.taskflow.appointment.internal;
 
+import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.AppointmentStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

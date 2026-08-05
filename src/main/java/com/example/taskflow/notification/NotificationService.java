@@ -1,4 +1,5 @@
 package com.example.taskflow.notification;
+import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

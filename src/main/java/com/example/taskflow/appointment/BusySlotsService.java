@@ -1,4 +1,8 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
+import com.example.taskflow.appointment.internal.BarberScheduleRepository;
+import com.example.taskflow.appointment.internal.BarberRepository;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
 
 import com.example.taskflow.core.LogSanitizer;
 import org.slf4j.Logger;

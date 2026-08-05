@@ -1,4 +1,5 @@
 package com.example.taskflow.notification;
+import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 
 import com.example.taskflow.appointment.Appointment;
 import com.example.taskflow.appointment.AppointmentStatusChangedEvent;

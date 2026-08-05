@@ -84,6 +84,12 @@ dependencies {
 	implementation 'org.hibernate.orm:hibernate-core:7.4.5.Final'
 	implementation 'com.github.ben-manes.caffeine:jcache:3.2.4'
 	// Cache (Redis-backed via spring-boot-starter-data-redis; Caffeine was unused)
+	// Modular monolith — Spring Modulith verifies package-based module boundaries
+	// (repositories live under <module>/internal/ and are inaccessible from other
+	// modules; cross-module communication goes through each module's public
+	// service API or domain events). Verified by ModularityTest.java and
+	// documented via auto-generated PlantUML/C4 diagrams.
+	implementation 'org.springframework.modulith:spring-modulith-starter-core:2.1.0'
 	// Observability
 	implementation 'org.springframework.boot:spring-boot-micrometer-tracing-opentelemetry'
 	implementation 'io.micrometer:micrometer-registry-prometheus'
@@ -123,6 +129,9 @@ dependencies {
 	testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
 	testImplementation 'org.testcontainers:testcontainers-postgresql'
 	testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.0'
+	// Spring Modulith test support — ApplicationModules.of().verify() and
+	// @ApplicationModuleTest for isolated module bootstrapping.
+	testImplementation 'org.springframework.modulith:spring-modulith-starter-test:2.1.0'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher:6.1.2'
 	// Static analysis
 	spotbugsPlugins 'com.h3xstream.findsecbugs:findsecbugs-plugin:1.14.0'

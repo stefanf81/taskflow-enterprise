@@ -1,5 +1,7 @@
-package com.example.taskflow.appointment;
+package com.example.taskflow.appointment.internal;
 
+import com.example.taskflow.appointment.Barber;
+import com.example.taskflow.appointment.BarberResponse;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;

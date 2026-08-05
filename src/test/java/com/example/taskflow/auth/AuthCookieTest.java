@@ -1,4 +1,5 @@
 package com.example.taskflow.auth;
+import com.example.taskflow.auth.internal.UserRepository;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

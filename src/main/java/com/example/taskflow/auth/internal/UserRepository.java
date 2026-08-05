@@ -1,5 +1,6 @@
-package com.example.taskflow.auth;
+package com.example.taskflow.auth.internal;
 
+import com.example.taskflow.auth.AppUser;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

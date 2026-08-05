@@ -1,5 +1,6 @@
-package com.example.taskflow.notification;
+package com.example.taskflow.notification.internal;
 
+import com.example.taskflow.notification.NotificationOutbox;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Pageable;

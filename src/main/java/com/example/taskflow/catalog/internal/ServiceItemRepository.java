@@ -1,5 +1,7 @@
-package com.example.taskflow.catalog;
+package com.example.taskflow.catalog.internal;
 
+import com.example.taskflow.catalog.ServiceItem;
+import com.example.taskflow.catalog.ServiceItemResponse;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;

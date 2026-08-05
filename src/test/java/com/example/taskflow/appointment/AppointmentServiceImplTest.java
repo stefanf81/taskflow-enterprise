@@ -1,4 +1,8 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
+import com.example.taskflow.appointment.internal.BarberScheduleRepository;
+import com.example.taskflow.appointment.internal.BarberRepository;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
 
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,7 +48,7 @@ class AppointmentServiceImplTest {
     private BarberRepository barberRepository;
 
     @Mock
-    private com.example.taskflow.catalog.ServiceItemRepository serviceItemRepository;
+    private com.example.taskflow.catalog.CatalogService catalogService;
 
     @Mock
     private BarberScheduleRepository barberScheduleRepository;
@@ -63,7 +67,7 @@ class AppointmentServiceImplTest {
         busySlotsService = new BusySlotsService(barberRepository, barberScheduleRepository, barberTimeOffRepository, appointmentRepository);
         appointmentService = new AppointmentServiceImpl(
                 appointmentRepository, eventPublisher, statsService, tracer,
-                busySlotsService, barberRepository, barberScheduleRepository, barberTimeOffRepository, serviceItemRepository
+                busySlotsService, barberRepository, barberScheduleRepository, barberTimeOffRepository, catalogService
         );
 
         testAppointment = new Appointment("John Doe", "john@test.com", "1234567890", "Barber Alex", LocalDate.now(), "10:00", "Haircut");
@@ -186,7 +190,7 @@ class AppointmentServiceImplTest {
                 "John Doe", "john@test.com", "123",
                 AppointmentServiceImpl.NO_PREFERENCE_BARBER, LocalDate.now(), "10:00", "Haircut");
         when(appointmentRepository.save(any(Appointment.class))).thenReturn(testAppointment);
-        when(serviceItemRepository.findByName("Haircut")).thenReturn(Optional.of(
+        when(catalogService.findServiceByName("Haircut")).thenReturn(Optional.of(
                 new com.example.taskflow.catalog.ServiceItem("Haircut", java.math.BigDecimal.TEN, 30, "hair", "")));
 
         AppointmentResponse response = appointmentService.createAppointment(request, null);
@@ -230,7 +234,7 @@ class AppointmentServiceImplTest {
         AppointmentCreateRequest request = new AppointmentCreateRequest(
                 "John Doe", "john@test.com", "123",
                 AppointmentServiceImpl.NO_PREFERENCE_BARBER, LocalDate.now(), "10:00", "Phantom Service");
-        when(serviceItemRepository.findByName("Phantom Service")).thenReturn(Optional.empty());
+        when(catalogService.findServiceByName("Phantom Service")).thenReturn(Optional.empty());
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> appointmentService.createAppointment(request, null));

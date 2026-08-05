@@ -1,4 +1,5 @@
 package com.example.taskflow.catalog;
+import com.example.taskflow.catalog.internal.ServiceItemRepository;
 
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.junit.jupiter.api.BeforeEach;

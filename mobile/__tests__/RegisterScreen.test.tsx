@@ -1,5 +1,11 @@
 import React from 'react';
-import { render, fireEvent, screen, cleanup, act } from '@testing-library/react-native';
+import {
+  render,
+  fireEvent,
+  screen,
+  cleanup,
+  act,
+} from '@testing-library/react-native';
 
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
@@ -41,16 +47,28 @@ describe('RegisterScreen', () => {
     await render(<RegisterScreen />);
 
     await act(async () => {
-      fireEvent.changeText(screen.getByPlaceholderText('e.g. Jane Smith'), 'Jane Smith');
+      fireEvent.changeText(
+        screen.getByPlaceholderText('e.g. Jane Smith'),
+        'Jane Smith',
+      );
     });
     await act(async () => {
-      fireEvent.changeText(screen.getByPlaceholderText('jane.smith@example.com'), 'jane@example.com');
+      fireEvent.changeText(
+        screen.getByPlaceholderText('jane.smith@example.com'),
+        'jane@example.com',
+      );
     });
     await act(async () => {
-      fireEvent.changeText(screen.getByPlaceholderText('+1 (555) 000-0000'), '+1-555-0000');
+      fireEvent.changeText(
+        screen.getByPlaceholderText('+1 (555) 000-0000'),
+        '+1-555-0000',
+      );
     });
     await act(async () => {
-      fireEvent.changeText(screen.getByPlaceholderText('••••••••'), 'password123');
+      fireEvent.changeText(
+        screen.getByPlaceholderText('••••••••'),
+        'password123',
+      );
     });
     await act(async () => {
       fireEvent.press(screen.getByText('Create Account'));
@@ -64,11 +82,17 @@ describe('RegisterScreen', () => {
     });
   });
 
-  it('does not submit when fields are empty', async () => {
+  it('shows field errors when required fields are empty', async () => {
     await render(<RegisterScreen />);
     await act(async () => {
       fireEvent.press(screen.getByText('Create Account'));
     });
     expect(mockRegisterFn).not.toHaveBeenCalled();
+    expect(screen.getByText('Full name is required')).toBeTruthy();
+    expect(screen.getByText('Email is required')).toBeTruthy();
+    expect(screen.getByText('Phone number is required')).toBeTruthy();
+    expect(
+      screen.getByText('Password must be at least 8 characters'),
+    ).toBeTruthy();
   });
 });

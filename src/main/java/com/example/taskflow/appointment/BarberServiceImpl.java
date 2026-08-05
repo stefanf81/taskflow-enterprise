@@ -1,4 +1,7 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
+import com.example.taskflow.appointment.internal.BarberScheduleRepository;
+import com.example.taskflow.appointment.internal.BarberRepository;
 
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.slf4j.Logger;

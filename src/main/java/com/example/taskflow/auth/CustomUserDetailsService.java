@@ -1,4 +1,5 @@
 package com.example.taskflow.auth;
+import com.example.taskflow.auth.internal.UserRepository;
 
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;

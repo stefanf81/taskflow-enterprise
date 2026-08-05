@@ -1,16 +1,16 @@
 package com.example.taskflow.benchmark;
 
-import com.example.taskflow.appointment.AppointmentRepository;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.Barber;
-import com.example.taskflow.appointment.BarberRepository;
+import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.BarberResponse;
-import com.example.taskflow.appointment.BarberScheduleRepository;
-import com.example.taskflow.appointment.BarberTimeOffRepository;
+import com.example.taskflow.appointment.internal.BarberScheduleRepository;
+import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
 import com.example.taskflow.auth.TestSecurityConfig;
 import com.example.taskflow.catalog.ServiceItem;
-import com.example.taskflow.catalog.ServiceItemRepository;
+import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.example.taskflow.catalog.ServiceItemResponse;
-import com.example.taskflow.review.ReviewRepository;
+import com.example.taskflow.review.internal.ReviewRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.TypedQuery;

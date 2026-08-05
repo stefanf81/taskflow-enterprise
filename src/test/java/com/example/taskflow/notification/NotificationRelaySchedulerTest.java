@@ -1,4 +1,5 @@
 package com.example.taskflow.notification;
+import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

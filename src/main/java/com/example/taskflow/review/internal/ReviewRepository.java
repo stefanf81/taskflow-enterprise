@@ -1,5 +1,7 @@
-package com.example.taskflow.review;
+package com.example.taskflow.review.internal;
 
+import com.example.taskflow.review.BarberRatingResponse;
+import com.example.taskflow.review.Review;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;

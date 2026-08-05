@@ -44,6 +44,7 @@ out/
 
 ### Angular Frontend / Node.js ###
 frontend/node_modules/
+**/node_modules/
 frontend/dist/
 frontend/.angular/
 frontend/playwright-report/

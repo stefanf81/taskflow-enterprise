@@ -1,5 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { Controller, useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { loginSchema, type LoginRequest } from '@taskflow/schemas';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -13,22 +23,25 @@ import { RootStackParamList } from '../types/navigation';
 import { colors } from '../theme/colors';
 
 export const LoginScreen: React.FC = () => {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { login, error, clearError } = useAuthStore();
 
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginRequest>({
+    defaultValues: { username: '', password: '' },
+    resolver: zodResolver(loginSchema),
+  });
 
-  const handleLogin = async () => {
-    if (!username.trim() || !password.trim()) {
-      return;
-    }
-
+  const handleLogin = async (credentials: LoginRequest) => {
     clearError();
     setLoading(true);
     try {
-      await login({ username: username.trim(), password });
+      await login(credentials);
       // Navigation is handled by RootNavigator reacting to auth state change
     } catch {
       setLoading(false);
@@ -42,58 +55,89 @@ export const LoginScreen: React.FC = () => {
         style={{ flex: 1 }}
       >
         <View style={styles.container}>
-        <View style={styles.header}>
-          <Ionicons name="lock-closed" size={48} color={colors.gold.main} />
-          <Text style={styles.title}>Sign In to TaskFlow</Text>
-          <Text style={styles.subtitle}>Enter your credentials to access your portal</Text>
+          <View style={styles.header}>
+            <Ionicons name="lock-closed" size={48} color={colors.gold.main} />
+            <Text style={styles.title}>Sign In to TaskFlow</Text>
+            <Text style={styles.subtitle}>
+              Enter your credentials to access your portal
+            </Text>
+          </View>
+
+          <Card style={styles.card} variant="goldBorder">
+            <ErrorMessage message={error || ''} />
+
+            <Controller
+              control={control}
+              name="username"
+              render={({ field: { onBlur, onChange, value } }) => (
+                <Input
+                  label="Username or Email"
+                  placeholder="admin or customer@example.com"
+                  value={value}
+                  onBlur={onBlur}
+                  onChangeText={onChange}
+                  error={errors.username?.message}
+                  autoCapitalize="none"
+                  icon={
+                    <Ionicons
+                      name="person-outline"
+                      size={18}
+                      color={colors.text.muted}
+                    />
+                  }
+                  testID="login-email-input"
+                />
+              )}
+            />
+
+            <Controller
+              control={control}
+              name="password"
+              render={({ field: { onBlur, onChange, value } }) => (
+                <Input
+                  label="Password"
+                  placeholder="••••••••"
+                  value={value}
+                  onBlur={onBlur}
+                  onChangeText={onChange}
+                  error={errors.password?.message}
+                  secureTextEntry
+                  icon={
+                    <Ionicons
+                      name="key-outline"
+                      size={18}
+                      color={colors.text.muted}
+                    />
+                  }
+                  testID="login-password-input"
+                />
+              )}
+            />
+
+            <Button
+              title="Sign In"
+              variant="primary"
+              size="lg"
+              loading={loading}
+              onPress={handleSubmit(handleLogin)}
+              style={styles.submitBtn}
+              testID="login-submit-btn"
+            />
+          </Card>
+
+          {/* Register link */}
+          <TouchableOpacity
+            style={styles.registerTouch}
+            onPress={() => navigation.navigate('Register')}
+          >
+            <Text style={styles.registerText}>
+              Don't have a customer account?{' '}
+              <Text style={styles.registerHighlight}>Register here</Text>
+            </Text>
+          </TouchableOpacity>
         </View>
-
-        <Card style={styles.card} variant="goldBorder">
-          <ErrorMessage message={error || ''} />
-
-          <Input
-            label="Username or Email"
-            placeholder="admin or customer@example.com"
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            icon={<Ionicons name="person-outline" size={18} color={colors.text.muted} />}
-            testID="login-email-input"
-          />
-
-          <Input
-            label="Password"
-            placeholder="••••••••"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            icon={<Ionicons name="key-outline" size={18} color={colors.text.muted} />}
-            testID="login-password-input"
-          />
-
-          <Button
-            title="Sign In"
-            variant="primary"
-            size="lg"
-            loading={loading}
-            onPress={handleLogin}
-            style={styles.submitBtn}
-            testID="login-submit-btn"
-          />
-        </Card>
-
-        {/* Register link */}
-        <TouchableOpacity
-          style={styles.registerTouch}
-          onPress={() => navigation.navigate('Register')}
-        >
-          <Text style={styles.registerText}>
-            Don't have a customer account? <Text style={styles.registerHighlight}>Register here</Text>
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
-  </SafeAreaView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 

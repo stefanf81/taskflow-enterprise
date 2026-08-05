@@ -7,7 +7,21 @@ import {
   ViewEncapsulation,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { email, form, max, min, required, FormField } from '@angular/forms/signals';
+
+/** Model shape for the "Cancel my booking" Signal Form. */
+interface CancelFormModel {
+  publicId: string;
+  email: string;
+}
+
+/** Model shape for the "Leave a review" Signal Form. */
+interface ReviewFormModel {
+  publicId: string;
+  email: string;
+  rating: number;
+  comment: string;
+}
 
 /**
  * Standalone Post-Booking Actions component.
@@ -15,11 +29,19 @@ import { FormsModule } from '@angular/forms';
  * Contains the "Secure Booking Cancellation" and "Submit a Review" forms
  * that appear well below the fold on the guest landing page. Designed for
  * @defer (on viewport) to keep initial bundle size small.
+ *
+ * Migrated to Angular 22 Signal Forms (`@angular/forms/signals`) to match
+ * the booking wizard in `app.ts`: each form is a single signal-backed model
+ * bound via `[formRoot]` + per-input `[formField]` directives, replacing the
+ * legacy template-driven `FormsModule` + `ngModel` + `#form="ngForm"` pattern.
+ * Field-level touched/invalid state now comes from the FieldTree signal
+ * accessors (`form.field().invalid()`, `form.field().touched()`) instead of
+ * the `ngForm.controls['name']?.invalid` template ref dance.
  */
 @Component({
   selector: 'app-post-booking-actions',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormField],
   template: `
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
       <!-- Interactive secure self-service cancellation portal -->
@@ -32,7 +54,7 @@ import { FormsModule } from '@angular/forms';
           scheduled slot instantly from our calendar:
         </p>
 
-        <form (ngSubmit)="onCancel()" #cancelForm="ngForm" class="space-y-4">
+        <form (submit)="$event.preventDefault(); onCancel()" class="space-y-4">
           <div class="flex flex-col gap-4">
             <div class="form-group flex flex-col gap-1.5">
               <label
@@ -43,23 +65,17 @@ import { FormsModule } from '@angular/forms';
               <input
                 type="text"
                 id="cancelBookingId"
-                name="cancelBookingId"
-                [ngModel]="cancelId()"
-                (ngModelChange)="cancelId.set($event)"
-                required
+                [formField]="cancelForm.publicId"
                 placeholder="e.g., 8f8d9b..."
                 class="form-control"
-                [attr.aria-invalid]="
-                  cancelForm.controls['cancelBookingId']?.invalid ? 'true' : null
-                "
+                [attr.aria-invalid]="cancelForm.publicId().invalid() ? 'true' : null"
                 aria-describedby="cancelBookingId-error"
               />
               <span
                 id="cancelBookingId-error"
                 class="text-rose-400 text-[10px]"
                 [style.display]="
-                  cancelForm.controls['cancelBookingId']?.invalid &&
-                  cancelForm.controls['cancelBookingId']?.touched
+                  cancelForm.publicId().invalid() && cancelForm.publicId().touched()
                     ? 'block'
                     : 'none'
                 "
@@ -76,23 +92,17 @@ import { FormsModule } from '@angular/forms';
               <input
                 type="email"
                 id="cancelEmail"
-                name="cancelEmail"
-                [ngModel]="cancelEmail()"
-                (ngModelChange)="cancelEmail.set($event)"
-                required
+                [formField]="cancelForm.email"
                 placeholder="e.g., john@example.com"
                 class="form-control"
-                [attr.aria-invalid]="cancelForm.controls['cancelEmail']?.invalid ? 'true' : null"
+                [attr.aria-invalid]="cancelForm.email().invalid() ? 'true' : null"
                 aria-describedby="cancelEmail-error"
               />
               <span
                 id="cancelEmail-error"
                 class="text-rose-400 text-[10px]"
                 [style.display]="
-                  cancelForm.controls['cancelEmail']?.invalid &&
-                  cancelForm.controls['cancelEmail']?.touched
-                    ? 'block'
-                    : 'none'
+                  cancelForm.email().invalid() && cancelForm.email().touched() ? 'block' : 'none'
                 "
               >
                 Valid email is required.
@@ -103,7 +113,7 @@ import { FormsModule } from '@angular/forms';
             <button
               type="submit"
               class="btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/100 hover:text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all w-full sm:w-auto"
-              [disabled]="cancelForm.invalid || isSubmitting()"
+              [disabled]="isSubmitting()"
             >
               {{ isSubmitting() ? 'Cancelling...' : 'Cancel Reservation' }}
             </button>
@@ -121,7 +131,7 @@ import { FormsModule } from '@angular/forms';
           for your barber!
         </p>
 
-        <form (ngSubmit)="onReview()" #reviewForm="ngForm" class="space-y-4">
+        <form (submit)="$event.preventDefault(); onReview()" class="space-y-4">
           <div class="flex flex-col gap-4">
             <div class="form-group flex flex-col gap-1.5">
               <label
@@ -132,21 +142,17 @@ import { FormsModule } from '@angular/forms';
               <input
                 type="text"
                 id="reviewPublicId"
-                name="reviewPublicId"
-                [ngModel]="reviewPublicId()"
-                (ngModelChange)="reviewPublicId.set($event)"
-                required
+                [formField]="reviewForm.publicId"
                 placeholder="e.g., 8f8d9b..."
                 class="form-control"
-                [attr.aria-invalid]="reviewForm.controls['reviewPublicId']?.invalid ? 'true' : null"
+                [attr.aria-invalid]="reviewForm.publicId().invalid() ? 'true' : null"
                 aria-describedby="reviewPublicId-error"
               />
               <span
                 id="reviewPublicId-error"
                 class="text-rose-400 text-[10px]"
                 [style.display]="
-                  reviewForm.controls['reviewPublicId']?.invalid &&
-                  reviewForm.controls['reviewPublicId']?.touched
+                  reviewForm.publicId().invalid() && reviewForm.publicId().touched()
                     ? 'block'
                     : 'none'
                 "
@@ -163,23 +169,17 @@ import { FormsModule } from '@angular/forms';
               <input
                 type="email"
                 id="reviewEmail"
-                name="reviewEmail"
-                [ngModel]="reviewEmail()"
-                (ngModelChange)="reviewEmail.set($event)"
-                required
+                [formField]="reviewForm.email"
                 placeholder="e.g., john@example.com"
                 class="form-control"
-                [attr.aria-invalid]="reviewForm.controls['reviewEmail']?.invalid ? 'true' : null"
+                [attr.aria-invalid]="reviewForm.email().invalid() ? 'true' : null"
                 aria-describedby="reviewEmail-error"
               />
               <span
                 id="reviewEmail-error"
                 class="text-rose-400 text-[10px]"
                 [style.display]="
-                  reviewForm.controls['reviewEmail']?.invalid &&
-                  reviewForm.controls['reviewEmail']?.touched
-                    ? 'block'
-                    : 'none'
+                  reviewForm.email().invalid() && reviewForm.email().touched() ? 'block' : 'none'
                 "
               >
                 Valid email is required.
@@ -194,24 +194,16 @@ import { FormsModule } from '@angular/forms';
               <input
                 type="number"
                 id="reviewRating"
-                name="reviewRating"
-                [ngModel]="reviewRating()"
-                (ngModelChange)="reviewRating.set(+$event)"
-                required
-                min="1"
-                max="5"
+                [formField]="reviewForm.rating"
                 class="form-control"
-                [attr.aria-invalid]="reviewForm.controls['reviewRating']?.invalid ? 'true' : null"
+                [attr.aria-invalid]="reviewForm.rating().invalid() ? 'true' : null"
                 aria-describedby="reviewRating-error"
               />
               <span
                 id="reviewRating-error"
                 class="text-rose-400 text-[10px]"
                 [style.display]="
-                  reviewForm.controls['reviewRating']?.invalid &&
-                  reviewForm.controls['reviewRating']?.touched
-                    ? 'block'
-                    : 'none'
+                  reviewForm.rating().invalid() && reviewForm.rating().touched() ? 'block' : 'none'
                 "
               >
                 Rating between 1 and 5 is required.
@@ -225,9 +217,7 @@ import { FormsModule } from '@angular/forms';
               >
               <textarea
                 id="reviewComment"
-                name="reviewComment"
-                [ngModel]="reviewComment()"
-                (ngModelChange)="reviewComment.set($event)"
+                [formField]="reviewForm.comment"
                 placeholder="Great haircut!"
                 class="form-control min-h-[60px]"
               ></textarea>
@@ -237,7 +227,7 @@ import { FormsModule } from '@angular/forms';
             <button
               type="submit"
               class="btn btn-submit text-xs font-bold px-5 py-2.5 rounded-xl transition-all w-full sm:w-auto"
-              [disabled]="reviewForm.invalid || isSubmitting()"
+              [disabled]="isSubmitting()"
             >
               {{ isSubmitting() ? 'Submitting...' : 'Submit Review' }}
             </button>
@@ -262,37 +252,51 @@ export class PostBookingActionsComponent {
     email: string;
   }>();
 
-  readonly cancelId = signal('');
-  readonly cancelEmail = signal('');
-  readonly reviewPublicId = signal('');
-  readonly reviewEmail = signal('');
-  readonly reviewRating = signal(5);
-  readonly reviewComment = signal('');
+  // Two independent Signal Forms, each with its own validation rules and
+  // lifecycle: a cancellation form (publicId + email both required) and a
+  // review form (publicId, email, rating required; comment optional).
+  readonly cancelModel = signal<CancelFormModel>({ publicId: '', email: '' });
+  readonly cancelForm = form(this.cancelModel, (f) => {
+    required(f.publicId);
+    required(f.email);
+    email(f.email);
+  });
+
+  readonly reviewModel = signal<ReviewFormModel>({
+    publicId: '',
+    email: '',
+    rating: 5,
+    comment: '',
+  });
+  readonly reviewForm = form(this.reviewModel, (f) => {
+    required(f.publicId);
+    required(f.email);
+    email(f.email);
+    required(f.rating);
+    min(f.rating, 1);
+    max(f.rating, 5);
+  });
 
   onCancel(): void {
-    const publicId = this.cancelId().trim();
-    const email = this.cancelEmail().trim();
+    const publicId = this.cancelModel().publicId.trim();
+    const email = this.cancelModel().email.trim();
     if (publicId && email) {
       this.cancelRequested.emit({ publicId, email });
-      this.cancelId.set('');
-      this.cancelEmail.set('');
+      this.cancelModel.set({ publicId: '', email: '' });
     }
   }
 
   onReview(): void {
-    const publicId = this.reviewPublicId().trim();
-    const email = this.reviewEmail().trim();
+    const publicId = this.reviewModel().publicId.trim();
+    const email = this.reviewModel().email.trim();
     if (publicId && email) {
       this.reviewSubmitted.emit({
         publicId,
-        rating: this.reviewRating(),
-        comment: this.reviewComment(),
+        rating: this.reviewModel().rating,
+        comment: this.reviewModel().comment,
         email,
       });
-      this.reviewPublicId.set('');
-      this.reviewEmail.set('');
-      this.reviewComment.set('');
-      this.reviewRating.set(5);
+      this.reviewModel.set({ publicId: '', email: '', rating: 5, comment: '' });
     }
   }
 }
