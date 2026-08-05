@@ -26,9 +26,10 @@ ext {
 	// @JsonUnwrapped container properties on deserialization). Spring Boot 4.1.0 BOM
 	// ships 3.1.4 which is vulnerable.
 	set('jackson-bom.version', '3.2.1')
-	// Pin Netty to 4.2.16.Final to fix GHSA-mfg7-5gfp-c4w3 (Memory Leak in DNS Record Decoder
-	// via Malformed Domain Names). Spring Boot 4.1.0 BOM ships 4.2.15.Final which is vulnerable.
-	set('netty.version', '4.2.16.Final')
+	// Pin Netty to 4.2.17.Final. Originally pinned to fix GHSA-mfg7-5gfp-c4w3
+	// (Memory Leak in DNS Record Decoder via Malformed Domain Names); 4.2.17.Final
+	// is the latest patch release. Spring Boot 4.1.0 BOM ships 4.2.15.Final which is vulnerable.
+	set('netty.version', '4.2.17.Final')
 }
 
 
@@ -63,9 +64,10 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 	// Netty — explicit pins so Dependabot's Gradle parser sees the correct versions
 	// (Dependabot does not resolve BOM property overrides set via ext.set()).
-	// Fixes GHSA-mfg7-5gfp-c4w3 (Memory Leak in DNS Record Decoder via Malformed Domain Names).
-	implementation platform('io.netty:netty-bom:4.2.16.Final')
-	implementation 'io.netty:netty-codec-dns:4.2.16.Final'
+	// Originally pinned for GHSA-mfg7-5gfp-c4w3 (DNS Record Decoder memory leak);
+	// bumped to 4.2.17.Final for the latest patch release.
+	implementation platform('io.netty:netty-bom:4.2.17.Final')
+	implementation 'io.netty:netty-codec-dns:4.2.17.Final'
 	// Jackson — explicit pins so Dependabot's Gradle parser sees the correct versions
 	// (Dependabot does not resolve BOM property overrides set via ext.set()).
 	//   - jackson-databind 2.x / jackson-core 2.x: fixes 8 CVEs (HIGH: async parser bypass,
@@ -97,6 +99,22 @@ dependencies {
 	// Runtime
 	runtimeOnly 'org.postgresql:postgresql:42.7.13'
 	runtimeOnly 'com.h2database:h2:2.4.240'
+	// Transitive dependency pins — override versions brought in by the Spring Boot BOM or
+	// other transitive paths. Explicit pins keep Dependabot's Gradle parser honest (it does
+	// not resolve BOM property overrides set via ext.set()).
+	//   - HikariCP:           BOM ships 7.0.2; bump to 7.1.0.
+	//   - Lettuce:            BOM ships 7.5.2.RELEASE; bump to 7.6.0.RELEASE.
+	//   - semconv:            transitive via opentelemetry-exporter-otlp (BOM ships 1.41.1).
+	//   - nimbus-jose-jwt:    transitive via spring-security-oauth2-resource-server; 10.9.1
+	//                         is a security patch (BOM ships 10.9).
+	//   - error_prone_*:      transitive annotation lib (BOM ships 2.49.0).
+	//   - okio:               transitive (BOM ships 3.17.0).
+	implementation 'com.zaxxer:HikariCP:7.1.0'
+	implementation 'io.lettuce:lettuce-core:7.6.0.RELEASE'
+	implementation 'io.opentelemetry.semconv:opentelemetry-semconv:1.43.0'
+	implementation 'com.nimbusds:nimbus-jose-jwt:10.9.1'
+	implementation 'com.google.errorprone:error_prone_annotations:2.50.0'
+	implementation 'com.squareup.okio:okio:3.18.1'
 	// Testing
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'

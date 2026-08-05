@@ -22,7 +22,7 @@ concurrency:
 env:
   JAVA_VERSION: "21"
   NODE_VERSION: "22"
-  TRIVY_VERSION: v0.72.0
+  TRIVY_VERSION: v0.73.0
 
 defaults:
   run:
@@ -60,7 +60,7 @@ jobs:
 
       - name: Set up Java
         if: matrix.language == 'java'
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
