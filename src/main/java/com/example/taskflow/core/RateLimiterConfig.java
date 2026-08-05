@@ -21,7 +21,7 @@ import java.time.Duration;
 public class RateLimiterConfig {
 
     private static final Logger log = LoggerFactory.getLogger(RateLimiterConfig.class);
-    
+
     private final int maxRequestsPerMinute;
     private final int authMaxRequestsPerMinute;
 
@@ -36,6 +36,16 @@ public class RateLimiterConfig {
     public OncePerRequestFilter rateLimitFilter(StringRedisTemplate redisTemplate) {
         return new OncePerRequestFilter() {
             @Override
+            protected boolean shouldNotFilter(HttpServletRequest request) {
+                String path = request.getRequestURI();
+                // Skip health/liveness/readiness probes so K8s/deployment checks
+                // don't burn rate-limit budget.
+                return path != null && (path.startsWith("/actuator/health")
+                        || path.equals("/actuator/health/liveness")
+                        || path.equals("/actuator/health/readiness"));
+            }
+
+            @Override
             protected void doFilterInternal(HttpServletRequest request,
                     HttpServletResponse response,
                     FilterChain filterChain) throws ServletException, IOException {
@@ -46,11 +56,11 @@ public class RateLimiterConfig {
                     path = "";
                 }
                 boolean isAuthEndpoint = path.startsWith("/api/v1/auth/");
-                
+
                 int maxRequests = isAuthEndpoint ? authMaxRequestsPerMinute : maxRequestsPerMinute;
-                
+
                 String redisKey = "rate_limit:" + clientIp + ":" + (isAuthEndpoint ? "auth" : "api");
-                
+
                 try {
                     Long currentCount = redisTemplate.opsForValue().increment(redisKey);
                     if (currentCount != null && currentCount == 1) {
@@ -62,7 +72,7 @@ public class RateLimiterConfig {
                         log.warn("Rate limit exceeded for IP {} on path {}", clientIp, safePath);
                         response.setStatus(429);
                         response.setHeader("Retry-After", "60");
-                        response.setContentType("application/json");
+                        response.setContentType("application/json;charset=UTF-8");
                         response.getWriter().write("{\"error\":\"Too many requests. Please try again later.\"}");
                         return;
                     }
@@ -73,10 +83,17 @@ public class RateLimiterConfig {
                 filterChain.doFilter(request, response);
             }
 
+            /**
+             * H2: Spring Boot's ForwardedHeaderFilter (registered via
+             * {@code server.forward-headers-strategy=framework} in prod
+             * properties) wraps the request so that {@code getRemoteAddr()}
+             * returns the real client IP from the {@code X-Forwarded-For}
+             * header set by the trusted Nginx reverse proxy. The
+             * ForwardedHeaderFilter runs at highest precedence, so it
+             * executes before this custom filter — no manual header
+             * parsing is needed here.
+             */
             private String getClientIp(HttpServletRequest request) {
-                // Do not blindly trust X-Forwarded-For to prevent IP spoofing
-                // In a production environment behind a trusted proxy, configure Spring to use ForwardedHeaderFilter
-                // instead of manually parsing this header.
                 return request.getRemoteAddr();
             }
         };

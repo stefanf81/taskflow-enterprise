@@ -107,10 +107,21 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
-                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                // Swagger UI / OpenAPI docs are ADMIN-gated (fail-safe: even if
+                // springdoc is left enabled, the docs are never public). Prod
+                // additionally disables springdoc outright via
+                // application-prod.properties.
+                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").hasRole("ADMIN")
                 .requestMatchers("/h2-console/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/mobile/login", "/api/v1/auth/register").permitAll()
-                .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness", "/actuator/prometheus").permitAll()
+                // Liveness/readiness probes must stay reachable unauthenticated
+                // for Kubernetes/docker healthchecks. Prometheus metrics reveal
+                // operational data (paths, status distributions, cardinal tags),
+                // so they require ADMIN. Defense-in-depth: prod runs actuator
+                // behind an internal-only binding (deployment follow-up) so even
+                // the ADMIN token is not externally scrapeable.
+                .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness").permitAll()
+                .requestMatchers("/actuator/prometheus").hasRole("ADMIN")
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments/public/busy-slots").permitAll()
                 .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*").permitAll()

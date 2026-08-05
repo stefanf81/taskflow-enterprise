@@ -8,11 +8,17 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Delivers a queued {@link NotificationOutbox} entry.
+ * Delivers a single claimed {@link NotificationOutbox} entry.
+ *
+ * <p>Processes by primary key so the relay can release its claim transaction
+ * before dispatch: {@link #process(Long)} reloads the row inside its own
+ * transaction and resolves the truthful outcome (SENT / FAILED + incremented
+ * retry counter).
  *
  * <p>The SMTP gateway is simulated, so delivery is treated as successful. When a
- * real gateway is wired in, {@link #simulateSend(NotificationOutbox)} should return
- * the actual outcome and failed rows will be retried by {@link NotificationRelayScheduler}.
+ * real gateway is wired in, {@link #simulateSend(NotificationOutbox)} should
+ * return the actual outcome and failed rows will be retried by
+ * {@link NotificationRelayScheduler}.
  */
 @Component
 public class NotificationSender {
@@ -26,28 +32,47 @@ public class NotificationSender {
     }
 
     /**
-     * Send a single outbox entry and persist the truthful outcome. Runs in its own
-     * transaction (REQUIRES_NEW) so a failure resolving one row does not roll back
-     * the whole relay batch. REQUIRES_NEW is explicit so that even if a caller
-     * happens to be transactional, the send is committed (or rolled back) in a
-     * dedicated transaction — matching the relay's "each entry in isolation" design.
+     * Send a single outbox entry and persist the truthful outcome. Runs in its
+     * own transaction (REQUIRES_NEW) so a failure resolving one row does not roll
+     * back the whole relay batch. REQUIRES_NEW is explicit so that even if a
+     * caller happens to be transactional, the send is committed (or rolled back)
+     * in a dedicated transaction — matching the relay's "each entry in
+     * isolation" design.
+     *
+     * @param outboxId the id of a row previously claimed as PROCESSING
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void process(NotificationOutbox outbox) {
+    public void process(Long outboxId) {
+        NotificationOutbox outbox = outboxRepository.findById(outboxId).orElse(null);
+        if (outbox == null) {
+            logger.warn("Outbox id={} no longer exists; skipping.", outboxId);
+            return;
+        }
         boolean delivered = simulateSend(outbox);
 
         if (delivered) {
             outbox.setStatus("SENT");
+            outbox.setClaimedAt(null);
+            outbox.setClaimedBy(null);
         } else {
             outbox.setStatus("FAILED");
             outbox.setRetryCount(outbox.getRetryCount() + 1);
+            outbox.setClaimedAt(null);
+            outbox.setClaimedBy(null);
         }
 
         try {
             outboxRepository.save(outbox);
         } catch (Exception e) {
+            // Do NOT swallow — rethrow so the REQUIRES_NEW transaction rolls
+            // back and the relay's outer catch logs the failure. The row stays
+            // in PROCESSING (set by claimBatch in a prior committed tx) and the
+            // stale-claim reclaimer resets it to PENDING for retry after
+            // CLAIM_STALE_MINUTES. Swallowing here would silently commit an
+            // empty transaction and lose the failure signal.
             String safeMsg = LogSanitizer.safeMessage(e);
             logger.error("Failed to persist notification outcome for outbox id={}: {}", outbox.getId(), safeMsg);
+            throw e;
         }
     }
 

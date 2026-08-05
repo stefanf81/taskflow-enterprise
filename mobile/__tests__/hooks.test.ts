@@ -317,10 +317,17 @@ describe('Hooks', () => {
       const { result } = await renderHook(() => useSubmitReview(), { wrapper: createWrapper() });
 
       await act(async () => {
-        await result.current.mutateAsync({ publicId: 'TF-0001', data: { rating: 5, comment: 'Great!' } });
+        await result.current.mutateAsync({
+          publicId: 'TF-0001',
+          data: { rating: 5, comment: 'Great!', customerEmail: 'john@example.com' },
+        });
       });
 
-      expect(mockSubmitReviewFn).toHaveBeenCalledWith('TF-0001', { rating: 5, comment: 'Great!' });
+      expect(mockSubmitReviewFn).toHaveBeenCalledWith('TF-0001', {
+        rating: 5,
+        comment: 'Great!',
+        customerEmail: 'john@example.com',
+      });
     });
   });
 });

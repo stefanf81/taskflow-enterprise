@@ -44,24 +44,21 @@ class BarberControllerTest {
     @Test
     void createBarber_shouldPersistAndReturn() {
         BarberRequest request = new BarberRequest("Alex", "alex@test.com", "555-1234");
-        Barber saved = new Barber();
-        saved.setId(1L);
-        saved.setName("Alex");
-        when(barberService.createBarber(any(BarberRequest.class))).thenReturn(saved);
+        BarberResponse response = new BarberResponse(1L, "Alex", "alex@test.com", "555-1234");
+        when(barberService.createBarber(any(BarberRequest.class))).thenReturn(response);
 
-        ResponseEntity<Barber> result = barberController.createBarber(request);
+        ResponseEntity<BarberResponse> result = barberController.createBarber(request);
 
         assertEquals(HttpStatus.CREATED, result.getStatusCode());
-        assertEquals("Alex", result.getBody().getName());
+        assertEquals("Alex", result.getBody().name());
     }
 
     @Test
     void getTimeOff_shouldReturnList() {
-        BarberTimeOff timeOff = new BarberTimeOff();
-        timeOff.setId(1L);
+        BarberTimeOffResponse timeOff = new BarberTimeOffResponse(1L, LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
         when(barberService.getTimeOff(1L)).thenReturn(List.of(timeOff));
 
-        ResponseEntity<List<BarberTimeOff>> result = barberController.getTimeOff(1L);
+        ResponseEntity<List<BarberTimeOffResponse>> result = barberController.getTimeOff(1L);
 
         assertEquals(HttpStatus.OK, result.getStatusCode());
         assertEquals(1, result.getBody().size());
@@ -70,13 +67,10 @@ class BarberControllerTest {
     @Test
     void addTimeOff_shouldCreateAndReturn() {
         BarberTimeOffRequest request = new BarberTimeOffRequest(LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
-        BarberTimeOff saved = new BarberTimeOff();
-        saved.setId(1L);
-        saved.setStartDate(LocalDate.of(2026, 7, 22));
-        saved.setEndDate(LocalDate.of(2026, 7, 23));
-        when(barberService.addTimeOff(eq(1L), any(BarberTimeOffRequest.class))).thenReturn(saved);
+        BarberTimeOffResponse response = new BarberTimeOffResponse(1L, LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
+        when(barberService.addTimeOff(eq(1L), any(BarberTimeOffRequest.class))).thenReturn(response);
 
-        ResponseEntity<BarberTimeOff> result = barberController.addTimeOff(1L, request);
+        ResponseEntity<BarberTimeOffResponse> result = barberController.addTimeOff(1L, request);
 
         assertEquals(HttpStatus.CREATED, result.getStatusCode());
         assertNotNull(result.getBody());

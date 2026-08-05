@@ -296,18 +296,22 @@ describe('App Component Quality Assurance Suite', () => {
   it('should handle submitReview success and failure', () => {
     const httpMock = TestBed.inject(HttpTestingController);
 
-    app.submitReview('test-id', 4, 'Great!');
+    app.submitReview('test-id', 4, 'Great!', 'john@example.com');
 
     let reqs = httpMock.match((req) => req.url.includes('/api/v1/reviews/public/test-id'));
     expect(reqs.length).toBe(1);
     expect(reqs[0].request.method).toBe('POST');
-    expect(reqs[0].request.body).toEqual({ rating: 4, comment: 'Great!' });
+    expect(reqs[0].request.body).toEqual({
+      rating: 4,
+      comment: 'Great!',
+      customerEmail: 'john@example.com',
+    });
     reqs[0].flush(null);
 
     expect(app.successMessage()).toBe('Thank you for your review! We appreciate your feedback.');
 
     // error path
-    app.submitReview('bad-id', 5, '');
+    app.submitReview('bad-id', 5, '', 'john@example.com');
 
     reqs = httpMock.match((req) => req.url.includes('/api/v1/reviews/public/bad-id'));
     expect(reqs.length).toBe(1);

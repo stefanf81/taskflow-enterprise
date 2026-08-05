@@ -8,8 +8,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Service to handle barber busy slot calculations.
@@ -57,6 +59,15 @@ public class BusySlotsService {
         }
 
         try {
+            // H3: "No Preference" sentinel must aggregate across ALL barbers.
+            // A slot is busy (unavailable) only when NO working barber can accept it.
+            // Previously the sentinel fell through to findDistinctBookingTimes with
+            // the sentinel string itself, which returned empty — making ALL slots
+            // appear available even if every real barber was fully booked.
+            if (AppointmentServiceImpl.NO_PREFERENCE_BARBER.equals(barberName)) {
+                return computeNoPreferenceBusySlots(date);
+            }
+
             // Check if Barber exists
             Optional<Barber> barberOpt = barberRepository.findByName(barberName);
             if (barberOpt.isPresent()) {
@@ -88,5 +99,50 @@ public class BusySlotsService {
                     LogSanitizer.mask(bookingDate), LogSanitizer.safeMessage(e), e);
             return ALL_SLOTS;
         }
+    }
+
+    /**
+     * H3: Compute busy slots for the "No Preference (First Available)" sentinel.
+     *
+     * <p>A slot is considered busy (unavailable) only when NO working barber can
+     * accept it — meaning every barber is either on time off, not scheduled that
+     * day, or already booked at that time. If at least one working barber is free
+     * at a given slot, that slot remains available for the "No Preference" booking.
+     *
+     * <p>If no barbers exist or none are working that day, ALL_SLOTS is returned
+     * as a conservative default (no availability → prevent bookings).
+     */
+    private List<String> computeNoPreferenceBusySlots(LocalDate date) {
+        List<Barber> allBarbers = barberRepository.findAll();
+        if (allBarbers.isEmpty()) {
+            return ALL_SLOTS;
+        }
+
+        int dayOfWeek = date.getDayOfWeek().getValue();
+        Set<String> availableSlots = new HashSet<>();
+
+        for (Barber barber : allBarbers) {
+            // Skip barbers on time off
+            if (!barberTimeOffRepository.findTimeOffForBarberOnDate(barber.getId(), date).isEmpty()) {
+                continue;
+            }
+            // Skip barbers not scheduled that day
+            if (barberScheduleRepository.findByBarberIdAndDayOfWeek(barber.getId(), dayOfWeek).isEmpty()) {
+                continue;
+            }
+            // This barber is working — collect slots they're NOT already booked for
+            List<String> bookedTimes = appointmentRepository.findDistinctBookingTimes(
+                    barber.getName(), date, AppointmentStatus.DENIED);
+            for (String slot : ALL_SLOTS) {
+                if (!bookedTimes.contains(slot)) {
+                    availableSlots.add(slot);
+                }
+            }
+        }
+
+        // Busy = all slots minus those where at least one barber is available
+        return ALL_SLOTS.stream()
+                .filter(slot -> !availableSlots.contains(slot))
+                .toList();
     }
 }

@@ -23,3 +23,16 @@ cookie remains CSRF-protected, even if it also includes an Authorization header.
 
 Mobile logout is local token deletion; server-side revocation is intentionally
 deferred until a refresh-token or `jti` deny-list design is required.
+
+## Security Hardening
+
+### SSL Certificate Pinning
+
+Production mobile builds fail-fast if `EXPO_PUBLIC_SSL_PIN_FINGERPRINTS` is not
+configured. The `getSslPinningConfig()` parser validates the configuration at
+client initialization. Full cryptographic pinning requires a native module
+(`react-native-ssl-pinning` or equivalent); the config validation ensures the
+deployment pipeline cannot accidentally ship without pinning metadata.
+
+See `src/utils/sslPinning.ts` for setup instructions and `src/api/client.ts`
+for the production validation guard.

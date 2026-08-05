@@ -32,7 +32,7 @@ class TokenProviderTest {
 
     @BeforeEach
     void setUp() {
-        tokenProvider = new TokenProvider(encoder, "test-issuer", "test-audience");
+        tokenProvider = new TokenProvider(encoder, "test-issuer", "test-audience", 3600L);
     }
 
     @Test
@@ -59,7 +59,7 @@ class TokenProviderTest {
 
     @Test
     void generateToken_shouldUseCustomIssuerAndAudience() {
-        TokenProvider customProvider = new TokenProvider(encoder, "custom-issuer", "custom-audience");
+        TokenProvider customProvider = new TokenProvider(encoder, "custom-issuer", "custom-audience", 7200L);
 
         GrantedAuthority authority = () -> "ROLE_CUSTOMER";
         when(authentication.getAuthorities()).thenAnswer(invocation -> List.of(authority));

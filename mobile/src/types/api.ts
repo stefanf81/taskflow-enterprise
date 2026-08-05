@@ -157,6 +157,7 @@ export type BarberRatingResponse = BarberRating;
 export interface ReviewRequest {
   rating: number;
   comment: string;
+  customerEmail: string;
 }
 
 export interface PublicCancelRequest {

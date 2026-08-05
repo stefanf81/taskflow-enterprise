@@ -110,6 +110,28 @@ class RateLimiterConfigTest {
     }
 
     @Test
+    void shouldNotRateLimitHealthEndpoints() throws Exception {
+        Arrays.asList("/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness")
+                .forEach(path -> {
+                    MockHttpServletRequest request = new MockHttpServletRequest();
+                    request.setRequestURI(path);
+                    request.setRemoteAddr("127.0.0.1");
+
+                    MockHttpServletResponse response = new MockHttpServletResponse();
+                    FilterChain filterChain = mock(FilterChain.class);
+
+                    try {
+                        filter.doFilter(request, response, filterChain);
+                        verify(filterChain, times(1)).doFilter(request, response);
+                        verifyNoInteractions(redisTemplate);
+                    } catch (Exception e) {
+                        fail("Filter should not have thrown for path " + path, e);
+                    }
+                    Mockito.clearInvocations(filterChain, redisTemplate);
+                });
+    }
+
+    @Test
     void shouldNotCreateFilterBeanWhenRateLimitDisabled() {
         // matchIfMissing=false: the filter must NOT be created unless explicitly enabled.
         // Without Redis present this prevents a self-DoS (every request 500-ing).

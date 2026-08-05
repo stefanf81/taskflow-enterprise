@@ -253,6 +253,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
 
     // Populate review form with the booking code we extracted
     await page.fill('#reviewPublicId', bookingCode);
+    await page.fill('#reviewEmail', guestEmailAddress);
     await page.fill('#reviewRating', '5');
     await page.fill(
       '#reviewComment',
@@ -320,6 +321,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await page.locator('h2:has-text("Submit a Review")').scrollIntoViewIfNeeded();
 
     await page.fill('#reviewPublicId', 'totally-made-up-code');
+    await page.fill('#reviewEmail', 'reviewer@example.com');
     await page.fill('#reviewRating', '5');
     await page.fill('#reviewComment', 'Should not be accepted.');
     await page.click('button:has-text("Submit Review")');

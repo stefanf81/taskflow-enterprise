@@ -1,9 +1,10 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, waitFor } from '@testing-library/react-native';
 import { RootNavigator } from '../src/navigation/RootNavigator';
 
 // Mock the auth store
 const mockCheckAuth = jest.fn();
+const mockLogout = jest.fn();
 const mockUseAuthStore = jest.fn();
 
 jest.mock('../src/store/useAuthStore', () => ({
@@ -33,6 +34,7 @@ jest.mock('../src/screens/PublicActionsScreen', () => ({
 describe('RootNavigator', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockLogout.mockResolvedValue(undefined);
   });
 
   it('shows loading spinner when isLoading is true', async () => {
@@ -40,7 +42,9 @@ describe('RootNavigator', () => {
       isAuthenticated: false,
       role: null,
       isLoading: true,
+      isOffline: false,
       checkAuth: mockCheckAuth,
+      logout: mockLogout,
     });
 
     const { container } = await render(<RootNavigator />);
@@ -53,7 +57,9 @@ describe('RootNavigator', () => {
       isAuthenticated: false,
       role: null,
       isLoading: false,
+      isOffline: false,
       checkAuth: mockCheckAuth,
+      logout: mockLogout,
     });
 
     const { container } = await render(<RootNavigator />);
@@ -65,7 +71,9 @@ describe('RootNavigator', () => {
       isAuthenticated: true,
       role: 'ROLE_ADMIN',
       isLoading: false,
+      isOffline: false,
       checkAuth: mockCheckAuth,
+      logout: mockLogout,
     });
 
     const { container } = await render(<RootNavigator />);
@@ -77,7 +85,9 @@ describe('RootNavigator', () => {
       isAuthenticated: true,
       role: 'ROLE_CUSTOMER',
       isLoading: false,
+      isOffline: false,
       checkAuth: mockCheckAuth,
+      logout: mockLogout,
     });
 
     const { container } = await render(<RootNavigator />);
@@ -89,10 +99,27 @@ describe('RootNavigator', () => {
       isAuthenticated: false,
       role: null,
       isLoading: false,
+      isOffline: false,
       checkAuth: mockCheckAuth,
+      logout: mockLogout,
     });
 
     await render(<RootNavigator />);
     expect(mockCheckAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed and signs out an authenticated unknown role', async () => {
+    mockUseAuthStore.mockReturnValue({
+      isAuthenticated: true,
+      role: 'ROLE_UNKNOWN',
+      isLoading: false,
+      isOffline: false,
+      checkAuth: mockCheckAuth,
+      logout: mockLogout,
+    });
+
+    await render(<RootNavigator />);
+
+    await waitFor(() => expect(mockLogout).toHaveBeenCalledTimes(1));
   });
 });

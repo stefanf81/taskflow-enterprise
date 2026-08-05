@@ -138,4 +138,81 @@ class BusySlotsServiceTest {
 
         assertTrue(slots.isEmpty());
     }
+
+    // ── H3: "No Preference" sentinel tests ──────────────────────────────────
+
+    @Test
+    void getBusySlots_noPreference_noBarbersExists_returnsAllSlots() {
+        when(barberRepository.findAll()).thenReturn(Collections.emptyList());
+
+        List<String> slots = busySlotsService.getBusySlots(
+                AppointmentServiceImpl.NO_PREFERENCE_BARBER, TEST_DATE_STR);
+
+        assertEquals(BusySlotsService.ALL_SLOTS, slots);
+    }
+
+    @Test
+    void getBusySlots_noPreference_allBarbersBookedAtSlot_returnsThatSlotBusy() {
+        Barber barber = new Barber();
+        barber.setId(1L);
+        barber.setName("Alex");
+        BarberSchedule schedule = new BarberSchedule();
+        schedule.setStartTime(java.time.LocalTime.of(9, 0));
+        schedule.setEndTime(java.time.LocalTime.of(17, 0));
+
+        when(barberRepository.findAll()).thenReturn(List.of(barber));
+        when(barberTimeOffRepository.findTimeOffForBarberOnDate(1L, TEST_DATE))
+                .thenReturn(Collections.emptyList());
+        when(barberScheduleRepository.findByBarberIdAndDayOfWeek(1L, TEST_DATE.getDayOfWeek().getValue()))
+                .thenReturn(Optional.of(schedule));
+        // Every slot is booked
+        when(appointmentRepository.findDistinctBookingTimes("Alex", TEST_DATE, AppointmentStatus.DENIED))
+                .thenReturn(BusySlotsService.ALL_SLOTS);
+
+        List<String> slots = busySlotsService.getBusySlots(
+                AppointmentServiceImpl.NO_PREFERENCE_BARBER, TEST_DATE_STR);
+
+        assertEquals(BusySlotsService.ALL_SLOTS, slots);
+    }
+
+    @Test
+    void getBusySlots_noPreference_atLeastOneBarberFree_returnsSlotAvailable() {
+        Barber barber = new Barber();
+        barber.setId(1L);
+        barber.setName("Alex");
+        BarberSchedule schedule = new BarberSchedule();
+        schedule.setStartTime(java.time.LocalTime.of(9, 0));
+        schedule.setEndTime(java.time.LocalTime.of(17, 0));
+
+        when(barberRepository.findAll()).thenReturn(List.of(barber));
+        when(barberTimeOffRepository.findTimeOffForBarberOnDate(1L, TEST_DATE))
+                .thenReturn(Collections.emptyList());
+        when(barberScheduleRepository.findByBarberIdAndDayOfWeek(1L, TEST_DATE.getDayOfWeek().getValue()))
+                .thenReturn(Optional.of(schedule));
+        // Only 10:00 is booked → all other slots should be available
+        when(appointmentRepository.findDistinctBookingTimes("Alex", TEST_DATE, AppointmentStatus.DENIED))
+                .thenReturn(List.of("10:00"));
+
+        List<String> slots = busySlotsService.getBusySlots(
+                AppointmentServiceImpl.NO_PREFERENCE_BARBER, TEST_DATE_STR);
+
+        // Only "10:00" is busy because the single working barber is booked then
+        assertEquals(List.of("10:00"), slots);
+    }
+
+    @Test
+    void getBusySlots_noPreference_barberOnTimeOff_returnsAllSlots() {
+        Barber barber = new Barber();
+        barber.setId(1L);
+        barber.setName("Alex");
+
+        when(barberRepository.findAll()).thenReturn(List.of(barber));
+        when(barberTimeOffRepository.findTimeOffForBarberOnDate(1L, TEST_DATE))
+                .thenReturn(List.of(new BarberTimeOff()));
+
+        List<String> slots = busySlotsService.getBusySlots(
+                AppointmentServiceImpl.NO_PREFERENCE_BARBER, TEST_DATE_STR);
+
+        assertEquals(BusySlotsService.ALL_SLOTS, slots);
+    }
 }

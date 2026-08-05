@@ -63,7 +63,7 @@ class AppointmentServiceImplTest {
         busySlotsService = new BusySlotsService(barberRepository, barberScheduleRepository, barberTimeOffRepository, appointmentRepository);
         appointmentService = new AppointmentServiceImpl(
                 appointmentRepository, eventPublisher, statsService, tracer,
-                busySlotsService, barberRepository, barberScheduleRepository, serviceItemRepository
+                busySlotsService, barberRepository, barberScheduleRepository, barberTimeOffRepository, serviceItemRepository
         );
 
         testAppointment = new Appointment("John Doe", "john@test.com", "1234567890", "Barber Alex", LocalDate.now(), "10:00", "Haircut");
@@ -164,14 +164,101 @@ class AppointmentServiceImplTest {
 
     @Test
     void testCreateAppointment() {
-        AppointmentCreateRequest request = new AppointmentCreateRequest("John Doe", "john@test.com", "123", "Barber Alex", LocalDate.now(), "10:00", "Haircut");
+        // H3: NO_PREFERENCE_BARBER now triggers findAll() + per-barber schedule/
+        // time-off checks in BusySlotsService. Stub a working barber so the
+        // requested 10:00 slot is available.
+        Barber workingBarber = new Barber();
+        workingBarber.setId(1L);
+        workingBarber.setName("Alex");
+        BarberSchedule schedule = new BarberSchedule();
+        schedule.setStartTime(java.time.LocalTime.of(9, 0));
+        schedule.setEndTime(java.time.LocalTime.of(17, 0));
+
+        when(barberRepository.findAll()).thenReturn(List.of(workingBarber));
+        when(barberTimeOffRepository.findTimeOffForBarberOnDate(1L, LocalDate.now()))
+                .thenReturn(Collections.emptyList());
+        when(barberScheduleRepository.findByBarberIdAndDayOfWeek(1L, LocalDate.now().getDayOfWeek().getValue()))
+                .thenReturn(Optional.of(schedule));
+        when(appointmentRepository.findDistinctBookingTimes("Alex", LocalDate.now(), AppointmentStatus.DENIED))
+                .thenReturn(Collections.emptyList());
+
+        AppointmentCreateRequest request = new AppointmentCreateRequest(
+                "John Doe", "john@test.com", "123",
+                AppointmentServiceImpl.NO_PREFERENCE_BARBER, LocalDate.now(), "10:00", "Haircut");
         when(appointmentRepository.save(any(Appointment.class))).thenReturn(testAppointment);
+        when(serviceItemRepository.findByName("Haircut")).thenReturn(Optional.of(
+                new com.example.taskflow.catalog.ServiceItem("Haircut", java.math.BigDecimal.TEN, 30, "hair", "")));
 
         AppointmentResponse response = appointmentService.createAppointment(request, null);
 
         assertNotNull(response);
         assertEquals("John Doe", response.customerName());
         verify(appointmentRepository).save(any(Appointment.class));
+    }
+
+    @Test
+    void testCreateAppointment_UnknownBarber_Rejected() {
+        AppointmentCreateRequest request = new AppointmentCreateRequest(
+                "John Doe", "john@test.com", "123",
+                "Ghost Barber", LocalDate.now(), "10:00", "Haircut");
+        when(barberRepository.findByName("Ghost Barber")).thenReturn(Optional.empty());
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.createAppointment(request, null));
+        assertTrue(ex.getMessage().contains("Unknown barber"));
+    }
+
+    @Test
+    void testCreateAppointment_UnknownService_Rejected() {
+        // H3: NO_PREFERENCE_BARBER now hits findAll() in BusySlotsService.
+        // Stub working barber so 10:00 is available, then the service rejection fires.
+        Barber workingBarber = new Barber();
+        workingBarber.setId(1L);
+        workingBarber.setName("Alex");
+        BarberSchedule schedule = new BarberSchedule();
+        schedule.setStartTime(java.time.LocalTime.of(9, 0));
+        schedule.setEndTime(java.time.LocalTime.of(17, 0));
+
+        when(barberRepository.findAll()).thenReturn(List.of(workingBarber));
+        when(barberTimeOffRepository.findTimeOffForBarberOnDate(1L, LocalDate.now()))
+                .thenReturn(Collections.emptyList());
+        when(barberScheduleRepository.findByBarberIdAndDayOfWeek(1L, LocalDate.now().getDayOfWeek().getValue()))
+                .thenReturn(Optional.of(schedule));
+        when(appointmentRepository.findDistinctBookingTimes("Alex", LocalDate.now(), AppointmentStatus.DENIED))
+                .thenReturn(Collections.emptyList());
+
+        AppointmentCreateRequest request = new AppointmentCreateRequest(
+                "John Doe", "john@test.com", "123",
+                AppointmentServiceImpl.NO_PREFERENCE_BARBER, LocalDate.now(), "10:00", "Phantom Service");
+        when(serviceItemRepository.findByName("Phantom Service")).thenReturn(Optional.empty());
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.createAppointment(request, null));
+        assertTrue(ex.getMessage().contains("Unknown service"));
+    }
+
+    @Test
+    void testCreateAppointment_TimeOff_RejectedDespiteCachedAvailability() {
+        Barber barber = new Barber();
+        barber.setId(7L);
+        barber.setName("Alex the Barber");
+        BarberSchedule schedule = new BarberSchedule();
+        schedule.setStartTime(java.time.LocalTime.of(9, 0));
+        schedule.setEndTime(java.time.LocalTime.of(17, 0));
+        BarberTimeOff timeOff = new BarberTimeOff();
+        timeOff.setBarber(barber);
+
+        LocalDate bookingDate = LocalDate.now();
+        AppointmentCreateRequest request = new AppointmentCreateRequest(
+                "John Doe", "john@test.com", "123", "Alex the Barber", bookingDate, "10:00", "Haircut");
+        when(barberRepository.findByName("Alex the Barber")).thenReturn(Optional.of(barber));
+        when(barberScheduleRepository.findByBarberIdAndDayOfWeek(7L, bookingDate.getDayOfWeek().getValue()))
+                .thenReturn(Optional.of(schedule));
+        when(barberTimeOffRepository.findTimeOffForBarberOnDate(7L, bookingDate)).thenReturn(List.of(timeOff));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.createAppointment(request, null));
+        assertTrue(ex.getMessage().contains("time off"));
     }
 
     @Test

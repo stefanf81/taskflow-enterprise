@@ -1,6 +1,7 @@
 import { useAuthStore } from '../src/store/useAuthStore';
 import { authApi } from '../src/api/auth';
 import { storage } from '../src/utils/storage';
+import { queryClient } from '../src/query/queryClient';
 
 jest.mock('../src/api/auth', () => ({
   authApi: {
@@ -30,11 +31,13 @@ const mobileLoginResponse = (username: string, role: 'ROLE_ADMIN' | 'ROLE_CUSTOM
 
 describe('useAuthStore', () => {
   beforeEach(() => {
+    queryClient.clear();
     useAuthStore.setState({
       isAuthenticated: false,
       isLoading: false,
       username: null,
       role: null,
+      isOffline: false,
       error: null,
     });
     jest.clearAllMocks();
@@ -98,6 +101,7 @@ describe('useAuthStore', () => {
 
   it('logs out locally by deleting the bearer token', async () => {
     useAuthStore.setState({ isAuthenticated: true, username: 'admin', role: 'ROLE_ADMIN' });
+    queryClient.setQueryData(['customerAppointments', 0, 10], { content: ['private appointment'] });
 
     await useAuthStore.getState().logout();
 
@@ -105,6 +109,7 @@ describe('useAuthStore', () => {
     expect(storage.removeUserData).toHaveBeenCalledTimes(1);
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(useAuthStore.getState().username).toBeNull();
+    expect(queryClient.getQueryData(['customerAppointments', 0, 10])).toBeUndefined();
   });
 
   it('restores state only when a stored token is confirmed by /me', async () => {
@@ -130,9 +135,9 @@ describe('useAuthStore', () => {
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
   });
 
-  it('clears state when /me rejects the stored token', async () => {
+  it('clears state when /me definitively rejects the stored token', async () => {
     (storage.getToken as jest.Mock).mockResolvedValueOnce('expired-jwt');
-    (authApi.me as jest.Mock).mockRejectedValueOnce(new Error('Not authenticated'));
+    (authApi.me as jest.Mock).mockRejectedValueOnce({ response: { status: 401 } });
     useAuthStore.setState({ isAuthenticated: true, username: 'admin', role: 'ROLE_ADMIN' });
 
     await useAuthStore.getState().checkAuth();
@@ -140,6 +145,18 @@ describe('useAuthStore', () => {
     expect(storage.removeToken).toHaveBeenCalled();
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(useAuthStore.getState().role).toBeNull();
+  });
+
+  it('preserves credentials and exposes retry state when /me is offline', async () => {
+    (storage.getToken as jest.Mock).mockResolvedValueOnce('stored-jwt');
+    (authApi.me as jest.Mock).mockRejectedValueOnce(new Error('Network Error'));
+    useAuthStore.setState({ isAuthenticated: true, username: 'admin', role: 'ROLE_ADMIN' });
+
+    await useAuthStore.getState().checkAuth();
+
+    expect(storage.removeToken).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
+    expect(useAuthStore.getState().isOffline).toBe(true);
   });
 
   it('clears an error', () => {

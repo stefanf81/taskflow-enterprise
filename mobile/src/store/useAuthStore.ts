@@ -2,12 +2,14 @@ import { create } from 'zustand';
 import { storage } from '../utils/storage';
 import { authApi } from '../api/auth';
 import { LoginRequest, LoginResponse, RegisterRequest } from '../types/api';
+import { queryClient } from '../query/queryClient';
 
 interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   username: string | null;
   role: 'ROLE_ADMIN' | 'ROLE_CUSTOMER' | null;
+  isOffline: boolean;
   error: string | null;
 
   login: (credentials: LoginRequest) => Promise<LoginResponse>;
@@ -17,11 +19,12 @@ interface AuthState {
   clearError: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isLoading: true,
   username: null,
   role: null,
+  isOffline: false,
   error: null,
 
   login: async (credentials) => {
@@ -36,6 +39,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isLoading: false,
         username: res.username,
         role: res.role,
+        isOffline: false,
         error: null,
       });
       return res;
@@ -71,24 +75,51 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     // Bearer JWTs are stateless; logout removes the native credential. Server
     // revocation can be added later with a jti deny-list if required.
-    await storage.removeToken();
-    await storage.removeUserData();
-    set({
-      isAuthenticated: false,
-      isLoading: false,
-      username: null,
-      role: null,
-      error: null,
-    });
+    try {
+      await storage.removeToken();
+      await storage.removeUserData();
+      queryClient.clear();
+      set({
+        isAuthenticated: false,
+        isLoading: false,
+        username: null,
+        role: null,
+        isOffline: false,
+        error: null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Secure sign-out failed. Please try again.';
+      set({ isLoading: false, error: message });
+      throw new Error(message);
+    }
   },
 
   checkAuth: async () => {
     set({ isLoading: true });
+    let token: string | null;
     try {
-      const token = await storage.getToken();
-      if (!token) {
-        throw new Error('No mobile access token');
-      }
+      token = await storage.getToken();
+    } catch {
+      set({
+        isLoading: false,
+        isOffline: true,
+        error: 'Secure credential storage is unavailable. Please try again.',
+      });
+      return;
+    }
+    if (!token) {
+      set({
+        isAuthenticated: false,
+        isLoading: false,
+        username: null,
+        role: null,
+        isOffline: false,
+        error: null,
+      });
+      return;
+    }
+
+    try {
       const res = await authApi.me();
       if (res.username && res.role) {
         // Server confirmed identity — fully authenticated
@@ -99,24 +130,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isLoading: false,
           username: res.username,
           role: res.role,
+          isOffline: false,
           error: null,
         });
         return;
       }
-    } catch {
-      // Server unreachable — do NOT trust locally cached role.
-      // Clear auth state so the user must re-authenticate against the server.
+    } catch (error: unknown) {
+      const status =
+        error && typeof error === 'object' && 'response' in error
+          ? (error as { response?: { status?: number } }).response?.status
+          : undefined;
+      if (status !== 401 && status !== 403) {
+        // A timeout/offline/DNS failure does not prove the bearer token is
+        // invalid. Preserve it and let the user retry when connectivity returns.
+        set({
+          isLoading: false,
+          isOffline: true,
+          error: 'Could not reach the server. Check your connection and retry.',
+        });
+        return;
+      }
     }
 
-    // Either /me returned no data, or the request failed.
-    // Wipe local credentials to force a fresh login.
+    // Only a definitive authentication failure clears native credentials.
     await storage.removeToken();
     await storage.removeUserData();
+    queryClient.clear();
     set({
       isAuthenticated: false,
       isLoading: false,
       username: null,
       role: null,
+      isOffline: false,
       error: null,
     });
   },

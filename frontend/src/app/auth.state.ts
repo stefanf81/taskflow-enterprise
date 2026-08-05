@@ -20,6 +20,7 @@ export class AuthState {
   readonly role = signal<string>('');
   readonly isLoggedIn = signal<boolean>(false);
   private bootstrapDone = signal<boolean>(false);
+  private bootstrapVersion = 0;
 
   /**
    * Cached in-flight bootstrap observable. When the auth guard and the App
@@ -36,15 +37,18 @@ export class AuthState {
     // Deduplicate concurrent calls: share a single in-flight request so the
     // auth guard and App.ngOnInit don't fire two `me()` calls on a deep-link.
     if (!this.bootstrap$) {
+      const version = ++this.bootstrapVersion;
       this.bootstrap$ = this.appointmentService.me().pipe(
         map((me: LoginResponse) => me.role),
         tap({
           next: (role) => {
+            if (version !== this.bootstrapVersion) return;
             this.applyRole(role);
             this.bootstrapDone.set(true);
             this.bootstrap$ = null;
           },
           error: () => {
+            if (version !== this.bootstrapVersion) return;
             this.clear();
             this.bootstrapDone.set(true);
             this.bootstrap$ = null;
@@ -62,6 +66,8 @@ export class AuthState {
   }
 
   clear(): void {
+    // A late /me response from a pre-logout bootstrap must not restore auth UI.
+    this.bootstrapVersion++;
     this.role.set('');
     this.isLoggedIn.set(false);
     this.bootstrapDone.set(false);

@@ -26,6 +26,15 @@ public class AppointmentServiceImpl implements AppointmentService {
     private static final Logger logger = LoggerFactory.getLogger(AppointmentServiceImpl.class);
     private static final int MAX_BUSY_SLOTS = 500;
 
+    /**
+     * Sentinel barber name used by the web/mobile booking UI to mean "assign me
+     * to any available barber". It is NOT a catalog row, so schedule validation
+     * and FK resolution are intentionally skipped for this exact string. Every
+     * other barber name must resolve to a real {@link Barber} catalog entry or
+     * the booking is rejected with a 400.
+     */
+    static final String NO_PREFERENCE_BARBER = "No Preference (First Available)";
+
     private final AppointmentRepository appointmentRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final AppointmentStatsService statsService;
@@ -33,6 +42,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     private final BusySlotsService busySlotsService;
     private final BarberRepository barberRepository;
     private final BarberScheduleRepository barberScheduleRepository;
+    private final BarberTimeOffRepository barberTimeOffRepository;
     private final ServiceItemRepository serviceItemRepository;
 
     public AppointmentServiceImpl(AppointmentRepository appointmentRepository,
@@ -42,6 +52,7 @@ public class AppointmentServiceImpl implements AppointmentService {
                                    BusySlotsService busySlotsService,
                                    BarberRepository barberRepository,
                                    BarberScheduleRepository barberScheduleRepository,
+                                   BarberTimeOffRepository barberTimeOffRepository,
                                    ServiceItemRepository serviceItemRepository) {
         this.appointmentRepository = appointmentRepository;
         this.eventPublisher = eventPublisher;
@@ -50,6 +61,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         this.busySlotsService = busySlotsService;
         this.barberRepository = barberRepository;
         this.barberScheduleRepository = barberScheduleRepository;
+        this.barberTimeOffRepository = barberTimeOffRepository;
         this.serviceItemRepository = serviceItemRepository;
     }
 
@@ -135,6 +147,23 @@ public class AppointmentServiceImpl implements AppointmentService {
         // relying on the busy-slot side effect). Backed by BarberSchedule.
         validateBookingTimeWithinSchedule(request.barberName(), request.bookingDate(), request.bookingTime());
 
+        // Atomic (in-transaction) time-off recheck. The busy-slot lookup below is
+        // cached for up to 2 minutes, so an admin time-off insertion between the
+        // cache load and this save would otherwise let a booking slip through.
+        // This fresh DB read closes that window for the common case. (A truly
+        // concurrent insert racing this transaction remains a documented residual
+        // race best closed by a database exclusion constraint if/when needed.)
+        if (!NO_PREFERENCE_BARBER.equals(request.barberName())) {
+            Barber barber = barberRepository.findByName(request.barberName())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Unknown barber: '" + LogSanitizer.stripNewlines(request.barberName())
+                                    + "'. Please select a barber from the list."));
+            if (!barberTimeOffRepository.findTimeOffForBarberOnDate(barber.getId(), request.bookingDate()).isEmpty()) {
+                throw new IllegalArgumentException(
+                        "The selected barber is unavailable on this date (time off). Please choose another date or barber.");
+            }
+        }
+
         // Validate slot availability (prevent double-bookings)
         // Call via injected BusySlotsService so the @Cacheable proxy is actually used.
         java.util.List<String> busy = busySlotsService.getBusySlots(request.barberName(), request.bookingDate().toString());
@@ -173,22 +202,38 @@ public class AppointmentServiceImpl implements AppointmentService {
 
             return AppointmentResponse.fromEntity(savedItem);
         } catch (org.springframework.dao.DataIntegrityViolationException ex) {
-            // Idempotency-key collision: return the already-persisted row.
-            Appointment existing = appointmentRepository.findByIdempotencyKey(idempotencyKey);
-            if (existing != null) {
-                logger.info("Concurrent duplicate for idempotency key {}. Returning existing appointment.",
-                        LogSanitizer.stripNewlines(idempotencyKey));
-                return AppointmentResponse.fromEntity(existing);
+            // H1: Inspect the root cause to distinguish constraint violations.
+            // Previously, ANY DataIntegrityViolationException was treated as either
+            // an idempotency-key collision or a slot collision. A different constraint
+            // (FK, NOT NULL, CHECK) would incorrectly return "slot was just booked".
+            //
+            // Next steps:
+            //   1. Try idempotency-key lookup — if found, return the existing row.
+            //   2. If SQLState = 23505 (unique_violation), treat as slot collision.
+            //   3. Otherwise, surface a generic "data conflict" error.
+            if (idempotencyKey != null && !idempotencyKey.trim().isEmpty()) {
+                Appointment existing = appointmentRepository.findByIdempotencyKey(idempotencyKey);
+                if (existing != null) {
+                    logger.info("Concurrent duplicate for idempotency key {}. Returning existing appointment.",
+                            LogSanitizer.stripNewlines(idempotencyKey));
+                    return AppointmentResponse.fromEntity(existing);
+                }
             }
-            // Slot was booked between our busy-slots check and save (TOCTOU).
-            // The partial unique index idx_appointment_slot_active caught it.
-            // Return a clear 400 message instead of a 500 constraint-violation error.
-            logger.warn("Slot collision for {} at {} on {} — request raced with another booking.",
-                    LogSanitizer.stripNewlines(request.barberName()),
-                    request.bookingTime(),
-                    request.bookingDate());
+            if (isUniqueViolation(ex)) {
+                // Slot was booked between our busy-slots check and save (TOCTOU).
+                // The partial unique index idx_appointment_slot_active caught it.
+                logger.warn("Slot collision for {} at {} on {} — request raced with another booking.",
+                        LogSanitizer.stripNewlines(request.barberName()),
+                        request.bookingTime(),
+                        request.bookingDate());
+                throw new IllegalArgumentException(
+                        "This time slot was just booked by someone else. Please select a different time.");
+            }
+            // Unknown constraint violation (FK, NOT NULL, CHECK, etc.)
+            logger.error("Unexpected data integrity violation during appointment creation (root: {})",
+                    LogSanitizer.safeMessage(ex), ex);
             throw new IllegalArgumentException(
-                    "This time slot was just booked by someone else. Please select a different time.");
+                    "Unable to process the booking due to a data conflict. Please try again.");
         }
     }
 
@@ -196,15 +241,20 @@ public class AppointmentServiceImpl implements AppointmentService {
      * A2: confirm the requested {@code bookingTime} is inside the barber's
      * {@link BarberSchedule} window for the weekday of {@code bookingDate}.
      * Throws {@link IllegalArgumentException} (→ 400) when the barber is not
-     * scheduled that day or the time is outside working hours.
+     * scheduled that day or the time is outside working hours. Unknown barber
+     * names (anything other than the {@link #NO_PREFERENCE_BARBER} sentinel) are
+     * rejected so clients cannot book appointments for nonexistent staff.
      */
     private void validateBookingTimeWithinSchedule(String barberName, LocalDate bookingDate, String bookingTime) {
-        Barber barber = barberRepository.findByName(barberName).orElse(null);
-        if (barber == null) {
-            // Barber unknown: the booking still proceeds with the denormalized name,
-            // but we cannot validate the window — let the busy-slot check handle it.
+        if (NO_PREFERENCE_BARBER.equals(barberName)) {
+            // Sentinel: no specific barber — skip schedule validation. The
+            // busy-slot check still prevents double-booking under this name.
             return;
         }
+        Barber barber = barberRepository.findByName(barberName)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Unknown barber: '" + LogSanitizer.stripNewlines(barberName)
+                                + "'. Please select a barber from the list."));
         BarberSchedule schedule = barberScheduleRepository
                 .findByBarberIdAndDayOfWeek(barber.getId(), bookingDate.getDayOfWeek().getValue())
                 .orElseThrow(() -> new IllegalArgumentException("The selected barber is not scheduled to work on the requested date."));
@@ -221,13 +271,27 @@ public class AppointmentServiceImpl implements AppointmentService {
      * A1: resolve the catalog FKs from the free-text names submitted by the
      * booking form. The denormalized name columns are already set by the caller;
      * this additionally wires the real {@code barber} / {@code service}
-     * associations for relational integrity and correct stats joins. A missing
-     * catalog entry (e.g. a typo'd barber) leaves the FK null but keeps the
-     * denormalized string so the booking is never lost.
+     * associations for relational integrity and correct stats joins.
+     *
+     * <p>Unknown service names are rejected with a 400. The barber FK is left
+     * null only for the {@link #NO_PREFERENCE_BARBER} sentinel; any other
+     * unknown barber name is rejected (already enforced by
+     * {@link #validateBookingTimeWithinSchedule}, but double-checked here for
+     * defense-in-depth in case this method is called independently).
      */
     private void resolveAndSetCatalogReferences(Appointment item, String barberName, String serviceType) {
-        barberRepository.findByName(barberName).ifPresent(item::setBarber);
-        serviceItemRepository.findByName(serviceType).ifPresent(item::setService);
+        if (!NO_PREFERENCE_BARBER.equals(barberName)) {
+            Barber barber = barberRepository.findByName(barberName)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Unknown barber: '" + LogSanitizer.stripNewlines(barberName)
+                                    + "'. Please select a barber from the list."));
+            item.setBarber(barber);
+        }
+        ServiceItem service = serviceItemRepository.findByName(serviceType)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Unknown service: '" + LogSanitizer.stripNewlines(serviceType)
+                                + "'. Please select a service from the catalog."));
+        item.setService(service);
     }
 
     @Override
@@ -301,6 +365,26 @@ public class AppointmentServiceImpl implements AppointmentService {
     @Override
     public Appointment findByPublicId(String publicId) {
         return appointmentRepository.findByPublicId(publicId);
+    }
+
+    /**
+     * H1: Walk the exception cause chain looking for a {@link java.sql.SQLException}
+     * whose SQLState is {@code "23505"} (the SQL-standard code for unique violation
+     * shared by PostgreSQL and H2). Non-unique integrity violations (FK = 23503,
+     * NOT NULL = 23502, CHECK = 23514) will not match, allowing the caller to
+     * distinguish a genuine slot/idempotency collision from other data issues.
+     */
+    private static boolean isUniqueViolation(Throwable ex) {
+        Throwable cause = ex;
+        while (cause != null) {
+            if (cause instanceof java.sql.SQLException sqlEx) {
+                if ("23505".equals(sqlEx.getSQLState())) {
+                    return true;
+                }
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 
 }

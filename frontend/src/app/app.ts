@@ -623,15 +623,19 @@ export class App implements OnInit, OnDestroy {
   }
 
   // --- Review Submission ---
-  submitReview(publicId: string, rating: number, comment: string): void {
+  submitReview(publicId: string, rating: number, comment: string, email: string): void {
     if (!publicId) {
       this.errorMessage.set('Booking Code is required to submit a review.');
+      return;
+    }
+    if (!email) {
+      this.errorMessage.set('Verification email is required to submit a review.');
       return;
     }
 
     this.isSubmitting.set(true);
     this.appointmentService
-      .submitReview(publicId, { rating, comment })
+      .submitReview(publicId, { rating, comment, customerEmail: email })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {

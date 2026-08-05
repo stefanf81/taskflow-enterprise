@@ -112,9 +112,10 @@ describe('types/api', () => {
     expect(r.averageRating).toBe(4.8);
   });
 
-  it('ReviewRequest has rating and comment', () => {
-    const r: ReviewRequest = { rating: 5, comment: 'Great!' };
+  it('ReviewRequest has rating, comment, and customerEmail', () => {
+    const r: ReviewRequest = { rating: 5, comment: 'Great!', customerEmail: 'john@example.com' };
     expect(r.rating).toBe(5);
+    expect(r.customerEmail).toBe('john@example.com');
   });
 
   it('PublicCancelRequest has email', () => {

@@ -16,6 +16,9 @@ import { storage } from '../src/utils/storage';
 describe('storage', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockSetItemAsync.mockResolvedValue(undefined);
+    mockGetItemAsync.mockResolvedValue(null);
+    mockDeleteItemAsync.mockResolvedValue(undefined);
     // Default to native platform
     (Platform as any).OS = 'ios';
     // Clear module-level memoryStore that persists across tests
@@ -41,12 +44,9 @@ describe('storage', () => {
       expect(token).toBe('my-jwt-token');
     });
 
-    it('falls back to memory when SecureStore throws', async () => {
+    it('fails closed when SecureStore throws on native', async () => {
       mockSetItemAsync.mockRejectedValue(new Error('SecureStore unavailable'));
-      mockGetItemAsync.mockRejectedValue(new Error('Also unavailable'));
-      await storage.setToken('fallback-token');
-      const token = await storage.getToken();
-      expect(token).toBe('fallback-token');
+      await expect(storage.setToken('fallback-token')).rejects.toThrow('Secure credential storage is unavailable.');
     });
   });
 
@@ -73,21 +73,11 @@ describe('storage', () => {
       expect(mockGetItemAsync).not.toHaveBeenCalled();
     });
 
-    it('falls back to memory when SecureStore throws on get', async () => {
+    it('fails closed when SecureStore throws on get', async () => {
       mockGetItemAsync.mockRejectedValue(new Error('Not available'));
-      const token = await storage.getToken();
-      expect(token).toBeNull(); // memory also empty
+      await expect(storage.getToken()).rejects.toThrow('Secure credential storage is unavailable.');
     });
 
-    it('returns memory value after SecureStore failure', async () => {
-      // First set in memory via fallback
-      mockSetItemAsync.mockRejectedValue(new Error('fail'));
-      await storage.setToken('mem-token');
-      // Now get
-      mockGetItemAsync.mockRejectedValue(new Error('fail'));
-      const token = await storage.getToken();
-      expect(token).toBe('mem-token');
-    });
   });
 
   // ==================== removeToken ====================
@@ -105,13 +95,9 @@ describe('storage', () => {
       expect(token).toBeNull();
     });
 
-    it('falls back to memory removal when SecureStore throws', async () => {
-      mockSetItemAsync.mockRejectedValue(new Error('fail'));
-      await storage.setToken('remove-me');
+    it('fails closed when SecureStore deletion throws', async () => {
       mockDeleteItemAsync.mockRejectedValue(new Error('fail'));
-      await storage.removeToken();
-      const token = await storage.getToken();
-      expect(token).toBeNull();
+      await expect(storage.removeToken()).rejects.toThrow('Secure credential removal failed.');
     });
   });
 
@@ -134,12 +120,10 @@ describe('storage', () => {
       expect(retrieved).toEqual(data);
     });
 
-    it('falls back to memory when SecureStore throws', async () => {
+    it('fails closed when SecureStore throws', async () => {
       mockSetItemAsync.mockRejectedValue(new Error('fail'));
       const data = { name: 'Fallback' };
-      await storage.setUserData(data);
-      const retrieved = await storage.getUserData<{ name: string }>();
-      expect(retrieved).toEqual(data);
+      await expect(storage.setUserData(data)).rejects.toThrow('Secure credential storage is unavailable.');
     });
   });
 
@@ -158,19 +142,9 @@ describe('storage', () => {
       expect(result).toBeNull();
     });
 
-    it('returns memory data when SecureStore fails', async () => {
-      mockSetItemAsync.mockRejectedValue(new Error('fail'));
-      await storage.setUserData({ key: 'value' });
-      mockGetItemAsync.mockRejectedValue(new Error('fail again'));
-      const result = await storage.getUserData<{ key: string }>();
-      expect(result).toEqual({ key: 'value' });
-    });
-
-    it('returns null when both SecureStore and memory fail', async () => {
+    it('fails closed when SecureStore read fails', async () => {
       mockGetItemAsync.mockRejectedValue(new Error('fail'));
-      // Memory store is empty since userData was never set
-      const result = await storage.getUserData();
-      expect(result).toBeNull();
+      await expect(storage.getUserData()).rejects.toThrow('Secure credential storage is unavailable.');
     });
   });
 
@@ -189,13 +163,9 @@ describe('storage', () => {
       expect(result).toBeNull();
     });
 
-    it('falls back to memory removal when SecureStore throws', async () => {
-      mockSetItemAsync.mockRejectedValue(new Error('fail'));
-      await storage.setUserData({ cleanup: true });
+    it('fails closed when SecureStore deletion throws', async () => {
       mockDeleteItemAsync.mockRejectedValue(new Error('fail'));
-      await storage.removeUserData();
-      const result = await storage.getUserData();
-      expect(result).toBeNull();
+      await expect(storage.removeUserData()).rejects.toThrow('Secure credential removal failed.');
     });
   });
 

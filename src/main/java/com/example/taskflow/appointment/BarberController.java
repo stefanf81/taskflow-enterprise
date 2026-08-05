@@ -37,7 +37,7 @@ public class BarberController {
             @ApiResponse(responseCode = "201", description = "Barber created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid barber data")
     })
-    public ResponseEntity<Barber> createBarber(@Valid @RequestBody BarberRequest request) {
+    public ResponseEntity<BarberResponse> createBarber(@Valid @RequestBody BarberRequest request) {
         return new ResponseEntity<>(barberService.createBarber(request), HttpStatus.CREATED);
     }
 
@@ -47,7 +47,7 @@ public class BarberController {
             @ApiResponse(responseCode = "200", description = "List of time-off periods returned"),
             @ApiResponse(responseCode = "404", description = "Barber not found")
     })
-    public ResponseEntity<List<BarberTimeOff>> getTimeOff(@Parameter(description = "Barber database ID") @PathVariable Long barberId) {
+    public ResponseEntity<List<BarberTimeOffResponse>> getTimeOff(@Parameter(description = "Barber database ID") @PathVariable Long barberId) {
         return ResponseEntity.ok(barberService.getTimeOff(barberId));
     }
 
@@ -58,7 +58,7 @@ public class BarberController {
             @ApiResponse(responseCode = "400", description = "Invalid time-off data"),
             @ApiResponse(responseCode = "404", description = "Barber not found")
     })
-    public ResponseEntity<BarberTimeOff> addTimeOff(@Parameter(description = "Barber database ID") @PathVariable Long barberId, @Valid @RequestBody BarberTimeOffRequest request) {
+    public ResponseEntity<BarberTimeOffResponse> addTimeOff(@Parameter(description = "Barber database ID") @PathVariable Long barberId, @Valid @RequestBody BarberTimeOffRequest request) {
         return new ResponseEntity<>(barberService.addTimeOff(barberId, request), HttpStatus.CREATED);
     }
 }

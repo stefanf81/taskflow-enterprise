@@ -29,6 +29,12 @@ public class NotificationOutbox {
     @Column(name = "retry_count", nullable = false)
     private int retryCount = 0;
 
+    @Column(name = "claimed_at")
+    private java.time.LocalDateTime claimedAt;
+
+    @Column(name = "claimed_by", length = 100)
+    private String claimedBy;
+
     public NotificationOutbox() {}
 
     public NotificationOutbox(String recipient, String type, String message, LocalDateTime sentAt, String status) {
@@ -55,4 +61,9 @@ public class NotificationOutbox {
 
     public int getRetryCount() { return retryCount; }
     public void setRetryCount(int retryCount) { this.retryCount = retryCount; }
+
+    public LocalDateTime getClaimedAt() { return claimedAt; }
+    public void setClaimedAt(LocalDateTime claimedAt) { this.claimedAt = claimedAt; }
+    public String getClaimedBy() { return claimedBy; }
+    public void setClaimedBy(String claimedBy) { this.claimedBy = claimedBy; }
 }

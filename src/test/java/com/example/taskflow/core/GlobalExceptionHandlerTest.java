@@ -173,7 +173,8 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals("Malformed JSON request payload: Parse error detail", response.getBody().message());
+        // M1: response message must NOT leak the internal cause detail
+        assertEquals("Malformed JSON request payload. Please check your request body and content type.", response.getBody().message());
     }
 
     @Test

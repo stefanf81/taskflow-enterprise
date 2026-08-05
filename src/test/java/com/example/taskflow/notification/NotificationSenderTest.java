@@ -4,11 +4,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -20,7 +20,6 @@ class NotificationSenderTest {
     @Mock
     private NotificationOutboxRepository outboxRepository;
 
-    @InjectMocks
     private NotificationSender sender;
 
     private NotificationOutbox outbox;
@@ -34,13 +33,15 @@ class NotificationSenderTest {
                 LocalDateTime.now(),
                 "PENDING");
         outbox.setId(1L);
+        sender = new NotificationSender(outboxRepository);
     }
 
     @Test
-    void processMarksPendingRowAsSentOnSuccessfulDelivery() {
+    void processMarksClaimedRowAsSentOnSuccessfulDelivery() {
+        when(outboxRepository.findById(1L)).thenReturn(Optional.of(outbox));
         when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        sender.process(outbox);
+        sender.process(1L);
 
         ArgumentCaptor<NotificationOutbox> captor = ArgumentCaptor.forClass(NotificationOutbox.class);
         verify(outboxRepository, times(1)).save(captor.capture());
@@ -48,20 +49,22 @@ class NotificationSenderTest {
         NotificationOutbox saved = captor.getValue();
         assertEquals("SENT", saved.getStatus());
         assertEquals(0, saved.getRetryCount());
+        assertNull(saved.getClaimedAt());
+        assertNull(saved.getClaimedBy());
     }
 
     @Test
     void processIncrementsRetryCountAndMarksFailedWhenSendFails() {
-        // Force the simulated gateway to fail for this row.
         NotificationSender failingSender = new NotificationSender(outboxRepository) {
             @Override
             boolean simulateSend(NotificationOutbox o) {
                 return false;
             }
         };
+        when(outboxRepository.findById(1L)).thenReturn(Optional.of(outbox));
         when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        failingSender.process(outbox);
+        failingSender.process(1L);
 
         ArgumentCaptor<NotificationOutbox> captor = ArgumentCaptor.forClass(NotificationOutbox.class);
         verify(outboxRepository, times(1)).save(captor.capture());
@@ -72,20 +75,31 @@ class NotificationSenderTest {
     }
 
     @Test
-    void processDoesNotThrowWhenRepositoryFails() {
+    void processPropagatesRepositoryFailureForRetry() {
+        when(outboxRepository.findById(1L)).thenReturn(Optional.of(outbox));
         when(outboxRepository.save(any(NotificationOutbox.class))).thenThrow(new RuntimeException("db error"));
 
-        assertDoesNotThrow(() -> sender.process(outbox));
+        // The exception must propagate so the REQUIRES_NEW transaction rolls
+        // back and the stale-claim reclaimer can retry the row later.
+        assertThrows(RuntimeException.class, () -> sender.process(1L));
+    }
+
+    @Test
+    void processSkipsMissingRow() {
+        when(outboxRepository.findById(99L)).thenReturn(Optional.empty());
+
+        sender.process(99L);
+
+        verify(outboxRepository, never()).save(any(NotificationOutbox.class));
     }
 
     @Test
     void maskingHidesEmailLocalPart() {
-        // maskEmail is exercised indirectly via simulateSend during process();
-        // verify the sender does not leak the raw address into a thrown error.
         outbox.setRecipient("ab@test.com");
+        when(outboxRepository.findById(1L)).thenReturn(Optional.of(outbox));
         when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        assertDoesNotThrow(() -> sender.process(outbox));
+        assertDoesNotThrow(() -> sender.process(1L));
         verify(outboxRepository, times(1)).save(any(NotificationOutbox.class));
     }
 }

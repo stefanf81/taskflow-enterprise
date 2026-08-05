@@ -800,7 +800,9 @@
         <app-post-booking-actions
           [isSubmitting]="isSubmitting()"
           (cancelRequested)="onPublicCancel($event.publicId, $event.email)"
-          (reviewSubmitted)="submitReview($event.publicId, $event.rating, $event.comment)"
+          (reviewSubmitted)="
+            submitReview($event.publicId, $event.rating, $event.comment, $event.email)
+          "
         />
       } @placeholder {
         <div class="h-24"></div>

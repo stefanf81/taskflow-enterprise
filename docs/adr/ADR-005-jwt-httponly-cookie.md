@@ -32,6 +32,7 @@ Key points of the decision:
 - **Simpler frontend code** — no token storage, retrieval, or refresh logic in JavaScript. The auth interceptor is minimal.
 - **Automatic cookie lifecycle** — the browser handles cookie expiry, secure-only transmission over HTTPS, and same-origin scoping.
 - **Backend-controlled security** — token rotation, invalidation, and renewal are entirely server-side.
+- **Configurable token lifetime** — the JWT expiry is controlled by `app.jwt.lifetime-seconds` (default 3600s), allowing per-environment tuning without a code change.
 
 ### Negative
 - **Requires cookie-accessible deployment** — the frontend and backend must be served from the same origin (or with proper CORS + `SameSite=None; Secure` configuration for cross-origin).

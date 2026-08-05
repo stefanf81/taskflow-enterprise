@@ -40,7 +40,7 @@ class ReviewControllerTest {
 
     @Test
     void submitReview_shouldCreate() {
-        ReviewRequest request = new ReviewRequest(4, "Great!");
+        ReviewRequest request = new ReviewRequest(4, "Great!", "john@example.com");
         doNothing().when(reviewService).submitReview(eq("test-public-id"), any(ReviewRequest.class));
 
         ResponseEntity<Void> result = reviewController.submitReview("test-public-id", request);

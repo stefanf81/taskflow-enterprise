@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import {
   NavigationContainer,
   NavigationContainerRef,
@@ -19,7 +19,10 @@ import { colors } from '../theme/colors';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator: React.FC = () => {
-  const { isAuthenticated, role, isLoading, checkAuth } = useAuthStore();
+  const { isAuthenticated, role, isLoading, isOffline, checkAuth, logout } = useAuthStore();
+  const isCustomer = isAuthenticated && role === 'ROLE_CUSTOMER';
+  const isAdmin = isAuthenticated && role === 'ROLE_ADMIN';
+  const hasAuthorizedRole = isCustomer || isAdmin;
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
   const prevAuthRef = useRef<{ isAuthenticated: boolean; role: string | null }>({
     isAuthenticated: false,
@@ -29,6 +32,14 @@ export const RootNavigator: React.FC = () => {
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
+
+  useEffect(() => {
+    if (isAuthenticated && !hasAuthorizedRole) {
+      // An unrecognised server role must never receive admin/customer UI.
+      // Clear the credential rather than treating every non-customer as admin.
+      void logout().catch(() => undefined);
+    }
+  }, [hasAuthorizedRole, isAuthenticated, logout]);
 
   // Reset navigation stack when auth state changes
   useEffect(() => {
@@ -41,9 +52,7 @@ export const RootNavigator: React.FC = () => {
 
       // Route to the correct navigator based on new auth state,
       // rather than always resetting to GuestTabs (which caused a UX flash).
-      const targetRoute = isAuthenticated
-        ? (role === 'ROLE_CUSTOMER' ? 'CustomerTabs' : 'AdminTabs')
-        : 'GuestTabs';
+      const targetRoute = isCustomer ? 'CustomerTabs' : isAdmin ? 'AdminTabs' : 'GuestTabs';
 
       navigationRef.current?.dispatch(
         CommonActions.reset({
@@ -52,7 +61,7 @@ export const RootNavigator: React.FC = () => {
         }),
       );
     }
-  }, [isAuthenticated, role]);
+  }, [isAdmin, isAuthenticated, isCustomer, role]);
 
   if (isLoading) {
     return (
@@ -62,11 +71,23 @@ export const RootNavigator: React.FC = () => {
     );
   }
 
+  if (isOffline) {
+    return (
+      <View style={styles.splash}>
+        <Text style={styles.offlineText}>Could not reach TaskFlow.</Text>
+        <Text style={styles.offlineHint}>Check your connection and try again.</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => checkAuth()}>
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   // Determine the initial route based on auth state
   const getInitialRouteName = (): keyof RootStackParamList => {
-    if (!isAuthenticated) return 'GuestTabs';
-    if (role === 'ROLE_CUSTOMER') return 'CustomerTabs';
-    return 'AdminTabs';
+    if (isCustomer) return 'CustomerTabs';
+    if (isAdmin) return 'AdminTabs';
+    return 'GuestTabs';
   };
 
   return (
@@ -103,17 +124,21 @@ export const RootNavigator: React.FC = () => {
           options={{ title: 'Create Account' }}
         />
 
-        {/* Authenticated screens */}
-        <Stack.Screen
-          name="CustomerTabs"
-          component={CustomerTabNavigator}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="AdminTabs"
-          component={AdminTabNavigator}
-          options={{ headerShown: false }}
-        />
+        {/* Only register the navigator authorized for the confirmed role. */}
+        {isCustomer && (
+          <Stack.Screen
+            name="CustomerTabs"
+            component={CustomerTabNavigator}
+            options={{ headerShown: false }}
+          />
+        )}
+        {isAdmin && (
+          <Stack.Screen
+            name="AdminTabs"
+            component={AdminTabNavigator}
+            options={{ headerShown: false }}
+          />
+        )}
 
         {/* Public actions – always available */}
         <Stack.Screen
@@ -132,5 +157,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.obsidian.bg,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  offlineText: {
+    color: colors.text.primary,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  offlineHint: {
+    color: colors.text.secondary,
+    fontSize: 14,
+    marginTop: 8,
+  },
+  retryButton: {
+    backgroundColor: colors.gold.main,
+    borderRadius: 8,
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  retryText: {
+    color: colors.obsidian.bg,
+    fontWeight: '700',
   },
 });

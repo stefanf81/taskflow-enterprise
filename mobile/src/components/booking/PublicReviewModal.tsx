@@ -24,6 +24,7 @@ export const PublicReviewModal: React.FC<PublicReviewModalProps> = ({
   const [publicId, setPublicId] = useState(initialPublicId);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const reviewMutation = useSubmitReview();
@@ -33,12 +34,16 @@ export const PublicReviewModal: React.FC<PublicReviewModalProps> = ({
       setError('Public Reference ID is required.');
       return;
     }
+    if (!customerEmail.trim()) {
+      setError('Verification email is required.');
+      return;
+    }
 
     setError(null);
     try {
       await reviewMutation.mutateAsync({
         publicId: publicId.trim(),
-        data: { rating, comment: comment.trim() },
+        data: { rating, comment: comment.trim(), customerEmail: customerEmail.trim() },
       });
       onSuccess();
       onClose();
@@ -68,6 +73,15 @@ export const PublicReviewModal: React.FC<PublicReviewModalProps> = ({
           value={publicId}
           onChangeText={setPublicId}
           autoCapitalize="characters"
+        />
+
+        <Input
+          label="Verification Email"
+          placeholder="e.g. john@example.com"
+          value={customerEmail}
+          onChangeText={setCustomerEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
         />
 
         <Text style={styles.label}>Rating</Text>

@@ -161,6 +161,25 @@ Two critical architectural alignments were identified and resolved to ensure run
 *   **Issue:** The newly built backend container contains a transitive dependency on `com.fasterxml.jackson.core:jackson-databind-2.21.4.jar`, which is a custom mock package version pinned inside the sandboxed database-less PoC. The Trivy image scanner flagged this version with `CVE-2026-54515` (MEDIUM severity). Because of local database differences, Trivy on the remote Actions runner evaluated this as a blocking HIGH/CRITICAL vulnerability and failed the build on exit code `1`. Furthermore, upgrading directly to `2.21.5` in Gradle failed because `2.21.5` is not published to the local sandbox maven cache.
 *   **Resolution:** Implemented a secure, industry-standard **`.trivyignore` configuration file** at the root of the repository to safely ignore `CVE-2026-54515` for the local sandboxed database driver, ensuring full compatibility and a green pipeline. Verified the resolution locally by mounting `.trivyignore` inside a Trivy scan container which returned **0 vulnerabilities**.
 
+### Finding 22: Configurable JWT Token Lifetime
+*   **Location:** `src/main/java/com/example/taskflow/auth/TokenProvider.java`, `src/main/resources/application.properties`
+*   **Issue:** The JWT token lifetime was hardcoded at `public static final long TOKEN_LIFETIME_SECONDS = 3600L` — a compile-time constant with no external override. This prevented per-environment tuning and forced a code change to adjust expiry.
+*   **Resolution:** Externalized the token lifetime to the `app.jwt.lifetime-seconds` configuration property (default 3600s). The `TokenProvider` constructor now accepts this value via `@Value`, allowing deployment environments to override the expiry via `APP_JWT_LIFETIME_SECONDS` without code changes. The web cookie `Max-Age` automatically follows the configured lifetime via `TokenProvider.getTokenLifetimeSeconds()`.
+
+### Finding 23: Mobile SSL Certificate Pinning Enforcement
+*   **Location:** `mobile/src/api/client.ts`, `mobile/src/utils/sslPinning.ts`
+*   **Issue:** The `sslPinning.ts` utility was a documentation-only module with no runtime consumption. Production mobile builds could ship without any certificate pinning configuration, exposing all API traffic to man-in-the-middle attacks.
+*   **Resolution:** Wired the `getSslPinningConfig()` validation into the API client initialization (`client.ts`). Production builds (`!__DEV__`) now fail-fast at startup if `EXPO_PUBLIC_SSL_PIN_FINGERPRINTS` is not configured with valid `sha256/...` fingerprints. Full cryptographic enforcement requires a native module (see mobile README), but the config validation ensures the deployment pipeline cannot accidentally ship without pinning metadata.
+
+### Finding 24: HTTP Security Headers — Permissions-Policy and Tightened CSP
+*   **Location:** `frontend/nginx.conf`
+*   **Issue:** Two header gaps were identified:
+    1. The `Permissions-Policy` header was absent, leaving browser feature access (camera, microphone, geolocation, payment, USB, Bluetooth) unrestricted by policy.
+    2. The CSP `connect-src` directive used the scheme-source `https: wss:`, allowing XMLHttpRequest/WebSocket connections to **any** HTTPS/WSS endpoint — effectively negating CSP's data exfiltration protection.
+*   **Resolution:**
+    1. Added `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=()` to both the server block and static-files location block.
+    2. Tightened CSP `connect-src` from `'self' https: wss:` to `'self'` — all API traffic goes through the Nginx reverse proxy as same-origin requests, so the broader scheme-sources were unnecessary and dangerous.
+
 ---
 
 ## 🧪 3. System Verification Status
@@ -198,3 +217,6 @@ To run the suite in a secure, high-performance configuration, please adhere to t
     ```
     And configure `APP_RSA_PRIVATE_KEY` and `APP_RSA_PUBLIC_KEY` environment variables.
 3.  **Local Deployment:** Run `./start-docker.sh` for an automated composed deploy.
+4.  **JWT Token Lifetime:** Override the default 1-hour expiry via `APP_JWT_LIFETIME_SECONDS` (maps to `app.jwt.lifetime-seconds`) for environments that require shorter or longer session durations.
+5.  **Mobile SSL Pinning:** Set `EXPO_PUBLIC_SSL_PIN_FINGERPRINTS=sha256/AAAA...,sha256/BBBB...` in your EAS environment variables/secrets before building production mobile apps. Production builds fail startup without it.
+6.  **Nginx Security Headers:** The frontend Nginx config enforces `Permissions-Policy` (disabling camera, microphone, geolocation, payment, USB, Bluetooth) and a tight CSP `connect-src 'self'`. Verify these headers are present in downstream reverse proxies if you chain TLS termination.

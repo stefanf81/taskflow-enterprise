@@ -88,12 +88,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleHttpMessageNotReadableException(
             org.springframework.http.converter.HttpMessageNotReadableException ex, HttpServletRequest request) {
-        
-        String mostSpecificMessage = ex.getMostSpecificCause() != null ? ex.getMostSpecificCause().getMessage() : ex.getMessage();
+
+        // M1: Log the detailed message server-side for debugging, but return a
+        // generic message to the client. The raw mostSpecificCause message can
+        // leak internal class names (e.g. "Cannot deserialize value of type
+        // `com.example.taskflow.appointment.AppointmentCreateRequest`"), which
+        // is an information-disclosure vector flagged by OWASP / ZAP.
+        String detailedMessage = ex.getMostSpecificCause() != null ? ex.getMostSpecificCause().getMessage() : ex.getMessage();
+        logger.warn("Malformed JSON request on {}: {}", request.getRequestURI(), LogSanitizer.stripNewlines(detailedMessage));
+
         ErrorResponse errorResponse = new ErrorResponse(
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
-                "Malformed JSON request payload: " + mostSpecificMessage,
+                "Malformed JSON request payload. Please check your request body and content type.",
                 request.getRequestURI()
         );
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);

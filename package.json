@@ -7,7 +7,7 @@
     "test:all": "npm --prefix frontend test && npm --prefix mobile test",
     "test:frontend": "npm --prefix frontend test",
     "test:mobile": "npm --prefix mobile test",
-    "lint:all": "npm --prefix frontend run lint && npm --prefix mobile run lint",
+    "lint:all": "npm --prefix frontend run lint && npm --prefix frontend run format:check && npm --prefix mobile run lint",
     "sync:api-types": "node scripts/sync-api-types.js",
     "docker:start": "./start-docker.sh",
     "docker:stop": "./stop-docker.sh",

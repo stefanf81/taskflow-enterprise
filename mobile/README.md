@@ -47,6 +47,26 @@ EXPO_PUBLIC_API_URL=https://api.yourdomain.com npx expo start -c
 ```
 Production environments enforce TLS/HTTPS encryption, hardware token encryption in **iOS Keychain** / **Android Keystore** via `expo-secure-store`, and Redis IP rate-limiting.
 
+### SSL Certificate Pinning (Production)
+
+Production builds must configure SSL certificate pinning to prevent man-in-the-middle attacks. Without it, the build throws a hard error at startup:
+
+```bash
+# Set the SHA-256 fingerprint(s) of your backend's TLS certificate
+EXPO_PUBLIC_SSL_PIN_FINGERPRINTS=sha256/AAAA...,sha256/BBBB...
+```
+
+Configuration:
+- **Development**: Pinning is automatically disabled (`__DEV__` mode).
+- **Production (EAS)**: Set `EXPO_PUBLIC_SSL_PIN_FINGERPRINTS` in your EAS environment variables/secrets.
+- **Cryptographic enforcement**: The config validation in `client.ts` ensures fingerprints are configured. Full cryptographic pinning requires installing a native module (see `src/utils/sslPinning.ts` for setup instructions).
+
+To obtain fingerprints:
+```bash
+openssl s_client -connect api.example.com:443 2>/dev/null \
+  | openssl x509 -noout -fingerprint -sha256
+```
+
 ---
 
 ## Directory Structure

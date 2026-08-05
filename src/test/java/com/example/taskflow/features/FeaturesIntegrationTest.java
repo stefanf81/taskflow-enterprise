@@ -209,6 +209,7 @@ public class FeaturesIntegrationTest {
         Map<String, Object> reviewRequest = new HashMap<>();
         reviewRequest.put("rating", 5);
         reviewRequest.put("comment", "Absolutely amazing cut!");
+        reviewRequest.put("customerEmail", "jane@example.com");
 
         mockMvc.perform(post("/api/v1/reviews/public/" + publicId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -220,6 +221,17 @@ public class FeaturesIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(reviewRequest)))
                 .andExpect(status().isNotFound());
+
+        // Ensure reviews fail if the verification email does not match the booking
+        Map<String, Object> wrongEmailReview = new HashMap<>();
+        wrongEmailReview.put("rating", 5);
+        wrongEmailReview.put("comment", "Imposter review");
+        wrongEmailReview.put("customerEmail", "someone-else@example.com");
+        mockMvc.perform(post("/api/v1/reviews/public/" + publicId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(wrongEmailReview)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", is("Verification failed: the provided email does not match this booking.")));
 
         // Now let's approve the appointment via admin token so it can be reviewed
         mockMvc.perform(put("/api/v1/appointments/" + apptMap.get("id"))

@@ -33,7 +33,7 @@ describe('reviewsApi', () => {
   describe('submitReview', () => {
     it('sends POST with review data for given publicId', async () => {
       mockedPost.mockResolvedValueOnce({});
-      const reviewData = { rating: 5, comment: 'Excellent service!' };
+      const reviewData = { rating: 5, comment: 'Excellent service!', customerEmail: 'john@example.com' };
       await reviewsApi.submitReview('TF-0001', reviewData);
       expect(mockedPost).toHaveBeenCalledWith('/api/v1/reviews/public/TF-0001', reviewData);
     });

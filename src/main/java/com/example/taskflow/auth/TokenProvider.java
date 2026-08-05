@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 @Component
 public class TokenProvider {
 
-    public static final long TOKEN_LIFETIME_SECONDS = 3600L;
+    private final long tokenLifetimeSeconds;
 
     private final JwtEncoder encoder;
     private final String issuer;
@@ -23,10 +23,12 @@ public class TokenProvider {
     public TokenProvider(
             JwtEncoder encoder,
             @Value("${app.jwt.issuer:taskflow}") String issuer,
-            @Value("${app.jwt.audience:taskflow-api}") String audience) {
+            @Value("${app.jwt.audience:taskflow-api}") String audience,
+            @Value("${app.jwt.lifetime-seconds:3600}") long tokenLifetimeSeconds) {
         this.encoder = encoder;
         this.issuer = issuer;
         this.audience = audience;
+        this.tokenLifetimeSeconds = tokenLifetimeSeconds;
     }
 
     public String generateToken(Authentication authentication) {
@@ -40,7 +42,7 @@ public class TokenProvider {
                 .issuer(issuer)
                 .audience(java.util.List.of(audience))
                 .issuedAt(now)
-                .expiresAt(now.plusSeconds(TOKEN_LIFETIME_SECONDS))
+                .expiresAt(now.plusSeconds(tokenLifetimeSeconds))
                 .subject(authentication.getName())
                 .claim("scope", scope)
                 .build();
@@ -49,6 +51,6 @@ public class TokenProvider {
     }
 
     public long getTokenLifetimeSeconds() {
-        return TOKEN_LIFETIME_SECONDS;
+        return tokenLifetimeSeconds;
     }
 }

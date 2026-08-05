@@ -16,6 +16,9 @@ export const storage = {
         await SecureStore.setItemAsync(TOKEN_KEY, token);
       }
     } catch (err) {
+      if (Platform.OS !== 'web') {
+        throw new Error('Secure credential storage is unavailable.');
+      }
       console.warn(
         '[storage] SecureStore.setToken failed, falling back to in-memory storage. ' +
         'Token will be lost on app restart. Error:',
@@ -32,6 +35,9 @@ export const storage = {
       }
       return await SecureStore.getItemAsync(TOKEN_KEY);
     } catch (err) {
+      if (Platform.OS !== 'web') {
+        throw new Error('Secure credential storage is unavailable.');
+      }
       console.warn(
         '[storage] SecureStore.getToken failed, falling back to in-memory storage. Error:',
         err instanceof Error ? err.message : err,
@@ -48,6 +54,9 @@ export const storage = {
         await SecureStore.deleteItemAsync(TOKEN_KEY);
       }
     } catch (err) {
+      if (Platform.OS !== 'web') {
+        throw new Error('Secure credential removal failed. Please try signing out again.');
+      }
       console.warn(
         '[storage] SecureStore.removeToken failed, falling back to in-memory removal. Error:',
         err instanceof Error ? err.message : err,
@@ -65,6 +74,9 @@ export const storage = {
         await SecureStore.setItemAsync(USER_KEY, json);
       }
     } catch (err) {
+      if (Platform.OS !== 'web') {
+        throw new Error('Secure credential storage is unavailable.');
+      }
       console.warn(
         '[storage] SecureStore.setUserData failed, falling back to in-memory storage. Error:',
         err instanceof Error ? err.message : err,
@@ -83,6 +95,9 @@ export const storage = {
       }
       return json ? (JSON.parse(json) as T) : null;
     } catch (err) {
+      if (Platform.OS !== 'web') {
+        throw new Error('Secure credential storage is unavailable.');
+      }
       console.warn(
         '[storage] SecureStore.getUserData failed, falling back to in-memory storage. Error:',
         err instanceof Error ? err.message : err,
@@ -104,6 +119,9 @@ export const storage = {
         await SecureStore.deleteItemAsync(USER_KEY);
       }
     } catch (err) {
+      if (Platform.OS !== 'web') {
+        throw new Error('Secure credential removal failed. Please try signing out again.');
+      }
       console.warn(
         '[storage] SecureStore.removeUserData failed, falling back to in-memory removal. Error:',
         err instanceof Error ? err.message : err,

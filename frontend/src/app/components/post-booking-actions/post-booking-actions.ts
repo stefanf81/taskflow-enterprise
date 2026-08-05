@@ -156,6 +156,37 @@ import { FormsModule } from '@angular/forms';
             </div>
             <div class="form-group flex flex-col gap-1.5">
               <label
+                for="reviewEmail"
+                class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
+                >Verification Email <span class="required">*</span></label
+              >
+              <input
+                type="email"
+                id="reviewEmail"
+                name="reviewEmail"
+                [ngModel]="reviewEmail()"
+                (ngModelChange)="reviewEmail.set($event)"
+                required
+                placeholder="e.g., john@example.com"
+                class="form-control"
+                [attr.aria-invalid]="reviewForm.controls['reviewEmail']?.invalid ? 'true' : null"
+                aria-describedby="reviewEmail-error"
+              />
+              <span
+                id="reviewEmail-error"
+                class="text-rose-400 text-[10px]"
+                [style.display]="
+                  reviewForm.controls['reviewEmail']?.invalid &&
+                  reviewForm.controls['reviewEmail']?.touched
+                    ? 'block'
+                    : 'none'
+                "
+              >
+                Valid email is required.
+              </span>
+            </div>
+            <div class="form-group flex flex-col gap-1.5">
+              <label
                 for="reviewRating"
                 class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
                 >Rating (1-5) <span class="required">*</span></label
@@ -224,11 +255,17 @@ export class PostBookingActionsComponent {
   /** Emitted when the user submits a cancellation request. */
   readonly cancelRequested = output<{ publicId: string; email: string }>();
   /** Emitted when the user submits a review. */
-  readonly reviewSubmitted = output<{ publicId: string; rating: number; comment: string }>();
+  readonly reviewSubmitted = output<{
+    publicId: string;
+    rating: number;
+    comment: string;
+    email: string;
+  }>();
 
   readonly cancelId = signal('');
   readonly cancelEmail = signal('');
   readonly reviewPublicId = signal('');
+  readonly reviewEmail = signal('');
   readonly reviewRating = signal(5);
   readonly reviewComment = signal('');
 
@@ -244,13 +281,16 @@ export class PostBookingActionsComponent {
 
   onReview(): void {
     const publicId = this.reviewPublicId().trim();
-    if (publicId) {
+    const email = this.reviewEmail().trim();
+    if (publicId && email) {
       this.reviewSubmitted.emit({
         publicId,
         rating: this.reviewRating(),
         comment: this.reviewComment(),
+        email,
       });
       this.reviewPublicId.set('');
+      this.reviewEmail.set('');
       this.reviewComment.set('');
       this.reviewRating.set(5);
     }
