@@ -12,7 +12,7 @@ on:
   schedule:
     # Nightly regression: build, test, e2e, and Docker build+scan.
     # Security-only scans (CodeQL, Trivy FS) moved to .github/workflows/security.yml.
-    - cron: '0 2 * * *'
+    - cron: "0 2 * * *"
 
   workflow_dispatch:
     inputs:
@@ -330,6 +330,12 @@ jobs:
       - name: Install Dependencies
         run: |
           npm ci \
+            --prefix ../shared/schemas \
+            --prefer-offline \
+            --no-audit \
+            --no-fund
+
+          npm ci \
             --prefer-offline \
             --no-audit \
             --no-fund
@@ -536,9 +542,15 @@ jobs:
       ##########################################################
 
       - name: Install Frontend
-        working-directory: frontend
         run: |
           npm ci \
+            --prefix shared/schemas \
+            --prefer-offline \
+            --no-audit \
+            --no-fund
+
+          npm ci \
+            --prefix frontend \
             --prefer-offline \
             --no-audit \
             --no-fund
