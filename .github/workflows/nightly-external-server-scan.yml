@@ -1,13 +1,7 @@
-name: Nightly External Server Security Scan
+name: External Server Security Scan
 
 on:
   workflow_dispatch:
-
-  schedule:
-    # Runs every night at 02:30 in the Europe/Brussels timezone.
-    # Using minute 30 avoids GitHub Actions' busiest start-of-hour period.
-    - cron: "30 2 * * *"
-      timezone: "Europe/Brussels"
 
 permissions:
   contents: read
