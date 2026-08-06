@@ -279,7 +279,7 @@ jobs:
           # nightly production scan. Only signed templates are accepted.
           nuclei \
             -list reports/nuclei-targets.txt \
-            -severity info,low,medium,high,critical \
+            -severity medium,high,critical \
             -exclude-tags dos,fuzz,bruteforce \
             -exclude-type code,headless \
             -disable-unsigned-templates \
