@@ -78,6 +78,8 @@ jobs:
           filters: |
             backend:
               - src/**
+              - api/**
+              - scripts/**
               - '*.gradle'
               - gradle.properties
               - gradlew
@@ -85,6 +87,9 @@ jobs:
 
             frontend:
               - frontend/**
+              - shared/**
+              - api/**
+              - scripts/**
 
             docker:
               - Dockerfile*
@@ -192,6 +197,11 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
@@ -204,6 +214,24 @@ jobs:
             --build-cache \
             assemble \
             --stacktrace
+
+      - name: Verify OpenAPI Contract
+        run: |
+          java -jar build/libs/*.jar > openapi-contract.log 2>&1 &
+          backend_pid=$!
+          trap 'kill "$backend_pid" 2>/dev/null || true; wait "$backend_pid" 2>/dev/null || true' EXIT
+
+          for attempt in {1..60}; do
+            if curl -fsS http://localhost:8080/actuator/health/liveness > /dev/null; then
+              node scripts/check-openapi-contract.js --auth http://localhost:8080/v3/api-docs
+              node scripts/sync-api-types.js --check api/openapi.json
+              exit 0
+            fi
+            sleep 1
+          done
+
+          cat openapi-contract.log
+          exit 1
 
       - name: Run Tests
         if: |

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { barbersApi } from '../api/barbers';
-import { BarberTimeOff } from '../types/api';
+import { BarberTimeOffRequest } from '../types/api';
 
 export const useBarbers = () => {
   return useQuery({
@@ -21,8 +21,10 @@ export const useBarberTimeOff = (barberId: number | null) => {
 export const useAddTimeOff = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ barberId, data }: { barberId: number; data: BarberTimeOff }) =>
-      barbersApi.addTimeOff(barberId, data),
+    mutationFn: ({ barberId, data }: {
+      barberId: number;
+      data: BarberTimeOffRequest;
+    }) => barbersApi.addTimeOff(barberId, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['barberTimeOff', variables.barberId] });
     },

@@ -24,7 +24,7 @@ React Native + Expo Mobile Application
 
 The mobile app owns its platform-local contract directory under `src/`:
 
-* **API Types (`src/types/api.ts`)**: Owns API contracts synced with Spring Boot OpenAPI via `npm run sync:api-types`.
+* **API Types (`src/types/api.ts`)**: Generated from the reviewed root-level `api/openapi.json` baseline. Regenerate from the repository root with `npm run sync:api-types` and validate with `npm run sync:api-types:check`.
 * **Design System (`src/theme/colors.ts`)**: Imports theme tokens (`obsidian`, `gold`, `status`, `text`) from `src/theme/tokens.json`.
 * **Pure Time Utilities (`src/utils/time-utils.ts`)**: Owns pure 12h/24h time formatting and `isOverdue` calculations.
 

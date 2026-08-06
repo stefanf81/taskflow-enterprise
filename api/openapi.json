@@ -1,0 +1,1748 @@
+{
+  "components": {
+    "schemas": {
+      "AppointmentCreateRequest": {
+        "properties": {
+          "barberName": {
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string"
+          },
+          "bookingDate": {
+            "format": "date",
+            "type": "string"
+          },
+          "bookingTime": {
+            "minLength": 1,
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "type": "string"
+          },
+          "customerEmail": {
+            "format": "email",
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string"
+          },
+          "customerName": {
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string"
+          },
+          "customerPhone": {
+            "maxLength": 50,
+            "minLength": 0,
+            "type": "string"
+          },
+          "serviceType": {
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string"
+          }
+        },
+        "required": [
+          "barberName",
+          "bookingDate",
+          "bookingTime",
+          "customerEmail",
+          "customerName",
+          "customerPhone",
+          "serviceType"
+        ],
+        "type": "object"
+      },
+      "AppointmentDashboardResponse": {
+        "properties": {
+          "page": {
+            "$ref": "#/components/schemas/PageObject"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/AppointmentStats"
+          }
+        },
+        "type": "object"
+      },
+      "AppointmentResponse": {
+        "properties": {
+          "barberName": {
+            "type": "string"
+          },
+          "bookingDate": {
+            "format": "date",
+            "type": "string"
+          },
+          "bookingTime": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "customerEmail": {
+            "type": "string"
+          },
+          "customerName": {
+            "type": "string"
+          },
+          "customerPhone": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "publicId": {
+            "type": "string"
+          },
+          "serviceType": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AppointmentStats": {
+        "properties": {
+          "approved": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "approvedRevenue": {
+            "format": "double",
+            "type": "number"
+          },
+          "denied": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "overdue": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "pending": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "progress": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AppointmentUpdateRequest": {
+        "properties": {
+          "status": {
+            "maxLength": 50,
+            "minLength": 0,
+            "pattern": "^(APPROVED|DENIED)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "BarberRatingResponse": {
+        "properties": {
+          "averageRating": {
+            "format": "double",
+            "type": "number"
+          },
+          "barberName": {
+            "type": "string"
+          },
+          "reviewCount": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "BarberRequest": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string"
+          },
+          "phone": {
+            "maxLength": 50,
+            "minLength": 0,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "BarberResponse": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BarberTimeOffRequest": {
+        "properties": {
+          "endDate": {
+            "format": "date",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 255,
+            "minLength": 0,
+            "type": "string"
+          },
+          "startDate": {
+            "format": "date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "endDate",
+          "startDate"
+        ],
+        "type": "object"
+      },
+      "BarberTimeOffResponse": {
+        "properties": {
+          "endDate": {
+            "format": "date",
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "startDate": {
+            "format": "date",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CancelRequest": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "type": "object"
+      },
+      "CsrfToken": {
+        "properties": {
+          "headerName": {
+            "type": "string"
+          },
+          "parameterName": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "LoginRequest": {
+        "properties": {
+          "password": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "username": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "password",
+          "username"
+        ],
+        "type": "object"
+      },
+      "LoginResponse": {
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MobileLoginResponse": {
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "expiresIn": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "role": {
+            "type": "string"
+          },
+          "tokenType": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "NotificationOutboxResponse": {
+        "properties": {
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "recipient": {
+            "type": "string"
+          },
+          "retryCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "sentAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PageableObject": {
+        "properties": {
+          "offset": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "paged": {
+            "type": "boolean"
+          },
+          "pageNumber": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "pageSize": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "sort": {
+            "$ref": "#/components/schemas/SortObject"
+          },
+          "unpaged": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "PagedModelAppointmentResponse": {
+        "properties": {
+          "content": {
+            "items": {
+              "$ref": "#/components/schemas/AppointmentResponse"
+            },
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMetadata"
+          }
+        },
+        "type": "object"
+      },
+      "PageMetadata": {
+        "properties": {
+          "number": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalElements": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalPages": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "PageObject": {
+        "properties": {
+          "content": {
+            "items": {
+              "$ref": "#/components/schemas/AppointmentResponse"
+            },
+            "type": "array"
+          },
+          "empty": {
+            "type": "boolean"
+          },
+          "first": {
+            "type": "boolean"
+          },
+          "last": {
+            "type": "boolean"
+          },
+          "number": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "numberOfElements": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "pageable": {
+            "$ref": "#/components/schemas/PageableObject"
+          },
+          "size": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "sort": {
+            "$ref": "#/components/schemas/SortObject"
+          },
+          "totalElements": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalPages": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "RegisterRequest": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "minLength": 1,
+            "type": "string"
+          },
+          "fullName": {
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 2147483647,
+            "minLength": 8,
+            "pattern": "^(?=.*[0-9])(?=.*[a-zA-Z]).{8,}$",
+            "type": "string"
+          },
+          "phone": {
+            "maxLength": 50,
+            "minLength": 0,
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "fullName",
+          "password",
+          "phone"
+        ],
+        "type": "object"
+      },
+      "RegisterResponse": {
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ReviewRequest": {
+        "properties": {
+          "comment": {
+            "maxLength": 1000,
+            "minLength": 0,
+            "type": "string"
+          },
+          "customerEmail": {
+            "format": "email",
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string"
+          },
+          "rating": {
+            "format": "int32",
+            "maximum": 5,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "customerEmail",
+          "rating"
+        ],
+        "type": "object"
+      },
+      "ServiceItemRequest": {
+        "properties": {
+          "category": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "durationMinutes": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "price": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "category",
+          "durationMinutes",
+          "name",
+          "price"
+        ],
+        "type": "object"
+      },
+      "ServiceItemResponse": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "durationMinutes": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "SortObject": {
+        "properties": {
+          "empty": {
+            "type": "boolean"
+          },
+          "sorted": {
+            "type": "boolean"
+          },
+          "unsorted": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "OpenAPI definition",
+    "version": "v0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/appointments": {
+      "get": {
+        "description": "Can be filtered by status and customer name, with pagination.",
+        "operationId": "getAllAppointments",
+        "parameters": [
+          {
+            "description": "Filter by status (PENDING, APPROVED, DENIED)",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Search customer name",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page number (0-indexed)",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Page size",
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "format": "int32",
+              "maximum": 100,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentDashboardResponse"
+                }
+              }
+            },
+            "description": "Successfully retrieved paginated appointments"
+          },
+          "400": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentDashboardResponse"
+                }
+              }
+            },
+            "description": "Invalid filter or pagination parameters"
+          }
+        },
+        "summary": "View a list of scheduled appointments",
+        "tags": [
+          "Barber Appointment Management System"
+        ]
+      },
+      "post": {
+        "operationId": "createAppointment",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppointmentCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            },
+            "description": "Successfully booked appointment"
+          },
+          "400": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            },
+            "description": "Invalid request payload provided"
+          }
+        },
+        "summary": "Create/Book a new appointment (Guest Access)",
+        "tags": [
+          "Barber Appointment Management System"
+        ]
+      }
+    },
+    "/api/v1/appointments/{id}": {
+      "delete": {
+        "operationId": "deleteAppointment",
+        "parameters": [
+          {
+            "description": "The database ID of the appointment to delete",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successfully deleted appointment"
+          },
+          "404": {
+            "description": "Appointment was not found"
+          }
+        },
+        "summary": "Delete/Cancel an appointment",
+        "tags": [
+          "Barber Appointment Management System"
+        ]
+      },
+      "get": {
+        "operationId": "getAppointmentById",
+        "parameters": [
+          {
+            "description": "The database ID of the appointment",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            },
+            "description": "Successfully retrieved appointment"
+          },
+          "404": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            },
+            "description": "Appointment was not found"
+          }
+        },
+        "summary": "Get an appointment by its ID",
+        "tags": [
+          "Barber Appointment Management System"
+        ]
+      },
+      "put": {
+        "operationId": "updateAppointmentStatus",
+        "parameters": [
+          {
+            "description": "The database ID of the appointment to update",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppointmentUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            },
+            "description": "Successfully updated appointment status"
+          },
+          "400": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            },
+            "description": "Invalid request payload provided"
+          },
+          "404": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            },
+            "description": "Appointment was not found"
+          }
+        },
+        "summary": "Approve or Deny an appointment status (Owner Admin Access)",
+        "tags": [
+          "Barber Appointment Management System"
+        ]
+      }
+    },
+    "/api/v1/appointments/public/busy-slots": {
+      "get": {
+        "operationId": "getBusySlots",
+        "parameters": [
+          {
+            "description": "Barber name",
+            "in": "query",
+            "name": "barberName",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 0,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Booking date (YYYY-MM-DD)",
+            "in": "query",
+            "name": "bookingDate",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "List of busy time slots returned"
+          },
+          "400": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Invalid barber name or date format"
+          }
+        },
+        "summary": "Get a list of busy time slots for a specific barber on a specific date (Guest Access)",
+        "tags": [
+          "Barber Appointment Management System"
+        ]
+      }
+    },
+    "/api/v1/appointments/public/cancel/{publicId}": {
+      "put": {
+        "operationId": "publicCancelAppointment",
+        "parameters": [
+          {
+            "description": "The public UUID of the appointment",
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Appointment successfully cancelled"
+          },
+          "400": {
+            "description": "Invalid or mismatched email"
+          },
+          "404": {
+            "description": "Appointment with given public ID not found"
+          }
+        },
+        "summary": "Cancel an appointment securely as a guest by verifying the booking email (Guest Access)",
+        "tags": [
+          "Barber Appointment Management System"
+        ]
+      }
+    },
+    "/api/v1/auth/csrf": {
+      "get": {
+        "operationId": "csrf",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/CsrfToken"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsrfToken"
+                }
+              }
+            },
+            "description": "CSRF token returned (also set in XSRF-TOKEN cookie)"
+          }
+        },
+        "summary": "Get CSRF token for authenticated state-changing requests",
+        "tags": [
+          "Authentication Portal"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "authenticateUser",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Login successful — JWT set in HttpOnly cookie"
+          },
+          "401": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Invalid username or password"
+          }
+        },
+        "summary": "Authenticate user and issue an HttpOnly JWT cookie",
+        "tags": [
+          "Authentication Portal"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "JWT cookie cleared — session ended"
+          }
+        },
+        "summary": "Clear the HttpOnly JWT cookie",
+        "tags": [
+          "Authentication Portal"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "currentUser",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Authenticated user's role returned"
+          },
+          "401": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "No valid cookie or bearer token present"
+          }
+        },
+        "summary": "Return the currently authenticated principal's role",
+        "tags": [
+          "Authentication Portal"
+        ]
+      }
+    },
+    "/api/v1/auth/mobile/login": {
+      "post": {
+        "operationId": "authenticateMobileUser",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileLoginResponse"
+                }
+              }
+            },
+            "description": "Login successful — bearer token returned"
+          },
+          "401": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileLoginResponse"
+                }
+              }
+            },
+            "description": "Invalid username or password"
+          }
+        },
+        "summary": "Authenticate a native client and issue a bearer token",
+        "tags": [
+          "Authentication Portal"
+        ]
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "operationId": "registerUser",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterResponse"
+                }
+              }
+            },
+            "description": "Account created successfully"
+          },
+          "400": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterResponse"
+                }
+              }
+            },
+            "description": "Email already registered or invalid input"
+          }
+        },
+        "summary": "Register a new customer account",
+        "tags": [
+          "Authentication Portal"
+        ]
+      }
+    },
+    "/api/v1/barbers": {
+      "get": {
+        "operationId": "getAllBarbers",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BarberResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "List of all barbers returned"
+          }
+        },
+        "summary": "Get all barbers",
+        "tags": [
+          "Barber Management"
+        ]
+      },
+      "post": {
+        "operationId": "createBarber",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BarberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/BarberResponse"
+                }
+              }
+            },
+            "description": "Barber created successfully"
+          },
+          "400": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/BarberResponse"
+                }
+              }
+            },
+            "description": "Invalid barber data"
+          }
+        },
+        "summary": "Add a new barber",
+        "tags": [
+          "Barber Management"
+        ]
+      }
+    },
+    "/api/v1/barbers/{barberId}/time-off": {
+      "get": {
+        "operationId": "getTimeOff",
+        "parameters": [
+          {
+            "description": "Barber database ID",
+            "in": "path",
+            "name": "barberId",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BarberTimeOffResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "List of time-off periods returned"
+          },
+          "404": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BarberTimeOffResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Barber not found"
+          }
+        },
+        "summary": "Get time-off for a barber",
+        "tags": [
+          "Barber Management"
+        ]
+      },
+      "post": {
+        "operationId": "addTimeOff",
+        "parameters": [
+          {
+            "description": "Barber database ID",
+            "in": "path",
+            "name": "barberId",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BarberTimeOffRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/BarberTimeOffResponse"
+                }
+              }
+            },
+            "description": "Time-off period created"
+          },
+          "400": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/BarberTimeOffResponse"
+                }
+              }
+            },
+            "description": "Invalid time-off data"
+          },
+          "404": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/BarberTimeOffResponse"
+                }
+              }
+            },
+            "description": "Barber not found"
+          }
+        },
+        "summary": "Add time-off for a barber",
+        "tags": [
+          "Barber Management"
+        ]
+      }
+    },
+    "/api/v1/catalog": {
+      "get": {
+        "operationId": "getAllServices",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ServiceItemResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "List of all services returned"
+          }
+        },
+        "summary": "Get all services (Public Access)",
+        "tags": [
+          "Service Catalog"
+        ]
+      },
+      "post": {
+        "operationId": "createService",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceItemResponse"
+                }
+              }
+            },
+            "description": "Service created successfully"
+          },
+          "400": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceItemResponse"
+                }
+              }
+            },
+            "description": "Invalid service data"
+          }
+        },
+        "summary": "Create a new service (Admin Access)",
+        "tags": [
+          "Service Catalog"
+        ]
+      }
+    },
+    "/api/v1/catalog/{id}": {
+      "delete": {
+        "operationId": "deleteService",
+        "parameters": [
+          {
+            "description": "Service database ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Service deleted successfully"
+          },
+          "404": {
+            "description": "Service not found"
+          }
+        },
+        "summary": "Delete a service (Admin Access)",
+        "tags": [
+          "Service Catalog"
+        ]
+      },
+      "get": {
+        "operationId": "getServiceById",
+        "parameters": [
+          {
+            "description": "Service database ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceItemResponse"
+                }
+              }
+            },
+            "description": "Service found and returned"
+          },
+          "404": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceItemResponse"
+                }
+              }
+            },
+            "description": "Service not found"
+          }
+        },
+        "summary": "Get a specific service by ID",
+        "tags": [
+          "Service Catalog"
+        ]
+      },
+      "put": {
+        "operationId": "updateService",
+        "parameters": [
+          {
+            "description": "Service database ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceItemResponse"
+                }
+              }
+            },
+            "description": "Service updated successfully"
+          },
+          "400": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceItemResponse"
+                }
+              }
+            },
+            "description": "Invalid service data"
+          },
+          "404": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceItemResponse"
+                }
+              }
+            },
+            "description": "Service not found"
+          }
+        },
+        "summary": "Update a service (Admin Access)",
+        "tags": [
+          "Service Catalog"
+        ]
+      }
+    },
+    "/api/v1/customer/appointments": {
+      "get": {
+        "operationId": "getMyAppointments",
+        "parameters": [
+          {
+            "description": "Page number (0-indexed)",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Page size",
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "format": "int32",
+              "maximum": 100,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedModelAppointmentResponse"
+                }
+              }
+            },
+            "description": "Paginated appointments returned"
+          },
+          "401": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedModelAppointmentResponse"
+                }
+              }
+            },
+            "description": "Not authenticated"
+          }
+        },
+        "summary": "Get all appointments for the logged-in customer",
+        "tags": [
+          "Customer Dashboard"
+        ]
+      }
+    },
+    "/api/v1/customer/appointments/{publicId}": {
+      "delete": {
+        "operationId": "cancelMyAppointment",
+        "parameters": [
+          {
+            "description": "Appointment public UUID",
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Appointment cancelled successfully"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "404": {
+            "description": "Appointment not found or not owned by user"
+          }
+        },
+        "summary": "Cancel my appointment",
+        "tags": [
+          "Customer Dashboard"
+        ]
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "operationId": "getNotifications",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/NotificationOutboxResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "List of notifications returned (newest first, capped at top 100)"
+          }
+        },
+        "summary": "Get all notifications (Admin Only)",
+        "tags": [
+          "Notification Outbox"
+        ]
+      }
+    },
+    "/api/v1/reviews/public/{publicId}": {
+      "post": {
+        "operationId": "submitReview",
+        "parameters": [
+          {
+            "description": "Public UUID of the completed appointment",
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Review submitted successfully"
+          },
+          "400": {
+            "description": "Invalid review data, appointment not completed, or duplicate review"
+          },
+          "404": {
+            "description": "Appointment with given public ID not found"
+          }
+        },
+        "summary": "Submit a review for a completed appointment",
+        "tags": [
+          "Client Reviews"
+        ]
+      }
+    },
+    "/api/v1/reviews/public/barber-ratings": {
+      "get": {
+        "operationId": "getBarberRatings",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BarberRatingResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Aggregated barber ratings returned"
+          }
+        },
+        "summary": "Get aggregated ratings for all barbers",
+        "tags": [
+          "Client Reviews"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "description": "Generated server url",
+      "url": "http://localhost:8080"
+    }
+  ],
+  "tags": [
+    {
+      "description": "Endpoints for logged-in customers",
+      "name": "Customer Dashboard"
+    },
+    {
+      "description": "Operations for managing shop services and pricing",
+      "name": "Service Catalog"
+    },
+    {
+      "description": "View history of sent SMS/Emails",
+      "name": "Notification Outbox"
+    },
+    {
+      "description": "Endpoints for user authentication",
+      "name": "Authentication Portal"
+    },
+    {
+      "description": "Operations for booking and approving appointments",
+      "name": "Barber Appointment Management System"
+    },
+    {
+      "description": "Operations for managing barbers, schedules, and time-off",
+      "name": "Barber Management"
+    },
+    {
+      "description": "Public review submissions and rating aggregates",
+      "name": "Client Reviews"
+    }
+  ]
+}

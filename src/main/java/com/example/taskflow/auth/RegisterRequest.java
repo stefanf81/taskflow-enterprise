@@ -19,6 +19,7 @@ public record RegisterRequest(
     @Pattern(regexp = "^(?=.*[0-9])(?=.*[a-zA-Z]).{8,}$", message = "Password must be at least 8 characters long and contain both letters and numbers")
     String password,
     
+    @NotBlank(message = "Phone number is required")
     @Size(max = 50, message = "Phone must not exceed 50 characters")
     String phone
 ) {}

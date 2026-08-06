@@ -13,6 +13,7 @@ import {
   ServiceItem,
   Barber,
   BarberTimeOff,
+  BarberTimeOffRequest,
   NotificationItem,
   BarberRating,
   ReviewRequest,
@@ -30,6 +31,7 @@ export type {
   ServiceItem,
   Barber,
   BarberTimeOff,
+  BarberTimeOffRequest,
   NotificationItem,
   BarberRating,
   ReviewRequest,
@@ -89,7 +91,7 @@ export class AppointmentService {
     return this.http.get<BarberTimeOff[]>(`${this.barbersUrl}/${barberId}/time-off`);
   }
 
-  addTimeOff(barberId: number, request: BarberTimeOff): Observable<BarberTimeOff> {
+  addTimeOff(barberId: number, request: BarberTimeOffRequest): Observable<BarberTimeOff> {
     return this.http.post<BarberTimeOff>(`${this.barbersUrl}/${barberId}/time-off`, request);
   }
 

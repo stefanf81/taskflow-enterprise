@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { Barber, BarberTimeOff } from '../types/api';
+import { Barber, BarberTimeOff, BarberTimeOffRequest } from '../types/api';
 
 export const barbersApi = {
   getAllBarbers: async (): Promise<Barber[]> => {
@@ -12,7 +12,7 @@ export const barbersApi = {
     return response.data;
   },
 
-  addTimeOff: async (barberId: number, data: BarberTimeOff): Promise<BarberTimeOff> => {
+  addTimeOff: async (barberId: number, data: BarberTimeOffRequest): Promise<BarberTimeOff> => {
     const response = await apiClient.post<BarberTimeOff>(
       `/api/v1/barbers/${barberId}/time-off`,
       data

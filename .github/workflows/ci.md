@@ -45,6 +45,7 @@ This job handles the Spring Boot backend compilation, testing, and packaging.
 - **Gradle Task Parallelism & Caching:** We explicitly pass the `--parallel` and `--build-cache` arguments to `./gradlew`. This compiles independent modules across multiple threads, leveraging build outputs from previous runs.
 - **Gradle Caching Write Access (`cache-read-only: false`):** We configure `cache-read-only: false` on the setup-gradle action. By default, setup-gradle disables cache writes on non-default branches (e.g. Pull Requests). Overriding this ensures that PR branches can cache new/updated dependencies, avoiding slow downloads on subsequent commits.
 - **Direct Artifact Uploads:** Instead of manually compressing reports into a `.tar.gz` archive, we upload the `build/reports` and `build/test-results` directories directly using `actions/upload-artifact@v7`. We set a 14-day retention period. For JAR files, we set `compression-level: 0` because they are already compressed natively.
+- **OpenAPI Contract Gate:** After packaging, CI starts the backend, authenticates through the mobile login endpoint, and compares the live `/v3/api-docs` document with `api/openapi.json`. It also fails if either generated platform API type file is stale. API changes therefore require a reviewed baseline update and regenerated types in the same change.
 
 ## 7. Job: `frontend`
 Handles the Angular 22 frontend linting, unit tests, and production distribution builds.

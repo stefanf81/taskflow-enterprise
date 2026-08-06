@@ -131,6 +131,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/reviews/public/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/barbers", "/api/v1/barbers/**").permitAll()
                 // Strict Admin restrictions to prevent privilege escalation / BOLA / PII leakage
+                .requestMatchers(HttpMethod.GET, "/api/v1/appointments/events").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments/{id}").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/{id}").hasRole("ADMIN")

@@ -1,5 +1,6 @@
 package com.example.taskflow.appointment;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -35,6 +36,7 @@ public record BarberTimeOffRequest(
     /**
      * Cross-field validation: end date must not precede start date.
      */
+    @JsonIgnore
     public boolean isDateRangeValid() {
         return startDate != null && endDate != null && !endDate.isBefore(startDate);
     }

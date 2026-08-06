@@ -21,7 +21,7 @@ Refer to `frontend/src/component-map.json` or `mobile/src/component-map.json` to
 * **Angular Signals & Stores (`*.store.ts`)**:
   * Angular 22 uses `signal()`, `computed()`, and RxJS stores.
   * Map these to React Native **TanStack Query** custom hooks (`mobile/src/hooks/use*.ts`) for server state, or **Zustand** (`mobile/src/store/use*.ts`) for client state.
-* API contracts are kept in `frontend/src/app/types/api.ts` and `mobile/src/types/api.ts` (sync via `npm run sync:api-types`).
+* API contracts are generated into `frontend/src/app/types/api.ts` and `mobile/src/types/api.ts` from the reviewed `api/openapi.json` baseline. For backend contract changes: run `npm run api:spec:update`, `npm run sync:api-types`, and `npm run sync:api-types:check` from the repository root.
 
 ### 2. UI Component Structure
 * **Angular HTML Templates (`*.html` or inline)**:

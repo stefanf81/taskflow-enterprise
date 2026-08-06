@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Max;
@@ -12,9 +13,13 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/api/v1/appointments")
@@ -23,9 +28,11 @@ import org.springframework.validation.annotation.Validated;
 public class AppointmentController {
 
     private final AppointmentService appointmentService;
+    private final AppointmentEventStreamService eventStreamService;
 
-    public AppointmentController(AppointmentService appointmentService) {
+    public AppointmentController(AppointmentService appointmentService, AppointmentEventStreamService eventStreamService) {
         this.appointmentService = appointmentService;
+        this.eventStreamService = eventStreamService;
     }
 
     @GetMapping
@@ -46,6 +53,14 @@ public class AppointmentController {
         
         AppointmentDashboardResponse response = appointmentService.getAllAppointments(status, search, page, size);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping(value = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(summary = "Subscribe to administrator appointment update events")
+    public SseEmitter streamAppointmentEvents(Authentication authentication, HttpServletResponse response) {
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-cache");
+        response.setHeader("X-Accel-Buffering", "no");
+        return eventStreamService.subscribe(authentication.getName());
     }
 
     @GetMapping("/{id}")

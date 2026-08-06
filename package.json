@@ -8,7 +8,10 @@
     "test:frontend": "npm --prefix frontend test",
     "test:mobile": "npm --prefix mobile test",
     "lint:all": "npm --prefix frontend run lint && npm --prefix frontend run format:check && npm --prefix mobile run lint",
-    "sync:api-types": "node scripts/sync-api-types.js",
+    "sync:api-types": "node scripts/sync-api-types.js api/openapi.json",
+    "sync:api-types:check": "node scripts/sync-api-types.js --check api/openapi.json",
+    "api:spec:update": "node scripts/check-openapi-contract.js --write --auth http://localhost:8080/v3/api-docs",
+    "api:spec:check": "node scripts/check-openapi-contract.js api/openapi.json",
     "docker:start": "./start-docker.sh",
     "docker:stop": "./stop-docker.sh",
     "verify:all": "./verify.sh"

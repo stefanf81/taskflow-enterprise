@@ -1,7 +1,12 @@
 import { Injectable, signal, computed, inject, effect, DestroyRef } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { AppointmentService, Barber, BarberTimeOff } from './appointment.service';
+import {
+  AppointmentService,
+  Barber,
+  BarberTimeOff,
+  BarberTimeOffRequest,
+} from './appointment.service';
 
 @Injectable({ providedIn: 'root' })
 export class BarberStore {
@@ -66,7 +71,7 @@ export class BarberStore {
     this.timeOffsResource.reload();
   }
 
-  addTimeOff(request: BarberTimeOff): void {
+  addTimeOff(request: BarberTimeOffRequest): void {
     const barberId = this.selectedBarberId();
     if (!barberId) return;
 

@@ -101,6 +101,17 @@ Below is the complete sequence of an authenticated, paginated API query from the
     3.  Since Angular 22 Signals are highly reactive, Angular does not waste CPU running heavy Zone.js digest loops. It immediately repaints *only* the specific bound DOM elements (the stats cards, progress bar, and card lists) in `app.html`.
     4.  In the background, Prometheus periodically scrapes JVM metrics, connection pool stats, and API request latency from `/actuator/prometheus` (permitted by `SecurityConfig`), providing complete observability.
 
+### **Step 7: Real-Time Admin Appointment Refreshes**
+*   **Active Files**: `AppointmentController.java`, `AppointmentEventStreamService.java`, `AppointmentEventStreamListener.java`, `admin-events.service.ts`, `admin-dashboard.ts`, `nginx.conf`
+*   **The Flow**:
+    1.  An administrator opens `/admin`. The Angular `AdminEventsService` opens a same-origin `EventSource` to `GET /api/v1/appointments/events` with browser credentials enabled.
+    2.  Spring Security authenticates the existing HttpOnly `access_token` cookie and requires `ROLE_ADMIN`. No JWT is exposed to frontend JavaScript or sent in a query parameter.
+    3.  Appointment creation, status changes, and deletion publish an immutable, PII-free `AppointmentAdminEvent` inside the mutation transaction.
+    4.  `AppointmentEventStreamListener` handles the event only after a successful commit and sends a small named SSE event to connected local admin emitters.
+    5.  The Angular service validates the event envelope and calls `AppointmentStore.loadAppointments()`. The existing paginated REST endpoint reloads the current page, filter, and search state.
+    6.  Nginx disables buffering for the stream and forwards heartbeats every 20 seconds so idle connections survive proxy timeouts.
+*   **Consistency Boundary**: SSE is a best-effort invalidation signal. The REST dashboard response remains authoritative; the initial in-memory implementation has no replay and only reaches clients connected to the same backend instance.
+
 ---
 
 ## 💎 3. Why This Connected Flow is Enterprise-Grade
@@ -140,7 +151,7 @@ Through exhaustive benchmarking, the application has been tuned for maximum Requ
 4.  **Threading Model**: Java 21 **Virtual Threads (Project Loom) are explicitly enabled** through `spring.threads.virtual.enabled=true`, with `spring.main.keep-alive=true` so daemon virtual-thread schedulers do not terminate the application. The decision is based on the mixed I/O benchmark; the CPU-bound BCrypt/RSA login path remains a separate benchmark concern.
 5.  **JSON Serialization**: Integrated Jackson 3.x with explicit version pins for low-latency serialization and CVE resolution.
 6.  **Database Connection Pooling**: **HikariCP** pool is sized at `maximum-pool-size=25` / `minimum-idle=10` in the `prod` profile (`spring.datasource.hikari.*`). The size is tuned for the expected concurrent request volume rather than left at the default of 10.
-7.  **Asynchronous Logging**: Synchronous I/O locking has been eliminated by wrapping the Logback `FileAppender` inside an `AsyncAppender` with a massive non-blocking queue.
+7.  **Asynchronous Logging**: Console logging is buffered through Logback's `AsyncAppender` to keep normal request paths from blocking on log output.
 8.  **Observability Taxonomy**: OpenTelemetry distributed tracing sampling was reduced from 100% to **10%** (`management.tracing.sampling.probability=0.1`), recovering peak RPS while retaining statistical observability.
 9.  **Distributed Caching**: Read-heavy operations (e.g., retrieving busy slots) are annotated with `@Cacheable` and backed by **Redis** (`spring.cache.type=redis` in the `prod` profile) to prevent database exhaustion under heavy load while staying shared across replicas. A local `simple` (ConcurrentHashMap-backed) cache is used in dev so the `@Cacheable` / `CacheManager` code paths are exercised without requiring Redis. Each cache region has a bounded TTL — `appointmentStats` expires after 5 minutes, `busySlots` after 2 minutes — with key-scoped eviction on mutation to prevent cache stampedes.
 10. **Upstream Connection Pooling (Nginx Keepalives)**: Configured a persistent TCP connection pool (`keepalive 64`) inside Nginx's proxy upstream block. Rather than tearing down the TCP connection after every single request, Nginx reuse connections, eliminating handshake latency entirely. This yielded a **7.1x increase in throughput (from 350 RPS to 2,505 RPS)** and slashed average proxy latency from 141.4ms to **19.8ms** during heavy end-to-end load tests.
@@ -156,7 +167,7 @@ To comply with the absolute highest standards in production-grade container arch
 1.  **Network Segmentation**: We replaced the flat default Docker network with two strictly segmented networks: `frontend-tier` and `backend-tier`. The database and Redis are completely locked inside `backend-tier`, while Nginx resides on `frontend-tier`. Only the Spring Boot JRE acts as a bridge between the two, making it physically impossible for the frontend to establish a direct connection to the database.
 2.  **Read-Only Root Filesystems**: Both the Frontend and Backend containers are run with `read_only: true`. The underlying OS is completely locked down, with temporary in-memory write access selectively granted only to transient directories (`/tmp`, `/var/cache/nginx`) using `tmpfs`. This blocks runtime code injection or malicious shell modifications entirely.
 3.  **Kernel Privilege Dropping**: Every container explicitly drops all Linux kernel capabilities (`cap_drop: [ALL]`) and is barred from gaining new privileges (`no-new-privileges:true`), minimizing container breakout escalations.
-4.  **Signal Management & Init System**: We integrated `tini` as PID 1 inside the JRE container. `tini` acts as a lightweight init system, forwarding OS termination signals (like `SIGTERM` on Kubernetes scaling events) flawlessly to the JVM to trigger clean resource flushes, and reaping zombie child processes automatically to prevent slow memory leaks.
+4.  **Signal Management & Graceful Shutdown**: `tini` runs as PID 1 and forwards `SIGTERM` to the JVM. Spring stops accepting new requests and drains managed lifecycle phases for up to 30 seconds (`server.shutdown=graceful`, `spring.lifecycle.timeout-per-shutdown-phase=30s`); Compose waits 40 seconds (`stop_grace_period`) before it can issue `SIGKILL`.
 5.  **Strict Numeric UIDs**: Rather than using string-based names (like `USER appuser`), we hardcoded explicit numeric user and group IDs (`USER 10001:10001`) in the Dockerfile, instantly satisfying **Strict Kubernetes Pod Security Standards (PSS)** without runtime translation overhead.
 6.  **Dual-Dockerfile Strategy (Dev/Benchmarking vs. Production Cloud)**: To achieve optimal throughput locally and standard portability in the cloud, the container layers are separated into two specialized specifications:
     *   **Local Developer (`Dockerfile`):** Targets local Apple Silicon (`--platform=linux/arm64`). Ships sizing-agnostic invariants in `CMD` (`-XX:SharedArchiveFile=application.jsa`, `-Xshare:auto`, `-XX:+ExitOnOutOfMemoryError`), while runtime heap and GC tuning are supplied via `JAVA_TOOL_OPTIONS` in `docker-compose.yml`.
@@ -212,12 +223,11 @@ The mobile client architecture mirrors the Angular web functionality while optim
 
 ## 🔁 9. Platform-local Contracts & AI Synchronization Framework
 
-To prevent architectural drift between the Web Frontend (`frontend/`) and Mobile App (`mobile/`), TaskFlow keeps synchronized, platform-local contract files. The OpenAPI document remains the source of truth for API shapes:
+To prevent architectural drift between the Web Frontend (`frontend/`) and Mobile App (`mobile/`), TaskFlow keeps synchronized, platform-local contract files. The reviewed OpenAPI baseline is the source of truth for API shapes:
 
 ```text
  ┌─────────────────────────────────────────────────────────────┐
- │                 Spring Boot OpenAPI Spec                    │
- │               (http://localhost:8080/v3/api-docs)          │
+│         Reviewed OpenAPI Baseline (`api/openapi.json`)       │
  └──────────────────────────────┬──────────────────────────────┘
                                 │
                                 │ npm run sync:api-types
@@ -239,11 +249,12 @@ To prevent architectural drift between the Web Frontend (`frontend/`) and Mobile
 ```
 
 ### Components of the Sync Framework:
-1. **API Contract Generator (`scripts/sync-api-types.js`)**: Fetches OpenAPI specs from Spring Boot (`/v3/api-docs`) and updates both `frontend/src/app/types/api.ts` and `mobile/src/types/api.ts`.
-2. **Design Tokens**: `frontend/src/theme/tokens.json` and `mobile/src/theme/tokens.json` keep platform build inputs local while preserving the same Gold & Obsidian palette. They are consumed by `frontend/src/styles.css` (`@theme`) and `mobile/src/theme/colors.ts`.
-3. **Pure Business Utilities**: `frontend/src/app/time-utils.ts` and `mobile/src/utils/time-utils.ts` each contain the client-local 12h/24h time formatting and `isOverdue` calculations.
-4. **Feature Mapping Matrix**: `frontend/src/component-map.json` and `mobile/src/component-map.json` map feature domains (e.g. Stylist Cards, Booking Wizard, Customer Portal, Admin Dashboard) between Angular Web components/stores and React Native screens/hooks.
-5. **Opencode AI Skill (`.opencode/skills/sync-to-mobile.md`)**: Instructs AI agents on framework translation rules (Angular Signals $\rightarrow$ TanStack Query / Zustand; Angular HTML $\rightarrow$ React Native JSX components).
+1. **Reviewed OpenAPI Contract**: `scripts/check-openapi-contract.js` authenticates to the local development backend, canonicalizes `/v3/api-docs`, and writes or compares `api/openapi.json`. CI performs the same authenticated comparison and rejects unreviewed API changes.
+2. **API Contract Generator (`scripts/sync-api-types.js`)**: Deterministically generates `frontend/src/app/types/api.ts` and `mobile/src/types/api.ts` from the reviewed baseline. `npm run sync:api-types:check` rejects stale generated files.
+3. **Design Tokens**: `frontend/src/theme/tokens.json` and `mobile/src/theme/tokens.json` keep platform build inputs local while preserving the same Gold & Obsidian palette. They are consumed by `frontend/src/styles.css` (`@theme`) and `mobile/src/theme/colors.ts`.
+4. **Pure Business Utilities**: `frontend/src/app/time-utils.ts` and `mobile/src/utils/time-utils.ts` each contain the client-local 12h/24h time formatting and `isOverdue` calculations.
+5. **Feature Mapping Matrix**: `frontend/src/component-map.json` and `mobile/src/component-map.json` map feature domains (e.g. Stylist Cards, Booking Wizard, Customer Portal, Admin Dashboard) between Angular Web components/stores and React Native screens/hooks.
+6. **Opencode AI Skill (`.opencode/skills/sync-to-mobile.md`)**: Instructs AI agents on framework translation rules (Angular Signals $\rightarrow$ TanStack Query / Zustand; Angular HTML $\rightarrow$ React Native JSX components).
 
 ---
 

@@ -22,7 +22,8 @@
   - Security: Native bearer login via `POST /api/v1/auth/mobile/login`, bearer tokens stored via `expo-secure-store` (iOS Keychain / Android Keystore), and no reliance on a native cookie jar. Bearer-only state-changing requests are CSRF-exempt; web cookie requests retain double-submit CSRF protection.
   - Builds: EAS Build configured via `mobile/eas.json` for Android (APK/AAB) and iOS (Simulator/IPA).
 - **Platform-local contracts**:
-  - `frontend/src/app/types/api.ts` and `mobile/src/types/api.ts`: API DTO contracts synced with backend OpenAPI spec.
+  - `api/openapi.json`: reviewed, canonical OpenAPI contract baseline.
+  - `frontend/src/app/types/api.ts` and `mobile/src/types/api.ts`: generated API DTO contracts synchronized from the baseline.
   - `frontend/src/theme/tokens.json` and `mobile/src/theme/tokens.json`: Obsidian & Gold design system tokens.
   - `frontend/src/app/time-utils.ts` and `mobile/src/utils/time-utils.ts`: Pure 12h/24h time and date utilities.
   - `frontend/src/component-map.json` and `mobile/src/component-map.json`: Cross-platform feature component mapping metadata.
@@ -36,14 +37,17 @@ When modifying or porting a feature between Web (`frontend/`) and Mobile (`mobil
    * **State**: Angular Signals (`signal()`, `computed()`) $\rightarrow$ TanStack Query (`useQuery`) / Zustand (`useAuthStore`).
    * **Templates**: Angular `@if`/`@for` $\rightarrow$ React Native JSX conditionals & `FlatList`/`map()`.
    * **Theme**: Ensure color tokens originate from the platform-local token files (`mobile/src/theme/colors.ts`).
-3. **Sync API Contracts**: If backend endpoints/DTOs change, run `npm run sync:api-types` to update both platform API contract files.
+3. **Sync API Contracts**: If backend endpoints/DTOs change, start the backend, run `npm run api:spec:update`, then `npm run sync:api-types`. Commit the baseline and both generated client type files. Run `npm run sync:api-types:check` before finishing.
 4. **Verify**: Run `npm run lint:all` and `npm run test:all`.
 
 ## Commands
 
 ### Monorepo Workspace Commands (root)
 ```bash
-npm run sync:api-types   # pull OpenAPI spec from Spring Boot and update both platform API contract files
+npm run api:spec:update      # refresh the reviewed baseline from a running local backend
+npm run api:spec:check       # validate the canonical baseline file
+npm run sync:api-types       # generate both platform API types from the baseline
+npm run sync:api-types:check # fail when generated platform API types are stale
 npm run test:all         # run unit tests across both Angular Web and React Native Mobile
 npm run lint:all         # run TypeScript type check on mobile and web
 ```
@@ -115,6 +119,7 @@ Security scans (filesystem lints, container image vulnerability scans, and DAST 
   - **Read-Only Root**: Containers mount read-only filesystems with ephemeral directories mounted as `tmpfs` (e.g., `/tmp`, `/var/cache/nginx`), preventing runtime binary tampering.
   - **Dropped Capabilities**: All services completely drop kernel privileges (`cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`).
   - **Container Lifecycle**: `docker-compose.yml` uses `restart: "no"` so containers do not linger across system/Docker reboots. Verification and E2E scripts (`./verify.sh`, `npm run e2e:docker`) use exit traps (`./stop-docker.sh`) to automatically stop containers after test completion.
+  - **Graceful Shutdown**: Spring drains for 30 seconds (`server.shutdown=graceful`, `spring.lifecycle.timeout-per-shutdown-phase=30s`) and the Compose backend has a 40-second `stop_grace_period`. Keep production `terminationGracePeriodSeconds` longer than the Spring shutdown phase in the separate GitOps repository.
 - **OSIV is off** (`spring.jpa.open-in-view=false`) — connections return to Hikari pool immediately after service methods.
 - **Web Auth**: Stateless JWT in an HttpOnly `access_token` cookie (Asymmetric RSA-2048 signing via OAuth2 Resource Server). Role/identity is restored via `GET /api/v1/auth/me` into an in-memory Signal (`AuthState`) and never stored in `sessionStorage`/`localStorage`. CSRF protection uses the double-submit `XSRF-TOKEN` cookie.
 - **Mobile Auth**: Native clients use `POST /api/v1/auth/mobile/login` and store the returned bearer token in `expo-secure-store`. The shared `/api/v1/auth/me` endpoint confirms the token on startup. Bearer-only requests do not require browser CSRF tokens; requests carrying the web `access_token` cookie remain protected.

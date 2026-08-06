@@ -118,6 +118,9 @@ services:
       jaeger:
         condition: service_healthy
         required: false
+    # Allow Spring's 30-second graceful-shutdown phase to finish before Docker
+    # escalates SIGTERM to SIGKILL.
+    stop_grace_period: 40s
     restart: "no"
     logging:
       driver: "json-file"

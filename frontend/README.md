@@ -55,13 +55,16 @@ This project uses **Tailwind CSS v4** (`^4.3.1`) natively within Angular 22's mo
 
 The frontend owns its contract files under `src/`:
 
-- **API Types (`src/app/types/api.ts`)**: Owns API contracts (`AppointmentItem`, `ServiceItem`, `Barber`, `LoginResponse`, etc.).
+- **API Types (`src/app/types/api.ts`)**: Generated from the reviewed root-level `api/openapi.json` baseline. Do not edit manually; use the workspace contract commands.
 - **Pure Time Utilities (`src/app/time-utils.ts`)**: Owns pure time formatting and date validation functions.
 - **Design Tokens (`src/theme/tokens.json`)**: Defines the frontend's Gold & Obsidian theme values used by `src/styles.css`.
 
 ---
 
 ## 🚀 3. Local Development & Setup
+
+### API Contract Workflow
+From the repository root, run `npm run sync:api-types` after the reviewed OpenAPI baseline changes. Use `npm run sync:api-types:check` to confirm this generated file is current. Backend API changes require `npm run api:spec:update` against a running local backend before regenerating types.
 
 ### Prerequisites
 

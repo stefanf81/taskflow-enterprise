@@ -23,6 +23,7 @@ import io.micrometer.tracing.Tracer;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.Instant;
 
 @Service
 public class AppointmentServiceImpl implements AppointmentService {
@@ -197,6 +198,7 @@ public class AppointmentServiceImpl implements AppointmentService {
             Appointment savedItem = appointmentRepository.save(item);
             statsService.clearStatsCache();
             statsService.clearBusySlotsCache(savedItem.getBarberName(), savedItem.getBookingDate());
+            publishAdminEvent(AppointmentAdminEvent.Type.CREATED, savedItem.getId());
 
             tagSpan(
                 "appointment.id", String.valueOf(savedItem.getId()),
@@ -318,6 +320,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         // by the (separate) notification slice listener so the appointment slice
         // stays decoupled from the notification slice (ArchUnit cycle rule).
         eventPublisher.publishEvent(new AppointmentStatusChangedEvent(this, savedItem));
+        publishAdminEvent(AppointmentAdminEvent.Type.UPDATED, savedItem.getId());
 
         return AppointmentResponse.fromEntity(savedItem);
     }
@@ -330,6 +333,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         appointmentRepository.delete(item);
         statsService.clearStatsCache();
         statsService.clearBusySlotsCache(item.getBarberName(), item.getBookingDate());
+        publishAdminEvent(AppointmentAdminEvent.Type.DELETED, item.getId());
 
         tagSpan(
             "appointment.id", String.valueOf(id),
@@ -359,6 +363,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         appointmentRepository.delete(item);
         statsService.clearStatsCache();
         statsService.clearBusySlotsCache(item.getBarberName(), item.getBookingDate());
+        publishAdminEvent(AppointmentAdminEvent.Type.DELETED, item.getId());
 
         tagSpan(
             "appointment.publicId", LogSanitizer.stripNewlines(publicId),
@@ -369,6 +374,12 @@ public class AppointmentServiceImpl implements AppointmentService {
     @Override
     public Appointment findByPublicId(String publicId) {
         return appointmentRepository.findByPublicId(publicId);
+    }
+
+    private void publishAdminEvent(AppointmentAdminEvent.Type type, Long appointmentId) {
+        if (appointmentId != null) {
+            eventPublisher.publishEvent(new AppointmentAdminEvent(type, appointmentId, Instant.now()));
+        }
     }
 
     @Override

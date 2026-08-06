@@ -196,6 +196,21 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(errorResponse, HttpStatus.FORBIDDEN);
     }
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(
+            org.springframework.web.server.ResponseStatusException ex, HttpServletRequest request) {
+
+        int status = ex.getStatusCode().value();
+        String message = ex.getReason() == null ? "Request could not be processed." : LogSanitizer.stripNewlines(ex.getReason());
+        ErrorResponse errorResponse = new ErrorResponse(
+                status,
+                ex.getStatusCode().toString(),
+                message,
+                request.getRequestURI()
+        );
+        return new ResponseEntity<>(errorResponse, ex.getStatusCode());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGlobalException(
             Exception ex, HttpServletRequest request) {

@@ -198,6 +198,7 @@ class AppointmentServiceImplTest {
         assertNotNull(response);
         assertEquals("John Doe", response.customerName());
         verify(appointmentRepository).save(any(Appointment.class));
+        verify(eventPublisher).publishEvent(any(AppointmentAdminEvent.class));
     }
 
     @Test
@@ -275,6 +276,7 @@ class AppointmentServiceImplTest {
 
         assertEquals("APPROVED", response.status());
         verify(appointmentRepository).save(testAppointment);
+        verify(eventPublisher).publishEvent(any(AppointmentAdminEvent.class));
     }
     
     @Test
@@ -349,6 +351,7 @@ class AppointmentServiceImplTest {
         when(appointmentRepository.findById(1L)).thenReturn(Optional.of(testAppointment));
         appointmentService.deleteAppointment(1L);
         verify(appointmentRepository).delete(testAppointment);
+        verify(eventPublisher).publishEvent(any(AppointmentAdminEvent.class));
     }
 
     @Test
@@ -378,6 +381,7 @@ class AppointmentServiceImplTest {
         when(appointmentRepository.findByPublicId("test-public-id")).thenReturn(testAppointment);
         appointmentService.publicCancelAppointment("test-public-id", "john@test.com");
         verify(appointmentRepository).delete(testAppointment);
+        verify(eventPublisher).publishEvent(any(AppointmentAdminEvent.class));
     }
 
     @Test

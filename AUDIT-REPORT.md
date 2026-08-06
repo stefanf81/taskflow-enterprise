@@ -2,6 +2,8 @@
 
 > **Historical document:** This report reflects the repository state on 2026-07-25. Some findings and file references may no longer apply to the current codebase.
 
+> **Current-status addendum (2026-08-06):** H12 is resolved. `scripts/sync-api-types.js` now deterministically writes both platform API type files from the reviewed `api/openapi.json` baseline; `scripts/check-openapi-contract.js` and CI reject unreviewed API changes or stale generated types.
+
 **Date:** 2026-07-25
 **Scope:** Backend (Spring Boot), Frontend (Angular 22), Mobile (React Native/Expo), Shared, CI/CD, Scripts, Docs
 

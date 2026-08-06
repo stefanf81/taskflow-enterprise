@@ -24,6 +24,7 @@ describe('NotificationStore', () => {
       message: 'Your appointment is confirmed',
       sentAt: '2026-07-01T10:00:00',
       status: 'SENT',
+      retryCount: 0,
     },
     {
       id: 2,
@@ -32,6 +33,7 @@ describe('NotificationStore', () => {
       message: 'Reminder: Appointment tomorrow',
       sentAt: '2026-07-02T08:00:00',
       status: 'SENT',
+      retryCount: 0,
     },
   ];
 

@@ -16,6 +16,7 @@ import { BarberStore } from '../../barber.store';
 import { NotificationStore } from '../../notification.store';
 import { CustomerStore } from '../../customer.store';
 import { ServiceCatalogStore } from '../../service-catalog.store';
+import { AdminEventsService } from '../../admin-events.service';
 import { formatTime12Hour, formatLocalDate, isOverdue } from '../../time-utils';
 
 /**
@@ -41,6 +42,7 @@ export class AdminDashboard {
   readonly customerStore = inject(CustomerStore);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly adminEvents = inject(AdminEventsService);
 
   /** Eager httpResource — services are already loaded at app boot; the tab just reads them. */
   readonly catalogStore = inject(ServiceCatalogStore);
@@ -67,6 +69,14 @@ export class AdminDashboard {
   readonly newTimeOffEndDate = signal('');
   readonly newTimeOffReason = signal('');
   readonly notificationsList = this.notificationStore.notifications;
+
+  constructor() {
+    this.adminEvents.appointmentChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.store.loadAppointments());
+    this.adminEvents.connect();
+    this.destroyRef.onDestroy(() => this.adminEvents.close());
+  }
 
   setAdminView(view: 'appointments' | 'services' | 'schedules' | 'notifications'): void {
     this.adminView.set(view);

@@ -58,10 +58,45 @@ cd frontend && npm run e2e:docker  # Playwright E2E with auto-spinup and teardow
 ./verify.sh                 # Full verification suite with auto-start and auto-cleanup of Docker
 ```
 
+### API Contract Changes
+The reviewed `api/openapi.json` file is the API compatibility baseline. When a backend endpoint or DTO changes intentionally:
+
+```bash
+./gradlew bootRun                  # In a separate terminal; OpenAPI docs require admin auth
+npm run api:spec:update            # Refresh the reviewed baseline from the live backend
+npm run sync:api-types             # Regenerate web and mobile API types
+npm run sync:api-types:check       # Confirm generated files are committed and current
+```
+
+CI authenticates to the development backend, compares its live OpenAPI document with this baseline, and fails on unreviewed API changes. Commit the updated baseline and generated type files together.
+
+### Admin SSE Changes
+The admin dashboard receives appointment invalidation events from
+`GET /api/v1/appointments/events`. When changing appointment mutations or stream
+behavior:
+
+- Keep event payloads immutable and free of customer PII.
+- Publish mutation signals inside the transaction, but deliver them only with
+  `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)`.
+- Keep the REST appointment query authoritative; SSE should trigger a reload rather
+  than maintain a second appointment state model.
+- Preserve cookie authentication. Never put the JWT in an `EventSource` URL.
+- Test the stream through Nginx because buffering and idle timeouts affect delivery.
+- Remember that the current emitter registry is single-instance. Add shared fanout
+  and replay before enabling multiple backend replicas.
+
+Run the focused tests while developing:
+
+```bash
+./gradlew test --tests '*AppointmentEventStreamServiceTest'
+cd frontend && npm test -- --include src/app/admin-events.service.spec.ts
+```
+
 ### Code Quality
 - Frontend: Prettier (100 char width, single quotes). Run `npx prettier --write .` in `frontend/`.
 - Backend: SpotBugs, ArchUnit, JaCoCo (80% coverage minimum).
 - Security: OWASP Dependency Check (fails on CVSS >= 7).
+- API contracts: The OpenAPI baseline and generated client type files must both be current.
 
 ## Project Structure
 - `src/` — Spring Boot backend (Java 21, Gradle)

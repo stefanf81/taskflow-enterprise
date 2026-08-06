@@ -58,7 +58,26 @@ export class AppointmentStore {
     },
     {
       defaultValue: {
-        page: { content: [], totalPages: 1, totalElements: 0, size: 50, number: 0 },
+        page: {
+          content: [],
+          empty: true,
+          first: true,
+          last: true,
+          number: 0,
+          numberOfElements: 0,
+          pageable: {
+            offset: 0,
+            paged: true,
+            pageNumber: 0,
+            pageSize: 50,
+            sort: { empty: true, sorted: false, unsorted: true },
+            unpaged: false,
+          },
+          size: 50,
+          sort: { empty: true, sorted: false, unsorted: true },
+          totalElements: 0,
+          totalPages: 1,
+        },
         stats: {
           total: 0,
           pending: 0,

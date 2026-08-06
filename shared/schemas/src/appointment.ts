@@ -28,8 +28,8 @@ export const appointmentCreateSchema = z.object({
 export type AppointmentCreateRequest = z.infer<typeof appointmentCreateSchema>;
 
 export const appointmentUpdateSchema = z.object({
-  status: z.enum(["PENDING", "APPROVED", "DENIED"], {
-    error: "Status must be PENDING, APPROVED, or DENIED",
+  status: z.enum(["APPROVED", "DENIED"], {
+    error: "Status must be APPROVED or DENIED",
   }),
 });
 
