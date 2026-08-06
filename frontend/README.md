@@ -64,6 +64,7 @@ The frontend owns its contract files under `src/`:
 ## 🚀 3. Local Development & Setup
 
 ### API Contract Workflow
+
 From the repository root, run `npm run sync:api-types` after the reviewed OpenAPI baseline changes. Use `npm run sync:api-types:check` to confirm this generated file is current. Backend API changes require `npm run api:spec:update` against a running local backend before regenerating types.
 
 ### Prerequisites

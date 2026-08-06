@@ -194,6 +194,10 @@ export interface SortObject {
   unsorted: boolean;
 }
 
+export interface SseEmitter {
+  timeout?: number;
+}
+
 export type AppointmentItem = AppointmentResponse;
 export type AppointmentPage = PageObject;
 export type Barber = BarberResponse;

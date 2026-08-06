@@ -600,6 +600,15 @@
           }
         },
         "type": "object"
+      },
+      "SseEmitter": {
+        "properties": {
+          "timeout": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   },
@@ -859,6 +868,27 @@
           }
         },
         "summary": "Approve or Deny an appointment status (Owner Admin Access)",
+        "tags": [
+          "Barber Appointment Management System"
+        ]
+      }
+    },
+    "/api/v1/appointments/events": {
+      "get": {
+        "operationId": "streamAppointmentEvents",
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/SseEmitter"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Subscribe to administrator appointment update events",
         "tags": [
           "Barber Appointment Management System"
         ]
