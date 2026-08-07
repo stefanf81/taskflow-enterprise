@@ -12,9 +12,9 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 
 ### ☕ 1. JVM & Runtime Layer
 *   **OpenJDK 21 (Eclipse Temurin Alpine)**:
-    *   **GC Model (G1GC — verified against ZGC on allocation-heavy paths)**: The collector is left unpinned so the JVM uses **G1GC** (JDK 25 default on most configs). Earlier benchmarks (§1) showed G1GC and ParallelGC are **statistically identical** (~189 RPS on the CPU-bound `/login` path). A deeper **G1GC vs Generational ZGC** comparison on allocation-heavy endpoints (§30) confirms G1GC wins by **2–104% throughput** depending on allocation intensity, while ZGC's sub-millisecond pauses offer no practical advantage at this scale. G1GC remains the default.
+     *   **GC Model (G1GC — verified against ZGC on allocation-heavy paths)**: The collector is left unpinned so the JVM uses **G1GC** (the JDK 21 default). Earlier benchmarks (§1) showed G1GC and ParallelGC are **statistically identical** (~189 RPS on the CPU-bound `/login` path). A deeper **G1GC vs Generational ZGC** comparison on allocation-heavy endpoints (§30) confirms G1GC wins by **2–104% throughput** depending on allocation intensity, while ZGC's sub-millisecond pauses offer no practical advantage at this scale. G1GC remains the default.
      *   **Deterministic Heap Allocation (local benchmark)**: Sized to a static `1GB` (`-Xms1g -Xmx1g`) for local benchmarking to eliminate heap-expansion noise. Runtime images do not embed heap sizing; Docker Compose and production deployment manifests use `-XX:MaxRAMPercentage=50.0`, with the local 2560M limit yielding approximately 1.25 GiB of heap.
-    *   **Project Loom / Virtual Threads**: Explicitly enabled with `spring.threads.virtual.enabled=true` and kept alive with `spring.main.keep-alive=true`. §32 benchmarks the full I/O-bound mixed workload — VT delivers marginal gains on H2 in-memory (+0.4% throughput) but significantly higher throughput on PostgreSQL when combined with larger HikariCP pool sizes (§33). The earlier §3 finding that VT hurts the CPU-bound `/login` (BCrypt/RSA) path is absorbed by the read-heavy workload mix in production.
+     *   **Project Loom / Virtual Threads**: Explicitly enabled with `spring.threads.virtual.enabled=true` and kept alive with `spring.main.keep-alive=true`. §32 benchmarks the full I/O-bound mixed workload — VT delivers marginal gains on H2 in-memory (+0.4% throughput) but significantly higher throughput on PostgreSQL when combined with larger HikariCP pool sizes (§33). The earlier §3 finding that VT hurts the CPU-bound `/login` (BCrypt/RSA) path is absorbed by the read-heavy workload mix in production.
 
 ### 🍃 2. Spring Boot 4.1.0 Application Layer
 *   **Embedded Apache Tomcat 11**:
@@ -38,8 +38,8 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   Custom pooling alignment (`io.netty.allocator.useCacheForAllThreads=true`) to enable Tomcat threads to reuse pooled thread-local buffers during Redis cache transactions, completely avoiding global Netty allocator lock contentions.
 
 ### 🗄️ 4. Database, JPA & Connection Pooling Layer
-*   **PostgreSQL 17 (Alpine)**:
-    *   **Memory Architecture Tuning**: Configured `shared_buffers=256MB` (25% system RAM), `effective_cache_size=768MB` (75% RAM), `work_mem=16MB` (for sorting and hash joins in memory), and `maintenance_work_mem=256MB` (for vacuuming).
+*   **PostgreSQL 18 (Alpine)**:
+     *   **Memory Architecture Tuning**: Configured `shared_buffers=256MB` (25% system RAM), `effective_cache_size=768MB` (75% RAM), `work_mem=16MB` (for sorting and hash joins in memory), and `maintenance_work_mem=256MB` (for vacuuming).
     *   **Write & WAL Tuning**: Enforced `wal_buffers=16MB`, `checkpoint_completion_target=0.9` (spreading write I/O over 15-minute intervals), and `wal_compression=on`.
     *   **OLTP JIT Compilation Guard**: Explicitly disabled Just-In-Time query compilation (`jit=off`), saving the query planner from wasting CPU compiling dynamic queries when raw execution time is already under 1ms.
     *   **Storage Access Tuning**: Reduced `random_page_cost=1.1` and raised `effective_io_concurrency=200` to inform the planner of NVMe flash speeds, forcing index scans over sequential disk sweeps.
@@ -62,8 +62,6 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   Replaced Zone.js digest loop entirely with Angular 22 **Signals** (`provideZonelessChangeDetection()`), driving native, high-performance UI updates.
 *   **RxJS**:
     *   Preserved for cross-component event streams and specific async state transitions, but heavily streamlined across core stores in favor of native signals.
-*   **Idiomatic `@Service()` Decorators**:
-    *   Migrated the `AppointmentService` and all 6 centralized stores (`AppointmentStore`, `BarberStore`, `CustomerStore`, `NotificationStore`, `ReviewStore`, `ServiceCatalogStore`) to Angular 22's new `@Service()` decorator, replacing legacy `@Injectable({ providedIn: 'root' })` syntax and simplifying dependency tree declarations.
 *   **Declarative `httpResource` API**:
     *   Completely converted our store layer data-fetching pipelines from manual Observable `.subscribe()` chains and RxJS blockings to the modern, signal-based `httpResource` API. This completely eliminates subscription boilerplate, automatically handles in-flight request cancellations, and integrates automatic query planning bound to reactive signals.
 *   **Modern HTTP Client (Native Fetch, Default in Angular 22)**:
@@ -95,7 +93,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Spring Boot Actuator**:
     *   Exposed native health check probes (`/actuator/health/liveness`, `readiness`) integrated with orchestrator state machines, and a dedicated `/actuator/prometheus` endpoint.
 *   **OpenTelemetry Tracing**:
-    *   Integrated OTel 1.62.0 tracing with a 10% sampling probability (`management.tracing.sampling.probability=0.1`) to achieve robust coverage while stripping only ~0.7% overhead.
+    *   Integrated OTel 1.64.0 tracing with a 10% sampling probability (`management.tracing.sampling.probability=0.1`) to achieve robust coverage while stripping only ~0.7% overhead.
 *   **Jaeger Server & Micrometer**:
     *   Collected traces via a Dockerized Jaeger `2.20.0` backend with trace propagation, mapped to Prometheus/Micrometer metrics.
 
@@ -121,7 +119,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   **Parallel Test Execution**: Configured `maxParallelForks` to dynamically scale JVM test forks based on `availableProcessors() * 0.75` to saturate CI pipelines without starving the host (Testcontainers tests are I/O- and container-bound, not CPU-bound, so over-subscribing cores is safe).
 *   **Code Quality & Static Analysis Guards**:
     *   **SpotBugs & FindSecBugs**: Integrated `spotbugs` plugin with `findsecbugs-plugin` at `effort = 'max'` to automatically break CI builds on detected security anti-patterns.
-    *   **JaCoCo Coverage Enforcement**: Defined strict validation rules (`minimum = 0.80` branch/line coverage) to fail pipelines on untested code paths.
+     *   **JaCoCo Coverage Enforcement**: Defined a strict validation rule (`minimum = 0.80` instruction coverage) to fail pipelines on untested code paths.
     *   **Ben Manes Versions**: Configured dynamic dependency resolution rules to strictly reject unstable package updates (`alpha`, `beta`, `rc`).
     *   **ArchUnit**: Enforced clean code design constraints via package dependency assertions during unit testing to prevent architecture erosion.
     *   **OWASP Vulnerability Scanners**: Configured Gradle to check and break the build on upstream dependencies with known CVE scores `CVSS >= 7` via **Dependency-Check**, paired with automated **OWASP ZAP DAST** scanning against the OpenAPI spec.
@@ -134,7 +132,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 ## 🚀 1. The JVM & Garbage Collection
 **Goal:** Maximize peak Request-Per-Second (RPS) throughput for CPU-bound API requests (`/api/v1/auth/login`), and determine whether the GC collector choice matters.
 
-**Important measurement note (reproducibility):** The real `/login` path is dominated by **BCrypt password verification (strength 10)** plus RSA-2048 JWT signing. BCrypt is a fixed per-request CPU cost, so throughput saturates at a fixed RPS *regardless of GC*: raising concurrency from 50→200 threads moves RPS only 196→190 while average latency blows up 0.25s→1.04s. The GC therefore cannot change peak throughput on this endpoint — it only affects tail latency under saturation. The previously-published "8,742 RPS" figure was **not reproducible** on the actual login path (it implied a BCrypt cost ~50× lighter than reality) and has been retracted. The table below is the honest, re-measured result on an Apple M4 Pro (14-core, arm64, OpenJDK 25, 1 GB fixed heap, 30 s `hey` runs at `-c 50`).
+**Important measurement note (reproducibility):** The real `/login` path is dominated by **BCrypt password verification (strength 10)** plus RSA-2048 JWT signing. BCrypt is a fixed per-request CPU cost, so throughput saturates at a fixed RPS *regardless of GC*: raising concurrency from 50→200 threads moves RPS only 196→190 while average latency blows up 0.25s→1.04s. The GC therefore cannot change peak throughput on this endpoint — it only affects tail latency under saturation. The previously-published "8,742 RPS" figure was **not reproducible** on the actual login path (it implied a BCrypt cost ~50× lighter than reality) and has been retracted. The table below is the honest, re-measured result on an Apple M4 Pro (14-core, arm64, OpenJDK 21, 1 GB fixed heap, 30 s `hey` runs at `-c 50`).
 
 | Configuration | Requests / Sec (RPS) | Avg Latency | Notes |
 | :--- | :--- | :--- | :--- |
@@ -315,7 +313,7 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 
 ---
 
-## 🗄️ 16. PostgreSQL 17 Parallel Engine (Database Maintenance)
+## 🗄️ 16. PostgreSQL 18 Parallel Engine (Database Maintenance)
 **Goal:** Optimize background table maintenance and index vacuuming workloads.
 
 | Configuration | table-vacuum Execution Time | System CPU Cost | Efficiency Boost |
@@ -323,7 +321,7 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 | **Tuned Parallel Index Vacuum (Winner)** | **104.26 ms** | **0.01 seconds** | **🚀 23.0% faster (Wall-time), 6x less CPU** |
 | Sequential Index Vacuum | 135.26 ms | 0.06 seconds | *Baseline* |
 
-**Verdict:** PostgreSQL 17 introduces compact index structures and a memory-efficient radix tree for vacuuming. By setting `max_parallel_maintenance_workers = 4`, the vacuum engine launches concurrent background workers, scaling maintenance throughput across CPU cores and drastically reducing transactional overhead.
+**Verdict:** PostgreSQL 18 introduces compact index structures and a memory-efficient radix tree for vacuuming. By setting `max_parallel_maintenance_workers = 4`, the vacuum engine launches concurrent background workers, scaling maintenance throughput across CPU cores and drastically reducing transactional overhead.
 
 ---
 
@@ -413,14 +411,14 @@ By setting `spring.jpa.properties.hibernate.query.in_clause_parameter_padding=tr
 ---
 
 ## 🐘 24. PostgreSQL Production Memory, Checkpoint & WAL Tuning
-**Goal:** Close the single largest gap found when comparing our stack to top production-tuning guides (PostgreSQL official docs, AWS RDS tuning guide, r/PostgreSQL, Elysiate, *Advanced PostgreSQL 17 Tuning at Scale*).
+**Goal:** Close the single largest gap found when comparing our stack to top production-tuning guides (PostgreSQL official docs, AWS RDS tuning guide, r/PostgreSQL, Elysiate, *Advanced PostgreSQL 18 Tuning at Scale*).
 
 | Parameter | Previous | New (1 GB / 2 vCPU container) | Why |
 | :--- | :--- | :--- | :--- |
 | `shared_buffers` | default (128MB) | `256MB` (25% RAM) | PostgreSQL's own cache; keeps hot pages in memory |
 | `effective_cache_size` | default | `768MB` (75% RAM) | Planner hint → favours index scans over seq scans |
 | `work_mem` | default (4MB) | `16MB` | Sorts/hashes in memory; kept low for OLTP + 25-conn pool |
-| `maintenance_work_mem` | default (64MB) | `256MB` | Faster VACUUM / `CREATE INDEX` (PG17 TID store improvement) |
+| `maintenance_work_mem` | default (64MB) | `256MB` | Faster VACUUM / `CREATE INDEX` (PG18 TID store improvement) |
 | `wal_buffers` | default | `16MB` | Lower WAL write latency |
 | `checkpoint_completion_target` | `0.5` | `0.9` | Spreads checkpoint I/O, eliminates spikes |
 | `checkpoint_timeout` | `5min` | `15min` | Fewer checkpoints under load |
@@ -548,11 +546,11 @@ Note: API JSON is proxied from the backend and is compressed on-the-fly (no pre-
 
 ## ⚡ 30. G1GC vs Generational ZGC on Allocation-Heavy Endpoints
 
-**Goal:** Compare G1GC (JDK 25 default) against Generational ZGC on allocation-heavy REST endpoints — large DTO list mapping, JSON serialization, and synthetic allocation stress — where GC behavior, not CPU-bound cryptography, dominates.
+**Goal:** Compare G1GC (JDK 21 default) against Generational ZGC on allocation-heavy REST endpoints — large DTO list mapping, JSON serialization, and synthetic allocation stress — where GC behavior, not CPU-bound cryptography, dominates.
 
 The earlier GC benchmark (§1) used the CPU-bound `/login` path (BCrypt hashing, few allocations), where G1GC and ParallelGC were statistically identical. This benchmark targets the opposite end of the spectrum.
 
-**Test Environment:** OpenJDK 25.0.2, Spring Boot 4.1.0, H2 in-memory, 5 000 seeded appointments with 100 barbers and 50 services. `GcComparisonBenchmarkTest` (`@Tag("benchmark")`).
+**Test Environment:** OpenJDK 21, Spring Boot 4.1.0, H2 in-memory, 5 000 seeded appointments with 100 barbers and 50 services. `GcComparisonBenchmarkTest` (`@Tag("benchmark")`).
 
 ### Throughput Comparison
 

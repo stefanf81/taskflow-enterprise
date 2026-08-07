@@ -102,7 +102,7 @@ Below is the complete sequence of an authenticated, paginated API query from the
     4.  In the background, Prometheus periodically scrapes JVM metrics, connection pool stats, and API request latency from `/actuator/prometheus` (permitted by `SecurityConfig`), providing complete observability.
 
 ### **Step 7: Real-Time Admin Appointment Refreshes**
-*   **Active Files**: `AppointmentController.java`, `AppointmentEventStreamService.java`, `AppointmentEventStreamListener.java`, `admin-events.service.ts`, `admin-dashboard.ts`, `nginx.conf`
+*   **Active Files**: `AppointmentController.java`, `AppointmentEventStreamService.java`, `AppointmentEventStreamListener.java`, `admin-events.service.ts`, `frontend/src/app/features/admin/admin-dashboard.ts`, `nginx.conf`
 *   **The Flow**:
     1.  An administrator opens `/admin`. The Angular `AdminEventsService` opens a same-origin `EventSource` to `GET /api/v1/appointments/events` with browser credentials enabled.
     2.  Spring Security authenticates the existing HttpOnly `access_token` cookie and requires `ROLE_ADMIN`. No JWT is exposed to frontend JavaScript or sent in a query parameter.
@@ -209,11 +209,11 @@ The mobile client architecture mirrors the Angular web functionality while optim
 ```
 
 ### Key Mobile Architectural Design Choices:
-1.  **Native Navigation Flow (`src/navigation/`):** Utilizes React Navigation 6 with specialized Bottom Tab Navigators for Guests (`GuestTabNavigator`), Customers (`CustomerTabNavigator`), and Administrators (`AdminTabNavigator`) wrapped in a root `NativeStack`.
+1.  **Native Navigation Flow (`src/navigation/`):** Utilizes React Navigation 7 with specialized Bottom Tab Navigators for Guests (`GuestTabNavigator`), Customers (`CustomerTabNavigator`), and Administrators (`AdminTabNavigator`) wrapped in a root `NativeStack`.
 2.  **Server State Management via TanStack Query (`src/hooks/`):** All asynchronous API states (appointments, service catalog, barbers, time-off, notifications, ratings) use TanStack Query for caching, retries, background refreshes, and mutation invalidations.
 3.  **Client Application State via Zustand (`src/store/`):** In-memory client states (active filter selections, search queries, active booking step) and JWT authentication credentials are handled by lightweight Zustand stores (`useAuthStore`, `useUIStore`).
 4.  **Hardware Secure Storage (`src/utils/storage.ts`):** JWT credentials and user session payloads are stored securely inside platform hardware stores (**iOS Keychain** and **Android Keystore**) via `expo-secure-store`.
-5.  **Styling & Design System (`src/theme/`):** Built with NativeWind (Tailwind CSS for React Native) adhering strictly to TaskFlow's Gold & Obsidian luxury salon color palette sourced from the mobile-local `src/theme/tokens.json`.
+5.  **Styling & Design System (`src/theme/`):** Built with React Native `StyleSheet` consuming the `src/theme/colors.ts` palette (sourced from the mobile-local `src/theme/tokens.json`) of TaskFlow's Gold & Obsidian luxury salon color scheme.
 6.  **Backend Connectivity & Zero-Trust Security:**
     *   **Local Routing**: iOS Simulator (`http://localhost:8080`), Android Emulator (`http://10.0.2.2:8080`), and Physical LAN Devices (`http://<LAN_IP>:8080`).
     *   **Production Deployment**: Replaces local API endpoints with public HTTPS domains (e.g. `https://api.taskflow.example.com`) via `EXPO_PUBLIC_API_URL` environment injection in `eas.json` or CLI flags (`EXPO_PUBLIC_API_URL=https://api.domain.com npx expo start -c`).

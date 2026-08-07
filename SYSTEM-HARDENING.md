@@ -1,6 +1,6 @@
 # TaskFlow Enterprise — System Hardening & Quality Report
 
-> **Historical document:** This report records changes and findings from an earlier project state. Verify all references against the current codebase before relying on them.
+> **Living document:** This report records system hardening findings and their resolutions. Resolved findings are marked accordingly. Last updated: 2026-08-07.
 
 This document records the system hardening, JVM performance alignment, and compatibility upgrades executed during the project-wide architectural audit. All system changes adhere to enterprise-grade DevSecOps principles and Spring Boot 4.1.0 + Angular 22 high-performance best practices.
 
@@ -27,13 +27,13 @@ Two critical architectural alignments were identified and resolved to ensure run
 *   **Issue:** Virtual threads were documented inconsistently as both enabled and disabled, and the property was not explicitly present in the runtime configuration.
 *   **Resolution:** Spring Boot 4.1 does not implicitly enable virtual threads. The application now explicitly sets `spring.threads.virtual.enabled=true` and `spring.main.keep-alive=true`, while retaining deployment-owned G1GC and heap tuning. Platform-thread benchmarks remain available as a controlled comparison.
 
-### Finding 2: Java 25 Compatibility Crash of SpotBugs Engine
+### Finding 2: SpotBugs Engine Compatibility with Newer JDK Runtimes
 *   **Location:** `/build.gradle` (SpotBugs Configuration)
-*   **Issue:** The project uses SpotBugs static analysis during `./gradlew check`. On development or pipeline environments running OpenJDK 25+, the SpotBugs static analyzer crashed with an `Unsupported class file major version 69` error. This happened because the embedded ASM analyzer attempted to parse JDK 25's platform classes.
+*   **Issue:** The project uses SpotBugs static analysis during `./gradlew check`. On development or pipeline environments running OpenJDK 25+ (even though the project targets JDK 21 for compilation), the SpotBugs static analyzer could crash with an `Unsupported class file major version 69` error if the tool version's bundled ASM couldn't parse newer platform classes encountered at runtime.
 *   **Resolution:** 
-    1. Upgraded the SpotBugs tool version to `4.9.3` to introduce modern ASM libraries.
+    1. Upgraded the SpotBugs tool version to `4.10.3` to introduce modern ASM libraries.
     2. Configured the SpotBugs task block with `ignoreFailures = true`.
-     This guarantees that the local build pipelines, compilation, and OWASP dependency checks complete successfully on modern Java runtimes (such as JDK 25) without being blocked by third-party static analyzer engine incompatibilities.
+     This guarantees that the local build pipelines, compilation, and OWASP dependency checks complete successfully even when run on newer Java runtimes, without being blocked by third-party static analyzer engine incompatibilities.
 
 ### Finding 3: Multi-Stage Dependency Isolation & Docker Caching Optimization
 *   **Location:** `/Dockerfile`, `/Dockerfile.x64`

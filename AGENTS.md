@@ -97,8 +97,8 @@ To maintain absolute data privacy, cost efficiency, and low-latency development 
 *   **UI Integration & Collapsible Thoughts:** The model is configured inside `~/.config/opencode/opencode.jsonc` with `"reasoning": true` to separate internal `<think>` reasoning strings from the final coding outputs. Opencode renders these steps in native collapsible panels.
 *   **Credentials Hardening:** Plaintext API keys or tokens are banned in configurations. The GitHub Personal Access Token is dynamically injected via Opencode's env substitution: `"GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_PERSONAL_ACCESS_TOKEN}"`.
 *   **Configuration Backups:** 
-    - Opencode LLM parameters: Saved in `llm-config.json`
-    - LM Studio Model loading parameters: Saved in `lmstudio-qwen-config.json`
+    - Opencode LLM parameters: Saved in `llm-config.json` (external to repo)
+    - LM Studio Model loading parameters: Saved in `lmstudio-qwen-config.json` (external to repo)
 
 ### Full-stack Docker
 ```bash
