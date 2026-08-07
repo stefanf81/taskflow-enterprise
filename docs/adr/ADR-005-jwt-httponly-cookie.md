@@ -17,7 +17,7 @@ Key points of the decision:
 
 1. **XSS immunity** — since the cookie is marked `HttpOnly`, JavaScript code (including any injected by XSS attacks) cannot read the JWT. In the localStorage approach, a single XSS vulnerability would leak the token.
 
-2. **CSRF protection via SameSite** — `SameSite=Strict` ensures the browser does not attach the cookie to cross-site requests, preventing CSRF-based token usage. This eliminates the need for a separate CSRF token or custom header validation for most flows.
+2. **CSRF protection via double-submit cookie pattern** — in addition to `SameSite=Strict`, the application implements the double-submit CSRF pattern: the backend sets a readable `XSRF-TOKEN` cookie (via `CookieCsrfTokenRepository.withHttpOnlyFalse()`), and Angular's `withXsrfConfiguration` reads that cookie and attaches it as the `X-XSRF-TOKEN` header on state-changing requests. The backend compares the header against the cookie value. This provides defense-in-depth against CSRF even if `SameSite` is bypassed (e.g., older browsers, proxy de-escalation).
 
 3. **Automatic cookie attachment** — the browser automatically includes the cookie in same-origin requests. The Angular `auth.interceptor.ts` does not need to read, manage, or refresh tokens — it simply allows the cookie to be sent.
 
@@ -36,6 +36,6 @@ Key points of the decision:
 
 ### Negative
 - **Requires cookie-accessible deployment** — the frontend and backend must be served from the same origin (or with proper CORS + `SameSite=None; Secure` configuration for cross-origin).
-- **Slightly more complex CSRF handling** — `SameSite=Strict` covers most cases, but non-GPC/form-POST requests may still need CSRF tokens if `SameSite` is not sufficient.
+- **CSRF exemptions for public/guest endpoints** — the double-submit CSRF protection is intentionally disabled on public state-changing endpoints (`POST /api/v1/appointments`, `PUT /api/v1/appointments/public/cancel/*`, `POST /api/v1/reviews/public/**`) to allow unauthenticated guest bookings.
 - **Larger cookie size** — JWTs can exceed the 4 KB cookie size limit if they carry many claims. The application keeps claims minimal (sub, roles, iat, exp) to stay well within limits.
 - **No programmatic token inspection** — the frontend cannot inspect the JWT payload to check roles or expiration without a backend call (`/auth/me`), adding a minor latency cost for auth state checks.

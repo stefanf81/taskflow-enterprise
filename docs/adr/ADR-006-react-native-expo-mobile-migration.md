@@ -16,12 +16,12 @@ Migrate the mobile application experience into a standalone **React Native + Exp
 
 Key technological choices in `mobile/`:
 
-1. **Expo ~52 & React Native 0.76+ with TypeScript:** Built using Expo managed workflow with TypeScript for 100% type safety across mobile screens, navigation params, and API payloads.
-2. **React Navigation 6:** Provides native stack navigation (`@react-navigation/native-stack`) and bottom tabs (`@react-navigation/bottom-tabs`) with smooth native transitions and gesture support.
+1. **Expo SDK 57 & React Native 0.86+ with TypeScript:** Built using Expo managed workflow with TypeScript for 100% type safety across mobile screens, navigation params, and API payloads.
+2. **React Navigation 7:** Provides native stack navigation (`@react-navigation/native-stack`) and bottom tabs (`@react-navigation/bottom-tabs`) with smooth native transitions and gesture support.
 3. **TanStack Query (`@tanstack/react-query`) for Server State:** All backend server state (appointments, service catalog, barbers, time-off, notifications, reviews) is fetched, cached, and synchronized using TanStack Query.
 4. **Zustand for Client Application State:** Client-side state (authentication credentials, theme preferences, search query, active booking wizard steps) is isolated using Zustand stores (`useAuthStore`, `useUIStore`).
 5. **Secure Storage via `expo-secure-store`:** JWT authentication tokens and user credentials are saved directly into platform secure hardware storage (**iOS Keychain** and **Android Keystore**).
-6. **NativeWind / Tailwind CSS Styling:** Styling utilizes NativeWind to maintain design system consistency with the web application's Gold & Obsidian luxury theme.
+6. **React Native `StyleSheet` Styling with Theme Tokens:** Styling uses `StyleSheet` with color tokens sourced from `mobile/src/theme/tokens.json` (Gold & Obsidian luxury palette) to maintain design system consistency with the web application.
 7. **React Hook Form & Zod:** Form input handling and client-side validation schemas.
 8. **EAS Build Support (`eas.json`):** Pre-configured build profiles for Android development APK, production AAB (Google Play Store), iOS Simulator, and production IPA (TestFlight / Apple App Store).
 

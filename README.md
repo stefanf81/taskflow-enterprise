@@ -127,7 +127,7 @@ This launches the PostgreSQL database, Redis cache, Spring Boot backend, and Ngi
 
 * **Web UI:** `http://localhost:4200`
 * **Backend API:** `http://localhost:8080`
-* **Prometheus Metrics:** `http://localhost:8080/actuator/prometheus`
+* **Prometheus Metrics:** `http://localhost:8080/actuator/prometheus` (requires ADMIN authentication — JWT cookie or bearer token)
 * **Stop Application Stack:** `./stop-docker.sh`
 * **Full-Stack Automated Verification:** `./verify.sh` (automatically starts Docker if needed and cleans up on exit)
 
@@ -197,13 +197,13 @@ npm start
 * [ARCHITECTURE.md](ARCHITECTURE.md) — Detailed end-to-end data flow and architectural analysis
 * [AGENTS.md](AGENTS.md) — Developer guidelines and AI agent instructions
 * [SYSTEM-HARDENING.md](SYSTEM-HARDENING.md) — Zero-trust security & container hardening policy
-* [docs/adr/](docs/adr/) — Architecture Decision Records (ADRs)
+* [docs/adr/README.md](docs/adr/README.md) — Architecture Decision Records (ADRs) — full index
   * `ADR-001` — Virtual Threads — Enabled Explicitly
-  * `ADR-002` — ParallelGC vs G1GC
+  * `ADR-002` — ParallelGC vs G1GC (Superseded)
   * `ADR-003` — Denormalized Customer Name
   * `ADR-004` — Redis for Distributed Caching
   * `ADR-005` — JWT in HttpOnly Cookie
   * `ADR-006` — Migration to React Native & Expo Mobile Application
-   * `ADR-007` — Dedicated Mobile Bearer Authentication
-    * `ADR-008` — Reviewed OpenAPI Contract Baseline
-    * `ADR-009` — Admin Appointment Updates via Server-Sent Events
+  * `ADR-007` — Dedicated Mobile Bearer Authentication
+  * `ADR-008` — Reviewed OpenAPI Contract Baseline
+  * `ADR-009` — Admin Appointment Updates via Server-Sent Events
