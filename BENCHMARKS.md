@@ -65,20 +65,20 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Declarative `httpResource` API**:
     *   Completely converted our store layer data-fetching pipelines from manual Observable `.subscribe()` chains and RxJS blockings to the modern, signal-based `httpResource` API. This completely eliminates subscription boilerplate, automatically handles in-flight request cancellations, and integrates automatic query planning bound to reactive signals.
 *   **Modern HTTP Client (Native Fetch, Default in Angular 22)**:
-    *   Angular 22 makes the native browser `fetch` API the default HTTP backend — the legacy `XMLHttpRequest` is fully deprecated. We previously enabled this via `withFetch()`, which is now redundant; the explicit call has been removed per Angular 22 conventions.
+    *   Angular 22 makes the native browser `fetch` API the default HTTP backend. `withFetch()` remains explicitly present in `frontend/src/app/app.config.ts`, but an A/B production build showed no meaningful bundle difference when it was removed (`281.80 kB` vs. `281.73 kB` raw initial output; `66.36 kB` vs. `66.37 kB` estimated transfer). It is cleanup-only, not a performance optimization.
 *   **Optimized Control Flow**:
     *   Completely adopted the new declarative block syntax (`@for`, `@if`) combined with strict `track` expressions, bypassing legacy `*ngFor` / `*ngIf` structural directive overhead.
-*   **Code Splitting & Preloading**:
-    *   Granular page and feature chunking (`loadComponent()` / `loadChildren()`) combined with aggressive background preloading (`withPreloading(PreloadAllModules)`) for immediate route navigations.
+*   **Code Splitting & Deferred Loading**:
+    *   Granular page and feature chunking through standalone `loadComponent()` routes. No global `PreloadAllModules` strategy is configured; route preloading should be evaluated against bandwidth and navigation requirements before being added.
 *   **Deferrable Views**:
     *   Used `@defer` blocks to dynamically lazy-load heavy in-page elements only when idle.
 *   **`NgOptimizedImage` Directive Integration**:
     *   Integrated `<img ngSrc>` and the standard `NgOptimizedImage` directive in `app.html` to render our core landing hero image. Configured with required aspect ratio sizing (to prevent layout shifts) and the `priority` tag to speed up **Largest Contentful Paint (LCP)**.
 *   **Build Budget Regression Guards & Cache Busting**:
-    *   Enforced rigorous build failure boundaries in `angular.json` for initial total (`1MB` limit) and individual lazy chunks (`400kB` warning, `600kB` error) to automatically catch bundle bloat in CI.
+    *   Enforced rigorous build failure boundaries in `angular.json` for initial total (`350kB` warning, `500kB` error) and individual chunks (`400kB` warning, `600kB` error) to automatically catch bundle bloat in CI.
     *   Enforced `outputHashing: "all"` to aggressively bust caches on deployments.
-*   **Native Critical CSS Inlining (Beasties)**:
-    *   Activated `"inlineCritical": true` in the production workspace. The esbuild application builder compiles and inlines the critical styling block directly into `index.html` on compile-time, deferring non-critical sheets asynchronously and maximizing **First Contentful Paint (FCP)** to ~15ms.
+*   **CSP-Compatible Critical CSS Handling**:
+    *   Kept `"inlineCritical": false` in the production workspace. Angular's critical-style inlining can inject dynamic attributes that conflict with the hardened production CSP, so this is intentionally disabled rather than treated as a performance toggle.
 *   **Subresource Integrity (SRI) & Bundle Analysis**:
     *   Enabled `subresourceIntegrity: true` in production builds to generate SHA-512 hashes for all output assets, preventing CDN/subresource tampering.
     *   Enabled `statsJson: true` to produce `dist/stats.json` for esbuild bundle visualization in CI.
@@ -293,7 +293,7 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 | **HTTP/2 Multiplexing** | Eliminates Head-Of-Line Blocking | Multiplexes concurrent requests/responses over a single persistent TCP connection. |
 | **Keep-Alive Pooling** | Eliminates TCP/TLS Handshakes | Increased Tomcat Keep-Alive thresholds (`max-keep-alive-requests=100`) allowing the browser to reuse warm connections. |
 | **Shallow ETag Caching** | Saves Massive Bandwidth | Computes an MD5 payload hash. The browser sends `If-None-Match`, and the server returns an ultra-fast `304 Not Modified`, bypassing the JSON download. Restricted to GET requests only — POST/PUT/DELETE skip ETag content-buffering entirely to avoid unnecessary overhead on mutations. |
-| **Angular Route Preloading** | Instant Page Navigation | Uses `withPreloading(PreloadAllModules)`. The browser downloads lazy-loaded JS chunks in the background while the user is idle. |
+| **Angular Route Code Splitting** | Smaller Initial Bundle | Uses standalone `loadComponent()` routes. No global `PreloadAllModules` strategy is configured. |
 | **View Transitions API** | Perceived Latency Drop | Utilizes `withViewTransitions()` for native browser-accelerated visual cross-fades, creating a fluid, app-like experience. |
 
 **Verdict:** By attacking the latency layer natively at the browser/server network boundary, we bypassed the physical limitations of geographical distance and achieved instant-feeling application responsiveness.
@@ -449,11 +449,11 @@ By setting `spring.jpa.properties.hibernate.query.in_clause_parameter_padding=tr
 
 | Budget | Previous | New |
 | :--- | :--- | :--- |
-| `initial` | 500kB warn / 1MB err | unchanged |
+| `initial` | 350kB warn / 500kB err | unchanged |
 | `anyComponentStyle` | 20kB / 50kB | unchanged |
-| `any` (per lazy chunk) | *none* | **400kB warn / 600kB err** (sized above our 396kB `main` entry chunk so it guards lazy chunks, not the initial bundle) |
+| `any` (per chunk) | *none* | **400kB warn / 600kB err** |
 
-**Verdict:** Without an `any` budget, a single bloated lazy-loaded chunk can slip through CI unnoticed. The new guard fails the production build if any individual chunk exceeds 600kB (warning at 400kB), catching regressions (e.g. a heavy dependency pulled into one route) before merge. Threshold is sized above our 396kB entry `main` chunk so it guards lazy chunks rather than the legitimate initial bundle.
+**Verdict:** Without an `any` budget, a single bloated chunk can slip through CI unnoticed. The guard fails the production build if any individual chunk exceeds 600kB (warning at 400kB), catching regressions such as a heavy dependency pulled into one route before merge.
 
 ---
 
@@ -480,9 +480,9 @@ We navigated directly to the live Angular application, and extracted the raw V8 
 | :--- | :--- | :--- |
 | **Fetch-Start to DOM** | **107 ms** | Time taken to download the `main` JS chunk, parse, and boot the Angular engine. |
 | **DOM Ready Time** | **109 ms** | Full application interactive and ready for user input. |
-| **Total Page Load** | **147 ms** | All lazy/async resources and background preloads completed. |
+| **Total Page Load** | **147 ms** | All resources observed by the browser timing run completed. |
 
-**Verdict:** Hitting **109ms** for DOM Ready on a fully fledged Enterprise Angular 22 application is world-class. Stripping out the heavy legacy `XMLHttpRequest` wrapper in favor of the native `fetch` API, combined with strict chunk size budgets, guarantees that the network delivers the application shell to the user nearly instantaneously.
+**Verdict:** Hitting **109ms** for DOM Ready on a fully fledged Enterprise Angular 22 application is a strong result. Angular's native `fetch` backend is the default, but the separate A/B build showed that removing the redundant `withFetch()` declaration does not materially change bundle output. Strict chunk size budgets remain the meaningful regression guard.
 
 ---
 
@@ -845,6 +845,52 @@ GC: G1 Old Generation (collections: 2, time: 82 ms)
 4. **No runtime overhead.** CDS only affects class loading — once classes are mapped from the archive, execution is identical to non-CDS startup. There is zero throughput or latency penalty.
 
 **Verdict:** CDS is already deployed and provides a **19.8% cold-start improvement** (0.74 s saved). This is a pure win with no tradeoffs — the archive is built once at image build time and benefits every container startup.
+
+---
+
+## ⚡ Recent Angular 22 and Expo 57 Performance Verification
+**Goal:** Verify recently introduced framework defaults and proposed performance settings against the current application instead of assuming that a new API is an optimization.
+
+### Angular 22 Production Build
+
+The production build was measured with the same source and Angular 22.1 toolchain:
+
+| Configuration | Initial raw | Estimated transfer | Build time | Result |
+| :--- | ---: | ---: | ---: | :--- |
+| Default Angular 22 chunk optimization | **281.80 kB** | **66.36 kB** | 1.329 s | Passes budgets |
+| `NG_BUILD_OPTIMIZE_CHUNKS=1` | **281.80 kB** | **66.36 kB** | 1.109 s | Same output |
+| `NG_BUILD_OPTIMIZE_CHUNKS=0` | 467.36 kB | 126.49 kB | 1.052 s | Initial budget warning |
+| Without explicit `withFetch()` | 281.73 kB | 66.37 kB | 1.138 s | No material change |
+
+**Verdict:** Keep Angular's default chunk optimizer enabled. Disabling it increases the initial estimated transfer by approximately 91% and exceeds the configured initial budget. Removing `withFetch()` is reasonable API cleanup, but it is not a measurable performance improvement.
+
+The application already uses the APIs that were listed as missing:
+
+* `httpResource()` is used by the appointment, catalog, review, notification, barber, and customer stores.
+* Six `@defer` blocks use idle, viewport, interaction, and signal triggers.
+* `provideZonelessChangeDetection()` and explicit `OnPush` components are already in use.
+* Both dashboard routes use `loadComponent()` code splitting.
+* No high-cost optional service dependency was identified as an `injectAsync()` candidate. Lazy routes and deferred components already provide the relevant split points.
+
+### Expo and React Native Verification
+
+The mobile checks used Expo SDK 57, React Native 0.86.2, and the installed Hermes compiler `250829098.0.16`:
+
+| Check | Result |
+| :--- | :--- |
+| TypeScript lint | Pass |
+| Jest unit/component tests | **343/343 passed** |
+| Android Metro production export | Pass |
+| Hermes bytecode output | `_expo/static/js/android/*.hbc`, 3,399,015 bytes |
+| `react-native-reanimated` / `react-native-worklets` | Not installed |
+
+Expo SDK 57 enables the React Native New Architecture by default and Hermes V1 is the default runtime in this release line. Worklets bundle mode is therefore not applicable to this application because Reanimated and Worklets are not dependencies; the documented 25–30% memory concern does not apply.
+
+React Native 0.86's installed source defines the default `PerformanceObserver` event threshold as exactly 104 ms. The application does not currently use `PerformanceObserver`, so there is no application setting to tune.
+
+Expo SDK 57/RN 0.86 handle Android edge-to-edge by default. The application uses `SafeAreaView` on its primary screens. Native frame, memory, and Android 15 inset behavior still require a connected Android 15+ device or emulator; no Android device was connected during this verification.
+
+**Verdict:** No mobile performance configuration change is justified. Keep the New Architecture and Hermes defaults, do not add Worklets dependencies solely for performance, and validate edge-to-edge on a real Android 15+ target before release.
 
 ---
 

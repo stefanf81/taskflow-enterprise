@@ -146,10 +146,12 @@ npm run build
 
 The resulting assets are generated in the `dist/` directory. These assets are then copied into our lightweight, unprivileged **Nginx web server container** (running on port `8080` to adhere to unprivileged port binding rules).
 
+The Angular 22 production chunk optimizer is enabled by default. The current measured baseline is **281.80 kB raw / 66.36 kB estimated transfer** for the initial bundle. Disabling chunk optimization increases the initial output to **467.36 kB raw / 126.49 kB estimated transfer** and triggers the initial bundle budget warning. Keep `NG_BUILD_OPTIMIZE_CHUNKS` unset or enabled unless investigating a build issue.
+
 ---
 
 ## 📁 6. Key Architecture Conventions
 
 - **Signals-Only State:** Component state, inputs, and outputs use native Angular Signals (`signal()`, `computed()`, `input()`, `model()`) instead of raw RxJS streams where applicable, eliminating Zone.js change-detection overhead.
 - **Stateless JWT Cookie Authentication:** Auth state is managed via HttpOnly JWT cookies set by the backend. Role identity is restored into an in-memory Signal (`AuthState`) via `GET /api/v1/auth/me`.
-- **Lazy-loaded Routes:** Feature dashboards (`/admin`, `/customer`) use lazy-loaded standalone components via `loadComponent()`, keeping the initial bundle small. View transitions and in-memory scroll restoration are enabled via Angular's `withViewTransitions()` and `withInMemoryScrolling()`.
+- **Lazy-loaded Routes:** Feature dashboards (`/admin`, `/customer`) use lazy-loaded standalone components via `loadComponent()`, keeping the initial bundle small. No global route preloading strategy is configured. View transitions and in-memory scroll restoration are enabled via Angular's `withViewTransitions()` and `withInMemoryScrolling()`.
