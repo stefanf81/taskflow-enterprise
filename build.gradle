@@ -4,13 +4,13 @@ plugins {
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'org.owasp.dependencycheck' version '13.0.0'
 	id 'jacoco'
-	id 'io.github.ben-manes.versions' version '0.60.0'
+	id 'io.github.ben-manes.versions' version '0.61.0'
 	id 'com.github.spotbugs' version '6.5.10'
 }
 group = 'com.example'
 version = '0.0.1-SNAPSHOT'
 ext {
-	set('opentelemetry.version', '1.64.0')
+	set('opentelemetry.version', '1.65.0')
 	set('commons-lang3.version', '3.20.0')
 	// Pin logback above Spring Boot's vulnerable 1.5.34 release to fix CVE-2026-13006
 	// (ACE via conditional config file processing); 1.5.36+ adds additional hardening
@@ -132,7 +132,7 @@ dependencies {
 	// Spring Modulith test support — ApplicationModules.of().verify() and
 	// @ApplicationModuleTest for isolated module bootstrapping.
 	testImplementation 'org.springframework.modulith:spring-modulith-starter-test:2.1.0'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher:6.1.2'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher:6.1.3'
 	// Static analysis
 	spotbugsPlugins 'com.h3xstream.findsecbugs:findsecbugs-plugin:1.14.0'
 	spotbugsSlf4j 'org.slf4j:slf4j-simple:2.0.18'
