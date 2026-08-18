@@ -30,6 +30,9 @@ ext {
 	// (Memory Leak in DNS Record Decoder via Malformed Domain Names); 4.2.17.Final
 	// is the latest patch release. Spring Boot 4.1.0 BOM ships 4.2.15.Final which is vulnerable.
 	set('netty.version', '4.2.17.Final')
+	// Pin Log4j API and its SLF4J bridge above 2.25.4 to fix CVE-2026-49844
+	// (malformed JSON output for non-finite MapMessage values).
+	set('log4j2.version', '2.25.5')
 }
 
 
@@ -62,6 +65,10 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	// Explicit pins ensure Dependabot and container scanners resolve the patched
+	// Log4j API used by Spring Boot's log4j-to-slf4j bridge.
+	implementation 'org.apache.logging.log4j:log4j-api:2.25.5'
+	implementation 'org.apache.logging.log4j:log4j-to-slf4j:2.25.5'
 	// Netty — explicit pins so Dependabot's Gradle parser sees the correct versions
 	// (Dependabot does not resolve BOM property overrides set via ext.set()).
 	// Originally pinned for GHSA-mfg7-5gfp-c4w3 (DNS Record Decoder memory leak);
