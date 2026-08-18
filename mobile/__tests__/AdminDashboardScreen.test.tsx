@@ -124,10 +124,10 @@ describe('AdminDashboardScreen', () => {
   it('renders all five filter chips', async () => {
     await render(<AdminDashboardScreen />);
     expect(screen.getByText('ALL')).toBeTruthy();
-    // PENDING appears in filter chip + status badge -> use getAllByText
+    // Appointment status badges share labels with filter chips.
     expect(screen.getAllByText('PENDING').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('APPROVED')).toBeTruthy();
-    expect(screen.getByText('OVERDUE')).toBeTruthy();
+    expect(screen.getAllByText('OVERDUE').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('DENIED')).toBeTruthy();
   });
 
