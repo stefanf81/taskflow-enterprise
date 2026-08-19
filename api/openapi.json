@@ -465,6 +465,18 @@
         },
         "type": "object"
       },
+      "PublicBarberResponse": {
+        "properties": {
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "RegisterRequest": {
         "properties": {
           "email": {
@@ -1204,7 +1216,7 @@
               "*/*": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/BarberResponse"
+                    "$ref": "#/components/schemas/PublicBarberResponse"
                   },
                   "type": "array"
                 }
@@ -1363,6 +1375,30 @@
           }
         },
         "summary": "Add time-off for a barber",
+        "tags": [
+          "Barber Management"
+        ]
+      }
+    },
+    "/api/v1/barbers/admin": {
+      "get": {
+        "operationId": "getAdminBarbers",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BarberResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "List of all barbers returned"
+          }
+        },
+        "summary": "Get all barbers with administrative contact details",
         "tags": [
           "Barber Management"
         ]

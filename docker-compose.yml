@@ -69,8 +69,6 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: taskflow-backend
-    ports:
-      - "8080:8080"
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
@@ -79,6 +77,9 @@ services:
       # against this list. Whitelist both loopback hostnames so the E2E stack
       # passes whether Playwright drives the browser via localhost or 127.0.0.1.
       - APP_CORS_ALLOWED_ORIGINS=http://localhost:4200,http://127.0.0.1:4200
+      # The backend accepts forwarding headers only from the Nginx container.
+      # Keep this in sync with the trusted proxy network in the deployment.
+      - APP_TRUSTED_PROXY_REGEX=^172\\.([1][6-9]|2[0-9]|3[0-1])\\.\\d{1,3}\\.\\d{1,3}$
       # JVM sizing is owned by the deployment (JAVA_TOOL_OPTIONS), not the image
       # CMD — see Dockerfile / Dockerfile.x64 for the sizing-agnostic rationale.
       # This block mirrors the prod homelab/TF backend.yaml intent (modulo

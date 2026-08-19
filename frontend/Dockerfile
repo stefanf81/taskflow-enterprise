@@ -97,6 +97,14 @@ RUN mkdir -p \
         /usr/share/nginx/html \
         /var/cache/nginx
 
+# Alpine's Brotli module file uses relative paths that resolve through
+# /var/lib/nginx. Replace them with the package's absolute, world-readable
+# module location so the unprivileged runtime user can load them.
+RUN sed -i \
+        -e 's#"modules/ngx_http_brotli_filter_module.so"#"/usr/lib/nginx/modules/ngx_http_brotli_filter_module.so"#' \
+        -e 's#"modules/ngx_http_brotli_static_module.so"#"/usr/lib/nginx/modules/ngx_http_brotli_static_module.so"#' \
+        /etc/nginx/modules/10_http_brotli.conf
+
 COPY --from=compression \
     --chown=${NGINX_UID}:${NGINX_GID} \
     /assets/ \

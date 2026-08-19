@@ -215,9 +215,9 @@ The mobile client architecture mirrors the Angular web functionality while optim
 4.  **Hardware Secure Storage (`src/utils/storage.ts`):** JWT credentials and user session payloads are stored securely inside platform hardware stores (**iOS Keychain** and **Android Keystore**) via `expo-secure-store`.
 5.  **Styling & Design System (`src/theme/`):** Built with React Native `StyleSheet` consuming the `src/theme/colors.ts` palette (sourced from the mobile-local `src/theme/tokens.json`) of TaskFlow's Gold & Obsidian luxury salon color scheme.
 6.  **Backend Connectivity & Zero-Trust Security:**
-    *   **Local Routing**: iOS Simulator (`http://localhost:8080`), Android Emulator (`http://10.0.2.2:8080`), and Physical LAN Devices (`http://<LAN_IP>:8080`).
+     *   **Local Routing**: iOS Simulator (`http://localhost:4200`), Android Emulator (`http://10.0.2.2:4200`), and Physical LAN Devices (`http://<LAN_IP>:4200`) use the Nginx ingress; the backend is not host-published by Compose.
     *   **Production Deployment**: Replaces local API endpoints with public HTTPS domains (e.g. `https://api.taskflow.example.com`) via `EXPO_PUBLIC_API_URL` environment injection in `eas.json` or CLI flags (`EXPO_PUBLIC_API_URL=https://api.domain.com npx expo start -c`).
-    *   **Security Layers**: Asymmetric RSA-2048 JWT authentication, native bearer tokens stored in SecureStore, bearer-only CSRF exemption for non-browser requests, web double-submit CSRF headers, Redis rate-limiting (max 20 auth reqs/min per IP), and mandatory TLS 1.3/1.2 encryption.
+     *   **Security Layers**: Asymmetric RSA-2048 JWT authentication, native bearer tokens stored in SecureStore, bearer-only CSRF exemption for non-browser requests, web double-submit CSRF headers, Redis rate-limiting (max 20 auth reqs/min per IP), production SPKI public-key pinning, and mandatory TLS 1.3/1.2 encryption.
 
 ---
 

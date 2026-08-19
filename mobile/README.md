@@ -35,9 +35,9 @@ The mobile app owns its platform-local contract directory under `src/`:
 The mobile app connects to the Spring Boot REST API (`taskflow-backend`).
 
 ### Local Development Setup (`mobile/.env`)
-* **iOS Simulator**: `http://localhost:8080`
-* **Android Emulator**: `http://10.0.2.2:8080` (or leave `EXPO_PUBLIC_API_URL` empty for auto-detection)
-* **Physical Device**: `http://<YOUR_MAC_LAN_IP>:8080`
+* **iOS Simulator**: `http://localhost:4200`
+* **Android Emulator**: `http://10.0.2.2:4200` (or leave `EXPO_PUBLIC_API_URL` empty for auto-detection)
+* **Physical Device**: `http://<YOUR_MAC_LAN_IP>:4200`
 
 ### Production Connection
 To connect local simulators, emulators, or production builds to a live production backend:
@@ -49,22 +49,26 @@ Production environments enforce TLS/HTTPS encryption, hardware token encryption 
 
 ### SSL Certificate Pinning (Production)
 
-Production builds must configure SSL certificate pinning to prevent man-in-the-middle attacks. Without it, the build throws a hard error at startup:
+Preview and production builds use platform-native SPKI public-key pinning. The Expo
+prebuild fails unless the API URL is HTTPS and two pins are configured:
 
 ```bash
-# Set the SHA-256 fingerprint(s) of your backend's TLS certificate
-EXPO_PUBLIC_SSL_PIN_FINGERPRINTS=sha256/AAAA...,sha256/BBBB...
+# Set current and backup SHA-256 SPKI hashes (Base64, without a sha256/ prefix).
+TASKFLOW_API_SPKI_PINS=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=,BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=
 ```
 
 Configuration:
-- **Development**: Pinning is automatically disabled (`__DEV__` mode).
-- **Production (EAS)**: Set `EXPO_PUBLIC_SSL_PIN_FINGERPRINTS` in your EAS environment variables/secrets.
-- **Cryptographic enforcement**: The config validation in `client.ts` ensures fingerprints are configured. Full cryptographic pinning requires installing a native module (see `src/utils/sslPinning.ts` for setup instructions).
+- **Development**: Local HTTP remains available for simulators and emulators.
+- **Preview and production (EAS)**: Set `TASKFLOW_TLS_POLICY=required` and configure `TASKFLOW_API_SPKI_PINS` in the selected EAS environment.
+- **Enforcement**: `plugins/withTaskflowTlsPinning.js` writes Android and iOS native pinning settings during prebuild; Axios traffic is pinned by the platform networking stack.
 
-To obtain fingerprints:
+To obtain an SPKI hash:
 ```bash
-openssl s_client -connect api.example.com:443 2>/dev/null \
-  | openssl x509 -noout -fingerprint -sha256
+openssl s_client -connect api.example.com:443 </dev/null 2>/dev/null \
+  | openssl x509 -pubkey -noout \
+  | openssl pkey -pubin -outform DER \
+  | openssl dgst -sha256 -binary \
+  | openssl base64 -A
 ```
 
 ---

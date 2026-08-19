@@ -83,8 +83,8 @@ export class AppointmentService {
   }
 
   // --- Barbers & Time-Off API ---
-  getAllBarbers(): Observable<Barber[]> {
-    return this.http.get<Barber[]>(this.barbersUrl);
+  getAdminBarbers(): Observable<Barber[]> {
+    return this.http.get<Barber[]>(`${this.barbersUrl}/admin`);
   }
 
   getTimeOff(barberId: number): Observable<BarberTimeOff[]> {

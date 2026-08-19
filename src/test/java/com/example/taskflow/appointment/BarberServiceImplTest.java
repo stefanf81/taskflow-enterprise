@@ -41,6 +41,16 @@ class BarberServiceImplTest {
     }
 
     @Test
+    void getPublicBarbers_shouldReturnOnlyPublicFields() {
+        PublicBarberResponse projected = new PublicBarberResponse(1L, "Alex");
+        when(barberRepository.findAllPublicProjectedBy()).thenReturn(List.of(projected));
+
+        List<PublicBarberResponse> result = barberService.getPublicBarbers();
+
+        assertEquals(List.of(projected), result);
+    }
+
+    @Test
     void getAllBarbers_shouldReturnList() {
         BarberResponse projected = new BarberResponse(1L, "Alex", "alex@test.com", "555-1234");
         when(barberRepository.findAllProjectedBy()).thenReturn(List.of(projected));

@@ -31,14 +31,25 @@ class BarberControllerTest {
 
     @Test
     void getAllBarbers_shouldReturnList() {
-        BarberResponse projected = new BarberResponse(1L, "Alex", "alex@test.com", "555-1234");
-        when(barberService.getAllBarbers()).thenReturn(List.of(projected));
+        PublicBarberResponse projected = new PublicBarberResponse(1L, "Alex");
+        when(barberService.getPublicBarbers()).thenReturn(List.of(projected));
 
-        ResponseEntity<List<BarberResponse>> result = barberController.getAllBarbers();
+        ResponseEntity<List<PublicBarberResponse>> result = barberController.getAllBarbers();
 
         assertEquals(HttpStatus.OK, result.getStatusCode());
         assertEquals(1, result.getBody().size());
         assertEquals("Alex", result.getBody().get(0).name());
+    }
+
+    @Test
+    void getAdminBarbers_shouldReturnContactDetails() {
+        BarberResponse projected = new BarberResponse(1L, "Alex", "alex@test.com", "555-1234");
+        when(barberService.getAllBarbers()).thenReturn(List.of(projected));
+
+        ResponseEntity<List<BarberResponse>> result = barberController.getAdminBarbers();
+
+        assertEquals(HttpStatus.OK, result.getStatusCode());
+        assertEquals("alex@test.com", result.getBody().get(0).email());
     }
 
     @Test

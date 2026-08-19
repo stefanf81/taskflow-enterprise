@@ -47,15 +47,27 @@ if ! ./gradlew check test; then
   exit 1
 fi
 
-# 4. Run E2E Tests (requires a running backend on :8080 and Playwright browsers)
+# 4. Run E2E Tests through the public Nginx ingress.
 echo "Running Playwright E2E tests..."
-if ! curl -fs --max-time 3 http://localhost:8080/actuator/health/liveness > /dev/null 2>&1; then
+if ! curl -fs --max-time 3 http://localhost:4200/api/v1/catalog > /dev/null 2>&1; then
   echo "Backend is not running — starting full application stack via ./start-docker.sh..."
   ./start-docker.sh
   STARTED_DOCKER=true
 fi
 
-if ! (cd frontend && npm run e2e); then
+echo "Waiting for the Nginx API ingress to become ready..."
+for attempt in {1..30}; do
+  if curl -fs --max-time 3 http://localhost:4200/api/v1/catalog > /dev/null 2>&1; then
+    break
+  fi
+  if [ "$attempt" -eq 30 ]; then
+    echo -e "${RED}Nginx API ingress did not become ready!${NC}"
+    exit 1
+  fi
+  sleep 1
+done
+
+if ! (cd frontend && E2E_DOCKER=true npm run e2e); then
   echo -e "${RED}E2E tests failed!${NC}"
   exit 1
 fi

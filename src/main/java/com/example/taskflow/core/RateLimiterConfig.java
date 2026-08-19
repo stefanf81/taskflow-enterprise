@@ -11,6 +11,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.core.Ordered;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -33,7 +35,17 @@ public class RateLimiterConfig {
     }
 
     @Bean
-    public OncePerRequestFilter rateLimitFilter(StringRedisTemplate redisTemplate) {
+    public FilterRegistrationBean<OncePerRequestFilter> rateLimitFilter(StringRedisTemplate redisTemplate) {
+        FilterRegistrationBean<OncePerRequestFilter> registration = new FilterRegistrationBean<>();
+        registration.setFilter(createRateLimitFilter(redisTemplate));
+        // Tomcat has already normalized trusted proxy headers before servlet filters
+        // run. Rate-limit before Spring Security reaches JWT verification or BCrypt.
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 20);
+        registration.addUrlPatterns("/*");
+        return registration;
+    }
+
+    OncePerRequestFilter createRateLimitFilter(StringRedisTemplate redisTemplate) {
         return new OncePerRequestFilter() {
             @Override
             protected boolean shouldNotFilter(HttpServletRequest request) {

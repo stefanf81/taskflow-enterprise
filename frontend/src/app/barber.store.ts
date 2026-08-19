@@ -12,7 +12,7 @@ import {
 export class BarberStore {
   private readonly appointmentService = inject(AppointmentService);
 
-  private readonly barbersResource = httpResource<Barber[]>(() => '/api/v1/barbers', {
+  private readonly barbersResource = httpResource<Barber[]>(() => '/api/v1/barbers/admin', {
     defaultValue: [],
   });
 

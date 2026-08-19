@@ -2,6 +2,7 @@ package com.example.taskflow.appointment.internal;
 
 import com.example.taskflow.appointment.Barber;
 import com.example.taskflow.appointment.BarberResponse;
+import com.example.taskflow.appointment.PublicBarberResponse;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -25,4 +26,11 @@ public interface BarberRepository extends JpaRepository<Barber, Long> {
             ORDER BY b.name
             """)
     List<BarberResponse> findAllProjectedBy();
+
+    @Query("""
+            SELECT new com.example.taskflow.appointment.PublicBarberResponse(b.id, b.name)
+            FROM Barber b
+            ORDER BY b.name
+            """)
+    List<PublicBarberResponse> findAllPublicProjectedBy();
 }

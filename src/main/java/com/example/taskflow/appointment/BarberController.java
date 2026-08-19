@@ -27,7 +27,14 @@ public class BarberController {
     @GetMapping
     @Operation(summary = "Get all barbers")
     @ApiResponse(responseCode = "200", description = "List of all barbers returned")
-    public ResponseEntity<List<BarberResponse>> getAllBarbers() {
+    public ResponseEntity<List<PublicBarberResponse>> getAllBarbers() {
+        return ResponseEntity.ok(barberService.getPublicBarbers());
+    }
+
+    @GetMapping("/admin")
+    @Operation(summary = "Get all barbers with administrative contact details")
+    @ApiResponse(responseCode = "200", description = "List of all barbers returned")
+    public ResponseEntity<List<BarberResponse>> getAdminBarbers() {
         return ResponseEntity.ok(barberService.getAllBarbers());
     }
 

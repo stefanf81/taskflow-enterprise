@@ -1,6 +1,8 @@
 name: React Native CI
 
 on:
+  schedule:
+    - cron: '30 4 * * *'
   workflow_dispatch:
     inputs:
       native_scope:
@@ -69,6 +71,7 @@ jobs:
 
   android:
     name: Android build and test
+    needs: javascript
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:
@@ -135,7 +138,7 @@ jobs:
         working-directory: mobile/android
         shell: bash
         env:
-          NATIVE_SCOPE: ${{ inputs.native_scope }}
+          NATIVE_SCOPE: ${{ inputs.native_scope || 'full' }}
         run: |
           set -euo pipefail
 
@@ -177,6 +180,7 @@ jobs:
 
   ios:
     name: iOS simulator build
+    needs: javascript
     runs-on: macos-26
     timeout-minutes: 60
     defaults:
@@ -252,7 +256,7 @@ jobs:
       - name: Build unsigned iOS simulator application
         shell: bash
         env:
-          NATIVE_SCOPE: ${{ inputs.native_scope }}
+          NATIVE_SCOPE: ${{ inputs.native_scope || 'full' }}
         run: |
           set -euo pipefail
 

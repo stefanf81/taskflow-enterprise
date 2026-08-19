@@ -36,6 +36,12 @@ public class BarberServiceImpl implements BarberService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<PublicBarberResponse> getPublicBarbers() {
+        return barberRepository.findAllPublicProjectedBy();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<BarberResponse> getAllBarbers() {
         return barberRepository.findAllProjectedBy();
     }

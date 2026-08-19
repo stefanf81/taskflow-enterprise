@@ -167,9 +167,9 @@ Two critical architectural alignments were identified and resolved to ensure run
 *   **Resolution:** Externalized the token lifetime to the `app.jwt.lifetime-seconds` configuration property (default 3600s). The `TokenProvider` constructor now accepts this value via `@Value`, allowing deployment environments to override the expiry via `APP_JWT_LIFETIME_SECONDS` without code changes. The web cookie `Max-Age` automatically follows the configured lifetime via `TokenProvider.getTokenLifetimeSeconds()`.
 
 ### Finding 23: Mobile SSL Certificate Pinning Enforcement
-*   **Location:** `mobile/src/api/client.ts`, `mobile/src/utils/sslPinning.ts`
-*   **Issue:** The `sslPinning.ts` utility was a documentation-only module with no runtime consumption. Production mobile builds could ship without any certificate pinning configuration, exposing all API traffic to man-in-the-middle attacks.
-*   **Resolution:** Wired the `getSslPinningConfig()` validation into the API client initialization (`client.ts`). Production builds (`!__DEV__`) now fail-fast at startup if `EXPO_PUBLIC_SSL_PIN_FINGERPRINTS` is not configured with valid `sha256/...` fingerprints. Full cryptographic enforcement requires a native module (see mobile README), but the config validation ensures the deployment pipeline cannot accidentally ship without pinning metadata.
+*   **Location:** `mobile/plugins/withTaskflowTlsPinning.js`
+*   **Issue:** JavaScript-only pin metadata does not make the platform networking stack enforce certificate pinning.
+*   **Resolution:** Preview and production Expo prebuilds now require an HTTPS API URL and two SHA-256 SPKI hashes. The tracked config plugin generates Android and iOS native pinning configuration, which applies beneath the Axios client.
 
 ### Finding 24: HTTP Security Headers — Permissions-Policy and Tightened CSP
 *   **Location:** `frontend/nginx.conf`
@@ -218,5 +218,5 @@ To run the suite in a secure, high-performance configuration, please adhere to t
     And configure `APP_RSA_PRIVATE_KEY` and `APP_RSA_PUBLIC_KEY` environment variables.
 3.  **Local Deployment:** Run `./start-docker.sh` for an automated composed deploy.
 4.  **JWT Token Lifetime:** Override the default 1-hour expiry via `APP_JWT_LIFETIME_SECONDS` (maps to `app.jwt.lifetime-seconds`) for environments that require shorter or longer session durations.
-5.  **Mobile SSL Pinning:** Set `EXPO_PUBLIC_SSL_PIN_FINGERPRINTS=sha256/AAAA...,sha256/BBBB...` in your EAS environment variables/secrets before building production mobile apps. Production builds fail startup without it.
+5.  **Mobile TLS Pinning:** Set `TASKFLOW_API_SPKI_PINS` with current and backup Base64 SHA-256 SPKI hashes in the preview and production EAS environments before building.
 6.  **Nginx Security Headers:** The frontend Nginx config enforces `Permissions-Policy` (disabling camera, microphone, geolocation, payment, USB, Bluetooth) and a tight CSP `connect-src 'self'`. Verify these headers are present in downstream reverse proxies if you chain TLS termination.

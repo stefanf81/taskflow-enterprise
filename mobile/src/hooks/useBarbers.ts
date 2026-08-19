@@ -2,10 +2,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { barbersApi } from '../api/barbers';
 import { BarberTimeOffRequest } from '../types/api';
 
-export const useBarbers = () => {
+export const usePublicBarbers = () => {
   return useQuery({
-    queryKey: ['barbers'],
-    queryFn: () => barbersApi.getAllBarbers(),
+    queryKey: ['publicBarbers'],
+    queryFn: () => barbersApi.getPublicBarbers(),
+    staleTime: 60000,
+  });
+};
+
+export const useAdminBarbers = () => {
+  return useQuery({
+    queryKey: ['adminBarbers'],
+    queryFn: () => barbersApi.getAdminBarbers(),
     staleTime: 60000,
   });
 };

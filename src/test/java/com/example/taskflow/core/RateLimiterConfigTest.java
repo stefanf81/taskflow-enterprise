@@ -32,7 +32,7 @@ class RateLimiterConfigTest {
         redisTemplate = mock(StringRedisTemplate.class);
         valueOperations = mock(ValueOperations.class);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        filter = rateLimiterConfig.rateLimitFilter(redisTemplate);
+        filter = rateLimiterConfig.createRateLimitFilter(redisTemplate);
     }
 
     @Test
@@ -140,7 +140,7 @@ class RateLimiterConfigTest {
         // Property deliberately left unset (and would be false if set) -> bean absent.
         context.refresh();
 
-        String[] names = context.getBeanNamesForType(OncePerRequestFilter.class);
+        String[] names = context.getBeanNamesForType(org.springframework.boot.web.servlet.FilterRegistrationBean.class);
         boolean hasRateLimitFilter = java.util.Arrays.stream(names)
                 .anyMatch(n -> n.toLowerCase().contains("rateLimit") || n.contains("rateLimitFilter"));
         assertFalse(hasRateLimitFilter, "Rate limiter filter must be absent when not explicitly enabled");

@@ -28,11 +28,8 @@ deferred until a refresh-token or `jti` deny-list design is required.
 
 ### SSL Certificate Pinning
 
-Production mobile builds fail-fast if `EXPO_PUBLIC_SSL_PIN_FINGERPRINTS` is not
-configured. The `getSslPinningConfig()` parser validates the configuration at
-client initialization. Full cryptographic pinning requires a native module
-(`react-native-ssl-pinning` or equivalent); the config validation ensures the
-deployment pipeline cannot accidentally ship without pinning metadata.
-
-See `src/utils/sslPinning.ts` for setup instructions and `src/api/client.ts`
-for the production validation guard.
+Preview and production builds require an HTTPS API host plus two SHA-256 SPKI
+public-key hashes in `TASKFLOW_API_SPKI_PINS`. The tracked Expo config plugin
+`plugins/withTaskflowTlsPinning.js` generates Android network-security and iOS
+`NSPinnedDomains` configuration during prebuild, so the platform networking
+stack enforces pinning for the existing Axios client.

@@ -154,6 +154,11 @@ export interface PageObject {
   totalPages: number;
 }
 
+export interface PublicBarberResponse {
+  id: number;
+  name: string;
+}
+
 export interface RegisterRequest {
   email: string;
   fullName: string;
@@ -201,6 +206,7 @@ export interface SseEmitter {
 export type AppointmentItem = AppointmentResponse;
 export type AppointmentPage = PageObject;
 export type Barber = BarberResponse;
+export type PublicBarber = PublicBarberResponse;
 export type BarberRating = BarberRatingResponse;
 export type BarberTimeOff = BarberTimeOffResponse;
 export type NotificationItem = NotificationOutboxResponse;

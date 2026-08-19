@@ -25,13 +25,15 @@ jest.mock('../src/api/appointments', () => ({
   },
 }));
 
-const mockGetAllBarbersFn = jest.fn();
+const mockGetPublicBarbersFn = jest.fn();
+const mockGetAdminBarbersFn = jest.fn();
 const mockGetTimeOffFn = jest.fn();
 const mockAddTimeOffFn = jest.fn();
 
 jest.mock('../src/api/barbers', () => ({
   barbersApi: {
-    getAllBarbers: (...args: unknown[]) => mockGetAllBarbersFn(...args),
+    getPublicBarbers: (...args: unknown[]) => mockGetPublicBarbersFn(...args),
+    getAdminBarbers: (...args: unknown[]) => mockGetAdminBarbersFn(...args),
     getTimeOff: (...args: unknown[]) => mockGetTimeOffFn(...args),
     addTimeOff: (...args: unknown[]) => mockAddTimeOffFn(...args),
   },
@@ -88,7 +90,7 @@ function createWrapper() {
 }
 
 import { useAppointments, useBusySlots, useCreateAppointment, useUpdateAppointmentStatus, useDeleteAppointment, usePublicCancelAppointment } from '../src/hooks/useAppointments';
-import { useBarbers, useBarberTimeOff, useAddTimeOff } from '../src/hooks/useBarbers';
+import { usePublicBarbers, useAdminBarbers, useBarberTimeOff, useAddTimeOff } from '../src/hooks/useBarbers';
 import { useCatalog } from '../src/hooks/useCatalog';
 import { useCustomerAppointments, useCancelCustomerAppointment } from '../src/hooks/useCustomer';
 import { useNotifications } from '../src/hooks/useNotifications';
@@ -201,15 +203,25 @@ describe('Hooks', () => {
   });
 
   // ==================== BARBERS ====================
-  describe('useBarbers', () => {
-    it('fetches all barbers', async () => {
-      mockGetAllBarbersFn.mockResolvedValueOnce([{ id: 1, name: 'Alex', email: '', phone: '' }]);
+  describe('barber queries', () => {
+    it('fetches public barbers', async () => {
+      mockGetPublicBarbersFn.mockResolvedValueOnce([{ id: 1, name: 'Alex' }]);
 
-      await renderHook(() => useBarbers(), { wrapper: createWrapper() });
+      await renderHook(() => usePublicBarbers(), { wrapper: createWrapper() });
 
       await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
 
-      expect(mockGetAllBarbersFn).toHaveBeenCalled();
+      expect(mockGetPublicBarbersFn).toHaveBeenCalled();
+    });
+
+    it('fetches administrative barbers separately', async () => {
+      mockGetAdminBarbersFn.mockResolvedValueOnce([{ id: 1, name: 'Alex', email: '', phone: '' }]);
+
+      await renderHook(() => useAdminBarbers(), { wrapper: createWrapper() });
+
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+
+      expect(mockGetAdminBarbersFn).toHaveBeenCalled();
     });
   });
 

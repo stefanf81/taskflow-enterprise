@@ -129,7 +129,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/v1/appointments").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/catalog", "/api/v1/catalog/**").permitAll()
                 .requestMatchers("/api/v1/reviews/public/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/v1/barbers", "/api/v1/barbers/**").permitAll()
+                // Public booking only needs a barber identifier and display name.
+                // Contact data and time-off details are restricted to administrators.
+                .requestMatchers(HttpMethod.GET, "/api/v1/barbers").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/barbers/admin", "/api/v1/barbers/*/time-off").hasRole("ADMIN")
                 // Strict Admin restrictions to prevent privilege escalation / BOLA / PII leakage
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments/events").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments").hasRole("ADMIN")

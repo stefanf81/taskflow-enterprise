@@ -5,6 +5,7 @@
   },
   "build": {
     "development": {
+      "environment": "development",
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
@@ -15,6 +16,10 @@
       }
     },
     "preview": {
+      "environment": "preview",
+      "env": {
+        "TASKFLOW_TLS_POLICY": "required"
+      },
       "distribution": "internal",
       "android": {
         "buildType": "apk"
@@ -24,6 +29,10 @@
       }
     },
     "production": {
+      "environment": "production",
+      "env": {
+        "TASKFLOW_TLS_POLICY": "required"
+      },
       "distribution": "store",
       "autoIncrement": true,
       "android": {

@@ -16,16 +16,27 @@ describe('barbersApi', () => {
     jest.clearAllMocks();
   });
 
-  describe('getAllBarbers', () => {
-    it('fetches all barbers', async () => {
+  describe('getPublicBarbers', () => {
+    it('fetches public barber data without contact details', async () => {
       const mockBarbers = [
-        { id: 1, name: 'Alex', email: 'alex@example.com', phone: '+1' },
-        { id: 2, name: 'Sara', email: 'sara@example.com', phone: '+2' },
+        { id: 1, name: 'Alex' },
+        { id: 2, name: 'Sara' },
       ];
       mockedGet.mockResolvedValueOnce({ data: mockBarbers });
 
-      const result = await barbersApi.getAllBarbers();
+      const result = await barbersApi.getPublicBarbers();
       expect(mockedGet).toHaveBeenCalledWith('/api/v1/barbers');
+      expect(result).toEqual(mockBarbers);
+    });
+  });
+
+  describe('getAdminBarbers', () => {
+    it('fetches administrative barber contact details from the protected endpoint', async () => {
+      const mockBarbers = [{ id: 1, name: 'Alex', email: 'alex@example.com', phone: '+1' }];
+      mockedGet.mockResolvedValueOnce({ data: mockBarbers });
+
+      const result = await barbersApi.getAdminBarbers();
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/barbers/admin');
       expect(result).toEqual(mockBarbers);
     });
   });

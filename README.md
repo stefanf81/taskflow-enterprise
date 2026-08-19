@@ -22,7 +22,7 @@ shared event fanout before relying on real-time updates across replicas.
                                ┌──────────────────────────────────┐
                                │  Spring Boot 4.1 Backend REST    │
                                │        (Java 21 - Port 8080)     │
-                               │        http://localhost:8080     │
+                                │      internal-only in Compose    │
                                └────────────────┬─────────────────┘
                                                 │
                                                  │ Reviewed OpenAPI baseline
@@ -126,8 +126,8 @@ shared event fanout before relying on real-time updates across replicas.
 This launches the PostgreSQL database, Redis cache, Spring Boot backend, and Nginx frontend in health-checked isolated Docker networks.
 
 * **Web UI:** `http://localhost:4200`
-* **Backend API:** `http://localhost:8080`
-* **Prometheus Metrics:** `http://localhost:8080/actuator/prometheus` (requires ADMIN authentication — JWT cookie or bearer token)
+* **API via Nginx:** `http://localhost:4200/api`
+* **Prometheus Metrics:** Internal backend endpoint requiring ADMIN authentication — JWT cookie or bearer token
 * **Stop Application Stack:** `./stop-docker.sh`
 * **Full-Stack Automated Verification:** `./verify.sh` (automatically starts Docker if needed and cleans up on exit)
 
@@ -181,6 +181,7 @@ npm start
 
 * **Numeric UIDs:** Backend containers run as unprivileged numeric user `10001:10001` complying with strict Kubernetes Pod Security Standards (PSS).
 * **Zero-Trust Networks:** Docker Compose isolates PostgreSQL and Redis on `backend-tier`. Nginx lives on `frontend-tier`. Only Spring Boot bridges both.
+* **Single Public Ingress:** Docker Compose exposes only Nginx. The backend is reachable internally at `backend:8080` and receives normalized forwarding headers from Nginx.
 * **Read-Only Filesystems:** Containers run with `read_only: true` with ephemeral `/tmp` mounted as `tmpfs`.
 * **Dropped Kernel Capabilities:** All containers explicitly execute with `cap_drop: [ALL]` and `no-new-privileges:true`.
 * **Graceful Shutdown:** Spring Boot drains requests for up to 30 seconds (`server.shutdown=graceful`, `spring.lifecycle.timeout-per-shutdown-phase=30s`). The backend Compose service waits 40 seconds before Docker escalates SIGTERM to SIGKILL.

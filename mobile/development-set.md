@@ -85,14 +85,14 @@ The backend is secured using enterprise-grade DevSecOps controls:
 Configuration is defined in `mobile/.env`:
 
 ```env
-EXPO_PUBLIC_API_URL=http://localhost:8080
+EXPO_PUBLIC_API_URL=http://localhost:4200
 ```
 
 | Platform / Environment | Recommended `EXPO_PUBLIC_API_URL` | Override Needed? | Notes |
 |:---|:---|:---|:---|
-| **iOS Simulator** | `http://localhost:8080` | No | Shares host network loopback directly. |
-| **Android Emulator** | `http://10.0.2.2:8080` | Optional | `client.ts` auto-detects Android and uses `10.0.2.2` if `EXPO_PUBLIC_API_URL` is omitted. |
-| **Physical iPhone / Android** | `http://<MAC_LAN_IP>:8080` | **Yes** | Replace with your computer's local Wi-Fi IP (e.g. `http://192.168.1.50:8080`). |
+| **iOS Simulator** | `http://localhost:4200` | No | Uses the local Nginx ingress. |
+| **Android Emulator** | `http://10.0.2.2:4200` | Optional | `client.ts` auto-detects Android and uses `10.0.2.2` if `EXPO_PUBLIC_API_URL` is omitted. |
+| **Physical iPhone / Android** | `http://<MAC_LAN_IP>:4200` | **Yes** | Replace with your computer's local Wi-Fi IP (e.g. `http://192.168.1.50:4200`). |
 
 Find your Mac's LAN IP: `ifconfig | grep "inet " | grep -v 127.0.0.1`
 
@@ -105,7 +105,7 @@ The backend **must be running** before launching the mobile app:
 docker compose up -d db redis backend
 ```
 
-Verify backend reachability: `curl http://localhost:8080/api/v1/catalog`
+Verify API reachability: `curl http://localhost:4200/api/v1/catalog`
 
 ---
 
@@ -332,7 +332,7 @@ cd ios && pod install
 ### App shows blank/white screen
 The backend is probably unreachable. Check:
 1. `docker compose ps` — is the backend running?
-2. `curl http://localhost:8080/api/v1/catalog` — does it respond?
+2. `curl http://localhost:4200/api/v1/catalog` — does it respond?
 3. `.env` — is `EXPO_PUBLIC_API_URL` correct for your environment?
 
 ### Metro bundler port conflict

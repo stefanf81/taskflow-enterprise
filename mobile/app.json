@@ -26,6 +26,7 @@
     },
     "plugins": [
       "./plugins/withAndroidSplashApiFix",
+      "./plugins/withTaskflowTlsPinning",
       [
         "expo-splash-screen",
         {
@@ -43,7 +44,7 @@
       "@config-plugins/detox"
     ],
     "extra": {
-      "apiUrl": "http://localhost:8080",
+      "apiUrl": "http://localhost:4200",
       "eas": {
         "projectId": "11111111-2222-3333-4444-555555555555"
       }

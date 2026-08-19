@@ -21,7 +21,7 @@ import { TimeSlotPicker } from '../components/booking/TimeSlotPicker';
 import { ReceiptModal } from '../components/booking/ReceiptModal';
 import { ErrorMessage } from '../components/common/ErrorMessage';
 import { useCatalog } from '../hooks/useCatalog';
-import { useBarbers } from '../hooks/useBarbers';
+import { usePublicBarbers } from '../hooks/useBarbers';
 import { useBusySlots, useCreateAppointment } from '../hooks/useAppointments';
 import { GuestTabParamList, RootStackParamList } from '../types/navigation';
 import { AppointmentItem } from '../types/api';
@@ -77,7 +77,7 @@ export const BookingScreen: React.FC = () => {
   const navigation = useNavigation<BookingNavProp>();
 
   const { data: services = [] } = useCatalog();
-  const { data: apiBarbers = [] } = useBarbers();
+  const { data: apiBarbers = [] } = usePublicBarbers();
   const createMutation = useCreateAppointment();
 
   // Recompute the day list when the local calendar date rolls over at midnight

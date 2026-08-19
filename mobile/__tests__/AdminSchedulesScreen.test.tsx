@@ -4,7 +4,7 @@ import { AdminSchedulesScreen } from '../src/screens/AdminSchedulesScreen';
 
 const mockMutateAsync = jest.fn();
 jest.mock('../src/hooks/useBarbers', () => ({
-  useBarbers: () => ({
+  useAdminBarbers: () => ({
     data: [
       { id: 1, name: 'Alex the Barber', email: '', phone: '' },
       { id: 2, name: 'Sara the Stylist', email: '', phone: '' },

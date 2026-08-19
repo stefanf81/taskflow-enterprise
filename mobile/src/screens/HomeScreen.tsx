@@ -18,7 +18,7 @@ import { Button } from '../components/common/Button';
 import { StylistCard } from '../components/booking/StylistCard';
 import { LookbookGallery } from '../components/lookbook/LookbookGallery';
 import { useBarberRatings } from '../hooks/useReviews';
-import { useBarbers } from '../hooks/useBarbers';
+import { usePublicBarbers } from '../hooks/useBarbers';
 import { useCatalog } from '../hooks/useCatalog';
 import { useAuthStore } from '../store/useAuthStore';
 import { RootStackParamList, GuestTabParamList } from '../types/navigation';
@@ -63,7 +63,7 @@ export const HomeScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const { isAuthenticated, role } = useAuthStore();
   const { data: ratings = [] } = useBarberRatings();
-  const { data: apiBarbers = [] } = useBarbers();
+  const { data: apiBarbers = [] } = usePublicBarbers();
   const { data: services = [] } = useCatalog();
 
   const [activeFaq, setActiveFaq] = useState<number | null>(null);

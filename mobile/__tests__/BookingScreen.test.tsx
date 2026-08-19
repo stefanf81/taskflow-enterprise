@@ -43,7 +43,7 @@ jest.mock('../src/hooks/useCatalog', () => ({
 }));
 
 jest.mock('../src/hooks/useBarbers', () => ({
-  useBarbers: () => ({ data: [{ id: 1, name: 'Alex the Barber', email: '', phone: '' }] }),
+  usePublicBarbers: () => ({ data: [{ id: 1, name: 'Alex the Barber' }] }),
 }));
 
 jest.mock('../src/hooks/useAppointments', () => {

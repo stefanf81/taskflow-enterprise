@@ -104,14 +104,21 @@ jobs:
 
       matrix:
         component:
-          # Backend scans the repo root but skips frontend/ so npm findings
-          # are not double-reported under both Trivy FS categories.
+          # Keep findings attributable to the component that owns the lockfile.
           - name: Backend
             path: .
-            skip-dirs: frontend
+            skip-dirs: frontend,mobile,shared
 
           - name: Frontend
             path: frontend
+            skip-dirs: ""
+
+          - name: Mobile
+            path: mobile
+            skip-dirs: ""
+
+          - name: Shared
+            path: shared/schemas
             skip-dirs: ""
 
     steps:

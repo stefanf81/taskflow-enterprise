@@ -46,11 +46,13 @@ export default defineConfig({
     },
   ],
 
-  /* Automatically spin up the Angular dev server during E2E testing */
-  webServer: {
-    command: 'npm start',
-    url: 'http://localhost:4200',
-    reuseExistingServer: !process.env['CI'],
-    timeout: 120_000, // 2 minutes timeout for slow startup
-  },
+  /* Use the Docker Nginx ingress when verify.sh has started the full stack. */
+  webServer: process.env['E2E_DOCKER']
+    ? undefined
+    : {
+        command: 'npm start',
+        url: 'http://localhost:4200',
+        reuseExistingServer: !process.env['CI'],
+        timeout: 120_000, // 2 minutes timeout for slow startup
+      },
 });

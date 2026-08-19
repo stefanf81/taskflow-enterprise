@@ -14,7 +14,7 @@ jest.mock('../src/hooks/useReviews', () => ({
   useBarberRatings: () => ({ data: [] }),
 }));
 jest.mock('../src/hooks/useBarbers', () => ({
-  useBarbers: () => ({ data: [] }),
+  usePublicBarbers: () => ({ data: [] }),
 }));
 jest.mock('../src/hooks/useCatalog', () => ({
   useCatalog: () => ({ data: [] }),

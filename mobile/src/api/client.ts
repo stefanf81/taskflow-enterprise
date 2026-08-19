@@ -2,23 +2,25 @@ import axios from 'axios';
 import { Platform } from 'react-native';
 import { storage } from '../utils/storage';
 import { queryClient } from '../query/queryClient';
-import { getSslPinningConfig } from '../utils/sslPinning';
 
 const getBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_API_URL) {
     let url = process.env.EXPO_PUBLIC_API_URL;
-    const isHttp = url.startsWith('http://');
     let hostname = '';
+    let protocol = '';
     try {
-      hostname = new URL(url).hostname;
+      const parsed = new URL(url);
+      hostname = parsed.hostname;
+      protocol = parsed.protocol;
     } catch {
-      hostname = '';
+      throw new Error('EXPO_PUBLIC_API_URL must be a valid absolute URL.');
     }
     if (Platform.OS === 'android' && hostname === 'localhost') {
       url = url.replace(hostname, '10.0.2.2');
       hostname = '10.0.2.2';
     }
-    if (!__DEV__ && isHttp && hostname !== '10.0.2.2' && hostname !== 'localhost') {
+    const isExplicitLocalE2eBuild = process.env.EXPO_PUBLIC_E2E_LOCAL_API === 'true';
+    if (!__DEV__ && !isExplicitLocalE2eBuild && protocol !== 'https:') {
       throw new Error(
         'Production API URL must use HTTPS. Found: ' + url +
         '. Set EXPO_PUBLIC_API_URL to an https:// URL in your production .env file.',
@@ -33,26 +35,10 @@ const getBaseUrl = () => {
     );
   }
   if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:8080';
+    return 'http://10.0.2.2:4200';
   }
-  return 'http://localhost:8080';
+  return 'http://localhost:4200';
 };
-
-// Validate SSL certificate pinning configuration in production builds.
-// This does not enforce cryptographic pinning at the network level (that
-// requires a native module such as react-native-ssl-pinning) but ensures the
-// config is present, parseable, and validated so the deploy pipeline cannot
-// accidentally ship without pinning configured.
-if (!__DEV__) {
-  const sslConfig = getSslPinningConfig();
-  if (!sslConfig || sslConfig.fingerprints.length === 0) {
-    throw new Error(
-      'SSL certificate pinning is not configured for production. ' +
-        'Set EXPO_PUBLIC_SSL_PIN_FINGERPRINTS with one or more sha256/... fingerprints. ' +
-        'See src/utils/sslPinning.ts for setup instructions.',
-    );
-  }
-}
 
 export const apiClient = axios.create({
   baseURL: getBaseUrl(),

@@ -12,11 +12,11 @@ import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { ErrorMessage } from '../components/common/ErrorMessage';
 import { LoadingIndicator } from '../components/common/LoadingIndicator';
-import { useBarbers, useBarberTimeOff, useAddTimeOff } from '../hooks/useBarbers';
+import { useAdminBarbers, useBarberTimeOff, useAddTimeOff } from '../hooks/useBarbers';
 import { colors } from '../theme/colors';
 
 export const AdminSchedulesScreen: React.FC = () => {
-  const { data: barbers = [], isLoading: loadingBarbers } = useBarbers();
+  const { data: barbers = [], isLoading: loadingBarbers } = useAdminBarbers();
   const [selectedBarberId, setSelectedBarberId] = useState<number | null>(null);
 
   const { data: timeOffs = [], isLoading: loadingTimeOff } = useBarberTimeOff(selectedBarberId);

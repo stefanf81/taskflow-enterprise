@@ -1,9 +1,14 @@
 import { apiClient } from './client';
-import { Barber, BarberTimeOff, BarberTimeOffRequest } from '../types/api';
+import { Barber, BarberTimeOff, BarberTimeOffRequest, PublicBarber } from '../types/api';
 
 export const barbersApi = {
-  getAllBarbers: async (): Promise<Barber[]> => {
-    const response = await apiClient.get<Barber[]>('/api/v1/barbers');
+  getPublicBarbers: async (): Promise<PublicBarber[]> => {
+    const response = await apiClient.get<PublicBarber[]>('/api/v1/barbers');
+    return response.data;
+  },
+
+  getAdminBarbers: async (): Promise<Barber[]> => {
+    const response = await apiClient.get<Barber[]>('/api/v1/barbers/admin');
     return response.data;
   },
 
