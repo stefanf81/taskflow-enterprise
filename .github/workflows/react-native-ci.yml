@@ -1,6 +1,24 @@
 name: React Native CI
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - 'shared/**'
+      - 'api/**'
+      - 'scripts/sync-api-types.js'
+      - 'package.json'
+      - '.github/workflows/react-native-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - 'shared/**'
+      - 'api/**'
+      - 'scripts/sync-api-types.js'
+      - 'package.json'
+      - '.github/workflows/react-native-ci.yml'
   schedule:
     - cron: '30 4 * * *'
   workflow_dispatch:
@@ -27,7 +45,7 @@ env:
 
 jobs:
   javascript:
-    name: TypeScript and Jest
+    name: Mobile JavaScript
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
@@ -43,7 +61,9 @@ jobs:
         with:
           node-version-file: mobile/.nvmrc
           cache: npm
-          cache-dependency-path: mobile/package-lock.json
+          cache-dependency-path: |
+            mobile/package-lock.json
+            shared/schemas/package-lock.json
 
       - name: Install dependencies
         run: |
@@ -60,6 +80,10 @@ jobs:
       - name: Run Jest tests with coverage
         run: npm test -- --ci --coverage --maxWorkers=50%
 
+      - name: Verify generated API contracts
+        working-directory: .
+        run: npm run sync:api-types:check
+
       - name: Upload Jest coverage
         if: always()
         uses: actions/upload-artifact@v7
@@ -72,6 +96,7 @@ jobs:
   android:
     name: Android build and test
     needs: javascript
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:
@@ -181,6 +206,7 @@ jobs:
   ios:
     name: iOS simulator build
     needs: javascript
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: macos-26
     timeout-minutes: 60
     defaults:
