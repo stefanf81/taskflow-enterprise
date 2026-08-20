@@ -275,21 +275,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute Trivy Cache Key
-        if: ${{ !inputs.skip_scan }}
-        id: trivy-cache-key
-        run: |
-          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Trivy Database
-        if: ${{ !inputs.skip_scan }}
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/trivy
-          key: trivy-${{ runner.os }}-${{ env.TRIVY_VERSION }}-${{ steps.trivy-cache-key.outputs.week }}
-          restore-keys: |
-            trivy-${{ runner.os }}-${{ env.TRIVY_VERSION }}-
-
       ##########################################################
       # Build and Push to temporary scan tag (:tag-scan) with
       # provenance and SBOM enabled. Single build pass avoids rebuilding.

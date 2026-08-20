@@ -71,7 +71,9 @@ Submits the complete, deep Java and Gradle dependency tree directly to the GitHu
 
 See [`security.yml`](security.yml) for details on:
 - **Trivy Filesystem Scan:** Report-only (`exit-code: 0`) SARIF upload for both Backend (`.`) and Frontend (`frontend/`) source trees, surfaced in the Code Scanning tab. Severity asymmetry vs. the Docker image hard gate is deliberately maintained — see the inline notes.
-- **Trivy Database Caching:** Weekly cache key scoped to `TRIVY_VERSION`.
+- **Trivy Database Caching:** `trivy-action` manages its own workspace-local
+  vulnerability database cache and binary cache. The workflows do not layer a
+  second cache over it.
 
 ## 8a. Job: `codeql` — moved to `security.yml`
 
@@ -98,13 +100,14 @@ Runs Playwright E2E tests against a real, running backend and database.
 
 > The OWASP ZAP scan lives in its own dedicated workflow file, [`dast.yml`](dast.yml), and is no longer embedded in `ci.yml`. It is triggered on the daily schedule (staggered to **02:30 UTC**, off the 02:00 herd) and via manual `workflow_dispatch`.
 
-Runs an automated OWASP ZAP **full scan** against a live, running instance of the backend.
+Runs authenticated OWASP ZAP API and web scans against a disposable full-stack environment.
 
-- **Dynamic Environment Provisioning:** Provisions high-speed **PostgreSQL 18.4** and **Redis** service containers on the runner to provide a fully clean integration environment.
+- **Dynamic Environment Provisioning:** Provisions PostgreSQL and Redis service containers on the runner to provide a fully clean integration environment.
 - **Standalone Build:** Builds the backend with `./gradlew bootJar` (matching the production artifact) and boots it with `SPRING_PROFILES_ACTIVE=prod`, then waits for the `/actuator/health/liveness` endpoint to be healthy before scanning.
-- **OWASP ZAP Full Scan:** Uses `zaproxy/action-full-scan@v0.13.0` against `http://localhost:8080` with `fail_action: true`, covering the full web surface (not just the OpenAPI schema) of the running application.
-- **Interactive Security Reports:** Archives `report_html.html`, `report_json.json`, `report_md.md`, and `spring.log` as the `zap-full-scan` artifact (30-day retention).
-- **GitHub Security (GHAS) Code Scanning Integration:** Translates raw ZAP DAST findings into SARIF via the in-repo conversion utility `scripts/zap2sarif.py` and uploads them under the `dast-zap` category so they render natively on the **GitHub Security → Code Scanning** dashboard. The `upload-sarif` step uses `continue-on-error: true` so a SARIF ingestion failure never masks the scan results artifact.
+- **Authenticated API Scan:** Uses `zaproxy/action-api-scan@v0.8.0` with the canonical `api/openapi.json` definition and a bearer token issued by the disposable backend. This enumerates documented public and protected API operations without exposing a production credential.
+- **Production Ingress Scan:** Builds and runs the production frontend Nginx image with the same read-only filesystem and capability restrictions used by Compose, then scans `http://localhost:4200` through its API proxy.
+- **Interactive Security Reports:** Archives the API and web HTML, JSON, Markdown, SARIF, and backend logs as the `zap-full-scan` artifact (30-day retention).
+- **GitHub Security (GHAS) Code Scanning Integration:** Translates raw API and web ZAP findings into SARIF via `scripts/zap2sarif.py` and uploads separate `dast-zap-api` and `dast-zap-web` categories. Invalid source reports and SARIF write failures fail the workflow rather than being reported as zero findings.
 
 ## 10. Job: `docker-build`
 Compiles secure, production-grade container images for the backend and frontend components.

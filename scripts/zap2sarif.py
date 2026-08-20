@@ -18,10 +18,7 @@ def main(file_in, file_out):
         with open(file_in, 'r', encoding='utf-8') as file:
             zap_data = json.load(file)
     except Exception as e:
-        print(f"Error loading ZAP report: {e}")
-        # Write empty valid SARIF to not fail downstream steps
-        write_empty_sarif(file_out)
-        return
+        raise SystemExit(f"Error loading ZAP report: {e}") from e
 
     # Initializing SARIF structure
     sarif = {
@@ -128,7 +125,7 @@ def main(file_in, file_out):
             json.dump(sarif, sarif_file, indent=2)
         print(f"SARIF report generated at {file_out}")
     except Exception as e:
-        print(f"Error saving SARIF report: {e}")
+        raise SystemExit(f"Error saving SARIF report: {e}") from e
 
 def clean_html(text):
     if not text:
@@ -138,24 +135,6 @@ def clean_html(text):
     cleaned = re.sub(r'</p>', '\n', cleaned)
     cleaned = re.sub(r'<br\s*/?>', '\n', cleaned)
     return cleaned
-
-def write_empty_sarif(file_out):
-    sarif = {
-        "version": "2.1.0",
-        "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0-rtm.5.json",
-        "runs": [{
-            "tool": {
-                "driver": {
-                    "name": "OWASP ZAP",
-                    "informationUri": "https://www.zaproxy.org/",
-                    "rules": []
-                }
-            },
-            "results": []
-        }]
-    }
-    with open(file_out, 'w', encoding='utf-8') as f:
-        json.dump(sarif, f, indent=2)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert ZAP JSON report to SARIF format.")

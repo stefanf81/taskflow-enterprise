@@ -126,23 +126,6 @@ jobs:
         uses: actions/checkout@v7
 
       #####################################################
-      # Cache Trivy Database
-      #####################################################
-
-      - name: Compute Trivy Cache Key
-        id: trivy-cache-key
-        run: |
-          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Trivy Database
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/trivy
-          key: trivy-${{ runner.os }}-${{ env.TRIVY_VERSION }}-${{ steps.trivy-cache-key.outputs.week }}
-          restore-keys: |
-            trivy-${{ runner.os }}-${{ env.TRIVY_VERSION }}-
-
-      #####################################################
       # Filesystem Scan
       #####################################################
 

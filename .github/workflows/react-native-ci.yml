@@ -167,16 +167,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          architecture_args=()
+          gradle_args=(
+            ./gradlew
+            --no-daemon
+            --stacktrace
+            --build-cache
+          )
           if [[ "${NATIVE_SCOPE}" == "fast" ]]; then
-            architecture_args+=("-PreactNativeArchitectures=arm64-v8a")
+            gradle_args+=("-PreactNativeArchitectures=arm64-v8a")
           fi
 
-          ./gradlew \
-            --no-daemon \
-            --stacktrace \
-            --build-cache \
-            "${architecture_args[@]}" \
+          "${gradle_args[@]}" \
             :app:lintDebug \
             :app:testDebugUnitTest \
             :app:assembleDebug
@@ -286,20 +287,21 @@ jobs:
         run: |
           set -euo pipefail
 
-          architecture_args=()
+          xcodebuild_args=(
+            xcodebuild
+            -workspace ios/TaskFlowMobile.xcworkspace
+            -scheme TaskFlowMobile
+            -configuration Debug
+            -sdk iphonesimulator
+            -destination 'generic/platform=iOS Simulator'
+            -derivedDataPath ios/build/DerivedData
+            -resultBundlePath ios/build/TaskFlowMobile.xcresult
+          )
           if [[ "${NATIVE_SCOPE}" == "fast" ]]; then
-            architecture_args+=('ARCHS=arm64' 'ONLY_ACTIVE_ARCH=YES')
+            xcodebuild_args+=('ARCHS=arm64' 'ONLY_ACTIVE_ARCH=YES')
           fi
 
-          xcodebuild \
-            -workspace ios/TaskFlowMobile.xcworkspace \
-            -scheme TaskFlowMobile \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath ios/build/DerivedData \
-            -resultBundlePath ios/build/TaskFlowMobile.xcresult \
-            "${architecture_args[@]}" \
+          "${xcodebuild_args[@]}" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \

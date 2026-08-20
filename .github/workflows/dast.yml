@@ -16,6 +16,7 @@ concurrency:
 
 env:
   JAVA_VERSION: "21"
+  NODE_VERSION: "22"
 
 defaults:
   run:
@@ -31,7 +32,7 @@ jobs:
     name: OWASP ZAP Full Scan
 
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     services:
 
@@ -71,6 +72,7 @@ jobs:
       SPRING_DATASOURCE_PASSWORD: taskflow
       SPRING_DATA_REDIS_HOST: localhost
       SPRING_DATA_REDIS_PORT: 6379
+      SPRING_SECURITY_PASSWORD: admin-password
 
     steps:
 
@@ -95,6 +97,15 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            shared/schemas/package-lock.json
 
       ##########################################################
       # Build
@@ -145,25 +156,104 @@ jobs:
           cat spring.log
           exit 1
 
+      - name: Create DAST bearer token
+        id: auth
+        run: |
+          set -euo pipefail
+
+          response="$({
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header 'Content-Type: application/json' \
+              --data '{"username":"admin","password":"admin-password"}' \
+              http://localhost:8080/api/v1/auth/mobile/login
+          })"
+          token="$(jq --raw-output --exit-status '.accessToken' <<< "$response")"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Build production frontend image
+        run: |
+          set -euo pipefail
+
+          npm ci --prefix shared/schemas --prefer-offline --no-audit --no-fund
+          npm ci --prefix frontend --prefer-offline --no-audit --no-fund
+          npm --prefix frontend exec -- ng build
+          docker build --tag taskflow-dast-frontend frontend
+
+      - name: Start production frontend ingress
+        run: |
+          set -euo pipefail
+
+          docker run --detach \
+            --name taskflow-dast-frontend \
+            --add-host backend:host-gateway \
+            --publish 4200:8080 \
+            --read-only \
+            --tmpfs /tmp \
+            --tmpfs /var/cache/nginx \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            taskflow-dast-frontend
+
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:4200/ > /dev/null && \
+               curl --fail --silent http://localhost:4200/api/v1/catalog > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          docker logs taskflow-dast-frontend
+          exit 1
+
       ##########################################################
-      # OWASP ZAP Full Scan
+      # OWASP ZAP API Scan
       ##########################################################
 
-      - name: Run OWASP ZAP Full Scan
-        uses: zaproxy/action-full-scan@v0.13.0
+      - name: Run authenticated OWASP ZAP API Scan
+        uses: zaproxy/action-api-scan@v0.8.0
+        env:
+          ZAP_AUTH_HEADER: Authorization
+          ZAP_AUTH_HEADER_VALUE: Bearer ${{ steps.auth.outputs.token }}
+          ZAP_AUTH_HEADER_SITE: http://localhost:8080
         with:
-          target: http://localhost:8080
-
+          target: api/openapi.json
+          format: openapi
           fail_action: true
-
           allow_issue_writing: false
+          artifact_name: zap-api-report
+          cmd_options: >-
+            -O http://localhost:8080
+            -J zap-api-report.json
+            -r zap-api-report.html
+            -w zap-api-report.md
+            -T 10
 
-          artifact_name: zap-report
+      - name: Run authenticated OWASP ZAP frontend scan
+        uses: zaproxy/action-full-scan@v0.13.0
+        env:
+          ZAP_AUTH_HEADER: Authorization
+          ZAP_AUTH_HEADER_VALUE: Bearer ${{ steps.auth.outputs.token }}
+          ZAP_AUTH_HEADER_SITE: http://localhost:4200
+        with:
+          target: http://localhost:4200
+          fail_action: true
+          allow_issue_writing: false
+          artifact_name: zap-web-report
+          cmd_options: >-
+            -J zap-web-report.json
+            -r zap-web-report.html
+            -w zap-web-report.md
+            -T 10
 
       - name: Generate Job Summary from ZAP Report
-        if: always() && hashFiles('report_md.md') != ''
+        if: always()
         run: |
-          cat report_md.md >> $GITHUB_STEP_SUMMARY
+          for report in zap-api-report.md zap-web-report.md; do
+            if [[ -f "$report" ]]; then
+              cat "$report" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
 
       ##########################################################
       # Python
@@ -179,24 +269,37 @@ jobs:
       # Convert SARIF
       ##########################################################
 
-      - name: Convert ZAP JSON to SARIF
-        if: always() && hashFiles('report_json.json') != ''
+      - name: Convert ZAP API JSON to SARIF
+        if: always() && hashFiles('zap-api-report.json') != ''
         run: |
           python scripts/zap2sarif.py \
-            report_json.json \
-            zap-results.sarif
+            zap-api-report.json \
+            zap-api-results.sarif
+
+      - name: Convert ZAP web JSON to SARIF
+        if: always() && hashFiles('zap-web-report.json') != ''
+        run: |
+          python scripts/zap2sarif.py \
+            zap-web-report.json \
+            zap-web-results.sarif
 
       ##########################################################
       # Upload SARIF
       ##########################################################
 
-      - name: Upload SARIF
-        if: always() && hashFiles('zap-results.sarif') != ''
-        continue-on-error: true
+      - name: Upload API SARIF
+        if: always() && hashFiles('zap-api-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: zap-results.sarif
-          category: dast-zap
+          sarif_file: zap-api-results.sarif
+          category: dast-zap-api
+
+      - name: Upload web SARIF
+        if: always() && hashFiles('zap-web-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: zap-web-results.sarif
+          category: dast-zap-web
 
       ##########################################################
       # Upload Reports
@@ -209,10 +312,14 @@ jobs:
           name: zap-full-scan
           path: |
             spring.log
-            report_html.html
-            report_json.json
-            report_md.md
-            zap-results.sarif
+            zap-api-report.html
+            zap-api-report.json
+            zap-api-report.md
+            zap-api-results.sarif
+            zap-web-report.html
+            zap-web-report.json
+            zap-web-report.md
+            zap-web-results.sarif
           if-no-files-found: ignore
           compression-level: 0
           retention-days: 30

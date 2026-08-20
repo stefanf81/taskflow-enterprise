@@ -262,8 +262,9 @@ jobs:
 
       - name: Run Nuclei
         if: ${{ hashFiles('reports/nuclei-targets.txt') != '' }}
-        continue-on-error: true
         run: |
+          set -euo pipefail
+
           if [[ ! -s reports/nuclei-targets.txt ]]; then
             echo "No targets were generated for Nuclei."
             exit 0
@@ -286,9 +287,15 @@ jobs:
             -omit-raw \
             -no-color \
             -stats \
-            -jsonl-export reports/nuclei-results.jsonl \
+            -json-export reports/nuclei-results.json \
             -sarif-export reports/nuclei-results.sarif \
             2>&1 | tee reports/nuclei.log
+
+          # A successful zero-finding scan writes an empty JSON array. Require
+          # both exports so an outage cannot masquerade as a clean result.
+          jq -e 'type == "array"' reports/nuclei-results.json > /dev/null
+          test -s reports/nuclei-results.sarif
+          touch reports/nuclei-complete
 
       ##########################################################
       # testssl.sh
@@ -453,7 +460,7 @@ jobs:
                   lines.append(f"  - `{target}`")
 
           lines.extend(["", "## Nuclei findings", ""])
-          nuclei_jsonl = Path("reports/nuclei-results.jsonl")
+          nuclei_json = Path("reports/nuclei-results.json")
 
           counts = {
               "critical": 0,
@@ -465,17 +472,8 @@ jobs:
           }
           findings = []
 
-          if nuclei_jsonl.exists():
-              for raw_line in nuclei_jsonl.read_text(
-                  encoding="utf-8", errors="replace"
-              ).splitlines():
-                  if not raw_line.strip():
-                      continue
-                  try:
-                      finding = json.loads(raw_line)
-                  except json.JSONDecodeError:
-                      continue
-
+          if nuclei_json.exists():
+              for finding in json.loads(nuclei_json.read_text(encoding="utf-8")):
                   severity = (
                       finding.get("info", {}).get("severity", "unknown").lower()
                   )
@@ -525,7 +523,7 @@ jobs:
                   lines.append(f"- **{severity}** — {name} — `{matched}`")
           else:
               lines.append("")
-              lines.append("No Nuclei findings were written to the JSONL report.")
+              lines.append("No Nuclei findings were written to the JSON report.")
 
           nikto_reports = sorted(Path("reports").glob("nikto-*.json"))
           testssl_reports = sorted(Path("reports").glob("testssl-*.json"))
@@ -566,21 +564,27 @@ jobs:
       # Quality gate
       ##########################################################
 
-      - name: Fail on high or critical Nuclei findings
-        if: always() && hashFiles('reports/nuclei-results.jsonl') != ''
+      - name: Verify Nuclei completed and fail on high or critical findings
+        if: always()
         run: |
+          set -euo pipefail
+
+          if [[ ! -s reports/nuclei-targets.txt ]]; then
+            echo "No Nuclei targets were generated."
+            exit 0
+          fi
+
+          test -f reports/nuclei-complete
+          jq -e 'type == "array"' reports/nuclei-results.json > /dev/null
+
           high_or_critical="$({
-            jq --slurp '
-              [
-                .[]
-                | select(
-                    (.info.severity // "unknown") == "high"
-                    or (.info.severity // "unknown") == "critical"
-                  )
-              ]
-              | length
-            ' reports/nuclei-results.jsonl
-          } 2>/dev/null || echo 0)"
+            jq '
+              map(select(
+                (.info.severity // "unknown") == "high"
+                or (.info.severity // "unknown") == "critical"
+              )) | length
+            ' reports/nuclei-results.json
+          })"
 
           if (( high_or_critical > 0 )); then
             echo "::error::Nuclei detected ${high_or_critical} high or critical finding(s)."
