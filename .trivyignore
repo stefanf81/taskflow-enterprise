@@ -1,2 +1,7 @@
 # Remediate false positive or unupgradable transitive dependency CVE-2026-54515 in jackson-databind
 CVE-2026-54515
+
+# image-size is pulled only by Metro, the development bundler. Both DoS issues affect
+# every released image-size version; remove these entries once the upstream package ships a fix.
+CVE-2025-71329
+CVE-2025-71330

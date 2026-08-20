@@ -166,6 +166,7 @@ jobs:
           scan-type: fs
           scan-ref: ${{ matrix.component.path }}
           skip-dirs: ${{ matrix.component.skip-dirs }}
+          trivyignores: .trivyignore
           format: sarif
           output: trivy-results.sarif
 
