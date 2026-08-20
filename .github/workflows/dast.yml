@@ -189,8 +189,9 @@ jobs:
             --add-host backend:host-gateway \
             --publish 4200:8080 \
             --read-only \
-            --tmpfs /tmp \
-            --tmpfs /var/cache/nginx \
+            --tmpfs /tmp:uid=10001,gid=10001 \
+            --tmpfs /var/cache/nginx:uid=10001,gid=10001 \
+            --tmpfs /var/run:uid=10001,gid=10001 \
             --cap-drop ALL \
             --security-opt no-new-privileges:true \
             taskflow-dast-frontend
