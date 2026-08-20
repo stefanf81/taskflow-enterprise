@@ -164,7 +164,7 @@ jobs:
       # Build scanner targets from Nmap results
       ##########################################################
 
-      - name: Build HTTP and TLS target lists
+      - name: Build HTTP, TLS and non-HTTP target lists
         run: |
           python3 <<'PY'
           from pathlib import Path
@@ -185,6 +185,7 @@ jobs:
 
           web_targets: set[str] = set()
           tls_targets: set[str] = set()
+          non_http_targets: set[str] = set()
           nuclei_targets: set[str] = set()
 
           root = ET.parse(source).getroot()
@@ -220,8 +221,6 @@ jobs:
                   or port in common_https_ports
               )
 
-              nuclei_targets.add(f"{target_host}:{port}")
-
               if is_tls:
                   tls_targets.add(f"{target_host}:{port}")
 
@@ -236,6 +235,13 @@ jobs:
                   url = f"{scheme}://{authority}"
                   web_targets.add(url)
                   nuclei_targets.add(url)
+              else:
+                  # Nuclei receives HTTP services as URLs. Keep only genuine
+                  # non-HTTP services in host:port form to avoid duplicate
+                  # HTTP scans against the same endpoint.
+                  target = f"{target_host}:{port}"
+                  non_http_targets.add(target)
+                  nuclei_targets.add(target)
 
           def write_lines(path: str, values: set[str]) -> None:
               ordered = sorted(values)
@@ -246,12 +252,15 @@ jobs:
 
           write_lines("reports/web-targets.txt", web_targets)
           write_lines("reports/tls-targets.txt", tls_targets)
+          write_lines("reports/non-http-targets.txt", non_http_targets)
           write_lines("reports/nuclei-targets.txt", nuclei_targets)
 
           print("Web targets:")
           print("\n".join(sorted(web_targets)) or "  none")
           print("TLS targets:")
           print("\n".join(sorted(tls_targets)) or "  none")
+          print("Non-HTTP targets:")
+          print("\n".join(sorted(non_http_targets)) or "  none")
           print("Nuclei targets:")
           print("\n".join(sorted(nuclei_targets)) or "  none")
           PY
@@ -448,6 +457,7 @@ jobs:
           for label, filename in (
               ("Web", "reports/web-targets.txt"),
               ("TLS", "reports/tls-targets.txt"),
+              ("Non-HTTP", "reports/non-http-targets.txt"),
           ):
               path = Path(filename)
               targets = (

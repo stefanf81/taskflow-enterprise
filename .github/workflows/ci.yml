@@ -60,6 +60,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      dependency_submission: ${{ steps.filter.outputs.dependency_submission }}
 
       docker: ${{ steps.filter.outputs.docker }}
       docker_backend: ${{ steps.filter.outputs.docker_backend }}
@@ -91,18 +92,37 @@ jobs:
               - api/**
               - scripts/**
 
+            dependency_submission:
+              - '*.gradle'
+              - gradle.properties
+              - gradle/**
+
             docker:
               - Dockerfile*
               - frontend/Dockerfile
               - docker-compose.yml
               - .env.example
+              - .dockerignore
+              - frontend/.dockerignore
+              - .trivyignore
+              - frontend/nginx-main.conf
+              - frontend/nginx.conf
+              - frontend/docker-entrypoint.sh
 
             docker_backend:
               - Dockerfile*
               - docker-compose.yml
+              - .dockerignore
+              - .trivyignore
 
             docker_frontend:
               - frontend/Dockerfile
+              - docker-compose.yml
+              - frontend/.dockerignore
+              - .trivyignore
+              - frontend/nginx-main.conf
+              - frontend/nginx.conf
+              - frontend/docker-entrypoint.sh
 
       - name: Select Docker components
         id: components
@@ -111,7 +131,6 @@ jobs:
           FRONTEND_CHANGED: ${{ steps.filter.outputs.frontend }}
           DOCKER_BACKEND_CHANGED: ${{ steps.filter.outputs.docker_backend }}
           DOCKER_FRONTEND_CHANGED: ${{ steps.filter.outputs.docker_frontend }}
-          IS_MAIN: ${{ github.ref == 'refs/heads/main' }}
           IS_MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
           IS_SCHEDULE: ${{ github.event_name == 'schedule' }}
 
@@ -120,7 +139,6 @@ jobs:
 
           if [[ "$BACKEND_CHANGED" == "true" || \
                 "$DOCKER_BACKEND_CHANGED" == "true" || \
-                "$IS_MAIN" == "true" || \
                 "$IS_MANUAL" == "true" || \
                 "$IS_SCHEDULE" == "true" ]]; then
             components+=(backend)
@@ -128,15 +146,13 @@ jobs:
 
           if [[ "$FRONTEND_CHANGED" == "true" || \
                 "$DOCKER_FRONTEND_CHANGED" == "true" || \
-                "$IS_MAIN" == "true" || \
                 "$IS_MANUAL" == "true" || \
                 "$IS_SCHEDULE" == "true" ]]; then
             components+=(frontend)
           fi
 
-          printf 'matrix=%s\n' \
-            "$(printf '%s\n' "${components[@]}" | jq -R . | jq -s -c .)" \
-            >> "$GITHUB_OUTPUT"
+          matrix="$(jq -cn '$ARGS.positional' --args "${components[@]}")"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   ###########################################################
   # Dockerfile Lint
@@ -179,8 +195,8 @@ jobs:
 
     if: |
       needs.changes.outputs.backend == 'true' ||
+      needs.changes.outputs.frontend == 'true' ||
       needs.changes.outputs.docker_backend == 'true' ||
-      github.ref == 'refs/heads/main' ||
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'schedule'
 
@@ -296,6 +312,7 @@ jobs:
 
     if: |
       github.ref == 'refs/heads/main' &&
+      needs.changes.outputs.dependency_submission == 'true' &&
       (
         github.event_name == 'push' ||
         github.event_name == 'workflow_dispatch' ||
@@ -332,8 +349,8 @@ jobs:
 
     if: |
       needs.changes.outputs.frontend == 'true' ||
+      needs.changes.outputs.backend == 'true' ||
       needs.changes.outputs.docker_frontend == 'true' ||
-      github.ref == 'refs/heads/main' ||
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'schedule'
 
@@ -353,7 +370,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            shared/schemas/package-lock.json
 
       - name: Install Dependencies
         run: |
@@ -375,7 +394,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: frontend/.angular/cache
-          key: angular-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          key: angular-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json', 'shared/schemas/package-lock.json') }}
           restore-keys: |
             angular-${{ runner.os }}-
 
@@ -450,7 +469,6 @@ jobs:
       !contains(needs.*.result, 'skipped') &&
       (
         github.event_name == 'pull_request' ||
-        github.ref == 'refs/heads/main' ||
         github.event_name == 'schedule' ||
         (
           github.event_name == 'workflow_dispatch' &&
@@ -514,7 +532,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            shared/schemas/package-lock.json
 
       ##########################################################
       # Download Backend
@@ -566,7 +586,7 @@ jobs:
           exit 1
 
       ##########################################################
-      # Frontend
+      # Production frontend ingress
       ##########################################################
 
       - name: Install Frontend
@@ -583,6 +603,51 @@ jobs:
             --no-audit \
             --no-fund
 
+      - name: Download Frontend Bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-dist
+          path: frontend/dist/frontend/browser
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build production frontend image
+        run: |
+          docker buildx build \
+            --cache-from type=gha,scope=frontend-e2e \
+            --cache-to type=gha,mode=max,scope=frontend-e2e \
+            --load \
+            --tag taskflow-e2e-frontend \
+            frontend
+
+      - name: Start production frontend ingress
+        run: |
+          set -euo pipefail
+
+          docker run --detach \
+            --name taskflow-e2e-frontend \
+            --add-host backend:host-gateway \
+            --publish 4200:8080 \
+            --read-only \
+            --tmpfs /tmp:uid=10001,gid=10001 \
+            --tmpfs /var/cache/nginx:uid=10001,gid=10001 \
+            --tmpfs /var/run:uid=10001,gid=10001 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            taskflow-e2e-frontend
+
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:4200/ > /dev/null && \
+               curl --fail --silent http://localhost:4200/api/v1/catalog > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          docker logs taskflow-e2e-frontend
+          exit 1
+
       ##########################################################
       # Playwright
       ##########################################################
@@ -591,7 +656,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json', 'shared/schemas/package-lock.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
 
@@ -602,6 +667,8 @@ jobs:
 
       - name: Run Playwright Tests
         working-directory: frontend
+        env:
+          E2E_DOCKER: "true"
         run: npm run e2e
 
       ##########################################################
@@ -613,6 +680,10 @@ jobs:
         run: |
           echo "========== SPRING LOG =========="
           cat spring.log || true
+
+      - name: Print frontend ingress log on Failure
+        if: failure()
+        run: docker logs taskflow-e2e-frontend || true
 
       ##########################################################
       # Upload Reports
@@ -647,14 +718,7 @@ jobs:
       always() &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled') &&
-      (
-        needs.changes.outputs.backend == 'true' ||
-        needs.changes.outputs.frontend == 'true' ||
-        needs.changes.outputs.docker == 'true' ||
-        github.ref == 'refs/heads/main' ||
-        github.event_name == 'workflow_dispatch' ||
-        github.event_name == 'schedule'
-      )
+      needs.changes.outputs.docker_components != '[]'
 
     runs-on: ubuntu-latest
     timeout-minutes: 20
