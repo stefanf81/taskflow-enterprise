@@ -13,12 +13,27 @@ def clean_uri(uri):
     cleaned = cleaned.rstrip('/')
     return cleaned
 
-def main(file_in, file_out):
+def ignored_rule_ids(rules_file):
+    if not rules_file:
+        return set()
+
+    ignored = set()
+    with open(rules_file, 'r', encoding='utf-8') as file:
+        for line in file:
+            columns = line.strip().split('\t')
+            if len(columns) >= 2 and not columns[0].startswith('#') and columns[1] == 'IGNORE':
+                ignored.add(f"ZAP-{columns[0]}")
+    return ignored
+
+
+def main(file_in, file_out, rules_file=None):
     try:
         with open(file_in, 'r', encoding='utf-8') as file:
             zap_data = json.load(file)
     except Exception as e:
         raise SystemExit(f"Error loading ZAP report: {e}") from e
+
+    ignored_rules = ignored_rule_ids(rules_file)
 
     # Initializing SARIF structure
     sarif = {
@@ -44,6 +59,8 @@ def main(file_in, file_out):
     for site in zap_data.get("site", []):
         for alert in site.get("alerts", []):
             rule_id = f"ZAP-{alert.get('pluginid', alert.get('alertRef', 'unknown'))}"
+            if rule_id in ignored_rules:
+                continue
             
             # Map riskcode to GHA severity level (error, warning, note)
             riskcode = alert.get("riskcode", "0")
@@ -140,5 +157,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert ZAP JSON report to SARIF format.")
     parser.add_argument("file_in", help="Input ZAP JSON file")
     parser.add_argument("file_out", help="Output SARIF JSON file")
+    parser.add_argument("--rules-file", help="ZAP rules file whose IGNORE entries are omitted from SARIF")
     args = parser.parse_args()
-    main(args.file_in, args.file_out)
+    main(args.file_in, args.file_out, args.rules_file)

@@ -297,14 +297,16 @@ jobs:
         run: |
           python scripts/zap2sarif.py \
             zap-api-report.json \
-            zap-api-results.sarif
+            zap-api-results.sarif \
+            --rules-file .zap/api-rules.tsv
 
       - name: Convert ZAP web JSON to SARIF
         if: always() && hashFiles('zap-web-report.json') != ''
         run: |
           python scripts/zap2sarif.py \
             zap-web-report.json \
-            zap-web-results.sarif
+            zap-web-results.sarif \
+            --rules-file .zap/web-rules.tsv
 
       ##########################################################
       # Upload SARIF
