@@ -1,2 +1,11 @@
 # Angular reads the double-submit XSRF-TOKEN cookie, so it intentionally cannot be HttpOnly.
 10010	IGNORE	(XSRF-TOKEN is intentionally readable by Angular's XSRF interceptor)
+# API error responses deliberately use problem-detail JSON rather than the HTML ZAP expects for malformed root queries.
+100001	IGNORE	(Problem-detail JSON returned for malformed API requests)
+# Expected validation, authentication, authorization, and rate-limit responses are not security findings.
+100000	IGNORE	(Expected client-error responses during API fuzzing)
+# These rules identify normal API and authentication behavior but do not report vulnerabilities.
+10049	IGNORE	(API cache-control policy is intentional)
+10104	IGNORE	(User-Agent-dependent behavior is not a vulnerability)
+10111	IGNORE	(Authentication endpoint identification is informational)
+10112	IGNORE	(Authentication and CSRF token handling is intentional)

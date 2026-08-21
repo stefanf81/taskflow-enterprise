@@ -118,7 +118,7 @@ public class AuthController {
     @GetMapping("/csrf")
     @Operation(summary = "Get CSRF token for authenticated state-changing requests")
     @ApiResponse(responseCode = "200", description = "CSRF token returned (also set in XSRF-TOKEN cookie)")
-    public CsrfToken csrf(CsrfToken token) {
+    public CsrfToken csrf(@Parameter(hidden = true) CsrfToken token) {
         return token;
     }
 

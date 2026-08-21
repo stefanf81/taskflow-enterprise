@@ -1011,16 +1011,6 @@
     "/api/v1/auth/csrf": {
       "get": {
         "operationId": "csrf",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "token",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/CsrfToken"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "content": {

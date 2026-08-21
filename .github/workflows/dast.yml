@@ -213,7 +213,7 @@ jobs:
       - name: Run authenticated OWASP ZAP API Scan
         id: zap_api
         continue-on-error: true
-        uses: zaproxy/action-api-scan@v0.8.0
+        uses: zaproxy/action-api-scan@v0.10.0
         env:
           ZAP_AUTH_HEADER: Authorization
           ZAP_AUTH_HEADER_VALUE: Bearer ${{ steps.auth.outputs.token }}
