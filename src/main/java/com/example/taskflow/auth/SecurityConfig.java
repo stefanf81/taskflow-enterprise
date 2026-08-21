@@ -56,6 +56,7 @@ public class SecurityConfig {
     private final DataSource dataSource;
     private final String jwtIssuer;
     private final String jwtAudience;
+    private final boolean cookieSecure;
 
     public SecurityConfig(
             @Value("${spring.security.user.name:admin}") String adminUsername,
@@ -64,12 +65,14 @@ public class SecurityConfig {
             @Value("${app.rsa.public-key:#{null}}") String publicKeyB64,
             @Value("${app.jwt.issuer:taskflow}") String jwtIssuer,
             @Value("${app.jwt.audience:taskflow-api}") String jwtAudience,
+            @Value("${app.cookie.secure:false}") boolean cookieSecure,
             DataSource dataSource) {
         this.adminUsername = adminUsername;
         this.adminPassword = adminPassword;
         this.dataSource = dataSource;
         this.jwtIssuer = jwtIssuer;
         this.jwtAudience = jwtAudience;
+        this.cookieSecure = cookieSecure;
         this.keyPair = loadOrGenerateRsaKeyPair(privateKeyB64, publicKeyB64);
         this.rsaKey = new RSAKey.Builder((RSAPublicKey) keyPair.getPublic())
                 .privateKey((RSAPrivateKey) keyPair.getPrivate())
@@ -101,7 +104,7 @@ public class SecurityConfig {
                     PathPatternRequestMatcher.pathPattern("/h2-console/**"),
                     bearerOnlyRequestMatcher()
                 )
-                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                .csrfTokenRepository(csrfTokenRepository())
                 .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
             )
             .cors(cors -> {})  // CorsConfigurationSource is provided by CorsConfig @Bean auto-detection
@@ -158,6 +161,15 @@ public class SecurityConfig {
             );
 
         return http.build();
+    }
+
+    CookieCsrfTokenRepository csrfTokenRepository() {
+        CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repository.setCookieCustomizer(cookie -> cookie
+                // Angular must read this double-submit token, unlike the auth cookie.
+                .sameSite("Strict")
+                .secure(cookieSecure));
+        return repository;
     }
 
     /**

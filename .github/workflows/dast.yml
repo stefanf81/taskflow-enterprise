@@ -224,12 +224,22 @@ jobs:
           fail_action: true
           allow_issue_writing: false
           artifact_name: zap-api-report
+          rules_file_name: .zap/api-rules.tsv
           cmd_options: >-
             -O http://localhost:8080
-            -J zap-api-report.json
-            -r zap-api-report.html
-            -w zap-api-report.md
             -T 10
+
+      # The ZAP actions' built-in artifact upload expects these default names.
+      # Preserve them under scan-specific names before the frontend scan overwrites them.
+      - name: Preserve ZAP API reports
+        if: always()
+        run: |
+          for extension in json html md; do
+            source="report_${extension}.${extension}"
+            if [[ -f "$source" ]]; then
+              cp "$source" "zap-api-report.${extension}"
+            fi
+          done
 
       - name: Run authenticated OWASP ZAP frontend scan
         id: zap_web
@@ -245,11 +255,19 @@ jobs:
           fail_action: true
           allow_issue_writing: false
           artifact_name: zap-web-report
+          rules_file_name: .zap/web-rules.tsv
           cmd_options: >-
-            -J zap-web-report.json
-            -r zap-web-report.html
-            -w zap-web-report.md
             -T 10
+
+      - name: Preserve ZAP frontend reports
+        if: always()
+        run: |
+          for extension in json html md; do
+            source="report_${extension}.${extension}"
+            if [[ -f "$source" ]]; then
+              cp "$source" "zap-web-report.${extension}"
+            fi
+          done
 
       - name: Generate Job Summary from ZAP Report
         if: always()

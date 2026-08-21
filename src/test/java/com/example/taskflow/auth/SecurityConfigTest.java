@@ -2,7 +2,9 @@ package com.example.taskflow.auth;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
 import javax.sql.DataSource;
 import java.io.PrintWriter;
@@ -36,7 +38,7 @@ class SecurityConfigTest {
     }
 
     private SecurityConfig createConfig(String admin, String pass, String privKey, String pubKey) {
-        return new SecurityConfig(admin, pass, privKey, pubKey, "taskflow", "taskflow-api", dummyDataSource());
+        return new SecurityConfig(admin, pass, privKey, pubKey, "taskflow", "taskflow-api", false, dummyDataSource());
     }
 
     @Test
@@ -107,5 +109,20 @@ class SecurityConfigTest {
         request.setCookies(new jakarta.servlet.http.Cookie("access_token", "web-token"));
 
         assertFalse(config.bearerOnlyRequestMatcher().matches(request));
+    }
+
+    @Test
+    void csrfCookieIsReadableByAngularAndSameSiteStrict() {
+        SecurityConfig config = createConfig("admin", "pass", null, null);
+        CookieCsrfTokenRepository repository = config.csrfTokenRepository();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        repository.saveToken(repository.generateToken(request), request, response);
+
+        jakarta.servlet.http.Cookie cookie = response.getCookie("XSRF-TOKEN");
+        assertNotNull(cookie);
+        assertTrue("Strict".equals(cookie.getAttribute("SameSite")));
+        assertFalse(cookie.isHttpOnly());
     }
 }

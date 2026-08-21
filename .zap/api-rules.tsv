@@ -1,0 +1,2 @@
+# Angular reads the double-submit XSRF-TOKEN cookie, so it intentionally cannot be HttpOnly.
+10010	IGNORE	(XSRF-TOKEN is intentionally readable by Angular's XSRF interceptor)

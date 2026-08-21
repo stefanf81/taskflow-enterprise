@@ -1,0 +1,4 @@
+# Angular runtime component styles require this CSP source expression.
+10055	IGNORE	(Angular component styles require style-src unsafe-inline)
+# Fingerprinted static bundles may contain build timestamps; they do not expose server time or data.
+10096	IGNORE	(Static bundle timestamp false positive)
