@@ -185,6 +185,7 @@ jobs:
           docker run --detach \
             --name taskflow-dast-frontend \
             --add-host backend:host-gateway \
+            --mount type=bind,src="$PWD/frontend/nginx-upstream-server-ci.conf",dst=/etc/nginx/upstream-server.conf,readonly \
             --publish 4200:8080 \
             --read-only \
             --tmpfs /tmp:uid=10001,gid=10001 \

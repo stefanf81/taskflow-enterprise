@@ -116,6 +116,10 @@ COPY nginx-main.conf /etc/nginx/nginx.conf
 # Your existing HTTP server block
 COPY nginx.conf /etc/nginx/http.d/default.conf
 
+# Default upstream uses Docker's embedded DNS. CI mounts a static alternative
+# over this file when the backend runs directly on the runner host.
+COPY nginx-upstream-server.conf /etc/nginx/upstream-server.conf
+
 # Startup entrypoint: recreates temp directories on every container start
 # (the /var/cache/nginx tmpfs mount hides image-layer directories), then
 # execs nginx. PID 1 becomes nginx so it receives signals correctly.
