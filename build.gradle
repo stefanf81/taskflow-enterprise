@@ -1,6 +1,6 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '4.1.0'
+	id 'org.springframework.boot' version '4.1.1'
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'org.owasp.dependencycheck' version '13.0.0'
 	id 'jacoco'
@@ -12,10 +12,10 @@ version = '0.0.1-SNAPSHOT'
 ext {
 	set('opentelemetry.version', '1.65.0')
 	set('commons-lang3.version', '3.20.0')
-	// Pin logback above Spring Boot's vulnerable 1.5.34 release to fix CVE-2026-13006
-	// (ACE via conditional config file processing); 1.5.36+ adds additional hardening
-	// for disallowed references.
-	set('logback.version', '1.6.1')
+	// Pin Logback 1.6.3 above Spring Boot's vulnerable 1.5.34 release to fix CVE-2026-13006
+	// (ACE via conditional config file processing); this 1.6.x pin includes the 1.5.36+
+	// hardening for disallowed references.
+	set('logback.version', '1.6.3')
 	// Pin Jackson 2.x BOM to 2.22.2 to fix:
 	//   - CVE-2026-59888 (@JsonIgnore on Record bypassed with PropertyNamingStrategy)
 	//   - jackson-core: async parser maxNumberLength bypass (fixed in 2.21.4)
@@ -53,9 +53,9 @@ repositories {
 	mavenCentral()
 }
 dependencies {
-	implementation platform("org.springframework.boot:spring-boot-dependencies:4.1.0")
-	annotationProcessor platform("org.springframework.boot:spring-boot-dependencies:4.1.0")
-	testImplementation platform("org.springframework.boot:spring-boot-dependencies:4.1.0")
+	implementation platform("org.springframework.boot:spring-boot-dependencies:4.1.1")
+	annotationProcessor platform("org.springframework.boot:spring-boot-dependencies:4.1.1")
+	testImplementation platform("org.springframework.boot:spring-boot-dependencies:4.1.1")
 	// Spring Boot
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
@@ -67,8 +67,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 	// Explicit pins ensure Dependabot and container scanners resolve the patched
 	// Log4j API used by Spring Boot's log4j-to-slf4j bridge.
-	implementation 'org.apache.logging.log4j:log4j-api:2.25.5'
-	implementation 'org.apache.logging.log4j:log4j-to-slf4j:2.25.5'
+	implementation 'org.apache.logging.log4j:log4j-api:2.26.1'
+	implementation 'org.apache.logging.log4j:log4j-to-slf4j:2.26.1'
 	// Netty — explicit pins so Dependabot's Gradle parser sees the correct versions
 	// (Dependabot does not resolve BOM property overrides set via ext.set()).
 	// Originally pinned for GHSA-mfg7-5gfp-c4w3 (DNS Record Decoder memory leak);
@@ -87,8 +87,8 @@ dependencies {
 	implementation 'com.fasterxml.jackson.core:jackson-annotations:2.22'
 	implementation 'tools.jackson.core:jackson-databind:3.2.2'
 	// Hibernate 2nd-level cache with Caffeine JCache region factory
-	implementation 'org.hibernate.orm:hibernate-jcache:7.4.5.Final'
-	implementation 'org.hibernate.orm:hibernate-core:7.4.5.Final'
+	implementation 'org.hibernate.orm:hibernate-jcache:7.4.6.Final'
+	implementation 'org.hibernate.orm:hibernate-core:7.4.6.Final'
 	implementation 'com.github.ben-manes.caffeine:jcache:3.2.4'
 	// Cache (Redis-backed via spring-boot-starter-data-redis; Caffeine was unused)
 	// Modular monolith — Spring Modulith verifies package-based module boundaries

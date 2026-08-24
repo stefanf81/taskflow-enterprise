@@ -14,11 +14,10 @@ concurrency:
 env:
   TARGET_IP: "84.194.170.2"
 
-  # Optional but strongly recommended:
-  # Create a repository variable named PUBLIC_SERVER_DOMAIN containing the
-  # public hostname, for example app.example.com. Nmap will still scan the IP,
-  # while Nuclei, Nikto and testssl.sh will use the hostname for HTTP Host/SNI.
-  TARGET_HOST: ${{ vars.PUBLIC_SERVER_DOMAIN || '84.194.170.2' }}
+  # Required repository variable. Nmap scans the IP, while web scanners must
+  # use a hostname so TLS SNI and virtual-host routing are exercised correctly.
+  TARGET_HOST: ${{ vars.PUBLIC_SERVER_DOMAIN }}
+  EXPECTED_PUBLIC_TCP_PORTS: "80,443"
 
   NUCLEI_VERSION: "v3.11.0"
 
@@ -135,6 +134,33 @@ jobs:
           print(f"Discovered {len(ports)} open TCP port(s): {ports}")
           PY
 
+      - name: Record unexpected public TCP ports
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import os
+
+          expected = {
+              int(port)
+              for port in os.environ["EXPECTED_PUBLIC_TCP_PORTS"].split(",")
+              if port
+          }
+          discovered = {
+              int(port)
+              for port in Path("reports/open-ports.txt").read_text(
+                  encoding="utf-8"
+              ).split()
+          }
+          unexpected = sorted(discovered - expected)
+
+          Path("reports/unexpected-public-ports.txt").write_text(
+              "\n".join(str(port) for port in unexpected)
+              + ("\n" if unexpected else ""),
+              encoding="utf-8",
+          )
+          print(f"Unexpected public TCP port(s): {unexpected}")
+          PY
+
       - name: Run Nmap service and safe-script scan
         run: |
           open_ports="$(cat reports/open-ports.csv)"
@@ -164,29 +190,22 @@ jobs:
       # Build scanner targets from Nmap results
       ##########################################################
 
-      - name: Build HTTP, TLS and non-HTTP target lists
+      - name: Build application scanner target lists
         run: |
           python3 <<'PY'
           from pathlib import Path
           import os
           import xml.etree.ElementTree as ET
 
-          target_host = os.environ["TARGET_HOST"]
+          target_host = os.environ.get("TARGET_HOST", "").strip()
 
           service_xml = Path("reports/nmap-services.xml")
           discovery_xml = Path("reports/nmap-discovery.xml")
           source = service_xml if service_xml.exists() else discovery_xml
 
-          common_http_ports = {
-              80, 3000, 5000, 5601, 8000, 8008, 8080, 8081, 8088,
-              8888, 9000, 9090, 9091,
-          }
-          common_https_ports = {443, 4443, 6443, 7443, 8443, 9443}
-
           web_targets: set[str] = set()
           tls_targets: set[str] = set()
           non_http_targets: set[str] = set()
-          nuclei_targets: set[str] = set()
 
           root = ET.parse(source).getroot()
 
@@ -201,47 +220,13 @@ jobs:
               if protocol != "tcp":
                   continue
 
-              service = port_element.find("service")
-              service_name = ""
-              tunnel = ""
-
-              if service is not None:
-                  service_name = service.attrib.get("name", "").lower()
-                  tunnel = service.attrib.get("tunnel", "").lower()
-
-              is_tls = (
-                  tunnel == "ssl"
-                  or service_name in {"https", "https-alt", "ssl"}
-                  or port in common_https_ports
-              )
-
-              is_http = (
-                  "http" in service_name
-                  or port in common_http_ports
-                  or port in common_https_ports
-              )
-
-              if is_tls:
-                  tls_targets.add(f"{target_host}:{port}")
-
-              if is_http:
-                  scheme = "https" if is_tls else "http"
-                  default_port = 443 if scheme == "https" else 80
-                  authority = (
-                      target_host
-                      if port == default_port
-                      else f"{target_host}:{port}"
-                  )
-                  url = f"{scheme}://{authority}"
-                  web_targets.add(url)
-                  nuclei_targets.add(url)
+              if port == 443 and target_host:
+                  # Web scanners receive only the configured public hostname,
+                  # never inferred URLs for arbitrary TLS or management ports.
+                  web_targets.add(f"https://{target_host}")
+                  tls_targets.add(f"{target_host}:443")
               else:
-                  # Nuclei receives HTTP services as URLs. Keep only genuine
-                  # non-HTTP services in host:port form to avoid duplicate
-                  # HTTP scans against the same endpoint.
-                  target = f"{target_host}:{port}"
-                  non_http_targets.add(target)
-                  nuclei_targets.add(target)
+                  non_http_targets.add(f"{os.environ['TARGET_IP']}:{port}")
 
           def write_lines(path: str, values: set[str]) -> None:
               ordered = sorted(values)
@@ -253,7 +238,7 @@ jobs:
           write_lines("reports/web-targets.txt", web_targets)
           write_lines("reports/tls-targets.txt", tls_targets)
           write_lines("reports/non-http-targets.txt", non_http_targets)
-          write_lines("reports/nuclei-targets.txt", nuclei_targets)
+          write_lines("reports/nuclei-targets.txt", web_targets)
 
           print("Web targets:")
           print("\n".join(sorted(web_targets)) or "  none")
@@ -262,8 +247,34 @@ jobs:
           print("Non-HTTP targets:")
           print("\n".join(sorted(non_http_targets)) or "  none")
           print("Nuclei targets:")
-          print("\n".join(sorted(nuclei_targets)) or "  none")
+          print("\n".join(sorted(web_targets)) or "  none")
           PY
+
+      - name: Verify configured public HTTPS target
+        run: |
+          if [[ -z "${TARGET_HOST}" ]]; then
+            echo "::error::Set the PUBLIC_SERVER_DOMAIN repository variable to the public TaskFlow hostname."
+            touch reports/web-target-validation-failed
+            exit 0
+          fi
+
+          if [[ ! -s reports/web-targets.txt ]]; then
+            echo "::error::TCP port 443 is not open; no HTTPS application target can be scanned."
+            touch reports/web-target-validation-failed
+            exit 0
+          fi
+
+          while IFS= read -r url; do
+            [[ -z "${url}" ]] && continue
+            if ! curl --silent --show-error --location --max-time 20 --output /dev/null "${url}"; then
+              echo "::error::Configured public HTTPS target is unreachable: ${url}"
+              touch reports/web-target-validation-failed
+              : > reports/web-targets.txt
+              : > reports/tls-targets.txt
+              : > reports/nuclei-targets.txt
+              exit 0
+            fi
+          done < reports/web-targets.txt
 
       ##########################################################
       # Nuclei
@@ -281,6 +292,7 @@ jobs:
 
           # DAST/fuzzing and denial-of-service templates are excluded for this
           # nightly production scan. Only signed templates are accepted.
+          set +e
           nuclei \
             -list reports/nuclei-targets.txt \
             -severity medium,high,critical \
@@ -299,6 +311,14 @@ jobs:
             -json-export reports/nuclei-results.json \
             -sarif-export reports/nuclei-results.sarif \
             2>&1 | tee reports/nuclei.log
+          nuclei_status="${PIPESTATUS[0]}"
+          set -e
+
+          printf '%s\n' "${nuclei_status}" > reports/nuclei-exit-status.txt
+          if (( nuclei_status != 0 )); then
+            echo "::error::Nuclei exited with status ${nuclei_status}; inspect reports/nuclei.log."
+            exit "${nuclei_status}"
+          fi
 
           # A successful zero-finding scan writes an empty JSON array. Require
           # both exports so an outage cannot masquerade as a clean result.
@@ -454,6 +474,17 @@ jobs:
 
           lines.extend(["", "## Generated targets", ""])
 
+          unexpected_ports = Path("reports/unexpected-public-ports.txt")
+          unexpected = (
+              unexpected_ports.read_text(encoding="utf-8").split()
+              if unexpected_ports.exists()
+              else []
+          )
+          lines.append(
+              "- **Unexpected public TCP ports:** "
+              + (", ".join(unexpected) if unexpected else "none")
+          )
+
           for label, filename in (
               ("Web", "reports/web-targets.txt"),
               ("TLS", "reports/tls-targets.txt"),
@@ -578,27 +609,45 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
+          failed=0
+
+          if [[ -s reports/unexpected-public-ports.txt ]]; then
+            unexpected_ports="$(paste -sd, reports/unexpected-public-ports.txt)"
+            echo "::error::Unexpected public TCP port(s) detected: ${unexpected_ports}."
+            failed=1
+          fi
+
+          if [[ -f reports/web-target-validation-failed ]]; then
+            echo "::error::The configured public HTTPS target could not be validated."
+            failed=1
+          fi
 
           if [[ ! -s reports/nuclei-targets.txt ]]; then
-            echo "No Nuclei targets were generated."
-            exit 0
+            echo "No verified Nuclei targets were generated."
+          elif [[ ! -f reports/nuclei-complete ]]; then
+            echo "::error::Nuclei did not complete; inspect reports/nuclei.log."
+            failed=1
+          elif ! jq -e 'type == "array"' reports/nuclei-results.json > /dev/null; then
+            echo "::error::Nuclei did not produce a valid JSON array report."
+            failed=1
+          else
+            high_or_critical="$({
+              jq '
+                map(select(
+                  (.info.severity // "unknown") == "high"
+                  or (.info.severity // "unknown") == "critical"
+                )) | length
+              ' reports/nuclei-results.json
+            })"
+
+            if (( high_or_critical > 0 )); then
+              echo "::error::Nuclei detected ${high_or_critical} high or critical finding(s)."
+              failed=1
+            else
+              echo "No high or critical Nuclei findings detected."
+            fi
           fi
 
-          test -f reports/nuclei-complete
-          jq -e 'type == "array"' reports/nuclei-results.json > /dev/null
-
-          high_or_critical="$({
-            jq '
-              map(select(
-                (.info.severity // "unknown") == "high"
-                or (.info.severity // "unknown") == "critical"
-              )) | length
-            ' reports/nuclei-results.json
-          })"
-
-          if (( high_or_critical > 0 )); then
-            echo "::error::Nuclei detected ${high_or_critical} high or critical finding(s)."
+          if (( failed != 0 )); then
             exit 1
           fi
-
-          echo "No high or critical Nuclei findings detected."
