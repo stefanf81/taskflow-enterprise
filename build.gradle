@@ -96,7 +96,7 @@ dependencies {
 	// modules; cross-module communication goes through each module's public
 	// service API or domain events). Verified by ModularityTest.java and
 	// documented via auto-generated PlantUML/C4 diagrams.
-	implementation 'org.springframework.modulith:spring-modulith-starter-core:2.1.0'
+	implementation 'org.springframework.modulith:spring-modulith-starter-core:2.1.1'
 	// Observability
 	implementation 'org.springframework.boot:spring-boot-micrometer-tracing-opentelemetry'
 	implementation 'io.micrometer:micrometer-registry-prometheus'
@@ -116,14 +116,14 @@ dependencies {
 	// other transitive paths. Explicit pins keep Dependabot's Gradle parser honest (it does
 	// not resolve BOM property overrides set via ext.set()).
 	//   - HikariCP:           BOM ships 7.0.2; bump to 7.1.0.
-	//   - Lettuce:            BOM ships 7.5.2.RELEASE; bump to 7.6.0.RELEASE.
+	//   - Lettuce:            BOM ships 7.5.2.RELEASE; bump to 7.7.0.RELEASE.
 	//   - semconv:            transitive via opentelemetry-exporter-otlp (BOM ships 1.41.1).
 	//   - nimbus-jose-jwt:    transitive via spring-security-oauth2-resource-server; 10.9.1
 	//                         is a security patch (BOM ships 10.9).
 	//   - error_prone_*:      transitive annotation lib (BOM ships 2.49.0).
 	//   - okio:               transitive (BOM ships 3.17.0).
 	implementation 'com.zaxxer:HikariCP:7.1.0'
-	implementation 'io.lettuce:lettuce-core:7.6.0.RELEASE'
+	implementation 'io.lettuce:lettuce-core:7.7.0.RELEASE'
 	implementation 'io.opentelemetry.semconv:opentelemetry-semconv:1.43.0'
 	implementation 'com.nimbusds:nimbus-jose-jwt:10.9.1'
 	implementation 'com.google.errorprone:error_prone_annotations:2.50.0'
@@ -138,14 +138,14 @@ dependencies {
 	testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.0'
 	// Spring Modulith test support — ApplicationModules.of().verify() and
 	// @ApplicationModuleTest for isolated module bootstrapping.
-	testImplementation 'org.springframework.modulith:spring-modulith-starter-test:2.1.0'
+	testImplementation 'org.springframework.modulith:spring-modulith-starter-test:2.1.1'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher:6.1.3'
 	// Static analysis
 	spotbugsPlugins 'com.h3xstream.findsecbugs:findsecbugs-plugin:1.14.0'
 	spotbugsSlf4j 'org.slf4j:slf4j-simple:2.0.18'
 }
 spotbugs {
-	toolVersion = '4.10.3'
+	toolVersion = '4.10.4'
 	ignoreFailures = false
 	effort = com.github.spotbugs.snom.Effort.valueOf('MAX')
 	reportLevel = com.github.spotbugs.snom.Confidence.valueOf('HIGH')
