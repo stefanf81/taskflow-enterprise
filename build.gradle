@@ -84,7 +84,7 @@ dependencies {
 	//   - jackson-databind 3.x: fixes CVE-2026-59889 (@JsonView bypass for @JsonUnwrapped)
 	implementation "com.fasterxml.jackson.core:jackson-databind:${jackson2Version}"
 	implementation "com.fasterxml.jackson.core:jackson-core:${jackson2Version}"
-	implementation "com.fasterxml.jackson.core:jackson-annotations:${jackson2Version}"
+	implementation "com.fasterxml.jackson.core:jackson-annotations:${jacksonAnnotationsVersion}"
 	implementation "tools.jackson.core:jackson-databind:${jackson3Version}"
 	// Hibernate 2nd-level cache with Caffeine JCache region factory
 	implementation "org.hibernate.orm:hibernate-jcache:${hibernateVersion}"
