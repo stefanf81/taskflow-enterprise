@@ -351,7 +351,8 @@ Harmless — the iOS Simulator doesn't include haptic feedback files. Ignore.
 ```
 react-native@0.86.0 - expected version: 0.86.x
 ```
-Non-blocking. The current versions work. Update when convenient via `npx expo install --fix`.
+This indicates an SDK compatibility mismatch. Run `npx expo install --fix`, then
+verify with `npx expo install --check` and `npx expo-doctor` before building.
 
 ---
 

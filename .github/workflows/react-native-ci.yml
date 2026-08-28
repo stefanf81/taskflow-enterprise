@@ -4,21 +4,23 @@ on:
   push:
     branches: [main]
     paths:
+      - "build.gradle"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "gradle/**"
       - "mobile/**"
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
       - "shared/**"
       - "api/**"
       - "scripts/sync-api-types.js"
       - "package.json"
-      - ".github/workflows/react-native-ci.yml"
+      - "Dockerfile*"
+      - "frontend/Dockerfile"
+      - ".github/renovate.json"
+      - ".github/workflows/**"
   pull_request:
     branches: [main]
-    paths:
-      - "mobile/**"
-      - "shared/**"
-      - "api/**"
-      - "scripts/sync-api-types.js"
-      - "package.json"
-      - ".github/workflows/react-native-ci.yml"
   schedule:
     - cron: "30 4 * * *"
   workflow_dispatch:
@@ -96,7 +98,14 @@ jobs:
   android:
     name: Android build and test
     needs: javascript
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: |
+      github.event_name == 'schedule' ||
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          startsWith(github.head_ref, 'renovate/')
+        )
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:
@@ -209,7 +218,14 @@ jobs:
   ios:
     name: iOS simulator build
     needs: javascript
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: |
+      github.event_name == 'schedule' ||
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          startsWith(github.head_ref, 'renovate/')
+        )
     runs-on: macos-26
     timeout-minutes: 60
     defaults:

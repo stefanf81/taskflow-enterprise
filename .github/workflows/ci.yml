@@ -61,6 +61,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
       dependency_submission: ${{ steps.filter.outputs.dependency_submission }}
+      renovate: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'renovate/') }}
 
       docker: ${{ steps.filter.outputs.docker }}
       docker_backend: ${{ steps.filter.outputs.docker_backend }}
@@ -194,6 +195,7 @@ jobs:
     needs: changes
 
     if: |
+      needs.changes.outputs.renovate == 'true' ||
       needs.changes.outputs.backend == 'true' ||
       needs.changes.outputs.frontend == 'true' ||
       needs.changes.outputs.docker_backend == 'true' ||
@@ -348,6 +350,7 @@ jobs:
     needs: changes
 
     if: |
+      needs.changes.outputs.renovate == 'true' ||
       needs.changes.outputs.frontend == 'true' ||
       needs.changes.outputs.backend == 'true' ||
       needs.changes.outputs.docker_frontend == 'true' ||

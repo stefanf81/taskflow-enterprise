@@ -1,0 +1,120 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "branchPrefix": "renovate/",
+  "dependencyDashboard": true,
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "Automerge patch and minor updates after required CI checks pass",
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    },
+    {
+      "description": "Exclude only the named direct dependencies managed by the installed Expo SDK",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["mobile/package.json"],
+      "matchPackageNames": [
+        "expo",
+        "expo-*",
+        "@expo/*",
+        "react",
+        "react-dom",
+        "react-native",
+        "react-native-web",
+        "react-native-safe-area-context",
+        "react-native-screens",
+        "@react-native/*",
+        "jest-expo",
+        "react-test-renderer"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Update the Angular framework and its compatible toolchain together",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["frontend/package.json"],
+      "matchPackageNames": ["@angular/**", "rxjs", "typescript"],
+      "groupName": "Angular framework and toolchain",
+      "automerge": false
+    },
+    {
+      "description": "Keep the Spring Boot plugin and dependency BOM aligned",
+      "matchManagers": ["gradle"],
+      "matchPackageNames": [
+        "org.springframework.boot",
+        "org.springframework.boot:spring-boot-dependencies"
+      ],
+      "groupName": "Spring Boot plugin and BOM",
+      "automerge": false
+    },
+    {
+      "description": "Flyway core and its PostgreSQL module must use the same release",
+      "matchManagers": ["gradle"],
+      "matchPackageNames": [
+        "org.flywaydb:flyway-core",
+        "org.flywaydb:flyway-database-postgresql"
+      ],
+      "groupName": "Flyway PostgreSQL support",
+      "automerge": false
+    },
+    {
+      "description": "Hibernate core and JCache integration are version-coupled",
+      "matchManagers": ["gradle"],
+      "matchPackageNames": [
+        "org.hibernate.orm:hibernate-core",
+        "org.hibernate.orm:hibernate-jcache"
+      ],
+      "groupName": "Hibernate core and JCache",
+      "automerge": false
+    },
+    {
+      "description": "Keep the Netty BOM and explicit DNS codec pin aligned",
+      "matchManagers": ["gradle"],
+      "matchPackageNames": ["io.netty:netty-bom", "io.netty:netty-codec-dns"],
+      "groupName": "Netty BOM and DNS codec",
+      "automerge": false
+    },
+    {
+      "description": "Keep Log4j API and its SLF4J bridge on the same release",
+      "matchManagers": ["gradle"],
+      "matchPackageNames": ["org.apache.logging.log4j:log4j-*"],
+      "groupName": "Log4j API and SLF4J bridge",
+      "automerge": false
+    },
+    {
+      "description": "Review Jackson security pins together rather than automerging them",
+      "matchManagers": ["gradle"],
+      "matchPackageNames": [
+        "com.fasterxml.jackson.core:jackson-*",
+        "tools.jackson.core:jackson-*"
+      ],
+      "groupName": "Jackson 2 dependencies",
+      "automerge": false
+    },
+    {
+      "description": "React Navigation packages share React Native peer-dependency constraints",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["mobile/package.json"],
+      "matchPackageNames": ["@react-navigation/**"],
+      "groupName": "React Navigation",
+      "automerge": false
+    },
+    {
+      "description": "Review native test tooling together with its React Native compatibility requirements",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["mobile/package.json"],
+      "matchPackageNames": [
+        "@config-plugins/detox",
+        "@testing-library/react-native",
+        "detox",
+        "jest",
+        "@types/jest"
+      ],
+      "groupName": "React Native test tooling",
+      "automerge": false
+    }
+  ]
+}

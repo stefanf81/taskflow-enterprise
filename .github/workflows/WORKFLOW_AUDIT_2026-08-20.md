@@ -212,7 +212,8 @@ Actions use major tags and scanner/base images use mutable tags such as `stable`
 or `latest`, reducing reproducibility and increasing supply-chain exposure.
 
 **Fix:** Pin actions to reviewed full commit SHAs and container images to digests.
-Use Dependabot to maintain GitHub Actions and digest updates.
+Use Renovate to maintain GitHub Actions and digest updates under required CI
+checks; digest updates remain review-only.
 
 ### 18. Gitleaks can be weakened by the PR it scans
 

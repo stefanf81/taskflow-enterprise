@@ -133,6 +133,30 @@ Android edge-to-edge is handled by the Expo/RN SDK defaults, and the primary scr
 
 ---
 
+## Dependency Management
+
+Expo owns the compatible versions for native dependencies. Renovate excludes
+only the explicitly named Expo, React, React Native, React Native Web, and
+native test packages in `package.json`; it does not dynamically discover every
+module supported by the installed Expo SDK. Add a native dependency with
+`npx expo install <package>` rather than `npm install`.
+
+When upgrading Expo SDK, first select the target `expo` version, then align its
+compatibility set and diagnose the project:
+
+```bash
+npx expo install --fix
+npx expo install --check
+npx expo-doctor
+```
+
+Commit `package.json` and `package-lock.json` together. Renovate continues to
+manage ordinary libraries such as Axios, Zod, Zustand, TanStack Query, and React
+Hook Form. React Navigation and native test tooling remain review-only grouped
+updates because they carry React Native peer-dependency constraints.
+
+---
+
 ## Development & Testing Commands
 
 ```bash
