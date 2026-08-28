@@ -1,6 +1,6 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '4.1.1'
+	id 'org.springframework.boot' version "${springBootVersion}"
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'org.owasp.dependencycheck' version '13.0.0'
 	id 'jacoco'
@@ -16,23 +16,23 @@ ext {
 	// (ACE via conditional config file processing); this 1.6.x pin includes the 1.5.36+
 	// hardening for disallowed references.
 	set('logback.version', '1.6.3')
-	// Pin Jackson 2.x BOM to 2.22.2 to fix:
+	// Pin Jackson 2.x BOM to the shared jackson2Version to fix:
 	//   - CVE-2026-59888 (@JsonIgnore on Record bypassed with PropertyNamingStrategy)
 	//   - jackson-core: async parser maxNumberLength bypass (fixed in 2.21.4)
 	//   - CVE-2026-54512/13/14/15/16/17/18 (PTV bypass, @JsonView, SSRF, etc.)
-	// Spring Boot 4.1.0 BOM ships 2.21.4 by default.
-	set('jackson-2-bom.version', '2.22.2')
-	// Pin Jackson 3.x BOM to 3.2.2 (latest) to fix CVE-2026-59889 (@JsonView bypass for
+	// The earlier Spring Boot 4.1.0 BOM shipped 2.21.4 by default.
+	set('jackson-2-bom.version', jackson2Version)
+	// Pin Jackson 3.x BOM to the shared jackson3Version to fix CVE-2026-59889 (@JsonView bypass for
 	// @JsonUnwrapped container properties on deserialization). Spring Boot 4.1.0 BOM
-	// ships 3.1.4 which is vulnerable.
-	set('jackson-bom.version', '3.2.2')
-	// Pin Netty to 4.2.17.Final. Originally pinned to fix GHSA-mfg7-5gfp-c4w3
+	// The earlier BOM shipped 3.1.4, which is vulnerable.
+	set('jackson-bom.version', jackson3Version)
+	// Pin Netty to the shared nettyVersion. Originally pinned to fix GHSA-mfg7-5gfp-c4w3
 	// (Memory Leak in DNS Record Decoder via Malformed Domain Names); 4.2.17.Final
-	// is the latest patch release. Spring Boot 4.1.0 BOM ships 4.2.15.Final which is vulnerable.
-	set('netty.version', '4.2.17.Final')
-	// Pin Log4j API and its SLF4J bridge above 2.25.4 to fix CVE-2026-49844
+	// is the latest patch release. The earlier Spring Boot 4.1.0 BOM shipped 4.2.15.Final.
+	set('netty.version', nettyVersion)
+	// Pin Log4j API and its SLF4J bridge via the shared log4j2Version to fix CVE-2026-49844
 	// (malformed JSON output for non-finite MapMessage values).
-	set('log4j2.version', '2.25.5')
+	set('log4j2.version', log4j2Version)
 }
 
 
@@ -53,9 +53,9 @@ repositories {
 	mavenCentral()
 }
 dependencies {
-	implementation platform("org.springframework.boot:spring-boot-dependencies:4.1.1")
-	annotationProcessor platform("org.springframework.boot:spring-boot-dependencies:4.1.1")
-	testImplementation platform("org.springframework.boot:spring-boot-dependencies:4.1.1")
+	implementation platform("org.springframework.boot:spring-boot-dependencies:${springBootVersion}")
+	annotationProcessor platform("org.springframework.boot:spring-boot-dependencies:${springBootVersion}")
+	testImplementation platform("org.springframework.boot:spring-boot-dependencies:${springBootVersion}")
 	// Spring Boot
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
@@ -65,30 +65,30 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-	// Explicit pins ensure Dependabot and container scanners resolve the patched
+	// Explicit pins ensure dependency tooling and container scanners resolve the patched
 	// Log4j API used by Spring Boot's log4j-to-slf4j bridge.
-	implementation 'org.apache.logging.log4j:log4j-api:2.26.1'
-	implementation 'org.apache.logging.log4j:log4j-to-slf4j:2.26.1'
-	// Netty — explicit pins so Dependabot's Gradle parser sees the correct versions
-	// (Dependabot does not resolve BOM property overrides set via ext.set()).
+	implementation "org.apache.logging.log4j:log4j-api:${log4j2Version}"
+	implementation "org.apache.logging.log4j:log4j-to-slf4j:${log4j2Version}"
+	// Netty — explicit pins so dependency tooling sees the correct versions
+	// (BOM property overrides are not resolved consistently by all tooling).
 	// Originally pinned for GHSA-mfg7-5gfp-c4w3 (DNS Record Decoder memory leak);
 	// bumped to 4.2.17.Final for the latest patch release.
-	implementation platform('io.netty:netty-bom:4.2.17.Final')
-	implementation 'io.netty:netty-codec-dns:4.2.17.Final'
-	// Jackson — explicit pins so Dependabot's Gradle parser sees the correct versions
-	// (Dependabot does not resolve BOM property overrides set via ext.set()).
+	implementation platform("io.netty:netty-bom:${nettyVersion}")
+	implementation "io.netty:netty-codec-dns:${nettyVersion}"
+	// Jackson — explicit pins so dependency tooling sees the correct versions
+	// (BOM property overrides are not resolved consistently by all tooling).
 	//   - jackson-databind 2.x / jackson-core 2.x: fixes 8 CVEs (HIGH: async parser bypass,
 	//     MEDIUM: @JsonIgnore/@JsonView bypasses, PTV bypass, SSRF, etc.)
 	//   - jackson-annotations 2.x: MUST be >= 2.22 for JsonApplyView used by Jackson 3.x
 	//     backward-compat module. 2.22 also includes 2.22.1 CVE fixes.
 	//   - jackson-databind 3.x: fixes CVE-2026-59889 (@JsonView bypass for @JsonUnwrapped)
-	implementation 'com.fasterxml.jackson.core:jackson-databind:2.22.2'
-	implementation 'com.fasterxml.jackson.core:jackson-core:2.22.2'
-	implementation 'com.fasterxml.jackson.core:jackson-annotations:2.22'
-	implementation 'tools.jackson.core:jackson-databind:3.2.2'
+	implementation "com.fasterxml.jackson.core:jackson-databind:${jackson2Version}"
+	implementation "com.fasterxml.jackson.core:jackson-core:${jackson2Version}"
+	implementation "com.fasterxml.jackson.core:jackson-annotations:${jacksonAnnotationsVersion}"
+	implementation "tools.jackson.core:jackson-databind:${jackson3Version}"
 	// Hibernate 2nd-level cache with Caffeine JCache region factory
-	implementation 'org.hibernate.orm:hibernate-jcache:7.4.6.Final'
-	implementation 'org.hibernate.orm:hibernate-core:7.4.6.Final'
+	implementation "org.hibernate.orm:hibernate-jcache:${hibernateVersion}"
+	implementation "org.hibernate.orm:hibernate-core:${hibernateVersion}"
 	implementation 'com.github.ben-manes.caffeine:jcache:3.2.4'
 	// Cache (Redis-backed via spring-boot-starter-data-redis; Caffeine was unused)
 	// Modular monolith — Spring Modulith verifies package-based module boundaries
@@ -106,15 +106,15 @@ dependencies {
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0'
 	// Database migration
 	implementation 'org.springframework.boot:spring-boot-starter-flyway'
-	implementation 'org.flywaydb:flyway-database-postgresql:13.3.0'
-	// Pin flyway-core to match flyway-database-postgresql (Spring Boot 4.1.0 BOM ships 12.4.0)
-	implementation 'org.flywaydb:flyway-core:13.3.0'
+	implementation "org.flywaydb:flyway-database-postgresql:${flywayVersion}"
+	// Pin flyway-core to match flyway-database-postgresql (the earlier BOM shipped 12.4.0).
+	implementation "org.flywaydb:flyway-core:${flywayVersion}"
 	// Runtime
 	runtimeOnly 'org.postgresql:postgresql:42.7.13'
 	runtimeOnly 'com.h2database:h2:2.4.240'
 	// Transitive dependency pins — override versions brought in by the Spring Boot BOM or
-	// other transitive paths. Explicit pins keep Dependabot's Gradle parser honest (it does
-	// not resolve BOM property overrides set via ext.set()).
+	// other transitive paths. Explicit pins keep dependency tooling accurate because BOM
+	// property overrides are not resolved consistently by all tooling.
 	//   - HikariCP:           BOM ships 7.0.2; bump to 7.1.0.
 	//   - Lettuce:            BOM ships 7.5.2.RELEASE; bump to 7.7.0.RELEASE.
 	//   - semconv:            transitive via opentelemetry-exporter-otlp (BOM ships 1.41.1).

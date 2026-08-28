@@ -193,6 +193,31 @@ npm start
 
 ---
 
+## 📦 Dependency Updates
+
+Renovate runs daily and can also be started manually from GitHub Actions. Patch
+and minor updates automerge only after the protected `main` branch's required
+CI checks succeed; major, pin, digest, and lock-file-maintenance updates remain
+reviewable pull requests.
+
+Version-coupled stacks are grouped into reviewable PRs and never automerged:
+
+* Angular framework, CLI/build tooling, RxJS, and TypeScript.
+* Spring Boot plugin and dependency BOM.
+* Flyway, Hibernate, Netty, Log4j, and Jackson coordinated dependencies.
+* React Navigation and React Native test tooling.
+
+Expo owns the compatibility matrix for native modules. Renovate excludes only
+the explicitly named Expo, React, React Native, and native test dependencies in
+`mobile/package.json`; it does not automatically discover every SDK-compatible
+native module. Add a new native module with `npx expo install <package>`, then
+run `npx expo install --check`. When upgrading Expo SDK, first select the target
+`expo` version, then run `npx expo install --fix` and `npx expo-doctor`. See
+[CI documentation](.github/workflows/ci.md) for the required checks and
+Renovate authentication details.
+
+---
+
 ## 📚 Documentation & ADRs
 
 * [ARCHITECTURE.md](ARCHITECTURE.md) — Detailed end-to-end data flow and architectural analysis

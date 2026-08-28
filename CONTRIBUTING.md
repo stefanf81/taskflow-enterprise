@@ -20,7 +20,7 @@ cp .env.example .env
 # Edit .env if needed (defaults work for local dev)
 ```
 
-### Backend (Spring Boot 4.1.0)
+### Backend (Spring Boot 4.1.1)
 ```bash
 ./gradlew build          # Full build including tests
 ./gradlew bootRun        # Start backend on :8080 (uses H2 in-memory DB for dev)
@@ -97,6 +97,34 @@ cd frontend && npm test -- --include src/app/admin-events.service.spec.ts
 - Backend: SpotBugs, ArchUnit, JaCoCo (80% coverage minimum).
 - Security: OWASP Dependency Check (fails on CVSS >= 7).
 - API contracts: The OpenAPI baseline and generated client type files must both be current.
+
+### Dependency Updates
+
+Renovate creates dependency-update PRs daily. Do not manually update a
+Renovate branch. Patch and minor updates may automerge only after the required
+CI checks pass; major, pin, digest, and lock-file-maintenance updates require
+review.
+
+The following ecosystems are intentionally grouped and review-only because their
+members are version-coupled: Angular/toolchain, Spring Boot plugin/BOM, Flyway,
+Hibernate, Netty, Log4j, Jackson, React Navigation, and React Native test
+tooling.
+
+Renovate excludes only the named direct Expo, React, React Native, and native
+test dependencies in `mobile/package.json`; it does not infer the installed
+SDK's full native-module matrix. Add an Expo-compatible native module with
+`npx expo install <package>`. For an Expo SDK upgrade, first select the target
+`expo` version, then align its compatibility set with:
+
+```bash
+cd mobile
+npx expo install --fix
+npx expo install --check
+npx expo-doctor
+```
+
+Commit the resulting `package.json` and `package-lock.json` together, then run
+the mobile test and native build suites.
 
 ## Project Structure
 - `src/` — Spring Boot backend (Java 21, Gradle)

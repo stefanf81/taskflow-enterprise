@@ -2,7 +2,7 @@
 
 ## Project Structure
 
-- **Backend**: Spring Boot 4.1.0 / OpenJDK 21 / Gradle — `src/main/java/com/example/taskflow/`
+- **Backend**: Spring Boot 4.1.1 / OpenJDK 21 / Gradle — `src/main/java/com/example/taskflow/`
   - High-Performance Tunings: Container-portable heap sizing (deployment-owned via `JAVA_TOOL_OPTIONS`), Virtual Threads explicitly ENABLED (`spring.threads.virtual.enabled=true`, with `spring.main.keep-alive=true`; see BENCHMARKS.md §32), Jackson 3, Lazy Connection Fetching, Asynchronous Logging, OpenTelemetry 10% sampling, Redis-backed caching (Spring Cache abstraction).
   - Runtime Profiles & Multi-Arch JVM Optimization:
     - **JVM sizing is deployment-owned.** Both Dockerfiles' image CMDs are sizing-agnostic: they carry only environment-invariant flags (`-XX:SharedArchiveFile=application.jsa`, `-Xshare:auto`, `-XX:+ExitOnOutOfMemoryError`). Heap / off-heap / GC behavioral tuning live in `JAVA_TOOL_OPTIONS` of the runtime environment, NOT the image. Setting sizing in the CMD would silently win over the deployment env (JVM last-wins precedence for non-sticky flags) and recreate the precedence bug where the deployment's tuning was a no-op.

@@ -72,7 +72,7 @@ Handles the Angular 22 frontend linting, unit tests, and production distribution
 
 Submits the complete, deep Java and Gradle dependency tree directly to the GitHub Dependency Submission API.
 
-- **Dependabot Integration:** Uses `gradle/actions/dependency-submission@v6` to extract, compile, and upload the full transitive dependency graph on pushes to the `main` branch. This empowers Dependabot to dynamically track package vulnerabilities and automatically generate hotfix pull requests the moment a CVE is disclosed.
+- **Dependency Graph Submission:** Uses `gradle/actions/dependency-submission@v6` to extract, compile, and upload the full transitive dependency graph on relevant `main` runs. GitHub uses this graph for dependency visibility and vulnerability alerts; Renovate applies this repository's controlled update policy.
 - **Caching & Permissions:** Explicitly configured with `contents: write` and `actions: write` permissions. The `actions: write` permission is crucial to allow the Gradle Action to save and restore dependencies caching successfully, preventing "cache write denied" warnings while maximizing the build execution speed on subsequent runs.
 
 ## 8. Job: `security` — moved to `security.yml`
@@ -181,7 +181,50 @@ If you previously pushed `taskflow-backend` / `taskflow-frontend` manually (e.g.
 
 If organization policy blocks workflow write permissions, create a classic PAT with `write:packages` (and optionally `delete:packages`) and store it as a repository secret named `CR_PAT`. Then change the `docker/login-action` step in `pushdockerimage.yml` to use `password: ${{ secrets.CR_PAT }}`.
 
-## 13. Troubleshooting
+## 13. Automated Dependency Updates
+
+`.github/workflows/renovate.yml` runs Renovate daily and on demand. Renovate
+uses the `RENOVATE_TOKEN` secret instead of `GITHUB_TOKEN`, because pull
+requests created with `GITHUB_TOKEN` require manual workflow approval. The
+current secret is a PAT with repository and workflow access so Renovate can
+write branches, pull requests, issues, statuses, and GitHub Actions updates.
+
+Renovate opens reviewable PRs for all dependency updates. Ordinary minor and
+patch updates enable platform automerge. Major, pin, digest, and
+lock-file-maintenance updates remain reviewable. `ci.yml` detects same-repository
+`renovate/` branches and runs the backend, frontend, Testcontainers, and
+Playwright suites regardless of path filters. `react-native-ci.yml` always
+creates the mobile JavaScript check for pull requests and runs Android and iOS
+native jobs for same-repository Renovate branches.
+
+The following version-coupled ecosystems are grouped into review-only Renovate
+PRs, overriding ordinary patch/minor automerge: Angular and its toolchain,
+Spring Boot plugin/BOM, Flyway, Hibernate, Netty, Log4j, Jackson, React
+Navigation, and React Native test tooling. Renovate excludes only the named
+direct Expo, React, React Native, and native test dependencies in
+`mobile/package.json`; it does not dynamically read Expo's SDK compatibility
+matrix. Add native modules with `npx expo install <package>`. For an Expo SDK
+upgrade, select the target `expo` version first, then run `npx expo install
+--fix`, `npx expo install --check`, `npx expo-doctor`, and the mobile suites.
+
+The active `Protect main and require CI` ruleset protects `main`, requires
+branches to be current, and requires these checks before GitHub auto-merge can
+complete:
+
+- `Backend`
+- `Frontend`
+- `End-to-End Tests`
+- `Mobile JavaScript`
+- `Android build and test`
+- `iOS simulator build`
+
+GitHub's platform automerge waits for every required check above. Docker image
+builds and the hard Trivy image scan run in `ci.yml`, while secret scanning runs
+in `gitleaks.yml`; neither is currently included in the active ruleset's
+required-status-check list. Major, pin, digest, and lock-file-maintenance
+updates remain reviewable PRs.
+
+## 14. Troubleshooting
 
 ### `denied: permission_denied: write_package` during `docker push` (in `pushdockerimage.yml`)
 

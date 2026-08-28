@@ -54,6 +54,7 @@ FROM alpine:${ALPINE_VERSION}
 
 ARG NGINX_UID=10001
 ARG NGINX_GID=10001
+ARG APK_BUST=stable
 
 # Create a dedicated runtime identity before package installation.
 # A high UID avoids collisions with common Alpine system users.
@@ -70,6 +71,8 @@ RUN addgroup \
         --uid "${NGINX_UID}" \
         --ingroup nginx-runtime \
         nginx-runtime \
+    && : "${APK_BUST}" \
+    && apk upgrade --no-cache \
     && apk add --no-cache \
         nginx \
         nginx-mod-http-brotli

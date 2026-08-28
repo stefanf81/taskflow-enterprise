@@ -2,7 +2,7 @@
 
 > **Living document:** This report records system hardening findings and their resolutions. Resolved findings are marked accordingly. Last updated: 2026-08-07.
 
-This document records the system hardening, JVM performance alignment, and compatibility upgrades executed during the project-wide architectural audit. All system changes adhere to enterprise-grade DevSecOps principles and Spring Boot 4.1.0 + Angular 22 high-performance best practices.
+This document records the system hardening, JVM performance alignment, and compatibility upgrades executed during the project-wide architectural audit. All system changes adhere to enterprise-grade DevSecOps principles and Spring Boot 4.1.1 + Angular 22 high-performance best practices.
 
 ---
 
@@ -97,8 +97,8 @@ Two critical architectural alignments were identified and resolved to ensure run
 
 ### Finding 12: Automated GitHub Dependency Graph Submission
 *   **Location:** `.github/workflows/ci.yml` (Dependency Submission Job)
-*   **Issue:** The repository relied on asynchronous static analysis (CodeQL and Trivy filesystem scans) to identify security issues, but lacked direct, native integration with the **GitHub Dependency Graph** and **Dependabot** alert systems for Gradle. Without a formal dependency manifest submission, GitHub could not accurately map transitive library dependencies, leaving the project exposed to delayed vulnerability identification.
-*   **Resolution:** Introduced a dedicated `dependency-submission` job to the main CI workflow using **`gradle/actions/dependency-submission@v6`** (matching our other Gradle action major versions). This job runs on the main branch whenever a push or manual run occurs, extracting the complete dependency graph and submitting it immediately to the GitHub Dependency Submission API. This guarantees 100% accurate, up-to-the-minute tracking of transitive dependencies and empowers Dependabot to generate instant security patches/PRs the moment a vulnerability is disclosed.
+*   **Issue:** The repository relied on asynchronous static analysis (CodeQL and Trivy filesystem scans) to identify security issues, but lacked direct, native integration with the **GitHub Dependency Graph** and vulnerability alert systems for Gradle. Without a formal dependency manifest submission, GitHub could not accurately map transitive library dependencies, leaving the project exposed to delayed vulnerability identification.
+*   **Resolution:** The dedicated `dependency-submission` job in the main CI workflow uses **`gradle/actions/dependency-submission@v6`** to submit the complete dependency graph on relevant `main` runs. GitHub uses this graph for dependency visibility and vulnerability alerts; Renovate applies the repository's controlled update policy.
 
 ### Finding 13: NPM Global Cache Gaps in Frontend & E2E Jobs
 *   **Location:** `.github/workflows/ci.yml` (Frontend and E2E Jobs)
