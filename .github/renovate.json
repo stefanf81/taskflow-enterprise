@@ -49,8 +49,7 @@
       "matchManagers": ["npm"],
       "matchFileNames": ["frontend/package.json"],
       "matchPackageNames": ["@angular/**", "rxjs", "typescript"],
-      "groupName": "Angular framework and toolchain",
-      "automerge": false
+      "groupName": "Angular framework and toolchain"
     },
     {
       "description": "Keep the Spring Boot plugin and dependency BOM aligned",
@@ -59,8 +58,7 @@
         "org.springframework.boot",
         "org.springframework.boot:spring-boot-dependencies"
       ],
-      "groupName": "Spring Boot plugin and BOM",
-      "automerge": false
+      "groupName": "Spring Boot plugin and BOM"
     },
     {
       "description": "Flyway core and its PostgreSQL module must use the same release",
@@ -69,8 +67,7 @@
         "org.flywaydb:flyway-core",
         "org.flywaydb:flyway-database-postgresql"
       ],
-      "groupName": "Flyway PostgreSQL support",
-      "automerge": false
+      "groupName": "Flyway PostgreSQL support"
     },
     {
       "description": "Hibernate core and JCache integration are version-coupled",
@@ -79,43 +76,38 @@
         "org.hibernate.orm:hibernate-core",
         "org.hibernate.orm:hibernate-jcache"
       ],
-      "groupName": "Hibernate core and JCache",
-      "automerge": false
+      "groupName": "Hibernate core and JCache"
     },
     {
       "description": "Keep the Netty BOM and explicit DNS codec pin aligned",
       "matchManagers": ["gradle"],
       "matchPackageNames": ["io.netty:netty-bom", "io.netty:netty-codec-dns"],
-      "groupName": "Netty BOM and DNS codec",
-      "automerge": false
+      "groupName": "Netty BOM and DNS codec"
     },
     {
       "description": "Keep Log4j API and its SLF4J bridge on the same release",
       "matchManagers": ["gradle"],
       "matchPackageNames": ["org.apache.logging.log4j:log4j-*"],
-      "groupName": "Log4j API and SLF4J bridge",
-      "automerge": false
+      "groupName": "Log4j API and SLF4J bridge"
     },
     {
-      "description": "Review Jackson security pins together rather than automerging them",
+      "description": "Keep Jackson security pins aligned",
       "matchManagers": ["gradle"],
       "matchPackageNames": [
         "com.fasterxml.jackson.core:jackson-*",
         "tools.jackson.core:jackson-*"
       ],
-      "groupName": "Jackson 2 dependencies",
-      "automerge": false
+      "groupName": "Jackson 2 dependencies"
     },
     {
       "description": "React Navigation packages share React Native peer-dependency constraints",
       "matchManagers": ["npm"],
       "matchFileNames": ["mobile/package.json"],
       "matchPackageNames": ["@react-navigation/**"],
-      "groupName": "React Navigation",
-      "automerge": false
+      "groupName": "React Navigation"
     },
     {
-      "description": "Review native test tooling together with its React Native compatibility requirements",
+      "description": "Keep native test tooling aligned with its React Native compatibility requirements",
       "matchManagers": ["npm"],
       "matchFileNames": ["mobile/package.json"],
       "matchPackageNames": [
@@ -125,8 +117,7 @@
         "jest",
         "@types/jest"
       ],
-      "groupName": "React Native test tooling",
-      "automerge": false
+      "groupName": "React Native test tooling"
     }
   ]
 }
