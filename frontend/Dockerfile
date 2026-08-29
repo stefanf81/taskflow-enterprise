@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.26
 
 ARG ALPINE_VERSION=3.24.1
 
