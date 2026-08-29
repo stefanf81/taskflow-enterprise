@@ -175,13 +175,13 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Lint Backend Dockerfile
-        uses: hadolint/hadolint-action@v3.4.0
+        uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: Dockerfile.x64
           ignore: DL3018,DL3029
 
       - name: Lint Frontend Dockerfile
-        uses: hadolint/hadolint-action@v3.4.0
+        uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: frontend/Dockerfile
           ignore: DL3018,DL3029
