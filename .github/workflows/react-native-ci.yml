@@ -24,14 +24,6 @@ on:
   schedule:
     - cron: "30 4 * * *"
   workflow_dispatch:
-    inputs:
-      native_scope:
-        description: Native architecture coverage
-        type: choice
-        options:
-          - fast
-          - full
-        default: fast
 
 permissions:
   contents: read
@@ -174,7 +166,7 @@ jobs:
         working-directory: mobile/android
         shell: bash
         env:
-          NATIVE_SCOPE: ${{ inputs.native_scope || 'full' }}
+          NATIVE_SCOPE: fast
         run: |
           set -euo pipefail
 
@@ -306,7 +298,7 @@ jobs:
       - name: Build unsigned iOS simulator application
         shell: bash
         env:
-          NATIVE_SCOPE: ${{ inputs.native_scope || 'full' }}
+          NATIVE_SCOPE: fast
         run: |
           set -euo pipefail
 
