@@ -195,7 +195,7 @@ lock-file-maintenance updates remain reviewable. `ci.yml` detects same-repositor
 `renovate/` branches and runs the backend, frontend, Testcontainers, and
 Playwright suites regardless of path filters. `react-native-ci.yml` always
 creates the mobile JavaScript check for pull requests and runs Android and iOS
-native jobs for same-repository Renovate branches.
+native jobs for same-repository Renovate and `maintenance/expo-sdk` branches.
 
 The following version-coupled ecosystems are grouped into review-only Renovate
 PRs, overriding ordinary patch/minor automerge: Angular and its toolchain,
@@ -206,6 +206,14 @@ direct Expo, React, React Native, and native test dependencies in
 matrix. Add native modules with `npx expo install <package>`. For an Expo SDK
 upgrade, select the target `expo` version first, then run `npx expo install
 --fix`, `npx expo install --check`, `npx expo-doctor`, and the mobile suites.
+
+`.github/workflows/expo-maintenance.yml` owns routine Expo compatibility
+updates. It runs daily, aligns the SDK-managed dependency set, verifies Expo's
+compatibility and project health, and creates or refreshes one maintenance PR.
+The normal mobile CI does not run `expo install --check`: Expo can publish a
+new compatible patch without any change in a PR, so freshness is not a stable
+per-PR gate. The maintenance PR still runs the required JavaScript, Android,
+and iOS validations before merge.
 
 The active `Protect main and require CI` ruleset protects `main`, requires
 branches to be current, and requires these checks before GitHub auto-merge can

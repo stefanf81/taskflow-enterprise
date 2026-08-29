@@ -1,0 +1,82 @@
+name: Expo SDK Maintenance
+
+on:
+  schedule:
+    - cron: "47 3 * * *"
+  workflow_dispatch:
+
+# The PAT is required because PRs created with GITHUB_TOKEN do not trigger the
+# normal pull_request workflows that validate the generated Expo update.
+permissions:
+  contents: read
+
+concurrency:
+  group: expo-sdk-maintenance-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  BASE_BRANCH: main
+  MAINTENANCE_BRANCH: maintenance/expo-sdk
+
+jobs:
+  update:
+    name: Update Expo SDK-compatible dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out base branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.BASE_BRANCH }}
+          token: ${{ secrets.RENOVATE_TOKEN }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: mobile/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            mobile/package-lock.json
+            shared/schemas/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci --prefix shared/schemas --prefer-offline --no-audit --no-fund
+          npm ci --prefix mobile --prefer-offline --no-audit --no-fund
+
+      - name: Align Expo SDK-compatible dependencies
+        working-directory: mobile
+        run: |
+          npx expo install --fix
+          npx expo install --check
+          npx expo-doctor
+
+      - name: Create or update maintenance pull request
+        env:
+          GH_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- mobile/package.json mobile/package-lock.json; then
+            exit 0
+          fi
+
+          git switch -C "$MAINTENANCE_BRANCH"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mobile/package.json mobile/package-lock.json
+          git commit -m 'chore(mobile): align Expo SDK dependencies'
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force-with-lease origin "HEAD:$MAINTENANCE_BRANCH"
+
+          if ! gh pr list --base "$BASE_BRANCH" --head "$MAINTENANCE_BRANCH" --state open --json number --jq 'length > 0' | grep -qx true; then
+            gh pr create \
+              --base "$BASE_BRANCH" \
+              --head "$MAINTENANCE_BRANCH" \
+              --title 'chore(mobile): align Expo SDK dependencies' \
+              --body 'Automated Expo SDK compatibility update. Android and iOS native CI must pass before merging.'
+          fi
+
+          gh pr edit "$MAINTENANCE_BRANCH" --add-label dependencies
