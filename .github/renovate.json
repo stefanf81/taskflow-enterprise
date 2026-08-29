@@ -113,11 +113,18 @@
       "matchPackageNames": [
         "@config-plugins/detox",
         "@testing-library/react-native",
-        "detox",
-        "jest",
-        "@types/jest"
+        "detox"
       ],
       "groupName": "React Native test tooling"
+    },
+    {
+      "description": "Blocked on Expo SDK 57: @babel/core 8 / jest 30 / @types/jest 30 require babel-preset-expo & jest-expo versions that do not yet support these majors. Keep pending on the dashboard; no PR until the SDK is upgraded.",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["mobile/package.json"],
+      "matchPackageNames": ["@babel/core", "jest", "@types/jest"],
+      "labels": ["blocked-on-expo-sdk"],
+      "groupName": "Blocked on Expo SDK upgrade",
+      "dependencyDashboardApproval": true
     }
   ]
 }
