@@ -197,15 +197,17 @@ Playwright suites regardless of path filters. `react-native-ci.yml` always
 creates the mobile JavaScript check for pull requests and runs Android and iOS
 native jobs for same-repository Renovate and `maintenance/expo-sdk` branches.
 
-The following version-coupled ecosystems are grouped into review-only Renovate
-PRs, overriding ordinary patch/minor automerge: Angular and its toolchain,
-Spring Boot plugin/BOM, Flyway, Hibernate, Netty, Log4j, Jackson, React
-Navigation, and React Native test tooling. Renovate excludes only the named
-direct Expo, React, React Native, and native test dependencies in
-`mobile/package.json`; it does not dynamically read Expo's SDK compatibility
-matrix. Add native modules with `npx expo install <package>`. For an Expo SDK
-upgrade, select the target `expo` version first, then run `npx expo install
---fix`, `npx expo install --check`, `npx expo-doctor`, and the mobile suites.
+The following version-coupled ecosystems are grouped into cohesive Renovate
+PRs: Angular and its toolchain, Spring Boot plugin/BOM, Flyway, Hibernate,
+Netty, Log4j, Jackson, React Navigation, and React Native test tooling.
+Grouped minor and patch updates automerge automatically after required CI
+checks pass; grouped updates containing major version releases remain
+review-only. Renovate excludes only the named direct Expo, React, React
+Native, and native test dependencies in `mobile/package.json`; it does not
+dynamically read Expo's SDK compatibility matrix. Add native modules with
+`npx expo install <package>`. For an Expo SDK upgrade, select the target
+`expo` version first, then run `npx expo install --fix`, `npx expo install
+--check`, `npx expo-doctor`, and the mobile suites.
 
 `.github/workflows/expo-maintenance.yml` owns routine Expo compatibility
 updates. It runs daily, aligns the SDK-managed dependency set, verifies Expo's
