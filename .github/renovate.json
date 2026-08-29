@@ -33,6 +33,12 @@
       "enabled": false
     },
     {
+      "description": "Keep Temurin runtime images on Java 21",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["eclipse-temurin"],
+      "allowedVersions": "/^21-/"
+    },
+    {
       "description": "Update the Angular framework and its compatible toolchain together",
       "matchManagers": ["npm"],
       "matchFileNames": ["frontend/package.json"],
