@@ -39,6 +39,12 @@
       "allowedVersions": "/^21-/"
     },
     {
+      "description": "Keep TypeScript on major version 6",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "/^6\\./"
+    },
+    {
       "description": "Update the Angular framework and its compatible toolchain together",
       "matchManagers": ["npm"],
       "matchFileNames": ["frontend/package.json"],
