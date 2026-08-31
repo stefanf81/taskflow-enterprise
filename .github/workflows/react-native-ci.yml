@@ -4,21 +4,12 @@ on:
   push:
     branches: [main]
     paths:
-      - "build.gradle"
-      - "settings.gradle"
-      - "gradle.properties"
-      - "gradle/**"
       - "mobile/**"
-      - "frontend/package.json"
-      - "frontend/package-lock.json"
-      - "shared/**"
+      - "shared/schemas/**"
       - "api/**"
       - "scripts/sync-api-types.js"
       - "package.json"
-      - "Dockerfile*"
-      - "frontend/Dockerfile"
-      - ".github/renovate.json"
-      - ".github/workflows/**"
+      - ".github/workflows/react-native-ci.yml"
   pull_request:
     branches: [main]
   schedule:
