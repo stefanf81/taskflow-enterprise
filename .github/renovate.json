@@ -20,6 +20,12 @@
       "rangeStrategy": "pin"
     },
     {
+      "description": "Keep fast-uri on the compatible 3.x release line",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["fast-uri"],
+      "allowedVersions": "/^3\\./"
+    },
+    {
       "description": "Exclude only the named direct dependencies managed by the installed Expo SDK",
       "matchManagers": ["npm"],
       "matchFileNames": ["mobile/package.json"],
