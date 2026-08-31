@@ -4,23 +4,21 @@ on:
   push:
     branches: [main]
     paths:
-      - "build.gradle"
-      - "settings.gradle"
-      - "gradle.properties"
-      - "gradle/**"
       - "mobile/**"
-      - "frontend/package.json"
-      - "frontend/package-lock.json"
-      - "shared/**"
+      - "shared/schemas/**"
       - "api/**"
       - "scripts/sync-api-types.js"
       - "package.json"
-      - "Dockerfile*"
-      - "frontend/Dockerfile"
-      - ".github/renovate.json"
-      - ".github/workflows/**"
+      - ".github/workflows/react-native-ci.yml"
   pull_request:
     branches: [main]
+    paths:
+      - "mobile/**"
+      - "shared/schemas/**"
+      - "api/**"
+      - "scripts/sync-api-types.js"
+      - "package.json"
+      - ".github/workflows/react-native-ci.yml"
   schedule:
     - cron: "30 4 * * *"
   workflow_dispatch:
