@@ -4,6 +4,7 @@
   "branchPrefix": "renovate/",
   "dependencyDashboard": true,
   "labels": ["dependencies"],
+  "gitAuthor": "stefanf81 <17823566+stefanf81@users.noreply.github.com>",
   "packageRules": [
     {
       "description": "Automerge patch and minor updates after required CI checks pass",
@@ -11,6 +12,12 @@
       "automerge": true,
       "automergeType": "pr",
       "platformAutomerge": true
+    },
+    {
+      "description": "Keep npm overrides exact so npm lockfile updates do not fail with EOVERRIDE",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["overrides"],
+      "rangeStrategy": "pin"
     },
     {
       "description": "Exclude only the named direct dependencies managed by the installed Expo SDK",
@@ -98,13 +105,16 @@
       "groupName": "Log4j API and SLF4J bridge"
     },
     {
-      "description": "Keep Jackson security pins aligned",
+      "description": "Keep Jackson 2 security pins aligned",
       "matchManagers": ["gradle"],
-      "matchPackageNames": [
-        "com.fasterxml.jackson.core:jackson-*",
-        "tools.jackson.core:jackson-*"
-      ],
+      "matchPackageNames": ["com.fasterxml.jackson.core:jackson-*"],
       "groupName": "Jackson 2 dependencies"
+    },
+    {
+      "description": "Keep Jackson 3 security pins aligned",
+      "matchManagers": ["gradle"],
+      "matchPackageNames": ["tools.jackson.core:jackson-*"],
+      "groupName": "Jackson 3 dependencies"
     },
     {
       "description": "React Navigation packages share React Native peer-dependency constraints",
@@ -129,6 +139,7 @@
       "matchManagers": ["npm"],
       "matchFileNames": ["mobile/package.json"],
       "matchPackageNames": ["@babel/core", "jest", "@types/jest"],
+      "matchUpdateTypes": ["major"],
       "labels": ["blocked-on-expo-sdk"],
       "groupName": "Blocked on Expo SDK upgrade",
       "dependencyDashboardApproval": true

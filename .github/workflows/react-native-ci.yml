@@ -12,13 +12,6 @@ on:
       - ".github/workflows/react-native-ci.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "mobile/**"
-      - "shared/schemas/**"
-      - "api/**"
-      - "scripts/sync-api-types.js"
-      - "package.json"
-      - ".github/workflows/react-native-ci.yml"
   schedule:
     - cron: "30 4 * * *"
   workflow_dispatch:
