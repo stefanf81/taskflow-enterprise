@@ -33,6 +33,13 @@
       "enabled": false
     },
     {
+      "description": "Expo SDK 57's plist parser omits the MIME type required by @xmldom/xmldom 0.9",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["mobile/package.json"],
+      "matchPackageNames": ["@xmldom/xmldom"],
+      "allowedVersions": "/^0\\.8\\./"
+    },
+    {
       "description": "Keep Temurin runtime images on Java 21",
       "matchDatasources": ["docker"],
       "matchPackageNames": ["eclipse-temurin"],
