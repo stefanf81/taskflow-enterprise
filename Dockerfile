@@ -99,6 +99,13 @@ RUN java -XX:ArchiveClassesAtExit=application.jsa \
     && test -s application.jsa \
     && chown 10001:10001 application.jsa
 
+# JVM diagnostics (prod parity): JAVA_TOOL_OPTIONS in docker-compose.yml / homelab/TF now includes
+# -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof -Xlog:gc*:file=/tmp/gc.log:time,uptime:filecount=3,filesize=10m
+# and -XX:+UseContainerSupport (explicit, self-documenting). /tmp is tmpfs per compose.
+
+# Health check for standalone docker run (compose also defines healthcheck).
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness || exit 1
+
 # Drop root privileges.
 USER 10001:10001
 

@@ -37,3 +37,13 @@ jobs:
             -w /work \
             grafana/k6:latest-with-browser \
             run k6/browser.js
+
+      - name: Run k6 load profile
+        if: always()
+        run: |
+          docker run --rm \
+            -e BASE_URL="$BASE_URL" \
+            -v ${{ github.workspace }}:/work \
+            -w /work \
+            grafana/k6:latest-with-browser \
+            run k6/load.js

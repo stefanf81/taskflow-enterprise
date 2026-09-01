@@ -7,11 +7,13 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/v1/barbers")
@@ -28,14 +30,20 @@ public class BarberController {
     @Operation(summary = "Get all barbers")
     @ApiResponse(responseCode = "200", description = "List of all barbers returned")
     public ResponseEntity<List<PublicBarberResponse>> getAllBarbers() {
-        return ResponseEntity.ok(barberService.getPublicBarbers());
+        // Public barbers: 5m public cache, pairs with @Cacheable("publicBarbers") 10m
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
+                .body(barberService.getPublicBarbers());
     }
 
     @GetMapping("/admin")
     @Operation(summary = "Get all barbers with administrative contact details")
     @ApiResponse(responseCode = "200", description = "List of all barbers returned")
     public ResponseEntity<List<BarberResponse>> getAdminBarbers() {
-        return ResponseEntity.ok(barberService.getAllBarbers());
+        // Admin barbers: must-revalidate to avoid stale admin view, but allow ETag 304
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noCache().cachePrivate().mustRevalidate())
+                .body(barberService.getAllBarbers());
     }
 
     @PostMapping

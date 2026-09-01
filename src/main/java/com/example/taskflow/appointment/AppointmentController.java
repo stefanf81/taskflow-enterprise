@@ -12,6 +12,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -20,6 +21,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/v1/appointments")
@@ -50,9 +53,11 @@ public class AppointmentController {
             @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size")
             @RequestParam(defaultValue = "10") @Max(100) int size) {
-        
+
         AppointmentDashboardResponse response = appointmentService.getAllAppointments(status, search, page, size);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noCache().cachePrivate().mustRevalidate())
+                .body(response);
     }
 
     @GetMapping(value = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -72,9 +77,11 @@ public class AppointmentController {
     public ResponseEntity<AppointmentResponse> getAppointmentById(
             @Parameter(description = "The database ID of the appointment")
             @PathVariable Long id) {
-        
+
         AppointmentResponse appointment = appointmentService.getAppointmentById(id);
-        return ResponseEntity.ok(appointment);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noCache().cachePrivate().mustRevalidate())
+                .body(appointment);
     }
 
     @GetMapping("/public/busy-slots")
@@ -94,7 +101,9 @@ public class AppointmentController {
             @RequestParam String bookingDate) {
         
         java.util.List<String> busySlots = appointmentService.getBusySlots(barberName, bookingDate);
-        return ResponseEntity.ok(busySlots);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.maxAge(30, TimeUnit.SECONDS).cachePrivate().mustRevalidate())
+                .body(busySlots);
     }
 
     @PutMapping("/public/cancel/{publicId}")

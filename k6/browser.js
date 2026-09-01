@@ -20,13 +20,11 @@ export const options = {
   },
   thresholds: {
     checks: ['rate==1.0'],
-    // ----- Web vital performance gates -----
-    // TTFB: Time To First Byte — backend responsiveness.
-    'browser_web_vital_ttfb': ['p(95)<2500'],
-    // FCP: First Contentful Paint — how fast the user sees content.
-    'browser_web_vital_fcp': ['p(95)<3500'],
-    // LCP: Largest Contentful Paint — perceived load speed.
-    'browser_web_vital_lcp': ['p(95)<6000'],
+    // ----- Web vital performance gates — CWV good thresholds -----
+    // TTFB <800ms good per web.dev, FCP <1800, LCP <2500
+    'browser_web_vital_ttfb': ['p(95)<800'],
+    'browser_web_vital_fcp': ['p(95)<1800'],
+    'browser_web_vital_lcp': ['p(95)<2500'],
   },
 };
 

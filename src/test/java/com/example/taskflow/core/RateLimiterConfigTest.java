@@ -6,13 +6,13 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import java.time.Duration;
 import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -22,7 +22,6 @@ class RateLimiterConfigTest {
 
     private RateLimiterConfig rateLimiterConfig;
     private StringRedisTemplate redisTemplate;
-    private ValueOperations<String, String> valueOperations;
     private OncePerRequestFilter filter;
 
     @BeforeEach
@@ -30,9 +29,19 @@ class RateLimiterConfigTest {
     void setUp() {
         rateLimiterConfig = new RateLimiterConfig(100, 20);
         redisTemplate = mock(StringRedisTemplate.class);
-        valueOperations = mock(ValueOperations.class);
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         filter = rateLimiterConfig.createRateLimitFilter(redisTemplate);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void mockExecute(Long returnValue) {
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), anyString()))
+                .thenReturn(returnValue);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void mockExecuteForKey(String expectedKey, Long returnValue) {
+        when(redisTemplate.execute(any(DefaultRedisScript.class), eq(List.of(expectedKey)), eq("60000")))
+                .thenReturn(returnValue);
     }
 
     @Test
@@ -44,7 +53,7 @@ class RateLimiterConfigTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain filterChain = mock(FilterChain.class);
 
-        when(valueOperations.increment(eq("rate_limit:127.0.0.1:api"))).thenReturn(5L);
+        mockExecute(5L);
 
         filter.doFilter(request, response, filterChain);
 
@@ -61,8 +70,8 @@ class RateLimiterConfigTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain filterChain = mock(FilterChain.class);
 
-        // Max requests for auth is 20, so returning 21 should block
-        when(valueOperations.increment(eq("rate_limit:192.168.1.1:auth"))).thenReturn(21L);
+        // Max requests for auth is 20, so returning 21 should block — Lua EVAL returns count atomically
+        mockExecute(21L);
 
         filter.doFilter(request, response, filterChain);
 
@@ -82,7 +91,7 @@ class RateLimiterConfigTest {
         FilterChain filterChain = mock(FilterChain.class);
 
         // Max requests for API is 100, so returning 101 should block
-        when(valueOperations.increment(eq("rate_limit:127.0.0.1:api"))).thenReturn(101L);
+        mockExecute(101L);
 
         filter.doFilter(request, response, filterChain);
 
@@ -100,11 +109,12 @@ class RateLimiterConfigTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain filterChain = mock(FilterChain.class);
 
-        when(valueOperations.increment(eq("rate_limit:127.0.0.1:api"))).thenReturn(1L);
+        // Lua script atomically sets pexpire when c==1 — verify EVAL is invoked with correct TTL
+        mockExecuteForKey("rate_limit:127.0.0.1:api", 1L);
 
         filter.doFilter(request, response, filterChain);
 
-        verify(redisTemplate, times(1)).expire(eq("rate_limit:127.0.0.1:api"), eq(Duration.ofMinutes(1)));
+        verify(redisTemplate, times(1)).execute(any(DefaultRedisScript.class), eq(List.of("rate_limit:127.0.0.1:api")), eq("60000"));
         verify(filterChain, times(1)).doFilter(request, response);
         assertEquals(200, response.getStatus());
     }

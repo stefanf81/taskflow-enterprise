@@ -2,6 +2,8 @@ package com.example.taskflow.catalog;
 import com.example.taskflow.catalog.internal.ServiceItemRepository;
 
 import com.example.taskflow.core.ResourceNotFoundException;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +22,7 @@ public class CatalogServiceImpl implements CatalogService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = "services", sync = true)
     public List<ServiceItemResponse> getAllServices() {
         return repository.findAllProjectedBy();
     }
@@ -33,6 +36,7 @@ public class CatalogServiceImpl implements CatalogService {
     }
 
     @Override
+    @CacheEvict(value = "services", allEntries = true)
     public ServiceItemResponse createService(ServiceItemRequest request) {
         ServiceItem item = new ServiceItem(
             request.name(),
@@ -45,20 +49,22 @@ public class CatalogServiceImpl implements CatalogService {
     }
 
     @Override
+    @CacheEvict(value = "services", allEntries = true)
     public ServiceItemResponse updateService(Long id, ServiceItemRequest request) {
         ServiceItem item = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Service not found with id: " + id));
-        
+
         item.setName(request.name());
         item.setPrice(request.price());
         item.setDurationMinutes(request.durationMinutes());
         item.setCategory(request.category());
         item.setDescription(request.description());
-        
+
         return ServiceItemResponse.fromEntity(repository.save(item));
     }
 
     @Override
+    @CacheEvict(value = "services", allEntries = true)
     public void deleteService(Long id) {
         ServiceItem item = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Service not found with id: " + id));

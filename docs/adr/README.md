@@ -15,3 +15,7 @@ This directory records architectural decisions made during the development of Ta
 | [ADR-007](ADR-007-mobile-bearer-authentication.md) | Dedicated Mobile Bearer Authentication | Accepted |
 | [ADR-008](ADR-008-openapi-contract-baseline.md) | Reviewed OpenAPI Contract Baseline | Accepted |
 | [ADR-009](ADR-009-admin-appointment-sse.md) | Admin Appointment Updates via Server-Sent Events | Accepted |
+| [ADR-010](ADR-010-bounded-async-executor.md) | Bounded Async Executor | Accepted |
+| [ADR-011](ADR-011-reference-data-caching.md) | Reference Data Caching (Barbers & Services) | Accepted |
+| [ADR-012](ADR-012-lua-rate-limiter.md) | Lua-Atomic Rate Limiter | Accepted |
+| [ADR-013](ADR-013-partial-slot-index.md) | Partial Unique Slot Index (Anti Double-Booking) | Accepted |
