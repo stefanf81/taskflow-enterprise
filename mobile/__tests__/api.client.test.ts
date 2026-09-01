@@ -66,7 +66,7 @@ describe('mobile api client', () => {
 
   it('does not enable native cookie credentials', () => {
     expect(capturedCreateConfig.withCredentials).toBe(false);
-    expect(capturedCreateConfig.timeout).toBe(15000);
+    expect(capturedCreateConfig.timeout).toBe(10000);
   });
 
   it('injects a SecureStore bearer token on API requests', async () => {
