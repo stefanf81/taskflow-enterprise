@@ -18,7 +18,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
  * <p>Config follows jhipster / spring-boot-best-practice: bounded pool with
  * {@link ThreadPoolExecutor.CallerRunsPolicy} so burst load applies
  * backpressure to the caller instead of OOMing the heap. The async queue plus
- * Logback {@code AsyncAppender queue 16384} (logback-async.xml) would otherwise
+     * Logback {@code AsyncAppender queue 16384} (logback-spring.xml) would otherwise
  * grow without practical bound.
  *
  * <p>Tuning: core=8 (matches Spring default), max=64, queue=100,

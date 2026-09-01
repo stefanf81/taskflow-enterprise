@@ -1,4 +1,6 @@
 plugins {
+    // Version catalogs are not available to settings plugins; keep this
+    // toolchain resolver version here as Gradle's documented exception.
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 rootProject.name = 'taskflow'
