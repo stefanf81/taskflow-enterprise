@@ -22,22 +22,22 @@
     "@hono/node-server": "2.1.1"
   },
   "dependencies": {
-    "@angular/common": "^22.1.3",
-    "@angular/compiler": "^22.1.3",
-    "@angular/core": "^22.1.3",
-    "@angular/forms": "^22.1.3",
-    "@angular/platform-browser": "^22.1.3",
-    "@angular/router": "^22.1.3",
+    "@angular/common": "^22.1.4",
+    "@angular/compiler": "^22.1.4",
+    "@angular/core": "^22.1.4",
+    "@angular/forms": "^22.1.4",
+    "@angular/platform-browser": "^22.1.4",
+    "@angular/router": "^22.1.4",
     "@tailwindcss/postcss": "^4.3.3",
     "@taskflow/schemas": "file:../shared/schemas",
     "rxjs": "~7.8.2",
     "tslib": "^2.8.1",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@angular/build": "^22.1.5",
-    "@angular/cli": "^22.1.5",
-    "@angular/compiler-cli": "^22.1.3",
+    "@angular/build": "^22.1.6",
+    "@angular/cli": "^22.1.6",
+    "@angular/compiler-cli": "^22.1.4",
     "@playwright/test": "^1.62.1",
     "@vitest/coverage-v8": "^4.1.11",
     "autoprefixer": "^10.5.4",
