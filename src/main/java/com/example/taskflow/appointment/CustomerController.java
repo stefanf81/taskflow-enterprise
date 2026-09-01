@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import org.springframework.data.domain.Page;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
@@ -35,7 +36,10 @@ public class CustomerController {
             @Parameter(description = "Page number (0-indexed)") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size") @RequestParam(defaultValue = "10") @Max(100) int size) {
         String email = authentication.getName();
-        return ResponseEntity.ok(appointmentService.getMyAppointments(email, page, size));
+        // Private, must-revalidate — appointments mutate frequently; ETag handles 304
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noCache().cachePrivate().mustRevalidate())
+                .body(appointmentService.getMyAppointments(email, page, size));
     }
 
     @DeleteMapping("/appointments/{publicId}")

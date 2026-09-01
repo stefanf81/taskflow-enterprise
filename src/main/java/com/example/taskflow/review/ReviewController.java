@@ -6,11 +6,13 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/v1/reviews")
@@ -27,7 +29,10 @@ public class ReviewController {
     @Operation(summary = "Get aggregated ratings for all barbers")
     @ApiResponse(responseCode = "200", description = "Aggregated barber ratings returned")
     public ResponseEntity<List<BarberRatingResponse>> getBarberRatings() {
-        return ResponseEntity.ok(reviewService.getBarberRatings());
+        // Ratings are aggregated and change infrequently — 5m public cache with ETag
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
+                .body(reviewService.getBarberRatings());
     }
 
     @PostMapping("/public/{publicId}")

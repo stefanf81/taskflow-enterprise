@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../common/Card';
 import { Button } from '../common/Button';
@@ -49,39 +49,38 @@ interface LookbookGalleryProps {
 }
 
 export const LookbookGallery: React.FC<LookbookGalleryProps> = ({ onSelectStyle }) => {
+  // FlatList inside parent ScrollView with scrollEnabled=false defeats virtualization
+  // (all 4 items rendered at once, no recycling). For 4 static items this is fine
+  // but with >50 items it would inflate JS thread and memory. Use plain map + View
+  // so parent ScrollView handles scrolling, and swap to FlashList when catalogue >50.
   return (
     <View style={styles.container}>
-      <FlatList
-        data={LOOKBOOK_DATA}
-        keyExtractor={(item) => item.id}
-        scrollEnabled={false}
-        renderItem={({ item }) => (
-          <Card style={styles.card} variant="goldBorder">
-            <View style={styles.imagePlaceholder}>
-              <Ionicons name="cut" size={36} color={colors.gold.main} />
-              <View style={styles.categoryBadge}>
-                <Text style={styles.categoryText}>{item.category}</Text>
-              </View>
+      {LOOKBOOK_DATA.map((item) => (
+        <Card key={item.id} style={styles.card} variant="goldBorder">
+          <View style={styles.imagePlaceholder}>
+            <Ionicons name="cut" size={36} color={colors.gold.main} />
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryText}>{item.category}</Text>
             </View>
+          </View>
 
-            <View style={styles.content}>
-              <Text style={styles.title}>{item.title}</Text>
-              <Text style={styles.barber}>Crafted by {item.barber}</Text>
-              <Text style={styles.description}>{item.description}</Text>
+          <View style={styles.content}>
+            <Text style={styles.title}>{item.title}</Text>
+            <Text style={styles.barber}>Crafted by {item.barber}</Text>
+            <Text style={styles.description}>{item.description}</Text>
 
-              {onSelectStyle && (
-                <Button
-                  title="Book This Look"
-                  variant="outline"
-                  size="sm"
-                  style={styles.bookBtn}
-                  onPress={() => onSelectStyle(item)}
-                />
-              )}
-            </View>
-          </Card>
-        )}
-      />
+            {onSelectStyle && (
+              <Button
+                title="Book This Look"
+                variant="outline"
+                size="sm"
+                style={styles.bookBtn}
+                onPress={() => onSelectStyle(item)}
+              />
+            )}
+          </View>
+        </Card>
+      ))}
     </View>
   );
 };

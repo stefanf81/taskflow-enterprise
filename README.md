@@ -38,11 +38,13 @@ shared event fanout before relying on real-time updates across replicas.
                                         │                 │
                   ┌─────────────────────┘                 └─────────────────────┐
                   ▼                                                             ▼
-┌──────────────────────────────────┐                           ┌──────────────────────────────────┐
-│     Angular 22 Web Frontend      │                           │  React Native Mobile Application │
-│      (frontend/ - Port 4200)     │                           │     (mobile/ - Android & iOS)    │
-└──────────────────────────────────┘                           └──────────────────────────────────┘
+ ┌──────────────────────────────────┐                           ┌──────────────────────────────────┐
+ │     Angular 22 Web Frontend      │                           │  React Native Mobile Application │
+ │      (frontend/ - Port 4200)     │                           │     (mobile/ - Android & iOS)    │
+ └──────────────────────────────────┘                           └──────────────────────────────────┘
 ```
+
+**Performance & Reliability Highlights (P0–P2):** Bounded async executor `AsyncConfig` (core 8 / max 64 / queue 100 `CallerRunsPolicy`) → backpressure not OOM; atomic Redis Lua rate limiter (`EVAL` `INCR`+`PEXPIRE` 1 RTT, `HIGHEST_PRECEDENCE+20`); partial unique slot index `idx_appointment_slot_active` via `V21__fix_double_booking_index` (Postgres partial `WHERE status IN ('PENDING','APPROVED')` / H2 generated `active_slot_marker`); Redis `barbers`/`publicBarbers`/`services` caches (10 m TTL, `sync=true`, `@CacheEvict` on mutation) + `busySlots` 2 m; tiered `Cache-Control` (`5 m public` catalog/barbers/ratings, `30 s private` busySlots, `no-cache private` admin) + `ShallowEtagHeaderFilter` (GET only) + Tomcat `max-keep-alive-requests` 100 / Nginx `keepalive 64` + immutable hashed assets (`public, immutable, max-age=15552000` 6 M); Micrometer histograms `p50/p95/p99` + `sla 50/100/200 ms` + `percentiles-histogram true` via `/actuator/prometheus` (see `application-prod.properties`); explicit `-XX:+UseContainerSupport` + `-XX:+HeapDumpOnOutOfMemoryError`/`HeapDumpPath=/tmp/heapdump.hprof` + `-Xlog:gc*:file=/tmp/gc.log` diagnostics; local `Dockerfile` `HEALTHCHECK` (`30 s`/`5 s`/`3`/`15 s` `wget /actuator/health/liveness`) vs `Dockerfile.x64` probe-free for K8s `livenessProbe`; `k6/load.js` ramping-VUs `0→50→200→0` (`p95<500`/`p99<800`) + `k6/browser.js` CWV `ttfb<800 fcp<1800 lcp<2500`; mobile `queryClient` `staleTime 60 s`/`gcTime 5 m` + `timeout 10 s` fail-fast; PgBouncer ceiling docs (Hikari `25/10`, `pool×replicas < 100`, `>2 replicas → PgBouncer transaction`); Lookbook `FlatList scrollEnabled={false}` → `LOOKBOOK_DATA.map` fix.
 
 ---
 
@@ -92,12 +94,28 @@ shared event fanout before relying on real-time updates across replicas.
 ├── package.json                  # Root monorepo workspace scripts
 ├── docs/                         # Architectural Decision Records (ADRs)
 │   └── adr/
-├── docker-compose.yml            # Local Docker orchestrator
+├── docker-compose.yml            # Local Docker orchestrator (JAVA_TOOL_OPTIONS: UseContainerSupport, HeapDump, GC log, G1GC 50% heap)
+├── Dockerfile                    # arm64 local — sizing-agnostic + HEALTHCHECK (30s/5s/3/15s liveness); x64 prod image omits it (K8s probe)
+├── Dockerfile.x64                # amd64 prod — sizing-agnostic, no HEALTHCHECK (K8s livenessProbe owns it)
+├── k6/load.js                    # k6 ramping-VUs 0→50→200→0 load gate (p95<500, p99<800, checks 1.0)
+├── k6/browser.js                 # k6 browser CWV gate (ttfb<800 fcp<1800 lcp<2500, Lookbook wizard)
 ├── start-docker.sh               # One-click Docker launcher script
 ├── stop-docker.sh                # Docker cleanup script
 ├── verify.sh                     # Full-stack quality verification (with auto-docker lifecycle)
 └── ARCHITECTURE.md               # End-to-End Architectural Blueprint
 ```
+
+**P0–P2 Structures & Tunings (see `ARCHITECTURE.md` / `BENCHMARKS.md`):**
+
+- `core/AsyncConfig.java` — bounded `ThreadPoolTaskExecutor` `core=8 max=64 queue=100 CallerRunsPolicy` (`taskflow-async-` prefix, 30 s graceful) replaces unbounded `@EnableAsync` default.
+- `core/RateLimiterConfig.java` — stateless Redis Lua `EVAL` (`INCR`+`PEXPIRE` 1 RTT, `HIGHEST_PRECEDENCE+20`, skips `/actuator/health/**`).
+- `db/migration/V21__fix_double_booking_index.java` — partial unique `idx_appointment_slot_active ON appointments(barber_name, booking_date, booking_time) WHERE status IN ('PENDING','APPROVED')` (Postgres partial; H2 via generated `active_slot_marker INTEGER AS (CASE WHEN status IN ('PENDING','APPROVED') THEN 1 ELSE NULL END)` + `UNIQUE(... marker)`).
+- `core/CacheConfig.java` + `appointment/BarberServiceImpl.java` / `catalog/CatalogServiceImpl.java` / `appointment/BusySlotsService.java` — Redis-backed `@Cacheable(barbers/publicBarbers/services sync=true, 10 m)` / `busySlots (2 m, sync=true)` with `@CacheEvict(allEntries=true)` on mutations; `GenericJackson2JsonRedisSerializer` explicit allow-list; tiered `Cache-Control` in controllers (`5 m public` catalog/barbers/ratings, `30 s private` busySlots, `no-cache private` admin) + `ShallowEtagHeaderFilter` (GET only).
+- `frontend/nginx.conf` — upstream `keepalive 64` + split static caching (`js|css` → `Cache-Control "public, immutable, max-age=15552000"` 6 M, `ico|gif|jpe?g|png|svg|woff2?` → `Cache-Control "public"`), `index.html` via `try_files` (must-revalidate), security headers duplicated into cache blocks.
+- `src/main/resources/application-prod.properties` — Micrometer `management.metrics.distribution.percentiles.http.server.requests=0.5,0.95,0.99` + `percentiles-histogram=true` + `sla=50ms,100ms,200ms` (`/actuator/prometheus` histograms), Hikari `maximum-pool-size=25/minimum-idle=10` + PgBouncer ceiling comment (`pool×replicas < 100`, `>2 → PgBouncer transaction`).
+- `docker-compose.yml` & `homelab/TF/gitops/apps/taskflow/backend.yaml` `JAVA_TOOL_OPTIONS` — explicit `-XX:+UseContainerSupport` (cgroup-aware, self-documenting), `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof`, `-Xlog:gc*:file=/tmp/gc.log:time,uptime:filecount=3,filesize=10m` (3×10 MB), plus `UseG1GC`/`MaxGCPauseMillis=100`/`AlwaysPreTouch`/`MaxDirectMemorySize|Metaspace 256m`.
+- `k6/load.js` (`ramping-vus` `0→50 30 s →200 60 s →0 30 s`, `gracefulRampDown 10 s`, thresholds `http_req_failed rate<0.01`, `p95<500 p99<800`, `checks 1.0`, CWV gates; workload `70% catalog/barbers /20% busySlots /10% health`, `sleep 0.1`) + `k6/browser.js` (`shared-iterations` 1 VU Chromium Lookbook→stylist→slot→form, thresholds `ttfb<800 fcp<1800 lcp<2500`).
+- `mobile/src/query/queryClient.ts` (`staleTime 60_000` was 0, `gcTime 5*60_000`, `retry:1` exponential `retryDelay` `min(1000*2^attempt,30000)`, `refetchOnWindowFocus:false`) + `mobile/src/api/client.ts` (`timeout 10000` was 15000, fail-fast < JPA 5 s+Hikari 20 s); `mobile/src/components/lookbook/LookbookGallery.tsx` — `FlatList scrollEnabled={false}` inside `ScrollView` → `LOOKBOOK_DATA.map` + `View` + `Card` (parent `ScrollView` owns scroll; `FlashList` >50 items).
 
 ---
 
@@ -125,11 +143,12 @@ shared event fanout before relying on real-time updates across replicas.
 ```
 This launches the PostgreSQL database, Redis cache, Spring Boot backend, and Nginx frontend in health-checked isolated Docker networks.
 
-* **Web UI:** `http://localhost:4200`
-* **API via Nginx:** `http://localhost:4200/api`
-* **Prometheus Metrics:** Internal backend endpoint requiring ADMIN authentication — JWT cookie or bearer token
+* **Web UI:** `http://localhost:4200` — hashed `js|css` served `immutable, max-age=15552000` (6 M), other assets `public`, `index.html` must-revalidate.
+* **API via Nginx:** `http://localhost:4200/api` — tiered `Cache-Control` (`public max-age=300` catalog/barbers/ratings, `private max-age=30` busySlots, `no-cache private` admin) + `ETag` `304` on GETs, `keepalive 64` upstream, HTTP/2 multiplexing.
+* **Prometheus Metrics:** Internal backend endpoint requiring ADMIN authentication — JWT cookie or bearer token — at `/actuator/prometheus`; `application-prod.properties` exposes Micrometer histograms `p50/p95/p99` + `sla 50/100/200ms` + `percentiles-histogram` for `histogram_quantile` SLO queries (see `BENCHMARKS.md §46`). Health probes at `/actuator/health/liveness` & `/readiness` (local `Dockerfile` `HEALTHCHECK` `wget`; prod uses K8s probes).
 * **Stop Application Stack:** `./stop-docker.sh`
 * **Full-Stack Automated Verification:** `./verify.sh` (automatically starts Docker if needed and cleans up on exit)
+* **Load Gate (P2):** `k6/load.js` ramping `0→50→200→0` (`p95<500 ms`, `p99<800 ms`, `checks 1.0`) — workload mirrors prod `70% catalog/barbers /20% busySlots /10% health`; run via `.github/workflows/k6.yml`. Browser CWV gate via `k6/browser.js` (`ttfb<800 fcp<1800 lcp<2500`).
 
 ---
 
@@ -153,6 +172,8 @@ npm run ios
 # Run Jest test suite
 npm test
 ```
+
+* **Query Tuning (P1-4):** `mobile/src/query/queryClient.ts` uses `staleTime 60_000` / `gcTime 5*60_000` with exponential `retryDelay` (`retry:1`, `refetchOnWindowFocus:false`) — cuts catalog/barbers refetch ~50% on tab navigation vs `staleTime 0`. `mobile/src/api/client.ts` `timeout 10000` (was 15000, fail-fast < server JPA 5 s + Hikari 20 s). `LookbookGallery` uses `LOOKBOOK_DATA.map` (not `FlatList scrollEnabled={false}`) so parent `ScrollView` owns scrolling; upgrade to `FlashList` when catalogue >50.
 
 ---
 
@@ -190,6 +211,11 @@ npm start
 * **HttpOnly Cookies:** Web app uses `HttpOnly`, `SameSite=Strict` cookies with double-submit CSRF token protection.
 * **Native Mobile Auth:** Mobile uses `POST /api/v1/auth/mobile/login` and sends the SecureStore token as an `Authorization: Bearer` header; it does not depend on native cookie persistence.
 * **Admin SSE Auth:** The web admin event stream uses the existing HttpOnly `access_token` cookie. The JWT is never read by JavaScript or passed in an SSE URL.
+* **Tiered Cache-Control & ETag (P1-3):** `GET /api/v1/catalog` / `barbers` / `reviews/public/barber-ratings` → `Cache-Control: public, max-age=300` (5 m, aligns with 10 m `@Cacheable` + `304` via `ShallowEtagHeaderFilter` GET-only); `busySlots` → `private, max-age=30, must-revalidate`; admin `GET /appointments` / `barbers/admin` → `private, no-cache, must-revalidate` (ETag still allows `304`). Nginx additionally serves hashed `js|css` as `public, immutable, max-age=15552000` (6 M) for `outputHashing:all` bundles.
+* **Observability Histograms (P1-5):** `application-prod.properties` configures `management.metrics.distribution.percentiles=0.5,0.95,0.99` + `percentiles-histogram=true` + `sla=50ms,100ms,200ms`. Prometheus scrapes `/actuator/prometheus` for `http_server_requests_seconds{quantile}` and `_bucket{le}` — use `histogram_quantile(0.95, …)` for SLO alerts (overhead ~1–2% cardinality). OTel tracing remains at 10% sampling.
+* **Mobile Query Tuning (P1-4):** `mobile/src/query/queryClient.ts` sets `staleTime 60_000` (was 0, cuts catalog/barbers refetch ~50% on tab nav), `gcTime 5*60_000` (retain across nav), exponential `retryDelay` with `retry:1`, `refetchOnWindowFocus:false`; `mobile/src/api/client.ts` `timeout 10000` (< JPA 5 s + Hikari 20 s, fail-fast). `LookbookGallery` virtualization fix (`FlatList`+`scrollEnabled=false` → plain `map`) prevents windowing defeat.
+* **Container Diagnostics (P1-2):** `JAVA_TOOL_OPTIONS` carries explicit `-XX:+UseContainerSupport` (cgroup-aware, self-documenting), `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof` (0% until OOM, `tmpfs` `/tmp`), `-Xlog:gc*:file=/tmp/gc.log:time,uptime:filecount=3,filesize=10m` (3×10 MB rotation, ~0.7% overhead). `Dockerfile` (local) now has `HEALTHCHECK` (`wget /actuator/health/liveness`); `Dockerfile.x64` omits it — K8s `livenessProbe`/`readinessProbe` in `homelab/TF` is the source of truth.
+* **PgBouncer Ceiling (P2):** `application-prod.properties:38` documents Hikari `maximum-pool-size=25/minimum-idle=10` knee curve (`10→3015 RPS`, `25→4128 RPS`, `50→4257 RPS`) and `pool×replicas < PG max_connections (100)`; `>2 replicas → PgBouncer transaction pooling` sidecar (`homelab/TF/gitops/apps/taskflow/backend.yaml`).
 
 ---
 

@@ -62,7 +62,7 @@ public class AppointmentControllerBenchmarkTest {
         // 1. Populate the database with dummy appointments to simulate load volume
         List<Appointment> loadData = new ArrayList<>();
         for (int i = 0; i < DATABASE_SIZE; i++) {
-            loadData.add(new Appointment("Client " + i, "client" + i + "@example.com", "555-01" + i, "Barber Alex", LocalDate.now().plusDays(i), "10:00 AM", "Classic Haircut"));
+            loadData.add(new Appointment("Client " + i, "client" + i + "@example.com", "555-01" + i, "Barber Alex", LocalDate.now().plusDays(i), "10:00", "Classic Haircut"));
         }
         appointmentRepository.saveAll(loadData);
 

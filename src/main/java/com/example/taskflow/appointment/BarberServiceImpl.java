@@ -6,6 +6,8 @@ import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,18 +38,21 @@ public class BarberServiceImpl implements BarberService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = "publicBarbers", sync = true)
     public List<PublicBarberResponse> getPublicBarbers() {
         return barberRepository.findAllPublicProjectedBy();
     }
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = "barbers", sync = true)
     public List<BarberResponse> getAllBarbers() {
         return barberRepository.findAllProjectedBy();
     }
 
     @Override
     @Transactional
+    @CacheEvict(value = {"barbers", "publicBarbers"}, allEntries = true)
     public BarberResponse createBarber(BarberRequest request) {
         Barber saved = barberRepository.save(request.toEntity());
         return BarberResponse.fromEntity(saved);

@@ -48,7 +48,7 @@ export const apiClient = axios.create({
   // Native auth uses an Authorization bearer header. Do not rely on a browser
   // cookie jar or send ambient cookies from the mobile runtime.
   withCredentials: false,
-  timeout: 15000,
+  timeout: 10000,
 });
 
 // ---------------------------------------------------------------------------

@@ -11,18 +11,37 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.core.Ordered;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.time.Duration;
+import java.util.Collections;
 
 @Configuration
 @ConditionalOnProperty(name = "app.rate-limit.enabled", havingValue = "true", matchIfMissing = false)
 public class RateLimiterConfig {
 
     private static final Logger log = LoggerFactory.getLogger(RateLimiterConfig.class);
+
+    /**
+     * Atomic INCR + PEXPIRE via Lua. Two-command INCR then EXPIRE leaks a key
+     * without TTL if the process crashes between commands → permanent block.
+     * Lua runs atomically on Redis's single thread; EVAL is the production
+     * pattern per spring-boot-best-practice / jhipster.
+     */
+    private static final DefaultRedisScript<Long> RATE_LIMIT_SCRIPT;
+
+    static {
+        // KEYS[1]=rate_limit:ip:kind  ARGV[1]=ttlMillis (60000)
+        String lua = "local c = redis.call('incr', KEYS[1]); "
+                + "if c == 1 then redis.call('pexpire', KEYS[1], ARGV[1]) end; "
+                + "return c";
+        RATE_LIMIT_SCRIPT = new DefaultRedisScript<>();
+        RATE_LIMIT_SCRIPT.setScriptText(lua);
+        RATE_LIMIT_SCRIPT.setResultType(Long.class);
+    }
 
     private final int maxRequestsPerMinute;
     private final int authMaxRequestsPerMinute;
@@ -74,10 +93,10 @@ public class RateLimiterConfig {
                 String redisKey = "rate_limit:" + clientIp + ":" + (isAuthEndpoint ? "auth" : "api");
 
                 try {
-                    Long currentCount = redisTemplate.opsForValue().increment(redisKey);
-                    if (currentCount != null && currentCount == 1) {
-                        redisTemplate.expire(redisKey, Duration.ofMinutes(1));
-                    }
+                    Long currentCount = redisTemplate.execute(
+                            RATE_LIMIT_SCRIPT,
+                            Collections.singletonList(redisKey),
+                            "60000");
 
                     if (currentCount != null && currentCount > maxRequests) {
                         String safePath = path.replaceAll("[\\r\\n]", "");

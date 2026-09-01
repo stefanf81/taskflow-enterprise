@@ -6,11 +6,13 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/v1/catalog")
@@ -27,7 +29,11 @@ public class CatalogController {
     @Operation(summary = "Get all services (Public Access)")
     @ApiResponse(responseCode = "200", description = "List of all services returned")
     public ResponseEntity<List<ServiceItemResponse>> getAllServices() {
-        return ResponseEntity.ok(catalogService.getAllServices());
+        // 5m public, aligns with @Cacheable("services") TTL 10m — allows CDN/browser cache
+        // without revalidating every request, while still bounded by server cache.
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
+                .body(catalogService.getAllServices());
     }
 
     @GetMapping("/{id}")

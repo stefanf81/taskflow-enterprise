@@ -61,6 +61,9 @@ public class CacheConfig {
     private static final PolymorphicTypeValidator CACHE_TYPE_VALIDATOR =
             BasicPolymorphicTypeValidator.builder()
                     .allowIfSubType("com.example.taskflow.appointment.AppointmentStats")
+                    .allowIfSubType("com.example.taskflow.appointment.BarberResponse")
+                    .allowIfSubType("com.example.taskflow.appointment.PublicBarberResponse")
+                    .allowIfSubType("com.example.taskflow.catalog.ServiceItemResponse")
                     .allowIfSubType("java.util.ArrayList")
                     // List types from JDK 21+ List.of() and other collection
                     // factories. ImmutableCollections inner classes are
@@ -76,6 +79,7 @@ public class CacheConfig {
                     .allowIfSubType("java.lang.Long")
                     .allowIfSubType("java.lang.Double")
                     .allowIfSubType("java.lang.Integer")
+                    .allowIfSubType("java.math.BigDecimal")
                     .build();
 
     private static ObjectMapper redisObjectMapper() {
@@ -125,6 +129,24 @@ public class CacheConfig {
                 .withCacheConfiguration("busySlots",
                         RedisCacheConfiguration.defaultCacheConfig()
                                 .entryTtl(Duration.ofMinutes(2))
+                                .disableCachingNullValues()
+                                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
+                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper()))))
+                .withCacheConfiguration("barbers",
+                        RedisCacheConfiguration.defaultCacheConfig()
+                                .entryTtl(Duration.ofMinutes(10))
+                                .disableCachingNullValues()
+                                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
+                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper()))))
+                .withCacheConfiguration("publicBarbers",
+                        RedisCacheConfiguration.defaultCacheConfig()
+                                .entryTtl(Duration.ofMinutes(10))
+                                .disableCachingNullValues()
+                                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
+                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper()))))
+                .withCacheConfiguration("services",
+                        RedisCacheConfiguration.defaultCacheConfig()
+                                .entryTtl(Duration.ofMinutes(10))
                                 .disableCachingNullValues()
                                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper()))));
