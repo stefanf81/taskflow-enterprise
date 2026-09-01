@@ -4,7 +4,7 @@
 
 ## Context
 
-Spring Boot auto-configures a `ThreadPoolTaskExecutor` for `@EnableAsync` with `corePoolSize=8`, `maxPoolSize=Integer.MAX_VALUE`, and `queueCapacity=Integer.MAX_VALUE`. Logback's `AsyncAppender` adds a second unbounded queue (`queueSize 16384` in `logback-async.xml`). On a 1.25 GiB container (local: 2560M limit × `MaxRAMPercentage=50.0`; prod: 2Gi × 50% = 1 GiB heap) with a Hikari pool of 25 connections, an unbounded executor can grow threads and queue entries without bound under burst load (notification/outbox, future webhooks or mail). This risks heap exhaustion (OOM) and connection-pool starvation with no backpressure signal. The default `AbortPolicy` would also silently drop tasks when the pool saturates.
+Spring Boot auto-configures a `ThreadPoolTaskExecutor` for `@EnableAsync` with `corePoolSize=8`, `maxPoolSize=Integer.MAX_VALUE`, and `queueCapacity=Integer.MAX_VALUE`. Logback's `AsyncAppender` adds a second queue (`queueSize 16384` in `logback-spring.xml`). On a 1.25 GiB container (local: 2560M limit × `MaxRAMPercentage=50.0`; prod: 2Gi × 50% = 1 GiB heap) with a Hikari pool of 25 connections, an unbounded executor can grow threads and queue entries without bound under burst load (notification/outbox, future webhooks or mail). This risks heap exhaustion (OOM) and connection-pool starvation with no backpressure signal. The default `AbortPolicy` would also silently drop tasks when the pool saturates.
 
 The application enables virtual threads (`spring.threads.virtual.enabled=true`) but the async executor remains a platform-thread pool — its bounds must be explicit so burst work does not escape container quotas.
 
@@ -28,6 +28,8 @@ awaitTerminationSeconds=30
 * The bean is named `taskExecutor` so it replaces the auto-configured executor.
 
 `AsyncUncaughtExceptionHandler` logs unhandled async exceptions with `LogSanitizer.safeMessage` at `ERROR` level.
+
+`logback-spring.xml` retains the bounded logging queue, preserves every level (`discardingThreshold=0`), blocks the producer when full (`neverBlock=false`), and flushes for up to 30 s on Spring Boot's logging shutdown hook. This makes overload visible as caller latency rather than silently dropping operational logs.
 
 ## Consequences
 

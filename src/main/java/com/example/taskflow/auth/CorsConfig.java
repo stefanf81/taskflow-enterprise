@@ -1,17 +1,14 @@
 package com.example.taskflow.auth;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.env.Environment;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.List;
 
 /**
  * Dedicated CORS configuration extracted from {@link SecurityConfig}
@@ -20,45 +17,28 @@ import java.util.Collections;
 @Configuration
 public class CorsConfig {
 
-    private static final Logger logger = LoggerFactory.getLogger(CorsConfig.class);
-
     private final String allowedOrigins;
-    private final Environment environment;
 
     public CorsConfig(
-            @Value("${app.cors.allowed-origins:*}") String allowedOrigins,
-            Environment environment) {
+            @Value("${app.cors.allowed-origins:http://localhost:4200,http://127.0.0.1:4200}") String allowedOrigins) {
         this.allowedOrigins = allowedOrigins;
-        this.environment = environment;
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        if ("*".equals(allowedOrigins)) {
-            // WARN: a wildcard origin combined with allowCredentials=true trusts
-            // any origin with cookies. This is acceptable for local dev only —
-            // in production, app.cors.allowed-origins must list explicit origins
-            // (see application-prod.properties). Fail-fast in non-dev profiles to
-            // prevent an accidental wildcard from shipping to prod.
-            boolean isProd = environment != null
-                    && Arrays.asList(environment.getActiveProfiles()).contains("prod")
-                    && !Arrays.asList(environment.getActiveProfiles()).contains("dev");
-            if (isProd) {
-                throw new IllegalStateException(
-                        "app.cors.allowed-origins is '*' with allowCredentials=true in a prod profile. "
-                                + "Set app.cors.allowed-origins to an explicit, comma-separated origin list (e.g. "
-                                + "'https://example.com') in application-prod.properties.");
-            }
-            logger.warn("CORS is configured with a wildcard origin AND allowCredentials=true. "
-                    + "This is acceptable for local dev only — set explicit origins in production.");
-            configuration.setAllowedOriginPatterns(Collections.singletonList("*"));
-            configuration.setAllowCredentials(true);
-        } else {
-            configuration.setAllowedOrigins(Arrays.asList(allowedOrigins.split(",")));
-            configuration.setAllowCredentials(true);
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList();
+        if (origins.isEmpty() || origins.contains("*")) {
+            throw new IllegalStateException(
+                    "app.cors.allowed-origins must be a non-empty, comma-separated list of explicit origins "
+                            + "when allowCredentials=true.");
         }
+        configuration.setAllowedOrigins(origins);
+        configuration.setAllowCredentials(true);
 
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("Content-Type", "Authorization", "X-XSRF-TOKEN", "Idempotency-Key"));

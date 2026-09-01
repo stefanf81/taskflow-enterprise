@@ -1,39 +1,13 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version "${springBootVersion}"
-	id 'io.spring.dependency-management' version '1.1.7'
-	id 'org.owasp.dependencycheck' version '13.0.0'
+	alias(libs.plugins.spring.boot)
+	alias(libs.plugins.dependency.check)
 	id 'jacoco'
-	id 'io.github.ben-manes.versions' version '0.61.0'
-	id 'com.github.spotbugs' version '6.5.11'
+	alias(libs.plugins.versions)
+	alias(libs.plugins.spotbugs)
 }
 group = 'com.example'
 version = '0.0.1-SNAPSHOT'
-ext {
-	set('opentelemetry.version', '1.65.0')
-	set('commons-lang3.version', '3.20.0')
-	// Pin Logback 1.6.3 above Spring Boot's vulnerable 1.5.34 release to fix CVE-2026-13006
-	// (ACE via conditional config file processing); this 1.6.x pin includes the 1.5.36+
-	// hardening for disallowed references.
-	set('logback.version', '1.6.3')
-	// Pin Jackson 2.x BOM to the shared jackson2Version to fix:
-	//   - CVE-2026-59888 (@JsonIgnore on Record bypassed with PropertyNamingStrategy)
-	//   - jackson-core: async parser maxNumberLength bypass (fixed in 2.21.4)
-	//   - CVE-2026-54512/13/14/15/16/17/18 (PTV bypass, @JsonView, SSRF, etc.)
-	// The earlier Spring Boot 4.1.0 BOM shipped 2.21.4 by default.
-	set('jackson-2-bom.version', jackson2Version)
-	// Pin Jackson 3.x BOM to the shared jackson3Version to fix CVE-2026-59889 (@JsonView bypass for
-	// @JsonUnwrapped container properties on deserialization). Spring Boot 4.1.0 BOM
-	// The earlier BOM shipped 3.1.4, which is vulnerable.
-	set('jackson-bom.version', jackson3Version)
-	// Pin Netty to the shared nettyVersion. Originally pinned to fix GHSA-mfg7-5gfp-c4w3
-	// (Memory Leak in DNS Record Decoder via Malformed Domain Names); 4.2.17.Final
-	// is the latest patch release. The earlier Spring Boot 4.1.0 BOM shipped 4.2.15.Final.
-	set('netty.version', nettyVersion)
-	// Pin Log4j API and its SLF4J bridge via the shared log4j2Version to fix CVE-2026-49844
-	// (malformed JSON output for non-finite MapMessage values).
-	set('log4j2.version', log4j2Version)
-}
 
 
 java {
@@ -53,28 +27,38 @@ repositories {
 	mavenCentral()
 }
 dependencies {
-	implementation platform("org.springframework.boot:spring-boot-dependencies:${springBootVersion}")
-	annotationProcessor platform("org.springframework.boot:spring-boot-dependencies:${springBootVersion}")
-	testImplementation platform("org.springframework.boot:spring-boot-dependencies:${springBootVersion}")
+	implementation platform(libs.spring.boot.dependencies)
+	annotationProcessor platform(libs.spring.boot.dependencies)
+	testImplementation platform(libs.spring.boot.dependencies)
+	// The companion BOMs replace Spring's dependency-management plugin property
+	// overrides while keeping every pinned dependency family internally aligned.
+	implementation platform(libs.opentelemetry.bom)
+	implementation platform(libs.jackson2.bom)
+	implementation platform(libs.jackson3.bom)
+	implementation platform(libs.netty.bom)
+	implementation platform(libs.log4j2.bom)
+	constraints {
+		implementation(libs.commons.lang3)
+		implementation(libs.logback.classic)
+	}
 	// Spring Boot
-	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springframework.boot:spring-boot-starter-web'
-	implementation 'org.springframework.boot:spring-boot-starter-security'
-	implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
-	implementation 'org.springframework.boot:spring-boot-starter-actuator'
-	implementation 'org.springframework.boot:spring-boot-starter-cache'
-	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	implementation libs.spring.boot.starter.data.jpa
+	implementation libs.spring.boot.starter.validation
+	implementation libs.spring.boot.starter.web
+	implementation libs.spring.boot.starter.security
+	implementation libs.spring.boot.starter.oauth2.resource.server
+	implementation libs.spring.boot.starter.actuator
+	implementation libs.spring.boot.starter.cache
+	implementation libs.spring.boot.starter.data.redis
 	// Explicit pins ensure dependency tooling and container scanners resolve the patched
 	// Log4j API used by Spring Boot's log4j-to-slf4j bridge.
-	implementation "org.apache.logging.log4j:log4j-api:${log4j2Version}"
-	implementation "org.apache.logging.log4j:log4j-to-slf4j:${log4j2Version}"
-	// Netty — explicit pins so dependency tooling sees the correct versions
-	// (BOM property overrides are not resolved consistently by all tooling).
+	implementation libs.log4j2.api
+	implementation libs.log4j2.to.slf4j
+	// Netty — explicit pins so dependency tooling and container scanners resolve
+	// the patched DNS codec version directly.
 	// Originally pinned for GHSA-mfg7-5gfp-c4w3 (DNS Record Decoder memory leak);
 	// bumped to 4.2.17.Final for the latest patch release.
-	implementation platform("io.netty:netty-bom:${nettyVersion}")
-	implementation "io.netty:netty-codec-dns:${nettyVersion}"
+	implementation libs.netty.codec.dns
 	// Jackson — explicit pins so dependency tooling sees the correct versions
 	// (BOM property overrides are not resolved consistently by all tooling).
 	//   - jackson-databind 2.x / jackson-core 2.x: fixes 8 CVEs (HIGH: async parser bypass,
@@ -82,39 +66,38 @@ dependencies {
 	//   - jackson-annotations 2.x: MUST be >= 2.22 for JsonApplyView used by Jackson 3.x
 	//     backward-compat module. 2.22 also includes 2.22.1 CVE fixes.
 	//   - jackson-databind 3.x: fixes CVE-2026-59889 (@JsonView bypass for @JsonUnwrapped)
-	implementation "com.fasterxml.jackson.core:jackson-databind:${jackson2Version}"
-	implementation "com.fasterxml.jackson.core:jackson-core:${jackson2Version}"
-	implementation "com.fasterxml.jackson.core:jackson-annotations:${jacksonAnnotationsVersion}"
-	implementation "tools.jackson.core:jackson-databind:${jackson3Version}"
+	implementation libs.jackson2.databind
+	implementation libs.jackson2.core
+	implementation libs.jackson.annotations
+	implementation libs.jackson3.databind
 	// Hibernate 2nd-level cache with Caffeine JCache region factory
-	implementation "org.hibernate.orm:hibernate-jcache:${hibernateVersion}"
-	implementation "org.hibernate.orm:hibernate-core:${hibernateVersion}"
-	implementation 'com.github.ben-manes.caffeine:jcache:3.2.4'
+	implementation libs.hibernate.jcache
+	implementation libs.hibernate.core
+	implementation libs.caffeine.jcache
 	// Cache (Redis-backed via spring-boot-starter-data-redis; Caffeine was unused)
 	// Modular monolith — Spring Modulith verifies package-based module boundaries
 	// (repositories live under <module>/internal/ and are inaccessible from other
 	// modules; cross-module communication goes through each module's public
 	// service API or domain events). Verified by ModularityTest.java and
 	// documented via auto-generated PlantUML/C4 diagrams.
-	implementation 'org.springframework.modulith:spring-modulith-starter-core:2.1.1'
+	implementation libs.spring.modulith.core
 	// Observability
-	implementation 'org.springframework.boot:spring-boot-micrometer-tracing-opentelemetry'
-	implementation 'io.micrometer:micrometer-registry-prometheus'
-	implementation 'io.micrometer:micrometer-tracing-bridge-otel'
-	implementation 'io.opentelemetry:opentelemetry-exporter-otlp'
+	implementation libs.spring.boot.micrometer.tracing.opentelemetry
+	implementation libs.micrometer.prometheus
+	implementation libs.micrometer.tracing.otel
+	implementation libs.opentelemetry.otlp
 	// OpenAPI
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0'
+	implementation libs.springdoc.webmvc.ui
 	// Database migration
-	implementation 'org.springframework.boot:spring-boot-starter-flyway'
-	implementation "org.flywaydb:flyway-database-postgresql:${flywayVersion}"
+	implementation libs.spring.boot.starter.flyway
+	implementation libs.flyway.postgresql
 	// Pin flyway-core to match flyway-database-postgresql (the earlier BOM shipped 12.4.0).
-	implementation "org.flywaydb:flyway-core:${flywayVersion}"
+	implementation libs.flyway.core
 	// Runtime
-	runtimeOnly 'org.postgresql:postgresql:42.7.13'
-	runtimeOnly 'com.h2database:h2:2.4.240'
+	runtimeOnly libs.postgresql
+	runtimeOnly libs.h2
 	// Transitive dependency pins — override versions brought in by the Spring Boot BOM or
-	// other transitive paths. Explicit pins keep dependency tooling accurate because BOM
-	// property overrides are not resolved consistently by all tooling.
+	// other transitive paths. Explicit declarations keep dependency tooling accurate.
 	//   - HikariCP:           BOM ships 7.0.2; bump to 7.1.0.
 	//   - Lettuce:            BOM ships 7.5.2.RELEASE; bump to 7.7.0.RELEASE.
 	//   - semconv:            transitive via opentelemetry-exporter-otlp (BOM ships 1.41.1).
@@ -122,30 +105,30 @@ dependencies {
 	//                         is a security patch (BOM ships 10.9).
 	//   - error_prone_*:      transitive annotation lib (BOM ships 2.49.0).
 	//   - okio:               transitive (BOM ships 3.17.0).
-	implementation 'com.zaxxer:HikariCP:7.1.0'
-	implementation 'io.lettuce:lettuce-core:7.7.0.RELEASE'
-	implementation 'io.opentelemetry.semconv:opentelemetry-semconv:1.43.0'
-	implementation 'com.nimbusds:nimbus-jose-jwt:10.9.1'
-	implementation 'com.google.errorprone:error_prone_annotations:2.50.0'
-	implementation 'com.squareup.okio:okio:3.18.1'
+	implementation libs.hikari
+	implementation libs.lettuce
+	implementation libs.opentelemetry.semconv
+	implementation libs.nimbus.jose.jwt
+	implementation libs.error.prone.annotations
+	implementation libs.okio
 	// Testing
-	testImplementation 'org.springframework.boot:spring-boot-starter-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
-	testImplementation 'org.springframework.security:spring-security-test'
-	testImplementation 'org.testcontainers:testcontainers'
-	testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
-	testImplementation 'org.testcontainers:testcontainers-postgresql'
-	testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.0'
+	testImplementation libs.spring.boot.starter.test
+	testImplementation libs.spring.boot.starter.webmvc.test
+	testImplementation libs.spring.security.test
+	testImplementation libs.testcontainers.core
+	testImplementation libs.testcontainers.junit.jupiter
+	testImplementation libs.testcontainers.postgresql
+	testImplementation libs.archunit.junit5
 	// Spring Modulith test support — ApplicationModules.of().verify() and
 	// @ApplicationModuleTest for isolated module bootstrapping.
-	testImplementation 'org.springframework.modulith:spring-modulith-starter-test:2.1.1'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher:6.1.3'
+	testImplementation libs.spring.modulith.test
+	testRuntimeOnly libs.junit.platform.launcher
 	// Static analysis
-	spotbugsPlugins 'com.h3xstream.findsecbugs:findsecbugs-plugin:1.14.0'
-	spotbugsSlf4j 'org.slf4j:slf4j-simple:2.0.18'
+	spotbugsPlugins libs.findsecbugs.plugin
+	spotbugsSlf4j libs.slf4j.simple
 }
 spotbugs {
-	toolVersion = '4.10.4'
+	toolVersion = libs.versions.spotbugs.tool.get()
 	ignoreFailures = false
 	effort = com.github.spotbugs.snom.Effort.valueOf('MAX')
 	reportLevel = com.github.spotbugs.snom.Confidence.valueOf('HIGH')
@@ -209,7 +192,7 @@ tasks.register("benchmarkTest", Test) {
 }
 
 jacoco {
-	toolVersion = "0.8.15"
+	toolVersion = libs.versions.jacoco.get()
 }
 jacocoTestReport {
 	dependsOn(tasks.test)

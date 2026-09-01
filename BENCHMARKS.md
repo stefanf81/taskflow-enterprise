@@ -965,7 +965,7 @@ proxy_set_header Connection "";
 
 **Goal:** Eliminate heap-exhaustion and thread-explosion risk from Spring's unbounded `ThreadPoolTaskExecutor` default (`core=8, max=Integer.MAX_VALUE, queue=Integer.MAX_VALUE`) by enforcing a bounded pool with deterministic backpressure.
 
-**Implementation:** `src/main/java/com/example/taskflow/core/AsyncConfig.java:40` — `AsyncConfig implements AsyncConfigurer` replaces the auto-configured executor. `Logback AsyncAppender` queue `16384` in `logback-async.xml` was the companion unbounded risk.
+**Implementation:** `src/main/java/com/example/taskflow/core/AsyncConfig.java:40` — `AsyncConfig implements AsyncConfigurer` replaces the auto-configured executor. `Logback AsyncAppender` queue `16384` in `logback-spring.xml` was the companion unbounded risk.
 
 | Parameter | Default (Before) | Tuned (After) | Rationale |
 | :--- | :--- | :--- | :--- |
@@ -1409,5 +1409,4 @@ And `ARCHITECTURE.md` / `BENCHMARKS.md` inventories (§9) amplify: **>2 replicas
 **PgBouncer sidecar model (external GitOps, not in this repo):** `homelab/TF/gitops/apps/taskflow/` deploys a `pgbouncer` sidecar (or shared pool) with `pool_mode=transaction`, `max_client_conn=1000`, `default_pool_size=25` — backends connect through PgBouncer's transaction-pooled port, Postgres sees only `default_pool_size` connections regardless of replica count. The Hikari pool then sits behind PgBouncer and can stay at 25 without exhausting PG.
 
 **Verdict:** Documentation is the correct P2 action — no code change needed today (2-replica headroom is ample). When scale demands >2 replicas, the documented PgBouncer transaction-pooling path avoids the `max_connections` cliff without lowering per-replica throughput.
-
 
