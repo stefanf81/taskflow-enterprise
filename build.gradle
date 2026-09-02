@@ -134,11 +134,6 @@ spotbugs {
 	reportLevel = com.github.spotbugs.snom.Confidence.valueOf('HIGH')
 	excludeFilter = file("spotbugs-exclude.xml")
 }
-tasks.register("writeMainClasspath") {
-	doLast {
-		file("build/main-cp.txt").text = sourceSets.main.runtimeClasspath.asPath
-	}
-}
 tasks.named("test") {
 	useJUnitPlatform {
 		excludeTags 'benchmark', 'testcontainers'

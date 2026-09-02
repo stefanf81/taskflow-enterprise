@@ -100,7 +100,7 @@ mobile/
 │   ├── theme/               # Gold & Obsidian palette, tokens, and colors
 │   ├── types/               # TypeScript API models & Navigation ParamLists
 │   └── utils/               # Secure storage, time utilities, and optional SSL pinning
-├── __tests__/               # Jest & React Native Testing Library unit test suites (343 tests, 48 suites)
+├── __tests__/               # Jest & React Native Testing Library unit test suites (336 tests, 47 suites)
 ├── .detoxrc.js              # Detox dual-platform E2E configuration (Android APK & iOS App)
 ├── App.tsx                  # Application entry point
 ├── app.json                 # Expo configuration
@@ -114,7 +114,7 @@ mobile/
 TaskFlow Mobile enforces a dual-layered testing strategy combining Unit/Component tests with End-to-End (E2E) automation:
 
 ### 1. Unit & Component Tests (Jest + RNTL)
-* **Coverage:** 343 unit & component tests across 48 test suites (**100% PASS**).
+* **Coverage:** 336 unit & component tests across 47 test suites (**100% PASS**).
 * **Thresholds:** Enforced in `jest.config.js` (**>70%** across branches, functions, lines, and statements).
 * **Stack:** `jest-expo` + `@testing-library/react-native` v14 + `test-renderer`.
 
@@ -125,7 +125,7 @@ TaskFlow Mobile enforces a dual-layered testing strategy combining Unit/Componen
 
 ### 3. Runtime Performance Baseline
 
-Expo SDK 57 uses React Native 0.86.2 with the New Architecture and Hermes V1 enabled by default. A production Android Metro export generated a Hermes bytecode bundle (`.hbc`) of 3,399,015 bytes.
+Expo SDK 57 uses React Native 0.86.3 with the New Architecture and Hermes V1 enabled by default. A production Android Metro export generated a Hermes bytecode bundle (`.hbc`) of 3,399,015 bytes.
 
 `react-native-reanimated` and `react-native-worklets` are not installed, so Worklets bundle mode is not applicable and its documented memory overhead does not affect this app. React Native 0.86 also defaults `PerformanceObserver` event entries to a 104 ms threshold; the application does not use that API.
 
@@ -158,6 +158,8 @@ updates because they carry React Native peer-dependency constraints.
 ---
 
 ## Development & Testing Commands
+
+For the complete local setup and release workflow, see [`development-set.md`](development-set.md).
 
 ```bash
 # Start Metro bundler / Expo CLI

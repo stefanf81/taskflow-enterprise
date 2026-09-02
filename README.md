@@ -114,7 +114,7 @@ shared event fanout before relying on real-time updates across replicas.
 - `frontend/nginx.conf` — upstream `keepalive 64` + split static caching (`js|css` → `Cache-Control "public, immutable, max-age=15552000"` 6 M, `ico|gif|jpe?g|png|svg|woff2?` → `Cache-Control "public"`), `index.html` via `try_files` (must-revalidate), security headers duplicated into cache blocks.
 - `src/main/resources/application-prod.properties` — Micrometer `management.metrics.distribution.percentiles.http.server.requests=0.5,0.95,0.99` + `percentiles-histogram=true` + `sla=50ms,100ms,200ms` (`/actuator/prometheus` histograms), Hikari `maximum-pool-size=25/minimum-idle=10` + PgBouncer ceiling comment (`pool×replicas < 100`, `>2 → PgBouncer transaction`).
 - `docker-compose.yml` & `homelab/TF/gitops/apps/taskflow/backend.yaml` `JAVA_TOOL_OPTIONS` — explicit `-XX:+UseContainerSupport` (cgroup-aware, self-documenting), `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof`, `-Xlog:gc*:file=/tmp/gc.log:time,uptime:filecount=3,filesize=10m` (3×10 MB), plus `UseG1GC`/`MaxGCPauseMillis=100`/`AlwaysPreTouch`/`MaxDirectMemorySize|Metaspace 256m`.
-- `k6/load.js` (`ramping-vus` `0→50 30 s →200 60 s →0 30 s`, `gracefulRampDown 10 s`, thresholds `http_req_failed rate<0.01`, `p95<500 p99<800`, `checks 1.0`, CWV gates; workload `70% catalog/barbers /20% busySlots /10% health`, `sleep 0.1`) + `k6/browser.js` (`shared-iterations` 1 VU Chromium Lookbook→stylist→slot→form, thresholds `ttfb<800 fcp<1800 lcp<2500`).
+- `k6/load.js` (`ramping-vus` `0→50 30 s →200 60 s →0 30 s`, `gracefulRampDown 10 s`, thresholds `http_req_failed rate<0.01`, `p95<500 p99<800`, `checks 1.0`; workload `70% catalog/barbers /20% busySlots /10% health`, `sleep 0.1`) + `k6/browser.js` (`shared-iterations` 1 VU Chromium Lookbook→stylist→slot→form, Core Web Vitals thresholds `ttfb<800 fcp<1800 lcp<2500`).
 - `mobile/src/query/queryClient.ts` (`staleTime 60_000` was 0, `gcTime 5*60_000`, `retry:1` exponential `retryDelay` `min(1000*2^attempt,30000)`, `refetchOnWindowFocus:false`) + `mobile/src/api/client.ts` (`timeout 10000` was 15000, fail-fast < JPA 5 s+Hikari 20 s); `mobile/src/components/lookbook/LookbookGallery.tsx` — `FlatList scrollEnabled={false}` inside `ScrollView` → `LOOKBOOK_DATA.map` + `View` + `Card` (parent `ScrollView` owns scroll; `FlashList` >50 items).
 
 ---
@@ -144,7 +144,7 @@ shared event fanout before relying on real-time updates across replicas.
 This launches the PostgreSQL database, Redis cache, Spring Boot backend, and Nginx frontend in health-checked isolated Docker networks.
 
 * **Web UI:** `http://localhost:4200` — hashed `js|css` served `immutable, max-age=15552000` (6 M), other assets `public`, `index.html` must-revalidate.
-* **API via Nginx:** `http://localhost:4200/api` — tiered `Cache-Control` (`public max-age=300` catalog/barbers/ratings, `private max-age=30` busySlots, `no-cache private` admin) + `ETag` `304` on GETs, `keepalive 64` upstream, HTTP/2 multiplexing.
+* **API via Nginx:** `http://localhost:4200/api` — tiered `Cache-Control` (`public max-age=300` catalog/barbers/ratings, `private max-age=30` busySlots, `no-cache private` admin) + `ETag` `304` on GETs, HTTP/1.1 upstream proxying with `keepalive 64` connection reuse.
 * **Prometheus Metrics:** Internal backend endpoint requiring ADMIN authentication — JWT cookie or bearer token — at `/actuator/prometheus`; `application-prod.properties` exposes Micrometer histograms `p50/p95/p99` + `sla 50/100/200ms` + `percentiles-histogram` for `histogram_quantile` SLO queries (see `BENCHMARKS.md §46`). Health probes at `/actuator/health/liveness` & `/readiness` (local `Dockerfile` `HEALTHCHECK` `wget`; prod uses K8s probes).
 * **Stop Application Stack:** `./stop-docker.sh`
 * **Full-Stack Automated Verification:** `./verify.sh` (automatically starts Docker if needed and cleans up on exit)
@@ -249,6 +249,7 @@ Renovate authentication details.
 * [ARCHITECTURE.md](ARCHITECTURE.md) — Detailed end-to-end data flow and architectural analysis
 * [AGENTS.md](AGENTS.md) — Developer guidelines and AI agent instructions
 * [SYSTEM-HARDENING.md](SYSTEM-HARDENING.md) — Zero-trust security & container hardening policy
+* [mobile/development-set.md](mobile/development-set.md) — Mobile development setup, testing, and release workflow
 * [docs/adr/README.md](docs/adr/README.md) — Architecture Decision Records (ADRs) — full index
   * `ADR-001` — Virtual Threads — Enabled Explicitly
   * `ADR-002` — ParallelGC vs G1GC (Superseded)
@@ -259,3 +260,7 @@ Renovate authentication details.
   * `ADR-007` — Dedicated Mobile Bearer Authentication
   * `ADR-008` — Reviewed OpenAPI Contract Baseline
   * `ADR-009` — Admin Appointment Updates via Server-Sent Events
+  * `ADR-010` — Bounded Async Executor
+  * `ADR-011` — Reference Data Caching (Barbers & Services)
+  * `ADR-012` — Lua-Atomic Rate Limiter
+  * `ADR-013` — Partial Unique Slot Index (Anti Double-Booking)

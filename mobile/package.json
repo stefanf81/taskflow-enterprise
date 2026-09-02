@@ -11,8 +11,8 @@
     "test:watch": "jest --watch",
     "e2e:build": "detox build --configuration ios.sim.release",
     "e2e:test": "detox test --configuration ios.sim.release",
-    "e2e:build:android": "detox build --configuration android.emu.debug",
-    "e2e:test:android": "detox test --configuration android.emu.debug",
+    "e2e:build:android": "detox build --configuration android.emu.release",
+    "e2e:test:android": "detox test --configuration android.emu.release",
     "lint": "tsc --noEmit",
     "build:android": "eas build --platform android",
     "build:ios": "eas build --platform ios"

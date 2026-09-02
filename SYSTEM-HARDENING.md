@@ -31,9 +31,9 @@ Two critical architectural alignments were identified and resolved to ensure run
 *   **Location:** `/build.gradle` (SpotBugs Configuration)
 *   **Issue:** The project uses SpotBugs static analysis during `./gradlew check`. On development or pipeline environments running OpenJDK 25+ (even though the project targets JDK 21 for compilation), the SpotBugs static analyzer could crash with an `Unsupported class file major version 69` error if the tool version's bundled ASM couldn't parse newer platform classes encountered at runtime.
 *   **Resolution:** 
-    1. Upgraded the SpotBugs tool version to `4.10.3` to introduce modern ASM libraries.
-    2. Configured the SpotBugs task block with `ignoreFailures = true`.
-     This guarantees that the local build pipelines, compilation, and OWASP dependency checks complete successfully even when run on newer Java runtimes, without being blocked by third-party static analyzer engine incompatibilities.
+    1. Upgraded the SpotBugs tool version to `4.10.4` to introduce modern ASM libraries.
+    2. Kept the SpotBugs task block fail-closed with `ignoreFailures = false` after upgrading the engine.
+     This keeps local build pipelines, compilation, and OWASP dependency checks aligned with the security gate while relying on the newer SpotBugs engine to avoid the JDK runtime incompatibility.
 
 ### Finding 3: Multi-Stage Dependency Isolation & Docker Caching Optimization
 *   **Location:** `/Dockerfile`, `/Dockerfile.x64`
@@ -115,20 +115,10 @@ Two critical architectural alignments were identified and resolved to ensure run
 *   **Issue:** To handle PRs that changed neither frontend, backend, nor docker files (e.g. documentation-only updates), the workflow computed a fallback component named `none` and ran empty `security` and `docker-build` jobs to bypass empty matrix evaluation errors. While these jobs skipped all their steps immediately, they still spun up virtual machines on GitHub Actions runner fleets, wasting precious startup time and concurrent execution slots.
 *   **Resolution:** Eliminated the `'none'` fallback array entirely from our path-filtering logic. Instead, introduced a robust, job-level **`if` condition** to the `security` job that evaluates path outcomes before the runner even allocates a VM. The `security` and `docker-build` jobs are now skipped completely and never created on zero-change pull requests, entirely avoiding unnecessary runner allocations.
 
-### Finding 16: Backend-Only Dependency Review Restrictions
-*   **Location:** `.github/workflows/ci.yml` (Dependency Review Step)
-*   **Issue:** The GitHub Dependency Review step was strictly gated to execute only when `matrix.component.name == 'Backend'`. This meant that if a developer opened a Pull Request that only updated frontend NPM dependencies, the security gate was completely skipped, failing to scan and flag severe packages inside `frontend/package.json` before merging.
-*   **Resolution:** Redesigned the step's evaluation condition to support both Backend and Frontend manifests while maintaining a strict **runs-exactly-once** constraint to avoid wasting pipeline minutes. The Dependency Review action now executes on either the `Backend` loop, or falls back to the `Frontend` loop strictly if no backend changes are present in the PR:
-  ```yaml
-  if: |
-    github.event_name == 'pull_request' && (
-      matrix.component.name == 'Backend' || (
-        matrix.component.name == 'Frontend' && 
-        needs.changes.outputs.backend != 'true'
-      )
-    )
-  ```
-  This guarantees 100% security coverage of all Pull Requests changing either Java (Gradle) or Angular (NPM) manifests, with zero duplicate runs.
+### Finding 16: Dependency Visibility Coverage
+*   **Location:** `.github/workflows/ci.yml` (Dependency Submission Step)
+*   **Issue:** Dependency visibility needs to cover backend and frontend manifests without implying a currently configured GitHub Dependency Review gate.
+*   **Resolution:** Dependency visibility is handled by the dedicated dependency-submission job in `ci.yml`; security scans remain in the standalone security workflows.
 
 ### Finding 17: Redundant Pipeline Bottlenecks and Skip Cascades on E2E Tests
 *   **Location:** `.github/workflows/ci.yml` (End-to-End Tests Job)
@@ -151,7 +141,7 @@ Two critical architectural alignments were identified and resolved to ensure run
 
 ### Finding 20: OpenTelemetry / Micrometer Tracing Auto-Configuration Class Namespace Collision
 *   **Location:** `/src/main/java/com/example/cdstraining/CdsTrainingApplication.java`, `/Dockerfile`, `/Dockerfile.x64`
-*   **Issue:** Under Spring Boot 4.1.0, the core metrics, observation, and OpenTelemetry tracing auto-configurations have been refactored and moved to newer namespace structures under `org.springframework.boot.micrometer.*` and `org.springframework.boot.opentelemetry.*` from the previous `org.springframework.boot.actuate.*` paths. Consequently, the previous exclusions in `CdsTrainingApplication` (the CDS warm-up context) were bypassed. When BuildKit ran the image build in GitHub Actions, the host-injected Unix domain socket endpoint variable `OTEL_EXPORTER_OTLP_ENDPOINT=unix:///dev/otel-grpc.sock` leaked into the JRE startup. Since the `OtlpGrpcSpanExporter` was still loaded, its internal builder parsed this invalid endpoint and threw a fatal `IllegalArgumentException`, causing the container build to fail with exit code `1`.
+*   **Issue:** Under Spring Boot 4.1.1, the core metrics, observation, and OpenTelemetry tracing auto-configurations use newer namespace structures under `org.springframework.boot.micrometer.*` and `org.springframework.boot.opentelemetry.*` instead of the previous `org.springframework.boot.actuate.*` paths. Consequently, the previous exclusions in `CdsTrainingApplication` (the CDS warm-up context) were bypassed. When BuildKit ran the image build in GitHub Actions, the host-injected Unix domain socket endpoint variable `OTEL_EXPORTER_OTLP_ENDPOINT=unix:///dev/otel-grpc.sock` leaked into the JRE startup. Since the `OtlpGrpcSpanExporter` was still loaded, its internal builder parsed this invalid endpoint and threw a fatal `IllegalArgumentException`, causing the container build to fail with exit code `1`.
 *   **Resolution:**
     1. Extended the `@EnableAutoConfiguration` exclusions in `CdsTrainingApplication` to encompass all modern namespaces (including `WebMvcObservationAutoConfiguration`, `ObservationAutoConfiguration`, `MicrometerTracingAutoConfiguration`, `OpenTelemetryTracingAutoConfiguration`, and `OpenTelemetrySdkAutoConfiguration`), fully isolating the warm-up context.
     2. Hardened both `Dockerfile` and `Dockerfile.x64` to enforce pre-emptive overrides for the generic and trace-specific variables (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`) and configured explicit, safe JVM system properties (`-Dmanagement.tracing.enabled=false`, `-Dotel.sdk.disabled=true`, `-Dotel.exporter.otlp.traces.endpoint=http://localhost:4317`) during the pre-warming step.

@@ -77,7 +77,7 @@ Submits the complete, deep Java and Gradle dependency tree directly to the GitHu
 
 ## 8. Job: `security` — moved to `security.yml`
 
-> The Trivy filesystem scan and Dependency Review have been extracted to a dedicated nightly workflow, [`.github/workflows/security.yml`](security.yml). This keeps the CI/CD pipeline focused on build, test, and deployment, while security-only scans run independently on the nightly schedule (and on demand via `workflow_dispatch`).
+> The Trivy filesystem scan has been extracted to a dedicated nightly workflow, [`.github/workflows/security.yml`](security.yml). This keeps the CI/CD pipeline focused on build, test, and deployment, while security-only scans run independently on the nightly schedule (and on demand via `workflow_dispatch`). Dependency visibility is handled by the separate dependency-submission job described above.
 
 See [`security.yml`](security.yml) for details on:
 

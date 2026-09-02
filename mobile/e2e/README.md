@@ -20,7 +20,7 @@ Both Android and iOS share the exact same E2E test suite file (`e2e/booking.e2e.
 
 | Platform | Configuration (`.detoxrc.js`) | Target Device | Binary Path |
 | :--- | :--- | :--- | :--- |
-| **Android** | `android.emu.debug` | Android Emulator (`Pixel_6_API_35`) | `android/app/build/outputs/apk/release/app-release.apk` |
+| **Android** | `android.emu.release` | Android Emulator (`Pixel_6_API_35`) | `android/app/build/outputs/apk/release/app-release.apk` |
 | **iOS** | `ios.sim.release` | iOS Simulator (`iPhone 17 Pro`) | `ios/build/Build/Products/Release-iphonesimulator/TaskFlowMobile.app` |
 
 ---
@@ -58,7 +58,7 @@ Both Android and iOS share the exact same E2E test suite file (`e2e/booking.e2e.
 3. **Run Detox E2E Test Suite:**
    ```bash
    npm run e2e:test:android
-   # Executes: detox test --configuration android.emu.debug --no-build
+   # Executes: detox test --configuration android.emu.release --no-build
    ```
 
 ---
