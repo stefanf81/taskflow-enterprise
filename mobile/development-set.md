@@ -259,7 +259,7 @@ docker compose down
 ### 1. Unit & Component Tests (Jest + RNTL)
 
 ```bash
-npm test                 # run once with coverage check (343 tests, 48 suites)
+npm test                 # run once with coverage check (336 tests, 47 suites)
 npm run test:watch       # watch mode
 npm run lint             # TypeScript type-check (tsc --noEmit)
 ```

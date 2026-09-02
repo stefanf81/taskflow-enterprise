@@ -17,7 +17,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
      *   **Project Loom / Virtual Threads**: Explicitly enabled with `spring.threads.virtual.enabled=true` and kept alive with `spring.main.keep-alive=true`. §32 benchmarks the full I/O-bound mixed workload — VT delivers marginal gains on H2 in-memory (+0.4% throughput) but significantly higher throughput on PostgreSQL when combined with larger HikariCP pool sizes (§33). The earlier §3 finding that VT hurts the CPU-bound `/login` (BCrypt/RSA) path is absorbed by the read-heavy workload mix in production.
      *   **Container Support & Crash Diagnostics (P1-2 §43)**: Explicit `-XX:+UseContainerSupport` for cgroup-aware heap sizing (self-documenting), `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof` for post-mortem dumps, and `-Xlog:gc*:file=/tmp/gc.log:time,uptime:filecount=3,filesize=10m` for GC analysis. Deployed via `JAVA_TOOL_OPTIONS` in `docker-compose.yml` (local) and `homelab/TF/gitops/apps/taskflow/backend.yaml` (prod); `/tmp` is `tmpfs`. Zero overhead until OOM; GC log ~0.7% at 10% tracing (see §7).
 
-### 🍃 2. Spring Boot 4.1.0 Application Layer
+### 🍃 2. Spring Boot 4.1.1 Application Layer
 *   **Embedded Apache Tomcat 11**:
     *   **Thread Pre-Warming**: Pre-allocated `server.tomcat.threads.min-spare=20` to entirely bypass OS-level thread spawning overhead during sudden high-concurrency traffic bursts.
     *   **Keep-Alive Optimizations**: Raised threshold to `max-keep-alive-requests=100` and `timeout=60s` to reuse warm TCP connections directly.
@@ -25,7 +25,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   **Asymmetric Cryptography**: Standardized on RSA-2048 signing/verification using asymmetric key-pairs (`app.rsa.private-key` / `public-key`).
     *   **Zero-Trust Session Isolation**: Enforced stateless token authentication via HttpOnly, SameSite=Strict cookies set by the backend, restoring auth state via `GET /api/v1/auth/me` into an in-memory Signal (`AuthState`). Restricted all routes except public `/api/v1/auth/**`.
 *   **Springdoc OpenAPI 3 (Swagger UI)**:
-    *   Integrated `springdoc-openapi-starter-webmvc-ui` version **`3.1.0`** for automated, interactive API documentation generation from code structures. Fully compatible with Spring Boot 4.1.0.
+    *   Integrated `springdoc-openapi-starter-webmvc-ui` version **`3.1.0`** for automated, interactive API documentation generation from code structures. Fully compatible with Spring Boot 4.1.1.
 *   **Spring Boot Validation**:
     *   Integrated `spring-boot-starter-validation` (Hibernate Validator 9) for rigorous JSR-380 input sanitization and boundary enforcement.
 *   **Flyway Database Migrations**:
@@ -37,7 +37,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 
 ### 📦 3. Serialization & Caching (Jackson 3.x & Redis)
 *   **Jackson 3.x Library**:
-    *   Upgraded from Jackson 2.x to **Jackson 3.x** (under the `tools.jackson` namespace) as standard in Spring Boot 4.1.0, leveraging modernized factories, fast parser constraints, and low-latency JSON serialization.
+    *   Upgraded from Jackson 2.x to **Jackson 3.x** (under the `tools.jackson` namespace) as standard in Spring Boot 4.1.1, leveraging modernized factories, fast parser constraints, and low-latency JSON serialization.
     *   **Custom Caching Alignment**: Bypassed Jackson 3's automatic `tools.jackson` conversion issues inside `CacheConfig.java` and integration tests by explicitly instantiating a custom local `ObjectMapper` to streamline native caching buffers and Redis connection transactions.
 *   **Netty (Off-Heap Buffers)**:
      *   Custom pooling alignment (`io.netty.allocator.useCacheForAllThreads=true`) to enable Tomcat threads to reuse pooled thread-local buffers during Redis cache transactions, completely avoiding global Netty allocator lock contentions.
@@ -149,7 +149,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 
 ### 🧪 9. Load Testing & Performance Budgets (P2)
 *   **k6 Ramping Load Profile (P2 §48)**:
-     *   `k6/load.js` uses `executor: 'ramping-vus'` **0→50 (30s) →200 (60s) →0 (30s)** with thresholds `http_req_failed rate<0.01`, `http_req_duration p(95)<500 p(99)<800`, `checks rate==1.0`, and CWV gates `browser_web_vital_ttfb p(95)<800` / `fcp<1800` / `lcp<2500`. Workload mix 70% catalog/barbers (cached) / 20% busySlots / 10% health (§48).
+     *   `k6/load.js` uses `executor: 'ramping-vus'` **0→50 (30s) →200 (60s) →0 (30s)** with thresholds `http_req_failed rate<0.01`, `http_req_duration p(95)<500 p(99)<800`, and `checks rate==1.0`. Workload mix 70% catalog/barbers (cached) / 20% busySlots / 10% health (§48). Browser Core Web Vitals gates live in `k6/browser.js`.
 *   **Tightened Web Vitals Budgets (P2 §49)**:
      *   `k6/browser.js` (`shared-iterations` 1 VU Chromium) tightens thresholds to CWV **good** thresholds (`ttfb<800 fcp<1800 lcp<2500`, per web.dev) vs previous lenient `p(95)<2500`/`lcp<6000`. Browser wizard scenario exercises Lookbook → stylist → date-slot → form.
 *   **PgBouncer Connection Pooling Docs (P2 §50)**:
@@ -234,7 +234,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 | **Lazy Fetching (Winner)** | `@Transactional (No-Op)` | **100% Saturated** | **`0.9395 ms`** | **Instant Success (0% pool overhead)** |
 | Eager Fetching (Default) | `@Transactional (No-Op)` | **100% Saturated** | **`1005.80 ms`** | **SQLTransientConnectionException (Timeout)** |
 
-**Verdict:** By configuring `spring.datasource.connection-fetch=lazy` in Spring Boot 4.1.0, the `LazyConnectionDataSourceProxy` completely intercepts pool checkouts. Connections are requested *only* when a SQL statement runs. Transactional methods that don't execute a query bypass the pool instantly in **`0.93 ms`**, whereas eager fetching blocks and crashes on connection timeout.
+**Verdict:** By configuring `spring.datasource.connection-fetch=lazy` in Spring Boot 4.1.1, the `LazyConnectionDataSourceProxy` completely intercepts pool checkouts. Connections are requested *only* when a SQL statement runs. Transactional methods that don't execute a query bypass the pool instantly in **`0.93 ms`**, whereas eager fetching blocks and crashes on connection timeout.
 
 ---
 
@@ -904,12 +904,12 @@ The application already uses the APIs that were listed as missing:
 
 ### Expo and React Native Verification
 
-The mobile checks used Expo SDK 57, React Native 0.86.2, and the installed Hermes compiler `250829098.0.16`:
+The mobile checks used Expo SDK 57, React Native 0.86.3, and the installed Hermes compiler `250829098.0.16`:
 
 | Check | Result |
 | :--- | :--- |
 | TypeScript lint | Pass |
-| Jest unit/component tests | **343/343 passed** |
+| Jest unit/component tests | **336/336 passed** |
 | Android Metro production export | Pass |
 | Hermes bytecode output | `_expo/static/js/android/*.hbc`, 3,399,015 bytes |
 | `react-native-reanimated` / `react-native-worklets` | Not installed |
@@ -924,40 +924,28 @@ Expo SDK 57/RN 0.86 handle Android edge-to-edge by default. The application uses
 
 ---
 
-## ⚡ 37. Nginx HTTP/2 Backend Proxy
+## ⚡ 37. Nginx Backend Proxy Protocol
 
-**Goal:** Enable HTTP/2 multiplexed proxying between Nginx and the Spring Boot backend to eliminate head-of-line blocking on concurrent API calls.
+**Goal:** Keep client-facing HTTP/2 support while using Nginx's supported HTTP/1.1 upstream proxying to the Spring Boot backend.
 
-**Configuration Change:** `proxy_http_version 1.1` → `proxy_http_version 2` in `nginx.conf` `/api/` location block.
+**Current Configuration:** `frontend/nginx.conf` intentionally uses `proxy_http_version 1.1` with `proxy_set_header Connection ""` and an upstream `keepalive 64` pool.
 
-### Why HTTP/2 to the Backend
+### Why HTTP/1.1 Upstream Is Retained
 
-| Feature | HTTP/1.1 Proxy | HTTP/2 Proxy |
-| :--- | :--- | :--- |
-| **Multiplexing** | One request per TCP connection at a time | Multiple concurrent streams per connection |
-| **Head-of-line blocking** | First request blocks all others on same connection | Streams are independent — no blocking |
-| **Header compression** | Headers sent uncompressed on every request | HPACK header compression reduces overhead |
-| **Connection reuse** | Keepalive required (manual `Connection ""` header) | Native multiplexing — no keepalive config needed |
+| Concern | Selected Behavior |
+| :--- | :--- |
+| **Browser multiplexing** | HTTP/2 remains enabled at the client-facing edge. |
+| **Nginx upstream support** | Open-source Nginx proxies HTTP/1.1 to upstream application servers; `proxy_http_version 2` is not a valid replacement for this use case. |
+| **Connection reuse** | `keepalive 64` plus a cleared `Connection` header keeps backend TCP connections warm without attempting unsupported upstream HTTP/2 proxying. |
 
 ### Configuration
 
 ```nginx
-# Before (HTTP/1.1)
 proxy_http_version 1.1;
-proxy_set_header Connection "";
-
-# After (HTTP/2)
-proxy_http_version 2;
 proxy_set_header Connection "";
 ```
 
-### Expected Impact
-
-- **10–20% improvement on concurrent API latency** — multiple API calls from a single client page load (e.g., dashboard fetching appointments, barbers, and services simultaneously) can now be multiplexed over a single TCP connection instead of queuing.
-- **Reduced TCP handshake overhead** — one TCP connection serves all concurrent streams instead of requiring separate keepalive connections.
-- **HPACK header compression** — JWT cookie and common headers are compressed after the first request.
-
-**Verdict:** HTTP/2 proxying is a zero-cost configuration change that leverages the existing `server.http2.enabled=true` and Tomcat h2c support in the backend. No application code changes required.
+**Verdict:** Do not change the upstream block to `proxy_http_version 2`. The current HTTP/1.1 keepalive pool is the compatible Nginx configuration and is the basis for the §42 proxy-throughput benchmark.
 
 ---
 
@@ -1304,9 +1292,6 @@ export const options = {
     http_req_failed: ['rate<0.01'],
     http_req_duration: ['p(95)<500', 'p(99)<800'],
     checks: ['rate==1.0'],
-    'browser_web_vital_ttfb': ['p(95)<800'],
-    'browser_web_vital_fcp': ['p(95)<1800'],
-    'browser_web_vital_lcp': ['p(95)<2500'],
   },
 };
 ```
@@ -1409,4 +1394,3 @@ And `ARCHITECTURE.md` / `BENCHMARKS.md` inventories (§9) amplify: **>2 replicas
 **PgBouncer sidecar model (external GitOps, not in this repo):** `homelab/TF/gitops/apps/taskflow/` deploys a `pgbouncer` sidecar (or shared pool) with `pool_mode=transaction`, `max_client_conn=1000`, `default_pool_size=25` — backends connect through PgBouncer's transaction-pooled port, Postgres sees only `default_pool_size` connections regardless of replica count. The Hikari pool then sits behind PgBouncer and can stay at 25 without exhausting PG.
 
 **Verdict:** Documentation is the correct P2 action — no code change needed today (2-replica headroom is ample). When scale demands >2 replicas, the documented PgBouncer transaction-pooling path avoids the `max_connections` cliff without lowering per-replica throughput.
-

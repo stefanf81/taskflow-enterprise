@@ -2,7 +2,7 @@
 
 > **Historical document:** This report reflects the repository state on 2026-07-25. Some findings and file references may no longer apply to the current codebase.
 
-> **Current-status addendum (2026-08-07):** H12 is resolved. `scripts/sync-api-types.js` now deterministically writes both platform API type files from the reviewed `api/openapi.json` baseline; `scripts/check-openapi-contract.js` and CI reject unreviewed API changes or stale generated types. H9, H13, and L10 are also resolved — see findings below for details. The stale PostgreSQL version references in `BENCHMARKS.md` (claiming "PostgreSQL 17" when the codebase uses 18.4) have been fixed — all documentation now consistently references PostgreSQL 18. JaCoCo coverage rule corrected to "branch only" (not "branch/line"). README updated to note that `/actuator/prometheus` requires ADMIN auth.
+> **Current-status addendum (2026-08-07; refreshed 2026-09-02):** H12 is resolved. `scripts/sync-api-types.js` now deterministically writes both platform API type files from the reviewed `api/openapi.json` baseline; `scripts/check-openapi-contract.js` and CI reject unreviewed API changes or stale generated types. H9, H13, and L10 are also resolved — see findings below for details. The stale PostgreSQL version references in `BENCHMARKS.md` (claiming "PostgreSQL 17" while the current runtime image is `postgres:18.6-alpine`) have been fixed — current documentation consistently references PostgreSQL 18. JaCoCo coverage rule corrected to "branch only" (not "branch/line"). README updated to note that `/actuator/prometheus` requires ADMIN auth.
 
 **Date:** 2026-07-25
 **Scope:** Backend (Spring Boot), Frontend (Angular 22), Mobile (React Native/Expo), Shared, CI/CD, Scripts, Docs
@@ -87,7 +87,7 @@
 | **L7** | `formatTime12Hour()` doesn't pad single-digit minutes — `"9:5"` becomes `"9:5 AM"` not `"9:05 AM"`. | `time-utils.ts:13` |
 | **L8** | No `cancelled` status token in platform-local `tokens.json`. Any UI rendering a cancelled appointment must hardcode a color. | `frontend/src/theme/tokens.json`, `mobile/src/theme/tokens.json` |
 | **L9** | `gradle.properties` suppresses config-cache problems (`problems=warn`). Masks Gradle 10 migration issues. | `gradle.properties:26` |
-| **L10** | ~~**PostgreSQL version mismatch**~~ **RESOLVED.** `docker-compose.yml` (postgres:18.4-alpine), `start-docker.sh` (banner says "PostgreSQL 18"), and `BENCHMARKS.md` (now updated to "PostgreSQL 18") are all in agreement. The original audit misidentified the discrepancy — all sources now consistently reference PostgreSQL 18. | `BENCHMARKS.md`, `docker-compose.yml` |
+| **L10** | ~~**PostgreSQL version mismatch**~~ **RESOLVED.** `docker-compose.yml` now uses `postgres:18.6-alpine`, `start-docker.sh` labels the service as "PostgreSQL 18", and `BENCHMARKS.md` references PostgreSQL 18. The original audit misidentified the discrepancy — current sources consistently reference PostgreSQL 18. | `BENCHMARKS.md`, `docker-compose.yml` |
 | **L11** | `verify.sh` auto-fixes formatting (runs `prettier --write`) during verification — unexpected side effect | `verify.sh:31-33` |
 | **L12** | No `PrePush`/`PreCommit` hooks configured. Bad code reaches the remote before CI catches it. | (Process gap) |
 | **L13** | `TaskflowApplicationTest.testMain()` calls `main()` with no assertions about the outcome. || `TaskflowApplicationTest.java:15-17` |

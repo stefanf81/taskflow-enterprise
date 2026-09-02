@@ -15,7 +15,7 @@ The JWT is stored in an **HttpOnly, SameSite=Strict cookie** set by the backend.
 
 Key points of the decision:
 
-1. **XSS immunity** — since the cookie is marked `HttpOnly`, JavaScript code (including any injected by XSS attacks) cannot read the JWT. In the localStorage approach, a single XSS vulnerability would leak the token.
+1. **Reduced XSS token-theft impact** — since the cookie is marked `HttpOnly`, JavaScript code (including any injected by XSS attacks) cannot read the JWT. In the localStorage approach, a single XSS vulnerability would leak the token.
 
 2. **CSRF protection via double-submit cookie pattern** — in addition to `SameSite=Strict`, the application implements the double-submit CSRF pattern: the backend sets a readable `XSRF-TOKEN` cookie (via `CookieCsrfTokenRepository.withHttpOnlyFalse()`), and Angular's `withXsrfConfiguration` reads that cookie and attaches it as the `X-XSRF-TOKEN` header on state-changing requests. The backend compares the header against the cookie value. This provides defense-in-depth against CSRF even if `SameSite` is bypassed (e.g., older browsers, proxy de-escalation).
 
@@ -28,7 +28,7 @@ Key points of the decision:
 ## Consequences
 
 ### Positive
-- **Strong XSS protection** — the authentication token is never accessible to JavaScript, eliminating token theft via cross-site scripting.
+- **Strong token-theft protection during XSS** — the authentication token is never accessible to JavaScript, reducing the most direct token theft path during cross-site scripting.
 - **Simpler frontend code** — no token storage, retrieval, or refresh logic in JavaScript. The auth interceptor is minimal.
 - **Automatic cookie lifecycle** — the browser handles cookie expiry, secure-only transmission over HTTPS, and same-origin scoping.
 - **Backend-controlled security** — token rotation, invalidation, and renewal are entirely server-side.

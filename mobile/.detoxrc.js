@@ -20,7 +20,7 @@ module.exports = {
       binaryPath: 'ios/build/Build/Products/Debug-iphonesimulator/TaskFlowMobile.app',
       build: 'xcodebuild -workspace ios/TaskFlowMobile.xcworkspace -scheme TaskFlowMobile -configuration Debug -sdk iphonesimulator -derivedDataPath ios/build',
     },
-    'android.debug': {
+    'android.release': {
       type: 'android.apk',
       binaryPath: 'android/app/build/outputs/apk/release/app-release.apk',
       build: 'JAVA_HOME="/opt/homebrew/opt/openjdk@21" ANDROID_HOME="$HOME/Library/Android/sdk" ./android/gradlew -p android assembleRelease assembleAndroidTest -DtestBuildType=release',
@@ -49,9 +49,9 @@ module.exports = {
       device: 'simulator',
       app: 'ios.debug',
     },
-    'android.emu.debug': {
+    'android.emu.release': {
       device: 'emulator',
-      app: 'android.debug',
+      app: 'android.release',
     },
   },
   behavior: {
