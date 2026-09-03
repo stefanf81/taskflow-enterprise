@@ -14,6 +14,12 @@
       "platformAutomerge": true
     },
     {
+      "description": "Delay major updates so the ecosystem (Expo SDK, jest-expo, msw, babel presets) can add support first; never automerge majors",
+      "matchUpdateTypes": ["major"],
+      "minimumReleaseAge": "30 days",
+      "automerge": false
+    },
+    {
       "description": "Keep npm overrides exact so npm lockfile updates do not fail with EOVERRIDE",
       "matchManagers": ["npm"],
       "matchDepTypes": ["overrides"],
@@ -141,14 +147,13 @@
       "groupName": "React Native test tooling"
     },
     {
-      "description": "Blocked on Expo SDK 57: @babel/core 8 / jest 30 / @types/jest 30 require babel-preset-expo & jest-expo versions that do not yet support these majors. Keep pending on the dashboard; no PR until the SDK is upgraded.",
+      "description": "Blocked on Expo SDK upgrade: @babel/core 8 / jest 30 / @types/jest 30 require babel-preset-expo & jest-expo versions that do not yet support these majors (Babel 8 loadPartialConfig break vs msw). Fully suppressed: no branch, no PR, dashboard-only until this rule is removed after the SDK upgrade.",
       "matchManagers": ["npm"],
       "matchFileNames": ["mobile/package.json"],
       "matchPackageNames": ["@babel/core", "jest", "@types/jest"],
       "matchUpdateTypes": ["major"],
-      "labels": ["blocked-on-expo-sdk"],
-      "groupName": "Blocked on Expo SDK upgrade",
-      "dependencyDashboardApproval": true
+      "enabled": false,
+      "groupName": "Blocked on Expo SDK upgrade"
     }
   ]
 }
