@@ -59,6 +59,14 @@ dependencies {
 	// Originally pinned for GHSA-mfg7-5gfp-c4w3 (DNS Record Decoder memory leak);
 	// bumped to 4.2.17.Final for the latest patch release.
 	implementation libs.netty.codec.dns
+	// Tomcat embed — explicit pins so dependency tooling and container scanners
+	// resolve the patched version directly. Spring Boot 4.1.1 ships the vulnerable
+	// 11.0.24; 11.0.25 fixes CVE-2026-68525, CVE-2026-65905, CVE-2026-65182
+	// (all CRITICAL). Keep core/el/websocket aligned; drop once Spring Boot BOM
+	// ships >= 11.0.25.
+	implementation libs.tomcat.embed.core
+	implementation libs.tomcat.embed.el
+	implementation libs.tomcat.embed.websocket
 	// Jackson — explicit pins so dependency tooling sees the correct versions
 	// (BOM property overrides are not resolved consistently by all tooling).
 	//   - jackson-databind 2.x / jackson-core 2.x: fixes 8 CVEs (HIGH: async parser bypass,

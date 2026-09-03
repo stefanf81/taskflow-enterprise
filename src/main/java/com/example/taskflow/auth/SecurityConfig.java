@@ -119,13 +119,12 @@ public class SecurityConfig {
                 .requestMatchers("/h2-console/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/mobile/login", "/api/v1/auth/register").permitAll()
                 // Liveness/readiness probes must stay reachable unauthenticated
-                // for Kubernetes/docker healthchecks. Prometheus metrics reveal
-                // operational data (paths, status distributions, cardinal tags),
-                // so they require ADMIN. Defense-in-depth: prod runs actuator
-                // behind an internal-only binding (deployment follow-up) so even
-                // the ADMIN token is not externally scrapeable.
+                // for Kubernetes/docker healthchecks. VictoriaMetrics scrapes
+                // Prometheus metrics without application credentials; production
+                // NetworkPolicy restricts this port to the monitoring namespace.
+                // All other Actuator endpoints remain administrator-only.
                 .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness").permitAll()
-                .requestMatchers("/actuator/prometheus").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments/public/busy-slots").permitAll()
                 .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*").permitAll()

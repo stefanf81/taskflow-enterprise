@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -84,6 +85,25 @@ class AuthCookieTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value("admin"))
                 .andExpect(jsonPath("$.role").value("ROLE_ADMIN"));
+    }
+
+    @Test
+    void prometheusScrapeIsUnauthenticatedButOtherActuatorEndpointsRemainAdminOnly() throws Exception {
+        mockMvc.perform(get("/api/v1/barbers"))
+                .andExpect(status().isOk());
+
+        String metrics = mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertTrue(metrics.contains("jvm_memory_used_bytes"));
+        assertTrue(metrics.contains("http_server_requests_seconds"));
+        assertTrue(metrics.contains("hikaricp_connections_active"));
+
+        mockMvc.perform(get("/actuator/info"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

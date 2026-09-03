@@ -5,3 +5,14 @@ CVE-2026-54515
 # every released image-size version; remove these entries once the upstream package ships a fix.
 CVE-2025-71329
 CVE-2025-71330
+
+# decode-uri-component <=0.4.2 DoS (CVE-2026-45822) via query-string@7.1.3
+# <- @react-navigation/core@7 (mobile/package-lock.json). The fixed 0.5.0 is ESM-only
+# ("type": "module", default export only) while query-string@7 requires it via CJS
+# (`decodeComponent(value)`), so forcing 0.5.0 breaks deep-link parsing at runtime
+# and 4 Jest suites. The fixed chain needs query-string@v9 (ESM-only), which
+# @react-navigation/core@7.21.13 (latest) does not support (pins ^7.1.3).
+# Risk accepted: MEDIUM availability-only DoS, reachable only via crafted deep-link
+# input. Revisit once @react-navigation migrates to query-string@v9; then drop this
+# entry and add an npm override for decode-uri-component >=0.5.0.
+CVE-2026-45822
