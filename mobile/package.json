@@ -60,7 +60,7 @@
   "private": true,
   "overrides": {
     "tar": "7.5.22",
-    "postcss": "8.5.26",
+    "postcss": "8.5.28",
     "fast-uri": "3.1.7",
     "uuid": "11.1.1",
     "@xmldom/xmldom": "0.8.15",
