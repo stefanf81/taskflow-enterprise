@@ -53,7 +53,7 @@
       "AppointmentDashboardResponse": {
         "properties": {
           "page": {
-            "$ref": "#/components/schemas/PageObject"
+            "$ref": "#/components/schemas/PagedModelAppointmentResponse"
           },
           "stats": {
             "$ref": "#/components/schemas/AppointmentStats"
@@ -358,32 +358,6 @@
         },
         "type": "object"
       },
-      "PageableObject": {
-        "properties": {
-          "offset": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "paged": {
-            "type": "boolean"
-          },
-          "pageNumber": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "pageSize": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "sort": {
-            "$ref": "#/components/schemas/SortObject"
-          },
-          "unpaged": {
-            "type": "boolean"
-          }
-        },
-        "type": "object"
-      },
       "PagedModelAppointmentResponse": {
         "properties": {
           "content": {
@@ -414,52 +388,6 @@
           },
           "totalPages": {
             "format": "int64",
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "PageObject": {
-        "properties": {
-          "content": {
-            "items": {
-              "$ref": "#/components/schemas/AppointmentResponse"
-            },
-            "type": "array"
-          },
-          "empty": {
-            "type": "boolean"
-          },
-          "first": {
-            "type": "boolean"
-          },
-          "last": {
-            "type": "boolean"
-          },
-          "number": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "numberOfElements": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "pageable": {
-            "$ref": "#/components/schemas/PageableObject"
-          },
-          "size": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "sort": {
-            "$ref": "#/components/schemas/SortObject"
-          },
-          "totalElements": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "totalPages": {
-            "format": "int32",
             "type": "integer"
           }
         },
@@ -553,8 +481,8 @@
             "type": "string"
           },
           "durationMinutes": {
+            "exclusiveMinimum": 0,
             "format": "int32",
-            "minimum": 0,
             "type": "integer"
           },
           "name": {
@@ -562,7 +490,7 @@
             "type": "string"
           },
           "price": {
-            "minimum": 0,
+            "exclusiveMinimum": 0,
             "type": "number"
           }
         },
@@ -595,20 +523,6 @@
           },
           "price": {
             "type": "number"
-          }
-        },
-        "type": "object"
-      },
-      "SortObject": {
-        "properties": {
-          "empty": {
-            "type": "boolean"
-          },
-          "sorted": {
-            "type": "boolean"
-          },
-          "unsorted": {
-            "type": "boolean"
           }
         },
         "type": "object"

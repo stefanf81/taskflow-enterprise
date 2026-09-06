@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { AdminDashboard } from './admin-dashboard';
-import { AppointmentService } from '../../appointment.service';
+import { AppointmentService, AppointmentDashboardResponse } from '../../appointment.service';
 import { AppointmentStore } from '../../appointment.store';
 import { AuthState } from '../../auth.state';
 import { BarberStore } from '../../barber.store';
@@ -22,7 +22,7 @@ describe('AdminDashboard Component Quality Assurance Suite', () => {
   let component: AdminDashboard;
   let httpMock: HttpTestingController;
 
-  const mockDashboard = {
+  const mockDashboard: AppointmentDashboardResponse = {
     page: {
       content: [
         {
@@ -54,10 +54,7 @@ describe('AdminDashboard Component Quality Assurance Suite', () => {
           updatedAt: '2026-07-01T00:00:00',
         },
       ],
-      totalPages: 3,
-      totalElements: 6,
-      size: 50,
-      number: 0,
+      page: { number: 0, size: 50, totalElements: 101, totalPages: 3 },
     },
     stats: {
       total: 6,
@@ -184,6 +181,35 @@ describe('AdminDashboard Component Quality Assurance Suite', () => {
     expect(component.currentPage()).toBe(2);
     component.setPage(5); // beyond totalPages (3) -> clamped, no change
     expect(component.currentPage()).toBe(2);
+  });
+
+  it('should render and navigate pagination controls with nested metadata', async () => {
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const buttons = () =>
+      fixture.nativeElement.querySelectorAll('.btn-page') as NodeListOf<HTMLButtonElement>;
+    expect(buttons().length).toBe(2);
+    expect(buttons()[0].disabled).toBe(true);
+    expect(buttons()[1].disabled).toBe(false);
+
+    for (const number of [1, 2]) {
+      buttons()[1].click();
+      fixture.detectChanges();
+      httpMock.expectOne(`/api/v1/appointments?page=${number}&size=50`).flush({
+        ...mockDashboard,
+        page: { ...mockDashboard.page, page: { ...mockDashboard.page.page, number } },
+      } satisfies AppointmentDashboardResponse);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(component.currentPage()).toBe(number);
+      expect(buttons()[0].disabled).toBe(false);
+      expect(buttons()[1].disabled).toBe(number === 2);
+      expect(buttons()[0].parentElement?.textContent).toMatch(
+        new RegExp(`Page\\s+${number + 1}\\s+of\\s+3`),
+      );
+    }
   });
 
   it('should format 24h times into 12h AM/PM', () => {

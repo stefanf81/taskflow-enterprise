@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { AppointmentStore } from './appointment.store';
-import { AppointmentService } from './appointment.service';
+import { AppointmentService, AppointmentDashboardResponse } from './appointment.service';
 import { AuthState } from './auth.state';
 
 @Component({ standalone: true, template: '' })
@@ -18,7 +18,7 @@ describe('AppointmentStore', () => {
   let httpMock: HttpTestingController;
   let fixture: ComponentFixture<TestHost>;
 
-  const mockDashboard = {
+  const mockDashboard: AppointmentDashboardResponse = {
     page: {
       content: [
         {
@@ -36,10 +36,7 @@ describe('AppointmentStore', () => {
           updatedAt: '2026-07-01T00:00:00',
         },
       ],
-      totalPages: 3,
-      totalElements: 6,
-      size: 50,
-      number: 0,
+      page: { number: 0, size: 50, totalElements: 101, totalPages: 3 },
     },
     stats: {
       total: 6,
@@ -105,6 +102,7 @@ describe('AppointmentStore', () => {
     expect(store.appointments()[0].customerName).toBe('Alice');
     expect(store.stats().total).toBe(6);
     expect(store.totalPages()).toBe(3);
+    expect(store.totalElements()).toBe(101);
   });
 
   it('should expose computed stats with default fallback when not logged in', () => {
@@ -146,7 +144,7 @@ describe('AppointmentStore', () => {
     expect(store.errorMessage()).toBeNull();
   });
 
-  it('should support pagination and update URL accordingly', async () => {
+  it('should navigate multiple pages and enforce boundaries using nested metadata', async () => {
     authState.isLoggedIn.set(true);
     fixture.detectChanges();
     httpMock.expectOne(() => true).flush(mockDashboard);
@@ -154,19 +152,41 @@ describe('AppointmentStore', () => {
     fixture.detectChanges();
     expect(store.totalPages()).toBe(3);
 
-    store.currentPage.set(1);
+    store.prevPage();
+    expect(store.currentPage()).toBe(0);
+
+    for (const number of [1, 2]) {
+      store.nextPage();
+      fixture.detectChanges();
+
+      const content = [{ ...mockDashboard.page.content[0], id: number + 1 }];
+      httpMock.expectOne(`/api/v1/appointments?page=${number}&size=50`).flush({
+        ...mockDashboard,
+        page: { content, page: { ...mockDashboard.page.page, number } },
+      } satisfies AppointmentDashboardResponse);
+
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(store.currentPage()).toBe(number);
+      expect(store.appointments()).toEqual(content);
+      expect(store.totalPages()).toBe(3);
+      expect(store.totalElements()).toBe(101);
+    }
+
+    store.nextPage();
+    expect(store.currentPage()).toBe(2);
     fixture.detectChanges();
+    httpMock.expectNone((r) => r.url.includes('/api/v1/appointments'));
 
-    const req = httpMock.expectOne(
-      (r) => r.url.includes('/api/v1/appointments') && r.method === 'GET',
-    );
-    expect(req.request.url).toContain('page=1');
-    req.flush(mockDashboard);
-
+    store.prevPage();
+    fixture.detectChanges();
+    httpMock.expectOne('/api/v1/appointments?page=1&size=50').flush({
+      ...mockDashboard,
+      page: { ...mockDashboard.page, page: { ...mockDashboard.page.page, number: 1 } },
+    } satisfies AppointmentDashboardResponse);
     await fixture.whenStable();
-    fixture.detectChanges();
-
-    expect(store.totalPages()).toBe(3);
+    expect(store.currentPage()).toBe(1);
   });
 
   it('should debounce search and encode the query in the URL (B1)', async () => {

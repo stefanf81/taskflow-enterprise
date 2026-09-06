@@ -109,7 +109,10 @@ describe('Hooks', () => {
   // ==================== APPOINTMENTS ====================
   describe('useAppointments', () => {
     it('fetches appointments with given params', async () => {
-      const mockData = { page: { content: [], totalPages: 0 }, stats: null };
+      const mockData = {
+        page: { content: [], page: { number: 0, size: 10, totalElements: 0, totalPages: 0 } },
+        stats: null,
+      };
       mockGetAllAppointmentsFn.mockResolvedValueOnce(mockData);
 
       const { result } = await renderHook(() => useAppointments('pending', 'Alex', 0, 10), {
@@ -272,7 +275,9 @@ describe('Hooks', () => {
   // ==================== CUSTOMER ====================
   describe('useCustomerAppointments', () => {
     it('fetches customer appointments', async () => {
-      mockCustomerGetAppointmentsFn.mockResolvedValueOnce({ content: [], totalPages: 0 });
+      mockCustomerGetAppointmentsFn.mockResolvedValueOnce({
+        content: [], page: { number: 0, size: 10, totalElements: 0, totalPages: 0 },
+      });
 
       await renderHook(() => useCustomerAppointments(0, 10), { wrapper: createWrapper() });
 

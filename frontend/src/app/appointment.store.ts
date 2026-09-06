@@ -2,12 +2,7 @@ import { Injectable, signal, computed, inject, DestroyRef } from '@angular/core'
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthState } from './auth.state';
-import {
-  AppointmentService,
-  AppointmentItem,
-  AppointmentStats,
-  AppointmentDashboardResponse,
-} from './appointment.service';
+import { AppointmentService, AppointmentDashboardResponse } from './appointment.service';
 
 /**
  * Admin appointment list state.
@@ -60,23 +55,12 @@ export class AppointmentStore {
       defaultValue: {
         page: {
           content: [],
-          empty: true,
-          first: true,
-          last: true,
-          number: 0,
-          numberOfElements: 0,
-          pageable: {
-            offset: 0,
-            paged: true,
-            pageNumber: 0,
-            pageSize: 50,
-            sort: { empty: true, sorted: false, unsorted: true },
-            unpaged: false,
+          page: {
+            number: 0,
+            size: 50,
+            totalElements: 0,
+            totalPages: 1,
           },
-          size: 50,
-          sort: { empty: true, sorted: false, unsorted: true },
-          totalElements: 0,
-          totalPages: 1,
         },
         stats: {
           total: 0,
@@ -104,9 +88,11 @@ export class AppointmentStore {
         approvedRevenue: 0,
       },
   );
-  readonly totalPages = computed(() => this.appointmentsResource.value()?.page.totalPages ?? 1);
+  readonly totalPages = computed(
+    () => this.appointmentsResource.value()?.page.page.totalPages ?? 1,
+  );
   readonly totalElements = computed(
-    () => this.appointmentsResource.value()?.page.totalElements ?? 0,
+    () => this.appointmentsResource.value()?.page.page.totalElements ?? 0,
   );
 
   // Alerts & Loading State (Signals)

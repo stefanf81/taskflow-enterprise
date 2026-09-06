@@ -133,6 +133,26 @@ class AppointmentControllerIntegrationTest {
     }
 
     @Test
+    void shouldSerializeDashboardPaginationAsPagedModel() throws Exception {
+        Appointment item1 = new Appointment("Client 1", "client1@test.com", "123", "Barber Alex", LocalDate.now(), "10:00", "Haircut");
+        Appointment item2 = new Appointment("Client 2", "client2@test.com", "456", "Barber Sara", LocalDate.now(), "11:00", "Beard");
+        appointmentRepository.save(item1);
+        appointmentRepository.save(item2);
+
+        mockMvc.perform(get("/api/v1/appointments?page=1&size=1")
+                        .header("Authorization", authHeader))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.content", hasSize(1)))
+                .andExpect(jsonPath("$.page.page.number", is(1)))
+                .andExpect(jsonPath("$.page.page.size", is(1)))
+                .andExpect(jsonPath("$.page.page.totalElements", is(2)))
+                .andExpect(jsonPath("$.page.page.totalPages", is(2)))
+                .andExpect(jsonPath("$.page.totalPages").doesNotExist())
+                .andExpect(jsonPath("$.page.pageable").doesNotExist())
+                .andExpect(jsonPath("$.page.sort").doesNotExist());
+    }
+
+    @Test
     void shouldReturnUnauthorizedToViewAllAppointmentsWithoutAuthHeader() throws Exception {
         mockMvc.perform(get("/api/v1/appointments"))
                 .andExpect(status().isUnauthorized());

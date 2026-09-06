@@ -255,10 +255,17 @@ public class FeaturesIntegrationTest {
 
         // --- FEATURE 5: Customer Dashboard & Private Cancellation ---
         // Fetch customer appointments (returns 1 appointment for jane@example.com)
-        mockMvc.perform(get("/api/v1/customer/appointments")
+        mockMvc.perform(get("/api/v1/customer/appointments?size=1")
                         .header("Authorization", customerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.page.number", is(0)))
+                .andExpect(jsonPath("$.page.size", is(1)))
+                .andExpect(jsonPath("$.page.totalElements", is(1)))
+                .andExpect(jsonPath("$.page.totalPages", is(1)))
+                .andExpect(jsonPath("$.totalPages").doesNotExist())
+                .andExpect(jsonPath("$.pageable").doesNotExist())
+                .andExpect(jsonPath("$.sort").doesNotExist())
                 .andExpect(jsonPath("$.content[0].customerEmail", is("jane@example.com")));
 
         // Attempt unauthorized cancellation of Jane's appointment using another customer's token
