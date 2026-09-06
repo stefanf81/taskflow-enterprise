@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { CustomerPortal } from './customer-portal';
-import { AppointmentService } from '../../appointment.service';
+import { AppointmentService, AppointmentPage } from '../../appointment.service';
 import { AppointmentStore } from '../../appointment.store';
 import { CustomerStore } from '../../customer.store';
 import { AuthState } from '../../auth.state';
@@ -19,7 +19,7 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
   let component: CustomerPortal;
   let httpMock: HttpTestingController;
 
-  const mockAppointments = {
+  const mockAppointments: AppointmentPage = {
     content: [
       {
         id: 1,
@@ -50,7 +50,7 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
         updatedAt: '2026-07-01T00:00:00',
       },
     ],
-    totalPages: 1,
+    page: { number: 0, size: 10, totalElements: 2, totalPages: 1 },
   };
 
   beforeEach(async () => {

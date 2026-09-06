@@ -2,7 +2,7 @@ import { Injectable, signal, computed, inject, DestroyRef } from '@angular/core'
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthState } from './auth.state';
-import { AppointmentService, AppointmentItem } from './appointment.service';
+import { AppointmentService, AppointmentPage } from './appointment.service';
 
 @Injectable({ providedIn: 'root' })
 export class CustomerStore {
@@ -14,16 +14,16 @@ export class CustomerStore {
   // guard every guest visit would fire a 401 against a protected endpoint at
   // boot (and churn the auth:unauthorized handler). The request starts
   // reactively once AuthState flips to logged-in.
-  private readonly appointmentsResource = httpResource<{
-    content: AppointmentItem[];
-    totalPages: number;
-  }>(
+  private readonly appointmentsResource = httpResource<AppointmentPage>(
     () => {
       if (!this.authState.isLoggedIn()) return undefined;
       return `/api/v1/customer/appointments?page=${this.currentPage()}&size=10`;
     },
     {
-      defaultValue: { content: [], totalPages: 1 },
+      defaultValue: {
+        content: [],
+        page: { number: 0, size: 10, totalElements: 0, totalPages: 1 },
+      },
     },
   );
 

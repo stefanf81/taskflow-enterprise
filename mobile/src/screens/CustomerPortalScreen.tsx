@@ -73,7 +73,7 @@ export const CustomerPortalScreen: React.FC = () => {
   };
 
   const appointments = data?.content || [];
-  const totalPages = data?.totalPages || 1;
+  const totalPages = data?.page?.totalPages || 1;
 
   return (
     <SafeAreaView style={styles.safeArea}>

@@ -1,5 +1,6 @@
 import { appointmentsApi } from '../src/api/appointments';
 import { apiClient } from '../src/api/client';
+import type { AppointmentDashboardResponse } from '../src/types/api';
 
 jest.mock('../src/api/client', () => ({
   apiClient: {
@@ -22,8 +23,8 @@ describe('appointmentsApi', () => {
 
   describe('getAllAppointments', () => {
     it('fetches appointments with default params', async () => {
-      const mockResponse = {
-        page: { content: [], totalPages: 0, totalElements: 0, size: 10, number: 0 },
+      const mockResponse: AppointmentDashboardResponse = {
+        page: { content: [], page: { totalPages: 0, totalElements: 0, size: 10, number: 0 } },
         stats: { total: 0, pending: 0, approved: 0, denied: 0, overdue: 0, progress: 0, approvedRevenue: 0 },
       };
       mockedGet.mockResolvedValueOnce({ data: mockResponse });

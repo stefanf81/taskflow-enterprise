@@ -56,19 +56,19 @@ describe('types/api', () => {
     expect(stats.approvedRevenue).toBe(250);
   });
 
-  it('AppointmentPage has pagination fields', () => {
+  it('AppointmentPage has nested pagination metadata', () => {
     const page: AppointmentPage = {
-      content: [], totalPages: 1, totalElements: 0, size: 10, number: 0,
+      content: [], page: { totalPages: 0, totalElements: 0, size: 10, number: 0 },
     };
-    expect(page.totalPages).toBe(1);
+    expect(page.page.totalPages).toBe(0);
   });
 
   it('AppointmentDashboardResponse combines page and stats', () => {
     const resp: AppointmentDashboardResponse = {
-      page: { content: [], totalPages: 0, totalElements: 0, size: 10, number: 0 },
+      page: { content: [], page: { totalPages: 0, totalElements: 0, size: 10, number: 0 } },
       stats: { total: 0, pending: 0, approved: 0, denied: 0, overdue: 0, progress: 0, approvedRevenue: 0 },
     };
-    expect(resp.page).toBeDefined();
+    expect(resp.page.page.totalPages).toBe(0);
     expect(resp.stats).toBeDefined();
   });
 

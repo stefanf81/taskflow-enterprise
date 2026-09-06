@@ -2,21 +2,26 @@ import React from 'react';
 import { render, fireEvent, waitFor, screen } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { CustomerPortalScreen } from '../src/screens/CustomerPortalScreen';
+import type { AppointmentPage } from '../src/types/api';
 
 // ==================== Controllable mocks ====================
 let mockIsLoading: boolean;
-let mockAppointmentsData: any;
+let mockAppointmentsData: AppointmentPage;
 let mockRefetch: jest.Mock;
 let mockCancelMutate: jest.Mock;
 let mockLogout: jest.Mock;
 let mockUsername: string;
+let mockHookArgs: unknown[];
 
 jest.mock('../src/hooks/useCustomer', () => ({
-  useCustomerAppointments: () => ({
-    data: mockAppointmentsData,
-    isLoading: mockIsLoading,
-    refetch: mockRefetch,
-  }),
+  useCustomerAppointments: (...args: unknown[]) => {
+    mockHookArgs = args;
+    return {
+      data: mockAppointmentsData,
+      isLoading: mockIsLoading,
+      refetch: mockRefetch,
+    };
+  },
   useCancelCustomerAppointment: () => ({
     mutate: mockCancelMutate,
     isPending: false,
@@ -37,10 +42,10 @@ const defaultAppointment = {
   createdAt: '', updatedAt: '',
 };
 
-function buildData(overrides: Partial<any> = {}) {
+function buildData(overrides: Partial<AppointmentPage> = {}): AppointmentPage {
   return {
     content: [defaultAppointment],
-    totalPages: 1,
+    page: { number: 0, size: 10, totalElements: 1, totalPages: 1 },
     ...overrides,
   };
 }
@@ -54,6 +59,7 @@ describe('CustomerPortalScreen', () => {
     mockCancelMutate = jest.fn();
     mockLogout = jest.fn();
     mockUsername = 'John';
+    mockHookArgs = [];
   });
 
   // ============ RENDERING ============
@@ -104,7 +110,9 @@ describe('CustomerPortalScreen', () => {
   });
 
   it('shows empty state when no appointments', async () => {
-    mockAppointmentsData = buildData({ content: [], totalPages: 0 });
+    mockAppointmentsData = buildData({
+      content: [], page: { number: 0, size: 10, totalElements: 0, totalPages: 0 },
+    });
     await render(<CustomerPortalScreen />);
     expect(screen.getByText('No Bookings Found')).toBeTruthy();
     expect(screen.getByText("You haven't reserved any appointments yet.")).toBeTruthy();
@@ -207,7 +215,7 @@ describe('CustomerPortalScreen', () => {
   });
 
   // ============ PAGINATION ============
-  it('shows pagination when totalPages > 1', async () => {
+  it('shows pagination from nested VIA_DTO metadata when totalPages > 1', async () => {
     mockAppointmentsData = buildData({
       content: Array.from({ length: 10 }, (_, i) => ({
         ...defaultAppointment,
@@ -215,7 +223,7 @@ describe('CustomerPortalScreen', () => {
         publicId: `TF-${String(i + 1).padStart(4, '0')}`,
         customerName: `Customer ${i + 1}`,
       })),
-      totalPages: 3,
+      page: { number: 0, size: 10, totalElements: 25, totalPages: 3 },
     });
     await render(<CustomerPortalScreen />);
     expect(screen.getByText('Page 1 of 3')).toBeTruthy();
@@ -231,11 +239,18 @@ describe('CustomerPortalScreen', () => {
         publicId: `TF-${String(i + 1).padStart(4, '0')}`,
         customerName: `Customer ${i + 1}`,
       })),
-      totalPages: 3,
+      page: { number: 0, size: 10, totalElements: 25, totalPages: 3 },
     });
     await render(<CustomerPortalScreen />);
     await fireEvent.press(screen.getByText('Next'));
     expect(screen.getByText('Page 2 of 3')).toBeTruthy();
+    expect(mockHookArgs).toEqual([1, 10]);
+    await fireEvent.press(screen.getByText('Next'));
+    expect(screen.getByText('Page 3 of 3')).toBeTruthy();
+    expect(mockHookArgs).toEqual([2, 10]);
+    expect(screen.getByText('Next').parent?.props.accessibilityState.disabled).toBe(true);
+    await fireEvent.press(screen.getByText('Next'));
+    expect(mockHookArgs).toEqual([2, 10]);
   });
 
   it('navigates to previous page on Prev press', async () => {
@@ -246,16 +261,17 @@ describe('CustomerPortalScreen', () => {
         publicId: `TF-${String(i + 1).padStart(4, '0')}`,
         customerName: `Customer ${i + 1}`,
       })),
-      totalPages: 3,
+      page: { number: 0, size: 10, totalElements: 25, totalPages: 3 },
     });
     await render(<CustomerPortalScreen />);
     await fireEvent.press(screen.getByText('Next'));
     await fireEvent.press(screen.getByText('Prev'));
     expect(screen.getByText('Page 1 of 3')).toBeTruthy();
+    expect(mockHookArgs).toEqual([0, 10]);
   });
 
   it('does not show pagination when single page', async () => {
-    mockAppointmentsData = buildData({ totalPages: 1 });
+    mockAppointmentsData = buildData();
     await render(<CustomerPortalScreen />);
     expect(screen.queryByText('Prev')).toBeNull();
     expect(screen.queryByText('Next')).toBeNull();

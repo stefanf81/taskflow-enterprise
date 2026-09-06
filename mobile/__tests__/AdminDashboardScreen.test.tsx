@@ -45,7 +45,7 @@ function buildData(overrides: Partial<any> = {}) {
   return {
     page: {
       content: [defaultAppointment],
-      totalPages: 1,
+      page: { number: 0, size: 10, totalElements: 1, totalPages: 1 },
     },
     stats: defaultStats,
     ...overrides,
@@ -114,7 +114,10 @@ describe('AdminDashboardScreen', () => {
   });
 
   it('shows empty state when no appointments', async () => {
-    mockAppointmentsData = buildData({ page: { content: [], totalPages: 0 }, stats: null });
+    mockAppointmentsData = buildData({
+      page: { content: [], page: { number: 0, size: 10, totalElements: 0, totalPages: 0 } },
+      stats: null,
+    });
     await render(<AdminDashboardScreen />);
     expect(screen.getByText('No Appointments Found')).toBeTruthy();
     expect(screen.getByText('No records match your filter criteria.')).toBeTruthy();
@@ -320,7 +323,7 @@ describe('AdminDashboardScreen', () => {
   it('hides Approve button for already-approved appointments', async () => {
     const approvedAppt = { ...defaultAppointment, status: 'APPROVED' as const };
     mockAppointmentsData = buildData({
-      page: { content: [approvedAppt], totalPages: 1 },
+      page: { content: [approvedAppt], page: { number: 0, size: 10, totalElements: 1, totalPages: 1 } },
     });
     await render(<AdminDashboardScreen />);
     expect(screen.queryByText('Approve')).toBeNull();
@@ -331,7 +334,7 @@ describe('AdminDashboardScreen', () => {
   it('hides Decline button for already-denied appointments', async () => {
     const deniedAppt = { ...defaultAppointment, status: 'DENIED' as const };
     mockAppointmentsData = buildData({
-      page: { content: [deniedAppt], totalPages: 1 },
+      page: { content: [deniedAppt], page: { number: 0, size: 10, totalElements: 1, totalPages: 1 } },
     });
     await render(<AdminDashboardScreen />);
     expect(screen.getByText('Approve')).toBeTruthy();
@@ -344,7 +347,7 @@ describe('AdminDashboardScreen', () => {
     const overdueDate = '2020-01-01'; // far in the past
     const overdueAppt = { ...defaultAppointment, bookingDate: overdueDate };
     mockAppointmentsData = buildData({
-      page: { content: [overdueAppt], totalPages: 1 },
+      page: { content: [overdueAppt], page: { number: 0, size: 10, totalElements: 1, totalPages: 1 } },
     });
     await render(<AdminDashboardScreen />);
     // OVERDUE appears in both filter chip and overdue badge
@@ -356,7 +359,7 @@ describe('AdminDashboardScreen', () => {
   });
 
   // ============ PAGINATION ============
-  it('shows pagination when totalPages > 1', async () => {
+  it('shows pagination from nested VIA_DTO metadata when totalPages > 1', async () => {
     mockAppointmentsData = buildData({
       page: {
         content: Array.from({ length: 10 }, (_, i) => ({
@@ -365,7 +368,7 @@ describe('AdminDashboardScreen', () => {
           publicId: `TF-${String(i + 1).padStart(4, '0')}`,
           customerName: `Customer ${i + 1}`,
         })),
-        totalPages: 3,
+        page: { number: 0, size: 10, totalElements: 25, totalPages: 3 },
       },
     });
     // Need to re-render to use the mockAppointmentsData, which is captured
@@ -386,12 +389,19 @@ describe('AdminDashboardScreen', () => {
           publicId: `TF-${String(i + 1).padStart(4, '0')}`,
           customerName: `Customer ${i + 1}`,
         })),
-        totalPages: 3,
+        page: { number: 0, size: 10, totalElements: 25, totalPages: 3 },
       },
     });
     await render(<AdminDashboardScreen />);
     await fireEvent.press(screen.getByText('Next'));
     expect(screen.getByText('Page 2 of 3')).toBeTruthy();
+    expect(mockHookArgs).toEqual(['all', '', 1, 10]);
+    await fireEvent.press(screen.getByText('Next'));
+    expect(screen.getByText('Page 3 of 3')).toBeTruthy();
+    expect(mockHookArgs).toEqual(['all', '', 2, 10]);
+    expect(screen.getByText('Next').parent?.props.accessibilityState.disabled).toBe(true);
+    await fireEvent.press(screen.getByText('Next'));
+    expect(mockHookArgs).toEqual(['all', '', 2, 10]);
   });
 
   it('navigates previous page on Prev press', async () => {
@@ -403,13 +413,14 @@ describe('AdminDashboardScreen', () => {
           publicId: `TF-${String(i + 1).padStart(4, '0')}`,
           customerName: `Customer ${i + 1}`,
         })),
-        totalPages: 3,
+        page: { number: 0, size: 10, totalElements: 25, totalPages: 3 },
       },
     });
     await render(<AdminDashboardScreen />);
     await fireEvent.press(screen.getByText('Next'));
     await fireEvent.press(screen.getByText('Prev'));
     expect(screen.getByText('Page 1 of 3')).toBeTruthy();
+    expect(mockHookArgs).toEqual(['all', '', 0, 10]);
   });
 
   it('disables Prev on first page', async () => {
@@ -421,7 +432,7 @@ describe('AdminDashboardScreen', () => {
           publicId: `TF-${String(i + 1).padStart(4, '0')}`,
           customerName: `Customer ${i + 1}`,
         })),
-        totalPages: 3,
+        page: { number: 0, size: 10, totalElements: 25, totalPages: 3 },
       },
     });
     await render(<AdminDashboardScreen />);
@@ -429,7 +440,7 @@ describe('AdminDashboardScreen', () => {
     expect(prevBtn?.props?.accessibilityState?.disabled ?? false).toBe(true);
   });
 
-  it('disables Next on last page', async () => {
+  it('does not show pagination when single page', async () => {
     mockAppointmentsData = buildData({
       page: {
         content: Array.from({ length: 10 }, (_, i) => ({
@@ -438,7 +449,7 @@ describe('AdminDashboardScreen', () => {
           publicId: `TF-${String(i + 1).padStart(4, '0')}`,
           customerName: `Customer ${i + 1}`,
         })),
-        totalPages: 1, // single page, so pagination should NOT render
+        page: { number: 0, size: 10, totalElements: 10, totalPages: 1 },
       },
     });
     await render(<AdminDashboardScreen />);

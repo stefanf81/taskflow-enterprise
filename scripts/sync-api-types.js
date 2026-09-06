@@ -32,14 +32,11 @@ const RESPONSE_SCHEMAS = new Set([
   'LoginResponse',
   'MobileLoginResponse',
   'NotificationOutboxResponse',
-  'PageableObject',
   'PagedModelAppointmentResponse',
   'PageMetadata',
-  'PageObject',
   'PublicBarberResponse',
   'RegisterResponse',
   'ServiceItemResponse',
-  'SortObject',
 ]);
 
 function mapSchemaType(schema, schemas, schemaName) {
@@ -89,7 +86,7 @@ function mapSchemaType(schema, schemas, schemaName) {
 
 const TYPE_ALIASES = {
   AppointmentItem: 'AppointmentResponse',
-  AppointmentPage: 'PageObject',
+  AppointmentPage: 'PagedModelAppointmentResponse',
   Barber: 'BarberResponse',
   PublicBarber: 'PublicBarberResponse',
   BarberRating: 'BarberRatingResponse',

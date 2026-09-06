@@ -116,7 +116,7 @@ export const AdminDashboardScreen: React.FC = () => {
 
   const appointments = data?.page?.content || [];
   const stats = data?.stats;
-  const totalPages = data?.page?.totalPages || 1;
+  const totalPages = data?.page?.page?.totalPages || 1;
 
   return (
     <SafeAreaView style={styles.safeArea}>

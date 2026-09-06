@@ -53,15 +53,9 @@ export class AppointmentService {
     return this.http.post<void>(`${this.authUrl}/register`, request);
   }
 
-  getCustomerAppointments(
-    page = 0,
-    size = 10,
-  ): Observable<{ content: AppointmentItem[]; totalPages: number }> {
+  getCustomerAppointments(page = 0, size = 10): Observable<AppointmentPage> {
     const params = new HttpParams().set('page', page.toString()).set('size', size.toString());
-    return this.http.get<{ content: AppointmentItem[]; totalPages: number }>(
-      `${this.customerUrl}/appointments`,
-      { params },
-    );
+    return this.http.get<AppointmentPage>(`${this.customerUrl}/appointments`, { params });
   }
 
   cancelCustomerAppointment(publicId: string): Observable<void> {

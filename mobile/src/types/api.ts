@@ -16,7 +16,7 @@ export interface AppointmentCreateRequest {
 }
 
 export interface AppointmentDashboardResponse {
-  page: PageObject;
+  page: PagedModelAppointmentResponse;
   stats: AppointmentStats;
 }
 
@@ -119,15 +119,6 @@ export interface NotificationOutboxResponse {
   type: string;
 }
 
-export interface PageableObject {
-  offset: number;
-  paged: boolean;
-  pageNumber: number;
-  pageSize: number;
-  sort: SortObject;
-  unpaged: boolean;
-}
-
 export interface PagedModelAppointmentResponse {
   content: AppointmentResponse[];
   page: PageMetadata;
@@ -136,20 +127,6 @@ export interface PagedModelAppointmentResponse {
 export interface PageMetadata {
   number: number;
   size: number;
-  totalElements: number;
-  totalPages: number;
-}
-
-export interface PageObject {
-  content: AppointmentResponse[];
-  empty: boolean;
-  first: boolean;
-  last: boolean;
-  number: number;
-  numberOfElements: number;
-  pageable: PageableObject;
-  size: number;
-  sort: SortObject;
   totalElements: number;
   totalPages: number;
 }
@@ -193,18 +170,12 @@ export interface ServiceItemResponse {
   price: number;
 }
 
-export interface SortObject {
-  empty: boolean;
-  sorted: boolean;
-  unsorted: boolean;
-}
-
 export interface SseEmitter {
   timeout?: number;
 }
 
 export type AppointmentItem = AppointmentResponse;
-export type AppointmentPage = PageObject;
+export type AppointmentPage = PagedModelAppointmentResponse;
 export type Barber = BarberResponse;
 export type PublicBarber = PublicBarberResponse;
 export type BarberRating = BarberRatingResponse;

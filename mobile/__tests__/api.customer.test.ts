@@ -1,5 +1,6 @@
 import { customerApi } from '../src/api/customer';
 import { apiClient } from '../src/api/client';
+import type { AppointmentPage } from '../src/types/api';
 
 jest.mock('../src/api/client', () => ({
   apiClient: {
@@ -18,18 +19,22 @@ describe('customerApi', () => {
 
   describe('getAppointments', () => {
     it('fetches customer appointments with pagination', async () => {
-      const mockResponse = { content: [], totalPages: 1 };
+      const mockResponse: AppointmentPage = {
+        content: [], page: { number: 1, size: 10, totalElements: 25, totalPages: 3 },
+      };
       mockedGet.mockResolvedValueOnce({ data: mockResponse });
 
-      const result = await customerApi.getAppointments(0, 10);
+      const result = await customerApi.getAppointments(1, 10);
       expect(mockedGet).toHaveBeenCalledWith('/api/v1/customer/appointments', {
-        params: { page: 0, size: 10 },
+        params: { page: 1, size: 10 },
       });
       expect(result).toEqual(mockResponse);
     });
 
     it('uses default pagination values', async () => {
-      mockedGet.mockResolvedValueOnce({ data: { content: [], totalPages: 0 } });
+      mockedGet.mockResolvedValueOnce({
+        data: { content: [], page: { number: 0, size: 10, totalElements: 0, totalPages: 0 } },
+      });
       await customerApi.getAppointments();
       expect(mockedGet).toHaveBeenCalledWith('/api/v1/customer/appointments', {
         params: { page: 0, size: 10 },

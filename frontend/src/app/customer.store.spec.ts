@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { CustomerStore } from './customer.store';
-import { AppointmentService } from './appointment.service';
+import { AppointmentService, AppointmentPage } from './appointment.service';
 import { AuthState } from './auth.state';
 
 @Component({ standalone: true, template: '' })
@@ -17,7 +17,7 @@ describe('CustomerStore', () => {
   let httpMock: HttpTestingController;
   let fixture: ComponentFixture<TestHost>;
 
-  const mockAppointments = {
+  const mockAppointments: AppointmentPage = {
     content: [
       {
         id: 1,
@@ -34,7 +34,7 @@ describe('CustomerStore', () => {
         updatedAt: '2026-07-01T00:00:00',
       },
     ],
-    totalPages: 1,
+    page: { number: 0, size: 10, totalElements: 11, totalPages: 2 },
   };
 
   beforeEach(() => {
@@ -91,17 +91,25 @@ describe('CustomerStore', () => {
     expect(store.appointments()[0].customerName).toBe('Alice');
   });
 
-  it('should support pagination', () => {
+  it('should load a second page with nested metadata', async () => {
     store.currentPage.set(1);
-    store.loadAppointments();
     fixture.detectChanges();
+    await Promise.resolve();
 
     const req = httpMock.expectOne(
       (r) => r.url.includes('/api/v1/customer/appointments') && r.method === 'GET',
     );
     expect(req.request.url).toContain('page=1');
-    req.flush({ content: [], totalPages: 0 });
+    const content = [{ ...mockAppointments.content[0], id: 11, customerName: 'Bob' }];
+    req.flush({
+      content,
+      page: { ...mockAppointments.page, number: 1 },
+    } satisfies AppointmentPage);
+    await Promise.resolve();
     fixture.detectChanges();
+
+    expect(store.currentPage()).toBe(1);
+    expect(store.appointments()).toEqual(content);
   });
 
   it('should cancel an appointment via cancelAppointment', () => {
