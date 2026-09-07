@@ -72,6 +72,13 @@
       "allowedVersions": "/^6\\./"
     },
     {
+      "description": "Keep Vitest on the Angular 22-compatible 4.x release line",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["frontend/package.json"],
+      "matchPackageNames": ["vitest", "@vitest/coverage-v8"],
+      "allowedVersions": "/^4\\./"
+    },
+    {
       "description": "Update the Angular framework and its compatible toolchain together",
       "matchManagers": ["npm"],
       "matchFileNames": ["frontend/package.json"],
