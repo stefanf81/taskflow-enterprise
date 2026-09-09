@@ -1,0 +1,13 @@
+# Copy this file, booking-time-migration-presync-job.yaml, and
+# scripts/prepare-booking-time-migration.sh to the GitOps repository. Keep the
+# ConfigMap name stable because the PreSync Job mounts it by name.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - booking-time-migration-presync-job.yaml
+configMapGenerator:
+  - name: taskflow-booking-time-migration-script
+    files:
+      - prepare-booking-time-migration.sh=../../scripts/prepare-booking-time-migration.sh
+generatorOptions:
+  disableNameSuffixHash: true

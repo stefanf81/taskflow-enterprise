@@ -80,7 +80,7 @@ COPY --link --from=extractor --chown=10001:10001 /app/extracted/application/ ./
 #                                               are baked into the CDS archive. No real
 #                                               Redis connection is opened: Lettuce is
 #                                               lazy and the context exits at refresh.
-#   - management.otlp.tracing.export.enabled=false : Don't attempt OTLP export
+#   - tracing auto-configurations are excluded by CdsTrainingApplication
 #   - app.cds-training=true                  : Skips the admin-user CommandLineRunner
 #
 # spring.context.exit=onRefresh terminates the application immediately after
@@ -92,8 +92,6 @@ RUN java -XX:ArchiveClassesAtExit=application.jsa \
          -Dapp.cds-training=true \
          -Dspring.flyway.enabled=false \
          -Dspring.cache.type=redis \
-         -Dmanagement.tracing.enabled=false \
-         -Dmanagement.otlp.tracing.export.enabled=false \
          -Dotel.sdk.disabled=true \
          org.springframework.boot.loader.launch.PropertiesLauncher \
     && test -s application.jsa \

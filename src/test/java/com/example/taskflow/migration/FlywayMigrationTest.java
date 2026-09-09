@@ -1,13 +1,17 @@
 package com.example.taskflow.migration;
 
 import db.migration.V21__fix_double_booking_index;
+import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.migration.Context;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
+import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -29,9 +33,11 @@ class FlywayMigrationTest {
                     )
                     """);
             connection.createStatement().executeUpdate("""
-                    INSERT INTO appointments (barber_name, booking_date, booking_time, status, updated_at)
-                    VALUES ('Alex', DATE '2030-01-02', '9:00', 'PENDING', CURRENT_TIMESTAMP),
-                           ('Alex', DATE '2030-01-02', '09:00', 'PENDING', CURRENT_TIMESTAMP)
+                     INSERT INTO appointments (barber_name, booking_date, booking_time, status, updated_at)
+                     VALUES ('Alex', DATE '2030-01-02', '9:00', 'PENDING', CURRENT_TIMESTAMP),
+                            ('Alex', DATE '2030-01-02', '09:00', 'PENDING', CURRENT_TIMESTAMP),
+                            ('Alex', DATE '2030-01-02', 'not-a-time', 'PENDING', CURRENT_TIMESTAMP),
+                            ('Alex', DATE '2030-01-02', '99:99', 'LEGACY', CURRENT_TIMESTAMP)
                     """);
 
             Context context = Mockito.mock(Context.class);
@@ -39,7 +45,8 @@ class FlywayMigrationTest {
             new V21__fix_double_booking_index().migrate(context);
 
             assertEquals(1, count(connection, "PENDING"));
-            assertEquals(1, count(connection, "DENIED"));
+            assertEquals(3, count(connection, "DENIED"));
+            assertEquals(2, countByTime(connection, "00:00"));
 
             connection.createStatement().executeUpdate("""
                     INSERT INTO appointments (barber_name, booking_date, booking_time, status, updated_at)
@@ -53,6 +60,30 @@ class FlywayMigrationTest {
         }
     }
 
+    @Test
+    void flywayMigratesBookingTimeToTimeAndAddsStatusConstraintOnH2() throws Exception {
+        String url = "jdbc:h2:mem:v22-migration;MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
+        Flyway.configure()
+                .dataSource(url, "sa", "")
+                .locations("classpath:db/migration")
+                .load()
+                .migrate();
+
+        Properties connectionProperties = new Properties();
+        connectionProperties.setProperty("user", "sa");
+        try (Connection connection = DriverManager.getConnection(url, connectionProperties)) {
+            try (ResultSet columns = connection.getMetaData().getColumns(null, null, "APPOINTMENTS", "BOOKING_TIME")) {
+                columns.next();
+                assertEquals(Types.TIME, columns.getInt("DATA_TYPE"));
+            }
+
+            assertThrows(SQLException.class, () -> connection.createStatement().executeUpdate("""
+                    UPDATE appointments SET status = 'INVALID'
+                    WHERE id = (SELECT MIN(id) FROM appointments)
+                    """));
+        }
+    }
+
     private static int count(Connection connection, String status) throws SQLException {
         try (var statement = connection.prepareStatement(
                 "SELECT COUNT(*) FROM appointments WHERE status = ?")) {
@@ -60,6 +91,17 @@ class FlywayMigrationTest {
             try (var result = statement.executeQuery()) {
             result.next();
             return result.getInt(1);
+            }
+        }
+    }
+
+    private static int countByTime(Connection connection, String bookingTime) throws SQLException {
+        try (var statement = connection.prepareStatement(
+                "SELECT COUNT(*) FROM appointments WHERE booking_time = ?")) {
+            statement.setString(1, bookingTime);
+            try (var result = statement.executeQuery()) {
+                result.next();
+                return result.getInt(1);
             }
         }
     }

@@ -209,4 +209,18 @@ class GlobalExceptionHandlerTest {
         assertNotNull(response.getBody());
         assertEquals("Unsupported media type: Content-Type 'text/plain' is not supported", response.getBody().message());
     }
+
+    @Test
+    void testHandleDataAccessResourceFailure() {
+        org.springframework.dao.DataAccessResourceFailureException ex =
+                new org.springframework.dao.DataAccessResourceFailureException("Connection pool exhausted");
+
+        ResponseEntity<ErrorResponse> response =
+                globalExceptionHandler.handleDataAccessResourceFailure(ex, request);
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+        assertEquals("1", response.getHeaders().getFirst("Retry-After"));
+        assertNotNull(response.getBody());
+        assertEquals("The service is temporarily busy. Please try again shortly.", response.getBody().message());
+    }
 }

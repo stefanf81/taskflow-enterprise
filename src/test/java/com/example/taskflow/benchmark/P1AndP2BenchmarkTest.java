@@ -91,7 +91,8 @@ class P1AndP2BenchmarkTest {
         String content = Files.readString(nginx);
         long t0 = System.nanoTime();
         boolean hasJsCssImmutable = content.contains("location ~* \\.(?:js|css)$") && content.contains("immutable, max-age=15552000");
-        boolean hasIcoPublic = content.contains("location ~* \\.(?:ico|gif") && content.contains("add_header Cache-Control \"public\"");
+        boolean hasIcoPublic = content.contains("location ~* \\.(?:ico|gif")
+                && content.contains("public, max-age=3600, must-revalidate");
         boolean oldSingle = content.contains("location ~* \\.(?:ico|css|js|gif");
         long us = (System.nanoTime() - t0) / 1000;
 
@@ -101,7 +102,7 @@ class P1AndP2BenchmarkTest {
         System.out.printf("  Parse latency: %d µs%n", us);
 
         assertTrue(hasJsCssImmutable, "js/css must have immutable max-age=15552000");
-        assertTrue(hasIcoPublic, "images/fonts must keep public without immutable");
+        assertTrue(hasIcoPublic, "unhashed images/fonts must use a short revalidating public cache");
         assertFalse(oldSingle, "old single location with mixed types must be split");
 
         // Verify index.html not immutable (served via location / try_files)
@@ -186,27 +187,32 @@ class P1AndP2BenchmarkTest {
         System.out.println("=".repeat(80));
         Path qc = Path.of("mobile/src/query/queryClient.ts");
         Path client = Path.of("mobile/src/api/client.ts");
+        Path prodProperties = Path.of("src/main/resources/application-prod.properties");
         String qcs = Files.readString(qc);
         String cs = Files.readString(client);
+        String properties = Files.readString(prodProperties);
         long t0 = System.nanoTime();
         boolean hasStale = qcs.contains("staleTime: 60_000");
         boolean hasGc = qcs.contains("gcTime: 5 * 60_000");
         boolean hasRetryDelay = qcs.contains("retryDelay");
         boolean hasTimeout = cs.contains("timeout: 10000");
         boolean not15000 = !cs.contains("timeout: 15000");
+        boolean hasPoolTimeout = properties.contains("spring.datasource.hikari.connection-timeout=4000");
         long us = (System.nanoTime() - t0) / 1000;
 
         System.out.println("  staleTime 60_000: " + hasStale);
         System.out.println("  gcTime 5*60_000: " + hasGc);
         System.out.println("  retryDelay exponential: " + hasRetryDelay);
         System.out.println("  timeout 10000 (not 15000): " + hasTimeout + " / " + not15000);
+        System.out.println("  Hikari pool timeout 4000ms: " + hasPoolTimeout);
         System.out.printf("  Parse latency: %d µs%n", us);
 
         assertTrue(hasStale && hasGc && hasRetryDelay, "queryClient must have staleTime/gcTime/retryDelay");
-        assertTrue(hasTimeout && not15000, "api timeout must be 10000");
+        assertTrue(hasTimeout && not15000 && hasPoolTimeout,
+                "mobile timeout must be 10000 and Hikari must fail first at 4000ms");
 
         System.out.println("  Expected: staleTime 0→60s cuts refetch on every mount → ~50% fewer catalog/barbers GETs");
-        System.out.println("  gcTime 5m keeps cache across nav, timeout 10s < server 5s+20s Hikari → fail fast");
+        System.out.println("  gcTime 5m keeps cache across nav, 4s pool acquisition + 5s query timeout fit mobile's 10s deadline");
         System.out.println("  ✓ P1-4 mobile tuning verified");
         System.out.println("=".repeat(80));
     }

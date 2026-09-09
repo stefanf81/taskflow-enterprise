@@ -37,6 +37,7 @@ export const useUpdateAppointmentStatus = () => {
       appointmentsApi.updateAppointmentStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['busySlots'] });
     },
   });
 };
@@ -47,13 +48,18 @@ export const useDeleteAppointment = () => {
     mutationFn: (id: number) => appointmentsApi.deleteAppointment(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['busySlots'] });
     },
   });
 };
 
 export const usePublicCancelAppointment = () => {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ publicId, email }: { publicId: string; email: string }) =>
       appointmentsApi.publicCancelAppointment(publicId, email),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['busySlots'] });
+    },
   });
 };

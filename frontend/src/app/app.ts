@@ -248,12 +248,6 @@ export class App implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
-    // Ensure the XSRF-TOKEN cookie is set before any state-changing request.
-    // The backend's CookieCsrfTokenRepository sets the cookie on the response;
-    // subsequent POST/PUT/DELETE requests from Angular will read it and attach
-    // the X-XSRF-TOKEN header automatically via withXsrfConfiguration.
-    this.appointmentService.fetchCsrfToken().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
-
     // Catalog + ratings are fetched eagerly by their httpResources at boot —
     // no manual reload here (would duplicate every request, B3).
     // A1.2: restore UI role from the backend if a session cookie exists (survives

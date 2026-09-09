@@ -192,16 +192,6 @@ COPY --link --from=extractor --chown=10001:10001 /app/extracted/application/ ./
 #       attempted. Connection behavior depends on application beans, health
 #       checks, cache initialization, and library configuration.
 #
-#   - management.tracing.enabled=false
-#       Retained for compatibility with the current application configuration.
-#       It is not a generally documented tracing-disable property in recent
-#       Spring Boot releases unless the application defines or consumes it.
-#
-#   - management.otlp.tracing.export.enabled=false
-#       Disables Spring Boot 3.x OTLP tracing export during training. Spring Boot
-#       4 uses a different property namespace, so this flag must be reviewed if
-#       the application is upgraded to Spring Boot 4.
-#
 #   - otel.sdk.disabled=true
 #       Disables OpenTelemetry SDK initialization when OpenTelemetry SDK
 #       autoconfiguration or an agent-related integration is present.
@@ -222,8 +212,6 @@ RUN java -XX:ArchiveClassesAtExit=application.jsa \
          -Dapp.cds-training=true \
          -Dspring.flyway.enabled=false \
          -Dspring.cache.type=redis \
-         -Dmanagement.tracing.enabled=false \
-         -Dmanagement.otlp.tracing.export.enabled=false \
          -Dotel.sdk.disabled=true \
          org.springframework.boot.loader.launch.PropertiesLauncher \
     && test -s application.jsa \

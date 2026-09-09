@@ -75,6 +75,7 @@ jest.mock('../src/api/reviews', () => ({
 // Test wrapper with QueryClient
 // ============================================================
 const queryClients = new Set<QueryClient>();
+let lastQueryClient: QueryClient | null = null;
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -84,6 +85,7 @@ function createWrapper() {
     },
   });
   queryClients.add(queryClient);
+  lastQueryClient = queryClient;
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return React.createElement(QueryClientProvider, { client: queryClient }, children);
   };
@@ -104,6 +106,7 @@ describe('Hooks', () => {
   afterEach(() => {
     queryClients.forEach((queryClient) => queryClient.clear());
     queryClients.clear();
+    lastQueryClient = null;
   });
 
   // ==================== APPOINTMENTS ====================
@@ -168,12 +171,15 @@ describe('Hooks', () => {
       mockUpdateAppointmentStatusFn.mockResolvedValueOnce({ id: 1, status: 'APPROVED' });
 
       const { result } = await renderHook(() => useUpdateAppointmentStatus(), { wrapper: createWrapper() });
+      const invalidateQueries = jest.spyOn(lastQueryClient!, 'invalidateQueries');
 
       await act(async () => {
         await result.current.mutateAsync({ id: 1, status: 'APPROVED' });
+        await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
       expect(mockUpdateAppointmentStatusFn).toHaveBeenCalledWith(1, 'APPROVED');
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['busySlots'] });
     });
   });
 
@@ -182,12 +188,15 @@ describe('Hooks', () => {
       mockDeleteAppointmentFn.mockResolvedValueOnce(undefined);
 
       const { result } = await renderHook(() => useDeleteAppointment(), { wrapper: createWrapper() });
+      const invalidateQueries = jest.spyOn(lastQueryClient!, 'invalidateQueries');
 
       await act(async () => {
         await result.current.mutateAsync(5);
+        await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
       expect(mockDeleteAppointmentFn).toHaveBeenCalledWith(5);
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['busySlots'] });
     });
   });
 
@@ -196,10 +205,14 @@ describe('Hooks', () => {
       mockPublicCancelAppointmentFn.mockResolvedValueOnce(undefined);
 
       const { result } = await renderHook(() => usePublicCancelAppointment(), { wrapper: createWrapper() });
+      const invalidateQueries = jest.spyOn(lastQueryClient!, 'invalidateQueries');
 
       await act(async () => {
         await result.current.mutateAsync({ publicId: 'TF-0001', email: 'j@ex.com' });
+        await new Promise((resolve) => setTimeout(resolve, 0));
       });
+
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['busySlots'] });
 
       expect(mockPublicCancelAppointmentFn).toHaveBeenCalledWith('TF-0001', 'j@ex.com');
     });
@@ -250,12 +263,15 @@ describe('Hooks', () => {
       mockAddTimeOffFn.mockResolvedValueOnce({ id: 1, startDate: '2026-08-01', endDate: '2026-08-02', reason: 'Vacation' });
 
       const { result } = await renderHook(() => useAddTimeOff(), { wrapper: createWrapper() });
+      const invalidateQueries = jest.spyOn(lastQueryClient!, 'invalidateQueries');
 
       await act(async () => {
         await result.current.mutateAsync({ barberId: 1, data: { startDate: '2026-08-01', endDate: '2026-08-02', reason: 'Vacation' } });
+        await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
       expect(mockAddTimeOffFn).toHaveBeenCalledWith(1, { startDate: '2026-08-01', endDate: '2026-08-02', reason: 'Vacation' });
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['busySlots'] });
     });
   });
 

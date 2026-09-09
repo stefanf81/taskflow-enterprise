@@ -35,6 +35,7 @@ export const useAddTimeOff = () => {
     }) => barbersApi.addTimeOff(barberId, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['barberTimeOff', variables.barberId] });
+      queryClient.invalidateQueries({ queryKey: ['busySlots'] });
     },
   });
 };
