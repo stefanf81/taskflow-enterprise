@@ -38,7 +38,7 @@ class SecurityConfigTest {
     }
 
     private SecurityConfig createConfig(String admin, String pass, String privKey, String pubKey) {
-        return new SecurityConfig(admin, pass, privKey, pubKey, "taskflow", "taskflow-api", false, dummyDataSource());
+        return new SecurityConfig(admin, pass, privKey, pubKey, false, "taskflow", "taskflow-api", false, dummyDataSource());
     }
 
     @Test
@@ -73,6 +73,19 @@ class SecurityConfigTest {
     void testLoadRsaKeyPartiallyBlank() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "valid-fake-base", "");
         assertNotNull(config.jwtDecoder());
+    }
+
+    @Test
+    void productionRequiresPersistentKeys() {
+        assertThrows(IllegalStateException.class, () -> new SecurityConfig(
+                "admin", "pass", null, null, true, "taskflow", "taskflow-api", false, dummyDataSource()));
+    }
+
+    @Test
+    void productionRejectsInvalidPersistentKeys() {
+        assertThrows(IllegalStateException.class, () -> new SecurityConfig(
+                "admin", "pass", "invalid-base64", "invalid-base64", true,
+                "taskflow", "taskflow-api", false, dummyDataSource()));
     }
 
     @Test

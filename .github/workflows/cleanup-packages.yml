@@ -1,10 +1,13 @@
 name: Cleanup Old Packages
 
 on:
-  schedule:
-    # Run every day at 3:00 AM UTC (staggered from other 02:00 workflows)
-    - cron: '0 3 * * *'
-  workflow_dispatch: # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      confirm_delete:
+        description: Delete the reported package versions (defaults to dry run)
+        required: false
+        type: boolean
+        default: false
 
 env:
   # Container packages published by ci.yml's docker-build job.
@@ -24,6 +27,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
+          CONFIRM_DELETE: ${{ inputs.confirm_delete }}
         run: |
           echo "Determining account type for $OWNER..."
           ACCOUNT_TYPE=$(gh api /users/$OWNER -q '.type')
@@ -80,6 +84,11 @@ jobs:
 
             echo "Found the following $PACKAGE_NAME version IDs to delete:"
             echo "$version_ids_to_delete"
+
+            if [ "$CONFIRM_DELETE" != "true" ]; then
+              echo "Dry run only. Re-run with confirm_delete=true to delete these versions."
+              continue
+            fi
 
             # Delete in parallel (4 at a time). Export the loop-scoped
             # variables so the bash -c subshell can see them.

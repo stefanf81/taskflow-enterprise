@@ -153,7 +153,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Tightened Web Vitals Budgets (P2 §49)**:
      *   `k6/browser.js` (`shared-iterations` 1 VU Chromium) tightens thresholds to CWV **good** thresholds (`ttfb<800 fcp<1800 lcp<2500`, per web.dev) vs previous lenient `p(95)<2500`/`lcp<6000`. Browser wizard scenario exercises Lookbook → stylist → date-slot → form.
 *   **PgBouncer Connection Pooling Docs (P2 §50)**:
-     *   `application-prod.properties` documents HikariCP knee curve (size=10→3015 RPS / size=25→4128 RPS (+37%) / size=50→4257 RPS (+3%)) and threshold: pool×replicas must stay **< PG max_connections (100)**; for **>2 replicas use PgBouncer transaction pooling** sidecar (see `homelab/TF/gitops/apps/taskflow/backend.yaml` comment and docs).
+      *   `application-prod.properties` documents HikariCP knee curve (size=10→3015 RPS / size=25→4128 RPS (+37%) / size=50→4257 RPS (+3%)). The current deployment is single replica; any scale-out requires distributed SSE and PgBouncer transaction pooling before replica count increases.
 
 
 
@@ -1379,7 +1379,7 @@ Each iteration records per-endpoint `Trend` (`catalog_duration`, `barbers_durati
 ```properties
 # Prod with N replicas: pool × replicas must stay < PG max_connections (100 default).
 # For >2 replicas, use PgBouncer (transaction pooling) or lower pool to 10.
-# See homelab/TF/gitops/apps/taskflow/backend.yaml and pgbouncer sidecar.
+# Do not add replicas until distributed SSE and database connection pooling are deployed.
 ```
 
 And `ARCHITECTURE.md` / `BENCHMARKS.md` inventories (§9) amplify: **>2 replicas → PgBouncer**.
@@ -1391,6 +1391,6 @@ And `ARCHITECTURE.md` / `BENCHMARKS.md` inventories (§9) amplify: **>2 replicas
 | 3 | 75 | ⚠️ 25 spare | Borderline — add PgBouncer or lower to 15 |
 | 4 | 100 | ❌ 0 spare | **PgBouncer transaction pooling required** |
 
-**PgBouncer sidecar model (external GitOps, not in this repo):** `homelab/TF/gitops/apps/taskflow/` deploys a `pgbouncer` sidecar (or shared pool) with `pool_mode=transaction`, `max_client_conn=1000`, `default_pool_size=25` — backends connect through PgBouncer's transaction-pooled port, Postgres sees only `default_pool_size` connections regardless of replica count. The Hikari pool then sits behind PgBouncer and can stay at 25 without exhausting PG.
+**Future PgBouncer model:** A future GitOps change may deploy a shared PgBouncer transaction pool with `pool_mode=transaction`, `max_client_conn=1000`, and `default_pool_size=25`. Backends would then connect through its transaction-pooled port so PostgreSQL sees only the pool size regardless of replica count. No PgBouncer workload is currently deployed.
 
 **Verdict:** Documentation is the correct P2 action — no code change needed today (2-replica headroom is ample). When scale demands >2 replicas, the documented PgBouncer transaction-pooling path avoids the `max_connections` cliff without lowering per-replica throughput.

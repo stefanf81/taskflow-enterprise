@@ -58,9 +58,9 @@ public class AppointmentControllerTestcontainersTest {
         return date;
     }
 
-    // Define the PostgreSQL container matching our exact production version 18.4
+    // Define the PostgreSQL container matching production.
     @Container
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.4-alpine")
+    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.6-alpine")
             .withDatabaseName("taskflow_test")
             .withUsername("postgres")
             .withPassword("postgres-password");

@@ -62,7 +62,8 @@ public class SecurityConfig {
             @Value("${spring.security.user.name:admin}") String adminUsername,
             @Value("${spring.security.user.password}") String adminPassword,
             @Value("${app.rsa.private-key:#{null}}") String privateKeyB64,
-            @Value("${app.rsa.public-key:#{null}}") String publicKeyB64,
+             @Value("${app.rsa.public-key:#{null}}") String publicKeyB64,
+             @Value("${app.rsa.require-persistent-keys:false}") boolean requirePersistentKeys,
             @Value("${app.jwt.issuer:taskflow}") String jwtIssuer,
             @Value("${app.jwt.audience:taskflow-api}") String jwtAudience,
             @Value("${app.cookie.secure:false}") boolean cookieSecure,
@@ -73,7 +74,7 @@ public class SecurityConfig {
         this.jwtIssuer = jwtIssuer;
         this.jwtAudience = jwtAudience;
         this.cookieSecure = cookieSecure;
-        this.keyPair = loadOrGenerateRsaKeyPair(privateKeyB64, publicKeyB64);
+        this.keyPair = loadOrGenerateRsaKeyPair(privateKeyB64, publicKeyB64, requirePersistentKeys);
         this.rsaKey = new RSAKey.Builder((RSAPublicKey) keyPair.getPublic())
                 .privateKey((RSAPrivateKey) keyPair.getPrivate())
                 .keyID(UUID.randomUUID().toString())
@@ -289,7 +290,8 @@ public class SecurityConfig {
      * ephemeral key when the env vars are absent (logged at WARN — JWT tokens become
      * invalid on restart in this case).
      */
-    private static KeyPair loadOrGenerateRsaKeyPair(String privateKeyB64, String publicKeyB64) {
+    private static KeyPair loadOrGenerateRsaKeyPair(
+            String privateKeyB64, String publicKeyB64, boolean requirePersistentKeys) {
         if (privateKeyB64 != null && !privateKeyB64.isBlank() && 
             publicKeyB64 != null && !publicKeyB64.isBlank()) {
             try {
@@ -306,8 +308,15 @@ public class SecurityConfig {
                 logger.info("Loaded persistent RSA key pair from environment variables");
                 return new KeyPair(publicKey, privateKey);
             } catch (Exception e) {
+                if (requirePersistentKeys) {
+                    throw new IllegalStateException("Persistent RSA keys are required but could not be loaded", e);
+                }
                 logger.warn("Failed to load RSA keys from env vars, generating ephemeral keys: {}", e.getMessage());
             }
+        }
+
+        if (requirePersistentKeys) {
+            throw new IllegalStateException("Persistent RSA keys are required in this environment");
         }
         
         try {
