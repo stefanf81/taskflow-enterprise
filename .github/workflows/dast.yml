@@ -121,9 +121,24 @@ jobs:
 
       - name: Start Spring Boot
         run: |
+          set -euo pipefail
+          key_dir="$(mktemp -d)"
+          trap 'rm -rf "$key_dir"' EXIT
+
+          # The prod profile requires persistent keys. Generate a disposable
+          # pair in the PKCS#8/X.509 DER format expected by SecurityConfig and
+          # scope it only to the backend process.
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$key_dir/private.pem" 2>/dev/null
+          openssl pkey -in "$key_dir/private.pem" -outform DER -out "$key_dir/private.der"
+          openssl pkey -in "$key_dir/private.pem" -pubout -outform DER -out "$key_dir/public.der"
+          private_key="$(base64 -w0 "$key_dir/private.der")"
+          public_key="$(base64 -w0 "$key_dir/public.der")"
+
           # SPRING_PROFILES_ACTIVE is set in the job env block above;
           # no -D override needed here — keep the java command minimal.
-          nohup java \
+          APP_RSA_PRIVATE_KEY="$private_key" \
+          APP_RSA_PUBLIC_KEY="$public_key" \
+            nohup java \
             -jar build/libs/*.jar \
             > spring.log 2>&1 < /dev/null &
 
