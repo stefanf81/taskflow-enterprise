@@ -14,7 +14,7 @@ logback = "1.6.3"
 jackson2 = "2.22.2"
 jackson-annotations = "2.22"
 jackson3 = "3.2.2"
-netty = "4.2.17.Final"
+netty = "4.2.18.Final"
 log4j2 = "2.26.1"
 # Tomcat embed — pinned above Spring Boot 4.1.1's vulnerable 11.0.24 release;
 # 11.0.25 fixes CVE-2026-68525, CVE-2026-65905, CVE-2026-65182 (all CRITICAL).
