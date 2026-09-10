@@ -127,17 +127,21 @@ jobs:
 
           # The prod profile requires persistent keys. Generate a disposable
           # pair in the PKCS#8/X.509 DER format expected by SecurityConfig and
-          # scope it only to the backend process.
+          # scope it only to the backend process. Use pkcs8 explicitly because
+          # the default private-key output format of OpenSSL is version-dependent.
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$key_dir/private.pem" 2>/dev/null
-          openssl pkey -in "$key_dir/private.pem" -outform DER -out "$key_dir/private.der"
-          openssl pkey -in "$key_dir/private.pem" -pubout -outform DER -out "$key_dir/public.der"
-          private_key="$(base64 -w0 "$key_dir/private.der")"
-          public_key="$(base64 -w0 "$key_dir/public.der")"
+          openssl pkcs8 -topk8 -nocrypt -in "$key_dir/private.pem" \
+            -outform DER -out "$key_dir/private.der"
+          openssl rsa -in "$key_dir/private.pem" -pubout -outform DER \
+            -out "$key_dir/public.der" 2>/dev/null
+          private_key="$(base64 < "$key_dir/private.der" | tr -d '\n')"
+          public_key="$(base64 < "$key_dir/public.der" | tr -d '\n')"
 
           # SPRING_PROFILES_ACTIVE is set in the job env block above;
           # no -D override needed here — keep the java command minimal.
-          APP_RSA_PRIVATE_KEY="$private_key" \
-          APP_RSA_PUBLIC_KEY="$public_key" \
+          env \
+            APP_RSA_PRIVATE_KEY="$private_key" \
+            APP_RSA_PUBLIC_KEY="$public_key" \
             nohup java \
             -jar build/libs/*.jar \
             > spring.log 2>&1 < /dev/null &
