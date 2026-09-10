@@ -4,8 +4,6 @@ import { check } from 'k6';
 const BASE_URL = __ENV.BASE_URL;
 if (!BASE_URL) throw new Error('BASE_URL environment variable is required');
 
-// How long to wait after clicks for DOM updates / API calls to settle.
-const CLICK_SETTLE_MS = 400;
 // How long to wait for time-slot API to return after picking a date.
 const SLOT_LOAD_MS = 1500;
 
@@ -22,36 +20,11 @@ export const options = {
     checks: ['rate==1.0'],
     // ----- Web vital performance gates — CWV good thresholds -----
     // TTFB <800ms good per web.dev, FCP <1800, LCP <2500
-    'browser_web_vital_ttfb': ['p(95)<800'],
-    'browser_web_vital_fcp': ['p(95)<1800'],
-    'browser_web_vital_lcp': ['p(95)<2500'],
+    browser_web_vital_ttfb: ['p(95)<800'],
+    browser_web_vital_fcp: ['p(95)<1800'],
+    browser_web_vital_lcp: ['p(95)<2500'],
   },
 };
-
-/**
- * Find an element matching `cssSelector` whose text contains `text`
- * and click it.  Uses a DOM walk inside the page so we stay compatible
- * with k6 browser's standard-CSS-only Locator engine (no Playwright
- * extensions like :has-text() or text=…).
- *
- * Returns `true` if an element was found and clicked.
- */
-async function clickByText(page, cssSelector, text) {
-  return page.evaluate(
-    ({ sel, txt }) => {
-      const els = document.querySelectorAll(sel);
-      for (const el of els) {
-        if (el.textContent && el.textContent.includes(txt)) {
-          const ev = new MouseEvent('click', { bubbles: true, cancelable: true });
-          el.dispatchEvent(ev);
-          return true;
-        }
-      }
-      return false;
-    },
-    { sel: cssSelector, txt: text },
-  );
-}
 
 export default async function () {
   const page = await browser.newPage();
@@ -68,7 +41,9 @@ export default async function () {
       waitUntil: 'domcontentloaded',
       timeout: 60000,
     });
-    await page.waitForTimeout(CLICK_SETTLE_MS);
+    await page
+      .locator('#step-panel-1')
+      .waitFor({ state: 'visible', timeout: 10000 });
 
     const title = await page.title();
     check(title, {
@@ -88,25 +63,19 @@ export default async function () {
     scenario = 'wizard-step1-lookbook';
     console.log('--- 2. Wizard — Lookbook card ---');
 
-    // Click a lookbook card — this auto-selects a service and advances
-    // the wizard to step 2 (stylist selection).
-    const clickedLookbook = await clickByText(
-      page,
-      'div[role="button"] h4',
-      'Executive Pompadour',
-    );
-    if (clickedLookbook) {
-      await page.waitForTimeout(CLICK_SETTLE_MS);
-      check(true, { '2.1 lookbook card clicked': () => true });
-    } else {
-      // Fallback: click the first clickable card on the page.
-      const firstCard = page.locator('div[role="button"][tabindex="0"]').first();
-      if ((await firstCard.count()) > 0) {
-        await firstCard.click();
-        await page.waitForTimeout(CLICK_SETTLE_MS);
-      }
-      check(true, { '2.1 fallback: first card clicked (or skipped)': () => true });
-    }
+    // The lookbook is deferred until the browser is idle, so wait for it rather
+    // than falling back to an unrelated card in the first wizard step.
+    const lookbookCard = page
+      .locator('app-lookbook div[role="button"]')
+      .first();
+    await lookbookCard.waitFor({ state: 'visible', timeout: 10000 });
+    await lookbookCard.click();
+    await page
+      .locator('#step-panel-2')
+      .waitFor({ state: 'visible', timeout: 10000 });
+    check(await page.locator('#step-panel-2').count(), {
+      '2.1 lookbook advances to stylist selection': (c) => c === 1,
+    });
 
     // ==============================================================
     // 3. BOOKING WIZARD — STEP 2: STYLIST SELECTION
@@ -114,30 +83,25 @@ export default async function () {
     scenario = 'wizard-step2-stylist';
     console.log('--- 3. Wizard — Stylist selection ---');
 
-    // Click "No Preference (First Available)" for reliability.
-    const clickedNoPref = await clickByText(
-      page,
-      'div[role="button"], app-stylist-card[role="button"]',
-      'No Preference',
+    const stylistCard = page
+      .locator('#step-panel-2 div[aria-label^="Select stylist:"]')
+      .first();
+    await stylistCard.waitFor({ state: 'visible', timeout: 10000 });
+    await stylistCard.click();
+    check(
+      await page
+        .locator('#step-panel-2 div[aria-label^="Select stylist:"]')
+        .count(),
+      {
+        '3.1 a stylist is available for selection': (c) => c >= 1,
+      },
     );
-    if (clickedNoPref) {
-      await page.waitForTimeout(CLICK_SETTLE_MS);
-      check(true, { '3.1 no-preference stylist selected': () => true });
-    } else {
-      // Fallback: click any stylist card.
-      const stylistCard = page.locator('app-stylist-card[role="button"]').first();
-      if ((await stylistCard.count()) > 0) {
-        await stylistCard.click();
-        await page.waitForTimeout(CLICK_SETTLE_MS);
-      }
-      check(true, { '3.1 first stylist selected (or skipped)': () => true });
-    }
 
-    // Advance to step 3 — find the "Next →" button and click it.
-    const clickedNext1 = await clickByText(page, 'button', 'Next');
-    if (clickedNext1) {
-      await page.waitForTimeout(CLICK_SETTLE_MS);
-    }
+    // Advance to step 3 only after the selected stylist has rendered.
+    await page.locator('.wizard-footer-controls button.btn-submit').click();
+    await page
+      .locator('#step-panel-3')
+      .waitFor({ state: 'visible', timeout: 10000 });
 
     // ==============================================================
     // 4. BOOKING WIZARD — STEP 3: DATE & TIME SLOT
@@ -146,7 +110,10 @@ export default async function () {
     console.log('--- 4. Wizard — Date & time slot ---');
 
     // Click first available date in the carousel.
-    const dateBtns = page.locator('div[role="button"][aria-label^="Select date"]');
+    const dateBtns = page.locator(
+      '#step-panel-3 div[role="button"][aria-label^="Select date"]',
+    );
+    await dateBtns.first().waitFor({ state: 'visible', timeout: 10000 });
     const dateCount = await dateBtns.count();
     check(dateCount, {
       '4.1 date carousel has at least 1 day': (c) => c >= 1,
@@ -158,7 +125,9 @@ export default async function () {
       await page.waitForTimeout(SLOT_LOAD_MS); // Wait for busy-slots API
 
       // Look for an enabled time-slot button.
-      const slotBtns = page.locator('button.slot-picker-btn:not([disabled])');
+      const slotBtns = page.locator(
+        '#step-panel-3 button.slot-picker-btn:not([disabled])',
+      );
       const slotCount = await slotBtns.count();
       check(slotCount >= 0, {
         '4.2 time-slot buttons rendered': () => true,
@@ -166,19 +135,21 @@ export default async function () {
 
       if (slotCount > 0) {
         await slotBtns.first().click();
-        await page.waitForTimeout(CLICK_SETTLE_MS);
         timeSlotPicked = true;
         check(true, { '4.3 time slot selected': () => true });
 
         // Advance to step 4.
-        const clickedNext2 = await clickByText(page, 'button', 'Next');
-        if (clickedNext2) {
-          await page.waitForTimeout(CLICK_SETTLE_MS);
-        }
+        await page.locator('.wizard-footer-controls button.btn-submit').click();
+        await page
+          .locator('#step-panel-4')
+          .waitFor({ state: 'visible', timeout: 10000 });
       } else {
-        console.log('  (no available slots — shop may be closed; skipping step 4)');
+        console.log(
+          '  (no available slots — shop may be closed; skipping step 4)',
+        );
         check(true, {
-          '4.3 no time slots (shop closed or all booked) — step skipped': () => true,
+          '4.3 no time slots (shop closed or all booked) — step skipped': () =>
+            true,
         });
       }
     }

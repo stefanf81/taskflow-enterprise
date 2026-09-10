@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 # Least-privilege: this workflow only checks out the repo and runs a k6
-# browser test against an external BASE_URL. It must NOT inherit the
+# browser test and rate-limit-safe API probe against an external BASE_URL. It must NOT inherit the
 # repository-wide "Read and write" default (required by pushdockerimage.yml
 # for GHCR pushes) — that would silently grant packages:write, contents:write,
 # etc. to a job that needs none of them.
@@ -38,7 +38,7 @@ jobs:
             grafana/k6:latest-with-browser \
             run k6/browser.js
 
-      - name: Run k6 load profile
+      - name: Run k6 production API probe
         if: always()
         run: |
           docker run --rm \
@@ -46,4 +46,4 @@ jobs:
             -v ${{ github.workspace }}:/work \
             -w /work \
             grafana/k6:latest-with-browser \
-            run k6/load.js
+            run k6/probe.js

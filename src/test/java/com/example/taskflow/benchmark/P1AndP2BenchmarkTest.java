@@ -224,13 +224,18 @@ class P1AndP2BenchmarkTest {
         System.out.println("=".repeat(80));
         Path load = Path.of("k6/load.js");
         Path browser = Path.of("k6/browser.js");
+        Path probe = Path.of("k6/probe.js");
         assertTrue(Files.exists(load), "k6/load.js must exist");
+        assertTrue(Files.exists(probe), "k6/probe.js must exist");
         String ls = Files.readString(load);
         String bs = Files.readString(browser);
+        String ps = Files.readString(probe);
         long t0 = System.nanoTime();
         boolean hasRamp = ls.contains("ramping-vus") && ls.contains("target: 50") && ls.contains("target: 200");
         boolean hasThresh = ls.contains("http_req_failed") && ls.contains("p(95)<500");
         boolean cwvTight = bs.contains("p(95)<800") && bs.contains("p(95)<1800") && bs.contains("p(95)<2500");
+        boolean productionSafeProbe = ps.contains("constant-arrival-rate") && ps.contains("rate: 1")
+                && !ps.contains("/actuator/health");
         boolean notLenient = !bs.contains("p(95)<2500") || bs.contains("p(95)<800"); // ensure tight
         long us = (System.nanoTime() - t0) / 1000;
 
@@ -241,10 +246,11 @@ class P1AndP2BenchmarkTest {
 
         assertTrue(hasRamp && hasThresh, "load.js must have ramping-vus and p95<500");
         assertTrue(cwvTight, "browser.js must be tightened to CWV good thresholds");
+        assertTrue(productionSafeProbe, "probe.js must stay below the per-IP rate limit and use public endpoints");
 
         Path k6yml = Path.of(".github/workflows/k6.yml");
         String k6ymlStr = Files.readString(k6yml);
-        assertTrue(k6ymlStr.contains("k6/load.js"), "k6.yml must run load profile");
+        assertTrue(k6ymlStr.contains("k6/probe.js"), "k6.yml must run the production-safe probe");
 
         System.out.println("  Expected: load profile catches regression >500ms p95, CWV good <2500 vs lenient 6000");
         System.out.println("  ✓ P2 k6 load profile verified");

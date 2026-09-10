@@ -1310,9 +1310,11 @@ Workload mix (per-iteration `Math.random()`): **70% `GET /api/v1/catalog` `/barb
 
 Each iteration records per-endpoint `Trend` (`catalog_duration`, `barbers_duration`, `busySlots_duration`) and `sleep(0.1)` pacing (~10 RPS per VU).
 
-**CI Integration:** `.github/workflows/k6.yml` runs `k6 run k6/load.js` against the compose stack (health-checked, see §47) and fails the workflow on threshold violation.
+**Execution:** Run `k6/load.js` only against an isolated stack with rate limiting disabled or an explicit load-test allowance. Its 200 VUs share the load generator's source IP, so running it against production would correctly trigger the production 100 requests/minute per-IP limiter rather than measure application capacity.
 
-**Verification:** `P1AndP2BenchmarkTest.p2_k6_load_profile` asserts `k6/load.js` contains `ramping-vus`, `target: 50` & `target: 200`, `p(95)<500`, and `.github/workflows/k6.yml` references `k6/load.js`.
+**Production CI:** `.github/workflows/k6.yml` runs `k6/probe.js`, a 60-second, 1 request/second probe of the cacheable public API endpoints. It preserves the latency, availability, and `Cache-Control` gates without tripping abuse protection. Actuator endpoints are intentionally not part of the public probe because the edge proxy does not expose them.
+
+**Verification:** `P1AndP2BenchmarkTest.p2_k6_load_profile` asserts `k6/load.js` retains `ramping-vus`, `target: 50` & `target: 200`, `p(95)<500`, and that CI invokes `k6/probe.js`.
 
 **Verdict:** Ramping 50→200 with `p95<500` is the correct load gate for this stack (Tomcat 200 threads, Hikari 25, VT-enabled). It catches regressions that unit tests miss (tail latency, connection starvation) and integrates as a CI gate.
 
@@ -1330,7 +1332,7 @@ Each iteration records per-endpoint `Trend` (`catalog_duration`, `barbers_durati
 | **FCP** | `p(95)<3000` | **`p(95)<1800`** | Good <1800 ms |
 | **LCP** | `p(95)<6000` | **`p(95)<2500`** | Good <2500 ms |
 
-`k6/browser.js:12` runs a `shared-iterations` 1 VU Chromium scenario exercising the full booking wizard (Lookbook card → `No Preference` stylist → date carousel → time slot → customer form, without submitting) so the CWV metrics reflect real user navigation. Thresholds use `browser_web_vital_*` custom metrics emitted by the k6 browser extension.
+`k6/browser.js:12` runs a `shared-iterations` 1 VU Chromium scenario exercising the full booking wizard (deferred Lookbook card → stylist → date carousel → time slot → customer form, without submitting) so the CWV metrics reflect real user navigation. It waits for each rendered wizard panel instead of using fallback clicks that can target the wrong step. Thresholds use `browser_web_vital_*` custom metrics emitted by the k6 browser extension.
 
 **Verification:** `P1AndP2BenchmarkTest.p2_k6_load_profile` checks `k6/browser.js` for `p(95)<800`, `p(95)<1800`, `p(95)<2500`.
 
