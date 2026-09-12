@@ -35,6 +35,17 @@ The mobile app owns its platform-local contract directory under `src/`:
 The mobile app connects to the Spring Boot REST API (`taskflow-backend`).
 
 ### Local Development Setup (`mobile/.env`)
+
+Create the environment file before starting Metro:
+
+```bash
+cp .env.example .env
+```
+
+Set the URL appropriate for the target platform below. The backend must be
+running separately; see `development-set.md` for the complete first-time
+installation and native build setup.
+
 * **iOS Simulator**: `http://localhost:4200`
 * **Android Emulator**: `http://10.0.2.2:4200` (or leave `EXPO_PUBLIC_API_URL` empty for auto-detection)
 * **Physical Device**: `http://<YOUR_MAC_LAN_IP>:4200`
@@ -196,7 +207,8 @@ npm run e2e:test
 
 > **Before first EAS build:** `app.json` → `extra.eas.projectId` contains a
 > placeholder UUID. Replace it with the real project ID from
-> `npx eas-cli login && npx eas-cli project:init` (or the EAS web dashboard).
+> `npm install --global eas-cli`, then `eas login && eas project:init` (or the
+> EAS web dashboard).
 > OTA updates (`eas update`) will fail with an invalid projectId.
 
 ```bash

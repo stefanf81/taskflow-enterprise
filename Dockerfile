@@ -1,142 +1,82 @@
-# =========================================================================================
-# STAGE 1: LAYER EXTRACTION
-#
-# linux/arm64 is pinned explicitly so this image always matches the local Apple
-# Silicon runtime. The extractor only runs `java -Djarmode=tools ...`, which is a
-# pure JRE operation — no JDK is needed.
-# =========================================================================================
-FROM --platform=linux/arm64 eclipse-temurin:21-jre-alpine AS extractor
+# syntax=docker/dockerfile:1
 
+# Local development Spring Boot image for Apple Silicon (linux/arm64).
+# Uses the multi-platform index digest matching the production base JVM.
+ARG JAVA_IMAGE=eclipse-temurin:21-jre-alpine@sha256:974b08960c5d96694c780e65b2d5705268ab1e1ca1a0dd0caf4ba6c3fe34d699
+ARG PLATFORM=linux/arm64
+
+# JAR extraction is architecture-independent: runs natively on Apple Silicon.
+# Pre-built bootJar is supplied from host build context (via ./gradlew bootJar).
+FROM --platform=$BUILDPLATFORM ${JAVA_IMAGE} AS extractor
 WORKDIR /app
 
-# Copy the pre-built jar from the build context.
-#
-# NOTE on Build Performance:
-# This project separates compilation (CI runner) from packaging (Docker build).
-# If you ever decide to move the entire Gradle compilation inside this Dockerfile
-# (a "monolithic" multi-stage build), ensure you leverage BuildKit cache mounts
-# to cache the downloaded dependencies and compiler plugins:
-#
-#   RUN --mount=type=cache,target=/root/.gradle ./gradlew bootJar
-#
-# This prevents Gradle from re-downloading libraries on every build iteration.
-#
-# WARNING: The glob below must match exactly ONE jar. If both the bootJar and
-# the -plain.jar variant are present (e.g. after `./gradlew build` instead of
-# `./gradlew bootJar`), this COPY command will fail. Only the bootJar should
-# be in build/libs/ before building this image.
-COPY build/libs/*.jar /app/app.jar
+# build.gradle disables the plain jar; this matches exactly one bootJar.
+COPY build/libs/*.jar application.jar
 
-# Extract layers using the Spring Boot jar tools mode
-RUN java -Djarmode=tools -jar /app/app.jar extract --layers --launcher --destination extracted
+# Extract application into standard Spring Boot CDS-friendly layout
+# (application.jar with manifest Class-Path pointing to lib/).
+RUN --network=none java -Djarmode=tools -jar application.jar \
+    extract --layers --destination extracted
 
-# =========================================================================================
-# STAGE 2: PRODUCTION RUNTIME STAGE
-# A minimal Alpine-based JRE keeps the runtime image small while reducing the installed
-# operating system surface area.
-# =========================================================================================
-FROM --platform=linux/arm64 eclipse-temurin:21-jre-alpine
-
+# Target architecture base stage for arm64 runtime identity.
+FROM --platform=$PLATFORM ${JAVA_IMAGE} AS java-base
 WORKDIR /app
+RUN addgroup -g 10001 -S appgroup \
+    && adduser -u 10001 -S appuser -G appgroup
 
-# Install tini as PID 1 for proper signal handling and zombie reaping.
-# Create a fixed non-root user (UID/GID 10001) for compatibility with
-# Kubernetes Pod Security Standards.
-#
-# NOTE: `apk upgrade` is intentionally omitted — the base image
-# (eclipse-temurin:21-jre-alpine) is already kept up to date by the image
-# maintainer, and running upgrade inside the Dockerfile would make builds
-# non-reproducible by pulling unpredictable package versions.
-#
-# Intentionally divergent from Dockerfile.x64 (which runs `apk upgrade` for
-# prod security patching) so local builds stay reproducible across rebuilds.
-RUN apk update --no-cache \
-    && addgroup -g 10001 -S appgroup \
-    && adduser -u 10001 -S appuser -G appgroup \
-    && apk add --no-cache tini
+FROM java-base AS cds-training
 
-# Copy Spring Boot's extracted layers from least frequently changed to most frequently
-# changed to maximize Docker cache reuse.
-COPY --link --from=extractor --chown=10001:10001 /app/extracted/dependencies/ ./
-COPY --link --from=extractor --chown=10001:10001 /app/extracted/spring-boot-loader/ ./
-COPY --link --from=extractor --chown=10001:10001 /app/extracted/snapshot-dependencies/ ./
-COPY --link --from=extractor --chown=10001:10001 /app/extracted/application/ ./
+# Copy layers preserving timestamps and paths for CDS archive validation.
+COPY --link --from=extractor --chown=0:0 /app/extracted/dependencies/ ./
+COPY --link --from=extractor --chown=0:0 /app/extracted/spring-boot-loader/ ./
+COPY --link --from=extractor --chown=0:0 /app/extracted/snapshot-dependencies/ ./
+COPY --link --from=extractor --chown=0:0 /app/extracted/application/ ./
 
-# Build a JVM Class Data Sharing (CDS) archive.
-#
-# Uses PropertiesLauncher with -Dloader.main to delegate to
-# CdsTrainingApplication (com.example.cdstraining), which sits outside the
-# production component-scan hierarchy and excludes infrastructure that
-# requires external services (database, Redis, etc.), so this runs
-# successfully during docker build before any containers are started.
-#
-# PropertiesLauncher is used instead of JarLauncher because it supports
-# the loader.main property for specifying an alternative main class.
-#
-# Disable components that are irrelevant during CDS training to keep the
-# startup minimal and fast:
-#   - spring.cache.type=redis                : Instantiate RedisCacheManager so its
-#                                               classes (and the JSON serializer graph)
-#                                               are baked into the CDS archive. No real
-#                                               Redis connection is opened: Lettuce is
-#                                               lazy and the context exits at refresh.
-#   - tracing auto-configurations are excluded by CdsTrainingApplication
-#   - app.cds-training=true                  : Skips the admin-user CommandLineRunner
-#
-# spring.context.exit=onRefresh terminates the application immediately after
-# the Spring context has fully initialized, allowing CDS to observe a complete
-# startup without leaving a server running during the Docker build.
-RUN java -XX:ArchiveClassesAtExit=application.jsa \
-         -Dloader.main=com.example.cdstraining.CdsTrainingApplication \
+USER 10001:10001
+
+# Headless training run generating JVM Class Data Sharing (CDS) archive.
+# -cp application.jar uses manifest Class-Path to run CdsTrainingApplication directly.
+RUN --network=none java -XX:ArchiveClassesAtExit=/tmp/application.jsa \
          -Dspring.context.exit=onRefresh \
          -Dapp.cds-training=true \
          -Dspring.flyway.enabled=false \
          -Dspring.cache.type=redis \
          -Dotel.sdk.disabled=true \
-         org.springframework.boot.loader.launch.PropertiesLauncher \
-    && test -s application.jsa \
-    && chown 10001:10001 application.jsa
+         -cp application.jar com.example.cdstraining.CdsTrainingApplication \
+    && test -s /tmp/application.jsa
 
-# JVM diagnostics (prod parity): JAVA_TOOL_OPTIONS in docker-compose.yml / homelab/TF now includes
-# -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof -Xlog:gc*:file=/tmp/gc.log:time,uptime:filecount=3,filesize=10m
-# and -XX:+UseContainerSupport (explicit, self-documenting). /tmp is tmpfs per compose.
+FROM java-base AS runtime
 
-# Health check for standalone docker run (compose also defines healthcheck).
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness || exit 1
+# Local development: `apk upgrade` is intentionally omitted so local rebuilds
+# stay deterministic and fast without pulling unpredictable Alpine packages.
+RUN apk add --no-cache tini
 
-# Drop root privileges.
+# Copy application layers and the trained CDS archive.
+COPY --link --from=extractor --chown=0:0 /app/extracted/dependencies/ ./
+COPY --link --from=extractor --chown=0:0 /app/extracted/spring-boot-loader/ ./
+COPY --link --from=extractor --chown=0:0 /app/extracted/snapshot-dependencies/ ./
+COPY --link --from=extractor --chown=0:0 /app/extracted/application/ ./
+COPY --link --from=cds-training --chown=0:0 --chmod=0444 /tmp/application.jsa ./application.jsa
+
 USER 10001:10001
+
+# Validate the archive at build time under the final arm64 environment.
+RUN --network=none --mount=type=tmpfs,target=/tmp \
+    java -Xshare:on -XX:SharedArchiveFile=application.jsa \
+         -Xlog:cds=info -cp application.jar -version
+
+# Health check for standalone docker run and compose service_healthy dependency.
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness || exit 1
 
 EXPOSE 8080
 
-# =========================================================================================
-# JVM TUNING — image- vs deployment-owned flags
-#
-# JVM sizing (heap, off-heap caps) is owned by the DEPLOYMENT via JAVA_TOOL_OPTIONS,
-# not the image. The image CMD carries only flags that must hold in every environment:
-#
-#   -XX:SharedArchiveFile=application.jsa: CDS archive generated at build time.
-#   -Xshare:auto                         : Use the CDS archive when compatible.
-#   -XX:+ExitOnOutOfMemoryError          : Safety invariant — fail fast on OOM.
-#
-# Heap / direct / metaspace sizing live in:
-#   - docker-compose.yml   (local dev stack)
-#   - homelab/TF/gitops/.../backend.yaml JAVA_TOOL_OPTIONS (prod)
-#
-# Setting sizing flags here would silently win over JAVA_TOOL_OPTIONS (JVM
-# "last-wins" precedence for non-sticky flags) and recreate the precedence bug
-# where the deployment's tuning was a no-op. Keep this CMD sizing-agnostic.
-#
-# Garbage collector: no collector is selected explicitly — JDK 21 defaults to G1GC,
-# the right choice for a latency-sensitive request/response service. Operators can
-# override via JAVA_TOOL_OPTIONS if a different collector is ever warranted.
-# =========================================================================================
+# Sizing and GC tuning are owned by deployment (docker-compose.yml JAVA_TOOL_OPTIONS).
+# CMD carries only environment-invariant flags.
 ENTRYPOINT ["/sbin/tini", "--", "java"]
-
-# Replace the shell with direct JVM execution.
 CMD [ \
     "-XX:+ExitOnOutOfMemoryError", \
     "-XX:SharedArchiveFile=application.jsa", \
     "-Xshare:auto", \
-    "org.springframework.boot.loader.launch.JarLauncher" \
+    "-jar", \
+    "application.jar" \
 ]

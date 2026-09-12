@@ -5,7 +5,8 @@ versions-plugin = "0.62.0"
 spotbugs-plugin = "6.5.11"
 spotbugs-tool = "4.10.4"
 # The companion BOM keeps every OpenTelemetry module at this security-reviewed release.
-opentelemetry = "1.65.0"
+opentelemetry = "1.66.0"
+prometheus = "1.8.0"
 commons-lang3 = "3.20.0"
 # Pin above Spring Boot's vulnerable 1.5.34 release; 1.6.x includes the
 # hardening for disallowed conditional configuration references.
@@ -24,6 +25,7 @@ caffeine = "3.2.4"
 spring-modulith = "2.1.1"
 springdoc = "3.1.1"
 flyway = "13.6.0"
+byte-buddy = "1.18.13"
 postgresql = "42.7.13"
 h2 = "2.5.250"
 hikari = "7.1.0"
@@ -41,6 +43,7 @@ jacoco = "0.8.15"
 [libraries]
 spring-boot-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
 opentelemetry-bom = { module = "io.opentelemetry:opentelemetry-bom", version.ref = "opentelemetry" }
+prometheus-metrics-bom = { module = "io.prometheus:prometheus-metrics-bom", version.ref = "prometheus" }
 jackson2-bom = { module = "com.fasterxml.jackson:jackson-bom", version.ref = "jackson2" }
 jackson3-bom = { module = "tools.jackson:jackson-bom", version.ref = "jackson3" }
 netty-bom = { module = "io.netty:netty-bom", version.ref = "netty" }
@@ -98,6 +101,11 @@ archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
 findsecbugs-plugin = { module = "com.h3xstream.findsecbugs:findsecbugs-plugin", version.ref = "findsecbugs" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+slf4j-jul-to-slf4j = { module = "org.slf4j:jul-to-slf4j", version.ref = "slf4j" }
+slf4j-jcl-over-slf4j = { module = "org.slf4j:jcl-over-slf4j", version.ref = "slf4j" }
+byte-buddy = { module = "net.bytebuddy:byte-buddy", version.ref = "byte-buddy" }
+byte-buddy-agent = { module = "net.bytebuddy:byte-buddy-agent", version.ref = "byte-buddy" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

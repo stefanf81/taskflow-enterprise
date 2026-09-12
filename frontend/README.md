@@ -69,24 +69,39 @@ From the repository root, run `npm run sync:api-types` after the reviewed OpenAP
 
 ### Prerequisites
 
-Make sure you have **Node.js v22** and **npm v10+** installed.
+Make sure you have **Node.js 22.23.2** and **npm 11.19.1** installed. The
+repository pins these versions through `mobile/.nvmrc` and
+`frontend/package.json`.
 
 ### Setup and Start
 
 To download dependencies and launch the local Angular development server on **`http://localhost:4200`**:
 
 ```bash
-# Navigate to the frontend directory
-cd frontend
+# From the repository root, install the local shared package first
+cd shared/schemas
+npm ci
 
-# Install clean dependencies
+# Navigate to the frontend directory and install locked dependencies
+cd ../../frontend
 npm ci
 
 # Start the dev server
 npm start
 ```
 
-_Note: The Angular application is configured to proxy API requests to `http://localhost:8080` (Spring Boot) automatically during local development._
+The shared package is referenced through `file:../shared/schemas`; installing
+it first matches the CI setup and ensures its lockfile is honored. The Angular
+application proxies API requests to `http://localhost:8080`, so start the
+backend separately with `./gradlew bootRun` or start the full Docker stack.
+
+Install the browser required for frontend E2E tests once per machine:
+
+```bash
+cd frontend
+npx playwright install chromium
+# Linux workstations may use: npx playwright install --with-deps chromium
+```
 
 ---
 

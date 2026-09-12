@@ -137,14 +137,18 @@ Security scans (filesystem lints, container image vulnerability scans, and DAST 
 - **Frontend uses Angular 22 Signals** (no Zone.js digest loops). Styles use Tailwind with custom `gold`/`obsidian` color palette from `frontend/src/theme/tokens.json`.
 - **Mobile uses React Native & Expo** with TypeScript, React Navigation, TanStack Query, Zustand, and `expo-secure-store` for hardware token security. Theme colors import from `mobile/src/theme/tokens.json`.
 - **Prettier** is the formatter (100 char width, single quotes). Run `npx prettier --write <file>` in `frontend/`.
-- **Testcontainers** are used for PostgreSQL integration tests. They require Docker to be running.
+- **Testcontainers** are used for PostgreSQL integration tests. The tagged
+  `testcontainersTest` task requires Docker; the default `test` task excludes
+  those tests and runs against H2 without Docker.
 - **ArchUnit** enforces package-level architecture constraints (`src/test/java/com/example/taskflow/architecture/`).
 - **Default credentials**: `admin` / `admin-password` (overridden by `SPRING_SECURITY_PASSWORD` env var).
 - **Nginx** frontend container runs on unprivileged port 8080 (mapped from host 4200).
 
 ## Gotchas
 
-- `./gradlew test` requires Docker (Testcontainers).
+- `./gradlew test` runs the Docker-independent H2 test suite. Use
+  `./gradlew testcontainersTest` for the tagged PostgreSQL/Testcontainers suite;
+  that task requires Docker.
 - `./gradlew check` includes OWASP dependency check — build will fail if any dependency has CVSS >= 7.
 - The `.env` file (from `.env.example`) is required by docker-compose and is git-ignored — copy `.env.example` to `.env` and adjust as needed. Change default passwords before production use.
 - Frontend `dist/` and `node_modules/` are gitignored. Do not commit build artifacts.

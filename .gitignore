@@ -47,6 +47,7 @@ frontend/node_modules/
 **/node_modules/
 frontend/dist/
 frontend/.angular/
+.angular/
 frontend/playwright-report/
 frontend/test-results/
 frontend/.nx/
