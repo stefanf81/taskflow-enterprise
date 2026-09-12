@@ -1,12 +1,15 @@
 # syntax=docker/dockerfile:1.27
 
-ARG ALPINE_VERSION=3.24.1
+ARG ALPINE_IMAGE=alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
 # =========================================================================================
 # STAGE 1: STATIC ASSET COMPRESSION
 # =========================================================================================
 
-FROM alpine:${ALPINE_VERSION} AS compression
+# Compression is purely data transformation and architecture-independent. Using
+# --platform=$BUILDPLATFORM ensures brotli/gzip run at native host CPU speeds, avoiding
+# QEMU emulation slowdowns in cross-architecture builds.
+FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE} AS compression
 
 RUN apk add --no-cache brotli gzip
 
@@ -16,8 +19,8 @@ COPY dist/frontend/browser/ ./
 
 # Generate precompressed Brotli and gzip sidecars.
 #
-# Brotli quality 11 produces the smallest files but takes considerably longer.
-# Change to --quality=10 if CI build time becomes a concern.
+# Brotli quality 11 produces the smallest files. Compression runs in parallel bounded
+# to available CPU cores via xargs -P to maximize throughput without unbounded memory usage.
 RUN find . -type f \
         \( \
             -name '*.js' -o \
@@ -29,31 +32,23 @@ RUN find . -type f \
             -name '*.xml' -o \
             -name '*.txt' -o \
             -name '*.webmanifest' \
-        \) \
-        -exec brotli --quality=11 --force {} \; \
-    && find . -type f \
-        \( \
-            -name '*.js' -o \
-            -name '*.mjs' -o \
-            -name '*.css' -o \
-            -name '*.html' -o \
-            -name '*.json' -o \
-            -name '*.svg' -o \
-            -name '*.xml' -o \
-            -name '*.txt' -o \
-            -name '*.webmanifest' \
-        \) \
-        -exec gzip --best --keep --force {} \;
+        \) -print0 > /tmp/compress-files.txt \
+    && xargs -0 -P "$(nproc)" -n 8 brotli --quality=11 --force < /tmp/compress-files.txt \
+    && xargs -0 -P "$(nproc)" -n 16 gzip --best --keep --force < /tmp/compress-files.txt \
+    && rm -f /tmp/compress-files.txt
 
 
 # =========================================================================================
 # STAGE 2: SECURITY-HARDENED NGINX RUNTIME
 # =========================================================================================
 
-FROM alpine:${ALPINE_VERSION}
+FROM ${ALPINE_IMAGE}
 
 ARG NGINX_UID=10001
 ARG NGINX_GID=10001
+# CI passes a dynamic APK_BUST (run_id-run_attempt) to pick up Alpine package security
+# updates on every CI run while preserving the pinned base image digest. In local builds,
+# APK_BUST defaults to "stable" to maximize layer cache reuse.
 ARG APK_BUST=stable
 
 # Create a dedicated runtime identity before package installation.
@@ -89,6 +84,9 @@ RUN addgroup \
 # ownership. At runtime, the /var/cache/nginx tmpfs mount in docker-compose
 # hides these directories, so docker-entrypoint.sh recreates them on every
 # container start.
+# Note: Static assets in /usr/share/nginx/html remain owned by root:root (default)
+# with read-only permissions for defense-in-depth, ensuring the unprivileged
+# worker cannot modify or tamper with web assets even if exploited.
 RUN mkdir -p \
         /usr/share/nginx/html \
         /var/cache/nginx/client_temp \
@@ -97,7 +95,6 @@ RUN mkdir -p \
         /var/cache/nginx/uwsgi_temp \
         /var/cache/nginx/scgi_temp \
     && chown -R "${NGINX_UID}:${NGINX_GID}" \
-        /usr/share/nginx/html \
         /var/cache/nginx
 
 # Alpine's Brotli module file uses relative paths that resolve through
@@ -108,8 +105,8 @@ RUN sed -i \
         -e 's#"modules/ngx_http_brotli_static_module.so"#"/usr/lib/nginx/modules/ngx_http_brotli_static_module.so"#' \
         /etc/nginx/modules/10_http_brotli.conf
 
+# Static web assets remain owned by root:root with read-only permissions for defense-in-depth.
 COPY --from=compression \
-    --chown=${NGINX_UID}:${NGINX_GID} \
     /assets/ \
     /usr/share/nginx/html/
 
