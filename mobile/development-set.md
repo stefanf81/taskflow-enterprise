@@ -28,12 +28,14 @@ Spring Boot Backend
 
 | Tool | Version | Verify |
 |------|---------|--------|
-| Node.js | LTS (>=22) | `node -v` |
+| Node.js | 22.23.2 (`mobile/.nvmrc`) | `node -v` |
+| npm | 11.19.1 | `npm -v` |
+| Java | 21 for local Android/Detox builds | `java -version` |
 | Xcode | >=16 | `xcodebuild -version` |
 | CocoaPods | >=1.15 | `pod --version` |
 | Docker | (for backend) | `docker ps` |
 
-Install missing tools:
+Install the macOS tools with Homebrew when needed:
 
 ```bash
 brew install node watchman cocoapods
@@ -41,26 +43,82 @@ sudo xcode-select -s /Applications/Xcode.app
 sudo xcodebuild -license accept
 ```
 
+Android development additionally requires Android Studio. In Android Studio's
+SDK Manager, install:
+
+- Android SDK Platform 36
+- Android SDK Build-Tools 36.0.0
+- Android NDK 27.1.12297006
+- An Android 35 system image for the emulator
+
+In Device Manager, create an emulator named `Pixel_6_API_35`. This exact AVD
+name is used by the Detox configuration. Start it once to confirm that it is
+usable before running `npm run android`.
+
+Configure the Android SDK in the shell used to run Expo. The default macOS
+location is:
+
+```bash
+cat >> ~/.zshrc <<'EOF'
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+EOF
+source ~/.zshrc
+adb version
+```
+
+On Linux, replace the SDK path with `$HOME/Android/Sdk`. Windows developers
+should set the equivalent `ANDROID_HOME` and `PATH` values in their shell.
+
+For local Android Detox builds, configure Java 21 as `JAVA_HOME`. On macOS this
+can be selected with:
+
+```bash
+export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
+java -version
+```
+
+The checked-in Detox Android build command currently contains the Apple
+Silicon Homebrew path `/opt/homebrew/opt/openjdk@21`. Intel Mac or Linux users
+must update that path in `.detoxrc.js` to their Java 21 installation before
+running the Android Detox commands.
+
 ---
 
 ## First-Time Setup
 
 ```bash
+# From the repository root, install the local shared package first.
+(cd shared/schemas && npm ci)
+
 cd mobile
+
+# Create the mobile environment file and set EXPO_PUBLIC_API_URL for the
+# simulator, emulator, or physical device as described below.
+cp .env.example .env
 
 # Install locked JS dependencies. mobile/.npmrc records the required peer
 # compatibility setting for @config-plugins/detox@11.0.0 with Expo 57.
 npm ci
 
-# Generate native iOS project + install CocoaPods
+# Generate native iOS project + install CocoaPods (macOS/iOS only)
 npx expo prebuild --platform ios
 ```
 
-This creates the `ios/` directory with the Xcode workspace. It only needs to be done once (or after adding/removing native modules).
+For Android, run the corresponding command instead:
 
-The generated `ios/` directory, including `Podfile.lock`, is ignored by Git. CocoaPods
-therefore uses the lockfile locally when present, while clean CI runs resolve pods with
-`pod install --no-repo-update` and report that the pod graph is not fully locked.
+```bash
+npx expo prebuild --platform android
+```
+
+The prebuild command creates the platform's native directory. For iOS it also
+creates the Xcode workspace. Prebuild only needs to be repeated after adding or
+removing native modules.
+
+The generated `ios/` and `android/` directories are ignored by Git. The iOS
+directory includes `Podfile.lock`; CocoaPods therefore uses the lockfile locally
+when present, while clean CI resolves pods with `pod install --no-repo-update`
+and reports that the pod graph is not fully locked.
 
 ---
 
@@ -304,9 +362,21 @@ npm run e2e:test
 Production builds use EAS (Expo Application Services):
 
 ```bash
+# Install the CLI once, then authenticate and link this checkout to an EAS project.
+npm install --global eas-cli
+eas login
+eas project:init
+
 npm run build:android    # eas build --platform android
 npm run build:ios        # eas build --platform ios
 ```
+
+The `extra.eas.projectId` in `app.json` is intentionally a placeholder in a
+fresh checkout. `eas project:init` replaces it with the real project ID. Before
+preview or production builds, configure `EXPO_PUBLIC_API_URL` as an HTTPS URL
+and provide the two `TASKFLOW_API_SPKI_PINS` values required by the TLS
+pinning plugin. Do not use the local HTTP URL or placeholder pins in a release
+build.
 
 Build profiles are defined in `eas.json`:
 - `development` — development client, simulator builds

@@ -3,10 +3,16 @@
 ## Quick Start
 
 ### Prerequisites
-- Java 21 (OpenJDK)
-- Node.js 22+
-- Docker Desktop (for Testcontainers and docker-compose)
-- npm 11+
+- Git
+- OpenJDK 21 (the Gradle wrapper supplies Gradle 9.7.1)
+- Node.js 22.23.2 and npm 11.19.1 (mobile/.nvmrc pins the Node version)
+- Docker Desktop with a running daemon for the Docker stack and PostgreSQL tests
+- At least 5 GB available to Docker Desktop for the full Compose stack
+- OpenSSL, needed to create the local Compose RSA key pair
+
+For mobile native development, also install the platform-specific tools in
+`mobile/development-set.md`. iOS builds require macOS with Xcode and CocoaPods;
+Android builds require Android Studio, the Android SDK, and an emulator or device.
 
 ### Clone & Setup
 ```bash
@@ -17,29 +23,54 @@ cd taskflow
 ### Environment
 ```bash
 cp .env.example .env
-# Edit .env if needed (defaults work for local dev)
+# Set POSTGRES_PASSWORD and SPRING_SECURITY_PASSWORD.
+# For Docker Compose, generate and paste the required Base64 DER RSA keys as
+# described in .env.example before starting the stack.
+```
+
+The root `.env` is required by Docker Compose and is ignored by Git. It is not
+required for `./gradlew bootRun`, which uses the H2 development profile and
+ephemeral signing keys by default.
+
+### JavaScript Dependencies
+Run these commands from the repository root. Installing the shared package
+first keeps the local file dependency aligned with CI and the checked-in lockfiles.
+
+```bash
+(cd shared/schemas && npm ci)
+(cd frontend && npm ci)
+(cd mobile && npm ci)
+npm run sync:api-types:check
 ```
 
 ### Backend (Spring Boot 4.1.1)
 ```bash
-./gradlew build          # Full build including tests
+./gradlew test           # Fast H2-backed tests; Docker is not required
+./gradlew build          # Compile, test, and package the application
 ./gradlew bootRun        # Start backend on :8080 (uses H2 in-memory DB for dev)
+./gradlew testcontainersTest # PostgreSQL parity tests; Docker must be running
 ```
 
 ### Frontend (Angular 22)
 ```bash
-cd frontend
-npm install              # Install dependencies
-npm start                # Dev server on :4200 (proxies /api to :8080)
+(cd frontend && npm ci)  # Install locked dependencies
+(cd frontend && npm start) # Dev server on :4200 (proxies /api to :8080)
+```
+
+Install the browser required by Playwright once per machine:
+
+```bash
+(cd frontend && npx playwright install chromium)
+# Linux CI or Linux workstations may use:
+# (cd frontend && npx playwright install --with-deps chromium)
 ```
 
 ### Mobile (React Native / Expo)
 ```bash
-cd mobile
-npm install
-npm start                # Start Expo Metro Bundler
-npm test                 # Run Jest unit and component tests
-npm run lint             # Typecheck TypeScript
+(cd mobile && npm ci)
+(cd mobile && npm start) # Start Expo Metro Bundler
+(cd mobile && npm test)  # Run Jest unit and component tests
+(cd mobile && npm run lint) # Typecheck TypeScript
 ```
 
 ### Full-Stack Docker
@@ -51,12 +82,22 @@ npm run lint             # Typecheck TypeScript
 
 ### Testing
 ```bash
-./gradlew test              # Backend tests (requires Docker for Testcontainers)
+./gradlew test              # Backend H2 tests (does not require Docker)
+./gradlew testcontainersTest # PostgreSQL tests (requires Docker)
 cd frontend && npm test     # Frontend unit tests
 cd frontend && npm run e2e  # Playwright E2E tests (starts its own dev server)
 cd frontend && npm run e2e:docker  # Playwright E2E with auto-spinup and teardown of Docker stack
-./verify.sh                 # Full verification suite with auto-start and auto-cleanup of Docker
+./verify.sh                 # Full verification; stops Docker only if it started the stack
+./verify.sh --stop-docker   # Also stop a stack that was already running
 ```
+
+`./start-docker.sh` builds the backend and frontend locally, builds the images,
+and pulls `hadolint/hadolint` for Dockerfile linting on the first run. It needs
+the configured `.env`, a running Docker daemon, and the resources listed above.
+The default Dockerfile targets `linux/arm64` for Apple Silicon. Intel/AMD
+machines can run it through Docker emulation, but the Compose file does not
+automatically select `Dockerfile.x64`; adapt the Compose build configuration if
+you need a native amd64 image.
 
 ### API Contract Changes
 The reviewed `api/openapi.json` file is the API compatibility baseline. When a backend endpoint or DTO changes intentionally:

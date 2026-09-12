@@ -120,6 +120,104 @@ shared event fanout before relying on real-time updates across replicas.
 
 ---
 
+## 🧰 New Laptop Setup
+
+This repository contains three independently runnable clients/services. The
+following setup is the shortest supported path after cloning the repository.
+
+### Install prerequisites
+
+- Git
+- OpenJDK 21. Gradle is supplied by the checked-in Gradle 9.7.1 wrapper, so a
+  separate Gradle installation is not needed.
+- Node.js 22.23.2 and npm 11.19.1. Mobile pins Node in `mobile/.nvmrc`; the
+  frontend declares its npm version in `frontend/package.json`.
+- Docker Desktop with a running daemon and at least 5 GB available to Docker
+  for the full Compose stack.
+- OpenSSL for generating the local JWT key pair.
+
+For native mobile development, install the additional iOS or Android tools in
+`mobile/development-set.md`. iOS requires macOS, Xcode, and CocoaPods. Android
+requires Android Studio, the Android SDK, and an emulator or device.
+
+### Clone and install JavaScript dependencies
+
+```bash
+git clone <repo-url>
+cd <repo-directory>
+
+(cd shared/schemas && npm ci)
+(cd frontend && npm ci)
+(cd mobile && npm ci)
+npm run sync:api-types:check
+```
+
+The shared package is a local file dependency of both clients, so install it
+first. Use `npm ci`, not `npm install`, to honor the checked-in lockfiles.
+
+### Configure Docker Compose
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and replace the database and security placeholders. Compose runs
+the backend with the `prod` profile and therefore requires a persistent RSA
+key pair. Generate the required single-line Base64-encoded DER values from the
+repository root as documented in `.env.example`, then paste them into `.env`.
+Do not commit `.env` or the key files.
+
+The default Compose Dockerfile targets `linux/arm64` for Apple Silicon. On an
+Intel/AMD laptop Docker Desktop can emulate that image, but Compose does not
+automatically select `Dockerfile.x64`; adapt the Compose build configuration if
+you require a native amd64 build.
+
+### Choose a development mode
+
+For backend and web development without Docker:
+
+```bash
+# Terminal 1, repository root
+./gradlew bootRun
+
+# Terminal 2, repository root
+cd frontend
+npm start
+```
+
+The backend uses H2 and ephemeral JWT keys in this mode. The web application is
+available at `http://localhost:4200` and proxies API calls to port 8080.
+
+For the full PostgreSQL, Redis, backend, and Nginx stack:
+
+```bash
+./start-docker.sh
+```
+
+The first run also pulls `hadolint/hadolint` for Dockerfile linting. Open the
+web application at `http://localhost:4200`; stop the stack with
+`./stop-docker.sh`. Compose volumes are preserved when the containers stop.
+
+### Validate the checkout
+
+```bash
+./gradlew test                 # H2-backed tests; Docker is not required
+./gradlew testcontainersTest   # PostgreSQL parity tests; Docker is required
+npm run lint:all
+npm run test:all
+npm run sync:api-types:check
+```
+
+Install Playwright Chromium before frontend E2E tests:
+
+```bash
+(cd frontend && npx playwright install chromium)
+# Linux workstations may use:
+# (cd frontend && npx playwright install --with-deps chromium)
+```
+
+---
+
 ## 🚀 Workspace Commands
 
 | Command | Description |
@@ -140,6 +238,7 @@ shared event fanout before relying on real-time updates across replicas.
 
 ### 1. Run via Docker Compose (Full Stack)
 ```bash
+# Run the New Laptop Setup environment step first.
 ./start-docker.sh
 ```
 This launches the PostgreSQL database, Redis cache, Spring Boot backend, and Nginx frontend in health-checked isolated Docker networks.
@@ -148,7 +247,7 @@ This launches the PostgreSQL database, Redis cache, Spring Boot backend, and Ngi
 * **API via Nginx:** `http://localhost:4200/api` — tiered `Cache-Control` (`public max-age=300` catalog/barbers/ratings, `private max-age=30` busySlots, `no-cache private` admin) + `ETag` `304` on GETs, HTTP/1.1 upstream proxying with `keepalive 64` connection reuse.
 * **Prometheus Metrics:** Internal Kubernetes backend endpoint at `/actuator/prometheus`; the request is unauthenticated so VictoriaMetrics can scrape it, while the production NetworkPolicy limits access to the `monitoring` namespace. Other Actuator endpoints require ADMIN authentication. `application-prod.properties` exposes Micrometer histograms `p50/p95/p99` + `sla 50/100/200ms` + `percentiles-histogram` for `histogram_quantile` SLO queries (see `BENCHMARKS.md §46`). Health probes remain at `/actuator/health/liveness` & `/readiness` (local `Dockerfile` `HEALTHCHECK` `wget`; prod uses K8s probes).
 * **Stop Application Stack:** `./stop-docker.sh`
-* **Full-Stack Automated Verification:** `./verify.sh` (automatically starts Docker if needed and cleans up on exit)
+* **Full-Stack Automated Verification:** `./verify.sh` (starts Docker if needed; stops containers it started. Pass `--stop-docker` to also stop an already-running stack)
 * **Load Gate (P2):** `k6/load.js` ramping `0→50→200→0` (`p95<500 ms`, `p99<800 ms`, `checks 1.0`) is run against an isolated stack; `.github/workflows/k6.yml` runs the one-request/second public `k6/probe.js` instead, preserving production availability and cache-header checks without tripping the per-IP rate limiter. Browser CWV gate via `k6/browser.js` (`ttfb<800 fcp<1800 lcp<2500`).
 
 ---
@@ -158,8 +257,16 @@ This launches the PostgreSQL database, Redis cache, Spring Boot backend, and Ngi
 ```bash
 cd mobile
 
-# Install dependencies
-npm install
+# Create mobile/.env from mobile/.env.example and adjust the API URL if needed
+cp .env.example .env
+
+# Install locked dependencies (run shared/schemas npm ci first from the root setup)
+npm ci
+
+# Generate the native project on first run; Expo Go is not supported because
+# expo-secure-store is a native module.
+npx expo prebuild --platform ios   # macOS/iOS only
+npx expo prebuild --platform android # Android only
 
 # Start Expo Metro Bundler
 npm start
@@ -183,7 +290,7 @@ npm test
 ```bash
 ./gradlew bootRun
 ```
-* Uses embedded H2 database by default in `dev` profile.
+* Uses the default embedded H2 development configuration.
 * Listens on `http://localhost:8080`.
 
 ---
@@ -191,9 +298,7 @@ npm test
 ### 4. Run Web Frontend Locally (Angular 22)
 
 ```bash
-cd frontend
-npm install
-npm start
+(cd frontend && npm ci && npm start)
 ```
 * Dev server runs on `http://localhost:4200` and proxies `/api` requests to `http://localhost:8080`.
 
@@ -207,7 +312,7 @@ npm start
 * **Read-Only Filesystems:** Containers run with `read_only: true` with ephemeral `/tmp` mounted as `tmpfs`.
 * **Dropped Kernel Capabilities:** All containers explicitly execute with `cap_drop: [ALL]` and `no-new-privileges:true`.
 * **Graceful Shutdown:** Spring Boot drains requests for up to 30 seconds (`server.shutdown=graceful`, `spring.lifecycle.timeout-per-shutdown-phase=30s`). The backend Compose service waits 40 seconds before Docker escalates SIGTERM to SIGKILL.
-* **Container Lifecycle:** Services use `restart: "no"` in `docker-compose.yml` to prevent lingering background containers. Verification and test scripts (`./verify.sh`, `npm run e2e:docker`) register exit traps to automatically stop containers upon completion.
+* **Container Lifecycle:** Services use `restart: "no"` in `docker-compose.yml` to prevent lingering background containers. `npm run e2e:docker` stops the stack it starts; `./verify.sh` stops a stack it started, or an already-running stack when invoked with `--stop-docker`.
 * **Hardware Token Security:** Mobile app stores JWT tokens in **iOS Keychain** & **Android Keystore** via `expo-secure-store`.
 * **HttpOnly Cookies:** Web app uses `HttpOnly`, `SameSite=Strict` cookies with double-submit CSRF token protection.
 * **Native Mobile Auth:** Mobile uses `POST /api/v1/auth/mobile/login` and sends the SecureStore token as an `Authorization: Bearer` header; it does not depend on native cookie persistence.
