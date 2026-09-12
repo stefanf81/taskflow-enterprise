@@ -66,6 +66,12 @@
       "allowedVersions": "/^21-/"
     },
     {
+      "description": "Keep Alpine runtime images on the 3.24 release line",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["alpine"],
+      "allowedVersions": "/^3\\.24\\./"
+    },
+    {
       "description": "Keep TypeScript on major version 6",
       "matchManagers": ["npm"],
       "matchPackageNames": ["typescript"],
