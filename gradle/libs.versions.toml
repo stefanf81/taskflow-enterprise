@@ -1,7 +1,7 @@
 [versions]
 spring-boot = "4.1.1"
 dependency-check = "13.0.0"
-versions-plugin = "0.61.0"
+versions-plugin = "0.62.0"
 spotbugs-plugin = "6.5.11"
 spotbugs-tool = "4.10.4"
 # The companion BOM keeps every OpenTelemetry module at this security-reviewed release.
