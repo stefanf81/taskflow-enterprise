@@ -1,302 +1,93 @@
-# =========================================================================================
-#
-# Production Spring Boot image
-#
-# Design goals:
-#
-# • Fast incremental Docker builds through Spring Boot layered extraction.
-# • Faster cold starts using JVM Class Data Sharing (CDS).
-# • Container-aware JVM behavior, with sizing and GC tuning owned by deployment.
-# • Kubernetes-friendly runtime using a fixed non-root UID/GID and tini as PID 1.
-# • Small production runtime image containing a JRE, tini, the application,
-#   and its generated CDS archive.
-#
-# Note:
-#
-# This Dockerfile configures JVM CDS. Spring AOT is a separate Spring Boot build
-# feature and is not enabled by any Dockerfile instruction shown here.
-#
-# =========================================================================================
+# syntax=docker/dockerfile:1
 
-# =========================================================================================
-# STAGE 1: LAYER EXTRACTION
-#
-# linux/amd64 is pinned explicitly so the resulting image matches an amd64 cloud
-# runtime. When this image is built on an arm64 machine such as Apple Silicon,
-# BuildKit may run amd64 build-stage commands through QEMU emulation.
-#
-# This does not cross-compile the Java application. It selects the amd64 base
-# image and executes the Java extraction command for that target architecture.
-#
-# This stage only runs Spring Boot's executable-jar extraction tooling. It does
-# not compile source code or invoke JDK-only tools such as javac or jlink, so a
-# JRE is sufficient and avoids including an unused JDK in the build stage.
-# =========================================================================================
-
+# Production Spring Boot / Java 21 image. The multi-platform index pins the JVM
+# release for native extraction and target-architecture CDS training/runtime.
+# Renovate can update this digest while retaining the project's Java 21 policy.
+ARG JAVA_IMAGE=eclipse-temurin:21-jre-alpine@sha256:974b08960c5d96694c780e65b2d5705268ab1e1ca1a0dd0caf4ba6c3fe34d699
 ARG PLATFORM=linux/amd64
 
-FROM --platform=$PLATFORM eclipse-temurin:21-jre-alpine AS extractor
-
+# JAR extraction is architecture-independent: run natively on Apple Silicon as
+# well as amd64 CI. Compilation is performed by Gradle before the Docker build.
+FROM --platform=$BUILDPLATFORM ${JAVA_IMAGE} AS extractor
 WORKDIR /app
 
-# Copy the pre-built executable Spring Boot jar from the build context.
-#
-# A wildcard is used instead of a version-specific filename such as
-# taskflow-0.0.1-SNAPSHOT.jar because Gradle normally includes the project
-# version in the bootJar archive name.
-#
-# This glob must match exactly one jar. Ensure that build/libs contains only
-# the executable bootJar before building the image. For example, disable the
-# plain Gradle jar with `jar { enabled = false }`.
-#
-# An alternative is to configure Gradle's bootJar task to always produce a
-# stable name such as application.jar and copy that exact path here.
+# build.gradle disables the plain jar; this must match exactly one bootJar.
 COPY build/libs/*.jar application.jar
 
-# Run Spring Boot's executable-jar tooling instead of starting the application.
-#
-# `-Djarmode=tools` activates Spring Boot's archive tools.
-# `extract` unpacks the executable jar.
-# `--layers` follows Spring Boot's layer metadata.
-# `--launcher` prepares the extracted application for launcher-based execution.
-# `--destination extracted` writes the result beneath /app/extracted.
-#
-# Extracting the jar into separate dependency and application layers improves
-# Docker cache reuse because framework dependencies normally change less often
-# than application classes.
-RUN java \
-    -Djarmode=tools \
-    -jar application.jar \
-    extract \
-    --layers \
-    --launcher \
-    --destination extracted
+# The default layout creates a small application.jar with a manifest Class-Path
+# pointing to lib/. Standard JVM class loading makes this layout CDS-friendly.
+RUN --network=none java -Djarmode=tools -jar application.jar \
+    extract --layers --destination extracted
 
-# =========================================================================================
-# STAGE 2: RUNTIME
-#
-# Start a new stage so that the original fat jar and extraction-stage filesystem
-# are not automatically included in the production image.
-#
-# The same Java distribution, Java version, operating-system family, and target
-# architecture are used for extraction, CDS training, and runtime. Keeping these
-# environments aligned reduces the chance that the generated CDS archive is
-# incompatible with the production JVM.
-# =========================================================================================
-
-FROM --platform=$PLATFORM eclipse-temurin:21-jre-alpine
-
+# CDS is architecture/JVM-specific. Share the exact target JRE and identity;
+# package refreshes are confined to the runtime stage so they do not retrain CDS.
+FROM --platform=$PLATFORM ${JAVA_IMAGE} AS java-base
 WORKDIR /app
+RUN addgroup -g 10001 -S appgroup \
+    && adduser -u 10001 -S appuser -G appgroup
 
-# Install tini and create a dedicated non-root runtime identity.
-#
-# tini runs as PID 1, forwards Unix signals to Java, and reaps orphaned child
-# processes. This gives the container predictable shutdown behavior and protects
-# against zombie processes if the application or one of its libraries starts
-# subprocesses.
-#
-# A fixed numeric UID/GID is used rather than an automatically allocated value.
-# This provides predictable ownership for mounted files and aligns with
-# Kubernetes securityContext settings such as runAsUser and runAsGroup.
-#
-# Kubernetes requires a non-root identity under the Restricted Pod Security
-# profile, but UID/GID 10001 itself is an application convention rather than a
-# Kubernetes requirement.
-#
-# `apk upgrade --no-cache` upgrades packages inherited from the Alpine base
-# image using the repositories available at build time. This favors obtaining
-# recently published package fixes over bit-for-bit reproducibility.
-#
-# APK_BUST is included in this RUN instruction to invalidate Docker's cached
-# package-management layer when its value changes. Passing a timestamp such as
-# `--build-arg APK_BUST=$(date +%s)` forces the layer to run on every build.
-#
-# Forcing invalidation on every build reduces cache effectiveness. Alternatives
-# include regularly rebuilding with a freshly pulled base image or selectively
-# disabling the cache for this stage in CI.
-ARG APK_BUST=stable
+FROM java-base AS cds-training
 
-RUN : "${APK_BUST}" \
- && apk upgrade --no-cache \
- && apk add --no-cache tini \
- && addgroup -g 10001 -S appgroup \
- && adduser -u 10001 -S appuser -G appgroup
+# Match runtime paths, contents, and JAR timestamps for CDS classpath validation.
+COPY --link --from=extractor --chown=0:0 /app/extracted/dependencies/ ./
+COPY --link --from=extractor --chown=0:0 /app/extracted/spring-boot-loader/ ./
+COPY --link --from=extractor --chown=0:0 /app/extracted/snapshot-dependencies/ ./
+COPY --link --from=extractor --chown=0:0 /app/extracted/application/ ./
 
-# Copy the extracted Spring Boot layers in their default stability order.
-#
-# `--from=extractor` copies from the first build stage.
-# `--chown=10001:10001` assigns ownership while copying and avoids a later
-# recursive ownership-change layer.
-# `--link` creates independently reusable copy layers and can improve cache reuse
-# and image rebasing when supported by BuildKit.
-#
-# Spring Boot's default layer order is:
-#
-#   1. dependencies
-#   2. spring-boot-loader
-#   3. snapshot-dependencies
-#   4. application
-#
-# Stable release dependencies are placed in lower layers, while application
-# classes are placed last because they normally change most frequently.
+USER 10001:10001
 
-COPY --link --from=extractor --chown=10001:10001 /app/extracted/dependencies/ ./
-COPY --link --from=extractor --chown=10001:10001 /app/extracted/spring-boot-loader/ ./
-COPY --link --from=extractor --chown=10001:10001 /app/extracted/snapshot-dependencies/ ./
-COPY --link --from=extractor --chown=10001:10001 /app/extracted/application/ ./
-
-# Build a JVM Class Data Sharing archive.
-#
-# `-XX:ArchiveClassesAtExit=application.jsa` records eligible classes loaded
-# during this training execution and writes a dynamic CDS archive when the JVM
-# exits successfully.
-#
-# PropertiesLauncher is used because it supports `loader.main`, allowing this
-# build-time run to start CdsTrainingApplication instead of the application's
-# normal manifest Start-Class.
-#
-# The training application is intended to initialize enough of the Spring
-# context to load commonly used startup classes without requiring production
-# infrastructure such as a database or telemetry collector.
-#
-# Training an alternate main class is an application-specific optimization.
-# Because it does not necessarily follow exactly the same startup path as the
-# production JarLauncher execution, classes loaded only by the real application
-# may not be included in the archive. CDS effectiveness should therefore be
-# verified through startup measurements and CDS logging.
-#
-# Training properties:
-#
-#   - loader.main
-#       Selects the alternate Spring Boot main class through PropertiesLauncher.
-#
-#   - spring.context.exit=onRefresh
-#       Exits after the Spring ApplicationContext has completed its refresh,
-#       preventing the build from leaving an application server running.
-#
-#   - app.cds-training=true
-#       Custom application property used by project code to skip behavior that
-#       should not run during image construction, such as administrative-user
-#       creation or other CommandLineRunner work.
-#
-#   - spring.flyway.enabled=false
-#       Prevents Flyway migrations and database-dependent initialization during
-#       the image build. Flyway classes used only in production startup may
-#       consequently be absent from the generated archive.
-#
-#   - spring.cache.type=redis
-#       Forces Spring Boot to select the Redis cache implementation so relevant
-#       cache and serialization classes can be observed during training.
-#
-#       This property alone does not guarantee that no Redis connection will be
-#       attempted. Connection behavior depends on application beans, health
-#       checks, cache initialization, and library configuration.
-#
-#   - otel.sdk.disabled=true
-#       Disables OpenTelemetry SDK initialization when OpenTelemetry SDK
-#       autoconfiguration or an agent-related integration is present.
-#
-# The archive is generated during image construction rather than at container
-# startup. This moves the one-time training cost into CI so deployed containers
-# can attempt to use the archive immediately.
-#
-# `test -s application.jsa` fails the image build if the archive was not created
-# or is empty.
-#
-# The archive is created by root during this RUN instruction, so its ownership
-# is changed to the runtime UID/GID afterward.
-
-RUN java -XX:ArchiveClassesAtExit=application.jsa \
-         -Dloader.main=com.example.cdstraining.CdsTrainingApplication \
+# The dedicated training context initializes cache/serialization classes and
+# exits at refresh. Network isolation enforces its infrastructure-free contract.
+# -cp application.jar honors the same manifest Class-Path as runtime's -jar,
+# while selecting the training main directly. Only the archive is published.
+RUN --network=none java -XX:ArchiveClassesAtExit=/tmp/application.jsa \
          -Dspring.context.exit=onRefresh \
          -Dapp.cds-training=true \
          -Dspring.flyway.enabled=false \
          -Dspring.cache.type=redis \
          -Dotel.sdk.disabled=true \
-         org.springframework.boot.loader.launch.PropertiesLauncher \
-    && test -s application.jsa \
-    && chown 10001:10001 application.jsa
+         -cp application.jar com.example.cdstraining.CdsTrainingApplication \
+    && test -s /tmp/application.jsa
 
-# Run subsequent build instructions and the final container as the dedicated
-# numeric application user and group.
+FROM java-base AS runtime
+
+# CI changes APK_BUST on every build to obtain Alpine package fixes. This keeps
+# the JVM base pinned, but package resolution intentionally remains build-time.
+# Temurin's JRE lives in /opt/java/openjdk and is not managed by apk.
+ARG APK_BUST=stable
+RUN : "${APK_BUST}" \
+    && apk upgrade --no-cache \
+    && apk add --no-cache tini
+
+# Stable dependencies first; root-owned application files are readable but not
+# writable by the runtime user, including outside a read-only deployment.
+COPY --link --from=extractor --chown=0:0 /app/extracted/dependencies/ ./
+COPY --link --from=extractor --chown=0:0 /app/extracted/spring-boot-loader/ ./
+COPY --link --from=extractor --chown=0:0 /app/extracted/snapshot-dependencies/ ./
+COPY --link --from=extractor --chown=0:0 /app/extracted/application/ ./
+COPY --link --from=cds-training --chown=0:0 --chmod=0444 /tmp/application.jsa ./application.jsa
+
 USER 10001:10001
 
-# Document that the application is expected to listen on TCP port 8080.
-#
-# EXPOSE is image metadata only. It does not publish the port, create a Docker
-# port mapping, or create a Kubernetes Service.
+# Validate the archive after package refresh, under the final identity and
+# classpath. Fail the build on incompatibility; production retains CDS fallback.
+# Temporary JVM files from this check do not become part of the runtime image.
+RUN --network=none --mount=type=tmpfs,target=/tmp \
+    java -Xshare:on -XX:SharedArchiveFile=application.jsa \
+         -Xlog:cds=info -cp application.jar -version
+
 EXPOSE 8080
 
-# =========================================================================================
-# JVM TUNING — image-owned versus deployment-owned options
-#
-# JVM memory sizing, off-heap limits, garbage-collector tuning, and options such
-# as AlwaysPreTouch are owned by the deployment through JAVA_TOOL_OPTIONS rather
-# than being embedded in the image.
-#
-# This allows each environment to tune the same image according to its actual
-# Kubernetes resource requests and limits.
-#
-# The image CMD contains only options intended to apply in every environment:
-#
-#   -XX:+ExitOnOutOfMemoryError
-#       Terminates the JVM when it encounters a JVM OutOfMemoryError so the
-#       container can fail and be replaced by its workload controller.
-#
-#   -XX:SharedArchiveFile=application.jsa
-#       Selects the CDS archive generated during image construction.
-#
-#   -Xshare:auto
-#       Attempts to use CDS when the archive is compatible, but allows startup
-#       to continue without application CDS if the archive cannot be used.
-#
-# Heap, direct-memory, metaspace, and GC tuning currently live in:
-#
-#   - homelab/TF/gitops/.../backend.yaml JAVA_TOOL_OPTIONS
-#
-# Avoid defining deployment-specific sizing options in both the image command
-# and JAVA_TOOL_OPTIONS. Duplicate JVM options can produce confusing effective
-# values, and precedence may vary by option. Effective runtime settings should
-# be verified with JVM diagnostics such as:
-#
-#   java -XshowSettings:vm -version
-#   java -XX:+PrintCommandLineFlags -version
-#
-# No garbage collector is explicitly selected. JDK 21 normally selects G1 for a
-# server-class JVM. G1 is a reasonable general-purpose default for a
-# request/response service, but collector selection should ultimately be based
-# on measured pause-time, throughput, heap-size, and allocation requirements.
-# =========================================================================================
-
-# Run Java under tini using Docker's exec-form ENTRYPOINT.
-#
-# The fixed executable chain is:
-#
-#     tini → java
-#
-# tini remains PID 1 and forwards signals to the Java process.
-#
-# CMD supplies the default Java arguments and Spring Boot launcher class.
-# Supplying arguments to `docker run` replaces CMD while retaining the tini and
-# java ENTRYPOINT. Replacing the entire executable chain still requires an
-# explicit `--entrypoint` override.
-
+# Kubernetes owns production probes. Deployment JAVA_TOOL_OPTIONS owns heap,
+# off-heap, GC, and diagnostics (homelab/TF/gitops/apps/taskflow/backend.yaml).
+# Keep CMD sizing-agnostic so image arguments cannot override that tuning.
+# tini forwards shutdown signals and reaps children; exec-form CMD starts Java
+# directly with the extracted application JAR, not the original executable JAR.
 ENTRYPOINT ["/sbin/tini", "--", "java"]
-
-# Effective default command:
-#
-#   /sbin/tini -- java \
-#     -XX:+ExitOnOutOfMemoryError \
-#     -XX:SharedArchiveFile=application.jsa \
-#     -Xshare:auto \
-#     org.springframework.boot.loader.launch.JarLauncher
-#
-# JarLauncher starts the extracted Spring Boot application using the normal
-# Start-Class recorded in the executable jar's manifest.
-
 CMD [ \
     "-XX:+ExitOnOutOfMemoryError", \
     "-XX:SharedArchiveFile=application.jsa", \
     "-Xshare:auto", \
-    "org.springframework.boot.loader.launch.JarLauncher" \
+    "-jar", \
+    "application.jar" \
 ]

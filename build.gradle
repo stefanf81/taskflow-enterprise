@@ -33,6 +33,7 @@ dependencies {
 	// The companion BOMs replace Spring's dependency-management plugin property
 	// overrides while keeping every pinned dependency family internally aligned.
 	implementation platform(libs.opentelemetry.bom)
+	implementation platform(libs.prometheus.metrics.bom)
 	implementation platform(libs.jackson2.bom)
 	implementation platform(libs.jackson3.bom)
 	implementation platform(libs.netty.bom)
@@ -40,6 +41,11 @@ dependencies {
 	constraints {
 		implementation(libs.commons.lang3)
 		implementation(libs.logback.classic)
+		implementation(libs.slf4j.api)
+		implementation(libs.slf4j.jul.to.slf4j)
+		implementation(libs.slf4j.jcl.over.slf4j)
+		testImplementation(libs.byte.buddy)
+		testImplementation(libs.byte.buddy.agent)
 	}
 	// Spring Boot
 	implementation libs.spring.boot.starter.data.jpa
