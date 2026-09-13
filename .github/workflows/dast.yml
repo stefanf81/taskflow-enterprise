@@ -401,7 +401,8 @@ jobs:
           python scripts/zap2sarif.py \
             zap-api-report.json \
             zap-api-results.sarif \
-            --rules-file .zap/api-rules.tsv
+            --rules-file .zap/api-rules.tsv \
+            --target http://localhost:8080
 
       - name: Convert ZAP web JSON to SARIF
         if: always() && hashFiles('zap-web-report.json') != ''
@@ -409,7 +410,8 @@ jobs:
           python scripts/zap2sarif.py \
             zap-web-report.json \
             zap-web-results.sarif \
-            --rules-file .zap/web-rules.tsv
+            --rules-file .zap/web-rules.tsv \
+            --target http://localhost:4200
 
       ##########################################################
       # Upload SARIF

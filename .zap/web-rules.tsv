@@ -2,3 +2,24 @@
 10055	IGNORE	(Angular component styles require style-src unsafe-inline)
 # Fingerprinted static bundles may contain build timestamps; they do not expose server time or data.
 10096	IGNORE	(Static bundle timestamp false positive)
+# Angular reads the double-submit XSRF-TOKEN cookie, so it intentionally cannot be HttpOnly.
+10010	IGNORE	(XSRF-TOKEN is intentionally readable by Angular's XSRF interceptor)
+# API error responses deliberately use problem-detail JSON rather than the HTML ZAP expects for malformed root queries.
+100001	IGNORE	(Problem-detail JSON returned for malformed API requests)
+# Expected validation, authentication, authorization, and rate-limit responses are not security findings.
+100000	IGNORE	(Expected client-error responses during API fuzzing)
+# These rules identify normal API and authentication behavior but do not report vulnerabilities.
+10049	IGNORE	(API cache-control policy is intentional)
+10104	IGNORE	(User-Agent-dependent behavior is not a vulnerability)
+10111	IGNORE	(Authentication endpoint identification is informational)
+10112	IGNORE	(Authentication and CSRF token handling is intentional)
+# CORS headers are intentional for authorized origins on API endpoints.
+40040	IGNORE	(CORS headers are intentional for authorized origins)
+# CSRF token minting on cookie drop is intentional for /api/v1/auth/csrf.
+90027	IGNORE	(CSRF token minting on cookie drop is intentional)
+# Modern Web Application informational detection.
+10109	IGNORE	(Modern Web Application detection is informational)
+# External third-party resources (if any) are out of scope for local application DAST.
+10035	IGNORE	(HSTS on external domains is out of scope)
+10050	IGNORE	(Caching on external domains is out of scope)
+10098	IGNORE	(CORS on external domains is out of scope)

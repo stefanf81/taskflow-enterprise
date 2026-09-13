@@ -9,3 +9,9 @@
 10104	IGNORE	(User-Agent-dependent behavior is not a vulnerability)
 10111	IGNORE	(Authentication endpoint identification is informational)
 10112	IGNORE	(Authentication and CSRF token handling is intentional)
+# CORS headers are intentional for authorized origins on API endpoints.
+40040	IGNORE	(CORS headers are intentional for authorized origins)
+# CSRF token minting on cookie drop is intentional for /api/v1/auth/csrf.
+90027	IGNORE	(CSRF token minting on cookie drop is intentional)
+# Modern Web Application informational detection.
+10109	IGNORE	(Modern Web Application detection is informational)

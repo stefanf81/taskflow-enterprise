@@ -239,7 +239,7 @@
       "matchManagers": ["npm"],
       "matchFileNames": ["mobile/package.json"],
       "matchPackageNames": [
-        "@config-plugins/detox",
+        "expo-detox-config-plugin",
         "@testing-library/react-native",
         "detox"
       ],

@@ -26,7 +26,7 @@ def ignored_rule_ids(rules_file):
     return ignored
 
 
-def main(file_in, file_out, rules_file=None):
+def main(file_in, file_out, rules_file=None, target=None):
     try:
         with open(file_in, 'r', encoding='utf-8') as file:
             zap_data = json.load(file)
@@ -34,6 +34,14 @@ def main(file_in, file_out, rules_file=None):
         raise SystemExit(f"Error loading ZAP report: {e}") from e
 
     ignored_rules = ignored_rule_ids(rules_file)
+
+    target_hosts = set()
+    if target:
+        cleaned_target = re.sub(r'^\w+://', '', target).split(':')[0].split('/')[0].lower()
+        if cleaned_target:
+            target_hosts.add(cleaned_target)
+    if not target_hosts:
+        target_hosts.update(["localhost", "127.0.0.1"])
 
     # Initializing SARIF structure
     sarif = {
@@ -57,6 +65,11 @@ def main(file_in, file_out, rules_file=None):
 
     # Processing each alert
     for site in zap_data.get("site", []):
+        site_host = site.get("@host", "").lower()
+        # Restrict findings to in-scope target application; ignore third-party CDNs or external sites
+        if site_host and site_host not in target_hosts:
+            continue
+
         for alert in site.get("alerts", []):
             rule_id = f"ZAP-{alert.get('pluginid', alert.get('alertRef', 'unknown'))}"
             if rule_id in ignored_rules:
@@ -158,5 +171,6 @@ if __name__ == "__main__":
     parser.add_argument("file_in", help="Input ZAP JSON file")
     parser.add_argument("file_out", help="Output SARIF JSON file")
     parser.add_argument("--rules-file", help="ZAP rules file whose IGNORE entries are omitted from SARIF")
+    parser.add_argument("--target", help="Target URL or host to restrict reported findings to in-scope targets")
     args = parser.parse_args()
-    main(args.file_in, args.file_out, args.rules_file)
+    main(args.file_in, args.file_out, args.rules_file, args.target)

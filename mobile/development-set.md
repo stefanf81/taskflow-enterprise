@@ -97,8 +97,7 @@ cd mobile
 # simulator, emulator, or physical device as described below.
 cp .env.example .env
 
-# Install locked JS dependencies. mobile/.npmrc records the required peer
-# compatibility setting for @config-plugins/detox@11.0.0 with Expo 57.
+# Install locked JS dependencies.
 npm ci
 
 # Generate native iOS project + install CocoaPods (macOS/iOS only)
