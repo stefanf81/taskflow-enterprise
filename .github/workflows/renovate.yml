@@ -60,7 +60,7 @@ jobs:
       - name: Restore Renovate cache
         id: cache-restore
         if: github.event.inputs.repoCache != 'disabled' && github.event.inputs.repoCache != 'reset'
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.cache_dir }}
           key: ${{ env.cache_key }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -87,7 +87,7 @@ jobs:
 
       - name: Save Renovate cache
         if: github.event.inputs.repoCache != 'disabled' && steps.cache-restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.cache_dir }}
           key: ${{ env.cache_key }}-${{ github.run_id }}-${{ github.run_attempt }}
