@@ -103,7 +103,7 @@ public class NotificationSender {
         if (email == null || email.isEmpty()) {
             return "***";
         }
-        String sanitized = email.replaceAll("[\\r\\n]", "");
+        String sanitized = email.replace("\n", "").replace("\r", "");
         int atIndex = sanitized.lastIndexOf('@');
         if (atIndex <= 0) {
             return "***";

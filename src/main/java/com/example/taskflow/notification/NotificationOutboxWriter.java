@@ -54,7 +54,7 @@ public class NotificationOutboxWriter {
     }
 
     private static String safe(String value) {
-        return value != null ? value.replaceAll("[\\r\\n]", "") : "";
+        return value != null ? value.replace("\n", "").replace("\r", "") : "";
     }
 
     private String buildStatusChangeMessage(Appointment appointment) {

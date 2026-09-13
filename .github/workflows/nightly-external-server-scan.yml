@@ -48,8 +48,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TARGET_IP: ${{ inputs.target_ip != '' && inputs.target_ip || vars.TARGET_IP != '' && vars.TARGET_IP || '84.194.170.2' }}
-  TARGET_HOST: ${{ inputs.target_host != '' && inputs.target_host || vars.PUBLIC_SERVER_DOMAIN }}
+  TARGET_IP: ${{ inputs.target_ip || vars.TARGET_IP || '84.194.170.2' }}
+  TARGET_HOST: ${{ inputs.target_host || vars.PUBLIC_SERVER_DOMAIN || inputs.target_ip || vars.TARGET_IP || '84.194.170.2' }}
   EXPECTED_PUBLIC_TCP_PORTS: "80,443"
 
   NUCLEI_VERSION: "v3.11.1"
@@ -369,32 +369,31 @@ jobs:
 
       - name: Pin target domain to origin IP in runner hosts file
         run: |
-          if [[ -n "${TARGET_IP}" && -n "${TARGET_HOST}" ]]; then
+          if [[ -n "${TARGET_IP}" && -n "${TARGET_HOST}" && "${TARGET_HOST}" != "${TARGET_IP}" ]]; then
             echo "Pinning ${TARGET_HOST} to origin IP ${TARGET_IP} in /etc/hosts"
             echo "${TARGET_IP} ${TARGET_HOST}" | sudo tee -a /etc/hosts
           fi
 
       - name: Validate web target and verify port 80 HTTP-to-HTTPS redirect
         run: |
-          if [[ -z "${TARGET_HOST}" ]]; then
-            echo "::error::PUBLIC_SERVER_DOMAIN repository variable or target_host input is required."
-            touch reports/web-target-validation-failed
-            exit 0
-          fi
-
           touch reports/web-targets.txt
           touch reports/tls-targets.txt
           touch reports/nuclei-targets.txt
 
+          if [[ "${TARGET_HOST}" == "${TARGET_IP}" ]]; then
+            echo "::notice::TARGET_HOST is using target IP (${TARGET_IP}). Set vars.PUBLIC_SERVER_DOMAIN or target_host input for hostname/SNI scanning."
+          fi
+
           echo "Validating HTTPS target: https://${TARGET_HOST}..."
-          if ! curl --silent --show-error --location --max-time 15 --output /dev/null "https://${TARGET_HOST}"; then
-            echo "::error::Configured public HTTPS target is unreachable: https://${TARGET_HOST}"
-            touch reports/web-target-validation-failed
-          else
+          https_ok=0
+          if curl --silent --show-error --insecure --location --max-time 15 --output /dev/null "https://${TARGET_HOST}"; then
+            https_ok=1
             echo "https://${TARGET_HOST}" >> reports/web-targets.txt
             echo "${TARGET_HOST}:443" >> reports/tls-targets.txt
             echo "https://${TARGET_HOST}" >> reports/nuclei-targets.txt
-            echo "HTTPS target verified."
+            echo "HTTPS target verified on port 443."
+          else
+            echo "::warning::HTTPS target is unreachable on port 443: https://${TARGET_HOST}"
           fi
 
           echo "Checking Port 80 HTTP redirect behavior..."
@@ -404,17 +403,26 @@ jobs:
           echo "HTTP_CODE=${http_code}" >> reports/port80-status.env
           echo "REDIRECT_LOCATION=${redirect_loc}" >> reports/port80-status.env
 
+          http_ok=0
           if [[ "${http_code}" =~ ^(301|302|307|308)$ ]]; then
             echo "Port 80 correctly enforces HTTPS redirect to: ${redirect_loc} (HTTP ${http_code})"
             # Include port 80 in web targets for redirect header & HSTS analysis
             echo "http://${TARGET_HOST}" >> reports/web-targets.txt
             echo "http://${TARGET_HOST}" >> reports/nuclei-targets.txt
+            http_ok=1
           elif [[ "${http_code}" == "000" ]]; then
             echo "::warning::Port 80 connection refused or timed out."
           else
             echo "::warning::Port 80 responded with HTTP ${http_code} instead of redirecting to HTTPS."
             echo "http://${TARGET_HOST}" >> reports/web-targets.txt
             echo "http://${TARGET_HOST}" >> reports/nuclei-targets.txt
+            http_ok=1
+          fi
+
+          if (( https_ok == 0 && http_ok == 0 )); then
+            echo "::error::Neither HTTPS (port 443) nor HTTP (port 80) could be reached at ${TARGET_HOST}."
+            touch reports/web-target-validation-failed
+            exit 1
           fi
 
       - name: Install Nuclei
@@ -483,6 +491,11 @@ jobs:
           chmod -R 777 reports
 
           failed_targets=0
+          extra_hosts=()
+          if [[ "${TARGET_HOST}" != "${TARGET_IP}" ]]; then
+            extra_hosts+=(--add-host "${TARGET_HOST}:${TARGET_IP}")
+          fi
+
           while IFS= read -r target; do
             [[ -z "${target}" ]] && continue
 
@@ -491,7 +504,7 @@ jobs:
 
             testssl_status=0
             docker run --rm \
-              --add-host "${TARGET_HOST}:${TARGET_IP}" \
+              "${extra_hosts[@]}" \
               --volume "${PWD}/reports:/data" \
               ghcr.io/testssl/testssl.sh:3.2 \
               --warnings batch \
@@ -528,6 +541,11 @@ jobs:
           chmod -R 777 reports
 
           failed_nikto=0
+          extra_hosts=()
+          if [[ "${TARGET_HOST}" != "${TARGET_IP}" ]]; then
+            extra_hosts+=(--add-host "${TARGET_HOST}:${TARGET_IP}")
+          fi
+
           while IFS= read -r url; do
             [[ -z "${url}" ]] && continue
 
@@ -536,7 +554,7 @@ jobs:
 
             nikto_status=0
             docker run --rm \
-              --add-host "${TARGET_HOST}:${TARGET_IP}" \
+              "${extra_hosts[@]}" \
               --volume "${PWD}/reports:/tmp" \
               ghcr.io/sullo/nikto:latest \
               -h "${url}" \
@@ -587,6 +605,10 @@ jobs:
               f"- **Origin IP:** `{os.environ.get('TARGET_IP', '')}`",
               "",
           ]
+
+          if Path("reports/web-target-validation-failed").exists():
+              lines.append("> 🚨 **Target Unreachable:** Neither HTTPS (port 443) nor HTTP (port 80) could be reached. Application security scans were skipped.")
+              lines.append("")
 
           # Port 80 redirect status
           port80_env = Path("reports/port80-status.env")

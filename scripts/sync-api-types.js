@@ -199,7 +199,9 @@ async function main() {
       console.log(`✨ Generated TypeScript types → ${targetFile}`);
     }
   } catch (err) {
-    console.error(`OpenAPI type synchronization failed: ${err.message}`);
+    const rawMessage = err && err.message ? String(err.message) : String(err);
+    const safeMessage = rawMessage.replace(/\n|\r/g, '');
+    console.error(`OpenAPI type synchronization failed: ${safeMessage}`);
     process.exitCode = 1;
   }
 }

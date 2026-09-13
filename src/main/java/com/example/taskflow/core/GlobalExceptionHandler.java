@@ -96,7 +96,7 @@ public class GlobalExceptionHandler {
         // `com.example.taskflow.appointment.AppointmentCreateRequest`"), which
         // is an information-disclosure vector flagged by OWASP / ZAP.
         String detailedMessage = ex.getMostSpecificCause() != null ? ex.getMostSpecificCause().getMessage() : ex.getMessage();
-        logger.warn("Malformed JSON request on {}: {}", request.getRequestURI(), LogSanitizer.stripNewlines(detailedMessage));
+        logger.warn("Malformed JSON request on {}: {}", LogSanitizer.stripNewlines(request.getRequestURI()), LogSanitizer.stripNewlines(detailedMessage));
 
         ErrorResponse errorResponse = new ErrorResponse(
                 HttpStatus.BAD_REQUEST.value(),
@@ -200,7 +200,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DataAccessResourceFailureException.class)
     public ResponseEntity<ErrorResponse> handleDataAccessResourceFailure(
             DataAccessResourceFailureException ex, HttpServletRequest request) {
-        logger.warn("Database resource unavailable on {}: {}", request.getRequestURI(),
+        logger.warn("Database resource unavailable on {}: {}", LogSanitizer.stripNewlines(request.getRequestURI()),
                 LogSanitizer.safeMessage(ex));
 
         ErrorResponse errorResponse = new ErrorResponse(

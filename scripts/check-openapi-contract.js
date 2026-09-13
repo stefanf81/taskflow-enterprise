@@ -127,6 +127,8 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(`OpenAPI contract check failed: ${error.message}`);
+  const rawMessage = error && error.message ? String(error.message) : String(error);
+  const safeMessage = rawMessage.replace(/\n|\r/g, '');
+  console.error(`OpenAPI contract check failed: ${safeMessage}`);
   process.exitCode = 1;
 });

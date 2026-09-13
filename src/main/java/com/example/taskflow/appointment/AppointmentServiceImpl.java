@@ -230,7 +230,7 @@ public class AppointmentServiceImpl implements AppointmentService {
                 // The partial unique index idx_appointment_slot_active caught it.
                 logger.warn("Slot collision for {} at {} on {} — request raced with another booking.",
                         LogSanitizer.stripNewlines(request.barberName()),
-                        request.bookingTime(),
+                        LogSanitizer.stripNewlines(request.bookingTime()),
                         request.bookingDate());
                 throw new IllegalArgumentException(
                         "This time slot was just booked by someone else. Please select a different time.");

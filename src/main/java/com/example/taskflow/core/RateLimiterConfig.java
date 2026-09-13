@@ -99,8 +99,9 @@ public class RateLimiterConfig {
                             "60000");
 
                     if (currentCount != null && currentCount > maxRequests) {
-                        String safePath = path.replaceAll("[\\r\\n]", "");
-                        log.warn("Rate limit exceeded for IP {} on path {}", clientIp, safePath);
+                        String safePath = LogSanitizer.stripNewlines(path);
+                        String safeIp = LogSanitizer.stripNewlines(clientIp);
+                        log.warn("Rate limit exceeded for IP {} on path {}", safeIp, safePath);
                         response.setStatus(429);
                         response.setHeader("Retry-After", "60");
                         response.setContentType("application/json;charset=UTF-8");

@@ -120,10 +120,11 @@ Runs authenticated OWASP ZAP API and web scans against a disposable full-stack e
 
 - **Dynamic Environment Provisioning:** Provisions PostgreSQL and Redis service containers on the runner to provide a fully clean integration environment.
 - **Standalone Build:** Builds the backend with `./gradlew bootJar` (matching the production artifact) and boots it with `SPRING_PROFILES_ACTIVE=prod`, then waits for the `/actuator/health/liveness` endpoint to be healthy before scanning.
-- **Authenticated API Scan:** Uses `zaproxy/action-api-scan@v0.8.0` with the canonical `api/openapi.json` definition and a bearer token issued by the disposable backend. This enumerates documented public and protected API operations without exposing a production credential.
-- **Production Ingress Scan:** Builds and runs the production frontend Nginx image with the same read-only filesystem and capability restrictions used by Compose, then scans `http://localhost:4200` through its API proxy.
-- **Independent Scan Completion:** API and frontend ZAP scans each continue long enough for the other scan and all report/SARIF uploads to complete. A final aggregate step fails the job when either scan failed, preserving both coverage and blocking behavior.
-- **Interactive Security Reports:** Archives the API and web HTML, JSON, Markdown, SARIF, and backend logs as the `zap-full-scan` artifact (30-day retention).
+- **Authenticated API Scan:** Uses `zaproxy/action-api-scan@v0.10.0` with the canonical `api/openapi.json` definition and a bearer token issued by the disposable backend. This enumerates documented public and protected API operations without exposing a production credential.
+- **Production Ingress Scan:** Builds and runs the production frontend Nginx image with the same read-only filesystem and capability restrictions used by Compose, then scans `http://localhost:4200` through its API proxy with headless browser AJAX spidering (`-j`) to discover dynamic Angular SPA routes.
+- **Parameterized Manual Dispatch:** Supports manual `workflow_dispatch` with options for scan scope (`all`, `api_only`, `web_only`), AJAX spider toggle, and quality gate override (`fail_on_findings: false` for triage).
+- **Independent Scan Completion:** API and frontend ZAP scans each continue long enough for the other scan and all report/SARIF uploads to complete. A final aggregate step evaluates active scans while respecting skipped targets and quality gate settings, preserving both coverage and blocking behavior.
+- **Interactive Security Reports:** Archives the API and web HTML, JSON, Markdown, SARIF, and backend logs as the `zap-full-scan` artifact (30-day retention), with structured collapsible Markdown summaries rendered in GitHub Step Summary.
 - **GitHub Security (GHAS) Code Scanning Integration:** Translates raw API and web ZAP findings into SARIF via `scripts/zap2sarif.py` and uploads separate `dast-zap-api` and `dast-zap-web` categories. Invalid source reports and SARIF write failures fail the workflow rather than being reported as zero findings.
 
 ## 9b. External Server Security Scan — see `nightly-external-server-scan.yml`
@@ -249,12 +250,15 @@ Expo SDK upgrade, select the target `expo` version first, then run `npx expo ins
 --fix`, `npx expo install --check`, `npx expo-doctor`, and the mobile suites.
 
 `.github/workflows/expo-maintenance.yml` owns routine Expo compatibility
-updates. It runs daily, aligns the SDK-managed dependency set, verifies Expo's
-compatibility and project health, and creates or refreshes one maintenance PR.
-The normal mobile CI does not run `expo install --check`: Expo can publish a
-new compatible patch without any change in a PR, so freshness is not a stable
-per-PR gate. The maintenance PR still runs the required JavaScript, Android,
-and iOS validations before merge.
+updates. It runs daily (and supports manual `workflow_dispatch` with `dryRun`),
+aligns the SDK-managed dependency set, verifies Expo's compatibility and project
+health, pre-validates TypeScript (`lint`) and unit tests (`jest`), and creates or
+refreshes one maintenance PR with an itemized package diff summary. It also
+automatically closes obsolete maintenance PRs if the base branch is already
+aligned. The normal mobile CI does not run `expo install --check`: Expo can
+publish a new compatible patch without any change in a PR, so freshness is not a
+stable per-PR gate. The maintenance PR still runs the required JavaScript,
+Android, and iOS validations before merge.
 
 The active `Protect main and require CI` ruleset protects `main`, requires
 branches to be current, and requires these checks before GitHub auto-merge can

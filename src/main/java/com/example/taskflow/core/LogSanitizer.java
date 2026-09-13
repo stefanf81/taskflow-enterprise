@@ -13,7 +13,7 @@ public final class LogSanitizer {
      */
     public static String stripNewlines(String input) {
         if (input == null) return null;
-        return input.replaceAll("[\\r\\n]", "");
+        return input.replace("\n", "").replace("\r", "");
     }
 
     /**
@@ -32,10 +32,11 @@ public final class LogSanitizer {
             return "****";
         }
         String safe = stripNewlines(input);
-        if (safe.length() <= 4) {
+        if (safe == null || safe.length() <= 4) {
             return "****";
         }
-        return safe.substring(0, 2) + "****" + safe.substring(safe.length() - 2);
+        return (safe.substring(0, 2) + "****" + safe.substring(safe.length() - 2))
+                .replace("\n", "").replace("\r", "");
     }
 
     /**

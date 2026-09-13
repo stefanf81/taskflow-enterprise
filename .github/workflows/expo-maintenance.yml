@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "47 3 * * *"
   workflow_dispatch:
+    inputs:
+      dryRun:
+        description: "Dry run (check and summarize changes without pushing or creating PR)"
+        type: boolean
+        default: false
 
 # The PAT is required because PRs created with GITHUB_TOKEN do not trigger the
 # normal pull_request workflows that validate the generated Expo update.
@@ -53,14 +58,96 @@ jobs:
           npx expo install --check
           npx expo-doctor
 
+      - name: Validate mobile TypeScript and unit tests
+        working-directory: mobile
+        run: |
+          npm run lint
+          npm test -- --ci --maxWorkers=50%
+
       - name: Create or update maintenance pull request
         env:
           GH_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+          IS_DRY_RUN: ${{ github.event.inputs.dryRun || 'false' }}
         run: |
           set -euo pipefail
 
+          PR_NUMBER=$(gh pr list --base "$BASE_BRANCH" --head "$MAINTENANCE_BRANCH" --state open --json number --jq '.[0].number')
+
           if git diff --quiet -- mobile/package.json mobile/package-lock.json; then
+            echo "Expo SDK dependencies are up to date."
+            if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "null" ]; then
+              echo "Closing obsolete maintenance PR #$PR_NUMBER..."
+              gh pr close "$PR_NUMBER" --comment "Expo SDK dependencies are aligned on $BASE_BRANCH. Closing obsolete PR." --delete-branch
+            fi
             exit 0
+          fi
+
+          # Extract dependency diff summary for PR body & Step Summary
+          node -e '
+            const fs = require("fs");
+            const { execSync } = require("child_process");
+            let changesList = "";
+            try {
+              const diff = execSync("git diff -U0 mobile/package.json", { encoding: "utf8" });
+              const changes = new Map();
+              for (const line of diff.split("\n")) {
+                const removed = line.match(/^-\s*"([^"]+)":\s*"([^"]+)"/);
+                if (removed) {
+                  changes.set(removed[1], { oldVersion: removed[2], newVersion: null });
+                }
+                const added = line.match(/^\+\s*"([^"]+)":\s*"([^"]+)"/);
+                if (added) {
+                  if (changes.has(added[1])) {
+                    changes.get(added[1]).newVersion = added[2];
+                  } else {
+                    changes.set(added[1], { oldVersion: "(new)", newVersion: added[2] });
+                  }
+                }
+              }
+              const lines = [];
+              for (const [pkg, { oldVersion, newVersion }] of changes) {
+                if (newVersion) {
+                  lines.push(`- \`${pkg}\`: \`${oldVersion}\` → \`${newVersion}\``);
+                }
+              }
+              changesList = lines.join("\n");
+            } catch {}
+
+            const body = [
+              "### Automated Expo SDK Alignment",
+              "",
+              "Expo SDK dependency alignment detected the following package changes:",
+              "",
+              changesList || "- Transitive Expo SDK dependencies updated in lockfile.",
+              "",
+              "Verified with:",
+              "- `npx expo install --check`",
+              "- `npx expo-doctor`",
+              "- `npm run lint` (TypeScript)",
+              "- `npm test` (Jest)",
+              "",
+              "Native Android and iOS CI must pass before merging."
+            ].join("\n");
+
+            fs.writeFileSync("/tmp/pr-body.md", body);
+          '
+
+          cat /tmp/pr-body.md >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$IS_DRY_RUN" = "true" ]; then
+            echo "Dry run mode: changes detected but skipping commit, push, and PR creation."
+            git diff mobile/package.json
+            exit 0
+          fi
+
+          # Fetch remote tracking branch refspec so --force-with-lease evaluates against origin correctly
+          git fetch origin "+refs/heads/${MAINTENANCE_BRANCH}:refs/remotes/origin/${MAINTENANCE_BRANCH}" 2>/dev/null || true
+
+          # Determine --force-with-lease lease expectation
+          if git rev-parse --verify "refs/remotes/origin/${MAINTENANCE_BRANCH}" >/dev/null 2>&1; then
+            LEASE_ARG="--force-with-lease=${MAINTENANCE_BRANCH}:refs/remotes/origin/${MAINTENANCE_BRANCH}"
+          else
+            LEASE_ARG="--force-with-lease"
           fi
 
           git switch -C "$MAINTENANCE_BRANCH"
@@ -68,15 +155,18 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add mobile/package.json mobile/package-lock.json
           git commit -m 'chore(mobile): align Expo SDK dependencies'
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git push --force-with-lease origin "HEAD:$MAINTENANCE_BRANCH"
 
-          if ! gh pr list --base "$BASE_BRANCH" --head "$MAINTENANCE_BRANCH" --state open --json number --jq 'length > 0' | grep -qx true; then
+          # Push using -c http.extraheader to authenticate origin without writing token into .git/config
+          AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+          git -c "http.extraheader=${AUTH_HEADER}" push $LEASE_ARG origin "HEAD:$MAINTENANCE_BRANCH"
+
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
             gh pr create \
               --base "$BASE_BRANCH" \
               --head "$MAINTENANCE_BRANCH" \
               --title 'chore(mobile): align Expo SDK dependencies' \
-              --body 'Automated Expo SDK compatibility update. Android and iOS native CI must pass before merging.'
+              --body-file /tmp/pr-body.md \
+              --label dependencies
+          else
+            gh pr edit "$PR_NUMBER" --body-file /tmp/pr-body.md
           fi
-
-          gh pr edit "$MAINTENANCE_BRANCH" --add-label dependencies
