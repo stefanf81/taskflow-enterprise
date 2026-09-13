@@ -7,6 +7,49 @@ plugins {
 	alias(libs.plugins.spotbugs)
 	alias(libs.plugins.dependency.analysis)
 }
+
+dependencyAnalysis {
+	issues {
+		all {
+			// This audit is intentionally limited to unused declarations.
+			onUnusedDependencies {
+				severity("warn")
+				// Framework aggregators, runtime-loaded integrations, and explicit
+				// transitive version pins cannot be proven as used from bytecode alone.
+				exclude(libs.error.prone.annotations)
+				exclude(libs.micrometer.prometheus)
+				exclude(libs.micrometer.tracing.otel)
+				exclude(libs.netty.codec.dns)
+				exclude(libs.okio)
+				exclude(libs.opentelemetry.semconv)
+				exclude(libs.spring.boot.starter.actuator)
+				exclude(libs.spring.boot.starter.cache)
+				exclude(libs.spring.boot.starter.data.jpa)
+				exclude(libs.spring.boot.starter.data.redis)
+				exclude(libs.spring.boot.starter.flyway)
+				exclude(libs.spring.boot.starter.oauth2.resource.server)
+				exclude(libs.spring.boot.starter.security)
+				exclude(libs.spring.boot.starter.validation)
+				exclude(libs.spring.boot.starter.web)
+				exclude(libs.spring.modulith.core)
+				exclude(libs.springdoc.webmvc.ui)
+				exclude(libs.archunit.junit5)
+				exclude(libs.spring.boot.starter.test)
+				exclude(libs.spring.boot.starter.webmvc.test)
+				exclude(libs.spring.modulith.test)
+			}
+			onUsedTransitiveDependencies { severity("ignore") }
+			onIncorrectConfiguration { severity("ignore") }
+			onCompileOnly { severity("ignore") }
+			onRuntimeOnly { severity("ignore") }
+			onUnusedAnnotationProcessors { severity("ignore") }
+			onRedundantPlugins { severity("ignore") }
+			onModuleStructure { severity("ignore") }
+			onDuplicateClassWarnings { severity("ignore") }
+		}
+	}
+}
+
 group = 'com.example'
 version = '0.0.1-SNAPSHOT'
 

@@ -4,6 +4,7 @@
   "private": true,
   "description": "TaskFlow Enterprise Monorepo Root Workspace",
   "scripts": {
+    "deps:unused": "knip --include dependencies",
     "test:all": "npm --prefix frontend test && npm --prefix mobile test",
     "test:frontend": "npm --prefix frontend test",
     "test:mobile": "npm --prefix mobile test",
@@ -15,5 +16,8 @@
     "docker:start": "./start-docker.sh",
     "docker:stop": "./stop-docker.sh",
     "verify:all": "./verify.sh"
+  },
+  "devDependencies": {
+    "knip": "6.35.1"
   }
 }

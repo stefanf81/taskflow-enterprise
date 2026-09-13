@@ -1,8 +1,9 @@
-name: Dependency Health Audit
+name: Dependency Maintenance Audit
 
 on:
   schedule:
-    - cron: '0 0 * * 1' # Every Monday at midnight UTC
+    # Run after the daily Renovate job refreshes its abandonment data.
+    - cron: '0 5 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -15,11 +16,10 @@ concurrency:
 env:
   NODE_VERSION: '22'
   JAVA_VERSION: '21'
-  NPM_DEPRECATED_CHECK_VERSION: '2.1.1'
 
 jobs:
   node-audit:
-    name: Audit JS/Node Dependencies
+    name: Check JS/TS Dependency Usage
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -32,7 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           cat > node-audit-summary.md <<'EOF'
-          # JavaScript / Node Dependency Health
+          # JavaScript / TypeScript Dependency Usage
 
           EOF
 
@@ -42,6 +42,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: |
+            package-lock.json
             frontend/package-lock.json
             mobile/package-lock.json
             shared/schemas/package-lock.json
@@ -61,17 +62,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PACKAGES=("shared/schemas" "frontend" "mobile")
+          PACKAGES=("." "shared/schemas" "frontend" "mobile")
           has_error=false
 
           for pkg in "${PACKAGES[@]}"; do
             if [[ ! -f "$pkg/package-lock.json" ]]; then
               {
                 echo
-                echo "## ❌ npm dependency installation ($pkg)"
+                echo "## npm dependency installation ($pkg)"
                 echo
                 echo "A \`package.json\` was found in \`$pkg\`, but no \`package-lock.json\` exists."
-                echo "A reproducible npm audit requires a lockfile."
+                echo "A reproducible dependency check requires a lockfile."
                 echo
                 echo "Status: **ERROR**"
               } | tee -a node-audit-summary.md >> "$GITHUB_STEP_SUMMARY"
@@ -89,92 +90,44 @@ jobs:
           set -euo pipefail
           echo "Installing dependencies across monorepo packages..."
 
-          # shared/schemas must be installed first as frontend and mobile depend on it locally
+          npm ci --ignore-scripts
+          # shared/schemas must be installed before its local consumers.
           npm ci --prefix shared/schemas --ignore-scripts
           npm ci --prefix frontend --ignore-scripts
           npm ci --prefix mobile --ignore-scripts
 
-      - name: Security Audit
+      - name: Check Unused Dependencies
         shell: bash
         run: |
           set -uo pipefail
 
-          PACKAGES=("frontend" "mobile" "shared/schemas")
+          status=0
+          npm run deps:unused > knip.log 2>&1 || status=$?
 
-          for pkg in "${PACKAGES[@]}"; do
-            echo "Running npm audit for $pkg..."
-            (cd "$pkg" && npm audit --audit-level=high > audit.log 2>&1)
-            status=$?
+          {
+            echo
+            echo "## Knip"
+            echo
 
-            {
+            if [[ "$status" -eq 0 ]]; then
+              echo "No unused JavaScript/TypeScript dependencies found."
               echo
-              echo "## 🔒 npm audit ($pkg)"
+              echo "Status: **PASS**"
+            else
+              echo "Knip reported unused dependencies."
               echo
-
-              case "$status" in
-                0)
-                  echo "✅ No high/critical vulnerabilities found."
-                  echo
-                  echo "Status: **PASS**"
-                  ;;
-                *)
-                  echo "⚠️ High/critical vulnerabilities were reported."
-                  echo
-                  echo "Status: **FINDINGS**"
-                  echo
-                  echo '<details><summary>Audit output</summary>'
-                  echo
-                  echo '```text'
-                  cat "$pkg/audit.log"
-                  echo '```'
-                  echo '</details>'
-                  ;;
-              esac
-            } | tee -a node-audit-summary.md >> "$GITHUB_STEP_SUMMARY"
-          done
-
-          # npm audit uses non-zero status for vulnerability findings.
-          # Findings are intentionally non-blocking in this workflow.
-          exit 0
-
-      - name: Check Deprecated npm Packages
-        shell: bash
-        run: |
-          set -uo pipefail
-
-          PACKAGES=("frontend" "mobile" "shared/schemas")
-
-          for pkg in "${PACKAGES[@]}"; do
-            echo "Checking deprecated packages in $pkg..."
-            (cd "$pkg" && npx --yes "npm-deprecated-check@${NPM_DEPRECATED_CHECK_VERSION}" current > deprecated.log 2>&1)
-            status=$?
-
-            {
+              echo "Status: **FINDINGS**"
               echo
-              echo "## 📦 Deprecated npm packages ($pkg)"
+              echo '<details><summary>Knip output</summary>'
               echo
+              echo '```text'
+              cat knip.log
+              echo '```'
+              echo '</details>'
+            fi
+          } | tee -a node-audit-summary.md >> "$GITHUB_STEP_SUMMARY"
 
-              if [[ "$status" -eq 0 ]]; then
-                echo "✅ No deprecated packages found."
-                echo
-                echo "Status: **PASS**"
-              else
-                echo "⚠️ Deprecated packages were reported."
-                echo
-                echo "Status: **FINDINGS**"
-                echo
-                echo '<details><summary>Deprecated package output</summary>'
-                echo
-                echo '```text'
-                cat "$pkg/deprecated.log"
-                echo '```'
-                echo '</details>'
-              fi
-            } | tee -a node-audit-summary.md >> "$GITHUB_STEP_SUMMARY"
-          done
-
-          # npm-deprecated-check's current command is being used as a
-          # report-only check. A non-zero result is therefore non-blocking.
+          # This scheduled audit reports findings through the tracking issue.
           exit 0
 
       - name: Upload Node audit summary
@@ -188,7 +141,7 @@ jobs:
 
 
   gradle-audit:
-    name: Audit Gradle Dependencies
+    name: Check Gradle Dependency Usage
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -201,7 +154,7 @@ jobs:
         run: |
           set -euo pipefail
           cat > gradle-audit-summary.md <<'EOF'
-          # Gradle Dependency Health
+          # Gradle Dependency Usage
 
           EOF
 
@@ -223,7 +176,7 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "## ⏭️ Gradle audit"
+            echo "## Gradle dependency usage"
             echo
             echo "No executable \`./gradlew\` wrapper was found. Gradle dependency checks skipped."
             echo
@@ -241,48 +194,21 @@ jobs:
         if: steps.detect.outputs.has_gradle == 'true'
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Discover available Gradle audit tasks
+      - name: Check Unused Gradle Dependencies
         if: steps.detect.outputs.has_gradle == 'true'
-        id: tasks
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          ./gradlew -q tasks --all > gradle-tasks.txt 2>&1
-
-          if grep -Eq '(^|[[:space:]])buildHealth([[:space:]]|$)' gradle-tasks.txt; then
-            echo "build_health=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "build_health=false" >> "$GITHUB_OUTPUT"
-          fi
-
-          if grep -Eq '(^|[[:space:]])dependencyUpdates([[:space:]]|$)' gradle-tasks.txt; then
-            echo "dependency_updates=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "dependency_updates=false" >> "$GITHUB_OUTPUT"
-          fi
-
-          if grep -Eq '(^|[[:space:]])dependencyCheckAnalyze([[:space:]]|$)' gradle-tasks.txt; then
-            echo "dependency_check=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "dependency_check=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Check Gradle Dependency Health
-        if: steps.detect.outputs.has_gradle == 'true' && steps.tasks.outputs.build_health == 'true'
         shell: bash
         run: |
           set -uo pipefail
 
-          ./gradlew buildHealth > buildhealth.log 2>&1
-          status=$?
+          status=0
+          ./gradlew buildHealth > buildhealth.log 2>&1 || status=$?
 
           {
             echo
-            echo "## 🏗️ Gradle buildHealth"
+            echo "## AutonomousApps buildHealth"
             echo
 
-            if [[ -f build/reports/dependency-analysis/build-health-report.txt ]]; then
+            if [[ -s build/reports/dependency-analysis/build-health-report.txt ]]; then
               echo "Status: **FINDINGS / REPORT**"
               echo
               echo '<details><summary>buildHealth report</summary>'
@@ -292,13 +218,13 @@ jobs:
               echo '```'
               echo '</details>'
             elif [[ "$status" -eq 0 ]]; then
-              echo "✅ No unused or misconfigured dependencies found."
+              echo "No unused Gradle dependencies found."
               echo
               echo "Status: **PASS**"
             else
-              echo "⚠️ Dependency-analysis findings were reported."
+              echo "buildHealth failed to execute."
               echo
-              echo "Status: **FINDINGS**"
+              echo "Status: **ERROR**"
               echo
               echo '<details><summary>buildHealth output</summary>'
               echo
@@ -309,147 +235,9 @@ jobs:
             fi
           } | tee -a gradle-audit-summary.md >> "$GITHUB_STEP_SUMMARY"
 
-          # buildHealth is intentionally report-only.
-          exit 0
-
-      - name: Report missing buildHealth task
-        if: steps.detect.outputs.has_gradle == 'true' && steps.tasks.outputs.build_health == 'false'
-        shell: bash
-        run: |
-          set -euo pipefail
-          {
-            echo
-            echo "## ⏭️ Gradle buildHealth"
-            echo
-            echo "Task \`buildHealth\` is not configured."
-            echo "The AutonomousApps dependency-analysis plugin may not be applied."
-            echo
-            echo "Status: **SKIPPED**"
-          } | tee -a gradle-audit-summary.md >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Check Outdated Gradle Libraries
-        if: steps.detect.outputs.has_gradle == 'true' && steps.tasks.outputs.dependency_updates == 'true'
-        shell: bash
-        run: |
-          set -uo pipefail
-
-          ./gradlew dependencyUpdates -Drevision=release > updates.log 2>&1
-          status=$?
-
-          {
-            echo
-            echo "## ⬆️ Outdated Gradle dependencies"
-            echo
-
-            if [[ -f build/dependencyUpdates/report.txt ]]; then
-              echo "Status: **FINDINGS / REPORT**"
-              echo
-              echo '<details><summary>dependencyUpdates report</summary>'
-              echo
-              echo '```text'
-              cat build/dependencyUpdates/report.txt
-              echo '```'
-              echo '</details>'
-            elif [[ "$status" -eq 0 ]]; then
-              echo "✅ dependencyUpdates completed, but no report file was produced."
-              echo
-              echo "Status: **PASS**"
-              echo
-              echo '<details><summary>Command output</summary>'
-              echo
-              echo '```text'
-              cat updates.log
-              echo '```'
-              echo '</details>'
-            else
-              echo "❌ dependencyUpdates failed to execute."
-              echo
-              echo "Status: **ERROR**"
-              echo
-              echo '<details><summary>Command output</summary>'
-              echo
-              echo '```text'
-              cat updates.log
-              echo '```'
-              echo '</details>'
-            fi
-          } | tee -a gradle-audit-summary.md >> "$GITHUB_STEP_SUMMARY"
-
-          # A missing report combined with a non-zero exit means the tool itself failed.
-          if [[ ! -f build/dependencyUpdates/report.txt && "$status" -ne 0 ]]; then
-            exit "$status"
-          fi
-
-          exit 0
-
-      - name: Report missing dependencyUpdates task
-        if: steps.detect.outputs.has_gradle == 'true' && steps.tasks.outputs.dependency_updates == 'false'
-        shell: bash
-        run: |
-          set -euo pipefail
-          {
-            echo
-            echo "## ⏭️ Outdated Gradle dependencies"
-            echo
-            echo "Task \`dependencyUpdates\` is not configured."
-            echo "The Ben Manes Versions plugin may not be applied."
-            echo
-            echo "Status: **SKIPPED**"
-          } | tee -a gradle-audit-summary.md >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Security Audit - OWASP Dependency-Check
-        if: steps.detect.outputs.has_gradle == 'true' && steps.tasks.outputs.dependency_check == 'true'
-        shell: bash
-        run: |
-          set -uo pipefail
-
-          ./gradlew dependencyCheckAnalyze > owasp.log 2>&1
-          status=$?
-
-          {
-            echo
-            echo "## 🔒 OWASP Dependency-Check"
-            echo
-
-            if [[ "$status" -eq 0 ]]; then
-              echo "✅ Dependency-Check completed successfully."
-              echo
-              echo "Status: **PASS / REPORT**"
-            else
-              echo "❌ Dependency-Check failed to execute."
-              echo
-              echo "Status: **ERROR**"
-            fi
-
-            echo
-            echo '<details><summary>Execution output</summary>'
-            echo
-            echo '```text'
-            cat owasp.log
-            echo '```'
-            echo '</details>'
-          } | tee -a gradle-audit-summary.md >> "$GITHUB_STEP_SUMMARY"
-
-          # The OWASP plugin's failBuildOnCVSS setting should control whether
-          # vulnerability findings fail Gradle. Execution errors should still fail CI.
           if [[ "$status" -ne 0 ]]; then
             exit "$status"
           fi
-
-      - name: Report missing OWASP task
-        if: steps.detect.outputs.has_gradle == 'true' && steps.tasks.outputs.dependency_check == 'false'
-        shell: bash
-        run: |
-          set -euo pipefail
-          {
-            echo
-            echo "## ⏭️ OWASP Dependency-Check"
-            echo
-            echo "Task \`dependencyCheckAnalyze\` is not configured."
-            echo "The OWASP Dependency-Check Gradle plugin is not applied."
-            echo
-            echo "Status: **SKIPPED**"
-          } | tee -a gradle-audit-summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Gradle audit summary
         if: always()
@@ -460,22 +248,8 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload OWASP reports
-        if: always() && steps.detect.outputs.has_gradle == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: owasp-dependency-check-report
-          path: |
-            **/build/reports/dependency-check-report.html
-            **/build/reports/dependency-check-report.xml
-            **/build/reports/dependency-check-report.json
-            **/build/reports/dependency-check-report.sarif
-          if-no-files-found: ignore
-          retention-days: 30
-
-
   report:
-    name: Update Dependency Health Issue
+    name: Update Dependency Maintenance Issue
     needs:
       - node-audit
       - gradle-audit
@@ -495,13 +269,62 @@ jobs:
           pattern: '*-audit-summary'
           merge-multiple: true
 
+      - name: Read Renovate abandonment report
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const query = `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:title "Dependency Dashboard"`;
+            const { data } = await github.rest.search.issuesAndPullRequests({
+              q: query,
+              per_page: 10,
+            });
+            const dashboard = data.items.find((item) => item.title === 'Dependency Dashboard');
+
+            if (!dashboard) {
+              fs.writeFileSync(
+                'abandonment-summary.md',
+                '# Dependency Maintenance\n\n' +
+                  '## Abandoned Dependencies\n\n' +
+                  'The Renovate Dependency Dashboard was not found.\n\n' +
+                  'Status: **ERROR**\n',
+              );
+              return;
+            }
+
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: dashboard.number,
+            });
+            const dashboardBody = issue.body ?? '';
+            const heading = '## Abandoned Dependencies';
+            const start = dashboardBody.indexOf(heading);
+            const end =
+              start === -1 ? -1 : dashboardBody.indexOf('\n## ', start + heading.length);
+            const source =
+              `[Renovate Dependency Dashboard](${issue.html_url}), updated ${issue.updated_at}. ` +
+              'Threshold: `abandonments:recommended` (one year, with community overrides).';
+            const report =
+              start === -1
+                ? '## Abandoned Dependencies\n\n' +
+                  'No dependencies have gone at least one year without a release.\n\n' +
+                  'Status: **PASS**'
+                : dashboardBody.slice(start, end === -1 ? undefined : end).trim() +
+                  '\n\nStatus: **FINDINGS**';
+
+            fs.writeFileSync(
+              'abandonment-summary.md',
+              `# Dependency Maintenance\n\n${source}\n\n${report}\n`,
+            );
+
       - name: Assemble issue body
         shell: bash
         run: |
           set -euo pipefail
 
           {
-            echo "# Dependency Health Audit"
+            echo "# Dependency Maintenance Audit"
             echo
             echo "_Last updated: $(date -u '+%Y-%m-%d %H:%M UTC')_"
             echo
@@ -512,7 +335,7 @@ jobs:
             cat summaries/node-audit-summary.md 2>/dev/null || {
               echo "## JavaScript / Node"
               echo
-              echo "❌ No Node report was produced. The job may have failed before the summary was uploaded."
+              echo "No Node report was produced. The job may have failed before the summary was uploaded."
             }
             echo
             echo "---"
@@ -520,14 +343,18 @@ jobs:
             cat summaries/gradle-audit-summary.md 2>/dev/null || {
               echo "## Gradle"
               echo
-              echo "❌ No Gradle report was produced. The job may have failed before the summary was uploaded."
+              echo "No Gradle report was produced. The job may have failed before the summary was uploaded."
             }
+            echo
+            echo "---"
+            echo
+            cat abandonment-summary.md
           } > issue-body.md
 
       - name: Create or update dependency-health issue
         uses: actions/github-script@v9
         env:
-          ISSUE_TITLE: Dependency Health Audit
+          ISSUE_TITLE: Dependency Maintenance Audit
           ISSUE_LABEL: dependency-health
         with:
           script: |
@@ -550,7 +377,7 @@ jobs:
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   name: label,
-                  description: 'Dependency health audit tracking issue',
+                  description: 'Dependency maintenance audit tracking issue',
                 });
               } else {
                 throw error;
@@ -575,7 +402,7 @@ jobs:
                 labels: [label],
               });
 
-              core.info(`Updated dependency health issue #${issue.number}`);
+              core.info(`Updated dependency maintenance issue #${issue.number}`);
             } else {
               const created = await github.rest.issues.create({
                 owner: context.repo.owner,
@@ -585,5 +412,5 @@ jobs:
                 labels: [label],
               });
 
-              core.info(`Created dependency health issue #${created.data.number}`);
+              core.info(`Created dependency maintenance issue #${created.data.number}`);
             }

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    "frontend": {
+      "entry": ["test/setup.ts"]
+    },
+    "mobile": {
+      "entry": ["App.tsx"],
+      "ignoreDependencies": ["@babel/core"]
+    },
+    "shared/schemas": {}
+  }
+}
