@@ -21,7 +21,6 @@ concurrency:
 
 env:
   JAVA_VERSION: "21"
-  NODE_VERSION: "22"
   TRIVY_VERSION: v0.73.0
 
 defaults:
@@ -34,39 +33,41 @@ jobs:
   ###########################################################
 
   codeql:
-    name: CodeQL
+    name: CodeQL (${{ matrix.language }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     permissions:
       contents: read
       security-events: write
-      actions: read
+      actions: write
 
     strategy:
       fail-fast: false
 
       matrix:
         include:
-          - language: java
+          - language: java-kotlin
             build-mode: autobuild
 
-          - language: javascript
+          - language: javascript-typescript
             build-mode: none
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Java
-        if: matrix.language == 'java'
+        if: matrix.language == 'java-kotlin'
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Set up Gradle
-        if: matrix.language == 'java'
+        if: matrix.language == 'java-kotlin'
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: false
@@ -76,6 +77,7 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
 
       - name: Autobuild
         if: matrix.build-mode == 'autobuild'
@@ -83,6 +85,8 @@ jobs:
 
       - name: Analyze
         uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
 
   ###########################################################
   # Trivy Filesystem Scan
@@ -97,7 +101,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      packages: read
 
     strategy:
       fail-fast: false
@@ -107,23 +110,25 @@ jobs:
           # Keep findings attributable to the component that owns the lockfile.
           - name: Backend
             path: .
-            skip-dirs: frontend,mobile,shared
+            skip-dirs: frontend,mobile,shared,.git,.gradle,build
 
           - name: Frontend
             path: frontend
-            skip-dirs: ""
+            skip-dirs: node_modules,dist
 
           - name: Mobile
             path: mobile
-            skip-dirs: ""
+            skip-dirs: node_modules,android,ios
 
           - name: Shared
             path: shared/schemas
-            skip-dirs: ""
+            skip-dirs: node_modules
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       #####################################################
       # Filesystem Scan
@@ -147,6 +152,7 @@ jobs:
         with:
           version: ${{ env.TRIVY_VERSION }}
           scan-type: fs
+          scanners: vuln
           scan-ref: ${{ matrix.component.path }}
           skip-dirs: ${{ matrix.component.skip-dirs }}
           trivyignores: .trivyignore

@@ -81,19 +81,22 @@ Submits the complete, deep Java and Gradle dependency tree directly to the GitHu
 
 See [`security.yml`](security.yml) for details on:
 
-- **Trivy Filesystem Scan:** Report-only (`exit-code: 0`) SARIF upload for both Backend (`.`) and Frontend (`frontend/`) source trees, surfaced in the Code Scanning tab. Severity asymmetry vs. the Docker image hard gate is deliberately maintained — see the inline notes.
+- **Trivy Filesystem Scan:** Report-only (`exit-code: 0`, `scanners: vuln`) SARIF upload partitioned across four distinct components: Backend (`.`), Frontend (`frontend/`), Mobile (`mobile/`), and Shared Schemas (`shared/schemas/`), surfaced in the Code Scanning tab with dedicated category namespaces. Non-component and build directories (`node_modules/`, `build/`, `.gradle/`, `dist/`, `android/`, `ios/`, `.git/`) are explicitly excluded. Severity asymmetry vs. the Docker image hard gate is deliberately maintained — see the inline notes.
 - **Trivy Database Caching:** `trivy-action` manages its own workspace-local
   vulnerability database cache and binary cache. The workflows do not layer a
   second cache over it.
+- **Hardened Execution & Least Privilege:** Runs with scoped permissions (`contents: read`, `security-events: write`), omitting unneeded package tokens, and checks out the workspace with `persist-credentials: false`.
 
 ## 8a. Job: `codeql` — moved to `security.yml`
 
-> CodeQL analysis (Java + JavaScript) has also been extracted to `.github/workflows/security.yml`.
+> CodeQL analysis (`java-kotlin` + `javascript-typescript`) has also been extracted to `.github/workflows/security.yml`.
 
 Runs deep semantic security analysis in parallel for both languages on every nightly run:
 
-- **Java (`build-mode: autobuild`):** CodeQL performs its own Gradle build tracking — it does not consume the production JAR from the `backend` job, so there is no serialization bottleneck.
-- **JavaScript (`build-mode: none`):** Scans the Angular 22 TypeScript source without building, keeping the analysis lightweight.
+- **Java/Kotlin (`build-mode: autobuild`):** CodeQL performs its own Gradle build tracking with `actions: write` permission for Gradle build caching — it does not consume the production JAR from the `backend` job, so there is no serialization bottleneck.
+- **JavaScript/TypeScript (`build-mode: none`):** Scans the Angular 22 and React Native TypeScript sources directly without building, keeping the analysis lightweight.
+- **Extended Security Queries:** Configured with `queries: security-extended` to perform deep semantic checks for injection flaws, authentication bypasses, path traversals, and cryptographic weaknesses beyond the minimal default suite.
+- **Matrix Naming & SARIF Category Isolation:** Job matrix displays distinct language names (`CodeQL (${{ matrix.language }})`) and emits SARIF results categorized under `/language:${{ matrix.language }}`. Workspace checkout runs with `persist-credentials: false`.
 
 The standalone workflow has no change-detection dependency — it always scans both languages on every scheduled/manual run.
 
@@ -122,6 +125,24 @@ Runs authenticated OWASP ZAP API and web scans against a disposable full-stack e
 - **Independent Scan Completion:** API and frontend ZAP scans each continue long enough for the other scan and all report/SARIF uploads to complete. A final aggregate step fails the job when either scan failed, preserving both coverage and blocking behavior.
 - **Interactive Security Reports:** Archives the API and web HTML, JSON, Markdown, SARIF, and backend logs as the `zap-full-scan` artifact (30-day retention).
 - **GitHub Security (GHAS) Code Scanning Integration:** Translates raw API and web ZAP findings into SARIF via `scripts/zap2sarif.py` and uploads separate `dast-zap-api` and `dast-zap-web` categories. Invalid source reports and SARIF write failures fail the workflow rather than being reported as zero findings.
+
+## 9b. External Server Security Scan — see `nightly-external-server-scan.yml`
+
+> The external production boundary scan lives in [`.github/workflows/nightly-external-server-scan.yml`](nightly-external-server-scan.yml). It is scheduled nightly (**03:00 UTC**, after DAST and regression suites) and available on-demand via parameterized `workflow_dispatch`.
+
+Audits the public external perimeter, exposed ports, HTTP/TLS compliance, and web application attack surface against the production host.
+
+- **Two-Job Parallel Execution:** Dispatches concurrent jobs to optimize compute time from 60–90 minutes down to ~10–15 minutes:
+  - `network-scan`: Scans the target IP with Nmap across configurable port scopes (`top_1000` fast probe, `full_65k` deep audit, or `expected_only`). Automatically flags any ports outside `EXPECTED_PUBLIC_TCP_PORTS: "80,443"` and runs non-intrusive safe service scripts on open ports.
+  - `web-scan`: Tests the public web perimeter (`Nuclei`, `testssl.sh`, and `Nikto`).
+- **Origin IP & SNI Alignment:** Pins `TARGET_HOST` to `TARGET_IP` in `/etc/hosts` and passes `--add-host` to containerized scanners, eliminating CDN/DNS resolution drift while preserving exact TLS SNI and HTTP `Host` virtual routing.
+- **Port 80 Redirect Verification:** Validates that port 80 enforces an immediate HTTP-to-HTTPS redirect (301/302/307/308) to the target domain, including it in web analysis rather than misclassifying it as a non-HTTP protocol.
+- **Strict Quality Gates:**
+  - Fails if unexpected public TCP ports are open.
+  - Fails if Nuclei detects `HIGH` or `CRITICAL` findings.
+  - Fails if `testssl.sh` detects `CRITICAL` or `HIGH` TLS vulnerabilities (e.g. SSLv3, POODLE, Heartbleed, expired certs).
+  - Fails on operational scanner crashes or missing/empty reports (preventing false successes).
+- **Reconnaissance Protection:** Raw network and scanner dumps are excluded from public artifacts by default (`upload_raw_artifacts: false`). Sanitized tables and metrics are rendered in GitHub Step Summary, while Nuclei findings upload to GitHub Code Scanning via SARIF.
 
 ## 10. Job: `docker-build`
 

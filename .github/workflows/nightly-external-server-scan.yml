@@ -1,64 +1,85 @@
 name: External Server Security Scan
 
 on:
+  schedule:
+    # Nightly external audit at 03:00 UTC
+    - cron: "0 3 * * *"
+
   workflow_dispatch:
+    inputs:
+      target_ip:
+        description: "Target IP address (leave empty to use vars.TARGET_IP or default)"
+        type: string
+        default: ""
+      target_host:
+        description: "Target Hostname (leave empty to use vars.PUBLIC_SERVER_DOMAIN)"
+        type: string
+        default: ""
+      port_scan_scope:
+        description: "Port scan scope (top_1000 is fast ~15s; full_65k is thorough ~5-10m)"
+        type: choice
+        options:
+          - top_1000
+          - full_65k
+          - expected_only
+        default: top_1000
+      scan_components:
+        description: "Scan components to run"
+        type: choice
+        options:
+          - all
+          - web_only
+          - network_only
+        default: all
+      upload_raw_artifacts:
+        description: "Upload raw scanner artifacts (disabled by default to prevent reconnaissance leakage)"
+        type: boolean
+        default: false
+      fail_on_tls_issues:
+        description: "Fail quality gate on testssl.sh HIGH or CRITICAL findings"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
-  security-events: write
 
 concurrency:
-  group: nightly-external-security-scan
+  group: nightly-external-security-scan-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  TARGET_IP: "84.194.170.2"
-
-  # Required repository variable. Nmap scans the IP, while web scanners must
-  # use a hostname so TLS SNI and virtual-host routing are exercised correctly.
-  TARGET_HOST: ${{ vars.PUBLIC_SERVER_DOMAIN }}
+  TARGET_IP: ${{ inputs.target_ip != '' && inputs.target_ip || vars.TARGET_IP != '' && vars.TARGET_IP || '84.194.170.2' }}
+  TARGET_HOST: ${{ inputs.target_host != '' && inputs.target_host || vars.PUBLIC_SERVER_DOMAIN }}
   EXPECTED_PUBLIC_TCP_PORTS: "80,443"
 
-  NUCLEI_VERSION: "v3.11.0"
-
-  # Production-safe limits for the externally initiated scans.
+  NUCLEI_VERSION: "v3.11.1"
   NUCLEI_RATE_LIMIT: "20"
   NUCLEI_CONCURRENCY: "10"
   NIKTO_MAX_TIME: "15m"
+  FAIL_ON_TLS_ISSUES: ${{ inputs.fail_on_tls_issues != false }}
 
 defaults:
   run:
     shell: bash
 
 jobs:
-  external-security-scan:
-    name: Nmap, Nuclei, testssl.sh and Nikto
+  ##########################################################
+  # Network Port Discovery & Surface Audit
+  ##########################################################
+  network-scan:
+    name: Network Port Discovery & Surface Audit
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scan_components != 'web_only' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
 
     steps:
-      ##########################################################
-      # Checkout and preparation
-      ##########################################################
-
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Prepare report directory
         run: |
           mkdir -p reports
-
-          {
-            echo "# Nightly external security scan"
-            echo
-            echo "- **Target IP:** \`${TARGET_IP}\`"
-            echo "- **HTTP/TLS host:** \`${TARGET_HOST}\`"
-            echo "- **Started:** $(date --utc --iso-8601=seconds)"
-          } > reports/summary.md
-
-      ##########################################################
-      # Install tools
-      ##########################################################
+          chmod -R 777 reports
 
       - name: Install Nmap and report dependencies
         run: |
@@ -69,38 +90,54 @@ jobs:
 
           nmap --version | tee reports/nmap-version.txt
 
-      - name: Install Nuclei
-        uses: projectdiscovery/nuclei-action@v3
-        with:
-          version: ${{ env.NUCLEI_VERSION }}
-          install-only: true
-
-      - name: Update Nuclei templates
+      - name: Run TCP port discovery with Nmap
+        env:
+          PORT_SCAN_SCOPE: ${{ github.event_name == 'schedule' && 'full_65k' || inputs.port_scan_scope || 'top_1000' }}
         run: |
-          nuclei -version | tee reports/nuclei-version.txt
-          nuclei -update-templates
+          echo "Scanning target IP: ${TARGET_IP} with scope: ${PORT_SCAN_SCOPE}"
+          case "${PORT_SCAN_SCOPE}" in
+            expected_only)
+              echo "Scanning only expected ports (${EXPECTED_PUBLIC_TCP_PORTS})..."
+              sudo nmap \
+                -Pn \
+                -sS \
+                -T4 \
+                -p "${EXPECTED_PUBLIC_TCP_PORTS}" \
+                --reason \
+                -oA reports/nmap-discovery \
+                "${TARGET_IP}"
+              ;;
+            full_65k)
+              echo "Scanning all 65,535 TCP ports..."
+              sudo nmap \
+                -Pn \
+                -sS \
+                -T4 \
+                -p- \
+                --min-rate 800 \
+                --max-retries 1 \
+                --host-timeout 15m \
+                --reason \
+                -oA reports/nmap-discovery \
+                "${TARGET_IP}"
+              ;;
+            top_1000|*)
+              echo "Scanning top 1000 TCP ports..."
+              sudo nmap \
+                -Pn \
+                -sS \
+                -T4 \
+                --top-ports 1000 \
+                --min-rate 500 \
+                --max-retries 1 \
+                --host-timeout 5m \
+                --reason \
+                -oA reports/nmap-discovery \
+                "${TARGET_IP}"
+              ;;
+          esac
 
-      ##########################################################
-      # Nmap: discover every exposed TCP port
-      ##########################################################
-
-      - name: Run full TCP port discovery with Nmap
-        run: |
-          # -Pn: treat the host as online even when ICMP is blocked.
-          # -sS: TCP SYN scan; sudo is required on the hosted runner.
-          # -p-: scan all 65,535 TCP ports, not only common ports.
-          # -T3 and the request limits keep the scan reasonably gentle.
-          sudo nmap \
-            -Pn \
-            -sS \
-            -T3 \
-            -p- \
-            --min-rate 200 \
-            --max-retries 2 \
-            --host-timeout 25m \
-            --reason \
-            -oA reports/nmap-discovery \
-            "${TARGET_IP}"
+          touch reports/nmap-complete
 
       - name: Extract open ports
         run: |
@@ -109,25 +146,28 @@ jobs:
           import xml.etree.ElementTree as ET
 
           source = Path("reports/nmap-discovery.xml")
-          root = ET.parse(source).getroot()
+          ports = []
 
-          ports = sorted(
-              {
-                  int(port.attrib["portid"])
-                  for port in root.findall(".//port")
-                  if (port.find("state") is not None)
-                  and port.find("state").attrib.get("state") == "open"
-              }
-          )
+          if source.exists() and source.stat().st_size > 0:
+              try:
+                  root = ET.parse(source).getroot()
+                  ports = sorted(
+                      {
+                          int(port.attrib["portid"])
+                          for port in root.findall(".//port")
+                          if (port.find("state") is not None)
+                          and port.find("state").attrib.get("state") == "open"
+                      }
+                  )
+              except (ET.ParseError, OSError) as e:
+                  print(f"::warning::Failed to parse {source}: {e}")
 
           Path("reports/open-ports.txt").write_text(
-              "\n".join(str(port) for port in ports)
-              + ("\n" if ports else ""),
+              "\n".join(str(p) for p in ports) + ("\n" if ports else ""),
               encoding="utf-8",
           )
-
           Path("reports/open-ports.csv").write_text(
-              ",".join(str(port) for port in ports),
+              ",".join(str(p) for p in ports),
               encoding="utf-8",
           )
 
@@ -141,18 +181,21 @@ jobs:
           import os
 
           expected = {
-              int(port)
-              for port in os.environ["EXPECTED_PUBLIC_TCP_PORTS"].split(",")
-              if port
+              int(port.strip())
+              for port in os.environ.get("EXPECTED_PUBLIC_TCP_PORTS", "").split(",")
+              if port.strip()
           }
-          discovered = {
-              int(port)
-              for port in Path("reports/open-ports.txt").read_text(
-                  encoding="utf-8"
-              ).split()
-          }
-          unexpected = sorted(discovered - expected)
 
+          discovered = set()
+          open_ports_file = Path("reports/open-ports.txt")
+          if open_ports_file.exists():
+              discovered = {
+                  int(p.strip())
+                  for p in open_ports_file.read_text(encoding="utf-8").split()
+                  if p.strip()
+              }
+
+          unexpected = sorted(discovered - expected)
           Path("reports/unexpected-public-ports.txt").write_text(
               "\n".join(str(port) for port in unexpected)
               + ("\n" if unexpected else ""),
@@ -170,128 +213,230 @@ jobs:
             exit 0
           fi
 
-          # The 'safe' NSE category avoids scripts classified as intrusive,
-          # exploit, brute-force or denial-of-service checks.
+          echo "Running safe service scan on discovered port(s): ${open_ports}"
           sudo nmap \
             -Pn \
             -sS \
             -sV \
             --version-light \
-            -T3 \
+            -T4 \
             --script "safe" \
             -p "${open_ports}" \
-            --host-timeout 25m \
+            --host-timeout 10m \
             --reason \
             -oA reports/nmap-services \
             "${TARGET_IP}" \
-            || true
+            || echo "::warning::Nmap service scan encountered non-zero return code."
 
-      ##########################################################
-      # Build scanner targets from Nmap results
-      ##########################################################
-
-      - name: Build application scanner target lists
+      - name: Generate network step summary
+        if: always()
         run: |
           python3 <<'PY'
           from pathlib import Path
-          import os
           import xml.etree.ElementTree as ET
 
-          target_host = os.environ.get("TARGET_HOST", "").strip()
+          summary_lines = [
+              "## Network Port Discovery & Surface Audit",
+              "",
+              f"- **Target IP:** `{Path('reports/open-ports.csv').parent.name}`",
+              f"- **Configured Expected Ports:** `{Path('reports/unexpected-public-ports.txt').exists()}`",
+          ]
 
           service_xml = Path("reports/nmap-services.xml")
           discovery_xml = Path("reports/nmap-discovery.xml")
-          source = service_xml if service_xml.exists() else discovery_xml
+          xml_source = service_xml if (service_xml.exists() and service_xml.stat().st_size > 0) else discovery_xml
 
-          web_targets: set[str] = set()
-          tls_targets: set[str] = set()
-          non_http_targets: set[str] = set()
+          open_ports = []
+          rows = []
 
-          root = ET.parse(source).getroot()
+          if xml_source.exists() and xml_source.stat().st_size > 0:
+              try:
+                  root = ET.parse(xml_source).getroot()
+                  for port in root.findall(".//port"):
+                      state = port.find("state")
+                      if state is None or state.attrib.get("state") != "open":
+                          continue
+                      port_id = port.attrib.get("portid", "")
+                      open_ports.append(port_id)
+                      protocol = port.attrib.get("protocol", "tcp")
+                      service = port.find("service")
+                      rows.append(
+                          (
+                              port_id,
+                              protocol,
+                              service.attrib.get("name", "") if service is not None else "",
+                              service.attrib.get("product", "") if service is not None else "",
+                              service.attrib.get("version", "") if service is not None else "",
+                          )
+                      )
+              except (ET.ParseError, OSError) as e:
+                  summary_lines.append(f"> ⚠️ Failed to parse Nmap XML report: {e}")
 
-          for port_element in root.findall(".//port"):
-              state = port_element.find("state")
-              if state is None or state.attrib.get("state") != "open":
-                  continue
+          unexpected_ports = []
+          unexp_file = Path("reports/unexpected-public-ports.txt")
+          if unexp_file.exists():
+              unexpected_ports = [p.strip() for p in unexp_file.read_text(encoding="utf-8").split() if p.strip()]
 
-              port = int(port_element.attrib["portid"])
-              protocol = port_element.attrib.get("protocol", "tcp")
+          if unexpected_ports:
+              summary_lines.extend([
+                  "",
+                  f"### 🚨 Unexpected Public Ports Detected ({len(unexpected_ports)})",
+                  "",
+                  f"**Exposed ports not in allowlist:** `{', '.join(unexpected_ports)}`",
+                  "",
+              ])
+          else:
+              summary_lines.extend([
+                  "",
+                  "### ✅ Port Policy Compliance",
+                  "No unexpected public TCP ports were detected.",
+                  "",
+              ])
 
-              if protocol != "tcp":
-                  continue
+          if rows:
+              summary_lines.extend([
+                  "### Discovered Open TCP Services",
+                  "",
+                  "| Port | Protocol | Service | Product | Version |",
+                  "|---:|---|---|---|---|",
+              ])
+              for row in sorted(rows, key=lambda item: int(item[0])):
+                  escaped = [val.replace("|", "\\|") for val in row]
+                  summary_lines.append("| " + " | ".join(escaped) + " |")
+          else:
+              summary_lines.append("No open TCP ports detected.")
 
-              if port == 443 and target_host:
-                  # Web scanners receive only the configured public hostname,
-                  # never inferred URLs for arbitrary TLS or management ports.
-                  web_targets.add(f"https://{target_host}")
-                  tls_targets.add(f"{target_host}:443")
-              else:
-                  non_http_targets.add(f"{os.environ['TARGET_IP']}:{port}")
-
-          def write_lines(path: str, values: set[str]) -> None:
-              ordered = sorted(values)
-              Path(path).write_text(
-                  "\n".join(ordered) + ("\n" if ordered else ""),
-                  encoding="utf-8",
-              )
-
-          write_lines("reports/web-targets.txt", web_targets)
-          write_lines("reports/tls-targets.txt", tls_targets)
-          write_lines("reports/non-http-targets.txt", non_http_targets)
-          write_lines("reports/nuclei-targets.txt", web_targets)
-
-          print("Web targets:")
-          print("\n".join(sorted(web_targets)) or "  none")
-          print("TLS targets:")
-          print("\n".join(sorted(tls_targets)) or "  none")
-          print("Non-HTTP targets:")
-          print("\n".join(sorted(non_http_targets)) or "  none")
-          print("Nuclei targets:")
-          print("\n".join(sorted(web_targets)) or "  none")
+          summary_text = "\n".join(summary_lines) + "\n"
+          Path("reports/network-summary.md").write_text(summary_text, encoding="utf-8")
           PY
 
-      - name: Verify configured public HTTPS target
+          cat reports/network-summary.md >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload network scan reports
+        if: always() && (inputs.upload_raw_artifacts == true)
+        uses: actions/upload-artifact@v7
+        with:
+          name: network-scan-reports-${{ github.run_number }}
+          path: reports/
+          if-no-files-found: warn
+          compression-level: 6
+          retention-days: 7
+
+      - name: Network scan quality gate
+        if: always()
+        run: |
+          set -euo pipefail
+          failed=0
+
+          if [[ ! -f reports/nmap-complete ]]; then
+            echo "::error::Nmap port discovery scan did not complete."
+            failed=1
+          fi
+
+          if [[ -s reports/unexpected-public-ports.txt ]]; then
+            unexpected_ports="$(paste -sd, reports/unexpected-public-ports.txt)"
+            echo "::error::Unexpected public TCP port(s) detected: ${unexpected_ports}."
+            failed=1
+          else
+            echo "No unexpected public TCP ports detected."
+          fi
+
+          if (( failed != 0 )); then
+            exit 1
+          fi
+
+  ##########################################################
+  # Web Application & TLS Security Scan
+  ##########################################################
+  web-scan:
+    name: Web Application & TLS Security Scan
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scan_components != 'network_only' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Prepare report directory
+        run: |
+          mkdir -p reports
+          chmod -R 777 reports
+
+      - name: Pin target domain to origin IP in runner hosts file
+        run: |
+          if [[ -n "${TARGET_IP}" && -n "${TARGET_HOST}" ]]; then
+            echo "Pinning ${TARGET_HOST} to origin IP ${TARGET_IP} in /etc/hosts"
+            echo "${TARGET_IP} ${TARGET_HOST}" | sudo tee -a /etc/hosts
+          fi
+
+      - name: Validate web target and verify port 80 HTTP-to-HTTPS redirect
         run: |
           if [[ -z "${TARGET_HOST}" ]]; then
-            echo "::error::Set the PUBLIC_SERVER_DOMAIN repository variable to the public TaskFlow hostname."
+            echo "::error::PUBLIC_SERVER_DOMAIN repository variable or target_host input is required."
             touch reports/web-target-validation-failed
             exit 0
           fi
 
-          if [[ ! -s reports/web-targets.txt ]]; then
-            echo "::error::TCP port 443 is not open; no HTTPS application target can be scanned."
+          touch reports/web-targets.txt
+          touch reports/tls-targets.txt
+          touch reports/nuclei-targets.txt
+
+          echo "Validating HTTPS target: https://${TARGET_HOST}..."
+          if ! curl --silent --show-error --location --max-time 15 --output /dev/null "https://${TARGET_HOST}"; then
+            echo "::error::Configured public HTTPS target is unreachable: https://${TARGET_HOST}"
             touch reports/web-target-validation-failed
-            exit 0
+          else
+            echo "https://${TARGET_HOST}" >> reports/web-targets.txt
+            echo "${TARGET_HOST}:443" >> reports/tls-targets.txt
+            echo "https://${TARGET_HOST}" >> reports/nuclei-targets.txt
+            echo "HTTPS target verified."
           fi
 
-          while IFS= read -r url; do
-            [[ -z "${url}" ]] && continue
-            if ! curl --silent --show-error --location --max-time 20 --output /dev/null "${url}"; then
-              echo "::error::Configured public HTTPS target is unreachable: ${url}"
-              touch reports/web-target-validation-failed
-              : > reports/web-targets.txt
-              : > reports/tls-targets.txt
-              : > reports/nuclei-targets.txt
-              exit 0
-            fi
-          done < reports/web-targets.txt
+          echo "Checking Port 80 HTTP redirect behavior..."
+          http_code="$(curl --silent --show-error --head --max-time 10 -o /dev/null -w "%{http_code}" "http://${TARGET_HOST}/" || echo "000")"
+          redirect_loc="$(curl --silent --show-error --head --max-time 10 "http://${TARGET_HOST}/" | grep -i '^location:' | tr -d '\r' | awk '{print $2}' || true)"
 
-      ##########################################################
-      # Nuclei
-      ##########################################################
+          echo "HTTP_CODE=${http_code}" >> reports/port80-status.env
+          echo "REDIRECT_LOCATION=${redirect_loc}" >> reports/port80-status.env
+
+          if [[ "${http_code}" =~ ^(301|302|307|308)$ ]]; then
+            echo "Port 80 correctly enforces HTTPS redirect to: ${redirect_loc} (HTTP ${http_code})"
+            # Include port 80 in web targets for redirect header & HSTS analysis
+            echo "http://${TARGET_HOST}" >> reports/web-targets.txt
+            echo "http://${TARGET_HOST}" >> reports/nuclei-targets.txt
+          elif [[ "${http_code}" == "000" ]]; then
+            echo "::warning::Port 80 connection refused or timed out."
+          else
+            echo "::warning::Port 80 responded with HTTP ${http_code} instead of redirecting to HTTPS."
+            echo "http://${TARGET_HOST}" >> reports/web-targets.txt
+            echo "http://${TARGET_HOST}" >> reports/nuclei-targets.txt
+          fi
+
+      - name: Install Nuclei
+        uses: projectdiscovery/nuclei-action@v3
+        with:
+          version: ${{ env.NUCLEI_VERSION }}
+          install-only: true
+
+      - name: Update Nuclei templates
+        run: |
+          nuclei -version | tee reports/nuclei-version.txt
+          nuclei -update-templates
 
       - name: Run Nuclei
-        if: ${{ hashFiles('reports/nuclei-targets.txt') != '' }}
         run: |
           set -euo pipefail
 
           if [[ ! -s reports/nuclei-targets.txt ]]; then
-            echo "No targets were generated for Nuclei."
+            echo "No targets available for Nuclei."
             exit 0
           fi
 
-          # DAST/fuzzing and denial-of-service templates are excluded for this
-          # nightly production scan. Only signed templates are accepted.
           set +e
           nuclei \
             -list reports/nuclei-targets.txt \
@@ -317,79 +462,81 @@ jobs:
           printf '%s\n' "${nuclei_status}" > reports/nuclei-exit-status.txt
           if (( nuclei_status != 0 )); then
             echo "::error::Nuclei exited with status ${nuclei_status}; inspect reports/nuclei.log."
-            exit "${nuclei_status}"
+            touch reports/nuclei-failed
+          else
+            if [[ -s reports/nuclei-results.json ]] && jq -e 'type == "array"' reports/nuclei-results.json > /dev/null 2>&1; then
+              touch reports/nuclei-complete
+            else
+              echo "::error::Nuclei did not produce a valid JSON array export."
+              touch reports/nuclei-failed
+            fi
           fi
 
-          # A successful zero-finding scan writes an empty JSON array. Require
-          # both exports so an outage cannot masquerade as a clean result.
-          jq -e 'type == "array"' reports/nuclei-results.json > /dev/null
-          test -s reports/nuclei-results.sarif
-          touch reports/nuclei-complete
-
-      ##########################################################
-      # testssl.sh
-      ##########################################################
-
       - name: Run testssl.sh against detected TLS services
-        continue-on-error: true
         run: |
           if [[ ! -s reports/tls-targets.txt ]]; then
-            echo "No TLS services were detected by Nmap." \
-              | tee reports/testssl.log
+            echo "No TLS targets to scan."
             exit 0
           fi
 
+          # Ensure container user (testssl, UID 1000) has write access to volume mount
+          chmod -R 777 reports
+
+          failed_targets=0
           while IFS= read -r target; do
             [[ -z "${target}" ]] && continue
 
-            safe_name="$(
-              printf '%s' "${target}" \
-                | tr ':/[]' '-' \
-                | tr -cd 'A-Za-z0-9._-'
-            )"
-
+            safe_name="$(printf '%s' "${target}" | tr ':/[]' '-' | tr -cd 'A-Za-z0-9._-')"
             echo "Scanning TLS target: ${target}"
 
+            testssl_status=0
             docker run --rm \
+              --add-host "${TARGET_HOST}:${TARGET_IP}" \
               --volume "${PWD}/reports:/data" \
               ghcr.io/testssl/testssl.sh:3.2 \
               --warnings batch \
               --quiet \
+              --ip "${TARGET_IP}" \
               --jsonfile-pretty "/data/testssl-${safe_name}.json" \
               --htmlfile "/data/testssl-${safe_name}.html" \
               "${target}" \
-              > "reports/testssl-${safe_name}.log" 2>&1 \
-              || true
+              > "reports/testssl-${safe_name}.log" 2>&1 || testssl_status=$?
+
+            echo "${testssl_status}" > "reports/testssl-${safe_name}.status"
+            echo "testssl.sh exited with status ${testssl_status} for ${target}"
+
+            if [[ ! -s "reports/testssl-${safe_name}.json" ]]; then
+              echo "::error::testssl.sh failed to produce JSON output for ${target}. Inspect reports/testssl-${safe_name}.log."
+              failed_targets=$((failed_targets + 1))
+            fi
           done < reports/tls-targets.txt
 
-      ##########################################################
-      # Nikto
-      ##########################################################
+          if (( failed_targets > 0 )); then
+            touch reports/testssl-failed
+          else
+            touch reports/testssl-complete
+          fi
 
       - name: Run Nikto against detected web services
-        continue-on-error: true
         run: |
           if [[ ! -s reports/web-targets.txt ]]; then
-            echo "No HTTP services were detected by Nmap." \
-              | tee reports/nikto.log
+            echo "No web targets to scan."
             exit 0
           fi
 
+          # Ensure container user has write access to volume mount
+          chmod -R 777 reports
+
+          failed_nikto=0
           while IFS= read -r url; do
             [[ -z "${url}" ]] && continue
 
-            safe_name="$(
-              printf '%s' "${url}" \
-                | sed 's#^[a-zA-Z]*://##' \
-                | tr ':/[]' '-' \
-                | tr -cd 'A-Za-z0-9._-'
-            )"
-
+            safe_name="$(printf '%s' "${url}" | sed 's#^[a-zA-Z]*://##' | tr ':/[]' '-' | tr -cd 'A-Za-z0-9._-')"
             echo "Scanning web target: ${url}"
 
-            # Reverse tuning x6 means run all normal Nikto tests except the
-            # denial-of-service category. The per-host duration is capped.
+            nikto_status=0
             docker run --rm \
+              --add-host "${TARGET_HOST}:${TARGET_IP}" \
               --volume "${PWD}/reports:/tmp" \
               ghcr.io/sullo/nikto:latest \
               -h "${url}" \
@@ -400,13 +547,22 @@ jobs:
               -Tuning x6 \
               -Format json \
               -output "/tmp/nikto-${safe_name}.json" \
-              > "reports/nikto-${safe_name}.log" 2>&1 \
-              || true
+              > "reports/nikto-${safe_name}.log" 2>&1 || nikto_status=$?
+
+            echo "${nikto_status}" > "reports/nikto-${safe_name}.status"
+            echo "Nikto exited with status ${nikto_status} for ${url}"
+
+            if [[ ! -s "reports/nikto-${safe_name}.json" ]]; then
+              echo "::error::Nikto failed to produce JSON output for ${url}. Inspect reports/nikto-${safe_name}.log."
+              failed_nikto=$((failed_nikto + 1))
+            fi
           done < reports/web-targets.txt
 
-      ##########################################################
-      # GitHub Code Scanning
-      ##########################################################
+          if (( failed_nikto > 0 )); then
+            touch reports/nikto-failed
+          else
+            touch reports/nikto-complete
+          fi
 
       - name: Upload Nuclei SARIF
         if: always() && hashFiles('reports/nuclei-results.sarif') != ''
@@ -416,228 +572,162 @@ jobs:
           sarif_file: reports/nuclei-results.sarif
           category: nightly-external-nuclei
 
-      ##########################################################
-      # Summary
-      ##########################################################
-
-      - name: Generate job summary
+      - name: Generate web & TLS step summary
         if: always()
         run: |
           python3 <<'PY'
           from pathlib import Path
           import json
-          import xml.etree.ElementTree as ET
+          import os
 
-          summary = Path("reports/summary.md")
-          lines = [summary.read_text(encoding="utf-8") if summary.exists() else ""]
+          lines = [
+              "## Web Application & TLS Security Scan",
+              "",
+              f"- **Target Host:** `{os.environ.get('TARGET_HOST', '')}`",
+              f"- **Origin IP:** `{os.environ.get('TARGET_IP', '')}`",
+              "",
+          ]
 
-          nmap_xml = Path("reports/nmap-services.xml")
-          if not nmap_xml.exists():
-              nmap_xml = Path("reports/nmap-discovery.xml")
-
-          lines.extend(["", "## Nmap open TCP services", ""])
-
-          if nmap_xml.exists():
-              root = ET.parse(nmap_xml).getroot()
-              rows = []
-
-              for port in root.findall(".//port"):
-                  state = port.find("state")
-                  if state is None or state.attrib.get("state") != "open":
-                      continue
-
-                  service = port.find("service")
-                  rows.append(
-                      (
-                          port.attrib.get("portid", ""),
-                          port.attrib.get("protocol", ""),
-                          service.attrib.get("name", "") if service is not None else "",
-                          service.attrib.get("product", "") if service is not None else "",
-                          service.attrib.get("version", "") if service is not None else "",
-                      )
-                  )
-
-              if rows:
-                  lines.extend(
-                      [
-                          "| Port | Protocol | Service | Product | Version |",
-                          "|---:|---|---|---|---|",
-                      ]
-                  )
-                  for row in sorted(rows, key=lambda item: int(item[0])):
-                      escaped = [value.replace("|", "\\|") for value in row]
-                      lines.append("| " + " | ".join(escaped) + " |")
-              else:
-                  lines.append("No open TCP ports were discovered.")
-          else:
-              lines.append("Nmap did not produce an XML report.")
-
-          lines.extend(["", "## Generated targets", ""])
-
-          unexpected_ports = Path("reports/unexpected-public-ports.txt")
-          unexpected = (
-              unexpected_ports.read_text(encoding="utf-8").split()
-              if unexpected_ports.exists()
-              else []
-          )
-          lines.append(
-              "- **Unexpected public TCP ports:** "
-              + (", ".join(unexpected) if unexpected else "none")
-          )
-
-          for label, filename in (
-              ("Web", "reports/web-targets.txt"),
-              ("TLS", "reports/tls-targets.txt"),
-              ("Non-HTTP", "reports/non-http-targets.txt"),
-          ):
-              path = Path(filename)
-              targets = (
-                  [line for line in path.read_text(encoding="utf-8").splitlines() if line]
-                  if path.exists()
-                  else []
+          # Port 80 redirect status
+          port80_env = Path("reports/port80-status.env")
+          if port80_env.exists():
+              status_info = dict(
+                  line.split("=", 1)
+                  for line in port80_env.read_text(encoding="utf-8").splitlines()
+                  if "=" in line
               )
-              lines.append(f"- **{label} targets:** {len(targets)}")
-              for target in targets:
-                  lines.append(f"  - `{target}`")
+              code = status_info.get("HTTP_CODE", "unknown")
+              loc = status_info.get("REDIRECT_LOCATION", "")
+              if code in ("301", "302", "307", "308"):
+                  lines.append(f"- **Port 80 Redirect:** ✅ Redirects to `{loc}` (HTTP {code})")
+              elif code == "000":
+                lines.append("- **Port 80 Redirect:** ⚠️ Port 80 connection refused or timed out")
+              else:
+                lines.append(f"- **Port 80 Redirect:** ⚠️ Responded with HTTP {code} (not a redirect)")
+              lines.append("")
 
-          lines.extend(["", "## Nuclei findings", ""])
+          # Nuclei findings
+          lines.extend(["### Nuclei Findings", ""])
           nuclei_json = Path("reports/nuclei-results.json")
-
-          counts = {
-              "critical": 0,
-              "high": 0,
-              "medium": 0,
-              "low": 0,
-              "info": 0,
-              "unknown": 0,
-          }
+          counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0, "unknown": 0}
           findings = []
 
-          if nuclei_json.exists():
-              for finding in json.loads(nuclei_json.read_text(encoding="utf-8")):
-                  severity = (
-                      finding.get("info", {}).get("severity", "unknown").lower()
-                  )
-                  counts[severity if severity in counts else "unknown"] += 1
-                  findings.append(finding)
+          if nuclei_json.exists() and nuclei_json.stat().st_size > 0:
+              try:
+                  raw_data = json.loads(nuclei_json.read_text(encoding="utf-8"))
+                  if isinstance(raw_data, list):
+                      for item in raw_data:
+                          sev = item.get("info", {}).get("severity", "unknown").lower()
+                          counts[sev if sev in counts else "unknown"] += 1
+                          findings.append(item)
+              except Exception as e:
+                  lines.append(f"> ⚠️ Failed to parse Nuclei JSON report: {e}")
 
-          lines.extend(
-              [
-                  "| Severity | Count |",
-                  "|---|---:|",
-                  *[
-                      f"| {severity} | {counts[severity]} |"
-                      for severity in (
-                          "critical",
-                          "high",
-                          "medium",
-                          "low",
-                          "info",
-                          "unknown",
-                      )
-                  ],
-              ]
-          )
+          lines.extend([
+              "| Severity | Count |",
+              "|---|---:|",
+              *[f"| {s.capitalize()} | {counts[s]} |" for s in ("critical", "high", "medium", "low", "info", "unknown")],
+              "",
+          ])
 
           if findings:
-              rank = {
-                  "critical": 0,
-                  "high": 1,
-                  "medium": 2,
-                  "low": 3,
-                  "info": 4,
-                  "unknown": 5,
-              }
-              findings.sort(
-                  key=lambda finding: rank.get(
-                      finding.get("info", {}).get("severity", "unknown").lower(),
-                      5,
-                  )
-              )
-
-              lines.extend(["", "### First 50 findings", ""])
-              for finding in findings[:50]:
-                  info = finding.get("info", {})
-                  severity = info.get("severity", "unknown")
-                  name = info.get("name") or finding.get("template-id", "Unnamed finding")
-                  matched = finding.get("matched-at") or finding.get("host", "unknown target")
-                  lines.append(f"- **{severity}** — {name} — `{matched}`")
-          else:
+              rank = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4, "unknown": 5}
+              findings.sort(key=lambda f: rank.get(f.get("info", {}).get("severity", "unknown").lower(), 5))
+              lines.extend(["#### Top Findings", ""])
+              for f in findings[:25]:
+                  info = f.get("info", {})
+                  sev = info.get("severity", "unknown").upper()
+                  name = info.get("name") or f.get("template-id", "Unnamed")
+                  matched = f.get("matched-at") or f.get("host", "unknown")
+                  lines.append(f"- **[{sev}]** {name} — `{matched}`")
               lines.append("")
-              lines.append("No Nuclei findings were written to the JSON report.")
 
-          nikto_reports = sorted(Path("reports").glob("nikto-*.json"))
+          # testssl.sh findings
+          lines.extend(["### TLS Security (testssl.sh)", ""])
           testssl_reports = sorted(Path("reports").glob("testssl-*.json"))
+          lines.append(f"- **testssl.sh Reports Generated:** {len(testssl_reports)}")
 
-          lines.extend(
-              [
-                  "",
-                  "## Other reports",
-                  "",
-                  f"- **Nikto JSON reports:** {len(nikto_reports)}",
-                  f"- **testssl.sh JSON reports:** {len(testssl_reports)}",
-                  "",
-                  "Complete JSON, HTML, XML, text and log reports are attached "
-                  "to this workflow run as an artifact.",
-              ]
-          )
+          tls_crit_high = []
+          protocols = []
+          for report in testssl_reports:
+              try:
+                  data = json.loads(report.read_text(encoding="utf-8"))
+                  for item in data:
+                      sev = item.get("severity", "").upper()
+                      item_id = item.get("id", "")
+                      finding = item.get("finding", "")
+                      if sev in ("CRITICAL", "HIGH"):
+                          tls_crit_high.append((sev, item_id, finding))
+                      if item_id in ("SSLv2", "SSLv3", "TLS1", "TLS1_1", "TLS1_2", "TLS1_3") and "offered" in finding.lower() and "not" not in finding.lower():
+                          protocols.append(item_id)
+              except Exception as e:
+                  lines.append(f"> ⚠️ Error parsing testssl JSON {report.name}: {e}")
 
-          summary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          if protocols:
+              lines.append(f"- **Supported TLS Protocols:** `{', '.join(sorted(set(protocols)))}`")
+
+          if tls_crit_high:
+              lines.extend(["", "#### 🚨 High/Critical TLS Findings", ""])
+              for sev, item_id, finding in tls_crit_high[:15]:
+                  lines.append(f"- **[{sev}]** `{item_id}`: {finding}")
+              lines.append("")
+          else:
+              lines.append("- **TLS Vulnerabilities:** ✅ No High or Critical TLS vulnerabilities detected.")
+              lines.append("")
+
+          # Nikto summary
+          lines.extend(["### Web Server Audit (Nikto)", ""])
+          nikto_reports = sorted(Path("reports").glob("nikto-*.json"))
+          lines.append(f"- **Nikto Reports Generated:** {len(nikto_reports)}")
+
+          total_nikto_items = 0
+          for nr in nikto_reports:
+              try:
+                  nd = json.loads(nr.read_text(encoding="utf-8"))
+                  items = nd.get("vulnerabilities") or nd.get("items") or []
+                  total_nikto_items += len(items)
+              except Exception:
+                  pass
+          lines.append(f"- **Nikto Discovered Items:** {total_nikto_items}")
+
+          summary_text = "\n".join(lines) + "\n"
+          Path("reports/web-summary.md").write_text(summary_text, encoding="utf-8")
           PY
 
-          cat reports/summary.md >> "${GITHUB_STEP_SUMMARY}"
+          cat reports/web-summary.md >> "${GITHUB_STEP_SUMMARY}"
 
-      ##########################################################
-      # Upload reports before applying the quality gate
-      ##########################################################
-
-      - name: Upload scan reports
-        if: always()
+      - name: Upload web scan reports
+        if: always() && (inputs.upload_raw_artifacts == true)
         uses: actions/upload-artifact@v7
         with:
-          name: external-security-scan-${{ github.run_number }}
+          name: web-scan-reports-${{ github.run_number }}
           path: reports/
           if-no-files-found: warn
           compression-level: 6
-          retention-days: 30
+          retention-days: 7
 
-      ##########################################################
-      # Quality gate
-      ##########################################################
-
-      - name: Verify Nuclei completed and fail on high or critical findings
+      - name: Web scan quality gate
         if: always()
         run: |
           set -euo pipefail
           failed=0
 
-          if [[ -s reports/unexpected-public-ports.txt ]]; then
-            unexpected_ports="$(paste -sd, reports/unexpected-public-ports.txt)"
-            echo "::error::Unexpected public TCP port(s) detected: ${unexpected_ports}."
-            failed=1
-          fi
-
           if [[ -f reports/web-target-validation-failed ]]; then
-            echo "::error::The configured public HTTPS target could not be validated."
+            echo "::error::Target HTTPS validation failed or target was unreachable."
             failed=1
           fi
 
-          if [[ ! -s reports/nuclei-targets.txt ]]; then
-            echo "No verified Nuclei targets were generated."
-          elif [[ ! -f reports/nuclei-complete ]]; then
-            echo "::error::Nuclei did not complete; inspect reports/nuclei.log."
+          if [[ -f reports/nuclei-failed ]]; then
+            echo "::error::Nuclei encountered an operational failure."
             failed=1
-          elif ! jq -e 'type == "array"' reports/nuclei-results.json > /dev/null; then
-            echo "::error::Nuclei did not produce a valid JSON array report."
-            failed=1
-          else
+          elif [[ -f reports/nuclei-complete ]]; then
             high_or_critical="$({
               jq '
                 map(select(
                   (.info.severity // "unknown") == "high"
                   or (.info.severity // "unknown") == "critical"
                 )) | length
-              ' reports/nuclei-results.json
+              ' reports/nuclei-results.json 2>/dev/null || echo 0
             })"
 
             if (( high_or_critical > 0 )); then
@@ -646,6 +736,46 @@ jobs:
             else
               echo "No high or critical Nuclei findings detected."
             fi
+          fi
+
+          if [[ -f reports/testssl-failed ]]; then
+            echo "::error::testssl.sh encountered an operational failure or failed to produce JSON output."
+            failed=1
+          fi
+
+          if [[ "${FAIL_ON_TLS_ISSUES}" == "true" ]]; then
+            python3 <<'PY'
+          from pathlib import Path
+          import json
+          import sys
+
+          crit_high = []
+          for p in Path("reports").glob("testssl-*.json"):
+              try:
+                  data = json.loads(p.read_text(encoding="utf-8"))
+                  for item in data:
+                      sev = item.get("severity", "").upper()
+                      if sev in ("CRITICAL", "HIGH"):
+                          crit_high.append(f"{item.get('id')}: {item.get('finding')}")
+              except Exception as e:
+                  print(f"::warning::Failed to evaluate testssl report {p}: {e}")
+
+          if crit_high:
+              print(f"::error::testssl.sh detected {len(crit_high)} CRITICAL/HIGH TLS finding(s):")
+              for issue in crit_high[:10]:
+                  print(f"::error::  - {issue}")
+              sys.exit(1)
+          else:
+              print("No CRITICAL or HIGH testssl.sh TLS issues detected.")
+          PY
+            if (( $? != 0 )); then
+              failed=1
+            fi
+          fi
+
+          if [[ -f reports/nikto-failed ]]; then
+            echo "::error::Nikto encountered an operational failure or failed to produce JSON output."
+            failed=1
           fi
 
           if (( failed != 0 )); then

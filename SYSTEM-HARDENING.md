@@ -1,6 +1,6 @@
 # TaskFlow Enterprise — System Hardening & Quality Report
 
-> **Living document:** This report records system hardening findings and their resolutions. Resolved findings are marked accordingly. Last updated: 2026-09-01.
+> **Living document:** This report records system hardening findings and their resolutions. Resolved findings are marked accordingly. Last updated: 2026-09-13.
 
 This document records the system hardening, JVM performance alignment, and compatibility upgrades executed during the project-wide architectural audit. All system changes adhere to enterprise-grade DevSecOps principles and Spring Boot 4.1.1 + Angular 22 high-performance best practices.
 
@@ -218,6 +218,41 @@ Two critical architectural alignments were identified and resolved to ensure run
 *   **Location:** `src/main/resources/application-prod.properties`
 *   **Issue:** No latency quantiles or SLA buckets were exposed for `http.server.requests`, forcing reliance on averages instead of `p50`/`p95`/`p99` SLOs and preventing `histogram_quantile` burn-rate alerts in Prometheus/Grafana.
 *   **Resolution:** Added Micrometer distribution config: `management.metrics.distribution.percentiles.http.server.requests=0.5,0.95,0.99` + `percentiles-histogram.http.server.requests=true` + `sla.http.server.requests=50ms,100ms,200ms` (aligned to §32 `p50=7ms` `p99=29ms` at 50-pool VT). Exposes **p50/p95/p99** via `http_server_requests_seconds{quantile="…"}` and full Prometheus histograms `_bucket{le="…"}` at `/actuator/prometheus` (together with `exposure.include=health,info,prometheus`). Verified `p95<500ms` / `p99<800ms` k6 gate (§48) can now be driven by `histogram_quantile(0.95, …)`. Overhead **~1–2% cardinality** per `[uri,method,status]` series, negligible at 10% OTel sampling (§46).
+
+### Finding 33: External Server Security Pipeline Hardening
+*   **Location:** `.github/workflows/nightly-external-server-scan.yml`
+*   **Issue:** The external security scanner suffered from multiple operational and security defects:
+    1. `testssl.sh` and `Nikto` containers ran with `continue-on-error: true` and shell `|| true`, silently swallowing errors. Mounting `reports/` into container UID 1000 without relaxed permissions caused `EACCES` write failures that passed as clean scans.
+    2. Quality gate evaluated only Nuclei, ignoring testssl.sh findings (expired certs, weak ciphers, POODLE/Heartbleed) and Nikto crashes.
+    3. Raw Nmap/testssl/Nikto scans were uploaded to public GitHub artifacts, leaking infrastructure reconnaissance.
+    4. Port 80 was misclassified as "Non-HTTP" and excluded from web scanning.
+    5. The workflow lacked origin IP pinning, risking CDN edge scan drift.
+    6. All tools ran sequentially in a single job taking 60–90 minutes with no dispatch parameterization.
+*   **Resolution:**
+    1. **Eliminated False Successes:** Removed `continue-on-error` and `|| true`. Enforced `chmod -R 777 reports` before container runs, captured scanner exit statuses, verified non-empty report files (`test -s`), and flagged operational failures (`reports/testssl-failed`, `reports/nikto-failed`).
+    2. **Comprehensive Quality Gates:** Expanded the quality gate to parse `testssl.sh` JSON for `CRITICAL` and `HIGH` findings (failing on detection), enforce unexpected port detection, and assert operational completion for all scanners.
+    3. **Reconnaissance Protection:** Defaulted `upload_raw_artifacts` to `false` (7-day retention on manual opt-in) and restricted default outputs to GitHub Step Summary and Code Scanning SARIF.
+    4. **Web & Redirect Alignment:** Added port 80 to web targets, validated HTTP-to-HTTPS redirect enforcement (301/302/307/308), and pinned `TARGET_HOST` to `TARGET_IP` in `/etc/hosts` and Docker `--add-host`.
+    5. **Parallelized Execution & Inputs:** Split into concurrent `network-scan` and `web-scan` jobs (cutting runtime from 60–90m to ~10–15m), and added a nightly cron (`0 3 * * *`) with parameterized `workflow_dispatch` inputs (`target_ip`, `target_host`, `port_scan_scope`, `scan_components`, `upload_raw_artifacts`, `fail_on_tls_issues`).
+
+### Finding 34: Nightly Security Workflow (security.yml) Hardening & Alignment
+*   **Location:** `.github/workflows/security.yml`
+*   **Issue:** The nightly security scan workflow suffered from security posture, caching, and configuration gaps:
+    1. Checkouts retained GitHub token credentials in `.git/config` (`persist-credentials` left as default `true`).
+    2. CodeQL used default minimal query suites rather than extended security rulesets.
+    3. The `codeql` job had `actions: read` while `setup-gradle` configured `cache-read-only: false`, producing cache write permission warnings.
+    4. CodeQL matrix had identical UI job names (`name: CodeQL`) and used legacy language aliases (`java`, `javascript`) rather than canonical identifiers (`java-kotlin`, `javascript-typescript`).
+    5. The `trivy` job declared unneeded `packages: read` permissions for local filesystem scans.
+    6. Empty strings (`skip-dirs: ""`) were passed to `trivy-action`, and non-component build/dependency directories (`node_modules/`, `build/`, `.gradle/`, `.git/`, `dist/`, `android/`, `ios/`) were not cleanly excluded.
+    7. Trivy filesystem scans omitted explicit `scanners: vuln` targeting.
+    8. Unused top-level `NODE_VERSION: "22"` environment variable.
+*   **Resolution:**
+    1. **Credential Hardening:** Enforced `persist-credentials: false` across all checkout steps.
+    2. **Deep Security Queries:** Configured `queries: security-extended` in CodeQL initialization for comprehensive taint analysis, injection detection, and crypto audits.
+    3. **Cache Permissions:** Upgraded `codeql` permissions to `actions: write` to permit saving Gradle build caches.
+    4. **Matrix & Canonical Identifiers:** Differentiated job names via `name: CodeQL (${{ matrix.language }})`, modernized identifiers to `java-kotlin` and `javascript-typescript`, and routed SARIF outputs to `/language:${{ matrix.language }}`.
+    5. **Least Privilege:** Removed `packages: read` from the `trivy` job.
+    6. **Targeted Exclusions & Scanners:** Specified explicit build/dependency ignore directories per component (`.git`, `build`, `.gradle`, `node_modules`, `dist`, `android`, `ios`), added `scanners: vuln`, and removed the dead `NODE_VERSION` variable.
 
 ---
 

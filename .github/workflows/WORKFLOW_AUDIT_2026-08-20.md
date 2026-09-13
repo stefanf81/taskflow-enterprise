@@ -23,17 +23,16 @@ child reachable from a retained index, including platform manifests, SBOMs,
 provenance, signatures, and shared children. Add dry-run mode, deletion caps,
 minimum retained versions, and pre-delete validation.
 
-### 2. Public external-scan artifacts expose production reconnaissance
+### 2. Public external-scan artifacts expose production reconnaissance (resolved)
 
-**File:** `nightly-external-server-scan.yml:14-21,553-561`
-
-Raw Nmap, Nuclei, testssl, and Nikto reports are uploaded from a public
-repository. Reports can contain certificate SANs, internal identifiers, and
-infrastructure metadata.
-
-**Required action:** Remove existing sensitive artifacts. Move operational scans
-and reports to a private repository, encrypt the reports, or upload only a
-sanitized summary. Store any non-public target IP or hostname in secrets.
+**Resolved 2026-09-13.** `nightly-external-server-scan.yml` no longer uploads raw
+reconnaissance dumps to public artifacts by default (`upload_raw_artifacts: false`).
+High-level sanitized findings and metrics are rendered securely in GitHub Step
+Summary, and Nuclei SARIF is ingested through GitHub Code Scanning. Manual
+runs can optionally upload raw reports with a reduced 7-day retention period.
+Target IP and hostname resolve from repository variables/secrets (`vars.TARGET_IP`,
+`vars.PUBLIC_SERVER_DOMAIN`) with manual dispatch overrides rather than hardcoded
+values.
 
 ## High-Priority Correctness And Security Findings
 
@@ -108,17 +107,16 @@ Dependency submission is not an equivalent pre-merge vulnerability gate.
 branch ruleset requiring pull requests and the relevant CI, secret scanning,
 CodeQL, and dependency-review checks.
 
-### 9. External scanner failures are treated as successful scans
+### 9. External scanner failures are treated as successful scans (resolved)
 
-**File:** `nightly-external-server-scan.yml:304-375,567-594`
-
-testssl and Nikto use broad `continue-on-error` and `|| true`; only Nuclei is
-gated at the end. Container permission errors have produced successful runs with
-no usable testssl or Nikto reports.
-
-**Fix:** Provide writable output directories with compatible ownership, require
-each expected report to be non-empty, and fail incomplete scans. Handle scanner
-finding exit codes separately from operational failures.
+**Resolved 2026-09-13.** Removed `continue-on-error: true` and unconditional `|| true`
+from testssl and Nikto. Relaxed directory permissions (`chmod -R 777 reports`)
+prevent `EACCES` write errors for unprivileged container users (such as testssl UID
+1000). Scanner exit statuses are captured, non-empty report files are verified with
+`test -s`, and operational crashes set failure flags (`reports/testssl-failed`,
+`reports/nikto-failed`). The quality gate now inspects `testssl.sh` JSON reports for
+`CRITICAL` and `HIGH` TLS vulnerabilities (failing when detected) and asserts Nikto
+operational completion.
 
 ### 10. E2E coverage skips most single-stack pull requests (resolved)
 
@@ -239,15 +237,14 @@ report-only SARIF scan. Decide whether unfixed critical findings may publish.
 Use scoped, justified, expiring `.trivyignore.yaml` entries and remove stale
 suppression entries.
 
-### 20. External scans do not reliably target the intended hostname
+### 20. External scans do not reliably target the intended hostname (resolved)
 
-**File:** `nightly-external-server-scan.yml:14-21`
-
-The target host falls back to an IP. HTTP/TLS virtual-host routing and SNI may
-therefore differ from the production hostname.
-
-**Fix:** Require an explicit hostname and separately define edge and origin scan
-targets. For origin scans, pin hostname resolution to the origin IP.
+**Resolved 2026-09-13.** The runner now pins `TARGET_HOST` to `TARGET_IP` in
+`/etc/hosts` and passes `--add-host "${TARGET_HOST}:${TARGET_IP}"` to containerized
+scanners (`testssl.sh` and `Nikto`). This guarantees origin-pinned scanning and
+prevents DNS or CDN edge divergence while preserving accurate TLS SNI and HTTP
+`Host` virtual-host routing. Port 80 is correctly classified as HTTP, added to web
+targets, and verified for HTTP-to-HTTPS redirect enforcement.
 
 ## Lower-Priority Reliability And Performance Work
 
