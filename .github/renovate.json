@@ -1,18 +1,44 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended",
+    ":configMigration",
+    "abandonments:recommended",
+    ":maintainLockFilesWeekly"
+  ],
   "branchPrefix": "renovate/",
-  "rebaseWhen": "behind-base-branch",
+  "rebaseWhen": "auto",
   "dependencyDashboard": true,
   "labels": ["dependencies"],
   "gitAuthor": "stefanf81 <17823566+stefanf81@users.noreply.github.com>",
+  "prHourlyLimit": 0,
+  "prConcurrentLimit": 10,
+  "branchConcurrentLimit": 10,
+  "postUpdateOptions": ["npmDedupe"],
+  "vulnerabilityAlerts": {
+    "labels": ["security", "dependencies"],
+    "minimumReleaseAge": null
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": false,
+    "schedule": ["before 5am on monday"]
+  },
   "packageRules": [
     {
-      "description": "Automerge patch and minor updates after required CI checks pass",
-      "matchUpdateTypes": ["minor", "patch"],
+      "description": "Automerge patch, pin, and digest updates after required CI checks pass and a 3-day soak window",
+      "matchUpdateTypes": ["patch", "pin", "digest"],
+      "minimumReleaseAge": "3 days",
       "automerge": true,
       "automergeType": "pr",
-      "platformAutomerge": true
+      "platformAutomerge": true,
+      "rebaseWhen": "behind-base-branch"
+    },
+    {
+      "description": "Minor updates require manual review; hold 3 days to catch immediate regressions",
+      "matchUpdateTypes": ["minor"],
+      "minimumReleaseAge": "3 days",
+      "automerge": false
     },
     {
       "description": "Delay major updates so the ecosystem (Expo SDK, jest-expo, msw, babel presets) can add support first; never automerge majors",
@@ -53,6 +79,13 @@
       "enabled": false
     },
     {
+      "description": "Keep React types aligned with React 19 in mobile",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["mobile/package.json"],
+      "matchPackageNames": ["@types/react", "@types/react-dom"],
+      "allowedVersions": "/^19\\./"
+    },
+    {
       "description": "Expo SDK 57's plist parser omits the MIME type required by @xmldom/xmldom 0.9",
       "matchManagers": ["npm"],
       "matchFileNames": ["mobile/package.json"],
@@ -70,6 +103,12 @@
       "matchDatasources": ["docker"],
       "matchPackageNames": ["alpine"],
       "allowedVersions": "/^3\\.24\\./"
+    },
+    {
+      "description": "Keep PostgreSQL container images on version 18 to avoid incompatible data directory upgrades",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["postgres"],
+      "allowedVersions": "/^18\\./"
     },
     {
       "description": "Keep TypeScript on major version 6",
@@ -90,6 +129,19 @@
       "matchFileNames": ["frontend/package.json"],
       "matchPackageNames": ["@angular/**", "rxjs", "typescript"],
       "groupName": "Angular framework and toolchain"
+    },
+    {
+      "description": "Keep Tailwind CSS and PostCSS plugin aligned",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["frontend/package.json"],
+      "matchPackageNames": ["tailwindcss", "@tailwindcss/**"],
+      "groupName": "Tailwind CSS"
+    },
+    {
+      "description": "Keep Zod aligned across web, mobile, and shared schemas",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["zod"],
+      "groupName": "Zod validation"
     },
     {
       "description": "Keep the Spring Boot plugin and dependency BOM aligned",
@@ -131,16 +183,49 @@
       "groupName": "Log4j API and SLF4J bridge"
     },
     {
-      "description": "Keep Jackson 2 security pins aligned",
+      "description": "Keep Jackson 2 security pins and BOM aligned",
       "matchManagers": ["gradle"],
-      "matchPackageNames": ["com.fasterxml.jackson.core:jackson-*"],
+      "matchPackageNames": ["com.fasterxml.jackson:**"],
       "groupName": "Jackson 2 dependencies"
     },
     {
-      "description": "Keep Jackson 3 security pins aligned",
+      "description": "Keep Jackson 3 security pins and BOM aligned",
       "matchManagers": ["gradle"],
-      "matchPackageNames": ["tools.jackson.core:jackson-*"],
+      "matchPackageNames": ["tools.jackson:**"],
       "groupName": "Jackson 3 dependencies"
+    },
+    {
+      "description": "Keep Tomcat embedded dependencies aligned",
+      "matchManagers": ["gradle"],
+      "matchPackageNames": ["org.apache.tomcat.embed:**"],
+      "groupName": "Tomcat embedded dependencies"
+    },
+    {
+      "description": "Keep OpenTelemetry modules and semconv aligned",
+      "matchManagers": ["gradle"],
+      "matchPackageNames": [
+        "io.opentelemetry:**",
+        "io.opentelemetry.semconv:**"
+      ],
+      "groupName": "OpenTelemetry"
+    },
+    {
+      "description": "Keep Testcontainers modules aligned",
+      "matchManagers": ["gradle"],
+      "matchPackageNames": ["org.testcontainers:**"],
+      "groupName": "Testcontainers"
+    },
+    {
+      "description": "Keep Byte Buddy modules aligned",
+      "matchManagers": ["gradle"],
+      "matchPackageNames": ["net.bytebuddy:**"],
+      "groupName": "Byte Buddy"
+    },
+    {
+      "description": "Keep SLF4J modules aligned",
+      "matchManagers": ["gradle"],
+      "matchPackageNames": ["org.slf4j:**"],
+      "groupName": "SLF4J"
     },
     {
       "description": "React Navigation packages share React Native peer-dependency constraints",
@@ -159,6 +244,11 @@
         "detox"
       ],
       "groupName": "React Native test tooling"
+    },
+    {
+      "description": "Group GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions"
     },
     {
       "description": "Blocked on Expo SDK upgrade: @babel/core 8 / jest 30 / @types/jest 30 require babel-preset-expo & jest-expo versions that do not yet support these majors (Babel 8 loadPartialConfig break vs msw). Fully suppressed: no branch, no PR, dashboard-only until this rule is removed after the SDK upgrade.",

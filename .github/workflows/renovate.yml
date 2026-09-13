@@ -4,6 +4,32 @@ on:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
+    inputs:
+      dryRun:
+        description: "Dry run mode (full / lookup / extract / false)"
+        type: choice
+        default: "false"
+        options:
+          - "false"
+          - "full"
+          - "lookup"
+          - "extract"
+      logLevel:
+        description: "Logging verbosity"
+        type: choice
+        default: "info"
+        options:
+          - "info"
+          - "debug"
+          - "trace"
+      repoCache:
+        description: "Repository cache control"
+        type: choice
+        default: "enabled"
+        options:
+          - "enabled"
+          - "disabled"
+          - "reset"
 
 # Renovate authenticates with RENOVATE_TOKEN rather than GITHUB_TOKEN so its
 # pull requests trigger this repository's normal pull_request workflows.
@@ -14,6 +40,10 @@ concurrency:
   group: renovate-${{ github.repository }}
   cancel-in-progress: false
 
+env:
+  cache_dir: /tmp/renovate/cache/renovate/repository
+  cache_key: renovate-cache
+
 jobs:
   renovate:
     name: Update dependencies
@@ -21,12 +51,43 @@ jobs:
     timeout-minutes: 20
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Validate Renovate configuration
+        run: npx --yes --package renovate renovate-config-validator .github/renovate.json
+
+      - name: Restore Renovate cache
+        id: cache-restore
+        if: github.event.inputs.repoCache != 'disabled' && github.event.inputs.repoCache != 'reset'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.cache_dir }}
+          key: ${{ env.cache_key }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ env.cache_key }}-
+
+      - name: Fix restored cache permissions
+        if: steps.cache-restore.outputs.cache-matched-key != ''
+        run: sudo chown -R 12021:0 /tmp/renovate/
+
       - name: Run Renovate
-        uses: renovatebot/github-action@v46.2.6
+        uses: renovatebot/github-action@v46.3.0
         with:
           token: ${{ secrets.RENOVATE_TOKEN }}
+          configurationFile: .github/renovate.json
         env:
           RENOVATE_PLATFORM: github
           RENOVATE_REPOSITORIES: ${{ github.repository }}
           RENOVATE_ONBOARDING: "false"
           RENOVATE_REQUIRE_CONFIG: required
+          RENOVATE_REPOSITORY_CACHE: ${{ github.event.inputs.repoCache || 'enabled' }}
+          RENOVATE_DRY_RUN: ${{ github.event.inputs.dryRun != 'false' && github.event.inputs.dryRun || '' }}
+          LOG_LEVEL: ${{ github.event.inputs.logLevel || 'info' }}
+
+      - name: Save Renovate cache
+        if: github.event.inputs.repoCache != 'disabled' && steps.cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.cache_dir }}
+          key: ${{ env.cache_key }}-${{ github.run_id }}-${{ github.run_attempt }}

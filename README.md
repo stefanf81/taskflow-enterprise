@@ -3,6 +3,7 @@
 **TaskFlow** is a modern, high-performance, full-stack appointment management and luxury salon booking platform.
 
 The suite comprises three core components with platform-local contracts and design tokens:
+
 1. **Spring Boot 4.1 Backend (Java 21):** REST API and admin SSE server providing business logic, OpenAPI specs, authentication, PostgreSQL persistence, Flyway migrations, and Redis caching.
 2. **Angular 22 Web Frontend (`frontend/`):** Modern Angular Signals web application with Tailwind CSS gold & obsidian design system.
 3. **React Native + Expo Mobile Application (`mobile/`):** Cross-platform native mobile application for Android (phones & tablets) and iOS (iPhone & iPad).
@@ -220,35 +221,37 @@ Install Playwright Chromium before frontend E2E tests:
 
 ## 🚀 Workspace Commands
 
-| Command | Description |
-| :--- | :--- |
-| `npm run sync:api-types` | Generates both platform API type files from the reviewed `api/openapi.json` baseline |
-| `npm run sync:api-types:check` | Fails if either generated platform API type file is stale |
-| `npm run api:spec:update` | Authenticates to a running local backend and refreshes the reviewed OpenAPI baseline after an intentional API change |
-| `npm run api:spec:check` | Validates the checked-in OpenAPI baseline is canonical JSON |
-| `npm run test:all` | Executes test suites across both Angular Web (`frontend/`) and React Native Mobile (`mobile/`) |
-| `npm run lint:all` | Performs TypeScript static type checks across both projects |
-| `./start-docker.sh` | Launches PostgreSQL, Redis, Spring Boot backend, and Nginx frontend in health-checked Docker stack |
-| `./stop-docker.sh` | Safely tears down local Docker stack |
-| `./verify.sh` | Full-stack end-to-end verification check |
+| Command                        | Description                                                                                                          |
+| :----------------------------- | :------------------------------------------------------------------------------------------------------------------- |
+| `npm run sync:api-types`       | Generates both platform API type files from the reviewed `api/openapi.json` baseline                                 |
+| `npm run sync:api-types:check` | Fails if either generated platform API type file is stale                                                            |
+| `npm run api:spec:update`      | Authenticates to a running local backend and refreshes the reviewed OpenAPI baseline after an intentional API change |
+| `npm run api:spec:check`       | Validates the checked-in OpenAPI baseline is canonical JSON                                                          |
+| `npm run test:all`             | Executes test suites across both Angular Web (`frontend/`) and React Native Mobile (`mobile/`)                       |
+| `npm run lint:all`             | Performs TypeScript static type checks across both projects                                                          |
+| `./start-docker.sh`            | Launches PostgreSQL, Redis, Spring Boot backend, and Nginx frontend in health-checked Docker stack                   |
+| `./stop-docker.sh`             | Safely tears down local Docker stack                                                                                 |
+| `./verify.sh`                  | Full-stack end-to-end verification check                                                                             |
 
 ---
 
 ## 🚀 Quick Start Guide
 
 ### 1. Run via Docker Compose (Full Stack)
+
 ```bash
 # Run the New Laptop Setup environment step first.
 ./start-docker.sh
 ```
+
 This launches the PostgreSQL database, Redis cache, Spring Boot backend, and Nginx frontend in health-checked isolated Docker networks.
 
-* **Web UI:** `http://localhost:4200` — hashed `js|css` served `immutable, max-age=15552000` (6 M), other assets `public`, `index.html` must-revalidate.
-* **API via Nginx:** `http://localhost:4200/api` — tiered `Cache-Control` (`public max-age=300` catalog/barbers/ratings, `private max-age=30` busySlots, `no-cache private` admin) + `ETag` `304` on GETs, HTTP/1.1 upstream proxying with `keepalive 64` connection reuse.
-* **Prometheus Metrics:** Internal Kubernetes backend endpoint at `/actuator/prometheus`; the request is unauthenticated so VictoriaMetrics can scrape it, while the production NetworkPolicy limits access to the `monitoring` namespace. Other Actuator endpoints require ADMIN authentication. `application-prod.properties` exposes Micrometer histograms `p50/p95/p99` + `sla 50/100/200ms` + `percentiles-histogram` for `histogram_quantile` SLO queries (see `BENCHMARKS.md §46`). Health probes remain at `/actuator/health/liveness` & `/readiness` (local `Dockerfile` `HEALTHCHECK` `wget`; prod uses K8s probes).
-* **Stop Application Stack:** `./stop-docker.sh`
-* **Full-Stack Automated Verification:** `./verify.sh` (starts Docker if needed; stops containers it started. Pass `--stop-docker` to also stop an already-running stack)
-* **Load Gate (P2):** `k6/load.js` ramping `0→50→200→0` (`p95<500 ms`, `p99<800 ms`, `checks 1.0`) is run against an isolated stack; `.github/workflows/k6.yml` runs the one-request/second public `k6/probe.js` instead, preserving production availability and cache-header checks without tripping the per-IP rate limiter. Browser CWV gate via `k6/browser.js` (`ttfb<800 fcp<1800 lcp<2500`).
+- **Web UI:** `http://localhost:4200` — hashed `js|css` served `immutable, max-age=15552000` (6 M), other assets `public`, `index.html` must-revalidate.
+- **API via Nginx:** `http://localhost:4200/api` — tiered `Cache-Control` (`public max-age=300` catalog/barbers/ratings, `private max-age=30` busySlots, `no-cache private` admin) + `ETag` `304` on GETs, HTTP/1.1 upstream proxying with `keepalive 64` connection reuse.
+- **Prometheus Metrics:** Internal Kubernetes backend endpoint at `/actuator/prometheus`; the request is unauthenticated so VictoriaMetrics can scrape it, while the production NetworkPolicy limits access to the `monitoring` namespace. Other Actuator endpoints require ADMIN authentication. `application-prod.properties` exposes Micrometer histograms `p50/p95/p99` + `sla 50/100/200ms` + `percentiles-histogram` for `histogram_quantile` SLO queries (see `BENCHMARKS.md §46`). Health probes remain at `/actuator/health/liveness` & `/readiness` (local `Dockerfile` `HEALTHCHECK` `wget`; prod uses K8s probes).
+- **Stop Application Stack:** `./stop-docker.sh`
+- **Full-Stack Automated Verification:** `./verify.sh` (starts Docker if needed; stops containers it started. Pass `--stop-docker` to also stop an already-running stack)
+- **Load Gate (P2):** `k6/load.js` ramping `0→50→200→0` (`p95<500 ms`, `p99<800 ms`, `checks 1.0`) is run against an isolated stack; `.github/workflows/k6.yml` runs the one-request/second public `k6/probe.js` instead, preserving production availability and cache-header checks without tripping the per-IP rate limiter. Browser CWV gate via `k6/browser.js` (`ttfb<800 fcp<1800 lcp<2500`).
 
 ---
 
@@ -281,7 +284,7 @@ npm run ios
 npm test
 ```
 
-* **Query Tuning (P1-4):** `mobile/src/query/queryClient.ts` uses `staleTime 60_000` / `gcTime 5*60_000` with exponential `retryDelay` (`retry:1`, `refetchOnWindowFocus:false`) — cuts catalog/barbers refetch ~50% on tab navigation vs `staleTime 0`. `mobile/src/api/client.ts` `timeout 10000` (was 15000, fail-fast < server JPA 5 s + Hikari 20 s). `LookbookGallery` uses `LOOKBOOK_DATA.map` (not `FlatList scrollEnabled={false}`) so parent `ScrollView` owns scrolling; upgrade to `FlashList` when catalogue >50.
+- **Query Tuning (P1-4):** `mobile/src/query/queryClient.ts` uses `staleTime 60_000` / `gcTime 5*60_000` with exponential `retryDelay` (`retry:1`, `refetchOnWindowFocus:false`) — cuts catalog/barbers refetch ~50% on tab navigation vs `staleTime 0`. `mobile/src/api/client.ts` `timeout 10000` (was 15000, fail-fast < server JPA 5 s + Hikari 20 s). `LookbookGallery` uses `LOOKBOOK_DATA.map` (not `FlatList scrollEnabled={false}`) so parent `ScrollView` owns scrolling; upgrade to `FlashList` when catalogue >50.
 
 ---
 
@@ -290,8 +293,9 @@ npm test
 ```bash
 ./gradlew bootRun
 ```
-* Uses the default embedded H2 development configuration.
-* Listens on `http://localhost:8080`.
+
+- Uses the default embedded H2 development configuration.
+- Listens on `http://localhost:8080`.
 
 ---
 
@@ -300,51 +304,60 @@ npm test
 ```bash
 (cd frontend && npm ci && npm start)
 ```
-* Dev server runs on `http://localhost:4200` and proxies `/api` requests to `http://localhost:8080`.
+
+- Dev server runs on `http://localhost:4200` and proxies `/api` requests to `http://localhost:8080`.
 
 ---
 
 ## 🛡️ Security & Container Hardening
 
-* **Numeric UIDs:** Backend containers run as unprivileged numeric user `10001:10001` complying with strict Kubernetes Pod Security Standards (PSS).
-* **Zero-Trust Networks:** Docker Compose isolates PostgreSQL and Redis on `backend-tier`. Nginx lives on `frontend-tier`. Only Spring Boot bridges both.
-* **Single Public Ingress:** Docker Compose exposes only Nginx. The backend is reachable internally at `backend:8080` and receives normalized forwarding headers from Nginx.
-* **Read-Only Filesystems:** Containers run with `read_only: true` with ephemeral `/tmp` mounted as `tmpfs`.
-* **Dropped Kernel Capabilities:** All containers explicitly execute with `cap_drop: [ALL]` and `no-new-privileges:true`.
-* **Graceful Shutdown:** Spring Boot drains requests for up to 30 seconds (`server.shutdown=graceful`, `spring.lifecycle.timeout-per-shutdown-phase=30s`). The backend Compose service waits 40 seconds before Docker escalates SIGTERM to SIGKILL.
-* **Container Lifecycle:** Services use `restart: "no"` in `docker-compose.yml` to prevent lingering background containers. `npm run e2e:docker` stops the stack it starts; `./verify.sh` stops a stack it started, or an already-running stack when invoked with `--stop-docker`.
-* **Hardware Token Security:** Mobile app stores JWT tokens in **iOS Keychain** & **Android Keystore** via `expo-secure-store`.
-* **HttpOnly Cookies:** Web app uses `HttpOnly`, `SameSite=Strict` cookies with double-submit CSRF token protection.
-* **Native Mobile Auth:** Mobile uses `POST /api/v1/auth/mobile/login` and sends the SecureStore token as an `Authorization: Bearer` header; it does not depend on native cookie persistence.
-* **Admin SSE Auth:** The web admin event stream uses the existing HttpOnly `access_token` cookie. The JWT is never read by JavaScript or passed in an SSE URL.
-* **Tiered Cache-Control & ETag (P1-3):** `GET /api/v1/catalog` / `barbers` / `reviews/public/barber-ratings` → `Cache-Control: public, max-age=300` (5 m, aligns with 10 m `@Cacheable` + `304` via `ShallowEtagHeaderFilter` GET-only); `busySlots` → `private, max-age=30, must-revalidate`; admin `GET /appointments` / `barbers/admin` → `private, no-cache, must-revalidate` (ETag still allows `304`). Nginx additionally serves hashed `js|css` as `public, immutable, max-age=15552000` (6 M) for `outputHashing:all` bundles.
-* **Observability Histograms (P1-5):** `application-prod.properties` configures `management.metrics.distribution.percentiles=0.5,0.95,0.99` + `percentiles-histogram=true` + `sla=50ms,100ms,200ms`. Prometheus scrapes `/actuator/prometheus` for `http_server_requests_seconds{quantile}` and `_bucket{le}` — use `histogram_quantile(0.95, …)` for SLO alerts (overhead ~1–2% cardinality). OTel tracing remains at 10% sampling.
-* **Mobile Query Tuning (P1-4):** `mobile/src/query/queryClient.ts` sets `staleTime 60_000` (was 0, cuts catalog/barbers refetch ~50% on tab nav), `gcTime 5*60_000` (retain across nav), exponential `retryDelay` with `retry:1`, `refetchOnWindowFocus:false`; `mobile/src/api/client.ts` `timeout 10000` (< JPA 5 s + Hikari 20 s, fail-fast). `LookbookGallery` virtualization fix (`FlatList`+`scrollEnabled=false` → plain `map`) prevents windowing defeat.
-* **Container Diagnostics (P1-2):** `JAVA_TOOL_OPTIONS` carries explicit `-XX:+UseContainerSupport` (cgroup-aware, self-documenting), `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof` (0% until OOM, `tmpfs` `/tmp`), `-Xlog:gc*:file=/tmp/gc.log:time,uptime:filecount=3,filesize=10m` (3×10 MB rotation, ~0.7% overhead). `Dockerfile` (local) now has `HEALTHCHECK` (`wget /actuator/health/liveness`); `Dockerfile.x64` omits it — K8s `livenessProbe`/`readinessProbe` in `homelab/TF` is the source of truth.
-* **PgBouncer Ceiling (P2):** `application-prod.properties` documents Hikari `maximum-pool-size=25/minimum-idle=10` knee curve (`10→3015 RPS`, `25→4128 RPS`, `50→4257 RPS`). The deployment intentionally runs one replica; distributed SSE and PgBouncer transaction pooling are prerequisites for scale-out.
+- **Numeric UIDs:** Backend containers run as unprivileged numeric user `10001:10001` complying with strict Kubernetes Pod Security Standards (PSS).
+- **Zero-Trust Networks:** Docker Compose isolates PostgreSQL and Redis on `backend-tier`. Nginx lives on `frontend-tier`. Only Spring Boot bridges both.
+- **Single Public Ingress:** Docker Compose exposes only Nginx. The backend is reachable internally at `backend:8080` and receives normalized forwarding headers from Nginx.
+- **Read-Only Filesystems:** Containers run with `read_only: true` with ephemeral `/tmp` mounted as `tmpfs`.
+- **Dropped Kernel Capabilities:** All containers explicitly execute with `cap_drop: [ALL]` and `no-new-privileges:true`.
+- **Graceful Shutdown:** Spring Boot drains requests for up to 30 seconds (`server.shutdown=graceful`, `spring.lifecycle.timeout-per-shutdown-phase=30s`). The backend Compose service waits 40 seconds before Docker escalates SIGTERM to SIGKILL.
+- **Container Lifecycle:** Services use `restart: "no"` in `docker-compose.yml` to prevent lingering background containers. `npm run e2e:docker` stops the stack it starts; `./verify.sh` stops a stack it started, or an already-running stack when invoked with `--stop-docker`.
+- **Hardware Token Security:** Mobile app stores JWT tokens in **iOS Keychain** & **Android Keystore** via `expo-secure-store`.
+- **HttpOnly Cookies:** Web app uses `HttpOnly`, `SameSite=Strict` cookies with double-submit CSRF token protection.
+- **Native Mobile Auth:** Mobile uses `POST /api/v1/auth/mobile/login` and sends the SecureStore token as an `Authorization: Bearer` header; it does not depend on native cookie persistence.
+- **Admin SSE Auth:** The web admin event stream uses the existing HttpOnly `access_token` cookie. The JWT is never read by JavaScript or passed in an SSE URL.
+- **Tiered Cache-Control & ETag (P1-3):** `GET /api/v1/catalog` / `barbers` / `reviews/public/barber-ratings` → `Cache-Control: public, max-age=300` (5 m, aligns with 10 m `@Cacheable` + `304` via `ShallowEtagHeaderFilter` GET-only); `busySlots` → `private, max-age=30, must-revalidate`; admin `GET /appointments` / `barbers/admin` → `private, no-cache, must-revalidate` (ETag still allows `304`). Nginx additionally serves hashed `js|css` as `public, immutable, max-age=15552000` (6 M) for `outputHashing:all` bundles.
+- **Observability Histograms (P1-5):** `application-prod.properties` configures `management.metrics.distribution.percentiles=0.5,0.95,0.99` + `percentiles-histogram=true` + `sla=50ms,100ms,200ms`. Prometheus scrapes `/actuator/prometheus` for `http_server_requests_seconds{quantile}` and `_bucket{le}` — use `histogram_quantile(0.95, …)` for SLO alerts (overhead ~1–2% cardinality). OTel tracing remains at 10% sampling.
+- **Mobile Query Tuning (P1-4):** `mobile/src/query/queryClient.ts` sets `staleTime 60_000` (was 0, cuts catalog/barbers refetch ~50% on tab nav), `gcTime 5*60_000` (retain across nav), exponential `retryDelay` with `retry:1`, `refetchOnWindowFocus:false`; `mobile/src/api/client.ts` `timeout 10000` (< JPA 5 s + Hikari 20 s, fail-fast). `LookbookGallery` virtualization fix (`FlatList`+`scrollEnabled=false` → plain `map`) prevents windowing defeat.
+- **Container Diagnostics (P1-2):** `JAVA_TOOL_OPTIONS` carries explicit `-XX:+UseContainerSupport` (cgroup-aware, self-documenting), `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof` (0% until OOM, `tmpfs` `/tmp`), `-Xlog:gc*:file=/tmp/gc.log:time,uptime:filecount=3,filesize=10m` (3×10 MB rotation, ~0.7% overhead). `Dockerfile` (local) now has `HEALTHCHECK` (`wget /actuator/health/liveness`); `Dockerfile.x64` omits it — K8s `livenessProbe`/`readinessProbe` in `homelab/TF` is the source of truth.
+- **PgBouncer Ceiling (P2):** `application-prod.properties` documents Hikari `maximum-pool-size=25/minimum-idle=10` knee curve (`10→3015 RPS`, `25→4128 RPS`, `50→4257 RPS`). The deployment intentionally runs one replica; distributed SSE and PgBouncer transaction pooling are prerequisites for scale-out.
 
 ---
 
 ## 📦 Dependency Updates
 
-Renovate runs daily and can also be started manually from GitHub Actions. Patch
-and minor updates automerge only after the protected `main` branch's required
-CI checks succeed; major, pin, digest, and lock-file-maintenance updates remain
-reviewable pull requests.
+Renovate runs daily and can also be started manually from GitHub Actions with
+optional dry-run, log-level, and cache controls. Patch, pin, and digest updates
+automerge only after the protected `main` branch's required CI checks succeed
+and a 3-day release quarantine soak window expires; minor, major, and weekly
+lock-file-maintenance updates remain reviewable pull requests. Security fixes
+from vulnerability alerts bypass the release quarantine.
 
-Version-coupled stacks are grouped into reviewable PRs and never automerged:
+Version-coupled stacks are grouped into cohesive PRs to maintain toolchain and
+runtime stability:
 
-* Angular framework, CLI/build tooling, RxJS, and TypeScript.
-* Spring Boot plugin and dependency BOM.
-* Flyway, Hibernate, Netty, Log4j, and Jackson coordinated dependencies.
-* React Navigation and React Native test tooling.
+- Angular framework, CLI/build tooling, RxJS, and TypeScript.
+- Tailwind CSS and PostCSS plugin.
+- Zod validation schemas across web, mobile, and shared workspaces.
+- Spring Boot plugin and dependency BOM.
+- Coordinated Java dependencies: Flyway, Hibernate, Netty, Log4j, Jackson (including BOMs), Tomcat Embed, OpenTelemetry, Testcontainers, Byte Buddy, and SLF4J.
+- React Navigation and React Native test tooling.
+- GitHub Actions workflow actions.
+- PostgreSQL container images (pinned to major version 18).
 
 Expo owns the compatibility matrix for native modules. Renovate excludes only
 the explicitly named Expo, React, React Native, and native test dependencies in
-`mobile/package.json`; it does not automatically discover every SDK-compatible
-native module. Add a new native module with `npx expo install <package>`, then
-run `npx expo install --check`. When upgrading Expo SDK, first select the target
-`expo` version, then run `npx expo install --fix` and `npx expo-doctor`. See
+`mobile/package.json` (and keeps `@types/react` aligned to React 19); it does
+not automatically discover every SDK-compatible native module. Add a new native
+module with `npx expo install <package>`, then run `npx expo install --check`.
+When upgrading Expo SDK, first select the target `expo` version, then run
+`npx expo install --fix` and `npx expo-doctor`. See
 [CI documentation](.github/workflows/ci.md) for the required checks and
 Renovate authentication details.
 
@@ -352,21 +365,21 @@ Renovate authentication details.
 
 ## 📚 Documentation & ADRs
 
-* [ARCHITECTURE.md](ARCHITECTURE.md) — Detailed end-to-end data flow and architectural analysis
-* [AGENTS.md](AGENTS.md) — Developer guidelines and AI agent instructions
-* [SYSTEM-HARDENING.md](SYSTEM-HARDENING.md) — Zero-trust security & container hardening policy
-* [mobile/development-set.md](mobile/development-set.md) — Mobile development setup, testing, and release workflow
-* [docs/adr/README.md](docs/adr/README.md) — Architecture Decision Records (ADRs) — full index
-  * `ADR-001` — Virtual Threads — Enabled Explicitly
-  * `ADR-002` — ParallelGC vs G1GC (Superseded)
-  * `ADR-003` — Denormalized Customer Name
-  * `ADR-004` — Redis for Distributed Caching
-  * `ADR-005` — JWT in HttpOnly Cookie
-  * `ADR-006` — Migration to React Native & Expo Mobile Application
-  * `ADR-007` — Dedicated Mobile Bearer Authentication
-  * `ADR-008` — Reviewed OpenAPI Contract Baseline
-  * `ADR-009` — Admin Appointment Updates via Server-Sent Events
-  * `ADR-010` — Bounded Async Executor
-  * `ADR-011` — Reference Data Caching (Barbers & Services)
-  * `ADR-012` — Lua-Atomic Rate Limiter
-  * `ADR-013` — Partial Unique Slot Index (Anti Double-Booking)
+- [ARCHITECTURE.md](ARCHITECTURE.md) — Detailed end-to-end data flow and architectural analysis
+- [AGENTS.md](AGENTS.md) — Developer guidelines and AI agent instructions
+- [SYSTEM-HARDENING.md](SYSTEM-HARDENING.md) — Zero-trust security & container hardening policy
+- [mobile/development-set.md](mobile/development-set.md) — Mobile development setup, testing, and release workflow
+- [docs/adr/README.md](docs/adr/README.md) — Architecture Decision Records (ADRs) — full index
+  - `ADR-001` — Virtual Threads — Enabled Explicitly
+  - `ADR-002` — ParallelGC vs G1GC (Superseded)
+  - `ADR-003` — Denormalized Customer Name
+  - `ADR-004` — Redis for Distributed Caching
+  - `ADR-005` — JWT in HttpOnly Cookie
+  - `ADR-006` — Migration to React Native & Expo Mobile Application
+  - `ADR-007` — Dedicated Mobile Bearer Authentication
+  - `ADR-008` — Reviewed OpenAPI Contract Baseline
+  - `ADR-009` — Admin Appointment Updates via Server-Sent Events
+  - `ADR-010` — Bounded Async Executor
+  - `ADR-011` — Reference Data Caching (Barbers & Services)
+  - `ADR-012` — Lua-Atomic Rate Limiter
+  - `ADR-013` — Partial Unique Slot Index (Anti Double-Booking)

@@ -3,6 +3,7 @@
 ## Quick Start
 
 ### Prerequisites
+
 - Git
 - OpenJDK 21 (the Gradle wrapper supplies Gradle 9.7.1)
 - Node.js 22.23.2 and npm 11.19.1 (mobile/.nvmrc pins the Node version)
@@ -15,12 +16,14 @@ For mobile native development, also install the platform-specific tools in
 Android builds require Android Studio, the Android SDK, and an emulator or device.
 
 ### Clone & Setup
+
 ```bash
 git clone <repo-url>
 cd taskflow
 ```
 
 ### Environment
+
 ```bash
 cp .env.example .env
 # Set POSTGRES_PASSWORD and SPRING_SECURITY_PASSWORD.
@@ -33,6 +36,7 @@ required for `./gradlew bootRun`, which uses the H2 development profile and
 ephemeral signing keys by default.
 
 ### JavaScript Dependencies
+
 Run these commands from the repository root. Installing the shared package
 first keeps the local file dependency aligned with CI and the checked-in lockfiles.
 
@@ -44,6 +48,7 @@ npm run sync:api-types:check
 ```
 
 ### Backend (Spring Boot 4.1.1)
+
 ```bash
 ./gradlew test           # Fast H2-backed tests; Docker is not required
 ./gradlew build          # Compile, test, and package the application
@@ -52,6 +57,7 @@ npm run sync:api-types:check
 ```
 
 ### Frontend (Angular 22)
+
 ```bash
 (cd frontend && npm ci)  # Install locked dependencies
 (cd frontend && npm start) # Dev server on :4200 (proxies /api to :8080)
@@ -66,6 +72,7 @@ Install the browser required by Playwright once per machine:
 ```
 
 ### Mobile (React Native / Expo)
+
 ```bash
 (cd mobile && npm ci)
 (cd mobile && npm start) # Start Expo Metro Bundler
@@ -74,6 +81,7 @@ Install the browser required by Playwright once per machine:
 ```
 
 ### Full-Stack Docker
+
 ```bash
 ./start-docker.sh        # Builds and starts all services via docker-compose
 ./stop-docker.sh         # Stops all docker-compose services
@@ -81,6 +89,7 @@ Install the browser required by Playwright once per machine:
 ```
 
 ### Testing
+
 ```bash
 ./gradlew test              # Backend H2 tests (does not require Docker)
 ./gradlew testcontainersTest # PostgreSQL tests (requires Docker)
@@ -100,6 +109,7 @@ automatically select `Dockerfile.x64`; adapt the Compose build configuration if
 you need a native amd64 image.
 
 ### API Contract Changes
+
 The reviewed `api/openapi.json` file is the API compatibility baseline. When a backend endpoint or DTO changes intentionally:
 
 ```bash
@@ -112,6 +122,7 @@ npm run sync:api-types:check       # Confirm generated files are committed and c
 CI authenticates to the development backend, compares its live OpenAPI document with this baseline, and fails on unreviewed API changes. Commit the updated baseline and generated type files together.
 
 ### Admin SSE Changes
+
 The admin dashboard receives appointment invalidation events from
 `GET /api/v1/appointments/events`. When changing appointment mutations or stream
 behavior:
@@ -134,6 +145,7 @@ cd frontend && npm test -- --include src/app/admin-events.service.spec.ts
 ```
 
 ### Code Quality
+
 - Frontend: Prettier (100 char width, single quotes). Run `npx prettier --write .` in `frontend/`.
 - Backend: SpotBugs, ArchUnit, JaCoCo (80% coverage minimum).
 - Security: OWASP Dependency Check (fails on CVSS >= 7).
@@ -141,21 +153,23 @@ cd frontend && npm test -- --include src/app/admin-events.service.spec.ts
 
 ### Dependency Updates
 
-Renovate creates dependency-update PRs daily. Do not manually update a
-Renovate branch. Patch and minor updates may automerge only after the required
-CI checks pass; major, pin, digest, and lock-file-maintenance updates require
-review.
+Renovate creates dependency-update PRs daily and on demand. Do not manually
+update a Renovate branch. Patch, pin, and digest updates may automerge only after
+the required CI checks pass and a 3-day release quarantine soak period elapses;
+minor, major, and weekly lock-file-maintenance updates require review. Security
+vulnerability fixes bypass the quarantine soak to ensure prompt patching.
 
-The following ecosystems are intentionally grouped and review-only because their
-members are version-coupled: Angular/toolchain, Spring Boot plugin/BOM, Flyway,
-Hibernate, Netty, Log4j, Jackson, React Navigation, and React Native test
-tooling.
+The following ecosystems are intentionally grouped because their members are
+version-coupled: Angular/toolchain, Tailwind CSS, Zod across workspaces, Spring Boot
+plugin/BOM, Flyway, Hibernate, Netty, Log4j, Jackson (including BOMs), Tomcat Embed,
+OpenTelemetry, Testcontainers, Byte Buddy, SLF4J, React Navigation, React Native test
+tooling, and GitHub Actions.
 
 Renovate excludes only the named direct Expo, React, React Native, and native
-test dependencies in `mobile/package.json`; it does not infer the installed
-SDK's full native-module matrix. Add an Expo-compatible native module with
-`npx expo install <package>`. For an Expo SDK upgrade, first select the target
-`expo` version, then align its compatibility set with:
+test dependencies in `mobile/package.json` (and aligns `@types/react` to React 19);
+it does not infer the installed SDK's full native-module matrix. Add an
+Expo-compatible native module with `npx expo install <package>`. For an Expo SDK
+upgrade, first select the target `expo` version, then align its compatibility set with:
 
 ```bash
 cd mobile
@@ -168,12 +182,14 @@ Commit the resulting `package.json` and `package-lock.json` together, then run
 the mobile test and native build suites.
 
 ## Project Structure
+
 - `src/` — Spring Boot backend (Java 21, Gradle)
 - `frontend/` — Angular 22 SPA (TypeScript, Tailwind CSS)
 - `mobile/` — React Native / Expo application (TypeScript)
 - `docs/adr/` — Architecture Decision Records
 
 ## Branches & PRs
+
 - Main branch: `main`
 - Create feature branches from `main`
 - PRs require passing CI checks (build, test, lint, OWASP)

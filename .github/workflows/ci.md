@@ -192,26 +192,40 @@ uses the `RENOVATE_TOKEN` secret instead of `GITHUB_TOKEN`, because pull
 requests created with `GITHUB_TOKEN` require manual workflow approval. The
 current secret is a PAT with repository and workflow access so Renovate can
 write branches, pull requests, issues, statuses, and GitHub Actions updates.
+The workflow includes pre-flight schema validation via
+`renovate-config-validator`, repository caching (`actions/cache`), and
+interactive `workflow_dispatch` inputs (`dryRun`, `logLevel`, `repoCache`).
 
-Renovate opens reviewable PRs for all dependency updates. Ordinary minor and
-patch updates enable platform automerge. Major, pin, digest, and
-lock-file-maintenance updates remain reviewable. `ci.yml` detects same-repository
-`renovate/` branches and runs the backend, frontend, Testcontainers, and
-Playwright suites regardless of path filters. `react-native-ci.yml` always
-creates the mobile JavaScript check for pull requests and runs Android and iOS
-native jobs for same-repository Renovate and `maintenance/expo-sdk` branches.
+Renovate opens reviewable PRs for all dependency updates. Ordinary patch, pin,
+and digest updates enable platform automerge after required CI checks pass and
+a 3-day release quarantine soak expires to protect against supply-chain attacks.
+Minor updates require manual review (also holding for 3 days to catch immediate
+regressions). Major updates are held for 30 days and require manual review.
+Security vulnerability alerts bypass the release quarantine so CVE patches open
+immediately with a `security` label. Routine lock-file maintenance runs weekly
+on Monday mornings, deduplicating npm workspaces via `npmDedupe`.
+Branches use `rebaseWhen: auto` globally to avoid rebase churn, while automerging
+patch PRs override to `rebaseWhen: behind-base-branch` to satisfy branch protection.
+`ci.yml` detects same-repository `renovate/` branches and runs the backend,
+frontend, Testcontainers, and Playwright suites regardless of path filters.
+`react-native-ci.yml` always creates the mobile JavaScript check for pull
+requests and runs Android and iOS native jobs for same-repository Renovate and
+`maintenance/expo-sdk` branches.
 
 The following version-coupled ecosystems are grouped into cohesive Renovate
-PRs: Angular and its toolchain, Spring Boot plugin/BOM, Flyway, Hibernate,
-Netty, Log4j, Jackson, React Navigation, and React Native test tooling.
-Grouped minor and patch updates automerge automatically after required CI
-checks pass; grouped updates containing major version releases remain
-review-only. Renovate excludes only the named direct Expo, React, React
-Native, and native test dependencies in `mobile/package.json`; it does not
-dynamically read Expo's SDK compatibility matrix. Add native modules with
-`npx expo install <package>`. For an Expo SDK upgrade, select the target
-`expo` version first, then run `npx expo install --fix`, `npx expo install
---check`, `npx expo-doctor`, and the mobile suites.
+PRs: Angular and its toolchain, Tailwind CSS, Zod across monorepo packages,
+Spring Boot plugin/BOM, Flyway, Hibernate, Netty, Log4j, Jackson (including BOMs),
+Tomcat Embed, OpenTelemetry, Testcontainers, Byte Buddy, SLF4J, React Navigation,
+React Native test tooling, and GitHub Actions.
+Grouped patch updates automerge automatically after required CI checks pass and
+the soak period elapses; grouped updates containing minor or major version releases
+remain review-only. PostgreSQL container images are pinned to major version 18 to
+prevent incompatible data volume upgrades. Renovate excludes only the named direct
+Expo, React, React Native, and native test dependencies in `mobile/package.json`
+(with `@types/react` aligned to React 19); it does not dynamically read Expo's SDK
+compatibility matrix. Add native modules with `npx expo install <package>`. For an
+Expo SDK upgrade, select the target `expo` version first, then run `npx expo install
+--fix`, `npx expo install --check`, `npx expo-doctor`, and the mobile suites.
 
 `.github/workflows/expo-maintenance.yml` owns routine Expo compatibility
 updates. It runs daily, aligns the SDK-managed dependency set, verifies Expo's
