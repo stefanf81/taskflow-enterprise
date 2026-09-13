@@ -5,6 +5,7 @@ plugins {
 	id 'jacoco'
 	alias(libs.plugins.versions)
 	alias(libs.plugins.spotbugs)
+	alias(libs.plugins.dependency.analysis)
 }
 group = 'com.example'
 version = '0.0.1-SNAPSHOT'

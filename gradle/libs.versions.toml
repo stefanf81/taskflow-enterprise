@@ -1,6 +1,7 @@
 [versions]
 spring-boot = "4.1.1"
 dependency-check = "13.0.0"
+dependency-analysis = "3.19.1"
 versions-plugin = "0.62.0"
 spotbugs-plugin = "6.5.11"
 spotbugs-tool = "4.10.4"
@@ -112,3 +113,4 @@ spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
 dependency-check = { id = "org.owasp.dependencycheck", version.ref = "dependency-check" }
 versions = { id = "io.github.ben-manes.versions", version.ref = "versions-plugin" }
 spotbugs = { id = "com.github.spotbugs", version.ref = "spotbugs-plugin" }
+dependency-analysis = { id = "com.autonomousapps.dependency-analysis", version.ref = "dependency-analysis" }
