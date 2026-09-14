@@ -358,7 +358,7 @@ not automatically discover every SDK-compatible native module. Add a new native
 module with `npx expo install <package>`, then run `npx expo install --check`.
 When upgrading Expo SDK, first select the target `expo` version, then run
 `npx expo install --fix` and `npx expo-doctor`. See
-[CI documentation](.github/workflows/ci.md) for the required checks and
+[CI documentation](docs/ci/overview.md) for the required checks and
 Renovate authentication details.
 
 ---
@@ -368,6 +368,7 @@ Renovate authentication details.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Detailed end-to-end data flow and architectural analysis
 - [AGENTS.md](AGENTS.md) — Developer guidelines and AI agent instructions
 - [SYSTEM-HARDENING.md](SYSTEM-HARDENING.md) — Zero-trust security & container hardening policy
+- [docs/ci/](docs/ci/README.md) — CI/CD design rationale and workflow audit history
 - [mobile/development-set.md](mobile/development-set.md) — Mobile development setup, testing, and release workflow
 - [docs/adr/README.md](docs/adr/README.md) — Architecture Decision Records (ADRs) — full index
   - `ADR-001` — Virtual Threads — Enabled Explicitly

@@ -30,12 +30,19 @@ concurrency:
 
 ## 3. Least-Privilege Permissions (`permissions`)
 
-The top-level permissions block grants the absolute minimum access required. Specific jobs override these with only what they need (e.g., `packages: write` for Docker pushing, `security-events: write` for SARIF uploads).
+`ci.yml` declares a workflow-level default of `contents: read` only. Every job that needs more receives it job-scoped:
+
+- `changes`: `contents: read` + `pull-requests: read` — `dorny/paths-filter` lists pull-request changed files through the REST API, which requires `pull-requests: read`.
+- `docker-build`: `contents: read` + `security-events: write` — the only job that uploads SARIF.
+- `dependency-submission`: `contents: write` + `actions: write`.
+
+`packages: write` is deliberately **not** granted in `ci.yml` (it never pushes images); it belongs to the manual [`pushdockerimage.yml`](../../.github/workflows/pushdockerimage.yml) publication workflow.
+
 **Why:** Adheres to the Zero-Trust security model. If a malicious dependency somehow compromises the runner, the blast radius is severely limited because the `GITHUB_TOKEN` lacks sweeping repository write access.
 
 ## 4. Job: `changes` (Path Filtering)
 
-Uses `dorny/paths-filter@v4` to detect exactly which files changed in a PR or push. We enforce a 5-minute timeout on this job to prevent it from stalling.
+Uses `dorny/paths-filter@v4` to detect exactly which files changed in a PR or push. The job is granted `pull-requests: read` (see above) because the action lists PR files through the REST API. We enforce a 5-minute timeout on this job to prevent it from stalling.
 The filters distinguish backend, frontend, dependency-submission, and Docker component changes. Docker context files, Nginx configuration, entrypoints, ignore files, and Trivy policy are mapped to the affected image. The selector emits a valid empty JSON array when no image needs processing.
 **Why:** Monorepos (where frontend and backend live together) waste massive amounts of time running backend tests when only a CSS file changed, or vice versa. This step dynamically determines whether the backend, frontend, or both need to run (and similarly, which Docker images actually need to be built), completely skipping unaffected pipelines and avoiding missing build artifact failures.
 
@@ -52,8 +59,9 @@ This job handles the Spring Boot backend compilation, testing, and packaging.
   Unit and integration tests run automatically on all Pull Requests. On manual runs (`workflow_dispatch`), they are executed conditionally if `run_tests` is enabled, or skipped entirely to fast-track packaging.
 - **Gradle Task Parallelism & Caching:** We explicitly pass the `--parallel` and `--build-cache` arguments to `./gradlew`. This compiles independent modules across multiple threads, leveraging build outputs from previous runs.
 - **Gradle Caching Write Access (`cache-read-only: false`):** We configure `cache-read-only: false` on the setup-gradle action. By default, setup-gradle disables cache writes on non-default branches (e.g. Pull Requests). Overriding this ensures that PR branches can cache new/updated dependencies, avoiding slow downloads on subsequent commits.
+- **Combined Build, Tests, and Quality Gates:** A single Gradle invocation runs `assemble`, `test`, `testcontainersTest`, `jacocoTestReport`, `jacocoTestCoverageVerification`, and `spotbugsMain`. The enforced gates — JaCoCo coverage ≥ 0.80 and SpotBugs at MAX effort / HIGH confidence — therefore block the build instead of only producing reports. When `run_tests` is disabled, a packaging-only `assemble` fallback keeps the JAR artifact available for the downstream steps.
 - **Direct Artifact Uploads:** Instead of manually compressing reports into a `.tar.gz` archive, we upload the `build/reports` and `build/test-results` directories directly using `actions/upload-artifact@v7`. We set a 14-day retention period. For JAR files, we set `compression-level: 0` because they are already compressed natively.
-- **OpenAPI Contract Gate:** After packaging, CI starts the backend, authenticates through the mobile login endpoint, and compares the live `/v3/api-docs` document with `api/openapi.json`. It also fails if either generated platform API type file is stale. API changes therefore require a reviewed baseline update and regenerated types in the same change.
+- **OpenAPI Contract Gate:** After the build, CI starts the backend through the shared `start-backend` composite, authenticates through the mobile login endpoint, and compares the live `/v3/api-docs` document with `api/openapi.json`. It also fails if either generated platform API type file is stale. API changes therefore require a reviewed baseline update and regenerated types in the same change.
 
 ## 7. Job: `frontend`
 
@@ -77,9 +85,9 @@ Submits the complete, deep Java and Gradle dependency tree directly to the GitHu
 
 ## 8. Job: `security` — moved to `security.yml`
 
-> The Trivy filesystem scan has been extracted to a dedicated nightly workflow, [`.github/workflows/security.yml`](security.yml). This keeps the CI/CD pipeline focused on build, test, and deployment, while security-only scans run independently on the nightly schedule (and on demand via `workflow_dispatch`). Dependency visibility is handled by the separate dependency-submission job described above.
+> The Trivy filesystem scan has been extracted to a dedicated nightly workflow, [`.github/workflows/security.yml`](../../.github/workflows/security.yml). This keeps the CI/CD pipeline focused on build, test, and deployment, while security-only scans run independently on the nightly schedule (and on demand via `workflow_dispatch`). Dependency visibility is handled by the separate dependency-submission job described above.
 
-See [`security.yml`](security.yml) for details on:
+See [`security.yml`](../../.github/workflows/security.yml) for details on:
 
 - **Trivy Filesystem Scan:** Report-only (`exit-code: 0`, `scanners: vuln`) SARIF upload partitioned across four distinct components: Backend (`.`), Frontend (`frontend/`), Mobile (`mobile/`), and Shared Schemas (`shared/schemas/`), surfaced in the Code Scanning tab with dedicated category namespaces. Non-component and build directories (`node_modules/`, `build/`, `.gradle/`, `dist/`, `android/`, `ios/`, `.git/`) are explicitly excluded. Severity asymmetry vs. the Docker image hard gate is deliberately maintained — see the inline notes.
 - **Trivy Database Caching:** `trivy-action` manages its own workspace-local
@@ -107,14 +115,14 @@ Runs Playwright E2E tests against a real, running backend and database.
 - **Decoupled dependencies (`needs: [changes, backend, frontend]`)**:
   The E2E job depends strictly on `changes`, `backend`, and `frontend`. This eliminates redundant bottlenecks because E2E does not wait for static analysis.
 - **Single-Stack PR Coverage:** On Pull Requests, any backend or frontend change builds both application artifacts and runs E2E. This intentionally trades the extra untouched-stack build for production integration coverage on every application change. Docker-only changes retain component-specific build behavior.
-- **Production Ingress:** E2E downloads the frontend production bundle, builds the production Nginx image with a dedicated BuildKit GHA cache, and serves it on port 4200 with the same read-only filesystem and dropped capabilities used by Compose. Playwright sets `E2E_DOCKER=true`, so it tests the production bundle and reverse proxy instead of `ng serve`.
+- **Production Ingress:** E2E downloads the frontend production bundle, builds the production Nginx image with a BuildKit GHA cache that restores the shared `frontend-main`/`frontend-pr` scopes and writes a dedicated `frontend-e2e` scope, then serves it on port 4200 with the same read-only filesystem and dropped capabilities used by Compose. Playwright sets `E2E_DOCKER=true`, so it tests the production bundle and reverse proxy instead of `ng serve`.
 - **Upgraded Playwright Browser Cache:** Playwright browsers are cached under a key tied directly to the `package-lock.json` file hash, guaranteeing that the cache is cleanly invalidated whenever the Playwright dependency version is modified. This also allowed us to remove the redundant `npx playwright --version` run step.
-- **Targeted Browser Installation:** Instead of installing all available major browsers (Chromium, Firefox, WebKit), we only install `chromium` (`npx playwright install --with-deps chromium`), which matches the Desktop Chrome browser used in `playwright.config.ts`. This reduces dependency download sizes and drastically speeds up the installation phase.
-- **Direct Playwright Reports Upload:** We upload `spring.log`, `frontend/playwright-report`, and `frontend/test-results` directly using the `upload-artifact` action. To save CPU cycles on already-compressed images and logs, we set `compression-level: 0` and apply a 14-day retention policy.
+- **Cache-Aware Browser Installation:** Instead of installing all available major browsers (Chromium, Firefox, WebKit), we only install `chromium` (`npx playwright install --with-deps chromium`), which matches the Desktop Chrome browser used in `playwright.config.ts`. The install runs only on a Playwright cache miss, so `--with-deps` does not re-run `apt` on every build.
+- **Direct Playwright Reports Upload:** We upload `spring.log`, `frontend/playwright-report`, and `frontend/test-results` directly using the `upload-artifact` action with default compression and a 7-day retention policy; these text-heavy artifacts compress well, so the default keeps storage down.
 
 ## 9a. DAST (Dynamic Application Security Testing) — see `dast.yml`
 
-> The OWASP ZAP scan lives in its own dedicated workflow file, [`dast.yml`](dast.yml), and is no longer embedded in `ci.yml`. It is triggered on the daily schedule (staggered to **02:30 UTC**, off the 02:00 herd) and via manual `workflow_dispatch`.
+> The OWASP ZAP scan lives in its own dedicated workflow file, [`dast.yml`](../../.github/workflows/dast.yml), and is no longer embedded in `ci.yml`. It is triggered on the daily schedule (staggered to **02:30 UTC**, off the 02:00 herd) and via manual `workflow_dispatch`.
 
 Runs authenticated OWASP ZAP API and web scans against a disposable full-stack environment.
 
@@ -124,12 +132,12 @@ Runs authenticated OWASP ZAP API and web scans against a disposable full-stack e
 - **Production Ingress Scan:** Builds and runs the production frontend Nginx image with the same read-only filesystem and capability restrictions used by Compose, then scans `http://localhost:4200` through its API proxy with headless browser AJAX spidering (`-j`) to discover dynamic Angular SPA routes.
 - **Parameterized Manual Dispatch:** Supports manual `workflow_dispatch` with options for scan scope (`all`, `api_only`, `web_only`), AJAX spider toggle, and quality gate override (`fail_on_findings: false` for triage).
 - **Independent Scan Completion:** API and frontend ZAP scans each continue long enough for the other scan and all report/SARIF uploads to complete. A final aggregate step evaluates active scans while respecting skipped targets and quality gate settings, preserving both coverage and blocking behavior.
-- **Interactive Security Reports:** Archives the API and web HTML, JSON, Markdown, SARIF, and backend logs as the `zap-full-scan` artifact (30-day retention), with structured collapsible Markdown summaries rendered in GitHub Step Summary.
+- **Interactive Security Reports:** Archives the API and web HTML, JSON, Markdown, SARIF, and backend logs as the `zap-full-scan` artifact (14-day retention), with structured collapsible Markdown summaries rendered in GitHub Step Summary.
 - **GitHub Security (GHAS) Code Scanning Integration:** Translates raw API and web ZAP findings into SARIF via `scripts/zap2sarif.py` and uploads separate `dast-zap-api` and `dast-zap-web` categories. Invalid source reports and SARIF write failures fail the workflow rather than being reported as zero findings.
 
 ## 9b. External Server Security Scan — see `nightly-external-server-scan.yml`
 
-> The external production boundary scan lives in [`.github/workflows/nightly-external-server-scan.yml`](nightly-external-server-scan.yml). It is scheduled nightly (**03:00 UTC**, after DAST and regression suites) and available on-demand via parameterized `workflow_dispatch`.
+> The external production boundary scan lives in [`.github/workflows/nightly-external-server-scan.yml`](../../.github/workflows/nightly-external-server-scan.yml). It is scheduled nightly (**03:00 UTC**, after DAST and regression suites) and available on-demand via parameterized `workflow_dispatch`.
 
 Audits the public external perimeter, exposed ports, HTTP/TLS compliance, and web application attack surface against the production host.
 
@@ -149,7 +157,7 @@ Audits the public external perimeter, exposed ports, HTTP/TLS compliance, and we
 
 Compiles secure, production-grade container images for the backend and frontend components.
 
-> **Image publication is intentionally excluded from CI.** Docker images are built and scanned locally in CI but never pushed to GHCR. Publication is an explicit operator action via the dedicated [`.github/workflows/pushdockerimage.yml`](pushdockerimage.yml) workflow — see that file for the push pipeline.
+> **Image publication is intentionally excluded from CI.** Docker images are built and scanned locally in CI but never pushed to GHCR. Publication is an explicit operator action via the dedicated [`.github/workflows/pushdockerimage.yml`](../../.github/workflows/pushdockerimage.yml) workflow — see that file for the push pipeline.
 
 - **Deduplicated Multi-Tag Builds:** Both the unique commit SHA (`IMAGE_TAG`) and `latest` tags are defined simultaneously in the `docker/build-push-action` step. This ensures Buildx executes a single build compilation graph, tagging the resulting local image under both tags at once.
 - **Lowercase GHCR Owner Guard:** GHCR rejects mixed/uppercase repository owners (`repository name must be lowercase`). A `Compute Image Refs` step lowercases `github.repository_owner` once and exhales fully-resolved `ghcr.io/<owner>/taskflow-{backend,frontend}` refs as step outputs, which `build-push-action` and the Trivy `image-ref` both consume. This prevents hard-failures for forks/orgs whose casing doesn't match the package's lowercase requirement.
@@ -230,9 +238,12 @@ Branches use `rebaseWhen: auto` globally to avoid rebase churn, while automergin
 patch PRs override to `rebaseWhen: behind-base-branch` to satisfy branch protection.
 `ci.yml` detects same-repository `renovate/` branches and runs the backend,
 frontend, Testcontainers, and Playwright suites regardless of path filters.
-`react-native-ci.yml` always creates the mobile JavaScript check for pull
-requests and runs Android and iOS native jobs for same-repository Renovate and
-`maintenance/expo-sdk` branches.
+`react-native-ci.yml` path-filters pull requests (mobile, shared schemas, API
+contract, and the sync script) so unrelated PRs skip the mobile JavaScript
+check, and runs Android and iOS native jobs for same-repository Renovate and
+`maintenance/expo-sdk` branches. Its concurrency group includes the event name
+and only cancels pull-request runs, so a push to `main` cannot cancel the
+nightly native build.
 
 The following version-coupled ecosystems are grouped into cohesive Renovate
 PRs: Angular and its toolchain, Tailwind CSS, Zod across monorepo packages,
@@ -277,7 +288,24 @@ in `gitleaks.yml`; neither is currently included in the active ruleset's
 required-status-check list. Major, pin, digest, and lock-file-maintenance
 updates remain reviewable PRs.
 
-## 14. Troubleshooting
+## 14. Reusable Building Blocks
+
+Shared step logic lives in local composite actions under `.github/actions/`, so
+the same implementation is not copied across workflows (and cannot drift):
+
+- `npm-ci` — installs `shared/schemas` then a target package with `npm ci`
+  (`package-path`, `shared-schemas`, `ignore-scripts` inputs).
+- `start-backend` — generates disposable RSA keys, launches the JAR, and waits
+  for `/actuator/health/liveness`, exposing the PID as an output.
+- `prepull-buildkit` — pre-pulls the BuildKit image with bounded retries and
+  configures `buildx` with `driver-opts: image=<image>` so the pre-pull and the
+  builder cannot diverge.
+- `upload-sarif` — uploads a SARIF file to Code Scanning under a stable category.
+
+Callers reference them as `uses: ./.github/actions/<name>`. Job-level concerns
+such as `permissions` and `services` remain in the calling job.
+
+## 15. Troubleshooting
 
 ### `denied: permission_denied: write_package` during `docker push` (in `pushdockerimage.yml`)
 
