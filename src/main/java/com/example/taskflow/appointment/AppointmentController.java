@@ -125,14 +125,19 @@ public class AppointmentController {
     @Operation(summary = "Create/Book a new appointment (Guest Access)")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Successfully booked appointment"),
-            @ApiResponse(responseCode = "400", description = "Invalid request payload provided")
+            @ApiResponse(responseCode = "200", description = "Idempotent replay — the Idempotency-Key already created this booking"),
+            @ApiResponse(responseCode = "400", description = "Invalid request payload provided"),
+            @ApiResponse(responseCode = "409", description = "Idempotency-Key already used for a different request")
     })
     public ResponseEntity<AppointmentResponse> createAppointment(
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader(value = "Idempotency-Key", required = false)
+            @Size(max = 100, message = "Idempotency-Key must not exceed 100 characters")
+            String idempotencyKey,
             @Valid @RequestBody AppointmentCreateRequest request) {
-        
-        AppointmentResponse createdAppointment = appointmentService.createAppointment(request, idempotencyKey);
-        return new ResponseEntity<>(createdAppointment, HttpStatus.CREATED);
+
+        AppointmentCreationResult result = appointmentService.createAppointment(request, idempotencyKey);
+        HttpStatus status = result.replayed() ? HttpStatus.OK : HttpStatus.CREATED;
+        return ResponseEntity.status(status).body(result.appointment());
     }
 
     @PutMapping("/{id}")

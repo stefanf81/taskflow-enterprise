@@ -115,4 +115,34 @@ public class AppointmentControllerTestcontainersTest {
                 .andExpect(jsonPath("$.customerName", is("Guest John")))
                 .andExpect(jsonPath("$.status", is("PENDING")));
     }
+
+    @Test
+    void shouldResolveNoPreferenceAndPreventDoubleBookingInPostgres() throws Exception {
+        Map<String, Object> sentinelRequest = new HashMap<>();
+        sentinelRequest.put("customerName", "Guest Jane");
+        sentinelRequest.put("customerEmail", "jane.doe@example.com");
+        sentinelRequest.put("customerPhone", "555-4321");
+        sentinelRequest.put("barberName", "No Preference (First Available)");
+        sentinelRequest.put("bookingDate", getNextWorkingDate().toString());
+        sentinelRequest.put("bookingTime", "13:00");
+        sentinelRequest.put("serviceType", "Beard Trim & Shave");
+
+        String assignedBarber = objectMapper.readTree(mockMvc.perform(post("/api/v1/appointments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(sentinelRequest)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.barberName", not("No Preference (First Available)")))
+                .andReturn().getResponse().getContentAsString()).get("barberName").asText();
+
+        Map<String, Object> specificRequest = new HashMap<>(sentinelRequest);
+        specificRequest.put("customerEmail", "other@example.com");
+        specificRequest.put("barberName", assignedBarber);
+
+        // The partial unique index on (barber_name, booking_date, booking_time)
+        // WHERE status IN ('PENDING','APPROVED') must reject the second booking.
+        mockMvc.perform(post("/api/v1/appointments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(specificRequest)))
+                .andExpect(status().isBadRequest());
+    }
 }

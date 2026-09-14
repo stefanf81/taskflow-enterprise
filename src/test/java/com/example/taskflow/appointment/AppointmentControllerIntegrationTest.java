@@ -18,6 +18,7 @@ import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -45,6 +46,26 @@ class AppointmentControllerIntegrationTest {
         return date;
     }
 
+    private LocalDate getNextSunday() {
+        LocalDate date = LocalDate.now().plusDays(1);
+        while (date.getDayOfWeek() != java.time.DayOfWeek.SUNDAY) {
+            date = date.plusDays(1);
+        }
+        return date;
+    }
+
+    private Map<String, Object> appointmentRequest(String email, String barberName, String time) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("customerName", "Guest John");
+        request.put("customerEmail", email);
+        request.put("customerPhone", "555-1234");
+        request.put("barberName", barberName);
+        request.put("bookingDate", getNextWorkingDate().toString());
+        request.put("bookingTime", time);
+        request.put("serviceType", "Beard Trim & Shave");
+        return request;
+    }
+
     @BeforeEach
     void setUp() throws Exception {
         appointmentRepository.deleteAll();
@@ -67,31 +88,129 @@ class AppointmentControllerIntegrationTest {
 
     @Test
     void shouldCreateAppointmentSuccessfullyAsGuestWithoutAuth() throws Exception {
-        Map<String, Object> request = new HashMap<>();
-        request.put("customerName", "Guest John");
-        request.put("customerEmail", "john.doe@example.com");
-        request.put("customerPhone", "555-1234");
-        request.put("barberName", "Sara the Stylist");
-        request.put("bookingDate", getNextWorkingDate().toString());
-        request.put("bookingTime", "10:30");
-        request.put("serviceType", "Beard Trim & Shave");
+        Map<String, Object> request = appointmentRequest("john.doe@example.com", "Sara the Stylist", "10:30");
 
-        mockMvc.perform(post("/api/v1/appointments")
+        String createdId = objectMapper.readTree(mockMvc.perform(post("/api/v1/appointments")
                         .header("Idempotency-Key", "test-idempotent-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id", notNullValue()))
                 .andExpect(jsonPath("$.customerName", is("Guest John")))
-                .andExpect(jsonPath("$.status", is("PENDING")));
+                .andExpect(jsonPath("$.status", is("PENDING")))
+                .andReturn().getResponse().getContentAsString()).get("id").asText();
 
-        // Test idempotency: second request with same key should return 201 (or 200) and same ID
+        // H1: an identical replay is a 200 with the same resource, not a 201.
         mockMvc.perform(post("/api/v1/appointments")
                         .header("Idempotency-Key", "test-idempotent-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(Integer.parseInt(createdId))))
                 .andExpect(jsonPath("$.customerName", is("Guest John")));
+    }
+
+    @Test
+    void shouldRejectOverlongIdempotencyKey() throws Exception {
+        Map<String, Object> request = appointmentRequest("john.doe@example.com", "Sara the Stylist", "10:30");
+        String overlongKey = "k".repeat(101);
+
+        mockMvc.perform(post("/api/v1/appointments")
+                        .header("Idempotency-Key", overlongKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldRejectIdempotencyReplayForDifferentCustomer() throws Exception {
+        Map<String, Object> request = appointmentRequest("owner@example.com", "Sara the Stylist", "10:30");
+
+        mockMvc.perform(post("/api/v1/appointments")
+                        .header("Idempotency-Key", "shared-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated());
+
+        Map<String, Object> attackerRequest = appointmentRequest("attacker@example.com", "Sara the Stylist", "10:30");
+
+        mockMvc.perform(post("/api/v1/appointments")
+                        .header("Idempotency-Key", "shared-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(attackerRequest)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message", containsString("already used")))
+                .andExpect(jsonPath("$.customerEmail").doesNotExist());
+    }
+
+    @Test
+    void shouldRejectIdempotencyReplayForDifferentPayload() throws Exception {
+        Map<String, Object> request = appointmentRequest("john.doe@example.com", "Sara the Stylist", "10:30");
+
+        mockMvc.perform(post("/api/v1/appointments")
+                        .header("Idempotency-Key", "shared-key-2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated());
+
+        Map<String, Object> otherSlot = appointmentRequest("john.doe@example.com", "Sara the Stylist", "11:30");
+
+        mockMvc.perform(post("/api/v1/appointments")
+                        .header("Idempotency-Key", "shared-key-2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(otherSlot)))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void shouldResolveNoPreferenceBookingToConcreteBarber() throws Exception {
+        Map<String, Object> request = appointmentRequest(
+                "no.pref@example.com", "No Preference (First Available)", "10:30");
+
+        mockMvc.perform(post("/api/v1/appointments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.barberName", not("No Preference (First Available)")));
+
+        Appointment persisted = appointmentRepository.findAll().stream()
+                .filter(a -> "no.pref@example.com".equals(a.getCustomerEmail()))
+                .findFirst().orElseThrow();
+        assertNotNull(persisted.getBarber());
+        assertFalse("No Preference (First Available)".equals(persisted.getBarberName()));
+    }
+
+    @Test
+    void shouldPreventSpecificBarberDoubleBookingAfterSentinelAssignment() throws Exception {
+        Map<String, Object> sentinelRequest = appointmentRequest(
+                "sentinel@example.com", "No Preference (First Available)", "10:30");
+
+        String assignedBarber = objectMapper.readTree(mockMvc.perform(post("/api/v1/appointments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(sentinelRequest)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString()).get("barberName").asText();
+
+        Map<String, Object> specificRequest = appointmentRequest(
+                "specific@example.com", assignedBarber, "10:30");
+
+        mockMvc.perform(post("/api/v1/appointments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(specificRequest)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldRejectNoPreferenceBookingWhenNoBarberIsWorking() throws Exception {
+        Map<String, Object> request = appointmentRequest(
+                "sunday@example.com", "No Preference (First Available)", "10:30");
+        request.put("bookingDate", getNextSunday().toString());
+
+        mockMvc.perform(post("/api/v1/appointments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("No barber is available")));
     }
 
     @Test

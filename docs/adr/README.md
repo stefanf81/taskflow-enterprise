@@ -19,3 +19,5 @@ This directory records architectural decisions made during the development of Ta
 | [ADR-011](ADR-011-reference-data-caching.md) | Reference Data Caching (Barbers & Services) | Accepted |
 | [ADR-012](ADR-012-lua-rate-limiter.md) | Lua-Atomic Rate Limiter | Accepted |
 | [ADR-013](ADR-013-partial-slot-index.md) | Partial Unique Slot Index (Anti Double-Booking) | Accepted |
+| [ADR-014](ADR-014-resolve-no-preference-at-booking.md) | Resolve "No Preference" Bookings to a Concrete Barber | Accepted |
+| [ADR-015](ADR-015-bind-idempotency-replay.md) | Bind Idempotency-Key Replays to the Original Request | Accepted |

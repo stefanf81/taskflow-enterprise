@@ -219,4 +219,60 @@ class BusySlotsServiceTest {
 
         assertEquals(BusySlotsService.ALL_SLOTS, slots);
     }
+
+    @Test
+    void getBusySlots_noPreference_respectsBarberWorkingWindow() {
+        Barber barber = new Barber();
+        barber.setId(1L);
+        barber.setName("Alex");
+        BarberSchedule schedule = new BarberSchedule();
+        schedule.setStartTime(java.time.LocalTime.of(10, 0));
+        schedule.setEndTime(java.time.LocalTime.of(14, 0));
+
+        when(barberRepository.findAll()).thenReturn(List.of(barber));
+        when(barberTimeOffRepository.findTimeOffForBarberOnDate(1L, TEST_DATE))
+                .thenReturn(Collections.emptyList());
+        when(barberScheduleRepository.findByBarberIdAndDayOfWeek(1L, TEST_DATE.getDayOfWeek().getValue()))
+                .thenReturn(Optional.of(schedule));
+        when(appointmentRepository.findDistinctBookingTimes("Alex", TEST_DATE, AppointmentStatus.DENIED))
+                .thenReturn(Collections.emptyList());
+
+        List<String> slots = busySlotsService.getBusySlots(
+                AppointmentServiceImpl.NO_PREFERENCE_BARBER, TEST_DATE_STR);
+
+        // Window is [10:00, 14:00): only 10:00, 11:00 and 13:00 are offerable.
+        // This must match findFirstAvailableBarber(), or the calendar would show
+        // slots the resolver rejects.
+        assertEquals(List.of("09:00", "14:00", "15:00", "16:00"), slots);
+    }
+
+    @Test
+    void findFirstAvailableBarber_respectsWindowAndBookings() {
+        Barber earlyBarber = new Barber();
+        earlyBarber.setId(1L);
+        earlyBarber.setName("Early");
+        Barber lateBarber = new Barber();
+        lateBarber.setId(2L);
+        lateBarber.setName("Late");
+
+        BarberSchedule earlySchedule = new BarberSchedule();
+        earlySchedule.setStartTime(java.time.LocalTime.of(9, 0));
+        earlySchedule.setEndTime(java.time.LocalTime.of(11, 0));
+
+        when(barberRepository.findAll()).thenReturn(List.of(earlyBarber, lateBarber));
+        when(barberTimeOffRepository.findTimeOffForBarberOnDate(1L, TEST_DATE))
+                .thenReturn(Collections.emptyList());
+        when(barberTimeOffRepository.findTimeOffForBarberOnDate(2L, TEST_DATE))
+                .thenReturn(List.of(new BarberTimeOff()));
+        when(barberScheduleRepository.findByBarberIdAndDayOfWeek(1L, TEST_DATE.getDayOfWeek().getValue()))
+                .thenReturn(Optional.of(earlySchedule));
+
+        // Early is free and covers 10:00; Late is on time off anyway.
+        Optional<Barber> resolved = busySlotsService.findFirstAvailableBarber(TEST_DATE, "10:00");
+        assertTrue(resolved.isPresent());
+        assertEquals("Early", resolved.get().getName());
+
+        // 15:00 is outside Early's window; Late is off → nobody available.
+        assertTrue(busySlotsService.findFirstAvailableBarber(TEST_DATE, "15:00").isEmpty());
+    }
 }

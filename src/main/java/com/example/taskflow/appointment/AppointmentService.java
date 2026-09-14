@@ -10,7 +10,7 @@ public interface AppointmentService {
     AppointmentResponse getAppointmentById(Long id);
     org.springframework.data.domain.Page<AppointmentResponse> getMyAppointments(String email, int page, int size);
     void cancelMyAppointment(String publicId, String email);
-    AppointmentResponse createAppointment(AppointmentCreateRequest request, String idempotencyKey);
+    AppointmentCreationResult createAppointment(AppointmentCreateRequest request, String idempotencyKey);
     AppointmentResponse updateAppointmentStatus(Long id, AppointmentUpdateRequest request);
     void deleteAppointment(Long id);
     java.util.List<String> getBusySlots(String barberName, String bookingDate);

@@ -168,9 +168,9 @@ class AppointmentServiceImplTest {
 
     @Test
     void testCreateAppointment() {
-        // H3: NO_PREFERENCE_BARBER now triggers findAll() + per-barber schedule/
-        // time-off checks in BusySlotsService. Stub a working barber so the
-        // requested 10:00 slot is available.
+        // H2: the NO_PREFERENCE_BARBER sentinel is resolved to the first working,
+        // free barber before persisting. Stub a working barber so the requested
+        // 10:00 slot is available.
         Barber workingBarber = new Barber();
         workingBarber.setId(1L);
         workingBarber.setName("Alex");
@@ -189,16 +189,91 @@ class AppointmentServiceImplTest {
         AppointmentCreateRequest request = new AppointmentCreateRequest(
                 "John Doe", "john@test.com", "123",
                 AppointmentServiceImpl.NO_PREFERENCE_BARBER, LocalDate.now(), "10:00", "Haircut");
-        when(appointmentRepository.save(any(Appointment.class))).thenReturn(testAppointment);
+        when(appointmentRepository.save(any(Appointment.class))).thenAnswer(invocation -> {
+            Appointment toSave = invocation.getArgument(0);
+            assertEquals("Alex", toSave.getBarberName());
+            assertNotNull(toSave.getBarber());
+            return testAppointment;
+        });
         when(catalogService.findServiceByName("Haircut")).thenReturn(Optional.of(
                 new com.example.taskflow.catalog.ServiceItem("Haircut", java.math.BigDecimal.TEN, 30, "hair", "")));
 
-        AppointmentResponse response = appointmentService.createAppointment(request, null);
+        AppointmentCreationResult result = appointmentService.createAppointment(request, null);
 
-        assertNotNull(response);
-        assertEquals("John Doe", response.customerName());
+        assertNotNull(result);
+        assertFalse(result.replayed());
+        assertEquals("John Doe", result.appointment().customerName());
         verify(appointmentRepository).save(any(Appointment.class));
         verify(eventPublisher).publishEvent(any(AppointmentAdminEvent.class));
+    }
+
+    @Test
+    void testCreateAppointment_NoPreferenceNoBarberAvailable_Rejected() {
+        when(barberRepository.findAll()).thenReturn(Collections.emptyList());
+
+        AppointmentCreateRequest request = new AppointmentCreateRequest(
+                "John Doe", "john@test.com", "123",
+                AppointmentServiceImpl.NO_PREFERENCE_BARBER, LocalDate.now(), "10:00", "Haircut");
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.createAppointment(request, null));
+        assertTrue(ex.getMessage().contains("No barber is available"));
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+    }
+
+    @Test
+    void testCreateAppointment_IdempotentReplay_SamePayload_ReturnsReplay() {
+        Appointment existing = new Appointment(
+                "John Doe", "john@test.com", "123", "Alex the Barber",
+                LocalDate.now(), "10:00", "Haircut");
+        existing.setId(42L);
+        existing.setStatus("PENDING");
+        when(appointmentRepository.findByIdempotencyKey("idem-1")).thenReturn(existing);
+
+        AppointmentCreateRequest request = new AppointmentCreateRequest(
+                "John Doe", "JOHN@test.com", "999", "Alex the Barber",
+                LocalDate.now(), "10:00", "Haircut");
+
+        AppointmentCreationResult result = appointmentService.createAppointment(request, "idem-1");
+
+        assertTrue(result.replayed());
+        assertEquals(42L, result.appointment().id());
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+    }
+
+    @Test
+    void testCreateAppointment_IdempotentReplay_EmailMismatch_ThrowsConflict() {
+        Appointment existing = new Appointment(
+                "Victim", "victim@test.com", "123", "Alex the Barber",
+                LocalDate.now(), "10:00", "Haircut");
+        existing.setId(42L);
+        when(appointmentRepository.findByIdempotencyKey("idem-1")).thenReturn(existing);
+
+        AppointmentCreateRequest request = new AppointmentCreateRequest(
+                "Attacker", "attacker@test.com", "999", "Alex the Barber",
+                LocalDate.now(), "10:00", "Haircut");
+
+        assertThrows(com.example.taskflow.core.IdempotencyConflictException.class,
+                () -> appointmentService.createAppointment(request, "idem-1"));
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+    }
+
+    @Test
+    void testCreateAppointment_IdempotentReplay_PayloadMismatch_ThrowsConflict() {
+        Appointment existing = new Appointment(
+                "John Doe", "john@test.com", "123", "Alex the Barber",
+                LocalDate.now(), "10:00", "Haircut");
+        existing.setId(42L);
+        when(appointmentRepository.findByIdempotencyKey("idem-1")).thenReturn(existing);
+
+        // Same customer and key, but a different time — not the same request.
+        AppointmentCreateRequest request = new AppointmentCreateRequest(
+                "John Doe", "john@test.com", "123", "Alex the Barber",
+                LocalDate.now(), "11:00", "Haircut");
+
+        assertThrows(com.example.taskflow.core.IdempotencyConflictException.class,
+                () -> appointmentService.createAppointment(request, "idem-1"));
+        verify(appointmentRepository, never()).save(any(Appointment.class));
     }
 
     @Test

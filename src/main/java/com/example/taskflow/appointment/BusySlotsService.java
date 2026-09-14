@@ -12,6 +12,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -34,6 +38,8 @@ public class BusySlotsService {
      */
     public static final List<String> ALL_SLOTS =
             List.of("09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00");
+
+    private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
 
     private final BarberRepository barberRepository;
     private final BarberScheduleRepository barberScheduleRepository;
@@ -106,6 +112,64 @@ public class BusySlotsService {
     }
 
     /**
+     * H2: Resolve the "No Preference (First Available)" booking intent to a
+     * concrete barber who is scheduled, not on time off, and free for the
+     * requested slot. Returns empty when no barber can serve the slot.
+     *
+     * <p>Deliberately uncached: the caller persists the resolved barber inside
+     * the booking transaction, so a cached choice could assign a barber who has
+     * been booked since the cache entry was written.
+     */
+    public Optional<Barber> findFirstAvailableBarber(LocalDate date, String bookingTime) {
+        if (date == null || bookingTime == null || bookingTime.isBlank()) {
+            return Optional.empty();
+        }
+        LocalTime requested;
+        try {
+            requested = LocalTime.parse(bookingTime.trim());
+        } catch (DateTimeParseException e) {
+            return Optional.empty();
+        }
+
+        try {
+            // Deterministic order (lowest id first) so the same slot consistently
+            // resolves to the same barber until that barber is booked.
+            List<Barber> barbers = barberRepository.findAll().stream()
+                    .sorted(Comparator.comparing(Barber::getId,
+                            Comparator.nullsLast(Comparator.naturalOrder())))
+                    .toList();
+            int dayOfWeek = date.getDayOfWeek().getValue();
+
+            for (Barber barber : barbers) {
+                if (!barberTimeOffRepository.findTimeOffForBarberOnDate(barber.getId(), date).isEmpty()) {
+                    continue;
+                }
+                Optional<BarberSchedule> schedule = barberScheduleRepository
+                        .findByBarberIdAndDayOfWeek(barber.getId(), dayOfWeek);
+                if (schedule.isEmpty()
+                        || requested.isBefore(schedule.get().getStartTime())
+                        || !requested.isBefore(schedule.get().getEndTime())) {
+                    continue;
+                }
+                List<String> bookedTimes = appointmentRepository.findDistinctBookingTimes(
+                        barber.getName(), date, AppointmentStatus.DENIED);
+                if (bookedTimes.contains(requested.format(HH_MM))) {
+                    continue;
+                }
+                return Optional.of(barber);
+            }
+        } catch (Exception e) {
+            // Conservative: no barber is assigned when availability cannot be
+            // computed, so the caller rejects the booking instead of persisting
+            // an unassigned row that the slot index cannot protect.
+            logger.error("Error resolving first available barber on {} at {}: {}",
+                    LogSanitizer.mask(date.toString()),
+                    LogSanitizer.mask(bookingTime), LogSanitizer.safeMessage(e), e);
+        }
+        return Optional.empty();
+    }
+
+    /**
      * H3: Compute busy slots for the "No Preference (First Available)" sentinel.
      *
      * <p>A slot is considered busy (unavailable) only when NO working barber can
@@ -131,13 +195,24 @@ public class BusySlotsService {
                 continue;
             }
             // Skip barbers not scheduled that day
-            if (barberScheduleRepository.findByBarberIdAndDayOfWeek(barber.getId(), dayOfWeek).isEmpty()) {
+            Optional<BarberSchedule> scheduleOpt =
+                    barberScheduleRepository.findByBarberIdAndDayOfWeek(barber.getId(), dayOfWeek);
+            if (scheduleOpt.isEmpty()) {
                 continue;
             }
-            // This barber is working — collect slots they're NOT already booked for
+            // This barber is working — collect the slots inside their working
+            // window that they are NOT already booked for. The window filter
+            // matches findFirstAvailableBarber(), so the calendar never offers a
+            // slot the resolver would reject.
+            LocalTime windowStart = scheduleOpt.get().getStartTime();
+            LocalTime windowEnd = scheduleOpt.get().getEndTime();
             List<String> bookedTimes = appointmentRepository.findDistinctBookingTimes(
                     barber.getName(), date, AppointmentStatus.DENIED);
             for (String slot : ALL_SLOTS) {
+                LocalTime slotTime = LocalTime.parse(slot);
+                if (slotTime.isBefore(windowStart) || !slotTime.isBefore(windowEnd)) {
+                    continue;
+                }
                 if (!bookedTimes.contains(slot)) {
                     availableSlots.add(slot);
                 }

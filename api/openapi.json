@@ -626,6 +626,8 @@
             "name": "Idempotency-Key",
             "required": false,
             "schema": {
+              "maxLength": 100,
+              "minLength": 0,
               "type": "string"
             }
           }
@@ -641,6 +643,16 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            },
+            "description": "Idempotent replay — the Idempotency-Key already created this booking"
+          },
           "201": {
             "content": {
               "*/*": {
@@ -660,6 +672,16 @@
               }
             },
             "description": "Invalid request payload provided"
+          },
+          "409": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            },
+            "description": "Idempotency-Key already used for a different request"
           }
         },
         "summary": "Create/Book a new appointment (Guest Access)",
