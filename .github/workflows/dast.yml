@@ -149,66 +149,11 @@ jobs:
       ##########################################################
 
       - name: Start Spring Boot
-        run: |
-          set -euo pipefail
-          key_dir="$(mktemp -d)"
-          trap 'rm -rf "$key_dir"' EXIT
-
-          # The prod profile requires persistent keys. Generate a disposable
-          # pair in the PKCS#8/X.509 DER format expected by SecurityConfig and
-          # scope it only to the backend process. Use pkcs8 explicitly because
-          # the default private-key output format of OpenSSL is version-dependent.
-          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$key_dir/private.pem" 2>/dev/null
-          openssl pkcs8 -topk8 -nocrypt -in "$key_dir/private.pem" \
-            -outform DER -out "$key_dir/private.der"
-          openssl rsa -in "$key_dir/private.pem" -pubout -outform DER \
-            -out "$key_dir/public.der" 2>/dev/null
-          private_key="$(base64 < "$key_dir/private.der" | tr -d '\n')"
-          public_key="$(base64 < "$key_dir/public.der" | tr -d '\n')"
-
-          # SPRING_PROFILES_ACTIVE is set in the job env block above.
-          # Run with explicit memory boundaries and exit on OOM to safeguard runner resources.
-          env \
-            APP_RSA_PRIVATE_KEY="$private_key" \
-            APP_RSA_PUBLIC_KEY="$public_key" \
-            nohup java \
-            -Xmx1g \
-            -XX:+ExitOnOutOfMemoryError \
-            -jar build/libs/*.jar \
-            > spring.log 2>&1 < /dev/null &
-
-          echo $! > spring.pid
-
-      ##########################################################
-      # Wait for Backend (Fail-Fast Liveness Loop)
-      ##########################################################
-
-      - name: Wait for Backend
-        run: |
-          echo "Waiting for Spring Boot..."
-
-          timeout=180
-          pid="$(<spring.pid)"
-
-          while (( timeout > 0 )); do
-            if ! kill -0 "$pid" 2>/dev/null; then
-              echo "Backend process terminated unexpectedly" >&2
-              cat spring.log >&2
-              exit 1
-            fi
-
-            if curl -fs http://localhost:8080/actuator/health/liveness; then
-              echo "Backend ready"
-              exit 0
-            fi
-
-            sleep 2
-            timeout=$((timeout-2))
-          done
-
-          echo "Backend failed to start within timeout" >&2
-          cat spring.log >&2
-          exit 1
+        uses: ./.github/actions/start-backend
+        with:
+          profile: prod
+          pid-file: spring.pid
+          java-options: -Xmx1g -XX:+ExitOnOutOfMemoryError
 
       - name: Create DAST bearer token
         id: auth
@@ -241,13 +186,17 @@ jobs:
           restore-keys: |
             angular-${{ runner.os }}-
 
+      - name: Install frontend dependencies
+        if: env.SCAN_SCOPE != 'api_only'
+        uses: ./.github/actions/npm-ci
+        with:
+          package-path: frontend
+
       - name: Build production frontend image
         if: env.SCAN_SCOPE != 'api_only'
         run: |
           set -euo pipefail
 
-          npm ci --prefix shared/schemas --prefer-offline --no-audit --no-fund
-          npm ci --prefix frontend --prefer-offline --no-audit --no-fund
           npm --prefix frontend exec -- ng build
           docker build --tag taskflow-dast-frontend frontend
 
@@ -419,16 +368,16 @@ jobs:
 
       - name: Upload API SARIF
         if: always() && hashFiles('zap-api-results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v4
+        uses: ./.github/actions/upload-sarif
         with:
-          sarif_file: zap-api-results.sarif
+          path: zap-api-results.sarif
           category: dast-zap-api
 
       - name: Upload web SARIF
         if: always() && hashFiles('zap-web-results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v4
+        uses: ./.github/actions/upload-sarif
         with:
-          sarif_file: zap-web-results.sarif
+          path: zap-web-results.sarif
           category: dast-zap-web
 
       ##########################################################
@@ -451,8 +400,7 @@ jobs:
             zap-web-report.md
             zap-web-results.sarif
           if-no-files-found: ignore
-          compression-level: 0
-          retention-days: 30
+          retention-days: 14
 
       ##########################################################
       # Quality Gate Enforcement

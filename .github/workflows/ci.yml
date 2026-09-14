@@ -28,7 +28,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 concurrency:
   group: taskflow-${{ github.workflow }}-${{ github.ref }}
@@ -56,6 +55,13 @@ jobs:
     name: Detect Changes
     runs-on: ubuntu-latest
     timeout-minutes: 5
+
+    # dorny/paths-filter enumerates PR changed files via the REST API, which
+    # requires pull-requests: read. Job-scoped so the rest of the workflow
+    # stays at the minimal contents: read default.
+    permissions:
+      contents: read
+      pull-requests: read
 
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
@@ -205,6 +211,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    # Single source of truth for "do tests run on this event?" so the build,
+    # test, and report steps cannot drift apart.
+    env:
+      RUN_TESTS: ${{ github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.run_tests == true) }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -225,7 +236,22 @@ jobs:
         with:
           cache-read-only: false
 
-      - name: Build
+      - name: Build and Test
+        if: env.RUN_TESTS == 'true'
+        run: |
+          ./gradlew \
+            --parallel \
+            --build-cache \
+            assemble \
+            test \
+            testcontainersTest \
+            jacocoTestReport \
+            jacocoTestCoverageVerification \
+            spotbugsMain \
+            --stacktrace
+
+      - name: Build (packaging only)
+        if: env.RUN_TESTS != 'true'
         run: |
           ./gradlew \
             --parallel \
@@ -233,59 +259,24 @@ jobs:
             assemble \
             --stacktrace
 
+      - name: Start backend for contract verification
+        id: contract_backend
+        uses: ./.github/actions/start-backend
+        with:
+          log-file: openapi-contract.log
+
       - name: Verify OpenAPI Contract
         run: |
-          java -jar build/libs/*.jar > openapi-contract.log 2>&1 &
-          backend_pid=$!
-          trap 'kill "$backend_pid" 2>/dev/null || true; wait "$backend_pid" 2>/dev/null || true' EXIT
+          set -euo pipefail
+          node scripts/check-openapi-contract.js --auth http://localhost:8080/v3/api-docs
+          node scripts/sync-api-types.js --check api/openapi.json
 
-          for attempt in {1..60}; do
-            if curl -fsS http://localhost:8080/actuator/health/liveness > /dev/null; then
-              node scripts/check-openapi-contract.js --auth http://localhost:8080/v3/api-docs
-              node scripts/sync-api-types.js --check api/openapi.json
-              exit 0
-            fi
-            sleep 1
-          done
-
-          cat openapi-contract.log
-          exit 1
-
-      - name: Run Tests
-        if: |
-          github.event_name == 'pull_request' ||
-          github.event_name == 'schedule' ||
-          (
-            github.event_name == 'push' &&
-            github.ref == 'refs/heads/main'
-          ) ||
-          (
-            github.event_name == 'workflow_dispatch' &&
-            inputs.run_tests == true
-          )
-        run: |
-          ./gradlew \
-            --parallel \
-            --build-cache \
-            test \
-            testcontainersTest \
-            jacocoTestReport \
-            --stacktrace
+      - name: Stop contract-verification backend
+        if: always()
+        run: kill "${{ steps.contract_backend.outputs.pid }}" 2>/dev/null || true
 
       - name: Upload Test Reports
-        if: |
-          always() && (
-            github.event_name == 'pull_request' ||
-            github.event_name == 'schedule' ||
-            (
-              github.event_name == 'push' &&
-              github.ref == 'refs/heads/main'
-            ) ||
-            (
-              github.event_name == 'workflow_dispatch' &&
-              inputs.run_tests == true
-            )
-          )
+        if: always() && env.RUN_TESTS == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: backend-test-results
@@ -360,6 +351,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    env:
+      RUN_TESTS: ${{ github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.run_tests == true) }}
+
     defaults:
       run:
         working-directory: frontend
@@ -378,17 +372,9 @@ jobs:
             shared/schemas/package-lock.json
 
       - name: Install Dependencies
-        run: |
-          npm ci \
-            --prefix ../shared/schemas \
-            --prefer-offline \
-            --no-audit \
-            --no-fund
-
-          npm ci \
-            --prefer-offline \
-            --no-audit \
-            --no-fund
+        uses: ./.github/actions/npm-ci
+        with:
+          package-path: frontend
 
       - name: Check Formatting
         run: npx prettier --check .
@@ -402,17 +388,7 @@ jobs:
             angular-${{ runner.os }}-
 
       - name: Run Unit Tests
-        if: |
-          github.event_name == 'pull_request' ||
-          github.event_name == 'schedule' ||
-          (
-            github.event_name == 'push' &&
-            github.ref == 'refs/heads/main'
-          ) ||
-          (
-            github.event_name == 'workflow_dispatch' &&
-            inputs.run_tests == true
-          )
+        if: env.RUN_TESTS == 'true'
 
         run: |
           npx ng test \
@@ -427,23 +403,10 @@ jobs:
         with:
           name: frontend-dist
           path: frontend/dist/frontend/browser
-          compression-level: 0
           retention-days: 14
 
       - name: Upload Coverage
-        if: |
-          always() && (
-            github.event_name == 'pull_request' ||
-            github.event_name == 'schedule' ||
-            (
-              github.event_name == 'push' &&
-              github.ref == 'refs/heads/main'
-            ) ||
-            (
-              github.event_name == 'workflow_dispatch' &&
-              inputs.run_tests == true
-            )
-          )
+        if: always() && env.RUN_TESTS == 'true'
 
         uses: actions/upload-artifact@v7
 
@@ -554,76 +517,19 @@ jobs:
       ##########################################################
 
       - name: Start Spring Boot
-        run: |
-          set -euo pipefail
-          key_dir="$(mktemp -d)"
-          trap 'rm -rf "$key_dir"' EXIT
-
-          # The prod profile requires persistent keys. Generate a disposable
-          # pair in the PKCS#8/X.509 DER format expected by SecurityConfig and
-          # scope it only to the backend process. Use pkcs8 explicitly because
-          # the default private-key output format of OpenSSL is version-dependent.
-          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$key_dir/private.pem" 2>/dev/null
-          openssl pkcs8 -topk8 -nocrypt -in "$key_dir/private.pem" \
-            -outform DER -out "$key_dir/private.der"
-          openssl rsa -in "$key_dir/private.pem" -pubout -outform DER \
-            -out "$key_dir/public.der" 2>/dev/null
-          private_key="$(base64 < "$key_dir/private.der" | tr -d '\n')"
-          public_key="$(base64 < "$key_dir/public.der" | tr -d '\n')"
-
-          # SPRING_PROFILES_ACTIVE is set in the job env block above;
-          # no -D override needed here — keep the java command minimal.
-          env \
-            APP_RSA_PRIVATE_KEY="$private_key" \
-            APP_RSA_PUBLIC_KEY="$public_key" \
-            nohup java \
-            -jar backend-jar-dir/*.jar \
-            > spring.log 2>&1 < /dev/null &
-
-      ##########################################################
-      # Wait for Backend
-      ##########################################################
-
-      - name: Wait for Backend
-        run: |
-          echo "Waiting for Spring Boot..."
-
-          timeout=180
-
-          while (( timeout > 0 )); do
-            if curl -fs http://localhost:8080/actuator/health/liveness; then
-              echo "Backend ready"
-              exit 0
-            fi
-
-            sleep 2
-            timeout=$((timeout-2))
-          done
-
-          echo "Backend failed to start"
-          echo "=========================="
-          cat spring.log
-          echo "=========================="
-
-          exit 1
+        uses: ./.github/actions/start-backend
+        with:
+          jar-path: backend-jar-dir/*.jar
+          profile: prod
 
       ##########################################################
       # Production frontend ingress
       ##########################################################
 
       - name: Install Frontend
-        run: |
-          npm ci \
-            --prefix shared/schemas \
-            --prefer-offline \
-            --no-audit \
-            --no-fund
-
-          npm ci \
-            --prefix frontend \
-            --prefer-offline \
-            --no-audit \
-            --no-fund
+        uses: ./.github/actions/npm-ci
+        with:
+          package-path: frontend
 
       - name: Download Frontend Bundle
         uses: actions/download-artifact@v8
@@ -632,11 +538,13 @@ jobs:
           path: frontend/dist/frontend/browser
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: ./.github/actions/prepull-buildkit
 
       - name: Build production frontend image
         run: |
           docker buildx build \
+            --cache-from type=gha,scope=frontend-main \
+            --cache-from type=gha,scope=frontend-pr \
             --cache-from type=gha,scope=frontend-e2e \
             --cache-to type=gha,mode=max,scope=frontend-e2e \
             --load \
@@ -676,6 +584,7 @@ jobs:
       ##########################################################
 
       - name: Cache Playwright Browsers
+        id: playwright-cache
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
@@ -683,7 +592,10 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
 
+      # Browsers are restored from the cache above; --with-deps otherwise
+      # re-runs apt-get on every build. Install only on a cache miss.
       - name: Install Playwright Browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         working-directory: frontend
         run: |
           npx playwright install --with-deps chromium
@@ -722,8 +634,7 @@ jobs:
             frontend/playwright-report
             frontend/test-results
           if-no-files-found: ignore
-          compression-level: 0
-          retention-days: 14
+          retention-days: 7
 
   ###########################################################
   # Docker
@@ -731,6 +642,12 @@ jobs:
 
   docker-build:
     name: Build Docker (${{ matrix.component }})
+
+    # codeql-action/upload-sarif needs security-events: write; scoped to this
+    # job instead of the whole workflow to keep least privilege.
+    permissions:
+      contents: read
+      security-events: write
 
     needs:
       - changes
@@ -797,7 +714,7 @@ jobs:
       ##########################################################
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: ./.github/actions/prepull-buildkit
 
       ##########################################################
       # Build (load only — never push from CI; use
@@ -868,7 +785,7 @@ jobs:
 
       - name: Upload SARIF
         if: always() && hashFiles('trivy-results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v4
+        uses: ./.github/actions/upload-sarif
         with:
-          sarif_file: trivy-results.sarif
+          path: trivy-results.sarif
           category: docker-${{ matrix.component }}

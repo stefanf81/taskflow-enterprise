@@ -172,7 +172,7 @@ jobs:
       # same tool with the same category in one workflow run.
       - name: Upload SARIF
         if: always() && hashFiles('trivy-results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v4
+        uses: ./.github/actions/upload-sarif
         with:
-          sarif_file: trivy-results.sarif
+          path: trivy-results.sarif
           category: trivy-fs-${{ matrix.component.name }}

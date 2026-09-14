@@ -47,9 +47,9 @@ jobs:
             shared/schemas/package-lock.json
 
       - name: Install dependencies
-        run: |
-          npm ci --prefix shared/schemas --prefer-offline --no-audit --no-fund
-          npm ci --prefix mobile --prefer-offline --no-audit --no-fund
+        uses: ./.github/actions/npm-ci
+        with:
+          package-path: mobile
 
       - name: Align Expo SDK-compatible dependencies
         working-directory: mobile

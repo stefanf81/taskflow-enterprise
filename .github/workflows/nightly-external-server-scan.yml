@@ -78,8 +78,9 @@ jobs:
 
       - name: Prepare report directory
         run: |
-          mkdir -p reports
-          chmod -R 777 reports
+          # 0755 owned by the runner user; containers are launched with the
+          # same UID/GID below, so no world-writable directory is needed.
+          install -d -m 0755 reports
 
       - name: Install Nmap and report dependencies
         run: |
@@ -364,8 +365,9 @@ jobs:
 
       - name: Prepare report directory
         run: |
-          mkdir -p reports
-          chmod -R 777 reports
+          # 0755 owned by the runner user; containers are launched with the
+          # same UID/GID below, so no world-writable directory is needed.
+          install -d -m 0755 reports
 
       - name: Pin target domain to origin IP in runner hosts file
         run: |
@@ -487,9 +489,6 @@ jobs:
             exit 0
           fi
 
-          # Ensure container user (testssl, UID 1000) has write access to volume mount
-          chmod -R 777 reports
-
           failed_targets=0
           extra_hosts=()
           if [[ "${TARGET_HOST}" != "${TARGET_IP}" ]]; then
@@ -504,6 +503,7 @@ jobs:
 
             testssl_status=0
             docker run --rm \
+              --user "$(id -u):$(id -g)" \
               "${extra_hosts[@]}" \
               --volume "${PWD}/reports:/data" \
               ghcr.io/testssl/testssl.sh:3.2 \
@@ -537,9 +537,6 @@ jobs:
             exit 0
           fi
 
-          # Ensure container user has write access to volume mount
-          chmod -R 777 reports
-
           failed_nikto=0
           extra_hosts=()
           if [[ "${TARGET_HOST}" != "${TARGET_IP}" ]]; then
@@ -554,6 +551,7 @@ jobs:
 
             nikto_status=0
             docker run --rm \
+              --user "$(id -u):$(id -g)" \
               "${extra_hosts[@]}" \
               --volume "${PWD}/reports:/tmp" \
               ghcr.io/sullo/nikto:latest \
@@ -585,9 +583,9 @@ jobs:
       - name: Upload Nuclei SARIF
         if: always() && hashFiles('reports/nuclei-results.sarif') != ''
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v4
+        uses: ./.github/actions/upload-sarif
         with:
-          sarif_file: reports/nuclei-results.sarif
+          path: reports/nuclei-results.sarif
           category: nightly-external-nuclei
 
       - name: Generate web & TLS step summary

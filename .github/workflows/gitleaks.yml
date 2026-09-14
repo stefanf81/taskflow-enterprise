@@ -56,9 +56,9 @@ jobs:
 
       - name: Upload SARIF
         if: always() && hashFiles('results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v4
+        uses: ./.github/actions/upload-sarif
         with:
-          sarif_file: results.sarif
+          path: results.sarif
           category: gitleaks
 
       ##########################################################
@@ -73,5 +73,4 @@ jobs:
           path: |
             results.sarif
           if-no-files-found: ignore
-          compression-level: 0
-          retention-days: 30
+          retention-days: 14
