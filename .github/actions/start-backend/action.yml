@@ -1,0 +1,111 @@
+name: Start Spring Boot
+description: >-
+  Generate a disposable RSA key pair, launch the packaged JAR, and wait for the
+  liveness endpoint. Intended for the prod profile, which requires persistent keys.
+inputs:
+  jar-path:
+    description: Path or glob to the executable JAR (glob is expanded by the shell).
+    required: false
+    default: build/libs/*.jar
+  profile:
+    description: Value for SPRING_PROFILES_ACTIVE. Empty inherits the job environment.
+    required: false
+    default: ""
+  log-file:
+    description: File that receives the application log output.
+    required: false
+    default: spring.log
+  pid-file:
+    description: Optional file to write the backend PID to (for teardown steps).
+    required: false
+    default: ""
+  wait-timeout-seconds:
+    description: Maximum seconds to wait for the liveness endpoint.
+    required: false
+    default: "180"
+  java-options:
+    description: Additional JVM options (space-separated).
+    required: false
+    default: ""
+outputs:
+  pid:
+    description: PID of the launched backend.
+    value: ${{ steps.launch.outputs.pid }}
+runs:
+  using: composite
+  steps:
+    - name: Launch backend
+      id: launch
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        JAR_PATH: ${{ inputs.jar-path }}
+        PROFILE: ${{ inputs.profile }}
+        LOG_FILE: ${{ inputs.log-file }}
+        PID_FILE: ${{ inputs.pid-file }}
+        JAVA_OPTIONS: ${{ inputs.java-options }}
+      run: |
+        set -euo pipefail
+        key_dir="$(mktemp -d)"
+        trap 'rm -rf "$key_dir"' EXIT
+
+        # The prod profile requires persistent keys. Generate a disposable pair
+        # in the PKCS#8/X.509 DER format expected by SecurityConfig and scope it
+        # only to the backend process. pkcs8 is explicit because the default
+        # private-key output format of OpenSSL is version-dependent.
+        openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$key_dir/private.pem" 2>/dev/null
+        openssl pkcs8 -topk8 -nocrypt -in "$key_dir/private.pem" \
+          -outform DER -out "$key_dir/private.der"
+        openssl rsa -in "$key_dir/private.pem" -pubout -outform DER \
+          -out "$key_dir/public.der" 2>/dev/null
+
+        launch_env=(
+          APP_RSA_PRIVATE_KEY="$(base64 < "$key_dir/private.der" | tr -d '\n')"
+          APP_RSA_PUBLIC_KEY="$(base64 < "$key_dir/public.der" | tr -d '\n')"
+        )
+        if [[ -n "$PROFILE" ]]; then
+          launch_env+=(SPRING_PROFILES_ACTIVE="$PROFILE")
+        fi
+
+        # JAR_PATH and JAVA_OPTIONS are intentionally word-split so a glob and
+        # space-separated options expand correctly.
+        # shellcheck disable=SC2086
+        env "${launch_env[@]}" nohup java $JAVA_OPTIONS -jar $JAR_PATH \
+          > "$LOG_FILE" 2>&1 < /dev/null &
+
+        pid=$!
+        echo "pid=$pid" >> "$GITHUB_OUTPUT"
+        if [[ -n "$PID_FILE" ]]; then
+          printf '%s\n' "$pid" > "$PID_FILE"
+        fi
+
+    - name: Wait for liveness
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        PID: ${{ steps.launch.outputs.pid }}
+        LOG_FILE: ${{ inputs.log-file }}
+        WAIT_TIMEOUT: ${{ inputs.wait-timeout-seconds }}
+      run: |
+        set -euo pipefail
+        echo "Waiting for Spring Boot..."
+
+        deadline=$(( SECONDS + WAIT_TIMEOUT ))
+        while (( SECONDS < deadline )); do
+          if ! kill -0 "$PID" 2>/dev/null; then
+            echo "Backend process terminated unexpectedly" >&2
+            cat "$LOG_FILE" >&2 || true
+            exit 1
+          fi
+
+          if curl -fsS http://localhost:8080/actuator/health/liveness > /dev/null; then
+            echo "Backend ready"
+            exit 0
+          fi
+
+          sleep 2
+        done
+
+        echo "Backend failed to start within ${WAIT_TIMEOUT}s" >&2
+        cat "$LOG_FILE" >&2 || true
+        exit 1

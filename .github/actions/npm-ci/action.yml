@@ -1,0 +1,46 @@
+name: Install npm dependencies
+description: >-
+  Run `npm ci` for a package, optionally bootstrapping shared/schemas first.
+  Runs from the repository root so callers do not need a working directory.
+inputs:
+  package-path:
+    description: Repository-relative path of the package to install (e.g. frontend, mobile, .).
+    required: true
+  shared-schemas:
+    description: Install shared/schemas before the target package.
+    required: false
+    default: "true"
+  ignore-scripts:
+    description: Pass --ignore-scripts to both installs (supply-chain hardening).
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Install shared/schemas
+      if: inputs.shared-schemas == 'true'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        IGNORE_SCRIPTS: ${{ inputs.ignore-scripts }}
+      run: |
+        set -euo pipefail
+        args=(--prefix shared/schemas --prefer-offline --no-audit --no-fund)
+        if [[ "$IGNORE_SCRIPTS" == "true" ]]; then
+          args+=(--ignore-scripts)
+        fi
+        npm ci "${args[@]}"
+
+    - name: Install ${{ inputs.package-path }}
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        PACKAGE_PATH: ${{ inputs.package-path }}
+        IGNORE_SCRIPTS: ${{ inputs.ignore-scripts }}
+      run: |
+        set -euo pipefail
+        args=(--prefix "$PACKAGE_PATH" --prefer-offline --no-audit --no-fund)
+        if [[ "$IGNORE_SCRIPTS" == "true" ]]; then
+          args+=(--ignore-scripts)
+        fi
+        npm ci "${args[@]}"

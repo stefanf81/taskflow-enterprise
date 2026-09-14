@@ -1,0 +1,39 @@
+name: Set up Buildx with BuildKit pre-pull
+description: >-
+  Pre-pull the docker-container BuildKit image with bounded retries, then
+  configure buildx to use exactly that image. Docker Hub resets are transient;
+  booting the builder without a local copy otherwise hard-fails the job.
+inputs:
+  buildkit-image:
+    description: BuildKit image used by the docker-container driver.
+    required: false
+    default: moby/buildkit:buildx-stable-1
+runs:
+  using: composite
+  steps:
+    - name: Pre-pull BuildKit image
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        BUILDKIT_IMAGE: ${{ inputs.buildkit-image }}
+      run: |
+        set -euo pipefail
+        for attempt in {1..5}; do
+          if docker pull "$BUILDKIT_IMAGE"; then
+            exit 0
+          fi
+          if (( attempt == 5 )); then
+            break
+          fi
+          echo "docker pull $BUILDKIT_IMAGE failed (attempt ${attempt}/5); retrying in 10s..."
+          sleep 10
+        done
+        echo "::error::Failed to pull $BUILDKIT_IMAGE after 5 attempts (Docker Hub transient error?)"
+        exit 1
+
+    - name: Set up Buildx
+      uses: docker/setup-buildx-action@v4
+      with:
+        # Pin the builder to the image that was just pre-pulled so the two
+        # cannot diverge if the action's default tag changes.
+        driver-opts: image=${{ inputs.buildkit-image }}

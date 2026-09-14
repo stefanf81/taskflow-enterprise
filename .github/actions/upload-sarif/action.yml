@@ -1,0 +1,19 @@
+name: Upload SARIF
+description: >-
+  Upload a SARIF file to GitHub Code Scanning under a stable category. Keeps
+  the codeql-action upload pin in one place across every workflow.
+inputs:
+  path:
+    description: Path to the SARIF file.
+    required: true
+  category:
+    description: Code Scanning category (must be unique per tool and component).
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Upload SARIF
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ inputs.path }}
+        category: ${{ inputs.category }}
