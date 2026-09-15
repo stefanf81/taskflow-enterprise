@@ -379,6 +379,9 @@ jobs:
       - name: Check Formatting
         run: npx prettier --check .
 
+      - name: Lint (ESLint + strict type check)
+        run: npm run lint
+
       - name: Cache Angular Build
         uses: actions/cache@v6
         with:

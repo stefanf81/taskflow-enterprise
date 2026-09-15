@@ -30,7 +30,6 @@ import java.time.Instant;
 public class AppointmentServiceImpl implements AppointmentService {
 
     private static final Logger logger = LoggerFactory.getLogger(AppointmentServiceImpl.class);
-    private static final int MAX_BUSY_SLOTS = 500;
 
     /**
      * Sentinel barber name used by the web/mobile booking UI to mean "assign me

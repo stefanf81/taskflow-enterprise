@@ -44,7 +44,7 @@ Conditional on `app.rate-limit.enabled` (`@ConditionalOnProperty`, disabled by d
 ### Negative
 - **Lua script management:** The script is stored as a Java string literal in `RateLimiterConfig.java`; any change requires a code deploy (no external script file). The `DefaultRedisScript<Long>` result type must match Redis `integer-reply`.
 - **Fixed-window burst edge:** Fixed-window limits can allow `2×` burst at window boundaries (e.g., `maxRequests` at `T=59s` + `maxRequests` at `T=61s`). Sliding-window or token-bucket would be smoother but more complex; the fixed window is sufficient for abuse protection at this scale.
-- **No rate-limit headers:** `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Reset` are not set on successful requests (see AUDIT-REPORT.md L16). Clients see only `429` + `Retry-After` on excess.
+- **No rate-limit headers:** `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Reset` are not set on successful requests (see [docs/archive/AUDIT-REPORT.md](../archive/AUDIT-REPORT.md) L16). Clients see only `429` + `Retry-After` on excess.
 
 ## Verification
 

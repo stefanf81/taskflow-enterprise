@@ -24,7 +24,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.security.web.csrf.CsrfToken;
 
 import java.time.Duration;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/auth")

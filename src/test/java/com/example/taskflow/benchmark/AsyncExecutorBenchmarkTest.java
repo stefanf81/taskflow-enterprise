@@ -79,23 +79,6 @@ class AsyncExecutorBenchmarkTest {
             return CompletableFuture.completedFuture(null);
         }
 
-        @Async
-        public CompletableFuture<Void> workWithContention() {
-            // Slightly more realistic: allocate a small payload to pressure GC
-            // while still being I/O-bound (sleep).
-            byte[] payload = new byte[1024];
-            Arrays.fill(payload, (byte) 1);
-            try {
-                Thread.sleep(TASK_SLEEP_MS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            // Prevent dead-code elimination
-            if (payload[0] == 99) {
-                System.out.println("unreachable");
-            }
-            return CompletableFuture.completedFuture(null);
-        }
     }
 
     @Test

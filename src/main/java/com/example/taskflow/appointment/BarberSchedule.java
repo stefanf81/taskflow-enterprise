@@ -31,10 +31,8 @@ public class BarberSchedule {
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
-    public Barber getBarber() { return barber; }
     public void setBarber(Barber barber) { this.barber = barber; }
 
-    public Integer getDayOfWeek() { return dayOfWeek; }
     public void setDayOfWeek(Integer dayOfWeek) { this.dayOfWeek = dayOfWeek; }
 
     public LocalTime getStartTime() { return startTime; }

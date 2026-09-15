@@ -1,12 +1,23 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
+    ".": {
+      "entry": ["k6/*.js"],
+      "ignoreDependencies": ["k6"]
+    },
     "frontend": {
-      "entry": ["test/setup.ts"]
+      "entry": ["test/setup.ts", "src/app/types/api.ts"]
     },
     "mobile": {
-      "entry": ["App.tsx"],
-      "ignoreDependencies": ["@babel/core"]
+      "entry": [
+        "App.tsx",
+        "src/types/api.ts",
+        ".detoxrc.js",
+        "e2e/jest.config.js",
+        "plugins/*.js"
+      ],
+      "ignoreDependencies": ["@babel/core", "babel-jest"],
+      "ignoreBinaries": ["eas"]
     },
     "shared/schemas": {}
   }

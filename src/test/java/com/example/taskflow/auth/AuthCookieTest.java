@@ -1,6 +1,4 @@
 package com.example.taskflow.auth;
-import com.example.taskflow.auth.internal.UserRepository;
-
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -30,9 +28,6 @@ class AuthCookieTest {
 
     @MockitoBean
     private TokenProvider tokenProvider;
-
-    @MockitoBean
-    private UserRepository userRepository;
 
     @Test
     void loginSetsHttpOnlySecureStrictCookieAndNoTokenInBody() throws Exception {

@@ -10,6 +10,11 @@ NC='\033[0m' # No Color
 AUTO_STOP_DOCKER="${AUTO_STOP_DOCKER:-false}"
 STARTED_DOCKER=false
 
+# The Playwright suite shares one client IP; its auth calls (me/csrf/login/
+# register/logout) would exhaust the production 20/min auth bucket mid-run.
+# Raise the bucket for this local verification stack only.
+export APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE="${APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE:-200}"
+
 for arg in "$@"; do
   if [ "$arg" == "--stop-docker" ]; then
     AUTO_STOP_DOCKER=true

@@ -67,6 +67,15 @@ java {
 jar {
 	enabled = false
 }
+// Public Maven Central only — deliberately portable across machines and CI runners.
+//
+// Note on developer machines: Maven itself may be routed through a corporate
+// Nexus mirror configured globally in ~/.m2/settings.xml (mirror id
+// "Nexus_Mirror" with a wildcard <mirrorOf>*</mirrorOf> and an active "nexus"
+// profile). Gradle does NOT read Maven settings, so those machine-local
+// overrides never leak into this build — keep it that way: do not add custom
+// repository URLs here or in an init script, or CI (which cannot reach the
+// internal mirror) will break. Same convention as /.npmrc and /frontend/.npmrc.
 repositories {
 	mavenCentral()
 }

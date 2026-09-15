@@ -13,7 +13,10 @@
   - Packages: `appointment` (`BarberServiceImpl`/`BusySlotsService` + V21 partial index), `auth`, `catalog` (`CatalogServiceImpl` caching), `core` (`AsyncConfig` bounded executor, `RateLimiterConfig` Lua `EVAL`, `CacheConfig` 10m/2m TTLs, `CacheControl`/`ShallowEtagHeaderFilter`), `notification`, `review`
   - Entry point: `TaskflowApplication.java`
 - **Frontend**: Angular 22 / TypeScript / Tailwind CSS — `frontend/`
-  - Entry: `frontend/src/main.ts`, app module: `frontend/src/app/`
+  - Entry: `frontend/src/main.ts`; shell: `frontend/src/app/app.ts` (router-outlet + session bootstrap only).
+  - Features: `features/landing/*` (guest landing, lazy route `''`), `features/booking/*` (`booking.store.ts` wizard state machine + `booking-wizard.*`), `features/admin/*` (dashboard shell + 4 tab components), `features/customer/*`. Cross-cutting API clients live in `core/api/*` (`AuthApi`, `CatalogApi`, `BarbersApi`, `AppointmentsApi`, `NotificationsApi`, `ReviewsApi`); guest endpoints are marked with the `PUBLIC_REQUEST` HttpContextToken (never by URL matching) so a public 401 cannot clear the session. Session events flow through `core/session-events.ts`, not a DOM CustomEvent.
+  - Contracts: request **and response** payloads are validated at runtime with the shared zod schemas (`@taskflow/schemas` → `shared/schemas/`), including SSE events and `httpResource` responses via `parse`. Add/update schemas there before wiring a new endpoint.
+  - Quality gates: `npm run lint` = `theme:check` + ESLint (angular-eslint recommended + template a11y) + strict `tsc` for app & spec projects; `tsconfig.json` has `strict`, `noUncheckedIndexedAccess`, `noUnusedLocals/Parameters`. Unit tests enforce `coverageThresholds` in `angular.json` (65/66/52/66), so cover new stores/components. Design tokens are generated from `src/theme/tokens.json` (`npm run theme:build`, checked in CI) — edit the JSON, not `tokens.generated.css`. `e2e/a11y.spec.ts` gates axe serious/critical violations.
   - Auth: Stateless JWT in an HttpOnly `access_token` cookie (RSA-2048 asymmetric, OAuth2 Resource Server). `auth.interceptor.ts` catches 401s; `auth.guard.ts` is a `canActivateFn` that gates the `/admin` and `/customer` dashboards. The principal's role is restored from the backend via `GET /api/v1/auth/me` (reads the cookie) into an **in-memory** signal (`AuthState`) — it is never trusted from `sessionStorage`/`localStorage`.
   - CSRF: Double-submit pattern. The backend sets a readable `XSRF-TOKEN` cookie (via `CookieCsrfTokenRepository.withHttpOnlyFalse()`). Angular's `withXsrfConfiguration({ cookieName: 'XSRF-TOKEN', headerName: 'X-XSRF-TOKEN' })` in `app.config.ts` reads that cookie and attaches the header automatically on state-changing requests. The JWT `access_token` cookie is HttpOnly and **never** read by JavaScript — do not confuse the two. CSRF is disabled on public guest endpoints (`POST /api/v1/appointments`, `PUT /api/v1/appointments/public/cancel/*`, `POST /api/v1/reviews/public/**`).
 - **Mobile**: React Native / Expo / TypeScript — `mobile/`
@@ -21,6 +24,7 @@
   - Navigation: React Navigation (Guest, Customer, and Admin tab navigators inside Root NativeStack).
   - State: TanStack Query (`@tanstack/react-query`) for server state, Zustand (`useAuthStore`) for client state.
   - Security: Native bearer login via `POST /api/v1/auth/mobile/login`, bearer tokens stored via `expo-secure-store` (iOS Keychain / Android Keystore), and no reliance on a native cookie jar. Bearer-only state-changing requests are CSRF-exempt; web cookie requests retain double-submit CSRF protection.
+  - Contracts: request and response payloads are validated at the transport boundary (`mobile/src/api/contracts.ts`) with the shared zod schemas from `@taskflow/schemas` — keep the API clients in sync when the contract changes. Follow the repo formatting style (single quotes); mobile has no `.prettierrc`, so do not bulk-run Prettier with defaults.
   - Builds: EAS Build configured via `mobile/eas.json` for Android (APK/AAB) and iOS (Simulator/IPA).
 - **Platform-local contracts**:
   - `api/openapi.json`: reviewed, canonical OpenAPI contract baseline.
@@ -50,7 +54,7 @@ npm run api:spec:check       # validate the canonical baseline file
 npm run sync:api-types       # generate both platform API types from the baseline
 npm run sync:api-types:check # fail when generated platform API types are stale
 npm run test:all         # run unit tests across both Angular Web and React Native Mobile
-npm run lint:all         # run TypeScript type check on mobile and web
+npm run lint:all         # frontend ESLint + strict type check + prettier, and mobile type check
 ```
 
 ### Backend (root)

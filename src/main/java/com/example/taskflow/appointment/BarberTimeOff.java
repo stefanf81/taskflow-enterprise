@@ -33,7 +33,6 @@ public class BarberTimeOff {
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
-    public Barber getBarber() { return barber; }
     public void setBarber(Barber barber) { this.barber = barber; }
 
     public LocalDate getStartDate() { return startDate; }

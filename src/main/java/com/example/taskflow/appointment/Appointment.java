@@ -137,10 +137,6 @@ public class Appointment {
         this.publicId = publicId;
     }
 
-    public String getIdempotencyKey() {
-        return idempotencyKey;
-    }
-
     public void setIdempotencyKey(String idempotencyKey) {
         this.idempotencyKey = idempotencyKey;
     }
@@ -207,10 +203,6 @@ public class Appointment {
 
     public void setBarber(Barber barber) {
         this.barber = barber;
-    }
-
-    public ServiceItem getService() {
-        return service;
     }
 
     public void setService(ServiceItem service) {

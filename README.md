@@ -367,6 +367,7 @@ Renovate authentication details.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Detailed end-to-end data flow and architectural analysis
 - [AGENTS.md](AGENTS.md) — Developer guidelines and AI agent instructions
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Development setup, quality gates, and contribution workflow
 - [SYSTEM-HARDENING.md](SYSTEM-HARDENING.md) — Zero-trust security & container hardening policy
 - [docs/ci/](docs/ci/README.md) — CI/CD design rationale and workflow audit history
 - [mobile/development-set.md](mobile/development-set.md) — Mobile development setup, testing, and release workflow
