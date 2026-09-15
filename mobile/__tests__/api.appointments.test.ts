@@ -21,12 +21,29 @@ describe('appointmentsApi', () => {
     jest.clearAllMocks();
   });
 
+  const emptyDashboard: AppointmentDashboardResponse = {
+    page: { content: [], page: { totalPages: 0, totalElements: 0, size: 10, number: 0 } },
+    stats: { total: 0, pending: 0, approved: 0, denied: 0, overdue: 0, progress: 0, approvedRevenue: 0 },
+  };
+
+  const mockAppt = {
+    id: 1,
+    publicId: 'TF-0001',
+    customerName: 'John',
+    customerEmail: 'j@ex.com',
+    customerPhone: '+1',
+    barberName: 'Alex',
+    bookingDate: '2026-08-01',
+    bookingTime: '10:00',
+    serviceType: 'Haircut',
+    status: 'PENDING',
+    createdAt: '',
+    updatedAt: '',
+  };
+
   describe('getAllAppointments', () => {
     it('fetches appointments with default params', async () => {
-      const mockResponse: AppointmentDashboardResponse = {
-        page: { content: [], page: { totalPages: 0, totalElements: 0, size: 10, number: 0 } },
-        stats: { total: 0, pending: 0, approved: 0, denied: 0, overdue: 0, progress: 0, approvedRevenue: 0 },
-      };
+      const mockResponse: AppointmentDashboardResponse = emptyDashboard;
       mockedGet.mockResolvedValueOnce({ data: mockResponse });
 
       const result = await appointmentsApi.getAllAppointments();
@@ -35,7 +52,7 @@ describe('appointmentsApi', () => {
     });
 
     it('includes status filter when not "all"', async () => {
-      mockedGet.mockResolvedValueOnce({ data: { page: { content: [] }, stats: null } });
+      mockedGet.mockResolvedValueOnce({ data: emptyDashboard });
       await appointmentsApi.getAllAppointments('pending');
       expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments', {
         params: { page: 0, size: 10, status: 'PENDING' },
@@ -43,13 +60,13 @@ describe('appointmentsApi', () => {
     });
 
     it('omits status param when filter is "all"', async () => {
-      mockedGet.mockResolvedValueOnce({ data: { page: { content: [] }, stats: null } });
+      mockedGet.mockResolvedValueOnce({ data: emptyDashboard });
       await appointmentsApi.getAllAppointments('all');
       expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments', { params: { page: 0, size: 10 } });
     });
 
     it('includes search term when provided', async () => {
-      mockedGet.mockResolvedValueOnce({ data: { page: { content: [] }, stats: null } });
+      mockedGet.mockResolvedValueOnce({ data: emptyDashboard });
       await appointmentsApi.getAllAppointments(undefined, 'Alex');
       expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments', {
         params: { page: 0, size: 10, search: 'Alex' },
@@ -59,12 +76,6 @@ describe('appointmentsApi', () => {
 
   describe('createAppointment', () => {
     it('sends POST with appointment data', async () => {
-      const mockAppt = {
-        id: 1, publicId: 'TF-0001', customerName: 'John', customerEmail: 'j@ex.com',
-        customerPhone: '+1', barberName: 'Alex', bookingDate: '2026-08-01',
-        bookingTime: '10:00', serviceType: 'Haircut', status: 'PENDING' as const,
-        createdAt: '', updatedAt: '',
-      };
       mockedPost.mockResolvedValueOnce({ data: mockAppt });
 
       const result = await appointmentsApi.createAppointment({
@@ -97,10 +108,10 @@ describe('appointmentsApi', () => {
 
   describe('updateAppointmentStatus', () => {
     it('sends PUT with status update', async () => {
-      mockedPut.mockResolvedValueOnce({ data: { id: 1, status: 'APPROVED' } });
+      mockedPut.mockResolvedValueOnce({ data: { ...mockAppt, status: 'APPROVED' } });
       const result = await appointmentsApi.updateAppointmentStatus(1, 'APPROVED');
       expect(mockedPut).toHaveBeenCalledWith('/api/v1/appointments/1', { status: 'APPROVED' });
-      expect(result).toEqual({ id: 1, status: 'APPROVED' });
+      expect(result).toEqual({ ...mockAppt, status: 'APPROVED' });
     });
   });
 

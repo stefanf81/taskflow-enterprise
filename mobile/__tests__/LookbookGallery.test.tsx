@@ -11,11 +11,11 @@ describe('LookbookGallery Component', () => {
     expect(screen.getByText('Classic Taper Fade & Lineup')).toBeTruthy();
   });
 
-  it('renders barber names for each item (Alex appears twice)', async () => {
+  it('renders the catalogue service for each item (Classic Haircut appears twice)', async () => {
     await render(<LookbookGallery />);
-    expect(screen.getAllByText('Crafted by Alex the Barber').length).toBe(2); // two items by Alex
-    expect(screen.getByText('Crafted by Sara the Stylist')).toBeTruthy();
-    expect(screen.getByText('Crafted by Marcus Master Blade')).toBeTruthy();
+    expect(screen.getAllByText('Classic Haircut').length).toBe(2); // two items map to this service
+    expect(screen.getByText('Modern Skin Fade')).toBeTruthy();
+    expect(screen.getByText('Beard Trim & Shave')).toBeTruthy();
   });
 
   it('renders category badges with formatted text', async () => {

@@ -381,9 +381,8 @@ describe('BookingScreen', () => {
     await fireEvent.press(getByText('Continue'));
 
     expect(getByText('Reservation Summary')).toBeTruthy();
-    expect(getByText('$45.00')).toBeTruthy();  // subtotal
-    expect(getByText('$2.50')).toBeTruthy();  // fee
-    expect(getByText('$47.50')).toBeTruthy(); // total
+    // No platform fee is modelled server-side: the total is the service price.
+    expect(getByText('$45.00')).toBeTruthy();
   });
 });
 

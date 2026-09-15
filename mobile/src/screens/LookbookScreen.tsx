@@ -22,7 +22,7 @@ export const LookbookScreen: React.FC = () => {
 
         <LookbookGallery
           onSelectStyle={(item) =>
-            navigation.navigate('Booking', { preselectedBarber: item.barber })
+            navigation.navigate('Booking', { preselectedService: item.serviceName })
           }
         />
       </ScrollView>

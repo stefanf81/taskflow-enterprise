@@ -3,7 +3,6 @@ import {
   TouchableOpacity,
   Text,
   ActivityIndicator,
-  StyleSheet,
   TouchableOpacityProps,
   ViewStyle,
   TextStyle,

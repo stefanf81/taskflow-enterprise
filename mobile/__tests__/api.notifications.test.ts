@@ -17,7 +17,7 @@ describe('notificationsApi', () => {
   describe('getNotifications', () => {
     it('fetches all notifications', async () => {
       const mockData = [
-        { id: 1, recipient: 'admin@taskflow.com', type: 'APPOINTMENT_CONFIRMED', message: 'Confirmed', sentAt: '2026-07-24T10:00:00', status: 'SENT' },
+        { id: 1, recipient: 'admin@taskflow.com', type: 'APPOINTMENT_CONFIRMED', message: 'Confirmed', retryCount: 0, sentAt: '2026-07-24T10:00:00', status: 'SENT' },
       ];
       mockedGet.mockResolvedValueOnce({ data: mockData });
 

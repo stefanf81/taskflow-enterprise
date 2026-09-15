@@ -5,6 +5,13 @@ import {
   AppointmentItem,
   AppointmentUpdateRequest,
 } from '../types/api';
+import { parseContract } from './contracts';
+import {
+  appointmentCreateSchema,
+  appointmentDashboardResponseSchema,
+  appointmentResponseSchema,
+  appointmentUpdateSchema,
+} from '@taskflow/schemas';
 
 export const appointmentsApi = {
   getAllAppointments: async (
@@ -26,12 +33,21 @@ export const appointmentsApi = {
     const response = await apiClient.get<AppointmentDashboardResponse>('/api/v1/appointments', {
       params,
     });
-    return response.data;
+    return parseContract(
+      appointmentDashboardResponseSchema,
+      response.data,
+      'GET /api/v1/appointments',
+    );
   },
 
   createAppointment: async (data: AppointmentCreateRequest): Promise<AppointmentItem> => {
-    const response = await apiClient.post<AppointmentItem>('/api/v1/appointments', data);
-    return response.data;
+    const payload = parseContract(appointmentCreateSchema, data, 'POST /api/v1/appointments');
+    const response = await apiClient.post<AppointmentItem>('/api/v1/appointments', payload);
+    return parseContract(
+      appointmentResponseSchema,
+      response.data,
+      'POST /api/v1/appointments',
+    );
   },
 
   getBusySlots: async (barberName: string, bookingDate: string): Promise<string[]> => {
@@ -49,12 +65,16 @@ export const appointmentsApi = {
     id: number,
     statusValue: AppointmentUpdateRequest['status']
   ): Promise<AppointmentItem> => {
-    const request: AppointmentUpdateRequest = { status: statusValue };
+    const payload = parseContract(
+      appointmentUpdateSchema,
+      { status: statusValue },
+      'PUT /api/v1/appointments',
+    );
     const response = await apiClient.put<AppointmentItem>(
       `/api/v1/appointments/${id}`,
-      request
+      payload
     );
-    return response.data;
+    return parseContract(appointmentResponseSchema, response.data, 'PUT /api/v1/appointments');
   },
 
   deleteAppointment: async (id: number): Promise<void> => {

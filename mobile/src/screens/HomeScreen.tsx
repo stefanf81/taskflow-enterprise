@@ -27,12 +27,6 @@ import { colors } from '../theme/colors';
 // Module-level constants — defined outside the component to avoid
 // re-creation on every render (P1: memoization of static data).
 
-const FALLBACK_BARBERS = [
-  { id: 1, name: 'Alex the Barber', email: '', phone: '' },
-  { id: 2, name: 'Sara the Stylist', email: '', phone: '' },
-  { id: 3, name: 'Marcus Master Blade', email: '', phone: '' },
-];
-
 const BARBER_META: Record<string, { title: string; specialty: string; badge?: string }> = {
   'Alex the Barber': { title: 'Master Stylist', specialty: 'Classic Scissor Cuts', badge: 'Top Rated' },
   'Sara the Stylist': { title: 'Skin Fade Expert', specialty: 'Skin Fades & Tapers', badge: 'Featured' },
@@ -90,7 +84,9 @@ export const HomeScreen: React.FC = () => {
   }, [pingAnim]);
 
   // Use module-level constants (P1: no re-creation per render)
-  const barbers = apiBarbers.length > 0 ? apiBarbers : FALLBACK_BARBERS;
+  // API-driven roster (mirrors the web PublicBarberStore). Empty until the
+  // directory loads; never substitute invented names that can drift.
+  const barbers = apiBarbers;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -177,7 +173,7 @@ export const HomeScreen: React.FC = () => {
           <Text style={styles.sectionSub}>Explore signature cuts, razor shaves, and tapers</Text>
           <LookbookGallery
             onSelectStyle={(item) =>
-              navigation.navigate('Booking', { preselectedBarber: item.barber })
+              navigation.navigate('Booking', { preselectedService: item.serviceName })
             }
           />
         </View>

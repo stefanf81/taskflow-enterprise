@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors } from '../../theme/colors';
 
 interface TimeSlotPickerProps {
-  slots: string[];
+  slots: readonly string[];
   selectedSlot: string;
   busySlots?: string[];
   onSelectSlot: (slot: string) => void;

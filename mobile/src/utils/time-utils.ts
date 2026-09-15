@@ -75,7 +75,7 @@ export function toLocalDateString(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export interface UpcomingDay {
+interface UpcomingDay {
   dateStr: string;
   dayName: string;
   dayNum: number;

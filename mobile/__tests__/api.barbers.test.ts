@@ -43,7 +43,7 @@ describe('barbersApi', () => {
 
   describe('getTimeOff', () => {
     it('fetches time-off records for a barber', async () => {
-      const mockTimeOff = [{ startDate: '2026-08-01', endDate: '2026-08-03', reason: 'Vacation' }];
+      const mockTimeOff = [{ id: 1, startDate: '2026-08-01', endDate: '2026-08-03', reason: 'Vacation' }];
       mockedGet.mockResolvedValueOnce({ data: mockTimeOff });
 
       const result = await barbersApi.getTimeOff(1);

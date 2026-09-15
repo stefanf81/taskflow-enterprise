@@ -5,11 +5,12 @@ import { Card } from '../common/Card';
 import { Button } from '../common/Button';
 import { colors } from '../../theme/colors';
 
-export interface LookbookItem {
+interface LookbookItem {
   id: string;
   title: string;
   category: string;
-  barber: string;
+  /** Catalog service name to preselect in the booking wizard. */
+  serviceName: string;
   description: string;
 }
 
@@ -18,28 +19,28 @@ const LOOKBOOK_DATA: LookbookItem[] = [
     id: '1',
     title: 'Executive Pompadour & Beard Trim',
     category: 'Haircuts',
-    barber: 'Alex the Barber',
+    serviceName: 'Classic Haircut',
     description: 'Precision scissor work with textured volume and sharp razor-defined beard lines.',
   },
   {
     id: '2',
     title: 'Zero Skin Fade & Textured Crop',
     category: 'Haircuts',
-    barber: 'Sara the Stylist',
+    serviceName: 'Modern Skin Fade',
     description: 'High skin fade transitioning seamlessly into a blunt forward-fringe texture.',
   },
   {
     id: '3',
     title: 'Hot Towel Royal Razor Shave',
     category: 'Shaves',
-    barber: 'Marcus Master Blade',
+    serviceName: 'Beard Trim & Shave',
     description: 'Traditional 3-stage hot towel wrap followed by straight razor smooth finish.',
   },
   {
     id: '4',
     title: 'Classic Taper Fade & Lineup',
     category: 'Haircuts',
-    barber: 'Alex the Barber',
+    serviceName: 'Classic Haircut',
     description: 'Subtle temple taper fade with crisp edge-up for a clean professional aesthetic.',
   },
 ];
@@ -66,7 +67,7 @@ export const LookbookGallery: React.FC<LookbookGalleryProps> = ({ onSelectStyle 
 
           <View style={styles.content}>
             <Text style={styles.title}>{item.title}</Text>
-            <Text style={styles.barber}>Crafted by {item.barber}</Text>
+            <Text style={styles.barber}>{item.serviceName}</Text>
             <Text style={styles.description}>{item.description}</Text>
 
             {onSelectStyle && (

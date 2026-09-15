@@ -27,6 +27,7 @@ import { GuestTabParamList, RootStackParamList } from '../types/navigation';
 import { AppointmentItem } from '../types/api';
 import { colors } from '../theme/colors';
 import {
+  DEFAULT_TIME_SLOTS,
   formatTime12Hour,
   computeEstimatedEndTime,
   getUpcomingDays,
@@ -39,15 +40,6 @@ type BookingNavProp = CompositeNavigationProp<
   BottomTabNavigationProp<GuestTabParamList, 'Booking'>,
   NativeStackNavigationProp<RootStackParamList>
 >;
-
-const BARBERS_FALLBACK = [
-  'No Preference (First Available)',
-  'Alex the Barber',
-  'Sara the Stylist',
-  'Marcus Master Blade',
-];
-
-const TIME_SLOTS = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'];
 
 // Backend category values (V5__create_service_catalog.sql): hair | beard | combo
 const CATEGORIES = ['all', 'hair', 'beard', 'combo'];
@@ -112,10 +104,9 @@ export const BookingScreen: React.FC = () => {
     [navigation],
   );
 
-  // Build barber list from API, fallback to static names
-  const barberNames = apiBarbers.length > 0
-    ? ['No Preference (First Available)', ...apiBarbers.map((b) => b.name)]
-    : BARBERS_FALLBACK;
+  // API-driven roster (mirrors the web PublicBarberStore): no hardcoded names
+  // that can silently drift from the backend directory.
+  const barberNames = ['No Preference (First Available)', ...apiBarbers.map((b) => b.name)];
 
   // Service search & category state
   const [serviceSearchQuery, setServiceSearchQuery] = useState('');
@@ -170,10 +161,9 @@ export const BookingScreen: React.FC = () => {
   // Selected service object for pricing
   const selectedServiceObj = services.find((s) => s.name === selectedService);
 
-  // Computed pricing
-  const checkoutSubtotal = selectedServiceObj?.price ?? 0;
-  const checkoutFee = 2.5;
-  const checkoutTotal = checkoutSubtotal + checkoutFee;
+  // Computed pricing. The backend does not model a platform fee, so the
+  // summary and receipt show the catalog service price only (web parity).
+  const checkoutTotal = selectedServiceObj?.price ?? 0;
 
   // Estimated end time
   const estimatedEnd = computeEstimatedEndTime(selectedTime, selectedServiceObj?.durationMinutes ?? 0);
@@ -433,7 +423,7 @@ export const BookingScreen: React.FC = () => {
               </View>
             ) : selectedDate ? (
               <TimeSlotPicker
-                slots={TIME_SLOTS}
+                slots={DEFAULT_TIME_SLOTS}
                 selectedSlot={selectedTime}
                 busySlots={busySlots}
                 onSelectSlot={setSelectedTime}
@@ -489,14 +479,6 @@ export const BookingScreen: React.FC = () => {
 
               <View style={styles.divider} />
 
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Subtotal:</Text>
-                <Text style={styles.priceVal}>${checkoutSubtotal.toFixed(2)}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Platform Svc Fee:</Text>
-                <Text style={styles.priceVal}>${checkoutFee.toFixed(2)}</Text>
-              </View>
               <View style={[styles.summaryRow, styles.totalRow]}>
                 <Text style={styles.totalLabel}>Total Est. Price:</Text>
                 <Text style={styles.totalPrice}>${checkoutTotal.toFixed(2)}</Text>
