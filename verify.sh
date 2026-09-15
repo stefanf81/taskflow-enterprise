@@ -4,6 +4,7 @@ set -euo pipefail
 # Color Codes
 GREEN='\033[0;32m'
 RED='\033[0;31m'
+YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
 # Cleanup hook configuration
@@ -71,6 +72,27 @@ for attempt in {1..30}; do
   fi
   sleep 1
 done
+
+# The strict Nginx CSP (`script-src 'self'`) blocks inline event handlers.
+# Angular's inlineCritical optimization serves the stylesheet as
+# `media="print" onload="this.media='all'"`, so that CSP leaves the page
+# unstyled. Fail fast if the served bundle shipped that pattern.
+if ! INDEX_HTML="$(curl -fs --max-time 5 http://localhost:4200/ 2>/dev/null)"; then
+  echo -e "${RED}Could not fetch http://localhost:4200/ to verify the served bundle!${NC}"
+  exit 1
+fi
+
+if printf '%s' "$INDEX_HTML" | grep -qE 'media="print"[^>]*onload='; then
+  echo -e "${RED}Built index.html uses the CSP-blocked inline onload async-CSS trick (keep optimization.styles.inlineCritical=false)!${NC}"
+  exit 1
+fi
+
+# Only the production image serves a hashed bundle. If a dev server (npm start)
+# already occupies :4200, the Docker stack is skipped above and this check
+# cannot exercise the strict-CSP path — report that instead of passing silently.
+if ! printf '%s' "$INDEX_HTML" | grep -qE 'main-[A-Za-z0-9_-]+\.js'; then
+  echo -e "${YELLOW}Warning: http://localhost:4200/ is not serving a hashed production bundle (dev server?), so the production CSP/CSS check was skipped. Stop 'npm start' and re-run to verify the Docker image.${NC}"
+fi
 
 if ! (cd frontend && E2E_DOCKER=true npm run e2e); then
   echo -e "${RED}E2E tests failed!${NC}"

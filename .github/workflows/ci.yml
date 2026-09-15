@@ -401,6 +401,18 @@ jobs:
       - name: Build Production Bundle
         run: npx ng build
 
+      # Nginx serves the bundle with `script-src 'self'` (frontend/nginx.conf).
+      # Angular's inlineCritical optimization defers the full stylesheet via an
+      # inline `onload="this.media='all'"` handler, which that CSP blocks —
+      # leaving only a `media="print"` stylesheet and an unstyled production
+      # page. Keep optimization.styles.inlineCritical=false (frontend/README.md §1.3).
+      - name: Verify Built index.html is CSP-Safe
+        run: |
+          if grep -Eq 'media="print"[^>]*onload=' dist/frontend/browser/index.html; then
+            echo "::error::index.html contains Angular's inlineCritical async-CSS inline onload handler, which the Nginx CSP blocks. Set optimization.styles.inlineCritical=false."
+            exit 1
+          fi
+
       - name: Upload Frontend Bundle
         uses: actions/upload-artifact@v7
         with:
