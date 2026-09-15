@@ -1,11 +1,7 @@
-import { Component, inject, OnInit } from '@angular/core';
-import { Routes, Router, RouterLink } from '@angular/router';
+import { Component, inject } from '@angular/core';
+import { Router, RouterLink, Routes } from '@angular/router';
 import { authGuard } from './auth.guard';
 import { AuthState } from './auth.state';
-
-/** Empty landing component — the root App template IS the landing page. */
-@Component({ template: '', standalone: true })
-class AppShell {}
 
 /**
  * 404 handler: redirects authenticated users to their dashboard,
@@ -24,14 +20,13 @@ class AppShell {}
       </a>
     </div>
   `,
-  standalone: true,
   imports: [RouterLink],
 })
-class NotFoundComponent implements OnInit {
+class NotFoundComponent {
   private readonly auth = inject(AuthState);
   private readonly router = inject(Router);
 
-  ngOnInit(): void {
+  constructor() {
     const role = this.auth.role();
     if (role === 'ROLE_ADMIN') {
       this.router.navigateByUrl('/admin');
@@ -43,17 +38,24 @@ class NotFoundComponent implements OnInit {
 }
 
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', component: AppShell },
+  {
+    path: '',
+    pathMatch: 'full',
+    loadComponent: () => import('./features/landing/landing-page').then((m) => m.LandingPage),
+    title: 'TaskFlow — Premium Barber Booking',
+  },
   {
     path: 'admin',
     canActivate: [authGuard],
     loadComponent: () => import('./features/admin/admin-dashboard').then((m) => m.AdminDashboard),
+    title: 'Owner Dashboard — TaskFlow',
   },
   {
     path: 'customer',
     canActivate: [authGuard],
     loadComponent: () =>
       import('./features/customer/customer-portal').then((m) => m.CustomerPortal),
+    title: 'My Appointments — TaskFlow',
   },
-  { path: '**', component: NotFoundComponent },
+  { path: '**', component: NotFoundComponent, title: 'Not Found — TaskFlow' },
 ];

@@ -1,8 +1,11 @@
-import { Injectable, signal, computed, inject, DestroyRef } from '@angular/core';
+import { Injectable, signal, computed, inject, effect, DestroyRef } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthState } from './auth.state';
-import { AppointmentService, AppointmentDashboardResponse } from './appointment.service';
+import { AppointmentDashboardResponse } from './types/api';
+import { AppointmentsApi } from './core/api/appointments-api';
+import { AuthApi } from './core/api/auth-api';
+import { appointmentDashboardResponseSchema } from '@taskflow/schemas';
 
 /**
  * Admin appointment list state.
@@ -20,7 +23,8 @@ import { AppointmentService, AppointmentDashboardResponse } from './appointment.
  */
 @Injectable({ providedIn: 'root' })
 export class AppointmentStore {
-  private readonly appointmentService = inject(AppointmentService);
+  private readonly appointmentsApi = inject(AppointmentsApi);
+  private readonly authApi = inject(AuthApi);
   private readonly authState = inject(AuthState);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -36,22 +40,21 @@ export class AppointmentStore {
   /** Debounced copy of searchQuery — the only search signal the resource reads. */
   readonly searchDebounced = signal<string>('');
 
+  private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
   // Core Admin Reactive States (Declarative Signals via httpResource)
   private readonly appointmentsResource = httpResource<AppointmentDashboardResponse>(
     () => {
       if (!this.authState.isLoggedIn()) return undefined;
-      let url = `/api/v1/appointments?page=${this.currentPage()}&size=${this.pageSize}`;
-      const filter = this.selectedFilter();
-      if (filter && filter !== 'all') {
-        url += `&status=${filter.toUpperCase()}`;
-      }
-      const search = this.searchDebounced();
-      if (search) {
-        url += `&search=${encodeURIComponent(search)}`;
-      }
-      return url;
+      return this.appointmentsApi.dashboardUrl(
+        this.selectedFilter(),
+        this.searchDebounced(),
+        this.currentPage(),
+        this.pageSize,
+      );
     },
     {
+      parse: (raw) => appointmentDashboardResponseSchema.parse(raw),
       defaultValue: {
         page: {
           content: [],
@@ -102,20 +105,22 @@ export class AppointmentStore {
   readonly isCheckingSlots = signal<boolean>(false);
   readonly busySlots = signal<string[]>([]);
 
-  private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
   constructor() {
-    // React to 401s anywhere in the app by clearing client-side auth state.
-    // Register cleanup via DestroyRef so the listener is removed when the
-    // injector is destroyed (e.g. on hot-reload or lazy-module teardown).
-    if (typeof window !== 'undefined') {
-      const handler = () => this.resetAuthState();
-      window.addEventListener('auth:unauthorized', handler);
-      this.destroyRef.onDestroy(() => window.removeEventListener('auth:unauthorized', handler));
-    }
     this.destroyRef.onDestroy(() => {
       if (this.searchDebounceTimer) {
         clearTimeout(this.searchDebounceTimer);
+      }
+      if (this.successTimer) {
+        clearTimeout(this.successTimer);
+      }
+    });
+
+    // A 401 on a protected request clears the session (AuthState). Drop any
+    // stale banner as well so a logged-out dashboard never shows an alert
+    // from the previous session.
+    effect(() => {
+      if (!this.authState.isLoggedIn()) {
+        this.errorMessage.set(null);
       }
     });
   }
@@ -171,20 +176,36 @@ export class AppointmentStore {
     this.appointmentsResource.reload();
   }
 
-  // Handle Admin Logout — clear the HttpOnly cookie on the backend, then drop UI state.
+  // Handle Admin Logout — drop UI state before the request returns: the landing
+  // page redirects any still-signed-in role back to its dashboard, so a late
+  // clear would bounce the user to /admin while the logout POST is in flight.
   onLogout(): void {
-    this.appointmentService
+    this.resetAuthState();
+    this.authApi
       .logout()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => this.resetAuthState(),
         error: () => this.resetAuthState(),
       });
   }
 
-  // Reset local auth signals (also invoked on a 401 from the interceptor).
+  // Reset local auth signals (also invoked when the session is dropped by a 401).
   resetAuthState(): void {
     this.authState.clear();
     this.errorMessage.set(null);
+  }
+
+  private successTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Shows a transient success banner (auto-dismissed after 4.5s). */
+  showSuccess(message: string): void {
+    if (this.successTimer) {
+      clearTimeout(this.successTimer);
+    }
+    this.successMessage.set(message);
+    this.successTimer = setTimeout(() => {
+      this.successMessage.set(null);
+      this.successTimer = null;
+    }, 4500);
   }
 }

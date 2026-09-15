@@ -4,7 +4,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { AppointmentStore } from './appointment.store';
-import { AppointmentService, AppointmentDashboardResponse } from './appointment.service';
+import { AppointmentDashboardResponse } from './types/api';
+import { AppointmentsApi } from './core/api/appointments-api';
+import { AuthApi } from './core/api/auth-api';
 import { AuthState } from './auth.state';
 
 @Component({ standalone: true, template: '' })
@@ -55,7 +57,8 @@ describe('AppointmentStore', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        AppointmentService,
+        AppointmentsApi,
+        AuthApi,
         AppointmentStore,
       ],
     });
@@ -99,7 +102,7 @@ describe('AppointmentStore', () => {
     fixture.detectChanges();
 
     expect(store.appointments().length).toBe(1);
-    expect(store.appointments()[0].customerName).toBe('Alice');
+    expect(store.appointments()[0]!.customerName).toBe('Alice');
     expect(store.stats().total).toBe(6);
     expect(store.totalPages()).toBe(3);
     expect(store.totalElements()).toBe(101);
@@ -159,7 +162,7 @@ describe('AppointmentStore', () => {
       store.nextPage();
       fixture.detectChanges();
 
-      const content = [{ ...mockDashboard.page.content[0], id: number + 1 }];
+      const content = [{ ...mockDashboard.page.content[0]!, id: number + 1 }];
       httpMock.expectOne(`/api/v1/appointments?page=${number}&size=50`).flush({
         ...mockDashboard,
         page: { content, page: { ...mockDashboard.page.page, number } },

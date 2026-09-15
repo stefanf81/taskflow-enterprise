@@ -21,7 +21,7 @@
               "scripts": true,
               "styles": {
                 "minify": true,
-                "inlineCritical": false,
+                "inlineCritical": true,
                 "removeSpecialComments": true
               },
               "fonts": {
@@ -46,7 +46,7 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "350kB",
+                  "maximumWarning": "400kB",
                   "maximumError": "500kB"
                 },
                 {
@@ -57,7 +57,7 @@
                 {
                   "type": "any",
                   "maximumWarning": "400kB",
-                  "maximumError": "600kB"
+                  "maximumError": "500kB"
                 }
               ],
               "outputHashing": "all",
@@ -90,7 +90,14 @@
         "test": {
           "builder": "@angular/build:unit-test",
           "options": {
-            "setupFiles": ["test/setup.ts"]
+            "setupFiles": ["test/setup.ts"],
+            "coverageExclude": ["test/**"],
+            "coverageThresholds": {
+              "statements": 65,
+              "branches": 66,
+              "functions": 52,
+              "lines": 66
+            }
           }
         }
       }

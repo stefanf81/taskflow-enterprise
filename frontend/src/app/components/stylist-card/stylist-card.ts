@@ -14,26 +14,23 @@ export interface StylistProfile {
   standalone: true,
   imports: [],
   template: `
-    <div
-      tabindex="0"
-      role="button"
+    <button
+      type="button"
       [attr.aria-label]="'Select stylist: ' + profile().name"
-      class="card p-4 border border-white/5 bg-zinc-900/30 hover:border-gold/30 hover:bg-gold/5 flex items-center gap-4 cursor-pointer transition-all"
+      class="card w-full text-left p-4 border border-white/5 bg-zinc-900/30 hover:border-gold/30 hover:bg-gold/5 flex items-center gap-4 cursor-pointer transition-all"
       [class.selected-service-item]="isSelected()"
       (click)="selected.emit()"
-      (keydown.enter)="selected.emit()"
-      (keydown.space)="selected.emit(); $event.preventDefault()"
     >
       <!-- Initial Avatar Circle -->
-      <div
+      <span
         class="w-12 h-12 rounded-full bg-gradient-to-r from-gold to-gold-dark flex items-center justify-center text-sm font-black text-white"
       >
         {{ profile().name.charAt(0) }}
-      </div>
-      <div class="flex-1 min-width-0">
-        <div class="flex justify-between items-center">
-          <div class="flex items-center gap-2">
-            <h3 class="m-0 text-zinc-100 font-extrabold text-sm">{{ profile().name }}</h3>
+      </span>
+      <span class="flex-1 block min-width-0">
+        <span class="flex justify-between items-center">
+          <span class="flex items-center gap-2">
+            <span class="m-0 text-zinc-100 font-extrabold text-sm">{{ profile().name }}</span>
             @if (profile().badge) {
               <span
                 class="text-[9px] uppercase font-black tracking-wider px-1.5 py-0.5 rounded bg-gold/20 text-gold border border-gold/30"
@@ -41,22 +38,22 @@ export interface StylistProfile {
                 {{ profile().badge }}
               </span>
             }
-          </div>
+          </span>
           <span class="text-xs font-bold text-gold"
             >{{ profile().rating }}
             <span class="text-[10px] text-zinc-500 font-light"
               >({{ profile().reviews }})</span
             ></span
           >
-        </div>
-        <p class="m-0 text-[11px] font-semibold text-gold mt-0.5">
+        </span>
+        <span class="block m-0 text-[11px] font-semibold text-gold mt-0.5">
           {{ profile().title }}
-        </p>
-        <p class="m-0 text-xs text-zinc-500 font-light mt-1 leading-normal">
+        </span>
+        <span class="block m-0 text-xs text-zinc-500 font-light mt-1 leading-normal">
           {{ profile().specialty }}
-        </p>
-      </div>
-    </div>
+        </span>
+      </span>
+    </button>
   `,
 })
 export class StylistCard {

@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { BarberStore } from './barber.store';
-import { AppointmentService } from './appointment.service';
+import { BarbersApi } from './core/api/barbers-api';
 
 @Component({ standalone: true, template: '' })
 class TestHost {
@@ -28,7 +28,7 @@ describe('BarberStore', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [TestHost],
-      providers: [provideHttpClient(), provideHttpClientTesting(), AppointmentService, BarberStore],
+      providers: [provideHttpClient(), provideHttpClientTesting(), BarbersApi, BarberStore],
     });
 
     fixture = TestBed.createComponent(TestHost);

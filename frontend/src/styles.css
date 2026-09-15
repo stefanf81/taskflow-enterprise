@@ -1,17 +1,20 @@
 @import 'tailwindcss';
+@import './app/app.css';
 
-/* Platform-local design tokens: frontend/src/theme/tokens.json */
-@theme {
-  --color-gold-light: #e5c185;
-  --color-gold: #c5a059;
-  --color-gold-dark: #8e7a5c;
-  --color-obsidian-light: #1e293b;
-  --color-obsidian: #090d16;
-  --color-obsidian-dark: #030712;
-  --color-status-pending: #fbbf24;
-  --color-status-approved: #34d399;
-  --color-status-denied: #f87171;
-  --color-status-info: #3b82f6;
+/* Self-hosted Inter (variable, latin subset — 48 kB woff2).
+   Self-hosting avoids a third-party render-blocking request and keeps the CSP
+   tight (font-src 'self'), instead of preconnecting to Google Fonts. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('/fonts/inter-latin-var.woff2') format('woff2');
 }
 
-/* Custom base styles or variables can go here if needed */
+@import './theme/tokens.generated.css';
+
+/* Accessibility override (not part of the palette source). */
+@theme {
+  --color-zinc-500: #8a8a93;
+}

@@ -1,4 +1,4 @@
-import { test, expect, type TestInfo } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
 /**
  * COMPREHENSIVE END-TO-END FLOW TEST SUITE FOR TASKFLOW PORTAL
@@ -34,6 +34,9 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await page.goto('/');
   });
 
+  // Playwright requires the fixtures object as the first hook argument; this
+  // hook only needs `testInfo`, hence the intentionally empty destructuring.
+  // eslint-disable-next-line no-empty-pattern
   test.afterEach(async ({}, testInfo) => {
     // Only surface the captured browser console output for failing tests so
     // the CI log stays clean on green runs but keeps full diagnostics on red ones.
@@ -75,7 +78,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await expect(page.locator('h2:has-text("Signature Lookbook")')).toBeVisible();
 
     // 2. Click the Executive Pompadour Lookbook Style Card
-    await page.locator('h4:has-text("Executive Pompadour")').click();
+    await page.locator('button:has-text("Executive Pompadour")').click();
 
     // 3. Confirm the booking wizard automatically fast-forwards to Step 2 (Stylist Selection)
     await expect(page.locator('.wizard-step-node.active')).toHaveText('2');
@@ -218,8 +221,12 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await page.fill('input[placeholder="e.g. Vacation"]', 'Annual Summer Vacation');
     await page.click('button:has-text("Save Time-Off")');
 
-    // Confirm that Success Banner matches time-off action
-    await expect(page.locator('.alert-success')).toContainText('Time off added successfully.');
+    // Confirm that Success Banner matches time-off action. Scope to the schedules
+    // card: the app-level banner (e.g. the transient "Welcome back" alert) can
+    // legitimately be visible at the same time.
+    await expect(schedulesContainer.locator('.alert-success')).toContainText(
+      'Time off added successfully.',
+    );
 
     // Nav Tab 3: Appointments List, Filter, Search, Deny & Approve
     await page.click('button:has-text("Appointments")');

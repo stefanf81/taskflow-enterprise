@@ -1,37 +1,24 @@
 import { HttpInterceptorFn } from '@angular/common/http';
-import { catchError } from 'rxjs/operators';
-import { throwError } from 'rxjs';
+import { inject } from '@angular/core';
+import { catchError, throwError } from 'rxjs';
+import { PUBLIC_REQUEST } from './core/http/public-request.token';
+import { SessionEvents } from './core/session-events';
 
-function isPublicRequest(req: { method: string; url: string }): boolean {
-  const path = new URL(req.url, window.location.origin).pathname;
-
-  return (
-    (req.method === 'POST' &&
-      (path === '/api/v1/auth/login' ||
-        path === '/api/v1/auth/register' ||
-        path === '/api/v1/appointments' ||
-        path.startsWith('/api/v1/reviews/public/'))) ||
-    (req.method === 'PUT' && path.startsWith('/api/v1/appointments/public/cancel/')) ||
-    (req.method === 'GET' &&
-      (path === '/api/v1/auth/csrf' ||
-        path === '/api/v1/catalog' ||
-        path.startsWith('/api/v1/catalog/') ||
-        path === '/api/v1/barbers' ||
-        path === '/api/v1/appointments/public/busy-slots' ||
-        path.startsWith('/api/v1/reviews/public/')))
-  );
-}
-
-// The JWT is now stored in an HttpOnly, SameSite=Strict cookie set by the backend.
+// The JWT is stored in an HttpOnly, SameSite=Strict cookie set by the backend.
 // The browser automatically attaches it to same-origin /api requests, so the
-// interceptor no longer reads or writes the token in JavaScript (XSS-safe).
+// interceptor never reads or writes the token in JavaScript (XSS-safe).
+//
+// Endpoints that are callable without a session mark their requests with the
+// PUBLIC_REQUEST context token at the API layer (see core/api/*). A 401 from a
+// protected request is broadcast through SessionEvents so app state can react
+// (AuthState clears the in-memory role) without a global DOM event bus.
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
+  const sessionEvents = inject(SessionEvents);
+
   return next(req).pipe(
     catchError((err) => {
-      if (err.status === 401 && !isPublicRequest(req)) {
-        // Notify the app to drop its client-side auth state. No redirect to
-        // avoid infinite loops. Public routes must never erase a valid session.
-        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+      if (err.status === 401 && !req.context.get(PUBLIC_REQUEST)) {
+        sessionEvents.notifyUnauthorized();
       }
       return throwError(() => err);
     }),

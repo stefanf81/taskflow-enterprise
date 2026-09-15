@@ -2,11 +2,14 @@ import { Injectable, signal, computed, inject, DestroyRef } from '@angular/core'
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthState } from './auth.state';
-import { AppointmentService, AppointmentPage } from './appointment.service';
+import { AppointmentPage } from './types/api';
+import { AppointmentsApi } from './core/api/appointments-api';
+import { extractApiError } from './core/api/extract-api-error';
+import { pagedAppointmentResponseSchema } from '@taskflow/schemas';
 
 @Injectable({ providedIn: 'root' })
 export class CustomerStore {
-  private readonly appointmentService = inject(AppointmentService);
+  private readonly appointmentsApi = inject(AppointmentsApi);
   private readonly authState = inject(AuthState);
   readonly currentPage = signal<number>(0);
 
@@ -17,9 +20,10 @@ export class CustomerStore {
   private readonly appointmentsResource = httpResource<AppointmentPage>(
     () => {
       if (!this.authState.isLoggedIn()) return undefined;
-      return `/api/v1/customer/appointments?page=${this.currentPage()}&size=10`;
+      return this.appointmentsApi.customerPageUrl(this.currentPage(), 10);
     },
     {
+      parse: (raw) => pagedAppointmentResponseSchema.parse(raw),
       defaultValue: {
         content: [],
         page: { number: 0, size: 10, totalElements: 0, totalPages: 1 },
@@ -44,7 +48,7 @@ export class CustomerStore {
 
     this.cancelErrorMessage.set(null);
     this.isCancelling.set(true);
-    this.appointmentService
+    this.appointmentsApi
       .cancelCustomerAppointment(publicId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -55,11 +59,8 @@ export class CustomerStore {
         },
         error: (err) => {
           this.isCancelling.set(false);
-          const detail = (err as { error?: { message?: string } })?.error?.message;
           this.cancelErrorMessage.set(
-            detail && typeof detail === 'string'
-              ? detail
-              : 'Failed to cancel appointment. Please try again.',
+            extractApiError(err, 'Failed to cancel appointment. Please try again.'),
           );
         },
       });

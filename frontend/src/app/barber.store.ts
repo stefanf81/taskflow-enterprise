@@ -1,19 +1,18 @@
 import { Injectable, signal, computed, inject, effect, DestroyRef } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import {
-  AppointmentService,
-  Barber,
-  BarberTimeOff,
-  BarberTimeOffRequest,
-} from './appointment.service';
+import { Barber, BarberTimeOff, BarberTimeOffRequest } from './types/api';
+import { BarbersApi } from './core/api/barbers-api';
+import { extractApiError } from './core/api/extract-api-error';
+import { barberResponseSchema, barberTimeOffResponseSchema } from '@taskflow/schemas';
 
 @Injectable({ providedIn: 'root' })
 export class BarberStore {
-  private readonly appointmentService = inject(AppointmentService);
+  private readonly barbersApi = inject(BarbersApi);
 
-  private readonly barbersResource = httpResource<Barber[]>(() => '/api/v1/barbers/admin', {
+  private readonly barbersResource = httpResource<Barber[]>(() => this.barbersApi.adminListUrl, {
     defaultValue: [],
+    parse: (raw) => barberResponseSchema.array().parse(raw),
   });
 
   readonly barbers = this.barbersResource.value;
@@ -22,10 +21,11 @@ export class BarberStore {
   private readonly timeOffsResource = httpResource<BarberTimeOff[]>(
     () => {
       const id = this.selectedBarberId();
-      return id ? `/api/v1/barbers/${id}/time-off` : undefined;
+      return id ? this.barbersApi.timeOffUrl(id) : undefined;
     },
     {
       defaultValue: [],
+      parse: (raw) => barberTimeOffResponseSchema.array().parse(raw),
     },
   );
 
@@ -51,9 +51,9 @@ export class BarberStore {
 
   constructor() {
     effect(() => {
-      const data = this.barbers();
-      if (data.length > 0 && !this.selectedBarberId()) {
-        this.selectedBarberId.set(data[0].id);
+      const first = this.barbers()[0];
+      if (first && !this.selectedBarberId()) {
+        this.selectedBarberId.set(first.id);
       }
     });
   }
@@ -77,7 +77,7 @@ export class BarberStore {
 
     this.actionErrorMessage.set(null);
     this.isSaving.set(true);
-    this.appointmentService
+    this.barbersApi
       .addTimeOff(barberId, request)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -97,7 +97,6 @@ export class BarberStore {
   }
 
   private extractError(err: unknown, fallback: string): string {
-    const detail = (err as { error?: { message?: string } })?.error?.message;
-    return detail && typeof detail === 'string' ? detail : fallback;
+    return extractApiError(err, fallback);
   }
 }

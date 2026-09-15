@@ -1,2 +1,6 @@
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /customer
+
+Sitemap: https://taskflow.local/sitemap.xml

@@ -7,11 +7,13 @@
     "format": "npx prettier --write .",
     "format:check": "npx prettier --check .",
     "build": "ng build",
-    "lint": "npx tsc --noEmit",
+    "lint": "node scripts/generate-theme.mjs --check && eslint . && tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.spec.json",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "e2e": "playwright test",
-    "e2e:docker": "bash -c 'cd .. && ./start-docker.sh && trap ./stop-docker.sh EXIT && cd frontend && playwright test'"
+    "e2e:docker": "bash -c 'cd .. && APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE=${APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE:-200} ./start-docker.sh && trap ./stop-docker.sh EXIT && cd frontend && playwright test'",
+    "theme:build": "node scripts/generate-theme.mjs",
+    "theme:check": "node scripts/generate-theme.mjs --check"
   },
   "private": true,
   "packageManager": "npm@11.19.1",
@@ -23,6 +25,7 @@
     "hono": "4.13.7"
   },
   "dependencies": {
+    "@angular/cdk": "^22.1.6",
     "@angular/common": "^22.1.4",
     "@angular/compiler": "^22.1.4",
     "@angular/core": "^22.1.4",
@@ -38,15 +41,19 @@
     "@angular/build": "^22.1.8",
     "@angular/cli": "^22.1.8",
     "@angular/compiler-cli": "^22.1.4",
+    "@axe-core/playwright": "^4.13.0",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
     "@vitest/coverage-v8": "^4.1.11",
-    "autoprefixer": "^10.5.6",
+    "angular-eslint": "^22.5.0",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
     "jsdom": "^30.0.1",
     "postcss": "^8.5.26",
     "prettier": "^3.9.6",
-    "msw": "^2.15.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
+    "typescript-eslint": "^8.70.0",
     "vitest": "^4.1.11"
   },
   "allowScripts": {

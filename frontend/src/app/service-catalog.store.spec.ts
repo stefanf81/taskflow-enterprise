@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { ServiceCatalogStore } from './service-catalog.store';
-import { ServiceItem } from './appointment.service';
+import { ServiceItem } from './types/api';
 
 @Component({ standalone: true, template: '' })
 class TestHost {
@@ -81,7 +81,7 @@ describe('ServiceCatalogStore', () => {
     fixture.detectChanges();
 
     expect(store.services().length).toBe(3);
-    expect(store.services()[0].name).toBe('Classic Haircut');
+    expect(store.services()[0]!.name).toBe('Classic Haircut');
   });
 
   it('should surface error on HTTP failure', async () => {

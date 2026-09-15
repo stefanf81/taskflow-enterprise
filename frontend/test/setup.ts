@@ -1,9 +1,3 @@
-import { server } from './mocks/server';
-
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
-
 /**
  * Vitest test setup — mocks browser APIs not available in jsdom.
  *
@@ -21,7 +15,7 @@ class MockIntersectionObserver implements IntersectionObserver {
 
   constructor(
     private callback: IntersectionObserverCallback,
-    private options?: IntersectionObserverInit,
+    _options?: IntersectionObserverInit,
   ) {}
 
   observe(_target: Element): void {
@@ -56,7 +50,7 @@ Object.defineProperty(globalThis, 'IntersectionObserver', {
 
 // --- ResizeObserver mock (safety — some Angular internals may use it) ---
 class MockResizeObserver implements ResizeObserver {
-  constructor(private callback: ResizeObserverCallback) {}
+  constructor(_callback: ResizeObserverCallback) {}
 
   observe(_target: Element): void {}
   unobserve(_target: Element): void {}

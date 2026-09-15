@@ -1,0 +1,16 @@
+/* GENERATED FILE — do not edit.
+ * Source: src/theme/tokens.json
+ * Regenerate with: npm run theme:build
+ */
+@theme {
+  --color-gold-light: #e5c185;
+  --color-gold: #c5a059;
+  --color-gold-dark: #8e7a5c;
+  --color-obsidian-light: #1e293b;
+  --color-obsidian: #090d16;
+  --color-obsidian-dark: #030712;
+  --color-status-pending: #fbbf24;
+  --color-status-approved: #34d399;
+  --color-status-denied: #f87171;
+  --color-status-info: #3b82f6;
+}

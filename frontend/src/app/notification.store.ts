@@ -1,13 +1,18 @@
-import { Injectable, computed } from '@angular/core';
+import { Injectable, computed, inject } from '@angular/core';
 import { httpResource } from '@angular/common/http';
-import { NotificationItem } from './appointment.service';
+import { NotificationItem } from './types/api';
+import { NotificationsApi } from './core/api/notifications-api';
+import { notificationOutboxResponseSchema } from '@taskflow/schemas';
 
 @Injectable({ providedIn: 'root' })
 export class NotificationStore {
+  private readonly notificationsApi = inject(NotificationsApi);
+
   private readonly notificationsResource = httpResource<NotificationItem[]>(
-    () => '/api/v1/notifications',
+    () => this.notificationsApi.listUrl,
     {
       defaultValue: [],
+      parse: (raw) => notificationOutboxResponseSchema.array().parse(raw),
     },
   );
 

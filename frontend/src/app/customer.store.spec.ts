@@ -4,7 +4,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { CustomerStore } from './customer.store';
-import { AppointmentService, AppointmentPage } from './appointment.service';
+import { AppointmentPage } from './types/api';
+import { AppointmentsApi } from './core/api/appointments-api';
 import { AuthState } from './auth.state';
 
 @Component({ standalone: true, template: '' })
@@ -40,12 +41,7 @@ describe('CustomerStore', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [TestHost],
-      providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        AppointmentService,
-        CustomerStore,
-      ],
+      providers: [provideHttpClient(), provideHttpClientTesting(), AppointmentsApi, CustomerStore],
     });
 
     fixture = TestBed.createComponent(TestHost);
@@ -88,7 +84,7 @@ describe('CustomerStore', () => {
     fixture.detectChanges();
 
     expect(store.appointments().length).toBe(1);
-    expect(store.appointments()[0].customerName).toBe('Alice');
+    expect(store.appointments()[0]!.customerName).toBe('Alice');
   });
 
   it('should load a second page with nested metadata', async () => {
@@ -100,7 +96,7 @@ describe('CustomerStore', () => {
       (r) => r.url.includes('/api/v1/customer/appointments') && r.method === 'GET',
     );
     expect(req.request.url).toContain('page=1');
-    const content = [{ ...mockAppointments.content[0], id: 11, customerName: 'Bob' }];
+    const content = [{ ...mockAppointments.content[0]!, id: 11, customerName: 'Bob' }];
     req.flush({
       content,
       page: { ...mockAppointments.page, number: 1 },

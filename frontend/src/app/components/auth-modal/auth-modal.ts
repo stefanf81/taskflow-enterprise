@@ -5,16 +5,15 @@ import {
   inject,
   DestroyRef,
   ChangeDetectionStrategy,
-  ViewEncapsulation,
   isDevMode,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
+import { A11yModule } from '@angular/cdk/a11y';
 import { form, required, FormField } from '@angular/forms/signals';
-import { Router } from '@angular/router';
-import { AppointmentService } from '../../appointment.service';
+import { AuthApi } from '../../core/api/auth-api';
 import { AuthState } from '../../auth.state';
-import { AppointmentStore } from '../../appointment.store';
+import { extractApiError } from '../../core/api/extract-api-error';
 
 /** Model shape for the Signal Forms login / register wizard. */
 interface AuthFormModel {
@@ -39,16 +38,17 @@ interface AuthFormModel {
 @Component({
   selector: 'app-auth-modal',
   standalone: true,
-  imports: [CommonModule, FormField],
+  imports: [CommonModule, FormField, A11yModule],
   template: `
-    <div class="modal-overlay" (keydown.escape)="closeModal()">
+    <div class="modal-overlay" tabindex="-1" (keydown.escape)="closeModal()">
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Sign in"
+        aria-labelledby="authModalTitle"
+        cdkTrapFocus
         class="login-card modal-card animate-fadeIn p-8 rounded-3xl border border-white/10 shadow-2xl shadow-black/50"
       >
-        <button class="modal-close" (click)="closeModal()">&times;</button>
+        <button type="button" class="modal-close" (click)="closeModal()">&times;</button>
         <div class="login-header text-center mb-6">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -64,7 +64,7 @@ interface AuthFormModel {
               d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
             />
           </svg>
-          <h2 class="text-xl font-black text-zinc-100 tracking-tight uppercase">
+          <h2 id="authModalTitle" class="text-xl font-black text-zinc-100 tracking-tight uppercase">
             {{ isRegisterMode() ? 'Create Account' : 'Sign In' }}
           </h2>
           <p class="text-xs text-zinc-500 leading-relaxed mt-1">
@@ -138,6 +138,7 @@ interface AuthFormModel {
             <input
               type="text"
               id="username"
+              cdkFocusInitial
               [formField]="authForm.username"
               placeholder="e.g., admin"
               class="form-control"
@@ -199,17 +200,14 @@ interface AuthFormModel {
     </div>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  encapsulation: ViewEncapsulation.None,
 })
 export class AuthModalComponent {
-  private readonly appointmentService = inject(AppointmentService);
+  private readonly authApi = inject(AuthApi);
   private readonly authState = inject(AuthState);
-  private readonly store = inject(AppointmentStore);
-  private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
   /** Emitted when the modal should be closed (X button or Escape key). */
-  readonly close = output<void>();
+  readonly closed = output<void>();
   /** Emitted after a successful login with the user's role. */
   readonly loginSuccess = output<string>();
 
@@ -254,7 +252,7 @@ export class AuthModalComponent {
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
 
-    this.appointmentService
+    this.authApi
       .login(user, pass)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -266,7 +264,7 @@ export class AuthModalComponent {
           this.authModel.set({ username: '', password: '', fullName: '', phone: '' });
 
           this.loginSuccess.emit(response.role);
-          this.close.emit();
+          this.closed.emit();
         },
         error: (err) => {
           this.errorMessage.set('Invalid credentials. Please try again.');
@@ -287,15 +285,15 @@ export class AuthModalComponent {
     const name = this.authModel().fullName.trim();
     const phone = this.authModel().phone.trim();
 
-    if (!email || !pass || !name) {
-      this.errorMessage.set('Name, email, and password are required.');
+    if (!email || !pass || !name || !phone) {
+      this.errorMessage.set('Name, email, phone, and password are required.');
       return;
     }
 
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
 
-    this.appointmentService
+    this.authApi
       .register({ email, password: pass, fullName: name, phone })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -306,7 +304,7 @@ export class AuthModalComponent {
           this.errorMessage.set(null);
         },
         error: (err) => {
-          this.errorMessage.set(err.error?.message || 'Failed to create account.');
+          this.errorMessage.set(extractApiError(err, 'Failed to create account.'));
           this.isSubmitting.set(false);
         },
       });
@@ -321,6 +319,6 @@ export class AuthModalComponent {
 
   /** User-requested close (X button or Escape). */
   closeModal(): void {
-    this.close.emit();
+    this.closed.emit();
   }
 }

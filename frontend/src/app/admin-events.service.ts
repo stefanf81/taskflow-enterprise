@@ -1,13 +1,6 @@
 import { DestroyRef, Injectable, InjectionToken, inject, signal } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
-
-type AppointmentEventType = 'CREATED' | 'UPDATED' | 'DELETED';
-
-interface AppointmentEventPayload {
-  type: AppointmentEventType;
-  appointmentId: number;
-  occurredAt: string;
-}
+import { appointmentEventSchema } from '@taskflow/schemas';
 
 export type EventSourceFactory = (url: string, init: EventSourceInit) => EventSource | null;
 
@@ -55,24 +48,15 @@ export class AdminEventsService {
   }
 
   private handleAppointmentEvent(event: Event): void {
-    if (!(event instanceof MessageEvent) || !this.isAppointmentEvent(event.data)) return;
+    if (!(event instanceof MessageEvent) || typeof event.data !== 'string') return;
+    if (!this.isAppointmentEvent(event.data)) return;
     this.appointmentChangesSubject.next();
   }
 
-  private isAppointmentEvent(value: unknown): value is AppointmentEventPayload {
-    if (typeof value !== 'string') return false;
+  /** Validates the SSE payload against the shared zod contract. */
+  private isAppointmentEvent(data: string): boolean {
     try {
-      const payload: unknown = JSON.parse(value);
-      if (typeof payload !== 'object' || payload === null) return false;
-      const event = payload as Record<string, unknown>;
-      return (
-        (event['type'] === 'CREATED' ||
-          event['type'] === 'UPDATED' ||
-          event['type'] === 'DELETED') &&
-        typeof event['appointmentId'] === 'number' &&
-        Number.isFinite(event['appointmentId']) &&
-        typeof event['occurredAt'] === 'string'
-      );
+      return appointmentEventSchema.safeParse(JSON.parse(data)).success;
     } catch {
       return false;
     }

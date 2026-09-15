@@ -1,0 +1,156 @@
+<div class="space-y-6 animate-fadeIn">
+  <h3 class="text-white font-bold text-lg">Barber Schedules & Time-Off</h3>
+
+  <div class="flex flex-col md:flex-row gap-6">
+    <!-- Barber Selection -->
+    <div class="w-full md:w-1/3 space-y-3">
+      <h4 class="text-zinc-400 text-xs font-bold uppercase tracking-wider">Select Barber</h4>
+      @for (barber of barbersList(); track barber.id) {
+        <div
+          tabindex="0"
+          role="button"
+          [attr.aria-label]="'Select barber: ' + barber.name"
+          class="p-4 rounded-xl border cursor-pointer transition-all"
+          [class.bg-gold_20]="selectedBarberId() === barber.id"
+          [class.border-gold]="selectedBarberId() === barber.id"
+          [class.bg-zinc-900]="selectedBarberId() !== barber.id"
+          [class.border-white_5]="selectedBarberId() !== barber.id"
+          (click)="selectAdminBarber(barber.id)"
+          (keydown.enter)="selectAdminBarber(barber.id)"
+          (keydown.space)="selectAdminBarber(barber.id); $event.preventDefault()"
+        >
+          <p
+            class="text-sm font-extrabold"
+            [class.text-gold]="selectedBarberId() === barber.id"
+            [class.text-zinc-300]="selectedBarberId() !== barber.id"
+          >
+            {{ barber.name }}
+          </p>
+          <p class="text-[10px] text-zinc-500 mt-1">{{ barber.email }}</p>
+        </div>
+      }
+    </div>
+
+    <!-- Time Off Management -->
+    <div class="w-full md:w-2/3 space-y-6">
+      <!-- Add Time Off Form -->
+      <div class="card p-5 border border-white/5 bg-zinc-900/30 rounded-2xl">
+        <h4 class="text-zinc-100 font-extrabold mb-4 border-b border-white/5 pb-2">
+          Add Time-Off (Vacation/Sick)
+        </h4>
+
+        @if (timeOffActionError()) {
+          <div
+            role="alert"
+            class="alert alert-error mb-4 py-2.5 px-4 rounded-xl text-xs border border-red-500/20 flex items-center gap-2"
+          >
+            <span class="text-rose-400 leading-normal font-medium">{{ timeOffActionError() }}</span>
+            <button
+              type="button"
+              class="text-base font-bold opacity-60 hover:opacity-100 ml-auto"
+              (click)="timeOffActionError.set(null)"
+              aria-label="Dismiss error"
+            >
+              &times;
+            </button>
+          </div>
+        }
+
+        @if (timeOffActionSuccess()) {
+          <div
+            role="status"
+            aria-live="polite"
+            class="alert alert-success mb-4 py-2.5 px-4 rounded-xl text-xs border border-emerald-500/10 flex items-center gap-2"
+          >
+            <span class="text-emerald-400 leading-normal font-medium">{{
+              timeOffActionSuccess()
+            }}</span>
+            <button
+              type="button"
+              class="text-base font-bold opacity-60 hover:opacity-100 ml-auto"
+              (click)="timeOffActionSuccess.set(null)"
+              aria-label="Dismiss"
+            >
+              &times;
+            </button>
+          </div>
+        }
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label
+              for="timeOffStartDate"
+              class="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2"
+              >Start Date</label
+            >
+            <input
+              id="timeOffStartDate"
+              type="date"
+              [formField]="timeOffForm.startDate"
+              class="search-input w-full p-2.5 rounded-xl text-sm bg-zinc-950 border border-white/10 text-white"
+            />
+          </div>
+          <div>
+            <label
+              for="timeOffEndDate"
+              class="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2"
+              >End Date</label
+            >
+            <input
+              id="timeOffEndDate"
+              type="date"
+              [formField]="timeOffForm.endDate"
+              class="search-input w-full p-2.5 rounded-xl text-sm bg-zinc-950 border border-white/10 text-white"
+            />
+          </div>
+        </div>
+        <div class="mb-5">
+          <label
+            for="timeOffReason"
+            class="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2"
+            >Reason</label
+          >
+          <input
+            id="timeOffReason"
+            type="text"
+            [formField]="timeOffForm.reason"
+            placeholder="e.g. Vacation"
+            class="search-input w-full p-2.5 rounded-xl text-sm bg-zinc-950 border border-white/10 text-white"
+          />
+        </div>
+        <button class="btn btn-submit w-full py-2.5" (click)="addTimeOff()">Save Time-Off</button>
+      </div>
+
+      <!-- Existing Time Off -->
+      <div>
+        <h4 class="text-zinc-400 text-xs font-bold uppercase tracking-wider mb-3">
+          Scheduled Time-Off
+        </h4>
+        @if (timeOffs().length === 0) {
+          <div
+            class="text-center py-8 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20"
+          >
+            <p class="text-xs text-zinc-500 font-light italic">No time-off scheduled.</p>
+          </div>
+        } @else {
+          <div class="space-y-3">
+            @for (to of timeOffs(); track to.id) {
+              <div
+                class="p-4 rounded-xl border border-white/5 bg-zinc-900/50 flex justify-between items-center"
+              >
+                <div>
+                  <p class="text-sm font-bold text-rose-400">
+                    ⛔ {{ formatLocalDate(to.startDate) }} &rarr;
+                    {{ formatLocalDate(to.endDate) }}
+                  </p>
+                  <p class="text-[11px] text-zinc-400 mt-1 font-light">
+                    {{ to.reason }}
+                  </p>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+</div>

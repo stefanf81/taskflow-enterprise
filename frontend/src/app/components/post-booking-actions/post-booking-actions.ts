@@ -1,13 +1,12 @@
-import {
-  Component,
-  input,
-  output,
-  signal,
-  ChangeDetectionStrategy,
-  ViewEncapsulation,
-} from '@angular/core';
+import { Component, signal, inject, ChangeDetectionStrategy, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { email, form, max, min, required, FormField } from '@angular/forms/signals';
+import { AppointmentsApi } from '../../core/api/appointments-api';
+import { ReviewsApi } from '../../core/api/reviews-api';
+import { extractApiError } from '../../core/api/extract-api-error';
+import { AppointmentStore } from '../../appointment.store';
+import { ReviewStore } from '../../review.store';
 
 /** Model shape for the "Cancel my booking" Signal Form. */
 interface CancelFormModel {
@@ -237,20 +236,15 @@ interface ReviewFormModel {
     </div>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  encapsulation: ViewEncapsulation.None,
 })
 export class PostBookingActionsComponent {
-  readonly isSubmitting = input(false);
+  private readonly appointmentsApi = inject(AppointmentsApi);
+  private readonly reviewsApi = inject(ReviewsApi);
+  private readonly appointmentStore = inject(AppointmentStore);
+  private readonly reviewStore = inject(ReviewStore);
+  private readonly destroyRef = inject(DestroyRef);
 
-  /** Emitted when the user submits a cancellation request. */
-  readonly cancelRequested = output<{ publicId: string; email: string }>();
-  /** Emitted when the user submits a review. */
-  readonly reviewSubmitted = output<{
-    publicId: string;
-    rating: number;
-    comment: string;
-    email: string;
-  }>();
+  readonly isSubmitting = this.appointmentStore.isSubmitting;
 
   // Two independent Signal Forms, each with its own validation rules and
   // lifecycle: a cancellation form (publicId + email both required) and a
@@ -280,23 +274,61 @@ export class PostBookingActionsComponent {
   onCancel(): void {
     const publicId = this.cancelModel().publicId.trim();
     const email = this.cancelModel().email.trim();
-    if (publicId && email) {
-      this.cancelRequested.emit({ publicId, email });
-      this.cancelModel.set({ publicId: '', email: '' });
-    }
+    if (!publicId || !email) return;
+
+    this.appointmentStore.errorMessage.set(null);
+    this.appointmentStore.isSubmitting.set(true);
+    this.appointmentsApi
+      .publicCancelAppointment(publicId, email)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.appointmentStore.isSubmitting.set(false);
+          this.appointmentStore.showSuccess(
+            '🗑️ Reservation successfully cancelled and deleted from our calendar.',
+          );
+          this.cancelModel.set({ publicId: '', email: '' });
+        },
+        error: (err) => {
+          this.appointmentStore.errorMessage.set(
+            extractApiError(err, 'Verification failed. Please check your Booking Code and Email.'),
+          );
+          this.appointmentStore.isSubmitting.set(false);
+        },
+      });
   }
 
   onReview(): void {
     const publicId = this.reviewModel().publicId.trim();
     const email = this.reviewModel().email.trim();
-    if (publicId && email) {
-      this.reviewSubmitted.emit({
-        publicId,
+    if (!publicId || !email) return;
+
+    this.appointmentStore.isSubmitting.set(true);
+    this.reviewsApi
+      .submitReview(publicId, {
         rating: this.reviewModel().rating,
         comment: this.reviewModel().comment,
-        email,
+        customerEmail: email,
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.appointmentStore.isSubmitting.set(false);
+          this.appointmentStore.showSuccess(
+            'Thank you for your review! We appreciate your feedback.',
+          );
+          this.reviewStore.loadRatings();
+          this.reviewModel.set({ publicId: '', email: '', rating: 5, comment: '' });
+        },
+        error: (err) => {
+          this.appointmentStore.isSubmitting.set(false);
+          this.appointmentStore.errorMessage.set(
+            extractApiError(
+              err,
+              'Failed to submit review. Ensure the code is correct and the appointment is completed.',
+            ),
+          );
+        },
       });
-      this.reviewModel.set({ publicId: '', email: '', rating: 5, comment: '' });
-    }
   }
 }

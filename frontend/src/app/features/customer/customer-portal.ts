@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, ViewEncapsulation, inject } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AppointmentStore } from '../../appointment.store';
@@ -15,9 +15,7 @@ import { formatTime12Hour, formatLocalDate } from '../../time-utils';
   standalone: true,
   imports: [CommonModule],
   templateUrl: './customer-portal.html',
-  styleUrl: '../../app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  encapsulation: ViewEncapsulation.None,
 })
 export class CustomerPortal {
   private readonly store = inject(AppointmentStore);

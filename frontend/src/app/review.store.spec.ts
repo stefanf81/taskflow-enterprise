@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { ReviewStore } from './review.store';
-import { BarberRating } from './appointment.service';
+import { BarberRating } from './types/api';
 
 @Component({ standalone: true, template: '' })
 class TestHost {
@@ -61,8 +61,8 @@ describe('ReviewStore', () => {
     fixture.detectChanges();
 
     expect(store.ratings().length).toBe(2);
-    expect(store.ratings()[0].barberName).toBe('Alex the Barber');
-    expect(store.ratings()[0].averageRating).toBe(4.8);
+    expect(store.ratings()[0]!.barberName).toBe('Alex the Barber');
+    expect(store.ratings()[0]!.averageRating).toBe(4.8);
   });
 
   it('should surface error on HTTP failure', async () => {

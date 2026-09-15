@@ -1,60 +1,22 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { AdminDashboard } from './admin-dashboard';
-import { AppointmentService, AppointmentDashboardResponse } from '../../appointment.service';
 import { AppointmentStore } from '../../appointment.store';
 import { AuthState } from '../../auth.state';
-import { BarberStore } from '../../barber.store';
-import { NotificationStore } from '../../notification.store';
-import { CustomerStore } from '../../customer.store';
+import { AppointmentDashboardResponse } from '../../types/api';
 
-/**
- * TE1: Component-level QA suite for the Owner (admin) dashboard.
- * Covers approval / denial / deletion, status filtering, pagination math,
- * the 12-hour time formatter, and that action failures surface on the
- * errorMessage signal (C-level error surfacing).
- */
-describe('AdminDashboard Component Quality Assurance Suite', () => {
+describe('AdminDashboard shell', () => {
   let fixture: ComponentFixture<AdminDashboard>;
   let component: AdminDashboard;
   let httpMock: HttpTestingController;
 
   const mockDashboard: AppointmentDashboardResponse = {
     page: {
-      content: [
-        {
-          id: 1,
-          publicId: 'pub-1',
-          customerName: 'Alice',
-          customerEmail: 'alice@example.com',
-          customerPhone: '123',
-          barberName: 'Alex',
-          bookingDate: '2026-08-01',
-          bookingTime: '09:00',
-          serviceType: 'Classic Haircut',
-          status: 'PENDING',
-          createdAt: '2026-07-01T00:00:00',
-          updatedAt: '2026-07-01T00:00:00',
-        },
-        {
-          id: 2,
-          publicId: 'pub-2',
-          customerName: 'Bob',
-          customerEmail: 'bob@example.com',
-          customerPhone: '456',
-          barberName: 'Sara',
-          bookingDate: '2026-08-02',
-          bookingTime: '13:30',
-          serviceType: 'Beard Trim',
-          status: 'APPROVED',
-          createdAt: '2026-07-01T00:00:00',
-          updatedAt: '2026-07-01T00:00:00',
-        },
-      ],
-      page: { number: 0, size: 50, totalElements: 101, totalPages: 3 },
+      content: [],
+      page: { number: 0, size: 50, totalElements: 0, totalPages: 1 },
     },
     stats: {
       total: 6,
@@ -70,16 +32,7 @@ describe('AdminDashboard Component Quality Assurance Suite', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AdminDashboard],
-      providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        provideRouter([]),
-        AppointmentService,
-        AppointmentStore,
-        BarberStore,
-        NotificationStore,
-        CustomerStore,
-      ],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(AdminDashboard);
@@ -87,158 +40,43 @@ describe('AdminDashboard Component Quality Assurance Suite', () => {
     httpMock = TestBed.inject(HttpTestingController);
 
     TestBed.inject(AuthState).isLoggedIn.set(true);
-
     fixture.detectChanges();
 
-    // Flush the initial dashboard load.
-    const req = httpMock.expectOne(
-      (r) => r.url.includes('/api/v1/appointments') && r.method === 'GET',
-    );
-    req.flush(mockDashboard);
-
-    // The store also triggers a /auth/me when isLoggedIn is true; in the default
-    // test state we leave it logged out, so flush any auth request that appears.
+    httpMock
+      .match((r) => r.url.includes('/api/v1/appointments') && r.method === 'GET')
+      .forEach((r) => r.flush(mockDashboard));
     httpMock
       .match((r) => r.url.includes('/api/v1/auth/me'))
       .forEach((r) => r.flush({ username: 'admin', role: 'ROLE_ADMIN' }));
-    httpMock.match(() => true).forEach((r) => r.flush([]));
   });
 
-  it('should compile and render the owner panel', () => {
+  it('renders the owner panel chrome', () => {
     expect(component).toBeTruthy();
     expect(fixture.nativeElement.querySelector('h1')?.textContent).toContain(
       'TaskFlow Owner Panel',
     );
   });
 
-  it('should expose the loaded appointments and stats', () => {
-    expect(component.appointments().length).toBe(2);
-    expect(component.stats().total).toBe(6);
-    expect(component.totalPages()).toBe(3);
-  });
-
-  it('should approve an appointment and reload the list', () => {
-    component.approveAppointment(1);
-    const req = httpMock.expectOne((r) => r.url.endsWith('/api/v1/appointments/1'));
-    expect(req.request.method).toBe('PUT');
-    expect(req.request.body).toEqual({ status: 'APPROVED' });
-    req.flush({ ...mockDashboard.page.content[0], status: 'APPROVED' });
-
-    fixture.detectChanges();
-
-    // Subsequent list reload.
-    const reload = httpMock.expectOne(
-      (r) => r.url.includes('/api/v1/appointments') && r.method === 'GET',
-    );
-    reload.flush(mockDashboard);
-    expect(component.successMessage()).toBeTruthy();
-    expect(component.successMessage()?.toLowerCase()).toContain('approved');
-  });
-
-  it('should deny an appointment and surface an error on failure', () => {
-    component.denyAppointment(2);
-    const req = httpMock.expectOne((r) => r.url.endsWith('/api/v1/appointments/2'));
-    expect(req.request.method).toBe('PUT');
-    expect(req.request.body).toEqual({ status: 'DENIED' });
-    req.error(new ProgressEvent('error'), { status: 500, statusText: 'Server Error' });
-
-    expect(component.errorMessage()).toBe('Failed to decline appointment.');
-  });
-
-  it('should delete an appointment after confirmation and fail gracefully', () => {
-    // Stub window.confirm to accept.
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-
-    component.deleteAppointment(1);
-    const req = httpMock.expectOne((r) => r.url.endsWith('/api/v1/appointments/1'));
-    expect(req.request.method).toBe('DELETE');
-    req.error(new ProgressEvent('error'), { status: 404, statusText: 'Not Found' });
-
-    expect(component.errorMessage()).toBe('Failed to delete booking.');
-  });
-
-  it('should apply status filters and reset pagination to page 0', () => {
-    component.setFilter('approved');
-    expect(component.selectedFilter()).toBe('approved');
-    expect(component.currentPage()).toBe(0);
-
-    fixture.detectChanges();
-
-    const req = httpMock.expectOne(
-      (r) => r.url.includes('/api/v1/appointments') && r.url.includes('status=APPROVED'),
-    );
-    expect(req.request.url).toContain('status=APPROVED');
-    req.flush(mockDashboard);
-  });
-
-  it('should compute pagination boundaries correctly', () => {
-    component.currentPage.set(0);
-    expect(component.currentPage()).toBe(0);
-    component.setPage(-1); // clamped: no-op below 0
-    expect(component.currentPage()).toBe(0);
-
-    component.setPage(2);
-    expect(component.currentPage()).toBe(2);
-    component.setPage(5); // beyond totalPages (3) -> clamped, no change
-    expect(component.currentPage()).toBe(2);
-  });
-
-  it('should render and navigate pagination controls with nested metadata', async () => {
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    const buttons = () =>
-      fixture.nativeElement.querySelectorAll('.btn-page') as NodeListOf<HTMLButtonElement>;
-    expect(buttons().length).toBe(2);
-    expect(buttons()[0].disabled).toBe(true);
-    expect(buttons()[1].disabled).toBe(false);
-
-    for (const number of [1, 2]) {
-      buttons()[1].click();
-      fixture.detectChanges();
-      httpMock.expectOne(`/api/v1/appointments?page=${number}&size=50`).flush({
-        ...mockDashboard,
-        page: { ...mockDashboard.page, page: { ...mockDashboard.page.page, number } },
-      } satisfies AppointmentDashboardResponse);
-      await fixture.whenStable();
-      fixture.detectChanges();
-
-      expect(component.currentPage()).toBe(number);
-      expect(buttons()[0].disabled).toBe(false);
-      expect(buttons()[1].disabled).toBe(number === 2);
-      expect(buttons()[0].parentElement?.textContent).toMatch(
-        new RegExp(`Page\\s+${number + 1}\\s+of\\s+3`),
-      );
-    }
-  });
-
-  it('should format 24h times into 12h AM/PM', () => {
-    expect(component.formatTime12Hour('09:00')).toBe('9:00 AM');
-    expect(component.formatTime12Hour('13:30')).toBe('1:30 PM');
-    expect(component.formatTime12Hour('12:00')).toBe('12:00 PM');
-    expect(component.formatTime12Hour('')).toBe('');
-  });
-
-  it('should flag past booking dates as overdue', () => {
-    expect(component.isOverdue({ bookingDate: '2020-01-01' } as any)).toBe(true);
-    expect(component.isOverdue({ bookingDate: '2099-01-01' } as any)).toBe(false);
-    expect(component.isOverdue({} as any)).toBe(false);
-  });
-
-  it('should surface a time-off write error on the action error signal', () => {
-    const barberStore = TestBed.inject(BarberStore);
+  it('switches between workspace tabs', () => {
+    expect(component.adminView()).toBe('appointments');
     component.setAdminView('schedules');
-    barberStore.selectBarber(1);
+    expect(component.adminView()).toBe('schedules');
+    component.setAdminView('notifications');
+    expect(component.adminView()).toBe('notifications');
+  });
 
-    component.newTimeOffStartDate.set('2026-09-01');
-    component.newTimeOffEndDate.set('2026-09-05');
-    component.addTimeOff();
+  it('exposes dashboard stats from the store', () => {
+    expect(component.stats().total).toBe(6);
+  });
 
-    const req = httpMock.expectOne((r) => r.url.includes('/api/v1/barbers/1/time-off'));
-    expect(req.request.method).toBe('POST');
-    req.error(new ProgressEvent('error'), { status: 400, statusText: 'Bad Request' });
+  it('logs out and returns to the landing page', () => {
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
-    expect(barberStore.actionErrorMessage()).toBeTruthy();
-    expect(barberStore.actionErrorMessage()).not.toBeNull();
+    component.onLogout();
+
+    httpMock.match((r) => r.url.includes('/api/v1/auth/logout')).forEach((r) => r.flush(null));
+    expect(navigate).toHaveBeenCalledWith('');
+    expect(TestBed.inject(AppointmentStore).errorMessage()).toBeNull();
   });
 });

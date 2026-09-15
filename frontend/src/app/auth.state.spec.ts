@@ -3,7 +3,8 @@ import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { describe, beforeEach, expect, it, vi } from 'vitest';
 import { AuthState } from './auth.state';
-import { AppointmentService, LoginResponse } from './appointment.service';
+import { LoginResponse } from './types/api';
+import { AuthApi } from './core/api/auth-api';
 
 describe('AuthState', () => {
   let authState: AuthState;
@@ -14,7 +15,7 @@ describe('AuthState', () => {
     TestBed.configureTestingModule({
       providers: [
         AuthState,
-        { provide: AppointmentService, useValue: { me: vi.fn(() => me$.asObservable()) } },
+        { provide: AuthApi, useValue: { me: vi.fn(() => me$.asObservable()) } },
         { provide: Router, useValue: {} },
       ],
     });

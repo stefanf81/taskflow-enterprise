@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { NotificationStore } from './notification.store';
-import { NotificationItem } from './appointment.service';
+import { NotificationItem } from './types/api';
 
 @Component({ standalone: true, template: '' })
 class TestHost {
@@ -77,7 +77,7 @@ describe('NotificationStore', () => {
     fixture.detectChanges();
 
     expect(store.notifications().length).toBe(2);
-    expect(store.notifications()[0].recipient).toBe('alice@example.com');
+    expect(store.notifications()[0]!.recipient).toBe('alice@example.com');
   });
 
   it('should surface error message on HTTP failure', async () => {

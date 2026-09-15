@@ -4,7 +4,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { CustomerPortal } from './customer-portal';
-import { AppointmentService, AppointmentPage } from '../../appointment.service';
+import { AppointmentPage } from '../../types/api';
+import { AppointmentsApi } from '../../core/api/appointments-api';
 import { AppointmentStore } from '../../appointment.store';
 import { CustomerStore } from '../../customer.store';
 import { AuthState } from '../../auth.state';
@@ -60,7 +61,7 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
-        AppointmentService,
+        AppointmentsApi,
         AppointmentStore,
         CustomerStore,
       ],

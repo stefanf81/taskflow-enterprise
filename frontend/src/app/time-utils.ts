@@ -12,29 +12,21 @@ export const DEFAULT_TIME_SLOTS: readonly string[] = [
 
 export function formatTime12Hour(time24: string): string {
   if (!time24) return '';
-  try {
-    const parts = time24.split(':');
-    const hours = parseInt(parts[0], 10);
-    const minutes = parts[1] || '00';
-    if (isNaN(hours)) return time24;
-    const amPm = hours >= 12 ? 'PM' : 'AM';
-    const hours12 = hours % 12 || 12;
-    return `${hours12}:${minutes} ${amPm}`;
-  } catch {
-    return time24;
-  }
+  const [hourPart = '', minutePart = ''] = time24.split(':');
+  const hours = parseInt(hourPart, 10);
+  const minutes = minutePart || '00';
+  if (isNaN(hours)) return time24;
+  const amPm = hours >= 12 ? 'PM' : 'AM';
+  const hours12 = hours % 12 || 12;
+  return `${hours12}:${minutes} ${amPm}`;
 }
 
 export function parseTimeToMinutes(timeStr: string): number {
   if (!timeStr) return 0;
-  try {
-    const parts = timeStr.split(':');
-    const hours = parseInt(parts[0], 10) || 0;
-    const minutes = parseInt(parts[1], 10) || 0;
-    return hours * 60 + minutes;
-  } catch {
-    return 0;
-  }
+  const [hoursPart = '', minutesPart = ''] = timeStr.split(':');
+  const hours = parseInt(hoursPart, 10) || 0;
+  const minutes = parseInt(minutesPart, 10) || 0;
+  return hours * 60 + minutes;
 }
 
 export function formatMinutesToTimeString(totalMinutes: number): string {
