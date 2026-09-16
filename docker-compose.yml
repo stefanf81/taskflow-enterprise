@@ -176,7 +176,7 @@ services:
         max-file: "3"
 
   jaeger:
-    image: jaegertracing/jaeger:2.20.0
+    image: jaegertracing/jaeger:2.21.0
     container_name: taskflow-jaeger
     profiles: ["observability"]
     ports:
