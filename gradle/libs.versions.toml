@@ -1,7 +1,7 @@
 [versions]
 spring-boot = "4.1.1"
 dependency-check = "13.0.0"
-dependency-analysis = "3.19.1"
+dependency-analysis = "3.19.2"
 versions-plugin = "0.62.0"
 spotbugs-plugin = "6.5.11"
 spotbugs-tool = "4.10.4"
