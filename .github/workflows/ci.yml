@@ -184,7 +184,10 @@ jobs:
         uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: Dockerfile.x64
-          ignore: DL3018,DL3029
+          # DL3005 (apt-get upgrade) and DL3008 (apt pinning) are intentional:
+          # the runtime stage refreshes Ubuntu security packages on every build
+          # instead of pinning versions that would freeze out CVE fixes.
+          ignore: DL3005,DL3008,DL3029
 
       - name: Lint Frontend Dockerfile
         uses: hadolint/hadolint-action@v3.5.0
@@ -759,12 +762,14 @@ jobs:
           provenance: false
           sbom: false
 
-          # Cache-busting: force `apk upgrade` to run on every CI
-          # build so the image always ships the latest Alpine
-          # security patches. Without this, a cached `apk upgrade`
-          # layer carries stale OS packages with known CVEs.
+          # Cache-busting: force the runtime package refresh to run on every
+          # CI build so the image always ships the latest OS security patches
+          # (apt on the backend, apk on the frontend). Each Dockerfile consumes
+          # its own arg; the unused one is ignored. Without this, a cached
+          # refresh layer carries stale OS packages with known CVEs.
           build-args: |
             APK_BUST=${{ github.run_id }}-${{ github.run_attempt }}
+            APT_BUST=${{ github.run_id }}-${{ github.run_attempt }}
 
       ##########################################################
       # Scan

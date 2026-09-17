@@ -2,7 +2,9 @@
 
 # Local development Spring Boot image for Apple Silicon (linux/arm64).
 # Uses the multi-platform index digest matching the production base JVM.
-ARG JAVA_IMAGE=eclipse-temurin:21-jre-alpine@sha256:974b08960c5d96694c780e65b2d5705268ab1e1ca1a0dd0caf4ba6c3fe34d699
+# Explicit -resolute (Ubuntu 26.04 LTS, glibc) because the floating 21-jre tag
+# tracks the current Ubuntu release and would drift silently.
+ARG JAVA_IMAGE=eclipse-temurin:21-jre-resolute@sha256:ab0b2cdb24a65f299d6968601789826da34e4fbf6baa0518739ab8463f08779f
 ARG PLATFORM=linux/arm64
 
 # JAR extraction is architecture-independent: runs natively on Apple Silicon.
@@ -19,10 +21,13 @@ RUN --network=none java -Djarmode=tools -jar application.jar \
     extract --layers --destination extracted
 
 # Target architecture base stage for arm64 runtime identity.
+# No --system for useradd: a --system account expects UID < 1000 and emits a
+# warning for the explicit 10001; without it shadow still locks the password.
 FROM --platform=$PLATFORM ${JAVA_IMAGE} AS java-base
 WORKDIR /app
-RUN addgroup -g 10001 -S appgroup \
-    && adduser -u 10001 -S appuser -G appgroup
+RUN groupadd --system --gid 10001 appgroup \
+    && useradd --uid 10001 --gid 10001 --no-create-home \
+         --shell /usr/sbin/nologin appuser
 
 FROM java-base AS cds-training
 
@@ -47,9 +52,12 @@ RUN --network=none java -XX:ArchiveClassesAtExit=/tmp/application.jsa \
 
 FROM java-base AS runtime
 
-# Local development: `apk upgrade` is intentionally omitted so local rebuilds
-# stay deterministic and fast without pulling unpredictable Alpine packages.
-RUN apk add --no-cache tini
+# Local development: `apt-get upgrade` is intentionally omitted so local
+# rebuilds stay deterministic and fast without pulling unpredictable packages.
+# tini installs to /usr/bin/tini on the Ubuntu-based Temurin image.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy application layers and the trained CDS archive.
 COPY --link --from=extractor --chown=0:0 /app/extracted/dependencies/ ./
@@ -72,7 +80,7 @@ EXPOSE 8080
 
 # Sizing and GC tuning are owned by deployment (docker-compose.yml JAVA_TOOL_OPTIONS).
 # CMD carries only environment-invariant flags.
-ENTRYPOINT ["/sbin/tini", "--", "java"]
+ENTRYPOINT ["/usr/bin/tini", "--", "java"]
 CMD [ \
     "-XX:+ExitOnOutOfMemoryError", \
     "-XX:SharedArchiveFile=application.jsa", \
