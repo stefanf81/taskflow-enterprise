@@ -3,10 +3,11 @@ package com.example.taskflow.core;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -25,22 +26,19 @@ class RateLimiterConfigTest {
     private OncePerRequestFilter filter;
 
     @BeforeEach
-    @SuppressWarnings("unchecked")
     void setUp() {
         rateLimiterConfig = new RateLimiterConfig(100, 20);
         redisTemplate = mock(StringRedisTemplate.class);
         filter = rateLimiterConfig.createRateLimitFilter(redisTemplate);
     }
 
-    @SuppressWarnings("unchecked")
     private void mockExecute(Long returnValue) {
-        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), anyString()))
+        when(redisTemplate.execute(ArgumentMatchers.<RedisScript<Long>>any(), anyList(), anyString()))
                 .thenReturn(returnValue);
     }
 
-    @SuppressWarnings("unchecked")
     private void mockExecuteForKey(String expectedKey, Long returnValue) {
-        when(redisTemplate.execute(any(DefaultRedisScript.class), eq(List.of(expectedKey)), eq("60000")))
+        when(redisTemplate.execute(ArgumentMatchers.<RedisScript<Long>>any(), eq(List.of(expectedKey)), eq("60000")))
                 .thenReturn(returnValue);
     }
 
@@ -114,7 +112,7 @@ class RateLimiterConfigTest {
 
         filter.doFilter(request, response, filterChain);
 
-        verify(redisTemplate, times(1)).execute(any(DefaultRedisScript.class), eq(List.of("rate_limit:127.0.0.1:api")), eq("60000"));
+        verify(redisTemplate, times(1)).execute(ArgumentMatchers.<RedisScript<Long>>any(), eq(List.of("rate_limit:127.0.0.1:api")), eq("60000"));
         verify(filterChain, times(1)).doFilter(request, response);
         assertEquals(200, response.getStatus());
     }

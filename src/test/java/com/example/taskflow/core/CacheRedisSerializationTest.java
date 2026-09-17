@@ -3,12 +3,8 @@ package com.example.taskflow.core;
 import com.example.taskflow.appointment.BarberResponse;
 import com.example.taskflow.appointment.PublicBarberResponse;
 import com.example.taskflow.catalog.ServiceItemResponse;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
-import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.RedisSerializer;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -16,34 +12,16 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+/**
+ * Round-trips the cached DTOs through {@link CacheConfig#cacheValueSerializer()} — the exact
+ * serializer wired into every cache — so the explicit polymorphic-type allow-list is tested
+ * where it lives instead of a duplicated copy that could drift.
+ */
 class CacheRedisSerializationTest {
-
-    private GenericJackson2JsonRedisSerializer serializer() {
-        PolymorphicTypeValidator v = BasicPolymorphicTypeValidator.builder()
-                .allowIfSubType("com.example.taskflow.appointment.AppointmentStats")
-                .allowIfSubType("com.example.taskflow.appointment.BarberResponse")
-                .allowIfSubType("com.example.taskflow.appointment.PublicBarberResponse")
-                .allowIfSubType("com.example.taskflow.catalog.ServiceItemResponse")
-                .allowIfSubType("java.util.ArrayList")
-                .allowIfSubType("java.util.ImmutableCollections$ListN")
-                .allowIfSubType("java.util.ImmutableCollections$List12")
-                .allowIfSubType("java.util.Collections$EmptyList")
-                .allowIfSubType("java.util.Collections$SingletonList")
-                .allowIfSubType("java.util.Arrays$ArrayList")
-                .allowIfSubType("java.lang.String")
-                .allowIfSubType("java.lang.Long")
-                .allowIfSubType("java.lang.Double")
-                .allowIfSubType("java.lang.Integer")
-                .allowIfSubType("java.math.BigDecimal")
-                .build();
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.activateDefaultTyping(v, ObjectMapper.DefaultTyping.EVERYTHING, JsonTypeInfo.As.PROPERTY);
-        return new GenericJackson2JsonRedisSerializer(mapper);
-    }
 
     @Test
     void barberResponseList_roundTrip() {
-        GenericJackson2JsonRedisSerializer s = serializer();
+        RedisSerializer<Object> s = CacheConfig.cacheValueSerializer();
         List<BarberResponse> original = List.of(
                 new BarberResponse(1L, "Barber A", "a@example.com", "555-1"),
                 new BarberResponse(2L, "Barber B", "b@example.com", "555-2")
@@ -60,7 +38,7 @@ class CacheRedisSerializationTest {
 
     @Test
     void publicBarberResponseList_roundTrip() {
-        GenericJackson2JsonRedisSerializer s = serializer();
+        RedisSerializer<Object> s = CacheConfig.cacheValueSerializer();
         List<PublicBarberResponse> original = List.of(new PublicBarberResponse(1L, "Barber A"));
         byte[] bytes = s.serialize(original);
         assertNotNull(bytes);
@@ -74,7 +52,7 @@ class CacheRedisSerializationTest {
 
     @Test
     void serviceItemResponseList_roundTrip() {
-        GenericJackson2JsonRedisSerializer s = serializer();
+        RedisSerializer<Object> s = CacheConfig.cacheValueSerializer();
         List<ServiceItemResponse> original = List.of(
                 new ServiceItemResponse(1L, "Cut", BigDecimal.valueOf(25.00), 30, "hair", "desc")
         );
@@ -91,7 +69,7 @@ class CacheRedisSerializationTest {
 
     @Test
     void emptyList_roundTrip() {
-        GenericJackson2JsonRedisSerializer s = serializer();
+        RedisSerializer<Object> s = CacheConfig.cacheValueSerializer();
         List<BarberResponse> original = List.of();
         byte[] bytes = s.serialize(original);
         assertNotNull(bytes);

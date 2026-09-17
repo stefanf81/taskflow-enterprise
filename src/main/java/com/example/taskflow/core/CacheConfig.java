@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
+import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import org.springframework.web.filter.ShallowEtagHeaderFilter;
@@ -24,13 +25,13 @@ import java.time.Duration;
  *
  * <p><b>Dependency note:</b> {@code activateDefaultTyping} and
  * {@code BasicPolymorphicTypeValidator} are marked {@code @Deprecated} / for
- * removal in a future Jackson 2.x release (the recommended successor is
- * Jackson 3's {@code DefaultTyping} API). This project already pins Jackson 3
- * (see build.gradle) and will migrate to the new API once
- * {@code GenericJackson2JsonRedisSerializer} (Spring Data Redis) exposes a
- * Jackson 3-compatible constructor. Until then, the explicit allow-list below
- * keeps the deserialization surface secure — only the concrete types we
- * actually cache are permitted, eliminating the gadget-vector risk.
+ * removal in a future Jackson 2.x release. The Jackson 3 successor is available
+ * ({@code GenericJacksonJsonRedisSerializer}, Spring Data Redis 4), but a
+ * switch changes the on-the-wire cache format: entries written by the Jackson 2
+ * serializer would be deserialization errors until their TTL expires. Migration
+ * is therefore deferred to a dedicated change; until then, the explicit
+ * allow-list below keeps the deserialization surface secure — only the concrete
+ * types we actually cache are permitted, eliminating the gadget-vector risk.
  */
 @Configuration
 @SuppressWarnings({"deprecation", "removal"})
@@ -97,6 +98,18 @@ public class CacheConfig {
         return mapper;
     }
 
+    private static final RedisSerializer<Object> CACHE_VALUE_SERIALIZER =
+            new GenericJackson2JsonRedisSerializer(redisObjectMapper());
+
+    /**
+     * The single value serializer shared by every cache (thread-safe). Package-private so
+     * {@code CacheRedisSerializationTest} exercises the production serializer instead of a
+     * duplicated copy that could drift from the allow-list.
+     */
+    static RedisSerializer<Object> cacheValueSerializer() {
+        return CACHE_VALUE_SERIALIZER;
+    }
+
     @Bean
     public Filter shallowEtagHeaderFilter() {
         return new ShallowEtagHeaderFilter() {
@@ -114,7 +127,7 @@ public class CacheConfig {
                 .entryTtl(Duration.ofMinutes(10))
                 .disableCachingNullValues()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper())));
+                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(cacheValueSerializer()));
     }
 
     @Bean
@@ -125,30 +138,30 @@ public class CacheConfig {
                                 .entryTtl(Duration.ofMinutes(5))
                                 .disableCachingNullValues()
                                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper()))))
+                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(cacheValueSerializer())))
                 .withCacheConfiguration("busySlots",
                         RedisCacheConfiguration.defaultCacheConfig()
                                 .entryTtl(Duration.ofMinutes(2))
                                 .disableCachingNullValues()
                                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper()))))
+                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(cacheValueSerializer())))
                 .withCacheConfiguration("barbers",
                         RedisCacheConfiguration.defaultCacheConfig()
                                 .entryTtl(Duration.ofMinutes(10))
                                 .disableCachingNullValues()
                                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper()))))
+                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(cacheValueSerializer())))
                 .withCacheConfiguration("publicBarbers",
                         RedisCacheConfiguration.defaultCacheConfig()
                                 .entryTtl(Duration.ofMinutes(10))
                                 .disableCachingNullValues()
                                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper()))))
+                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(cacheValueSerializer())))
                 .withCacheConfiguration("services",
                         RedisCacheConfiguration.defaultCacheConfig()
                                 .entryTtl(Duration.ofMinutes(10))
                                 .disableCachingNullValues()
                                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper()))));
+                                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(cacheValueSerializer())));
     }
 }
