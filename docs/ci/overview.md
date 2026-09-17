@@ -23,10 +23,10 @@ A daily **schedule** (`0 2 * * *`) runs the full build, test, and Docker build+s
 ```yaml
 concurrency:
   group: taskflow-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 ```
 
-**Why:** If a developer pushes multiple commits to a PR in rapid succession, GitHub Actions will cancel the older, now-obsolete pipeline runs. This saves significant compute minutes and prevents a queue of stale builds.
+**Why:** If a developer (or Renovate) pushes multiple commits to a branch in rapid succession, GitHub Actions cancels the older, now-obsolete pipeline runs. This saves significant compute minutes and prevents a queue of stale builds. `main` is included because merge bursts otherwise queue a full ~6-minute run per commit; the surviving run always verifies the cumulative tree, and required status checks are evaluated per pull request, so cancelling a superseded `main` run has no effect on merge gating.
 
 ## 3. Least-Privilege Permissions (`permissions`)
 
@@ -53,15 +53,23 @@ A lightweight job that runs `hadolint` against `Dockerfile.x64` and `frontend/Do
 
 ## 6. Job: `backend`
 
-This job handles the Spring Boot backend compilation, testing, and packaging.
+This job handles the Spring Boot backend compilation, testing, and quality gates.
 
 - **Automatic & Conditional Test Execution:**
   Unit and integration tests run automatically on all Pull Requests. On manual runs (`workflow_dispatch`), they are executed conditionally if `run_tests` is enabled, or skipped entirely to fast-track packaging.
-- **Gradle Task Parallelism & Caching:** We explicitly pass the `--parallel` and `--build-cache` arguments to `./gradlew`. This compiles independent modules across multiple threads, leveraging build outputs from previous runs.
+- **Gradle Task Parallelism & Caching:** We explicitly pass the `--parallel` and `--build-cache` arguments to `./gradlew`. This compiles independent modules across multiple threads, leveraging build outputs from previous runs. On the nightly `schedule` the flag flips to `--no-build-cache`: `setup-gradle` restores the Gradle user home build cache, so otherwise `test` and `testcontainersTest` resolve `FROM-CACHE` on an unchanged tree and the nightly regression executes no tests.
 - **Gradle Caching Write Access (`cache-read-only: false`):** We configure `cache-read-only: false` on the setup-gradle action. By default, setup-gradle disables cache writes on non-default branches (e.g. Pull Requests). Overriding this ensures that PR branches can cache new/updated dependencies, avoiding slow downloads on subsequent commits.
-- **Combined Build, Tests, and Quality Gates:** A single Gradle invocation runs `assemble`, `test`, `testcontainersTest`, `jacocoTestReport`, `jacocoTestCoverageVerification`, and `spotbugsMain`. The enforced gates — JaCoCo coverage ≥ 0.80 and SpotBugs at MAX effort / HIGH confidence — therefore block the build instead of only producing reports. When `run_tests` is disabled, a packaging-only `assemble` fallback keeps the JAR artifact available for the downstream steps.
-- **Direct Artifact Uploads:** Instead of manually compressing reports into a `.tar.gz` archive, we upload the `build/reports` and `build/test-results` directories directly using `actions/upload-artifact@v7`. We set a 14-day retention period. For JAR files, we set `compression-level: 0` because they are already compressed natively.
+- **Combined Build, Tests, and Quality Gates:** A single Gradle invocation runs `assemble`, `test`, `testcontainersTest`, `jacocoTestReport`, `jacocoTestCoverageVerification`, and `spotbugsMain`. The enforced gates — JaCoCo coverage ≥ 0.80 and SpotBugs at MAX effort / HIGH confidence — therefore block the build instead of only producing reports. `assemble` stays in this invocation because the OpenAPI contract verification boots the locally built JAR; when `run_tests` is disabled, the packaging-only `assemble` fallback keeps that JAR available.
+- **Direct Artifact Uploads:** Instead of manually compressing reports into a `.tar.gz` archive, we upload the `build/reports` and `build/test-results` directories directly using `actions/upload-artifact@v7` with a 14-day retention period. The production JAR artifact is owned by the `package` job (see §6a).
 - **OpenAPI Contract Gate:** After the build, CI starts the backend through the shared `start-backend` composite, authenticates through the mobile login endpoint, and compares the live `/v3/api-docs` document with `api/openapi.json`. It also fails if either generated platform API type file is stale. API changes therefore require a reviewed baseline update and regenerated types in the same change.
+
+## 6a. Job: `package` (Backend Package)
+
+Produces the production JAR artifact consumed by downstream jobs, independently of the test suite.
+
+- **Fan-Out From Testing:** `package` runs only `./gradlew assemble` and uploads `backend-jar`. `docker-build` and `e2e` declare `needs: [changes, package, frontend]`, so the image build/scan and Playwright start as soon as the JAR and frontend bundle exist instead of waiting for `test`, `testcontainersTest`, and `spotbugsMain` to finish. The test suite continues concurrently inside the required `Backend` job.
+- **Gating:** `package` mirrors the `backend` job's path filters, so documentation-only diffs skip it. A `package` failure skips `docker-build` and `e2e`; because `End-to-End Tests` is a required status check, a skipped required check blocks the merge exactly as a failing `backend` job does today.
+- **Single Source of Truth for the Artifact:** Only `package` uploads `backend-jar`, so the artifact name is unique per run. The OpenAPI contract gate intentionally stays in the `backend` job so the required `Backend` check still covers it; the duplicate `assemble` costs seconds and is served from the Gradle build cache.
 
 ## 7. Job: `frontend`
 
@@ -82,6 +90,7 @@ Submits the complete, deep Java and Gradle dependency tree directly to the GitHu
 
 - **Dependency Graph Submission:** Uses `gradle/actions/dependency-submission@v6` to extract, compile, and upload the full transitive dependency graph on relevant `main` runs. GitHub uses this graph for dependency visibility and vulnerability alerts; Renovate applies this repository's controlled update policy.
 - **Caching & Permissions:** Explicitly configured with `contents: write` and `actions: write` permissions. The `actions: write` permission is crucial to allow the Gradle Action to save and restore dependencies caching successfully, preventing "cache write denied" warnings while maximizing the build execution speed on subsequent runs.
+- **Why the workflow job instead of GitHub's native automatic submission:** the native integration runs a GitHub-managed `dynamic` workflow (~1m37s per push, submitting from PR branches too), while this scoped job completes in ~33s and only runs for Gradle-file changes on `main`/dispatch/schedule. The native **Automatic dependency submission** setting is disabled in repository settings so the two paths cannot submit duplicate snapshots; re-enable it only if this job is removed.
 
 ## 8. Job: `security` — moved to `security.yml`
 
@@ -101,7 +110,7 @@ See [`security.yml`](../../.github/workflows/security.yml) for details on:
 
 Runs deep semantic security analysis in parallel for both languages on every nightly run:
 
-- **Java/Kotlin (`build-mode: autobuild`):** CodeQL performs its own Gradle build tracking with `actions: write` permission for Gradle build caching — it does not consume the production JAR from the `backend` job, so there is no serialization bottleneck.
+- **Java/Kotlin (`build-mode: autobuild`):** CodeQL performs its own Gradle build tracking with `actions: write` permission for Gradle build caching — it does not consume the production JAR from the `package` job, so there is no serialization bottleneck.
 - **JavaScript/TypeScript (`build-mode: none`):** Scans the Angular 22 and React Native TypeScript sources directly without building, keeping the analysis lightweight.
 - **Extended Security Queries:** Configured with `queries: security-extended` to perform deep semantic checks for injection flaws, authentication bypasses, path traversals, and cryptographic weaknesses beyond the minimal default suite.
 - **Matrix Naming & SARIF Category Isolation:** Job matrix displays distinct language names (`CodeQL (${{ matrix.language }})`) and emits SARIF results categorized under `/language:${{ matrix.language }}`. Workspace checkout runs with `persist-credentials: false`.
@@ -112,11 +121,12 @@ The standalone workflow has no change-detection dependency — it always scans b
 
 Runs Playwright E2E tests against a real, running backend and database.
 
-- **Decoupled dependencies (`needs: [changes, backend, frontend]`)**:
-  The E2E job depends strictly on `changes`, `backend`, and `frontend`. This eliminates redundant bottlenecks because E2E does not wait for static analysis.
+- **Decoupled dependencies (`needs: [changes, package, frontend]`)**:
+  The E2E job depends on the packaged backend JAR and the production frontend bundle — not on the test suite — so Playwright starts as soon as the artifacts exist while unit/integration tests run concurrently in the required `Backend` job.
+- **Fast Service Readiness:** The PostgreSQL and Redis service containers use `--health-interval 2s --health-timeout 2s --health-retries 30`, so GitHub's `Initialize containers` phase detects readiness within seconds instead of waiting out a 10-second health interval — the E2E job's largest fixed cost.
 - **Single-Stack PR Coverage:** On Pull Requests, any backend or frontend change builds both application artifacts and runs E2E. This intentionally trades the extra untouched-stack build for production integration coverage on every application change. Docker-only changes retain component-specific build behavior.
 - **Production Ingress:** E2E downloads the frontend production bundle, builds the production Nginx image with a BuildKit GHA cache that restores the shared `frontend-main`/`frontend-pr` scopes and writes a dedicated `frontend-e2e` scope, then serves it on port 4200 with the same read-only filesystem and dropped capabilities used by Compose. Playwright sets `E2E_DOCKER=true`, so it tests the production bundle and reverse proxy instead of `ng serve`.
-- **Upgraded Playwright Browser Cache:** Playwright browsers are cached under a key tied directly to the `package-lock.json` file hash, guaranteeing that the cache is cleanly invalidated whenever the Playwright dependency version is modified. This also allowed us to remove the redundant `npx playwright --version` run step.
+- **Playwright Browser Cache Keyed by Playwright Version:** Playwright browsers are cached under a key derived from the resolved `playwright-core` version in `frontend/package-lock.json`, so unrelated frontend dependency bumps no longer invalidate ~300 MB of browsers and force `playwright install --with-deps` (12–18s) on every run. The cache key naturally rotates when Playwright itself is upgraded, and `cache-hit` still gates the install step.
 - **Cache-Aware Browser Installation:** Instead of installing all available major browsers (Chromium, Firefox, WebKit), we only install `chromium` (`npx playwright install --with-deps chromium`), which matches the Desktop Chrome browser used in `playwright.config.ts`. The install runs only on a Playwright cache miss, so `--with-deps` does not re-run `apt` on every build.
 - **Direct Playwright Reports Upload:** We upload `spring.log`, `frontend/playwright-report`, and `frontend/test-results` directly using the `upload-artifact` action with default compression and a 7-day retention policy; these text-heavy artifacts compress well, so the default keeps storage down.
 
@@ -163,6 +173,7 @@ Compiles secure, production-grade container images for the backend and frontend 
 - **Lowercase GHCR Owner Guard:** GHCR rejects mixed/uppercase repository owners (`repository name must be lowercase`). A `Compute Image Refs` step lowercases `github.repository_owner` once and exhales fully-resolved `ghcr.io/<owner>/taskflow-{backend,frontend}` refs as step outputs, which `build-push-action` and the Trivy `image-ref` both consume. This prevents hard-failures for forks/orgs whose casing doesn't match the package's lowercase requirement.
 - **Local Load Only:** Images in CI (`ci.yml`) are built with `load: true`, `push: false`, `provenance: false`, `sbom: false`. GHA Buildx local loading does not support image index structures containing supply-chain annotations, so attestations are omitted. The `pushdockerimage.yml` workflow builds once to a temporary registry scan tag (`:<tag>-scan`) with `provenance: true` / `sbom: true`, scans that exact image on GHCR, and promotes it to `:<tag>` and `:latest` using `docker buildx imagetools create` without rebuilding.
 - **Dynamic Matrix Execution:** Instead of a hardcoded matrix that tries to build both components and fails when compilation is skipped, we use a dynamic `docker_components` output array calculated in the `changes` job. This only compiles and scans images that actually had changes.
+- **Artifact-Driven Fan-In:** The job declares `needs: [changes, package, frontend]` and pulls the backend JAR and frontend bundle from those jobs' artifacts, so image build and Trivy scan no longer wait for the backend test suite to complete.
 - **Smart Job-Level Gating (Skip Optimization):** Job-level conditions respect path filters on both pull requests and ordinary `main` pushes. Documentation-only changes skip heavyweight runners, while scheduled and manual runs retain full coverage. The matrix uses a valid empty array rather than a sentinel component.
 - **Hard-Gate Trivy Scan:** The image is scanned with `exit-code: 1` and `severity: HIGH,CRITICAL` — a blocking gate. This is the intentional counterpart to the report-only Trivy filesystem scan in `security.yml`. If a high/critical CVE is found, the build fails but the SARIF is still uploaded (via `if: always()`).
 - **GHA Cache for BuildKit:** The `cache-from` / `cache-to` directives use GitHub Actions cache (`type=gha`) with scoped keys per component and branch, so PR builds reuse layers from `main` when possible.

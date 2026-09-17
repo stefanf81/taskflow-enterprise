@@ -31,7 +31,7 @@ permissions:
 
 concurrency:
   group: taskflow-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 env:
   JAVA_VERSION: "21"
@@ -241,10 +241,12 @@ jobs:
 
       - name: Build and Test
         if: env.RUN_TESTS == 'true'
+        env:
+          GRADLE_CACHE_FLAG: ${{ github.event_name == 'schedule' && '--no-build-cache' || '--build-cache' }}
         run: |
           ./gradlew \
             --parallel \
-            --build-cache \
+            "$GRADLE_CACHE_FLAG" \
             assemble \
             test \
             testcontainersTest \
@@ -288,6 +290,48 @@ jobs:
             build/test-results
           if-no-files-found: ignore
           retention-days: 14
+
+  ###########################################################
+  # Backend Package
+  ###########################################################
+
+  package:
+    name: Backend Package
+    needs: changes
+
+    if: |
+      needs.changes.outputs.renovate == 'true' ||
+      needs.changes.outputs.backend == 'true' ||
+      needs.changes.outputs.frontend == 'true' ||
+      needs.changes.outputs.docker_backend == 'true' ||
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule'
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: false
+
+      - name: Build JAR
+        run: |
+          ./gradlew \
+            --parallel \
+            --build-cache \
+            assemble \
+            --stacktrace
 
       - name: Upload Backend JAR
         uses: actions/upload-artifact@v7
@@ -443,7 +487,7 @@ jobs:
 
     needs:
       - changes
-      - backend
+      - package
       - frontend
 
     if: |
@@ -477,9 +521,9 @@ jobs:
 
         options: >-
           --health-cmd "pg_isready -U taskflow"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 30
 
       redis:
         image: redis:8.10.1-alpine
@@ -489,9 +533,9 @@ jobs:
 
         options: >-
           --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 30
 
     env:
       SPRING_PROFILES_ACTIVE: prod
@@ -601,14 +645,20 @@ jobs:
       # Playwright
       ##########################################################
 
+      - name: Resolve Playwright version
+        id: playwright-version
+        run: |
+          version="$(node -p "require('./frontend/package-lock.json').packages['node_modules/playwright-core'].version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Cache Playwright Browsers
         id: playwright-cache
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json', 'shared/schemas/package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
           restore-keys: |
-            playwright-${{ runner.os }}-
+            playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       # Browsers are restored from the cache above; --with-deps otherwise
       # re-runs apt-get on every build. Install only on a cache miss.
@@ -669,7 +719,7 @@ jobs:
 
     needs:
       - changes
-      - backend
+      - package
       - frontend
 
     if: |

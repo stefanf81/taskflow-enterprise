@@ -98,7 +98,7 @@ Two critical architectural alignments were identified and resolved to ensure run
 ### Finding 12: Automated GitHub Dependency Graph Submission
 *   **Location:** `.github/workflows/ci.yml` (Dependency Submission Job)
 *   **Issue:** The repository relied on asynchronous static analysis (CodeQL and Trivy filesystem scans) to identify security issues, but lacked direct, native integration with the **GitHub Dependency Graph** and vulnerability alert systems for Gradle. Without a formal dependency manifest submission, GitHub could not accurately map transitive library dependencies, leaving the project exposed to delayed vulnerability identification.
-*   **Resolution:** The dedicated `dependency-submission` job in the main CI workflow uses **`gradle/actions/dependency-submission@v6`** to submit the complete dependency graph on relevant `main` runs. GitHub uses this graph for dependency visibility and vulnerability alerts; Renovate applies the repository's controlled update policy.
+*   **Resolution:** The dedicated `dependency-submission` job in the main CI workflow uses **`gradle/actions/dependency-submission@v6`** to submit the complete dependency graph on relevant `main` runs. GitHub uses this graph for dependency visibility and vulnerability alerts; Renovate applies the repository's controlled update policy. GitHub's native Automatic dependency submission integration (a GitHub-managed `dynamic` workflow taking ~1m37s per push, compared to ~33s for this scoped job) is disabled in repository settings so duplicate snapshots cannot be submitted; re-enable it only if the job is removed.
 
 ### Finding 13: NPM Global Cache Gaps in Frontend & E2E Jobs
 *   **Location:** `.github/workflows/ci.yml` (Frontend and E2E Jobs)
