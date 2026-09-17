@@ -23,10 +23,12 @@ RUN --network=none java -Djarmode=tools -jar application.jar \
 
 # CDS is architecture/JVM-specific. Share the exact target JRE and identity;
 # package refreshes are confined to the runtime stage so they do not retrain CDS.
+# No --system for useradd: a --system account expects UID < 1000 and emits a
+# warning for the explicit 10001; without it shadow still locks the password.
 FROM --platform=$PLATFORM ${JAVA_IMAGE} AS java-base
 WORKDIR /app
 RUN groupadd --system --gid 10001 appgroup \
-    && useradd --system --uid 10001 --gid 10001 --no-create-home \
+    && useradd --uid 10001 --gid 10001 --no-create-home \
          --shell /usr/sbin/nologin appuser
 
 FROM java-base AS cds-training
