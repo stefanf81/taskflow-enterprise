@@ -3,7 +3,9 @@
 # Production Spring Boot / Java 21 image. The multi-platform index pins the JVM
 # release for native extraction and target-architecture CDS training/runtime.
 # Renovate can update this digest while retaining the project's Java 21 policy.
-ARG JAVA_IMAGE=eclipse-temurin:21-jre-alpine@sha256:974b08960c5d96694c780e65b2d5705268ab1e1ca1a0dd0caf4ba6c3fe34d699
+# Explicit -resolute (Ubuntu 26.04 LTS, glibc) because the floating 21-jre tag
+# tracks the current Ubuntu release and would drift silently.
+ARG JAVA_IMAGE=eclipse-temurin:21-jre-resolute@sha256:ab0b2cdb24a65f299d6968601789826da34e4fbf6baa0518739ab8463f08779f
 ARG PLATFORM=linux/amd64
 
 # JAR extraction is architecture-independent: run natively on Apple Silicon as
@@ -23,8 +25,9 @@ RUN --network=none java -Djarmode=tools -jar application.jar \
 # package refreshes are confined to the runtime stage so they do not retrain CDS.
 FROM --platform=$PLATFORM ${JAVA_IMAGE} AS java-base
 WORKDIR /app
-RUN addgroup -g 10001 -S appgroup \
-    && adduser -u 10001 -S appuser -G appgroup
+RUN groupadd --system --gid 10001 appgroup \
+    && useradd --system --uid 10001 --gid 10001 --no-create-home \
+         --shell /usr/sbin/nologin appuser
 
 FROM java-base AS cds-training
 
@@ -51,13 +54,16 @@ RUN --network=none java -XX:ArchiveClassesAtExit=/tmp/application.jsa \
 
 FROM java-base AS runtime
 
-# CI changes APK_BUST on every build to obtain Alpine package fixes. This keeps
+# CI changes APT_BUST on every build to obtain Ubuntu package fixes. This keeps
 # the JVM base pinned, but package resolution intentionally remains build-time.
-# Temurin's JRE lives in /opt/java/openjdk and is not managed by apk.
-ARG APK_BUST=stable
-RUN : "${APK_BUST}" \
-    && apk upgrade --no-cache \
-    && apk add --no-cache tini
+# Temurin's JRE lives in /opt/java/openjdk and is not managed by dpkg.
+# tini installs to /usr/bin/tini on the Ubuntu-based Temurin image.
+ARG APT_BUST=stable
+RUN : "${APT_BUST}" \
+    && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get -y upgrade \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
+    && rm -rf /var/lib/apt/lists/*
 
 # Stable dependencies first; root-owned application files are readable but not
 # writable by the runtime user, including outside a read-only deployment.
@@ -83,7 +89,7 @@ EXPOSE 8080
 # Keep CMD sizing-agnostic so image arguments cannot override that tuning.
 # tini forwards shutdown signals and reaps children; exec-form CMD starts Java
 # directly with the extracted application JAR, not the original executable JAR.
-ENTRYPOINT ["/sbin/tini", "--", "java"]
+ENTRYPOINT ["/usr/bin/tini", "--", "java"]
 CMD [ \
     "-XX:+ExitOnOutOfMemoryError", \
     "-XX:SharedArchiveFile=application.jsa", \

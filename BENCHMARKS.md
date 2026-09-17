@@ -273,6 +273,8 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 
 **Verdict:** The historical Java performance penalty on Alpine is officially gone. We migrated to `eclipse-temurin:21-jre-alpine` to gain a **20% smaller image** and a massively reduced zero-trust attack surface.
 
+> **Update (2026-09-17):** Superseded. The backend base image is now `eclipse-temurin:21-jre-resolute` (Ubuntu 26.04 LTS, `glibc`), digest-pinned in `Dockerfile`/`Dockerfile.x64`. Rationale: track Adoptium's supported glibc LTS line (the floating `21-jre` tag now resolves to `-resolute`) instead of the `musl` variant, at the cost of a larger image and larger OS CVE surface. The measured throughput delta between the two rows above is ~1% (5,790 vs 5,729 RPS) and was not the deciding factor. `Dockerfile.x64` compensates for the CVE-surface increase with a build-time `apt-get upgrade` refresh layer (cache-busted via `APT_BUST`) and the CI Trivy HIGH/CRITICAL gate remains the hard backstop.
+
 ---
 
 ## 🐋 10. Docker Architecture (Fat JAR vs. Elite Layered)
@@ -1257,9 +1259,9 @@ management.metrics.distribution.sla.http.server.requests=50ms,100ms,200ms
 
 **Configuration:**
 
-*   **Local (`Dockerfile:107`):** `HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness || exit 1` — uses `wget` (present in `eclipse-temurin:21-jre-alpine` via `tini` layer) against the Spring Boot `liveness` probe (`management.endpoint.health.probes.enabled=true`). `start_period 15s` matches the CDS-warmed startup (3.0s §36) plus Hikari init.
+*   **Local (`Dockerfile:75`):** `HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness || exit 1` — uses `wget` (shipped in the `eclipse-temurin:21-jre-resolute` base image) against the Spring Boot `liveness` probe (`management.endpoint.health.probes.enabled=true`). `start_period 15s` matches the CDS-warmed startup (3.0s §36) plus Hikari init.
 *   **Production (`Dockerfile.x64`):** Intentionally **omits** `HEALTHCHECK` — K8s `livenessProbe`/`readinessProbe` are set in `homelab/TF/gitops/apps/taskflow/backend.yaml` (with `initialDelaySeconds` tuned to pod resources). A baked `HEALTHCHECK` would duplicate and potentially conflict with the kubelet probe, and `homelab/TF` is the single source of truth for prod health semantics.
-*   **Compose parity:** `docker-compose.yml:108` mirrors the same `wget` liveness check for `backend` (and `frontend` `http://127.0.0.1:8080/`), so `depends_on: condition: service_healthy` works locally.
+*   **Compose parity:** `docker-compose.yml:113` mirrors the same `wget` liveness check for `backend` (and `frontend` `http://127.0.0.1:8080/`), so `depends_on: condition: service_healthy` works locally.
 
 | Image | HEALTHCHECK | Why |
 | :--- | :--- | :--- |
@@ -1396,3 +1398,42 @@ And `ARCHITECTURE.md` / `BENCHMARKS.md` inventories (§9) amplify: **>2 replicas
 **Future PgBouncer model:** A future GitOps change may deploy a shared PgBouncer transaction pool with `pool_mode=transaction`, `max_client_conn=1000`, and `default_pool_size=25`. Backends would then connect through its transaction-pooled port so PostgreSQL sees only the pool size regardless of replica count. No PgBouncer workload is currently deployed.
 
 **Verdict:** Documentation is the correct P2 action — no code change needed today (2-replica headroom is ample). When scale demands >2 replicas, the documented PgBouncer transaction-pooling path avoids the `max_connections` cliff without lowering per-replica throughput.
+
+---
+
+## ⚡ 51. glibc Allocator & Huge-Page Tuning on the Ubuntu Base
+
+**Goal:** After migrating the backend from `eclipse-temurin:21-jre-alpine` (`musl`) to `eclipse-temurin:21-jre-resolute` (`glibc`, Ubuntu 26.04 LTS), re-baseline the migration and evaluate the glibc-only tuning knobs: `MALLOC_ARENA_MAX`, jemalloc preload, and transparent huge pages.
+
+**Methodology (reproducible):** `scripts/benchmark-glibc-tuning.sh` boots the production-like compose stack (db, redis, backend, frontend) with one tuning variant, warms JIT for 5 s, then drives **30 s of `hey -c 50`** through the Nginx ingress at `/api/v1/barbers` (cached JSON + ETag = allocation-heavy JVM path). It records RPS/p50/p95/p99, container RSS, G1 pause stats from `/tmp/gc.log`, cold start, and **verifies the knob reached the JVM process** (`/proc/<pid>/environ`, `/proc/<pid>/maps`, `smaps`). Three runs per variant, medians reported; host is an Apple M4 Pro (Rancher Desktop VM, cgroup `cpus=4`, `memory=2560M`, 1.25 GiB heap via `MaxRAMPercentage=50`).
+
+> **Methodology trap (fixed):** the public rate-limit bucket (100/min) 429s the entire run — the first sweep measured 541k rejections at ~18k RPS and was discarded. The harness now sets `APP_RATE_LIMIT_MAX_REQUESTS_PER_MINUTE=100000000` (limiter still runs, stays non-blocking) and **fails the run if zero 2xx responses** are recorded.
+
+### Re-baseline: Alpine (pre-change) vs Ubuntu (post-change)
+
+| Variant (3-run median) | RPS | p50 | p95 | p99 | RSS | G1 avg / p99 | Cold start |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Alpine 3.24 (`musl`) | 14,397 | 3.3 ms | 5.2 ms | 7.4 ms | 682 MiB | 1.48 / 5.14 ms | 2.61 s |
+| Ubuntu 26.04 (`glibc`) | 14,523 | 3.3 ms | 5.2 ms | 7.4 ms | 741 MiB | 1.45 / 5.03 ms | 2.43 s |
+
+**Verdict:** Throughput and latency are at parity (**+0.9% RPS**, well inside the ±3–5% run noise); Ubuntu cold-starts ~0.17 s faster and costs **+59 MiB RSS / +40 MB image** (188.1 → 228.2 MB). The glibc base pays for itself in support lifetime, and the CVE surface is not worse: with the Trivy DB of 2026-08-20, fixable HIGH/CRITICAL findings were **0 on Ubuntu vs 6 on the pinned Alpine image** (both local variants, i.e. without their production package-refresh layers).
+
+### glibc-only knobs
+
+| Variant (3-run median; 2 runs for jemalloc/THP) | RPS | p99 | RSS | G1 avg / p99 | Verdict |
+| :--- | ---: | ---: | ---: | ---: | :--- |
+| Ubuntu default (glibc arenas = 8 × cores) | 14,523 | 7.4 ms | 741 MiB | 1.45 / 5.03 ms | baseline |
+| **`MALLOC_ARENA_MAX=2` (adopted)** | **14,429** | **7.5 ms** | **669 MiB** | **1.54 / 4.99 ms** | **−72 MiB (−9.7%) RSS, no throughput/GC cost** |
+| `MALLOC_ARENA_MAX=1` | 14,779 | 7.5 ms | 653 MiB | 1.53 / 5.15 ms | best RSS (−88 MiB) but arena contention is unproven on higher-core prod; 2 chosen |
+| `LD_PRELOAD=libjemalloc.so.2` | 14,594 | 7.4 ms | 906 MiB | 1.52 / 5.26 ms | **rejected: +165 MiB RSS, no throughput gain** |
+| `-XX:+UseTransparentHugePages` | 14,790 | 7.3 ms | 759 MiB | 1.49 / 5.03 ms | **rejected: no benefit — the local VM runs THP=`always`, so pages are already collapsed (`AnonHugePages` 400–560 MiB in the JVM *without* the flag)** |
+
+**Adopted configuration:**
+
+* `docker-compose.yml` backend env: `MALLOC_ARENA_MAX=2` — glibc arenas scale to 8 × cores by default; the JVM's worker/carrier threads spread native allocations across them, padding RSS. 2 recovers ~72 MiB with no measurable cost. **Mirror this in `homelab/TF/gitops/apps/taskflow/backend.yaml`** (sizing/behavior is deployment-owned).
+* `libjemalloc2` is **not** shipped (evaluated in this section, removed from both Dockerfiles). Re-add it if a future re-measurement wants the allocator comparison; `scripts/benchmark-glibc-tuning.sh JEMALLOC=1` fails fast with that instruction.
+* Transparent huge pages remain host/deployment-owned; the JVM flag is not set.
+
+**Caveats:** single host, container limits (4 CPU / 2.5 GiB), 30 s runs and 3 reps → treat ±3–5% as noise; RSS medians include G1 heap growth, so allocator deltas should be read as directional. The arena delta is consistent across all three pairs and matches the known glibc-arena failure mode for many-threaded JVMs.
+
+**Verification:** `GlibcTuningBenchmarkTest` asserts the compose arena cap, the pinned `-resolute` base, the absence of jemalloc/`LD_PRELOAD`, this section's evidence, and the presence of the sweep harness.

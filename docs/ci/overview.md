@@ -48,7 +48,7 @@ The filters distinguish backend, frontend, dependency-submission, and Docker com
 
 ## 5. Job: `lint` (Dockerfile Lint)
 
-A lightweight job that runs `hadolint` against `Dockerfile.x64` and `frontend/Dockerfile` to verify linting and compliance. It only runs if Docker-related files were changed.
+A lightweight job that runs `hadolint` against `Dockerfile.x64` and `frontend/Dockerfile` to verify linting and compliance. It only runs if Docker-related files were changed. The backend lint intentionally ignores `DL3005` (`apt-get upgrade`) and `DL3008` (apt version pinning) because the runtime stage refreshes Ubuntu security packages on every build instead of pinning versions that would freeze out CVE fixes (the same rationale as the frontend's ignored `DL3018`).
 **Why:** Fails fast. By running these checks early and separately, we don't waste 5 minutes booting up JVMs and Node environments just to tell a developer they missed a Dockerfile best practice.
 
 ## 6. Job: `backend`
@@ -187,7 +187,7 @@ Our Docker build configurations (`Dockerfile` and `Dockerfile.x64`) implement st
         && test -s /tmp/application.jsa
     ```
   - Copies only the generated archive into runtime (`COPY --link --from=cds-training --chown=0:0 --chmod=0444 /tmp/application.jsa ./application.jsa`), preventing training artifacts or caches from bloating the production image.
-  - Separates CDS training from the final stage's `APK_BUST` layer: routine Alpine security package refreshes reuse the cached CDS archive instead of retraining on every build.
+  - Separates CDS training from the final stage's package-refresh layer (`APT_BUST` → `apt-get upgrade` on the backend's Ubuntu-based Temurin image, `APK_BUST` → `apk upgrade` on the frontend's Alpine image): routine OS security package refreshes reuse the cached CDS archive instead of retraining on every build.
   - Validates archive mapping at image build time using `--mount=type=tmpfs,target=/tmp` and `-Xshare:on`.
   - Mounts the shared archive at runtime via sizing-agnostic `CMD` arguments `"-XX:SharedArchiveFile=application.jsa"` and `"-Xshare:auto"`, launching the extracted JAR directly with `"-jar", "application.jar"`.
   - **Results:** Eliminates class-loading overhead, reducing cold-start times by ~20% (~740 ms saved, with over 15,000 application and framework classes mapped directly from the archive).
