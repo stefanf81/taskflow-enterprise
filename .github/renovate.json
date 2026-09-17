@@ -251,10 +251,10 @@
       "groupName": "GitHub Actions"
     },
     {
-      "description": "Blocked on Expo SDK upgrade: @babel/core 8 / jest 30 / @types/jest 30 require babel-preset-expo & jest-expo versions that do not yet support these majors (Babel 8 loadPartialConfig break vs msw). Fully suppressed: no branch, no PR, dashboard-only until this rule is removed after the SDK upgrade.",
+      "description": "Blocked on Expo SDK upgrade: @babel/core 8 / jest 30 / @types/jest 30 / @jest/types 30 require babel-preset-expo & jest-expo versions that do not yet support these majors (Babel 8 loadPartialConfig break vs msw; jest-expo still pins the @jest/* 29 surface). Fully suppressed: no branch, no PR, dashboard-only until this rule is removed after the SDK upgrade.",
       "matchManagers": ["npm"],
       "matchFileNames": ["mobile/package.json"],
-      "matchPackageNames": ["@babel/core", "jest", "@types/jest"],
+      "matchPackageNames": ["@babel/core", "jest", "@types/jest", "@jest/types"],
       "matchUpdateTypes": ["major"],
       "enabled": false,
       "groupName": "Blocked on Expo SDK upgrade"
