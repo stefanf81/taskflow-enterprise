@@ -10,15 +10,14 @@ on:
       - "scripts/sync-api-types.js"
       - "package.json"
       - ".github/workflows/react-native-ci.yml"
+  # Deliberately unfiltered: the repository's branch ruleset requires the
+  # "Mobile JavaScript", "Android build and test", and "iOS simulator build"
+  # contexts on every pull request. Path filtering here leaves those contexts
+  # "Expected" forever on backend/Gradle-only pull requests and blocks them
+  # (e.g. Renovate dependency PRs). The `changes` job below decides whether the
+  # individual jobs actually do any work.
   pull_request:
     branches: [main]
-    paths:
-      - "mobile/**"
-      - "shared/schemas/**"
-      - "api/**"
-      - "scripts/sync-api-types.js"
-      - "package.json"
-      - ".github/workflows/react-native-ci.yml"
   schedule:
     - cron: "30 4 * * *"
   workflow_dispatch:
@@ -43,8 +42,46 @@ env:
   GEM_PATH: ${{ github.workspace }}/.gem
 
 jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    # dorny/paths-filter enumerates PR changed files via the REST API, which
+    # requires pull-requests: read. Job-scoped so the rest of the workflow
+    # stays at the minimal contents: read default.
+    permissions:
+      contents: read
+      pull-requests: read
+
+    outputs:
+      mobile: ${{ steps.filter.outputs.mobile }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Detect mobile changes
+        id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            mobile:
+              - 'mobile/**'
+              - 'shared/schemas/**'
+              - 'api/**'
+              - 'scripts/sync-api-types.js'
+              - 'package.json'
+              - '.github/workflows/react-native-ci.yml'
+
   javascript:
     name: Mobile JavaScript
+    needs: changes
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
