@@ -7,7 +7,7 @@
     ":maintainLockFilesWeekly"
   ],
   "branchPrefix": "renovate/",
-  "rebaseWhen": "auto",
+  "rebaseWhen": "behind-base-branch",
   "dependencyDashboard": true,
   "labels": ["dependencies"],
   "gitAuthor": "stefanf81 <17823566+stefanf81@users.noreply.github.com>",
