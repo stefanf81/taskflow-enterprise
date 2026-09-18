@@ -72,6 +72,21 @@
       "enabled": false
     },
     {
+      "description": "Frontend pins @babel/core 7.x; a Babel 8 major is not validated against the Angular 22 build toolchain yet. Revisit with the next Angular upgrade.",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["frontend/package.json"],
+      "matchPackageNames": ["@babel/core"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "Runner images are pinned deliberately (ubuntu-24.04) for reproducible native/CI behaviour; ubuntu-latest is migrated by GitHub itself. Do not auto-bump the runner major.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["ubuntu"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
       "description": "Exclude only the named direct dependencies managed by the installed Expo SDK",
       "matchManagers": ["npm"],
       "matchFileNames": ["mobile/package.json"],
