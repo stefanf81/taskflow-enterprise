@@ -59,6 +59,19 @@
       "allowedVersions": "/^3\\./"
     },
     {
+      "description": "Mobile overrides are pinned to toolchain-compatible releases: uuid 14 and nanoid 6 are ESM-only and break the current Expo/Metro/jest pipeline, and the nested js-yaml override guards @istanbuljs/load-nyc-config. Revisit after the Expo SDK upgrade.",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["uuid", "nanoid", "js-yaml"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "Defer Node.js and npm major upgrades until the Expo SDK upgrade validates the native toolchain against the new runtime (mobile/.nvmrc and the workflow NODE_VERSION are pinned to 22).",
+      "matchPackageNames": ["node", "npm"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
       "description": "Exclude only the named direct dependencies managed by the installed Expo SDK",
       "matchManagers": ["npm"],
       "matchFileNames": ["mobile/package.json"],
