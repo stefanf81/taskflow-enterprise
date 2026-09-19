@@ -87,13 +87,10 @@
       "enabled": false
     },
     {
-      "description": "Exclude only the named direct dependencies managed by the installed Expo SDK",
+      "description": "Exclude the native/runtime dependencies whose versions are pinned by the installed Expo SDK; these must move together with an SDK upgrade, never independently",
       "matchManagers": ["npm"],
       "matchFileNames": ["mobile/package.json"],
       "matchPackageNames": [
-        "expo",
-        "expo-*",
-        "@expo/*",
         "react",
         "react-dom",
         "react-native",
@@ -104,6 +101,14 @@
         "jest-expo",
         "react-test-renderer"
       ],
+      "enabled": false
+    },
+    {
+      "description": "Expo SDK packages (expo, expo-*, @expo/*): allow patch updates within the current SDK line, but block minor and major, which track SDK releases and require the native toolchain upgrade to be validated first",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["mobile/package.json"],
+      "matchPackageNames": ["expo", "expo-*", "@expo/*"],
+      "matchUpdateTypes": ["minor", "major"],
       "enabled": false
     },
     {
