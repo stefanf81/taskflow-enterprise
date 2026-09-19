@@ -1,7 +1,9 @@
 name: Install npm dependencies
 description: >-
-  Run `npm ci` for a package, optionally bootstrapping shared/schemas first.
-  Runs from the repository root so callers do not need a working directory.
+  Install the npm version declared in frontend/package.json `packageManager`,
+  then run `npm ci` for a package, optionally bootstrapping shared/schemas
+  first. Runs from the repository root so callers do not need a working
+  directory.
 inputs:
   package-path:
     description: Repository-relative path of the package to install (e.g. frontend, mobile, .).
@@ -17,6 +19,33 @@ inputs:
 runs:
   using: composite
   steps:
+    # setup-node only reads `packageManager` to enable npm caching; it never
+    # installs that npm version, and Node 24 bundles npm 11. Corepack is
+    # deprecated and being removed from Node distributions, so install the
+    # declared npm explicitly. Derived from frontend/package.json so the pin
+    # cannot drift; npm 12 also enforces the `allowScripts` allowlists.
+    - name: Ensure declared npm version
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        declared="$(node -p "require('./frontend/package.json').packageManager")"
+        want="${declared#npm@}"
+        have="$(npm --version)"
+
+        # Nothing to do when the field is absent (want == declared).
+        if [[ -z "$want" || "$want" == "$declared" ]]; then
+          echo "No npm packageManager pin found; keeping npm $have"
+          exit 0
+        fi
+
+        if [[ "$have" != "$want" ]]; then
+          echo "npm $have -> installing npm $want (declared in frontend/package.json)"
+          npm install --global "npm@$want"
+        else
+          echo "npm $want already active"
+        fi
+
     - name: Install shared/schemas
       if: inputs.shared-schemas == 'true'
       shell: bash

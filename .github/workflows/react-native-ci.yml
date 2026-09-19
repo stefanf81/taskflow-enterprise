@@ -127,7 +127,7 @@ jobs:
           retention-days: 7
 
   android:
-    name: Android build and test
+    name: Android build and test (${{ matrix.os }})
     needs: javascript
     if: |
       github.event_name == 'schedule' ||
@@ -140,7 +140,21 @@ jobs:
             github.head_ref == 'maintenance/expo-sdk'
           )
         )
-    runs-on: ubuntu-24.04
+    # Trial matrix ahead of GitHub's `ubuntu-latest` migration to 26.04
+    # (Oct 19 - Nov 19, 2026). 24.04 is required; 26.04 is non-blocking. The
+    # Android SDK/NDK sdkmanager path and JDK/Gradle toolchain are the surfaces
+    # most likely to differ. Once the 26.04 leg is green, drop the matrix and
+    # pin `runs-on: ubuntu-26.04`.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            experimental: false
+          - os: ubuntu-26.04
+            experimental: true
+    continue-on-error: ${{ matrix.experimental }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     defaults:
       run:
@@ -231,7 +245,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: taskflow-android-debug
+          name: taskflow-android-debug-${{ matrix.os }}
           path: mobile/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           compression-level: 0
@@ -241,7 +255,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: android-reports
+          name: android-reports-${{ matrix.os }}
           path: |
             mobile/android/app/build/reports/
             mobile/android/build/reports/
