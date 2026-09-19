@@ -4,7 +4,7 @@
 # Uses the multi-platform index digest matching the production base JVM.
 # Explicit -resolute (Ubuntu 26.04 LTS, glibc) because the floating 21-jre tag
 # tracks the current Ubuntu release and would drift silently.
-ARG JAVA_IMAGE=eclipse-temurin:21-jre-resolute@sha256:ab0b2cdb24a65f299d6968601789826da34e4fbf6baa0518739ab8463f08779f
+ARG JAVA_IMAGE=eclipse-temurin:21-jre-resolute@sha256:7dd2336d132aaf34c980e4277a1828a7da68b67684bff3d5ff1877f52c117656
 ARG PLATFORM=linux/arm64
 
 # JAR extraction is architecture-independent: runs natively on Apple Silicon.

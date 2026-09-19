@@ -2,7 +2,7 @@
 spring-boot = "4.1.1"
 dependency-check = "13.0.0"
 dependency-analysis = "3.19.2"
-versions-plugin = "0.63.1"
+versions-plugin = "0.64.0"
 spotbugs-plugin = "6.5.11"
 spotbugs-tool = "4.10.4"
 # The companion BOM keeps every OpenTelemetry module at this security-reviewed release.
@@ -22,7 +22,7 @@ log4j2 = "2.26.1"
 # 11.0.25 fixed CVE-2026-68525, CVE-2026-65905, CVE-2026-65182 (all CRITICAL);
 # bumped to 11.0.26 for the latest patch release.
 tomcat = "11.0.26"
-hibernate = "7.4.8.Final"
+hibernate = "7.4.9.Final"
 caffeine = "3.2.4"
 spring-modulith = "2.1.1"
 springdoc = "3.1.1"

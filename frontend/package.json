@@ -16,7 +16,7 @@
     "theme:check": "node scripts/generate-theme.mjs --check"
   },
   "private": true,
-  "packageManager": "npm@11.19.1",
+  "packageManager": "npm@12.0.2",
   "overrides": {
     "esbuild": "0.28.2",
     "@babel/core": "7.29.7",
@@ -46,22 +46,21 @@
     "@playwright/test": "^1.62.1",
     "@vitest/coverage-v8": "^4.1.11",
     "angular-eslint": "^22.5.0",
-    "eslint": "^10.10.0",
+    "eslint": "^10.11.0",
     "eslint-config-prettier": "^10.1.8",
     "jsdom": "^30.1.0",
     "postcss": "^8.5.26",
-    "prettier": "^3.9.7",
+    "prettier": "^3.9.8",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.70.0",
     "vitest": "^4.1.11"
   },
   "allowScripts": {
-    "@parcel/watcher@2.6.0": true,
-    "esbuild@0.28.1": true,
-    "fsevents@2.3.2": true,
-    "fsevents@2.3.3": true,
-    "lmdb@3.5.4": true,
-    "msgpackr-extract@3.0.4": true
+    "@parcel/watcher": true,
+    "esbuild": true,
+    "fsevents": true,
+    "lmdb": true,
+    "msgpackr-extract": true
   }
 }
