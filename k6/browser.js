@@ -7,6 +7,14 @@ if (!BASE_URL) throw new Error('BASE_URL environment variable is required');
 // How long to wait for time-slot API to return after picking a date.
 const SLOT_LOAD_MS = 1500;
 
+// web.dev "good" CWV budgets are only meaningful when the browser is close to
+// the origin. The remote CI smoke test runs from a GitHub runner (US) against
+// the EU-hosted origin, so its FCP/LCP reflect cross-region latency rather than
+// real-user CWV. Default to enforcing them (same-region local/isolated runs)
+// and let remote CI opt out with `-e ENFORCE_CWV=false`, keeping the functional
+// and availability checks as the gate there.
+const ENFORCE_CWV = __ENV.ENFORCE_CWV !== 'false';
+
 export const options = {
   scenarios: {
     browser: {
@@ -20,9 +28,13 @@ export const options = {
     checks: ['rate==1.0'],
     // ----- Web vital performance gates — CWV good thresholds -----
     // TTFB <800ms good per web.dev, FCP <1800, LCP <2500
-    browser_web_vital_ttfb: ['p(95)<800'],
-    browser_web_vital_fcp: ['p(95)<1800'],
-    browser_web_vital_lcp: ['p(95)<2500'],
+    ...(ENFORCE_CWV
+      ? {
+          browser_web_vital_ttfb: ['p(95)<800'],
+          browser_web_vital_fcp: ['p(95)<1800'],
+          browser_web_vital_lcp: ['p(95)<2500'],
+        }
+      : {}),
   },
 };
 
@@ -64,10 +76,9 @@ export default async function () {
     console.log('--- 2. Wizard — Lookbook card ---');
 
     // The lookbook is deferred until the browser is idle, so wait for it rather
-    // than falling back to an unrelated card in the first wizard step.
-    const lookbookCard = page
-      .locator('app-lookbook div[role="button"]')
-      .first();
+    // than falling back to an unrelated card in the first wizard step. Cards are
+    // semantic <button> elements (a11y refactor); do not target div[role=button].
+    const lookbookCard = page.locator('app-lookbook button').first();
     await lookbookCard.waitFor({ state: 'visible', timeout: 10000 });
     await lookbookCard.click();
     await page
@@ -83,14 +94,15 @@ export default async function () {
     scenario = 'wizard-step2-stylist';
     console.log('--- 3. Wizard — Stylist selection ---');
 
+    // Stylist cards are <app-stylist-card> buttons carrying an aria-label.
     const stylistCard = page
-      .locator('#step-panel-2 div[aria-label^="Select stylist:"]')
+      .locator('#step-panel-2 button[aria-label^="Select stylist:"]')
       .first();
     await stylistCard.waitFor({ state: 'visible', timeout: 10000 });
     await stylistCard.click();
     check(
       await page
-        .locator('#step-panel-2 div[aria-label^="Select stylist:"]')
+        .locator('#step-panel-2 button[aria-label^="Select stylist:"]')
         .count(),
       {
         '3.1 a stylist is available for selection': (c) => c >= 1,
@@ -111,7 +123,7 @@ export default async function () {
 
     // Click first available date in the carousel.
     const dateBtns = page.locator(
-      '#step-panel-3 div[role="button"][aria-label^="Select date"]',
+      '#step-panel-3 button[aria-label^="Select date"]',
     );
     await dateBtns.first().waitFor({ state: 'visible', timeout: 10000 });
     const dateCount = await dateBtns.count();
@@ -124,9 +136,10 @@ export default async function () {
       await dateBtns.first().click();
       await page.waitForTimeout(SLOT_LOAD_MS); // Wait for busy-slots API
 
-      // Look for an enabled time-slot button.
+      // Time-slot buttons live in the dedicated grid; date buttons share the
+      // `slot-picker-btn` class, so scope to the grid to avoid clicking a date.
       const slotBtns = page.locator(
-        '#step-panel-3 button.slot-picker-btn:not([disabled])',
+        '.time-slots-grid button.slot-picker-btn:not([disabled])',
       );
       const slotCount = await slotBtns.count();
       check(slotCount >= 0, {
@@ -181,7 +194,7 @@ export default async function () {
 
       // Verify the submit button exists (do NOT click — we don't want to
       // create test bookings on the production database).
-      const submitBtn = page.locator('button[type="submit"]');
+      const submitBtn = page.locator('#step-panel-4 button[type="submit"]');
       check((await submitBtn.count()) > 0, {
         '5.4 submit button visible (not clicked)': (v) => v === true,
       });
@@ -190,6 +203,10 @@ export default async function () {
     console.log('=== All scenarios completed ===');
   } catch (err) {
     console.error(`\n[FAIL] Scenario "${scenario}" threw: ${err.message}`);
+    // Turn an aborted scenario into a failed check so the `checks rate==1.0`
+    // threshold fails the run. A bare rethrow alone does not guarantee a
+    // non-zero exit, which previously let a scenario failure pass unnoticed.
+    check(false, { [`scenario "${scenario}" completed`]: () => false });
     throw err;
   } finally {
     await page.close();

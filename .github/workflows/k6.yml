@@ -37,8 +37,13 @@ jobs:
 
       - name: Run k6 browser test
         run: |
+          # Remote smoke test: the GitHub runner measures cross-region latency,
+          # so web.dev "good" CWV budgets (FCP<1800/LCP<2500) are not a valid
+          # gate here — disable them and keep the functional/availability
+          # checks. Same-region runs keep the CWV gate (ENFORCE_CWV defaults true).
           docker run --rm \
             -e BASE_URL="$BASE_URL" \
+            -e ENFORCE_CWV=false \
             -v ${{ github.workspace }}:/work \
             -w /work \
             grafana/k6:2.2.0-with-browser \

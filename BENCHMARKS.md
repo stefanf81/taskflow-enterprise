@@ -1336,6 +1336,10 @@ Each iteration records per-endpoint `Trend` (`catalog_duration`, `barbers_durati
 
 `k6/browser.js:12` runs a `shared-iterations` 1 VU Chromium scenario exercising the full booking wizard (deferred Lookbook card → stylist → date carousel → time slot → customer form, without submitting) so the CWV metrics reflect real user navigation. It waits for each rendered wizard panel instead of using fallback clicks that can target the wrong step. Thresholds use `browser_web_vital_*` custom metrics emitted by the k6 browser extension.
 
+**Remote CI measurement:** a GitHub-hosted runner reaches the EU origin over the public internet, so its FCP/LCP include cross-region latency (observed ≈1.8–2.4 s FCP / 2.2–3.6 s LCP) and cannot validly assert web.dev **good** budgets. `k6/browser.js` enforces them by default (`ENFORCE_CWV`), and remote CI runs with `-e ENFORCE_CWV=false`, keeping the functional wizard checks (`checks rate==1.0`) as the gate. Same-region runs (measured locally at ≈0.6 s FCP / 0.8 s LCP) retain the full CWV gate.
+
+**Selector maintenance:** the a11y refactor replaced `div[role="button"]` cards with semantic `<button>` elements. The test now targets `app-lookbook button`, `#step-panel-2 button[aria-label^="Select stylist:"]`, `#step-panel-3 button[aria-label^="Select date"]`, and scopes time slots to `.time-slots-grid button.slot-picker-btn`. A failed scenario also records a failing `check`, so an aborted wizard run fails the `checks` threshold instead of exiting silently.
+
 **Verification:** `P1AndP2BenchmarkTest.p2_k6_load_profile` checks `k6/browser.js` for `p(95)<800`, `p(95)<1800`, `p(95)<2500`.
 
 ### Lookbook FlatList Fix — `mobile/src/components/lookbook/LookbookGallery.tsx:52`
