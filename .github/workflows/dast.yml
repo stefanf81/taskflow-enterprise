@@ -40,14 +40,65 @@ defaults:
 
 jobs:
   ###########################################################
-  # DAST (OWASP ZAP)
+  # Build the backend JAR once; both scan jobs consume it.
   ###########################################################
 
-  dast:
-    name: OWASP ZAP Full Scan
+  build-backend:
+    name: Build Backend JAR
 
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: false
+
+      - name: Build Backend
+        run: |
+          ./gradlew \
+            --parallel \
+            --build-cache \
+            bootJar
+
+      - name: Upload Backend JAR
+        uses: actions/upload-artifact@v7
+        with:
+          name: dast-backend-jar
+          path: build/libs/*.jar
+          compression-level: 0
+          retention-days: 1
+
+  ###########################################################
+  # DAST (OWASP ZAP) — API scan
+  #
+  # API and web scans run as independent jobs so the two ZAP runs overlap
+  # instead of executing serially (~160s + ~196s) in one job. Each job runs
+  # its own backend against its own Postgres/Redis services.
+  ###########################################################
+
+  dast-api:
+    name: OWASP ZAP API Scan
+
+    needs: build-backend
+
+    # Empty inputs.scan_scope (schedule) evaluates to !== 'web_only'.
+    if: ${{ inputs.scan_scope != 'web_only' }}
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     permissions:
       contents: read
@@ -91,23 +142,14 @@ jobs:
       SPRING_DATA_REDIS_HOST: localhost
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_SECURITY_PASSWORD: admin-password
-      SCAN_SCOPE: ${{ inputs.scan_scope || 'all' }}
       FAIL_ON_FINDINGS: ${{ inputs.fail_on_findings != false }}
-      ENABLE_AJAX_SPIDER: ${{ inputs.enable_ajax_spider != false }}
+      SCAN_SCOPE: ${{ inputs.scan_scope || 'all' }}
 
     steps:
-      ##########################################################
-      # Checkout
-      ##########################################################
-
       - name: Checkout
         uses: actions/checkout@v7
         with:
           persist-credentials: false
-
-      ##########################################################
-      # Java & Gradle
-      ##########################################################
 
       - name: Set up Java
         uses: actions/setup-java@v6
@@ -115,44 +157,18 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+      - name: Download Backend JAR
+        uses: actions/download-artifact@v8
         with:
-          cache-read-only: false
-
-      ##########################################################
-      # Node.js
-      ##########################################################
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: |
-            frontend/package-lock.json
-            shared/schemas/package-lock.json
-
-      ##########################################################
-      # Build Backend
-      ##########################################################
-
-      - name: Build Backend
-        run: |
-          ./gradlew \
-            --parallel \
-            --build-cache \
-            bootJar
-
-      ##########################################################
-      # Start Backend
-      ##########################################################
+          name: dast-backend-jar
+          path: backend-jar-dir
 
       - name: Start Spring Boot
         uses: ./.github/actions/start-backend
         with:
+          jar-path: backend-jar-dir/*.jar
           profile: prod
-          pid-file: spring.pid
+          pid-file: spring-api.pid
           java-options: -Xmx1g -XX:+ExitOnOutOfMemoryError
 
       - name: Create DAST bearer token
@@ -174,11 +190,251 @@ jobs:
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
       ##########################################################
-      # Frontend Ingress (Only needed when scanning web frontend)
+      # OWASP ZAP API Scan
+      ##########################################################
+
+      - name: Run authenticated OWASP ZAP API Scan
+        id: zap_api
+        continue-on-error: true
+        uses: zaproxy/action-api-scan@v0.10.0
+        env:
+          ZAP_AUTH_HEADER: Authorization
+          ZAP_AUTH_HEADER_VALUE: Bearer ${{ steps.auth.outputs.token }}
+          ZAP_AUTH_HEADER_SITE: http://localhost:8080
+        with:
+          target: api/openapi.json
+          format: openapi
+          fail_action: true
+          allow_issue_writing: false
+          artifact_name: zap-api-report
+          rules_file_name: .zap/api-rules.tsv
+          cmd_options: >-
+            -O http://localhost:8080
+            -T 10
+
+      # The ZAP action's built-in artifact upload expects these default names.
+      - name: Preserve ZAP API reports
+        if: always() && steps.zap_api.outcome != 'skipped'
+        run: |
+          for extension in json html md; do
+            source="report_${extension}.${extension}"
+            if [[ -f "$source" ]]; then
+              cp "$source" "zap-api-report.${extension}"
+            fi
+          done
+
+      - name: Set up Python
+        if: always()
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+
+      - name: Convert ZAP API JSON to SARIF
+        if: always() && hashFiles('zap-api-report.json') != ''
+        run: |
+          python scripts/zap2sarif.py \
+            zap-api-report.json \
+            zap-api-results.sarif \
+            --rules-file .zap/api-rules.tsv \
+            --target http://localhost:8080
+
+      - name: Upload API SARIF
+        if: always() && hashFiles('zap-api-results.sarif') != ''
+        uses: ./.github/actions/upload-sarif
+        with:
+          path: zap-api-results.sarif
+          category: dast-zap-api
+
+      - name: Upload API reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: zap-api-scan
+          path: |
+            spring.log
+            zap-api-report.html
+            zap-api-report.json
+            zap-api-report.md
+            zap-api-results.sarif
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Generate API scan summary
+        if: always()
+        env:
+          API_OUTCOME: ${{ steps.zap_api.outcome || 'skipped' }}
+        run: |
+          {
+            echo "## 🛡️ OWASP ZAP API Scan Summary"
+            echo ""
+            echo "| Target | Scope | Outcome | Report Available |"
+            echo "| :--- | :--- | :--- | :--- |"
+            echo "| API (\`api/openapi.json\`) | \`${SCAN_SCOPE}\` | \`${API_OUTCOME}\` | $( [[ -f zap-api-report.md ]] && echo 'Yes' || echo 'No' ) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ -f zap-api-report.md ]]; then
+            {
+              echo ""
+              echo "<details><summary><strong>📋 OWASP ZAP API Scan Report</strong></summary>"
+              echo ""
+              cat zap-api-report.md
+              echo ""
+              echo "</details>"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Enforce ZAP API scan results
+        if: ${{ always() && !cancelled() }}
+        env:
+          API_OUTCOME: ${{ steps.zap_api.outcome || 'skipped' }}
+        run: |
+          set -euo pipefail
+
+          echo "Scan evaluation: api=$API_OUTCOME, fail_on_findings=$FAIL_ON_FINDINGS"
+
+          if [[ "$API_OUTCOME" == "success" || "$API_OUTCOME" == "skipped" ]]; then
+            echo "OWASP ZAP API scan passed successfully."
+            exit 0
+          fi
+
+          if [[ "$FAIL_ON_FINDINGS" == "true" ]]; then
+            echo "::error::OWASP ZAP API scan reported failures or alerts (outcome: $API_OUTCOME)"
+            echo "OWASP ZAP API scan quality gate failed." >&2
+            exit 1
+          fi
+
+          echo "::warning::OWASP ZAP API scan reported findings, but fail_on_findings is disabled."
+
+      - name: Teardown DAST runtime resources
+        if: always()
+        run: |
+          echo "Cleaning up DAST runtime resources..."
+          if [[ -f spring-api.pid ]]; then
+            backend_pid="$(<spring-api.pid)"
+            if kill -0 "$backend_pid" 2>/dev/null; then
+              kill -SIGTERM "$backend_pid" 2>/dev/null || true
+            fi
+          fi
+
+  ###########################################################
+  # DAST (OWASP ZAP) — frontend/web scan
+  ###########################################################
+
+  dast-web:
+    name: OWASP ZAP Frontend Scan
+
+    needs: build-backend
+
+    # Empty inputs.scan_scope (schedule) evaluates to !== 'api_only'.
+    if: ${{ inputs.scan_scope != 'api_only' }}
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    permissions:
+      contents: read
+      security-events: write
+
+    services:
+      postgres:
+        image: postgres:18.6-alpine
+
+        env:
+          POSTGRES_DB: taskflow
+          POSTGRES_USER: taskflow
+          POSTGRES_PASSWORD: taskflow
+
+        ports:
+          - 5432:5432
+
+        options: >-
+          --health-cmd "pg_isready -U taskflow"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:8.10.1-alpine
+
+        ports:
+          - 6379:6379
+
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/taskflow
+      SPRING_DATASOURCE_USERNAME: taskflow
+      SPRING_DATASOURCE_PASSWORD: taskflow
+      SPRING_DATA_REDIS_HOST: localhost
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_SECURITY_PASSWORD: admin-password
+      FAIL_ON_FINDINGS: ${{ inputs.fail_on_findings != false }}
+      ENABLE_AJAX_SPIDER: ${{ inputs.enable_ajax_spider != false }}
+      SCAN_SCOPE: ${{ inputs.scan_scope || 'all' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            shared/schemas/package-lock.json
+
+      - name: Download Backend JAR
+        uses: actions/download-artifact@v8
+        with:
+          name: dast-backend-jar
+          path: backend-jar-dir
+
+      - name: Start Spring Boot
+        uses: ./.github/actions/start-backend
+        with:
+          jar-path: backend-jar-dir/*.jar
+          profile: prod
+          pid-file: spring-web.pid
+          java-options: -Xmx1g -XX:+ExitOnOutOfMemoryError
+
+      - name: Create DAST bearer token
+        id: auth
+        run: |
+          set -euo pipefail
+
+          payload="$(jq -cn --arg u "admin" --arg p "$SPRING_SECURITY_PASSWORD" '{username: $u, password: $p}')"
+
+          response="$({
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header 'Content-Type: application/json' \
+              --data "$payload" \
+              http://localhost:8080/api/v1/auth/mobile/login
+          })"
+          token="$(jq --raw-output --exit-status '.accessToken' <<< "$response")"
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      ##########################################################
+      # Frontend Ingress
       ##########################################################
 
       - name: Cache Angular Build
-        if: env.SCAN_SCOPE != 'api_only'
         uses: actions/cache@v6
         with:
           path: frontend/.angular/cache
@@ -187,13 +443,11 @@ jobs:
             angular-${{ runner.os }}-
 
       - name: Install frontend dependencies
-        if: env.SCAN_SCOPE != 'api_only'
         uses: ./.github/actions/npm-ci
         with:
           package-path: frontend
 
       - name: Build production frontend image
-        if: env.SCAN_SCOPE != 'api_only'
         run: |
           set -euo pipefail
 
@@ -201,7 +455,6 @@ jobs:
           docker build --tag taskflow-dast-frontend frontend
 
       - name: Start production frontend ingress
-        if: env.SCAN_SCOPE != 'api_only'
         run: |
           set -euo pipefail
 
@@ -230,48 +483,11 @@ jobs:
           exit 1
 
       ##########################################################
-      # OWASP ZAP API Scan
-      ##########################################################
-
-      - name: Run authenticated OWASP ZAP API Scan
-        id: zap_api
-        if: env.SCAN_SCOPE != 'web_only'
-        continue-on-error: true
-        uses: zaproxy/action-api-scan@v0.10.0
-        env:
-          ZAP_AUTH_HEADER: Authorization
-          ZAP_AUTH_HEADER_VALUE: Bearer ${{ steps.auth.outputs.token }}
-          ZAP_AUTH_HEADER_SITE: http://localhost:8080
-        with:
-          target: api/openapi.json
-          format: openapi
-          fail_action: true
-          allow_issue_writing: false
-          artifact_name: zap-api-report
-          rules_file_name: .zap/api-rules.tsv
-          cmd_options: >-
-            -O http://localhost:8080
-            -T 10
-
-      # The ZAP actions' built-in artifact upload expects these default names.
-      # Preserve them under scan-specific names before the frontend scan overwrites them.
-      - name: Preserve ZAP API reports
-        if: always() && steps.zap_api.outcome != 'skipped'
-        run: |
-          for extension in json html md; do
-            source="report_${extension}.${extension}"
-            if [[ -f "$source" ]]; then
-              cp "$source" "zap-api-report.${extension}"
-            fi
-          done
-
-      ##########################################################
       # OWASP ZAP Frontend Scan
       ##########################################################
 
       - name: Run authenticated OWASP ZAP frontend scan
         id: zap_web
-        if: ${{ !cancelled() && env.SCAN_SCOPE != 'api_only' }}
         continue-on-error: true
         uses: zaproxy/action-full-scan@v0.13.0
         env:
@@ -297,61 +513,11 @@ jobs:
             fi
           done
 
-      ##########################################################
-      # Job Summary Generation
-      ##########################################################
-
-      - name: Generate Job Summary from ZAP Report
-        if: always()
-        run: |
-          echo "## 🛡️ OWASP ZAP DAST Security Scan Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Target | Scope | Outcome | Report Available |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| :--- | :--- | :--- | :--- |" >> "$GITHUB_STEP_SUMMARY"
-
-          api_outcome="${{ steps.zap_api.outcome || 'skipped' }}"
-          web_outcome="${{ steps.zap_web.outcome || 'skipped' }}"
-
-          echo "| API (\`api/openapi.json\`) | \`${SCAN_SCOPE}\` | \`${api_outcome}\` | $( [[ -f zap-api-report.md ]] && echo 'Yes' || echo 'No' ) |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Web SPA (\`http://localhost:4200\`) | \`${SCAN_SCOPE}\` | \`${web_outcome}\` | $( [[ -f zap-web-report.md ]] && echo 'Yes' || echo 'No' ) |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          if [[ -f zap-api-report.md ]]; then
-            echo "<details><summary><strong>📋 OWASP ZAP API Scan Report</strong></summary>" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            cat zap-api-report.md >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "</details>" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          if [[ -f zap-web-report.md ]]; then
-            echo "<details><summary><strong>🌐 OWASP ZAP Frontend Web Scan Report</strong></summary>" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            cat zap-web-report.md >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "</details>" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      ##########################################################
-      # Python & SARIF Conversion
-      ##########################################################
-
       - name: Set up Python
         if: always()
         uses: actions/setup-python@v7
         with:
           python-version: "3.x"
-
-      - name: Convert ZAP API JSON to SARIF
-        if: always() && hashFiles('zap-api-report.json') != ''
-        run: |
-          python scripts/zap2sarif.py \
-            zap-api-report.json \
-            zap-api-results.sarif \
-            --rules-file .zap/api-rules.tsv \
-            --target http://localhost:8080
 
       - name: Convert ZAP web JSON to SARIF
         if: always() && hashFiles('zap-web-report.json') != ''
@@ -362,17 +528,6 @@ jobs:
             --rules-file .zap/web-rules.tsv \
             --target http://localhost:4200
 
-      ##########################################################
-      # Upload SARIF
-      ##########################################################
-
-      - name: Upload API SARIF
-        if: always() && hashFiles('zap-api-results.sarif') != ''
-        uses: ./.github/actions/upload-sarif
-        with:
-          path: zap-api-results.sarif
-          category: dast-zap-api
-
       - name: Upload web SARIF
         if: always() && hashFiles('zap-web-results.sarif') != ''
         uses: ./.github/actions/upload-sarif
@@ -380,21 +535,13 @@ jobs:
           path: zap-web-results.sarif
           category: dast-zap-web
 
-      ##########################################################
-      # Upload Consolidated Reports
-      ##########################################################
-
-      - name: Upload Reports
+      - name: Upload web reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: zap-full-scan
+          name: zap-web-scan
           path: |
             spring.log
-            zap-api-report.html
-            zap-api-report.json
-            zap-api-report.md
-            zap-api-results.sarif
             zap-web-report.html
             zap-web-report.json
             zap-web-report.md
@@ -402,53 +549,59 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      ##########################################################
-      # Quality Gate Enforcement
-      ##########################################################
+      - name: Generate web scan summary
+        if: always()
+        env:
+          WEB_OUTCOME: ${{ steps.zap_web.outcome || 'skipped' }}
+        run: |
+          {
+            echo "## 🌐 OWASP ZAP Frontend Scan Summary"
+            echo ""
+            echo "| Target | Scope | Outcome | Report Available |"
+            echo "| :--- | :--- | :--- | :--- |"
+            echo "| Web SPA (\`http://localhost:4200\`) | \`${SCAN_SCOPE}\` | \`${WEB_OUTCOME}\` | $( [[ -f zap-web-report.md ]] && echo 'Yes' || echo 'No' ) |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Enforce ZAP scan results
+          if [[ -f zap-web-report.md ]]; then
+            {
+              echo ""
+              echo "<details><summary><strong>🌐 OWASP ZAP Frontend Web Scan Report</strong></summary>"
+              echo ""
+              cat zap-web-report.md
+              echo ""
+              echo "</details>"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Enforce ZAP web scan results
         if: ${{ always() && !cancelled() }}
         env:
-          API_OUTCOME: ${{ steps.zap_api.outcome || 'skipped' }}
           WEB_OUTCOME: ${{ steps.zap_web.outcome || 'skipped' }}
         run: |
           set -euo pipefail
 
-          echo "Scan evaluation: api=$API_OUTCOME, web=$WEB_OUTCOME, fail_on_findings=$FAIL_ON_FINDINGS"
+          echo "Scan evaluation: web=$WEB_OUTCOME, fail_on_findings=$FAIL_ON_FINDINGS"
 
-          failed=0
-          if [[ "$API_OUTCOME" != "success" && "$API_OUTCOME" != "skipped" ]]; then
-            echo "::error::OWASP ZAP API scan reported failures or alerts (outcome: $API_OUTCOME)"
-            failed=1
+          if [[ "$WEB_OUTCOME" == "success" || "$WEB_OUTCOME" == "skipped" ]]; then
+            echo "OWASP ZAP web scan passed successfully."
+            exit 0
           fi
 
-          if [[ "$WEB_OUTCOME" != "success" && "$WEB_OUTCOME" != "skipped" ]]; then
-            echo "::error::OWASP ZAP Web scan reported failures or alerts (outcome: $WEB_OUTCOME)"
-            failed=1
+          if [[ "$FAIL_ON_FINDINGS" == "true" ]]; then
+            echo "::error::OWASP ZAP web scan reported failures or alerts (outcome: $WEB_OUTCOME)"
+            echo "OWASP ZAP web scan quality gate failed." >&2
+            exit 1
           fi
 
-          if (( failed == 1 )); then
-            if [[ "$FAIL_ON_FINDINGS" == "true" ]]; then
-              echo "OWASP ZAP scan quality gate failed." >&2
-              exit 1
-            else
-              echo "::warning::OWASP ZAP scan reported findings, but fail_on_findings is disabled."
-            fi
-          else
-            echo "OWASP ZAP scans passed successfully."
-          fi
-
-      ##########################################################
-      # Teardown & Runtime Resource Cleanup
-      ##########################################################
+          echo "::warning::OWASP ZAP web scan reported findings, but fail_on_findings is disabled."
 
       - name: Teardown DAST runtime resources
         if: always()
         run: |
           echo "Cleaning up DAST runtime resources..."
           docker rm -f taskflow-dast-frontend 2>/dev/null || true
-          if [[ -f spring.pid ]]; then
-            backend_pid="$(<spring.pid)"
+          if [[ -f spring-web.pid ]]; then
+            backend_pid="$(<spring-web.pid)"
             if kill -0 "$backend_pid" 2>/dev/null; then
               kill -SIGTERM "$backend_pid" 2>/dev/null || true
             fi

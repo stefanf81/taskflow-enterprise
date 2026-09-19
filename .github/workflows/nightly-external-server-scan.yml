@@ -2,8 +2,12 @@ name: External Server Security Scan
 
 on:
   schedule:
-    # Nightly external audit at 03:00 UTC
+    # Nightly external audit at 03:00 UTC — top-1000 TCP ports (fast).
     - cron: "0 3 * * *"
+    # Weekly full sweep on Sunday 03:00 UTC — all 65,535 TCP ports.
+    # The two crons share a start time; the discovery step keys off
+    # github.event.schedule to decide the port scope.
+    - cron: "0 3 * * 0"
 
   workflow_dispatch:
     inputs:
@@ -93,7 +97,9 @@ jobs:
 
       - name: Run TCP port discovery with Nmap
         env:
-          PORT_SCAN_SCOPE: ${{ github.event_name == 'schedule' && 'full_65k' || inputs.port_scan_scope || 'top_1000' }}
+          # Nightly schedule = top_1000; the Sunday schedule = full_65k.
+          # Manual dispatch honours the input.
+          PORT_SCAN_SCOPE: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 3 * * 0') && 'full_65k' || inputs.port_scan_scope || 'top_1000' }}
         run: |
           echo "Scanning target IP: ${TARGET_IP} with scope: ${PORT_SCAN_SCOPE}"
           case "${PORT_SCAN_SCOPE}" in
@@ -353,7 +359,10 @@ jobs:
     name: Web Application & TLS Security Scan
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.scan_components != 'network_only' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    # The three web/TLS detectors run concurrently inside this job; the
+    # slowest (Nuclei, ~23 min) sets the wall clock. 45 min leaves headroom
+    # above the prior 35 min cap that cancelled every nightly run.
+    timeout-minutes: 45
 
     permissions:
       contents: read
@@ -438,14 +447,21 @@ jobs:
           nuclei -version | tee reports/nuclei-version.txt
           nuclei -update-templates
 
-      - name: Run Nuclei
+      - name: Run web & TLS scans in parallel
         run: |
+          # Nuclei, testssl.sh, and Nikto are independent and share only the
+          # reports/ directory (each writes its own files). Running them
+          # sequentially exceeded the job timeout every night — Nuclei
+          # (~23 min) plus testssl (~4 min) plus Nikto (~9 min). Launch them
+          # concurrently and wait; per-scanner markers are still written for
+          # the summary and quality-gate steps that follow.
           set -euo pipefail
 
-          if [[ ! -s reports/nuclei-targets.txt ]]; then
-            echo "No targets available for Nuclei."
-            exit 0
-          fi
+          run_nuclei() {
+            if [[ ! -s reports/nuclei-targets.txt ]]; then
+              echo "No targets available for Nuclei."
+              return 0
+            fi
 
           set +e
           nuclei \
@@ -481,13 +497,13 @@ jobs:
               touch reports/nuclei-failed
             fi
           fi
+          }
 
-      - name: Run testssl.sh against detected TLS services
-        run: |
-          if [[ ! -s reports/tls-targets.txt ]]; then
-            echo "No TLS targets to scan."
-            exit 0
-          fi
+          run_testssl() {
+            if [[ ! -s reports/tls-targets.txt ]]; then
+              echo "No TLS targets to scan."
+              return 0
+            fi
 
           failed_targets=0
           extra_hosts=()
@@ -529,13 +545,13 @@ jobs:
           else
             touch reports/testssl-complete
           fi
+          }
 
-      - name: Run Nikto against detected web services
-        run: |
-          if [[ ! -s reports/web-targets.txt ]]; then
-            echo "No web targets to scan."
-            exit 0
-          fi
+          run_nikto() {
+            if [[ ! -s reports/web-targets.txt ]]; then
+              echo "No web targets to scan."
+              return 0
+            fi
 
           failed_nikto=0
           extra_hosts=()
@@ -579,6 +595,20 @@ jobs:
           else
             touch reports/nikto-complete
           fi
+          }
+
+          run_nuclei & p_nuclei=$!
+          run_testssl & p_testssl=$!
+          run_nikto & p_nikto=$!
+
+          s_nuclei=0; wait "$p_nuclei" || s_nuclei=$?
+          s_testssl=0; wait "$p_testssl" || s_testssl=$?
+          s_nikto=0; wait "$p_nikto" || s_nikto=$?
+
+          echo "Parallel scan exit codes: nuclei=${s_nuclei} testssl=${s_testssl} nikto=${s_nikto}"
+          # Per-scanner verdicts live in the marker files evaluated by the
+          # quality-gate step; do not hard-fail this step on a scanner error.
+          exit 0
 
       - name: Upload Nuclei SARIF
         if: always() && hashFiles('reports/nuclei-results.sarif') != ''
@@ -756,10 +786,16 @@ jobs:
             else
               echo "No high or critical Nuclei findings detected."
             fi
+          elif [[ -s reports/nuclei-targets.txt ]]; then
+            echo "::error::Nuclei did not complete (no results and no failure marker)."
+            failed=1
           fi
 
           if [[ -f reports/testssl-failed ]]; then
             echo "::error::testssl.sh encountered an operational failure or failed to produce JSON output."
+            failed=1
+          elif [[ ! -f reports/testssl-complete && -s reports/tls-targets.txt ]]; then
+            echo "::error::testssl.sh did not complete (no output and no failure marker)."
             failed=1
           fi
 
@@ -795,6 +831,9 @@ jobs:
 
           if [[ -f reports/nikto-failed ]]; then
             echo "::error::Nikto encountered an operational failure or failed to produce JSON output."
+            failed=1
+          elif [[ ! -f reports/nikto-complete && -s reports/web-targets.txt ]]; then
+            echo "::error::Nikto did not complete (no output and no failure marker)."
             failed=1
           fi
 

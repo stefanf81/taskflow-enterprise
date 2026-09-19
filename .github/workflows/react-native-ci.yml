@@ -143,17 +143,15 @@ jobs:
     # Trial matrix ahead of GitHub's `ubuntu-latest` migration to 26.04
     # (Oct 19 - Nov 19, 2026). 24.04 is required; 26.04 is non-blocking. The
     # Android SDK/NDK sdkmanager path and JDK/Gradle toolchain are the surfaces
-    # most likely to differ. Once the 26.04 leg is green, drop the matrix and
-    # pin `runs-on: ubuntu-26.04`.
+    # most likely to differ. The 26.04 leg runs on schedule/dispatch only (the
+    # job also runs on renovate/expo PRs, where the required 24.04 leg alone is
+    # enough), avoiding a duplicate Gradle build per PR. Once the 26.04 leg is
+    # green, drop the matrix and pin `runs-on: ubuntu-26.04`.
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-24.04
-            experimental: false
-          - os: ubuntu-26.04
-            experimental: true
-    continue-on-error: ${{ matrix.experimental }}
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-24.04"]') || fromJSON('["ubuntu-24.04","ubuntu-26.04"]') }}
+    continue-on-error: ${{ matrix.os == 'ubuntu-26.04' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     defaults:
@@ -211,6 +209,17 @@ jobs:
           if [[ ! -d android ]]; then
             npx expo prebuild --platform android --no-install
           fi
+
+      # Cache the generated project's Gradle configuration/build state. The
+      # dependency graph is fixed by mobile/package-lock.json, so the key is
+      # stable across runs and independent of the regenerated android/ tree.
+      - name: Cache Android Gradle project state
+        uses: actions/cache@v6
+        with:
+          path: mobile/android/.gradle
+          key: android-gradle-${{ runner.os }}-${{ hashFiles('mobile/package-lock.json') }}
+          restore-keys: |
+            android-gradle-${{ runner.os }}-
 
       - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
@@ -326,6 +335,17 @@ jobs:
         with:
           path: ${{ github.workspace }}/.gem
           key: cocoapods-${{ runner.os }}-${{ env.COCOAPODS_VERSION }}
+
+      # Cache the CocoaPods CDN/spec cache so `pod install --no-repo-update`
+      # does not re-resolve and re-download pod specs on every run. Keyed on
+      # the JavaScript dependency lock, which determines the pod graph.
+      - name: Cache CocoaPods spec cache
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/CocoaPods
+          key: cocoapods-specs-${{ runner.os }}-${{ hashFiles('mobile/package-lock.json') }}
+          restore-keys: |
+            cocoapods-specs-${{ runner.os }}-
 
       - name: Configure CocoaPods
         shell: bash

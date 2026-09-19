@@ -67,6 +67,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
       dependency_submission: ${{ steps.filter.outputs.dependency_submission }}
+      workflows: ${{ steps.filter.outputs.workflows }}
       renovate: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'renovate/') }}
 
       docker: ${{ steps.filter.outputs.docker }}
@@ -103,6 +104,10 @@ jobs:
               - '*.gradle'
               - gradle.properties
               - gradle/**
+
+            workflows:
+              - '.github/workflows/**'
+              - '.github/actionlint.yaml'
 
             docker:
               - Dockerfile*
@@ -196,6 +201,42 @@ jobs:
           ignore: DL3018,DL3029
 
   ###########################################################
+  # Workflow Lint
+  ###########################################################
+
+  workflow-lint:
+    name: Workflow Lint
+    needs: changes
+
+    # Without this, a PR that only edits `.github/workflows/**` matches no other
+    # path filter and runs no CI at all — a broken workflow would merge
+    # unvalidated. actionlint is pinned to a specific image tag; the
+    # ubuntu-26.04 trial label is declared in .github/actionlint.yaml.
+    if: needs.changes.outputs.workflows == 'true'
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Lint workflows
+        run: |
+          set -euo pipefail
+          # `-shellcheck=` disables actionlint's optional shellcheck pass on
+          # inline `run:` scripts; this job validates workflow structure
+          # (YAML, expressions, contexts, runner labels, action I/O). Inline
+          # shell linting is tracked separately so pre-existing SC2xxx style
+          # findings do not block unrelated workflow edits.
+          docker run --rm \
+            --volume "$PWD:/repo" \
+            --workdir /repo \
+            rhysd/actionlint:1.7.12 \
+            -color \
+            -shellcheck=
+
+  ###########################################################
   # Backend
   ###########################################################
 
@@ -212,19 +253,16 @@ jobs:
       github.event_name == 'schedule'
 
     # Trial matrix ahead of GitHub's `ubuntu-latest` migration to 26.04
-    # (announced for Oct 19 - Nov 19, 2026). ubuntu-24.04 is the required leg;
-    # ubuntu-26.04 runs alongside it non-blocking so OS-package/toolchain
-    # regressions surface early. Once the 26.04 leg is green, drop the matrix
-    # and pin `runs-on: ubuntu-26.04`.
+    # (announced for Oct 19 - Nov 19, 2026). ubuntu-24.04 is the required leg.
+    # The non-blocking ubuntu-26.04 leg runs on push/schedule/dispatch so
+    # OS-package/toolchain regressions surface nightly, but is skipped on pull
+    # requests to avoid paying for a duplicate leg on every PR. Once 26.04 is
+    # green, drop the matrix and pin `runs-on: ubuntu-26.04`.
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-24.04
-            experimental: false
-          - os: ubuntu-26.04
-            experimental: true
-    continue-on-error: ${{ matrix.experimental }}
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-24.04"]') || fromJSON('["ubuntu-24.04","ubuntu-26.04"]') }}
+    continue-on-error: ${{ matrix.os == 'ubuntu-26.04' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
 
@@ -305,49 +343,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  ###########################################################
-  # Backend Package
-  ###########################################################
-
-  package:
-    name: Backend Package
-    needs: changes
-
-    if: |
-      needs.changes.outputs.renovate == 'true' ||
-      needs.changes.outputs.backend == 'true' ||
-      needs.changes.outputs.frontend == 'true' ||
-      needs.changes.outputs.docker_backend == 'true' ||
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'schedule'
-
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Set up Java
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          cache-read-only: false
-
-      - name: Build JAR
-        run: |
-          ./gradlew \
-            --parallel \
-            --build-cache \
-            assemble \
-            --stacktrace
-
+      # Publish the JAR from a single matrix leg so e2e/docker-build have one
+      # unambiguous `backend-jar` artifact. This replaces the former dedicated
+      # `package` job, which re-ran the same `assemble` task.
       - name: Upload Backend JAR
+        if: matrix.os == 'ubuntu-24.04'
         uses: actions/upload-artifact@v7
         with:
           name: backend-jar
@@ -374,6 +374,7 @@ jobs:
       )
 
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     permissions:
       contents: write
@@ -501,7 +502,7 @@ jobs:
 
     needs:
       - changes
-      - package
+      - backend
       - frontend
 
     if: |
@@ -521,16 +522,14 @@ jobs:
     # Trial matrix for the ubuntu-latest -> 26.04 migration (Oct 19 - Nov 19,
     # 2026). The 24.04 leg is required; 26.04 is non-blocking. Docker services,
     # the production Nginx image, and Playwright's apt deps are the surfaces
-    # most likely to differ on 26.04. Once green, drop the matrix and pin.
+    # most likely to differ on 26.04. The 26.04 leg runs on schedule/dispatch
+    # only (not PRs) to avoid doubling Playwright cost on every pull request.
+    # Once green, drop the matrix and pin.
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-24.04
-            experimental: false
-          - os: ubuntu-26.04
-            experimental: true
-    continue-on-error: ${{ matrix.experimental }}
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-24.04"]') || fromJSON('["ubuntu-24.04","ubuntu-26.04"]') }}
+    continue-on-error: ${{ matrix.os == 'ubuntu-26.04' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
 
@@ -749,7 +748,7 @@ jobs:
 
     needs:
       - changes
-      - package
+      - backend
       - frontend
 
     if: |

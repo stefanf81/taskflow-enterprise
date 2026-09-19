@@ -11,6 +11,12 @@ on:
 permissions:
   contents: read
 
+# Serialize manual runs so two k6 browser sessions do not load the shared
+# external BASE_URL at the same time.
+concurrency:
+  group: k6-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   browser-test:
     runs-on: ubuntu-latest
@@ -35,7 +41,7 @@ jobs:
             -e BASE_URL="$BASE_URL" \
             -v ${{ github.workspace }}:/work \
             -w /work \
-            grafana/k6:latest-with-browser \
+            grafana/k6:2.2.0-with-browser \
             run k6/browser.js
 
       - name: Run k6 production API probe
@@ -45,5 +51,5 @@ jobs:
             -e BASE_URL="$BASE_URL" \
             -v ${{ github.workspace }}:/work \
             -w /work \
-            grafana/k6:latest-with-browser \
+            grafana/k6:2.2.0-with-browser \
             run k6/probe.js

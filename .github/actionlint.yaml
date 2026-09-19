@@ -1,0 +1,10 @@
+# actionlint configuration.
+#
+# ubuntu-26.04 is a GitHub-hosted runner label that predates actionlint's
+# bundled runner-label database. Registering it here keeps `actionlint` green
+# for the ubuntu-latest -> 26.04 trial matrix (see ci.yml / react-native-ci.yml)
+# without waiting for an actionlint release. Remove this entry once actionlint
+# knows the label natively.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

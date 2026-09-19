@@ -19,6 +19,12 @@ env:
   # Upper bound on deletions per run so a bad filter cannot wipe a package.
   MAX_DELETE: "50"
 
+# Serialize manual runs so two overlapping deletions cannot race on the same
+# package versions.
+concurrency:
+  group: cleanup-packages-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   cleanup:
     name: Prune stale package versions

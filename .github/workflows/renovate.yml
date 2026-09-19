@@ -54,6 +54,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      # `npx --package renovate` downloads Renovate (~50s cold) on every run.
+      # Cache npm's npx + registry data so an unchanged run reuses the prior
+      # download, while a fresh key each run still lets a new Renovate release
+      # be fetched when one lands.
+      - name: Cache Renovate validator package
+        uses: actions/cache@v6
+        with:
+          path: ~/.npm
+          key: renovate-npm-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            renovate-npm-${{ runner.os }}-
+
       - name: Validate Renovate configuration
         run: npx --yes --package renovate renovate-config-validator .github/renovate.json
 

@@ -2,8 +2,10 @@ name: Delete Old GitHub Actions Caches
 
 on:
   schedule:
-    # Runs every day at 04:00 UTC (staggered from other daily workflows)
-    - cron: "0 4 * * *"
+    # Weekly on Sunday at 04:00 UTC (staggered from other daily workflows).
+    # Caches keyed on lockfiles are long-lived; a daily sweep bought nothing
+    # over the 3-day retention cutoff.
+    - cron: "0 4 * * 0"
   workflow_dispatch:
 
 permissions:
@@ -13,6 +15,7 @@ permissions:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Delete caches older than 3 days

@@ -60,16 +60,16 @@ This job handles the Spring Boot backend compilation, testing, and quality gates
 - **Gradle Task Parallelism & Caching:** We explicitly pass the `--parallel` and `--build-cache` arguments to `./gradlew`. This compiles independent modules across multiple threads, leveraging build outputs from previous runs. On the nightly `schedule` the flag flips to `--no-build-cache`: `setup-gradle` restores the Gradle user home build cache, so otherwise `test` and `testcontainersTest` resolve `FROM-CACHE` on an unchanged tree and the nightly regression executes no tests.
 - **Gradle Caching Write Access (`cache-read-only: false`):** We configure `cache-read-only: false` on the setup-gradle action. By default, setup-gradle disables cache writes on non-default branches (e.g. Pull Requests). Overriding this ensures that PR branches can cache new/updated dependencies, avoiding slow downloads on subsequent commits.
 - **Combined Build, Tests, and Quality Gates:** A single Gradle invocation runs `assemble`, `test`, `testcontainersTest`, `jacocoTestReport`, `jacocoTestCoverageVerification`, and `spotbugsMain`. The enforced gates — JaCoCo coverage ≥ 0.80 and SpotBugs at MAX effort / HIGH confidence — therefore block the build instead of only producing reports. `assemble` stays in this invocation because the OpenAPI contract verification boots the locally built JAR; when `run_tests` is disabled, the packaging-only `assemble` fallback keeps that JAR available.
-- **Direct Artifact Uploads:** Instead of manually compressing reports into a `.tar.gz` archive, we upload the `build/reports` and `build/test-results` directories directly using `actions/upload-artifact@v7` with a 14-day retention period. The production JAR artifact is owned by the `package` job (see §6a).
+- **Direct Artifact Uploads:** Instead of manually compressing reports into a `.tar.gz` archive, we upload the `build/reports` and `build/test-results` directories directly using `actions/upload-artifact@v7` with a 14-day retention period. The production JAR artifact (`backend-jar`) is published from this job's required `ubuntu-24.04` leg (see §6a).
 - **OpenAPI Contract Gate:** After the build, CI starts the backend through the shared `start-backend` composite, authenticates through the mobile login endpoint, and compares the live `/v3/api-docs` document with `api/openapi.json`. It also fails if either generated platform API type file is stale. API changes therefore require a reviewed baseline update and regenerated types in the same change.
 
-## 6a. Job: `package` (Backend Package)
+## 6a. Backend JAR Artifact (folded into `backend`)
 
-Produces the production JAR artifact consumed by downstream jobs, independently of the test suite.
+The production JAR is published from the `backend` job's required `ubuntu-24.04` leg as the `backend-jar` artifact. The former standalone `package` job re-ran the same `./gradlew assemble`; publishing from `backend` removes that duplicate build without adding latency (the artifact is ready before the parallel `frontend` job finishes).
 
-- **Fan-Out From Testing:** `package` runs only `./gradlew assemble` and uploads `backend-jar`. `docker-build` and `e2e` declare `needs: [changes, package, frontend]`, so the image build/scan and Playwright start as soon as the JAR and frontend bundle exist instead of waiting for `test`, `testcontainersTest`, and `spotbugsMain` to finish. The test suite continues concurrently inside the required `Backend` job.
-- **Gating:** `package` mirrors the `backend` job's path filters, so documentation-only diffs skip it. A `package` failure skips `docker-build` and `e2e`; because `End-to-End Tests` is a required status check, a skipped required check blocks the merge exactly as a failing `backend` job does today.
-- **Single Source of Truth for the Artifact:** Only `package` uploads `backend-jar`, so the artifact name is unique per run. The OpenAPI contract gate intentionally stays in the `backend` job so the required `Backend` check still covers it; the duplicate `assemble` costs seconds and is served from the Gradle build cache.
+- **Fan-Out From Testing:** `e2e` and `docker-build` declare `needs: [changes, backend, frontend]`. The `ubuntu-26.04` trial leg runs with `continue-on-error: true`, so a failure there does not fail the run or the downstream fan-out; only the required 24.04 leg gates them.
+- **Gating:** The upload runs only on the 24.04 leg, so the `backend-jar` artifact name stays unique per run. A failure on the required leg fails `backend`, which skips `docker-build` and `e2e`.
+- **Contract Gate:** The OpenAPI contract check stays in the `backend` job so the required `Backend` check still covers it.
 
 ## 7. Job: `frontend`
 
@@ -110,7 +110,7 @@ See [`security.yml`](../../.github/workflows/security.yml) for details on:
 
 Runs deep semantic security analysis in parallel for both languages on every nightly run:
 
-- **Java/Kotlin (`build-mode: autobuild`):** CodeQL performs its own Gradle build tracking with `actions: write` permission for Gradle build caching — it does not consume the production JAR from the `package` job, so there is no serialization bottleneck.
+- **Java/Kotlin (`build-mode: autobuild`):** CodeQL performs its own Gradle build tracking with `actions: write` permission for Gradle build caching — it does not consume the production JAR from the `backend` job, so there is no serialization bottleneck.
 - **JavaScript/TypeScript (`build-mode: none`):** Scans the Angular 22 and React Native TypeScript sources directly without building, keeping the analysis lightweight.
 - **Extended Security Queries:** Configured with `queries: security-extended` to perform deep semantic checks for injection flaws, authentication bypasses, path traversals, and cryptographic weaknesses beyond the minimal default suite.
 - **Matrix Naming & SARIF Category Isolation:** Job matrix displays distinct language names (`CodeQL (${{ matrix.language }})`) and emits SARIF results categorized under `/language:${{ matrix.language }}`. Workspace checkout runs with `persist-credentials: false`.
@@ -121,7 +121,7 @@ The standalone workflow has no change-detection dependency — it always scans b
 
 Runs Playwright E2E tests against a real, running backend and database.
 
-- **Decoupled dependencies (`needs: [changes, package, frontend]`)**:
+- **Decoupled dependencies (`needs: [changes, backend, frontend]`)**:
   The E2E job depends on the packaged backend JAR and the production frontend bundle — not on the test suite — so Playwright starts as soon as the artifacts exist while unit/integration tests run concurrently in the required `Backend` job.
 - **Fast Service Readiness:** The PostgreSQL and Redis service containers use `--health-interval 2s --health-timeout 2s --health-retries 30`, so GitHub's `Initialize containers` phase detects readiness within seconds instead of waiting out a 10-second health interval — the E2E job's largest fixed cost.
 - **Single-Stack PR Coverage:** On Pull Requests, any backend or frontend change builds both application artifacts and runs E2E. This intentionally trades the extra untouched-stack build for production integration coverage on every application change. Docker-only changes retain component-specific build behavior.
@@ -141,8 +141,8 @@ Runs authenticated OWASP ZAP API and web scans against a disposable full-stack e
 - **Authenticated API Scan:** Uses `zaproxy/action-api-scan@v0.10.0` with the canonical `api/openapi.json` definition and a bearer token issued by the disposable backend. This enumerates documented public and protected API operations without exposing a production credential.
 - **Production Ingress Scan:** Builds and runs the production frontend Nginx image with the same read-only filesystem and capability restrictions used by Compose, then scans `http://localhost:4200` through its API proxy with headless browser AJAX spidering (`-j`) to discover dynamic Angular SPA routes.
 - **Parameterized Manual Dispatch:** Supports manual `workflow_dispatch` with options for scan scope (`all`, `api_only`, `web_only`), AJAX spider toggle, and quality gate override (`fail_on_findings: false` for triage).
-- **Independent Scan Completion:** API and frontend ZAP scans each continue long enough for the other scan and all report/SARIF uploads to complete. A final aggregate step evaluates active scans while respecting skipped targets and quality gate settings, preserving both coverage and blocking behavior.
-- **Interactive Security Reports:** Archives the API and web HTML, JSON, Markdown, SARIF, and backend logs as the `zap-full-scan` artifact (14-day retention), with structured collapsible Markdown summaries rendered in GitHub Step Summary.
+- **Parallel API & Web Scan Jobs:** A single `build-backend` job produces the JAR, then `dast-api` and `dast-web` run as independent jobs so the two ZAP scans (~160s API, ~196s web) overlap instead of executing serially. Each scan job provisions its own Postgres/Redis services and starts its own disposable backend. A per-job gate evaluates that job's scan outcome while respecting skipped targets and `fail_on_findings`.
+- **Interactive Security Reports:** Archives the API and web HTML, JSON, Markdown, SARIF, and backend logs as the `zap-api-scan` and `zap-web-scan` artifacts (14-day retention), with structured collapsible Markdown summaries rendered in GitHub Step Summary.
 - **GitHub Security (GHAS) Code Scanning Integration:** Translates raw API and web ZAP findings into SARIF via `scripts/zap2sarif.py` and uploads separate `dast-zap-api` and `dast-zap-web` categories. Invalid source reports and SARIF write failures fail the workflow rather than being reported as zero findings.
 
 ## 9b. External Server Security Scan — see `nightly-external-server-scan.yml`
@@ -152,8 +152,8 @@ Runs authenticated OWASP ZAP API and web scans against a disposable full-stack e
 Audits the public external perimeter, exposed ports, HTTP/TLS compliance, and web application attack surface against the production host.
 
 - **Two-Job Parallel Execution:** Dispatches concurrent jobs to optimize compute time from 60–90 minutes down to ~10–15 minutes:
-  - `network-scan`: Scans the target IP with Nmap across configurable port scopes (`top_1000` fast probe, `full_65k` deep audit, or `expected_only`). Automatically flags any ports outside `EXPECTED_PUBLIC_TCP_PORTS: "80,443"` and runs non-intrusive safe service scripts on open ports.
-  - `web-scan`: Tests the public web perimeter (`Nuclei`, `testssl.sh`, and `Nikto`).
+  - `network-scan`: Scans the target IP with Nmap across configurable port scopes (`top_1000` fast probe, `full_65k` deep audit, or `expected_only`). The nightly schedule runs `top_1000`; the Sunday schedule runs the `full_65k` sweep. Automatically flags any ports outside `EXPECTED_PUBLIC_TCP_PORTS: "80,443"` and runs non-intrusive safe service scripts on open ports.
+  - `web-scan`: Runs `Nuclei`, `testssl.sh`, and `Nikto` **concurrently** in one job (the slowest, Nuclei at ~23 min, sets the wall clock) under a 45-minute timeout, so a scan can no longer be cancelled mid-run as it was under the former serial 35-minute budget.
 - **Origin IP & SNI Alignment:** Pins `TARGET_HOST` to `TARGET_IP` in `/etc/hosts` and passes `--add-host` to containerized scanners, eliminating CDN/DNS resolution drift while preserving exact TLS SNI and HTTP `Host` virtual routing.
 - **Port 80 Redirect Verification:** Validates that port 80 enforces an immediate HTTP-to-HTTPS redirect (301/302/307/308) to the target domain, including it in web analysis rather than misclassifying it as a non-HTTP protocol.
 - **Strict Quality Gates:**
@@ -173,7 +173,7 @@ Compiles secure, production-grade container images for the backend and frontend 
 - **Lowercase GHCR Owner Guard:** GHCR rejects mixed/uppercase repository owners (`repository name must be lowercase`). A `Compute Image Refs` step lowercases `github.repository_owner` once and exhales fully-resolved `ghcr.io/<owner>/taskflow-{backend,frontend}` refs as step outputs, which `build-push-action` and the Trivy `image-ref` both consume. This prevents hard-failures for forks/orgs whose casing doesn't match the package's lowercase requirement.
 - **Local Load Only:** Images in CI (`ci.yml`) are built with `load: true`, `push: false`, `provenance: false`, `sbom: false`. GHA Buildx local loading does not support image index structures containing supply-chain annotations, so attestations are omitted. The `pushdockerimage.yml` workflow builds once to a temporary registry scan tag (`:<tag>-scan`) with `provenance: true` / `sbom: true`, scans that exact image on GHCR, and promotes it to `:<tag>` and `:latest` using `docker buildx imagetools create` without rebuilding.
 - **Dynamic Matrix Execution:** Instead of a hardcoded matrix that tries to build both components and fails when compilation is skipped, we use a dynamic `docker_components` output array calculated in the `changes` job. This only compiles and scans images that actually had changes.
-- **Artifact-Driven Fan-In:** The job declares `needs: [changes, package, frontend]` and pulls the backend JAR and frontend bundle from those jobs' artifacts, so image build and Trivy scan no longer wait for the backend test suite to complete.
+- **Artifact-Driven Fan-In:** The job declares `needs: [changes, backend, frontend]` and pulls the backend JAR and frontend bundle from those jobs' artifacts, so image build and Trivy scan no longer wait for the backend test suite to complete.
 - **Smart Job-Level Gating (Skip Optimization):** Job-level conditions respect path filters on both pull requests and ordinary `main` pushes. Documentation-only changes skip heavyweight runners, while scheduled and manual runs retain full coverage. The matrix uses a valid empty array rather than a sentinel component.
 - **Hard-Gate Trivy Scan:** The image is scanned with `exit-code: 1` and `severity: HIGH,CRITICAL` — a blocking gate. This is the intentional counterpart to the report-only Trivy filesystem scan in `security.yml`. If a high/critical CVE is found, the build fails but the SARIF is still uploaded (via `if: always()`).
 - **GHA Cache for BuildKit:** The `cache-from` / `cache-to` directives use GitHub Actions cache (`type=gha`) with scoped keys per component and branch, so PR builds reuse layers from `main` when possible.
@@ -234,8 +234,9 @@ requests created with `GITHUB_TOKEN` require manual workflow approval. The
 current secret is a PAT with repository and workflow access so Renovate can
 write branches, pull requests, issues, statuses, and GitHub Actions updates.
 The workflow includes pre-flight schema validation via
-`renovate-config-validator`, repository caching (`actions/cache`), and
-interactive `workflow_dispatch` inputs (`dryRun`, `logLevel`, `repoCache`).
+`renovate-config-validator`, repository caching (`actions/cache`) for both the
+Renovate repository cache and the validator's npm/npx download, and interactive
+`workflow_dispatch` inputs (`dryRun`, `logLevel`, `repoCache`).
 
 Renovate opens reviewable PRs for all dependency updates. Ordinary patch, pin,
 and digest updates enable platform automerge after required CI checks pass and
@@ -272,8 +273,8 @@ Expo SDK upgrade, select the target `expo` version first, then run `npx expo ins
 --fix`, `npx expo install --check`, `npx expo-doctor`, and the mobile suites.
 
 `.github/workflows/expo-maintenance.yml` owns routine Expo compatibility
-updates. It runs daily (and supports manual `workflow_dispatch` with `dryRun`),
-aligns the SDK-managed dependency set, verifies Expo's compatibility and project
+updates. It runs weekly (Monday) and supports manual `workflow_dispatch` with
+`dryRun`; it aligns the SDK-managed dependency set, verifies Expo's compatibility and project
 health, pre-validates TypeScript (`lint`) and unit tests (`jest`), and creates or
 refreshes one maintenance PR with an itemized package diff summary. It also
 automatically closes obsolete maintenance PRs if the base branch is already
