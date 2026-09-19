@@ -26,6 +26,11 @@ export const options = {
   },
   thresholds: {
     checks: ['rate==1.0'],
+    // Gate real application traffic only. The anonymous session bootstrap
+    // (GET /api/v1/auth/me -> 401 without a cookie, /api/v1/auth/csrf) is the
+    // expected guest state, not a failure; the page.on('metric') handler below
+    // re-tags it as `auth-probe` so it is excluded from this submetric.
+    'browser_http_req_failed{url:app}': ['rate<0.01'],
     // ----- Web vital performance gates — CWV good thresholds -----
     // TTFB <800ms good per web.dev, FCP <1800, LCP <2500
     ...(ENFORCE_CWV
@@ -40,6 +45,19 @@ export const options = {
 
 export default async function () {
   const page = await browser.newPage();
+
+  // Separate the expected anonymous session bootstrap from real application
+  // traffic before navigation. Collapse per-URL cardinality into `app`, then
+  // re-tag /auth/me and /auth/csrf as `auth-probe`; the
+  // browser_http_req_failed{url:app} threshold then gates only app requests.
+  page.on('metric', (metric) => {
+    metric.tag({ name: 'app', matches: [{ url: /.*/ }] });
+    metric.tag({
+      name: 'auth-probe',
+      matches: [{ url: /\/api\/v1\/auth\/(me|csrf)$/ }],
+    });
+  });
+
   let scenario = 'init';
 
   try {

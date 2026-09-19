@@ -1340,6 +1340,8 @@ Each iteration records per-endpoint `Trend` (`catalog_duration`, `barbers_durati
 
 **Selector maintenance:** the a11y refactor replaced `div[role="button"]` cards with semantic `<button>` elements. The test now targets `app-lookbook button`, `#step-panel-2 button[aria-label^="Select stylist:"]`, `#step-panel-3 button[aria-label^="Select date"]`, and scopes time slots to `.time-slots-grid button.slot-picker-btn`. A failed scenario also records a failing `check`, so an aborted wizard run fails the `checks` threshold instead of exiting silently.
 
+**Failure signal:** the built-in `browser_http_req_failed` metric counts the guest session bootstrap's `GET /api/v1/auth/me` 401 as a failure. `page.on('metric')` re-tags `/auth/me` and `/auth/csrf` as `auth-probe`, and the gate is scoped to `browser_http_req_failed{url:app}` so only real application traffic is enforced (the expected guest 401 no longer reads as a defect).
+
 **Verification:** `P1AndP2BenchmarkTest.p2_k6_load_profile` checks `k6/browser.js` for `p(95)<800`, `p(95)<1800`, `p(95)<2500`.
 
 ### Lookbook FlatList Fix — `mobile/src/components/lookbook/LookbookGallery.tsx:52`
