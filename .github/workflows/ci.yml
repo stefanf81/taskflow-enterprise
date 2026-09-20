@@ -242,14 +242,14 @@ jobs:
   ###########################################################
 
   backend:
-    name: Backend
+    name: Backend build
     needs: changes
 
     # A frontend-only change pulls the backend in only on pull requests, where
-    # the required `Backend` check must report and E2E exercises the API. On
-    # `main` pushes E2E is skipped and the backend image only builds when
-    # backend/Docker files change, so a frontend-only push need not run the
-    # ~3-minute Java suite.
+    # E2E exercises the API and the `backend-gate` must report the required
+    # `Backend` context. On `main` pushes E2E is skipped and the backend image
+    # only builds when backend/Docker files change, so a frontend-only push
+    # need not run the ~3-minute Java suite.
     if: |
       needs.changes.outputs.renovate == 'true' ||
       needs.changes.outputs.backend == 'true' ||
@@ -343,6 +343,27 @@ jobs:
             build/test-results
           if-no-files-found: ignore
           retention-days: 14
+
+  # Owns the required "Backend" context. A skipped job reports success to
+  # branch protection, so this gate fails when change detection or the build
+  # failed instead of letting a skipped `backend` job read as a pass.
+  backend-gate:
+    name: Backend
+    needs: [changes, backend]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Assert job results
+        uses: ./.github/actions/require-job-results
+        with:
+          required: ${{ needs.changes.result }}
+          may-skip: ${{ needs.backend.result }}
 
   ###########################################################
   # Backend Package
@@ -448,12 +469,13 @@ jobs:
   ###########################################################
 
   frontend:
-    name: Frontend
+    name: Frontend build
 
     needs: changes
 
     # A backend change pulls the frontend in only on pull requests, where E2E
-    # consumes the production bundle. On `main` pushes E2E is skipped and the
+    # consumes the production bundle and the `frontend-gate` reports the
+    # required `Frontend` context. On `main` pushes E2E is skipped and the
     # frontend image only builds when frontend files changed, so building the
     # bundle for a backend-only push is wasted work (~48s per merge).
     if: |
@@ -550,12 +572,31 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # Owns the required "Frontend" context; see `backend-gate`.
+  frontend-gate:
+    name: Frontend
+    needs: [changes, frontend]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Assert job results
+        uses: ./.github/actions/require-job-results
+        with:
+          required: ${{ needs.changes.result }}
+          may-skip: ${{ needs.frontend.result }}
+
   ###########################################################
   # End-to-End Tests
   ###########################################################
 
   e2e:
-    name: End-to-End Tests
+    name: End-to-End Playwright
 
     needs:
       - changes
@@ -781,6 +822,27 @@ jobs:
             frontend/test-results
           if-no-files-found: ignore
           retention-days: 7
+
+  # Owns the required "End-to-End Tests" context. `e2e` is skipped whenever any
+  # of its needs failed, which branch protection would otherwise read as a pass,
+  # so assert `package`/`frontend`/`e2e` did not fail as well as `changes`.
+  e2e-gate:
+    name: End-to-End Tests
+    needs: [changes, package, frontend, e2e]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Assert job results
+        uses: ./.github/actions/require-job-results
+        with:
+          required: ${{ needs.changes.result }}
+          may-skip: ${{ needs.package.result }} ${{ needs.frontend.result }} ${{ needs.e2e.result }}
 
   ###########################################################
   # Docker

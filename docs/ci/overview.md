@@ -68,8 +68,8 @@ This job handles the Spring Boot backend compilation, testing, and quality gates
 Produces the production JAR artifact consumed by downstream jobs, independently of the test suite.
 
 - **Fan-Out From Testing:** `package` runs `./gradlew assemble` (served from the Gradle build cache, ~35-65s) and uploads `backend-jar`. `docker-build` and `e2e` declare `needs: [changes, package, frontend]`, so the image build/scan and Playwright start as soon as the JAR and frontend bundle exist (measured start ≈65s) instead of waiting ~3 minutes for `test`, `testcontainersTest`, and `spotbugsMain` in the `backend` job. On the PR/dispatch path this buys ~100s of wall-clock (run wall 308s → ~210s).
-- **Gating:** `package` mirrors the `backend` job's path filters, so documentation-only diffs skip it. A `package` failure skips `docker-build` and `e2e`; because `End-to-End Tests` is a required status check, a skipped required check blocks the merge exactly as a failing `backend` job does today.
-- **Single Source of Truth for the Artifact:** Only `package` uploads `backend-jar`, so the artifact name is unique per run. The OpenAPI contract gate intentionally stays in the `backend` job so the required `Backend` check still covers it.
+- **Gating:** `package` mirrors the `backend` job's path filters, so documentation-only diffs skip it. A `package` failure skips `docker-build` and `e2e`; because a skipped job reports *success* to branch protection, the `e2e-gate` treats a failed `package`/`frontend` as a failure so the required `End-to-End Tests` context cannot pass on a silently skipped run.
+- **Single Source of Truth for the Artifact:** Only `package` uploads `backend-jar`, so the artifact name is unique per run. The OpenAPI contract gate intentionally stays in the `backend` job so the required `Backend` gate still covers it.
 
 ## 7. Job: `frontend`
 
@@ -122,11 +122,11 @@ The standalone workflow has no change-detection dependency — it always scans b
 Runs Playwright E2E tests against a real, running backend and database.
 
 - **Decoupled dependencies (`needs: [changes, package, frontend]`)**:
-  The E2E job depends on the packaged backend JAR and the production frontend bundle — not on the test suite — so Playwright starts as soon as the artifacts exist while unit/integration tests run concurrently in the required `Backend` job.
+  The E2E job depends on the packaged backend JAR and the production frontend bundle — not on the test suite — so Playwright starts as soon as the artifacts exist while unit/integration tests run concurrently in the `Backend build` job (whose result the required `Backend` gate mirrors).
 - **Fast Service Readiness:** The PostgreSQL and Redis service containers use `--health-interval 2s --health-timeout 2s --health-retries 30`, so GitHub's `Initialize containers` phase detects readiness within seconds instead of waiting out a 10-second health interval — the E2E job's largest fixed cost.
 - **Single-Stack PR Coverage:** On Pull Requests, any backend or frontend change builds both application artifacts and runs E2E. This intentionally trades the extra untouched-stack build for production integration coverage on every application change. Docker-only changes retain component-specific build behavior.
 - **Production Ingress:** E2E downloads the frontend production bundle, builds the production Nginx image with a BuildKit GHA cache that restores the shared `frontend-main`/`frontend-pr` scopes and writes a dedicated `frontend-e2e` scope, then serves it on port 4200 with the same read-only filesystem and dropped capabilities used by Compose. Playwright sets `E2E_DOCKER=true`, so it tests the production bundle and reverse proxy instead of `ng serve`.
-- **Playwright Browser Cache Keyed by Playwright Version:** Playwright browsers are cached under a key derived from the resolved `playwright-core` version in `frontend/package-lock.json`, so unrelated frontend dependency bumps no longer invalidate ~300 MB of browsers and force `playwright install --with-deps` (12–18s) on every run. The cache key naturally rotates when Playwright itself is upgraded, and `cache-hit` still gates the install step.
+- **Playwright Browser Cache Keyed by Image and Playwright Version:** Playwright browsers are cached under a key derived from the pinned `ubuntu-26.04` image and the resolved `playwright-core` version in `frontend/package-lock.json` (the browser bundles are glibc/OS-specific), so unrelated frontend dependency bumps no longer invalidate ~300 MB of browsers and force `playwright install --with-deps` (12–18s) on every run. The cache key naturally rotates when Playwright or the runner image is upgraded, and `cache-hit` still gates the install step.
 - **Cache-Aware Browser Installation:** Instead of installing all available major browsers (Chromium, Firefox, WebKit), we only install `chromium` (`npx playwright install --with-deps chromium`), which matches the Desktop Chrome browser used in `playwright.config.ts`. The install runs only on a Playwright cache miss, so `--with-deps` does not re-run `apt` on every build.
 - **Direct Playwright Reports Upload:** We upload `spring.log`, `frontend/playwright-report`, and `frontend/test-results` directly using the `upload-artifact` action with default compression and a 7-day retention policy; these text-heavy artifacts compress well, so the default keeps storage down.
 
@@ -300,6 +300,15 @@ in `gitleaks.yml`; neither is currently included in the active ruleset's
 required-status-check list. Major, pin, digest, and lock-file-maintenance
 updates remain reviewable PRs.
 
+The `Backend`, `Frontend`, `End-to-End Tests`, `Android build and test`, and
+`iOS simulator build` contexts are emitted by dedicated aggregator jobs
+(`backend-gate`, `frontend-gate`, `e2e-gate`, `android-gate`, `ios-gate`), not
+by the build jobs themselves. Because a skipped job reports *success* to branch
+protection, the aggregators assert the prerequisite results via the shared
+`require-job-results` action and fail when change detection or a build job
+failed — so a required check cannot go green on a silently skipped run while
+still passing on legitimately skipped ones (e.g. documentation-only PRs).
+
 ## 14. Reusable Building Blocks
 
 Shared step logic lives in local composite actions under `.github/actions/`, so
@@ -313,6 +322,9 @@ the same implementation is not copied across workflows (and cannot drift):
   configures `buildx` with `driver-opts: image=<image>` so the pre-pull and the
   builder cannot diverge.
 - `upload-sarif` — uploads a SARIF file to Code Scanning under a stable category.
+- `require-job-results` — fails unless a required prerequisite result is
+  `success` and every dependent result is `success` or `skipped`; backs the
+  required-status-check aggregator jobs (`required`, `may-skip` inputs).
 
 Callers reference them as `uses: ./.github/actions/<name>`. Job-level concerns
 such as `permissions` and `services` remain in the calling job.
