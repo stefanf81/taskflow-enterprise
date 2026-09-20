@@ -10,17 +10,35 @@ on:
       - "scripts/sync-api-types.js"
       - "package.json"
       - ".github/workflows/react-native-ci.yml"
+      - ".github/actions/npm-ci/**"
+      - ".github/actions/require-job-results/**"
   # Deliberately unfiltered: the repository's branch ruleset requires the
   # "Mobile JavaScript", "Android build and test", and "iOS simulator build"
   # contexts on every pull request. Path filtering here leaves those contexts
   # "Expected" forever on backend/Gradle-only pull requests and blocks them
   # (e.g. Renovate dependency PRs). The `changes` job below decides whether the
   # individual jobs actually do any work.
+  #
+  # The "Android build and test" and "iOS simulator build" contexts are emitted
+  # by the `android-gate` / `ios-gate` aggregators, not the native jobs: the
+  # Android matrix job reports suffixed names ("Android native build
+  # (ubuntu-24.04)") and a skipped matrix job reports the literal
+  # "Android native build (${{ matrix.os }})"; neither can match the required
+  # context exactly. The gates also fail closed when an upstream job fails,
+  # instead of letting a skipped native job read as success.
   pull_request:
     branches: [main]
   schedule:
     - cron: "32 3 * * *"
   workflow_dispatch:
+    inputs:
+      native_scope:
+        description: "Native build scope: fast (single arch) or full (all ABI/arches)"
+        type: choice
+        options:
+          - fast
+          - full
+        default: fast
 
 permissions:
   contents: read
@@ -60,6 +78,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Detect mobile changes
         id: filter
@@ -73,6 +93,8 @@ jobs:
               - 'scripts/sync-api-types.js'
               - 'package.json'
               - '.github/workflows/react-native-ci.yml'
+              - '.github/actions/npm-ci/**'
+              - '.github/actions/require-job-results/**'
 
   javascript:
     name: Mobile JavaScript
@@ -91,6 +113,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -127,9 +151,11 @@ jobs:
           retention-days: 7
 
   android:
-    name: Android build and test (${{ matrix.os }})
+    name: Android native build (${{ matrix.os }})
     needs: javascript
-    if: |
+    # Shared with `ios` via a YAML anchor: native builds run on the nightly,
+    # on manual dispatch, and on same-repo Renovate/Expo-maintenance PRs.
+    if: &native-build-gate |
       github.event_name == 'schedule' ||
         github.event_name == 'workflow_dispatch' ||
         (
@@ -157,10 +183,16 @@ jobs:
     defaults:
       run:
         working-directory: mobile
+    env:
+      # `fast` builds a single ABI/arch for CI; `full` builds every target and
+      # is available only through workflow_dispatch.
+      NATIVE_SCOPE: ${{ inputs.native_scope || 'fast' }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -230,8 +262,6 @@ jobs:
       - name: Run Android app lint, unit tests, and debug build
         working-directory: mobile/android
         shell: bash
-        env:
-          NATIVE_SCOPE: fast
         run: |
           set -euo pipefail
 
@@ -251,7 +281,6 @@ jobs:
             :app:assembleDebug
 
       - name: Upload Android debug APK
-        if: success()
         uses: actions/upload-artifact@v7
         with:
           name: taskflow-android-debug-${{ matrix.os }}
@@ -272,29 +301,56 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # The branch ruleset requires the exact context "Android build and test". The
+  # matrix job above emits suffixed contexts ("Android native build
+  # (ubuntu-24.04)" / "(ubuntu-26.04)"), which can never satisfy it. This
+  # aggregator owns the required context: it always reports (so non-mobile PRs
+  # are not blocked) and fails when a blocking leg or an upstream prerequisite
+  # failed. The 26.04 trial leg is continue-on-error, so `needs.android.result`
+  # stays `success` for a trial-only failure while its own check run still shows
+  # the failure.
+  android-gate:
+    name: Android build and test
+    # Depend on the whole mobile chain so an upstream failure cannot be masked
+    # as a skipped-and-therefore-successful native job.
+    needs: [changes, javascript, android]
+    # Runs even when `android` is skipped (non-mobile PRs) so the required
+    # context is always reported, but not on cancellation (`always()` would
+    # report a bogus success for a superseded run).
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Assert mobile job results
+        uses: ./.github/actions/require-job-results
+        with:
+          required: ${{ needs.changes.result }}
+          may-skip: ${{ needs.javascript.result }} ${{ needs.android.result }}
+
   ios:
-    name: iOS simulator build
+    name: iOS native build
     needs: javascript
-    if: |
-      github.event_name == 'schedule' ||
-        github.event_name == 'workflow_dispatch' ||
-        (
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          (
-            startsWith(github.head_ref, 'renovate/') ||
-            github.head_ref == 'maintenance/expo-sdk'
-          )
-        )
+    if: *native-build-gate
     runs-on: macos-26
     timeout-minutes: 60
     defaults:
       run:
         working-directory: mobile
+    env:
+      # `fast` builds a single arch for CI; `full` builds every target and is
+      # available only through workflow_dispatch.
+      NATIVE_SCOPE: ${{ inputs.native_scope || 'fast' }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -330,11 +386,19 @@ jobs:
             npx expo prebuild --platform ios --no-install
           fi
 
+      # The cached gems compile native extensions against the runner's system
+      # Ruby. macOS image updates can change that Ruby version, so the key must
+      # include it or a stale GEM_HOME would be restored and `pod` would break.
+      - name: Read system Ruby version
+        id: ruby
+        shell: bash
+        run: echo "version=$(ruby -e 'print RUBY_VERSION')" >> "$GITHUB_OUTPUT"
+
       - name: Cache CocoaPods gems
         uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/.gem
-          key: cocoapods-${{ runner.os }}-${{ env.COCOAPODS_VERSION }}
+          key: cocoapods-${{ runner.os }}-ruby${{ steps.ruby.outputs.version }}-${{ env.COCOAPODS_VERSION }}
 
       # Cache the CocoaPods CDN/spec cache so `pod install --no-repo-update`
       # does not re-resolve and re-download pod specs on every run. Keyed on
@@ -382,8 +446,6 @@ jobs:
 
       - name: Build unsigned iOS simulator application
         shell: bash
-        env:
-          NATIVE_SCOPE: fast
         run: |
           set -euo pipefail
 
@@ -399,6 +461,11 @@ jobs:
           )
           if [[ "${NATIVE_SCOPE}" == "fast" ]]; then
             xcodebuild_args+=('ARCHS=arm64' 'ONLY_ACTIVE_ARCH=YES')
+          else
+            # The Expo-generated Debug configuration sets ONLY_ACTIVE_ARCH=YES;
+            # override it so a full build compiles every supported simulator
+            # architecture rather than only the runner's own.
+            xcodebuild_args+=('ARCHS=arm64 x86_64' 'ONLY_ACTIVE_ARCH=NO')
           fi
 
           "${xcodebuild_args[@]}" \
@@ -408,7 +475,6 @@ jobs:
             build
 
       - name: Upload iOS simulator application
-        if: success()
         uses: actions/upload-artifact@v7
         with:
           name: taskflow-ios-simulator
@@ -425,3 +491,25 @@ jobs:
           path: mobile/ios/build/TaskFlowMobile.xcresult
           if-no-files-found: ignore
           retention-days: 7
+
+  # Mirror of `android-gate` for the required "iOS simulator build" context.
+  # `ios` has no matrix, but a job skipped after an upstream failure still
+  # reports success to branch protection, so the gate asserts the prerequisite
+  # results rather than relying on the skipped check.
+  ios-gate:
+    name: iOS simulator build
+    needs: [changes, javascript, ios]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Assert mobile job results
+        uses: ./.github/actions/require-job-results
+        with:
+          required: ${{ needs.changes.result }}
+          may-skip: ${{ needs.javascript.result }} ${{ needs.ios.result }}

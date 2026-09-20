@@ -107,6 +107,7 @@ jobs:
 
             workflows:
               - '.github/workflows/**'
+              - '.github/actions/**'
               - '.github/actionlint.yaml'
 
             docker:

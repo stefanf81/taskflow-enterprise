@@ -1,0 +1,47 @@
+name: Assert required job results
+description: >-
+  Fails unless the required prerequisite result is `success` and every
+  dependent result is `success` or `skipped`. Used by the native-build gates so
+  an upstream failure cannot be masked as a skipped — and therefore
+  successful — required status check.
+inputs:
+  required:
+    description: Result of a job that must have run successfully.
+    required: true
+  may-skip:
+    description: Space-separated results that may be `success` or `skipped`.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Assert results
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        REQUIRED_RESULT: ${{ inputs.required }}
+        OPTIONAL_RESULTS: ${{ inputs.may-skip }}
+      run: |
+        set -euo pipefail
+
+        echo "required=${REQUIRED_RESULT} may-skip='${OPTIONAL_RESULTS}'"
+
+        # Change detection must actually have run: a failed `changes` job
+        # leaves its dependents skipped, and a skipped required check still
+        # reports success to branch protection.
+        if [[ "${REQUIRED_RESULT}" != "success" ]]; then
+          echo "::error::Required prerequisite did not succeed (${REQUIRED_RESULT})"
+          exit 1
+        fi
+
+        # Dependents may legitimately be skipped (e.g. non-mobile PRs), but a
+        # real failure must fail the gate.
+        for result in ${OPTIONAL_RESULTS}; do
+          case "${result}" in
+            success|skipped) ;;
+            *)
+              echo "::error::Dependent job did not succeed (${result})"
+              exit 1
+              ;;
+          esac
+        done
