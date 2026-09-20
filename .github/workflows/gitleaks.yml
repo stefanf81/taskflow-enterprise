@@ -10,8 +10,8 @@ on:
       - main
 
   schedule:
-    # Every night at 02:45 UTC (staggered from other daily workflows)
-    - cron: "45 2 * * *"
+    # Every night at 03:24 UTC (staggered from other daily workflows)
+    - cron: "24 3 * * *"
 
   workflow_dispatch:
 

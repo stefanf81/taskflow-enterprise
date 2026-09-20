@@ -1,9 +1,17 @@
 name: Dependency Maintenance Audit
 
 on:
-  schedule:
-    # Run after the daily Renovate job refreshes its abandonment data.
-    - cron: '0 5 * * 1'
+  # Chained off the daily Renovate run instead of an independent cron: this audit
+  # reads Renovate's Dependency Dashboard, and two separate `schedule` crons have
+  # no ordering guarantee — GitHub's scheduled-run delay varies enough (~20+ min
+  # observed) to let the audit read a stale dashboard from the previous day. A
+  # `workflow_run` trigger fires only after Renovate completes, so the dashboard
+  # is always fresh; the `gate` job below narrows it to Mondays (UTC) to keep the
+  # weekly cadence.
+  workflow_run:
+    workflows: ["Renovate"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -18,8 +26,50 @@ env:
   JAVA_VERSION: '21'
 
 jobs:
+  # `workflow_run` fires on every Renovate completion (daily). The weekly audit
+  # only proceeds on Mondays; `workflow_dispatch` always proceeds.
+  gate:
+    name: Weekly Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+
+    steps:
+      - name: Decide whether to run the weekly audit
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RENOVATE_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RENOVATE_CREATED_AT: ${{ github.event.workflow_run.created_at }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "${RENOVATE_CONCLUSION}" != "success" ]]; then
+            echo "Renovate concluded '${RENOVATE_CONCLUSION}'; skipping the audit."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          dow="$(date -u -d "${RENOVATE_CREATED_AT}" +%u)"
+          if [[ "${dow}" == "1" ]]; then
+            echo "Renovate ran on Monday (UTC); running the weekly audit."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Renovate ran on weekday ${dow}; skipping the weekly audit."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   node-audit:
     name: Check JS/TS Dependency Usage
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -142,6 +192,8 @@ jobs:
 
   gradle-audit:
     name: Check Gradle Dependency Usage
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -251,9 +303,16 @@ jobs:
   report:
     name: Update Dependency Maintenance Issue
     needs:
+      - gate
       - node-audit
       - gradle-audit
-    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    if: |
+      always() &&
+      needs.gate.outputs.run == 'true' &&
+      (
+        github.event_name == 'workflow_run' ||
+        github.event_name == 'workflow_dispatch'
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 10
 

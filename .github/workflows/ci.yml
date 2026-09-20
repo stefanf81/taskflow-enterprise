@@ -12,7 +12,7 @@ on:
   schedule:
     # Nightly regression: build, test, e2e, and Docker build+scan.
     # Security-only scans (CodeQL, Trivy FS) moved to .github/workflows/security.yml.
-    - cron: "0 2 * * *"
+    - cron: "0 3 * * *"
 
   workflow_dispatch:
     inputs:
@@ -244,24 +244,32 @@ jobs:
     name: Backend (${{ matrix.os }})
     needs: changes
 
+    # A frontend-only change pulls the backend in only on pull requests, where
+    # the required `Backend` check must report and E2E exercises the API. On
+    # `main` pushes E2E is skipped and the backend image only builds when
+    # backend/Docker files change, so a frontend-only push need not run the
+    # ~3-minute Java suite.
     if: |
       needs.changes.outputs.renovate == 'true' ||
       needs.changes.outputs.backend == 'true' ||
-      needs.changes.outputs.frontend == 'true' ||
       needs.changes.outputs.docker_backend == 'true' ||
       github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'schedule'
+      github.event_name == 'schedule' ||
+      (
+        needs.changes.outputs.frontend == 'true' &&
+        github.event_name == 'pull_request'
+      )
 
     # Trial matrix ahead of GitHub's `ubuntu-latest` migration to 26.04
     # (announced for Oct 19 - Nov 19, 2026). ubuntu-24.04 is the required leg.
-    # The non-blocking ubuntu-26.04 leg runs on push/schedule/dispatch so
-    # OS-package/toolchain regressions surface nightly, but is skipped on pull
-    # requests to avoid paying for a duplicate leg on every PR. Once 26.04 is
-    # green, drop the matrix and pin `runs-on: ubuntu-26.04`.
+    # The non-blocking ubuntu-26.04 leg runs only on the nightly schedule and
+    # manual dispatch, which still surfaces OS-package/toolchain regressions
+    # within 24h without paying for a duplicate Gradle build+test (~160s) on
+    # every PR or `main` push. Once 26.04 is green, drop the matrix and pin.
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-24.04"]') || fromJSON('["ubuntu-24.04","ubuntu-26.04"]') }}
+        os: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["ubuntu-24.04","ubuntu-26.04"]') || fromJSON('["ubuntu-24.04"]') }}
     continue-on-error: ${{ matrix.os == 'ubuntu-26.04' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -356,13 +364,19 @@ jobs:
     name: Backend Package
     needs: changes
 
+    # Mirrors the `backend` job's gating: the JAR is only consumed by E2E
+    # (PR/schedule/dispatch) and the backend Docker image (backend/Docker
+    # changes), so a frontend-only push does not need to build it.
     if: |
       needs.changes.outputs.renovate == 'true' ||
       needs.changes.outputs.backend == 'true' ||
-      needs.changes.outputs.frontend == 'true' ||
       needs.changes.outputs.docker_backend == 'true' ||
       github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'schedule'
+      github.event_name == 'schedule' ||
+      (
+        needs.changes.outputs.frontend == 'true' &&
+        github.event_name == 'pull_request'
+      )
 
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -445,13 +459,20 @@ jobs:
 
     needs: changes
 
+    # A backend change pulls the frontend in only on pull requests, where E2E
+    # consumes the production bundle. On `main` pushes E2E is skipped and the
+    # frontend image only builds when frontend files changed, so building the
+    # bundle for a backend-only push is wasted work (~48s per merge).
     if: |
       needs.changes.outputs.renovate == 'true' ||
       needs.changes.outputs.frontend == 'true' ||
-      needs.changes.outputs.backend == 'true' ||
       needs.changes.outputs.docker_frontend == 'true' ||
       github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'schedule'
+      github.event_name == 'schedule' ||
+      (
+        needs.changes.outputs.backend == 'true' &&
+        github.event_name == 'pull_request'
+      )
 
     runs-on: ubuntu-latest
     timeout-minutes: 20

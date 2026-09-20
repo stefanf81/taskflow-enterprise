@@ -1,14 +1,8 @@
 name: External Server Security Scan
 
 on:
-  schedule:
-    # Nightly external audit at 03:00 UTC — top-1000 TCP ports (fast).
-    - cron: "0 3 * * *"
-    # Weekly full sweep on Sunday 03:00 UTC — all 65,535 TCP ports.
-    # The two crons share a start time; the discovery step keys off
-    # github.event.schedule to decide the port scope.
-    - cron: "0 3 * * 0"
-
+  # Manual-only. The web/TLS scan takes ~30 minutes and probes the production
+  # perimeter, so it runs on demand rather than on a schedule.
   workflow_dispatch:
     inputs:
       target_ip:
@@ -48,7 +42,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: nightly-external-security-scan-${{ github.ref }}
+  group: external-security-scan-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -72,7 +66,7 @@ jobs:
   ##########################################################
   network-scan:
     name: Network Port Discovery & Surface Audit
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scan_components != 'web_only' }}
+    if: ${{ inputs.scan_components != 'web_only' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -97,9 +91,8 @@ jobs:
 
       - name: Run TCP port discovery with Nmap
         env:
-          # Nightly schedule = top_1000; the Sunday schedule = full_65k.
-          # Manual dispatch honours the input.
-          PORT_SCAN_SCOPE: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 3 * * 0') && 'full_65k' || inputs.port_scan_scope || 'top_1000' }}
+          # Manual dispatch chooses the scope; default to the fast top-1000 probe.
+          PORT_SCAN_SCOPE: ${{ inputs.port_scan_scope || 'top_1000' }}
         run: |
           echo "Scanning target IP: ${TARGET_IP} with scope: ${PORT_SCAN_SCOPE}"
           case "${PORT_SCAN_SCOPE}" in
@@ -357,7 +350,7 @@ jobs:
   ##########################################################
   web-scan:
     name: Web Application & TLS Security Scan
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.scan_components != 'network_only' }}
+    if: ${{ inputs.scan_components != 'network_only' }}
     runs-on: ubuntu-latest
     # The three web/TLS detectors run concurrently inside this job; the
     # slowest (Nuclei, ~23 min) sets the wall clock. 45 min leaves headroom

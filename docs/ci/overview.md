@@ -12,9 +12,9 @@ It also includes a `workflow_dispatch` trigger with a boolean input for manual r
 
 - `run_tests`: Toggles unit tests, integration tests, and Playwright E2E tests across both the frontend and backend on manual runs (default: true).
 
-A daily **schedule** (`0 2 * * *`) runs the full build, test, and Docker build+scan pipeline as a nightly regression suite. Security-only scans (CodeQL, Trivy filesystem) are handled by the separate `.github/workflows/security.yml` workflow (staggered to the same 02:00 UTC window).
+A daily **schedule** (`0 3 * * *`) runs the full build, test, and Docker build+scan pipeline as a nightly regression suite. Security-only scans (CodeQL, Trivy filesystem) are handled by the separate `.github/workflows/security.yml` workflow (staggered within the same 03:00 UTC window).
 
-> **Gating behavior honors path filtering on PRs and ordinary `main` pushes.** A backend or frontend change builds both application artifacts so E2E can exercise their production integration. Docker-only changes continue to build only their affected artifact. Documentation-only pushes skip heavyweight jobs; the daily schedule remains the full regression suite. Unit/integration tests run on application changes, on the daily schedule, and on manual `workflow_dispatch` runs with `run_tests: true`.
+> **Gating behavior honors path filtering on PRs and ordinary `main` pushes.** On pull requests, a backend or frontend change builds both application artifacts so E2E can exercise their production integration and the required checks report. On `main` pushes (where E2E is skipped) only the changed stack builds — a backend-only push no longer builds the frontend bundle, and a frontend-only push no longer runs the Java suite. Docker-only changes continue to build only their affected artifact. Documentation-only pushes skip heavyweight jobs; the daily schedule remains the full regression suite. Unit/integration tests run on application changes, on the daily schedule, and on manual `workflow_dispatch` runs with `run_tests: true`.
 
 **Why:** This runs a comprehensive and rigorous set of quality gates on every PR (subject to the path-filtering rules above), while offering fine-grained toggles for custom manual developer runs.
 
@@ -132,7 +132,7 @@ Runs Playwright E2E tests against a real, running backend and database.
 
 ## 9a. DAST (Dynamic Application Security Testing) — see `dast.yml`
 
-> The OWASP ZAP scan lives in its own dedicated workflow file, [`dast.yml`](../../.github/workflows/dast.yml), and is no longer embedded in `ci.yml`. It is triggered on the daily schedule (staggered to **02:30 UTC**, off the 02:00 herd) and via manual `workflow_dispatch`.
+> The OWASP ZAP scan lives in its own dedicated workflow file, [`dast.yml`](../../.github/workflows/dast.yml), and is no longer embedded in `ci.yml`. It is triggered on the daily schedule (staggered to **03:16 UTC**, within the 03:00 window) and via manual `workflow_dispatch`.
 
 Runs authenticated OWASP ZAP API and web scans against a disposable full-stack environment.
 
@@ -147,12 +147,12 @@ Runs authenticated OWASP ZAP API and web scans against a disposable full-stack e
 
 ## 9b. External Server Security Scan — see `nightly-external-server-scan.yml`
 
-> The external production boundary scan lives in [`.github/workflows/nightly-external-server-scan.yml`](../../.github/workflows/nightly-external-server-scan.yml). It is scheduled nightly (**03:00 UTC**, after DAST and regression suites) and available on-demand via parameterized `workflow_dispatch`.
+> The external production boundary scan lives in [`.github/workflows/nightly-external-server-scan.yml`](../../.github/workflows/nightly-external-server-scan.yml). It is **manual-only** (parameterized `workflow_dispatch`): the web/TLS scan takes ~30 minutes and probes the production perimeter, so it is not scheduled.
 
 Audits the public external perimeter, exposed ports, HTTP/TLS compliance, and web application attack surface against the production host.
 
 - **Two-Job Parallel Execution:** Dispatches concurrent jobs to optimize compute time from 60–90 minutes down to ~10–15 minutes:
-  - `network-scan`: Scans the target IP with Nmap across configurable port scopes (`top_1000` fast probe, `full_65k` deep audit, or `expected_only`). The nightly schedule runs `top_1000`; the Sunday schedule runs the `full_65k` sweep. Automatically flags any ports outside `EXPECTED_PUBLIC_TCP_PORTS: "80,443"` and runs non-intrusive safe service scripts on open ports.
+  - `network-scan`: Scans the target IP with Nmap across configurable port scopes (`top_1000` fast probe, `full_65k` deep audit, or `expected_only`) selected by the manual `port_scan_scope` input (default `top_1000`). Automatically flags any ports outside `EXPECTED_PUBLIC_TCP_PORTS: "80,443"` and runs non-intrusive safe service scripts on open ports.
   - `web-scan`: Runs `Nuclei`, `testssl.sh`, and `Nikto` **concurrently** in one job (the slowest, Nuclei at ~23 min, sets the wall clock) under a 45-minute timeout, so a scan can no longer be cancelled mid-run as it was under the former serial 35-minute budget.
 - **Origin IP & SNI Alignment:** Pins `TARGET_HOST` to `TARGET_IP` in `/etc/hosts` and passes `--add-host` to containerized scanners, eliminating CDN/DNS resolution drift while preserving exact TLS SNI and HTTP `Host` virtual routing.
 - **Port 80 Redirect Verification:** Validates that port 80 enforces an immediate HTTP-to-HTTPS redirect (301/302/307/308) to the target domain, including it in web analysis rather than misclassifying it as a non-HTTP protocol.
