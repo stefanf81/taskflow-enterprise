@@ -30,7 +30,7 @@ jobs:
   # only proceeds on Mondays; `workflow_dispatch` always proceeds.
   gate:
     name: Weekly Gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
 
     outputs:
@@ -70,7 +70,7 @@ jobs:
     name: Check JS/TS Dependency Usage
     needs: gate
     if: needs.gate.outputs.run == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
 
     steps:
@@ -194,7 +194,7 @@ jobs:
     name: Check Gradle Dependency Usage
     needs: gate
     if: needs.gate.outputs.run == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
 
     steps:
@@ -313,7 +313,7 @@ jobs:
         github.event_name == 'workflow_run' ||
         github.event_name == 'workflow_dispatch'
       )
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
 
     permissions:

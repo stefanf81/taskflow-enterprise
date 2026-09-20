@@ -46,7 +46,7 @@ jobs:
   build-backend:
     name: Build Backend JAR
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
 
     steps:
@@ -97,7 +97,7 @@ jobs:
     # Empty inputs.scan_scope (schedule) evaluates to !== 'web_only'.
     if: ${{ inputs.scan_scope != 'web_only' }}
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
 
     permissions:
@@ -328,7 +328,7 @@ jobs:
     # Empty inputs.scan_scope (schedule) evaluates to !== 'api_only'.
     if: ${{ inputs.scan_scope != 'api_only' }}
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
 
     permissions:

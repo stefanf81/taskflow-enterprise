@@ -34,7 +34,7 @@ jobs:
 
   codeql:
     name: CodeQL (${{ matrix.language }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
 
     permissions:
@@ -95,7 +95,7 @@ jobs:
   trivy:
     name: Trivy FS (${{ matrix.component.name }})
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
 
     permissions:

@@ -20,12 +20,10 @@ on:
   # individual jobs actually do any work.
   #
   # The "Android build and test" and "iOS simulator build" contexts are emitted
-  # by the `android-gate` / `ios-gate` aggregators, not the native jobs: the
-  # Android matrix job reports suffixed names ("Android native build
-  # (ubuntu-24.04)") and a skipped matrix job reports the literal
-  # "Android native build (${{ matrix.os }})"; neither can match the required
-  # context exactly. The gates also fail closed when an upstream job fails,
-  # instead of letting a skipped native job read as success.
+  # by the `android-gate` / `ios-gate` aggregators, not the native jobs (which
+  # are named "Android native build" / "iOS native build"). A required check
+  # that is merely skipped after an upstream failure reports success, so the
+  # gates assert the prerequisite results and fail closed instead.
   pull_request:
     branches: [main]
   schedule:
@@ -62,7 +60,7 @@ env:
 jobs:
   changes:
     name: Detect Changes
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
 
     # dorny/paths-filter enumerates PR changed files via the REST API, which
@@ -104,7 +102,7 @@ jobs:
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
       needs.changes.outputs.mobile == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     defaults:
       run:
@@ -151,7 +149,7 @@ jobs:
           retention-days: 7
 
   android:
-    name: Android native build (${{ matrix.os }})
+    name: Android native build
     needs: javascript
     # Shared with `ios` via a YAML anchor: native builds run on the nightly,
     # on manual dispatch, and on same-repo Renovate/Expo-maintenance PRs.
@@ -166,19 +164,10 @@ jobs:
             github.head_ref == 'maintenance/expo-sdk'
           )
         )
-    # Trial matrix ahead of GitHub's `ubuntu-latest` migration to 26.04
-    # (Oct 19 - Nov 19, 2026). 24.04 is required; 26.04 is non-blocking. The
-    # Android SDK/NDK sdkmanager path and JDK/Gradle toolchain are the surfaces
-    # most likely to differ. The 26.04 leg runs on schedule/dispatch only (the
-    # job also runs on renovate/expo PRs, where the required 24.04 leg alone is
-    # enough), avoiding a duplicate Gradle build per PR. Once the 26.04 leg is
-    # green, drop the matrix and pin `runs-on: ubuntu-26.04`.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-24.04"]') || fromJSON('["ubuntu-24.04","ubuntu-26.04"]') }}
-    continue-on-error: ${{ matrix.os == 'ubuntu-26.04' }}
-    runs-on: ${{ matrix.os }}
+    # Pinned to ubuntu-26.04 ahead of GitHub's `ubuntu-latest` migration
+    # (Oct 19 - Nov 19, 2026). The 26.04 image is the single blocking build
+    # rather than a continue-on-error trial leg.
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     defaults:
       run:
@@ -283,7 +272,7 @@ jobs:
       - name: Upload Android debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: taskflow-android-debug-${{ matrix.os }}
+          name: taskflow-android-debug
           path: mobile/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           compression-level: 0
@@ -293,7 +282,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: android-reports-${{ matrix.os }}
+          name: android-reports
           path: |
             mobile/android/app/build/reports/
             mobile/android/build/reports/
@@ -301,14 +290,10 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # The branch ruleset requires the exact context "Android build and test". The
-  # matrix job above emits suffixed contexts ("Android native build
-  # (ubuntu-24.04)" / "(ubuntu-26.04)"), which can never satisfy it. This
-  # aggregator owns the required context: it always reports (so non-mobile PRs
-  # are not blocked) and fails when a blocking leg or an upstream prerequisite
-  # failed. The 26.04 trial leg is continue-on-error, so `needs.android.result`
-  # stays `success` for a trial-only failure while its own check run still shows
-  # the failure.
+  # The branch ruleset requires the exact context "Android build and test".
+  # This aggregator owns it: it always reports (so non-mobile PRs are not
+  # blocked) and fails when an upstream prerequisite failed, rather than
+  # letting a skipped native job read as success.
   android-gate:
     name: Android build and test
     # Depend on the whole mobile chain so an upstream failure cannot be masked
@@ -318,7 +303,7 @@ jobs:
     # context is always reported, but not on cancellation (`always()` would
     # report a bogus success for a superseded run).
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Check out repository
@@ -500,7 +485,7 @@ jobs:
     name: iOS simulator build
     needs: [changes, javascript, ios]
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Check out repository

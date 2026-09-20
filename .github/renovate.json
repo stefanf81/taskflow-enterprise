@@ -80,7 +80,7 @@
       "enabled": false
     },
     {
-      "description": "Runner images are pinned deliberately (ubuntu-24.04) for reproducible native/CI behaviour; ubuntu-latest is migrated by GitHub itself. Do not auto-bump the runner major.",
+      "description": "Runner images are pinned deliberately (ubuntu-26.04) for reproducible native/CI behaviour; ubuntu-latest is migrated by GitHub itself. Do not auto-bump the runner major.",
       "matchManagers": ["github-actions"],
       "matchPackageNames": ["ubuntu"],
       "matchUpdateTypes": ["major"],

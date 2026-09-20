@@ -70,7 +70,7 @@ jobs:
 
   resolve:
     name: Resolve Components
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
       matrix: ${{ steps.build_matrix.outputs.matrix }}
@@ -112,7 +112,7 @@ jobs:
     name: Backend Artifact
     needs: resolve
     if: contains(needs.resolve.outputs.matrix, '"backend"')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -149,7 +149,7 @@ jobs:
     name: Frontend Artifact
     needs: resolve
     if: contains(needs.resolve.outputs.matrix, '"frontend"')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     defaults:
       run:
@@ -205,7 +205,7 @@ jobs:
     # to gate ordering — downloads are individually conditionally skipped).
     if: always() && !contains(needs.*.result, 'failure')
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
 
     strategy:

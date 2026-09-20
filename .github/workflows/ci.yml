@@ -53,7 +53,7 @@ jobs:
 
   changes:
     name: Detect Changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
 
     # dorny/paths-filter enumerates PR changed files via the REST API, which
@@ -180,7 +180,7 @@ jobs:
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch'
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
 
     steps:
@@ -212,10 +212,10 @@ jobs:
     # Without this, a PR that only edits `.github/workflows/**` matches no other
     # path filter and runs no CI at all — a broken workflow would merge
     # unvalidated. actionlint is pinned to a specific image tag; the
-    # ubuntu-26.04 trial label is declared in .github/actionlint.yaml.
+    # ubuntu-26.04 runner label is declared in .github/actionlint.yaml.
     if: needs.changes.outputs.workflows == 'true'
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
 
     steps:
@@ -242,7 +242,7 @@ jobs:
   ###########################################################
 
   backend:
-    name: Backend (${{ matrix.os }})
+    name: Backend
     needs: changes
 
     # A frontend-only change pulls the backend in only on pull requests, where
@@ -261,18 +261,10 @@ jobs:
         github.event_name == 'pull_request'
       )
 
-    # Trial matrix ahead of GitHub's `ubuntu-latest` migration to 26.04
-    # (announced for Oct 19 - Nov 19, 2026). ubuntu-24.04 is the required leg.
-    # The non-blocking ubuntu-26.04 leg runs only on the nightly schedule and
-    # manual dispatch, which still surfaces OS-package/toolchain regressions
-    # within 24h without paying for a duplicate Gradle build+test (~160s) on
-    # every PR or `main` push. Once 26.04 is green, drop the matrix and pin.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["ubuntu-24.04","ubuntu-26.04"]') || fromJSON('["ubuntu-24.04"]') }}
-    continue-on-error: ${{ matrix.os == 'ubuntu-26.04' }}
-    runs-on: ${{ matrix.os }}
+    # Pinned to ubuntu-26.04 ahead of GitHub's `ubuntu-latest` migration
+    # (Oct 19 - Nov 19, 2026). The former 24.04/26.04 trial matrix is collapsed
+    # to a single blocking image.
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
 
     # Single source of truth for "do tests run on this event?" so the build,
@@ -345,7 +337,7 @@ jobs:
         if: always() && env.RUN_TESTS == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: backend-test-results-${{ matrix.os }}
+          name: backend-test-results
           path: |
             build/reports
             build/test-results
@@ -379,7 +371,7 @@ jobs:
         github.event_name == 'pull_request'
       )
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
 
     steps:
@@ -431,7 +423,7 @@ jobs:
         github.event_name == 'schedule'
       )
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
 
     permissions:
@@ -475,7 +467,7 @@ jobs:
         github.event_name == 'pull_request'
       )
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
 
     env:
@@ -563,7 +555,7 @@ jobs:
   ###########################################################
 
   e2e:
-    name: End-to-End Tests (${{ matrix.os }})
+    name: End-to-End Tests
 
     needs:
       - changes
@@ -584,18 +576,10 @@ jobs:
         )
       )
 
-    # Trial matrix for the ubuntu-latest -> 26.04 migration (Oct 19 - Nov 19,
-    # 2026). The 24.04 leg is required; 26.04 is non-blocking. Docker services,
-    # the production Nginx image, and Playwright's apt deps are the surfaces
-    # most likely to differ on 26.04. The 26.04 leg runs on schedule/dispatch
-    # only (not PRs) to avoid doubling Playwright cost on every pull request.
-    # Once green, drop the matrix and pin.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-24.04"]') || fromJSON('["ubuntu-24.04","ubuntu-26.04"]') }}
-    continue-on-error: ${{ matrix.os == 'ubuntu-26.04' }}
-    runs-on: ${{ matrix.os }}
+    # Pinned to ubuntu-26.04 ahead of GitHub's `ubuntu-latest` migration
+    # (Oct 19 - Nov 19, 2026). The former 24.04/26.04 trial matrix is collapsed
+    # to a single blocking image.
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
 
     services:
@@ -747,12 +731,12 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          # Key on matrix.os, not runner.os: the browser bundles are built
-          # against the image's glibc/OS packages, so a 24.04 cache must not be
-          # restored onto the 26.04 trial leg.
-          key: playwright-${{ matrix.os }}-${{ steps.playwright-version.outputs.version }}
+          # Key on the pinned image, not runner.os: the browser bundles are
+          # built against the image's glibc/OS packages, so caches must not be
+          # shared across Ubuntu releases.
+          key: playwright-ubuntu-26.04-${{ steps.playwright-version.outputs.version }}
           restore-keys: |
-            playwright-${{ matrix.os }}-${{ steps.playwright-version.outputs.version }}
+            playwright-ubuntu-26.04-${{ steps.playwright-version.outputs.version }}
 
       # Browsers are restored from the cache above; --with-deps otherwise
       # re-runs apt-get on every build. Install only on a cache miss.
@@ -790,7 +774,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-report-${{ matrix.os }}
+          name: playwright-report
           path: |
             spring.log
             frontend/playwright-report
@@ -822,7 +806,7 @@ jobs:
       !contains(needs.*.result, 'cancelled') &&
       needs.changes.outputs.docker_components != '[]'
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
 
     strategy:

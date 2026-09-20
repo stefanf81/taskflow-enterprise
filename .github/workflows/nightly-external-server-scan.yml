@@ -67,7 +67,7 @@ jobs:
   network-scan:
     name: Network Port Discovery & Surface Audit
     if: ${{ inputs.scan_components != 'web_only' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
 
     steps:
@@ -351,7 +351,7 @@ jobs:
   web-scan:
     name: Web Application & TLS Security Scan
     if: ${{ inputs.scan_components != 'network_only' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # The three web/TLS detectors run concurrently inside this job; the
     # slowest (Nuclei, ~23 min) sets the wall clock. 45 min leaves headroom
     # above the prior 35 min cap that cancelled every nightly run.
