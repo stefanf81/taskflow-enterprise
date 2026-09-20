@@ -343,11 +343,54 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      # Publish the JAR from a single matrix leg so e2e/docker-build have one
-      # unambiguous `backend-jar` artifact. This replaces the former dedicated
-      # `package` job, which re-ran the same `assemble` task.
+  ###########################################################
+  # Backend Package
+  ###########################################################
+
+  # Publishes the production JAR early so `e2e`/`docker-build` can start as soon
+  # as it exists, rather than waiting ~3 minutes for the full test suite in the
+  # `backend` job. The second `assemble` is served from the Gradle build cache
+  # (~35-65s) and buys ~100s of wall-clock on the PR/dispatch critical path
+  # (measured: consumers start at ~65s vs ~185s, run wall 308s -> ~210s).
+  package:
+    name: Backend Package
+    needs: changes
+
+    if: |
+      needs.changes.outputs.renovate == 'true' ||
+      needs.changes.outputs.backend == 'true' ||
+      needs.changes.outputs.frontend == 'true' ||
+      needs.changes.outputs.docker_backend == 'true' ||
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule'
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: false
+
+      - name: Build JAR
+        run: |
+          ./gradlew \
+            --parallel \
+            --build-cache \
+            assemble \
+            --stacktrace
+
       - name: Upload Backend JAR
-        if: matrix.os == 'ubuntu-24.04'
         uses: actions/upload-artifact@v7
         with:
           name: backend-jar
@@ -502,7 +545,7 @@ jobs:
 
     needs:
       - changes
-      - backend
+      - package
       - frontend
 
     if: |
@@ -748,7 +791,7 @@ jobs:
 
     needs:
       - changes
-      - backend
+      - package
       - frontend
 
     if: |
