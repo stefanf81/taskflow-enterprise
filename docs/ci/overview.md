@@ -151,7 +151,7 @@ Runs authenticated OWASP ZAP API and web scans against a disposable full-stack e
 
 Audits the public external perimeter, exposed ports, HTTP/TLS compliance, and web application attack surface against the production host.
 
-- **Two-Job Parallel Execution:** Dispatches concurrent jobs to optimize compute time from 60–90 minutes down to ~10–15 minutes:
+- **Two-Job Parallel Execution:** Runs the network and web scans as concurrent jobs, and the three web/TLS detectors concurrently within the web job, so the wall clock is bounded by the slowest scanner (Nuclei, ~23 min; observed end-to-end web scan ~30 min) instead of the former serial sum of 60–90 minutes:
   - `network-scan`: Scans the target IP with Nmap across configurable port scopes (`top_1000` fast probe, `full_65k` deep audit, or `expected_only`) selected by the manual `port_scan_scope` input (default `top_1000`). Automatically flags any ports outside `EXPECTED_PUBLIC_TCP_PORTS: "80,443"` and runs non-intrusive safe service scripts on open ports.
   - `web-scan`: Runs `Nuclei`, `testssl.sh`, and `Nikto` **concurrently** in one job (the slowest, Nuclei at ~23 min, sets the wall clock) under a 45-minute timeout, so a scan can no longer be cancelled mid-run as it was under the former serial 35-minute budget.
 - **Origin IP & SNI Alignment:** Pins `TARGET_HOST` to `TARGET_IP` in `/etc/hosts` and passes `--add-host` to containerized scanners, eliminating CDN/DNS resolution drift while preserving exact TLS SNI and HTTP `Host` virtual routing.
