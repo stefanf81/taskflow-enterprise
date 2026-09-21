@@ -2,10 +2,12 @@ name: Expo SDK Maintenance
 
 on:
   schedule:
-    # Weekly on Monday 03:47 UTC. Expo publishes SDK-compatible patches on a
+    # Fires Sunday 22:47 UTC to land execution ~Monday 03:47 UTC (GitHub
+    # scheduler lag ~5h; the day-of-week is shifted back one to preserve the
+    # Monday execution day). Expo publishes SDK-compatible patches on a
     # multi-week cadence, so a daily alignment run mostly re-validated an
     # already-aligned tree.
-    - cron: "47 3 * * 1"
+    - cron: "47 22 * * 0"
   workflow_dispatch:
     inputs:
       dryRun:

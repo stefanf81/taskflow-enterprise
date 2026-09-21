@@ -2,10 +2,12 @@ name: Delete Old GitHub Actions Caches
 
 on:
   schedule:
-    # Weekly on Sunday at 03:04 UTC (staggered from other daily workflows).
+    # Fires Saturday 22:04 UTC to land execution ~Sunday 03:04 UTC (GitHub
+    # scheduler lag ~5h; the day-of-week is shifted back one to preserve the
+    # Sunday execution day).
     # Caches keyed on lockfiles are long-lived; a daily sweep bought nothing
     # over the 3-day retention cutoff.
-    - cron: "4 3 * * 0"
+    - cron: "4 22 * * 6"
   workflow_dispatch:
 
 permissions:

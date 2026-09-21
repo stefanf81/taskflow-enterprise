@@ -10,8 +10,9 @@ on:
       - main
 
   schedule:
-    # Every night at 03:24 UTC (staggered from other daily workflows)
-    - cron: "24 3 * * *"
+    # Fires 22:24 UTC to land execution ~03:24 UTC (GitHub scheduler lag ~5h),
+    # staggered from the other nightly workflows.
+    - cron: "24 22 * * *"
 
   workflow_dispatch:
 

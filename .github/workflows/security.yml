@@ -2,7 +2,8 @@ name: Nightly Security Scans
 
 on:
   schedule:
-    - cron: '8 3 * * *'
+    # Fires 22:08 UTC to land execution ~03:08 UTC (GitHub scheduler lag ~5h).
+    - cron: '8 22 * * *'
 
   workflow_dispatch:
 

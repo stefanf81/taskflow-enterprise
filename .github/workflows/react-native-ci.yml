@@ -27,7 +27,8 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: "32 3 * * *"
+    # Fires 22:32 UTC to land execution ~03:32 UTC (GitHub scheduler lag ~5h).
+    - cron: "32 22 * * *"
   workflow_dispatch:
     inputs:
       native_scope:

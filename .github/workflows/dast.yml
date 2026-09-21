@@ -21,7 +21,8 @@ on:
         default: true
 
   schedule:
-    - cron: "16 3 * * *"
+    # Fires 22:16 UTC to land execution ~03:16 UTC (GitHub scheduler lag ~5h).
+    - cron: "16 22 * * *"
 
 permissions:
   contents: read

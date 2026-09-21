@@ -12,7 +12,12 @@ on:
   schedule:
     # Nightly regression: build, test, e2e, and Docker build+scan.
     # Security-only scans (CodeQL, Trivy FS) moved to .github/workflows/security.yml.
-    - cron: "0 3 * * *"
+    #
+    # Compensated for GitHub's scheduler lag: this repo's scheduled workflows
+    # consistently execute ~5h after their cron time (observed 4:25-5:30h), so
+    # the cron fires at 22:00 UTC to land execution in the intended 03:00 UTC
+    # window. Revisit if the observed lag changes.
+    - cron: "0 22 * * *"
 
   workflow_dispatch:
     inputs:

@@ -12,7 +12,7 @@ It also includes a `workflow_dispatch` trigger with a boolean input for manual r
 
 - `run_tests`: Toggles unit tests, integration tests, and Playwright E2E tests across both the frontend and backend on manual runs (default: true).
 
-A daily **schedule** (`0 3 * * *`) runs the full build, test, and Docker build+scan pipeline as a nightly regression suite. Security-only scans (CodeQL, Trivy filesystem) are handled by the separate `.github/workflows/security.yml` workflow (staggered within the same 03:00 UTC window).
+A daily **schedule** (`0 22 * * *`) runs the full build, test, and Docker build+scan pipeline as a nightly regression suite. Security-only scans (CodeQL, Trivy filesystem) are handled by the separate `.github/workflows/security.yml` workflow (staggered within the same window). All nightly crons fire at `22:00–22:59` UTC so that execution lands in the intended `03:00–03:59` UTC window: GitHub's scheduler for this repository consistently executes scheduled workflows ~5 hours after their cron time (observed 4:25–5:30h), and the crons are shifted 5 hours earlier to compensate. Revisit the shift if the observed lag changes.
 
 > **Gating behavior honors path filtering on PRs and ordinary `main` pushes.** On pull requests, a backend or frontend change builds both application artifacts so E2E can exercise their production integration and the required checks report. On `main` pushes (where E2E is skipped) only the changed stack builds — a backend-only push no longer builds the frontend bundle, and a frontend-only push no longer runs the Java suite. Docker-only changes continue to build only their affected artifact. Documentation-only pushes skip heavyweight jobs; the daily schedule remains the full regression suite. Unit/integration tests run on application changes, on the daily schedule, and on manual `workflow_dispatch` runs with `run_tests: true`.
 
@@ -132,7 +132,7 @@ Runs Playwright E2E tests against a real, running backend and database.
 
 ## 9a. DAST (Dynamic Application Security Testing) — see `dast.yml`
 
-> The OWASP ZAP scan lives in its own dedicated workflow file, [`dast.yml`](../../.github/workflows/dast.yml), and is no longer embedded in `ci.yml`. It is triggered on the daily schedule (staggered to **03:16 UTC**, within the 03:00 window) and via manual `workflow_dispatch`.
+> The OWASP ZAP scan lives in its own dedicated workflow file, [`dast.yml`](../../.github/workflows/dast.yml), and is no longer embedded in `ci.yml`. It is triggered on the daily schedule (cron `16 22 * * *`, executing ~**03:16 UTC** after the ~5h scheduler lag) and via manual `workflow_dispatch`.
 
 Runs authenticated OWASP ZAP API and web scans against a disposable full-stack environment.
 
