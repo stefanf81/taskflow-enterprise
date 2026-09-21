@@ -300,7 +300,14 @@ jobs:
       - name: Build and Test
         if: env.RUN_TESTS == 'true'
         env:
-          GRADLE_CACHE_FLAG: ${{ github.event_name == 'schedule' && '--no-build-cache' || '--build-cache' }}
+          # `--no-build-cache` whenever executing tests is the explicit point of
+          # the run — the nightly schedule, or a manual dispatch with
+          # run_tests=true. Otherwise setup-gradle's restored build cache serves
+          # `test`, `testcontainersTest`, and `spotbugsMain` FROM-CACHE and no
+          # test actually runs (verified: manual dispatch completed in ~18s with
+          # all three FROM-CACHE). PR/push runs keep the cache for speed; the
+          # nightly remains the authoritative full execution.
+          GRADLE_CACHE_FLAG: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)) && '--no-build-cache' || '--build-cache' }}
         run: |
           ./gradlew \
             --parallel \
