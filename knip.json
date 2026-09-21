@@ -16,7 +16,7 @@
         "e2e/jest.config.js",
         "plugins/*.js"
       ],
-      "ignoreDependencies": ["@babel/core", "babel-jest"],
+      "ignoreDependencies": ["@babel/core", "babel-jest", "expo-doctor"],
       "ignoreBinaries": ["eas"]
     },
     "shared/schemas": {}

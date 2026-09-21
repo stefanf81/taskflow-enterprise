@@ -61,7 +61,9 @@ jobs:
         run: |
           npx expo install --fix
           npx expo install --check
-          npx expo-doctor
+          # expo-doctor is a devDependency (pinned), so `--no-install` runs the
+          # copy installed by `npm ci` instead of downloading it every run.
+          npx --no-install expo-doctor
 
       - name: Validate mobile TypeScript and unit tests
         working-directory: mobile

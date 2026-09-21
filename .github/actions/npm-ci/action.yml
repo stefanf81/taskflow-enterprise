@@ -58,7 +58,14 @@ runs:
         if [[ "$IGNORE_SCRIPTS" == "true" ]]; then
           args+=(--ignore-scripts)
         fi
-        npm ci "${args[@]}"
+        # `npm ci` prints `npm warn deprecated` for transitively-pinned
+        # unmaintained packages (glob 6/7/8, rimraf 2/4, inflight, abab,
+        # domexception, whatwg-encoding) pulled in by Jest 29 / jsdom 20 /
+        # detox->bunyan. Those majors are deliberately held back, so the
+        # warnings are not actionable in normal installs. Filter only those
+        # lines from stderr; every other warning and error still surfaces.
+        # (The dependency-health audit keeps them - deprecation is signal there.)
+        npm ci "${args[@]}" 2> >(grep -v '^npm warn deprecated' >&2)
 
     - name: Install ${{ inputs.package-path }}
       shell: bash
@@ -72,4 +79,11 @@ runs:
         if [[ "$IGNORE_SCRIPTS" == "true" ]]; then
           args+=(--ignore-scripts)
         fi
-        npm ci "${args[@]}"
+        # `npm ci` prints `npm warn deprecated` for transitively-pinned
+        # unmaintained packages (glob 6/7/8, rimraf 2/4, inflight, abab,
+        # domexception, whatwg-encoding) pulled in by Jest 29 / jsdom 20 /
+        # detox->bunyan. Those majors are deliberately held back, so the
+        # warnings are not actionable in normal installs. Filter only those
+        # lines from stderr; every other warning and error still surfaces.
+        # (The dependency-health audit keeps them - deprecation is signal there.)
+        npm ci "${args[@]}" 2> >(grep -v '^npm warn deprecated' >&2)
