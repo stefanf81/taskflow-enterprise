@@ -84,12 +84,6 @@ jobs:
         id: filter
         uses: dorny/paths-filter@v4
         with:
-          # `github.event.before` is empty on workflow_dispatch, which makes the
-          # action emit "'before' field is missing in event payload" and fall
-          # back to comparing against the last commit. Pass the parent of the
-          # dispatched ref explicitly so the comparison is deterministic and the
-          # warning is gone (push events keep using `before` unchanged).
-          base: ${{ github.event.before || format('{0}~1', github.sha) }}
           filters: |
             mobile:
               - 'mobile/**'
