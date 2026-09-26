@@ -15,7 +15,7 @@ logback = "1.6.3"
 # Jackson 2.x and 3.x remain separate families and must stay internally aligned.
 jackson2 = "2.22.3"
 jackson-annotations = "2.22"
-jackson3 = "3.2.2"
+jackson3 = "3.2.3"
 netty = "4.2.18.Final"
 log4j2 = "2.26.1"
 # Tomcat embed — pinned above Spring Boot 4.1.1's vulnerable 11.0.24 release;
