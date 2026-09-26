@@ -7,7 +7,9 @@
     ":maintainLockFilesWeekly"
   ],
   "branchPrefix": "renovate/",
-  "rebaseWhen": "behind-base-branch",
+  "rebaseWhen": "auto",
+  "schedule": ["before 6am on monday"],
+  "updateNotScheduled": false,
   "dependencyDashboard": true,
   "labels": ["dependencies"],
   "gitAuthor": "stefanf81 <17823566+stefanf81@users.noreply.github.com>",
@@ -31,8 +33,7 @@
       "minimumReleaseAge": "3 days",
       "automerge": true,
       "automergeType": "pr",
-      "platformAutomerge": true,
-      "rebaseWhen": "behind-base-branch"
+      "platformAutomerge": true
     },
     {
       "description": "Minor updates require manual review; hold 3 days to catch immediate regressions",
@@ -291,6 +292,18 @@
       "matchUpdateTypes": ["major"],
       "enabled": false,
       "groupName": "Blocked on Expo SDK upgrade"
+    },
+    {
+      "description": "Batch all patch/pin/digest updates into a single automerged PR",
+      "matchUpdateTypes": ["patch", "pin", "digest"],
+      "groupName": "all patch updates",
+      "groupSlug": "all-patch"
+    },
+    {
+      "description": "Batch all minor updates into a single PR for manual review",
+      "matchUpdateTypes": ["minor"],
+      "groupName": "all minor updates",
+      "groupSlug": "all-minor"
     }
   ]
 }
