@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code local c=redis.call('incr',KEYS[1]); if c==1 then redis.call('pexpire',KEYS[1],ARGV[1]) end; return c}
  *
  * <p>Requires a running Redis at localhost:6379 (docker-compose redis or
- * {@code docker run -p 6379:6379 redis:8.10.1-alpine}).
+ * {@code docker run -p 6379:6379 redis:8.10.2-alpine}).
  *
  * <p>Run:
  * <pre>{@code ./gradlew benchmarkTest --tests "*RateLimiterBenchmarkTest*"}</pre>
@@ -71,7 +71,7 @@ class RateLimiterBenchmarkTest {
             redisTemplate.getConnectionFactory().getConnection().serverCommands().flushAll();
         } catch (Exception e) {
             // If Redis not available, fail fast with clear message
-            throw new IllegalStateException("Redis not available at localhost:6379 — start with `docker run -p 6379:6379 redis:8.10.1-alpine`", e);
+            throw new IllegalStateException("Redis not available at localhost:6379 — start with `docker run -p 6379:6379 redis:8.10.2-alpine`", e);
         }
     }
 
@@ -126,7 +126,7 @@ class RateLimiterBenchmarkTest {
     void benchmark_twoStep_vs_lua_throughput() {
         System.out.println("\n" + "=".repeat(80));
         System.out.println("  ▸ RATE LIMITER THROUGHPUT: INCR+EXPIRE (2 RTT) vs LUA EVAL (1 RTT)");
-        System.out.println("  Redis: localhost:6379 (docker: redis:8.10.1-alpine)");
+        System.out.println("  Redis: localhost:6379 (docker: redis:8.10.2-alpine)");
         System.out.println("  Iterations: " + MEASUREMENT + "  warmup: " + WARMUP);
         System.out.println("=".repeat(80));
 

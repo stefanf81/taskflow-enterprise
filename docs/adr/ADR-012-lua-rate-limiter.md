@@ -48,4 +48,4 @@ Conditional on `app.rate-limit.enabled` (`@ConditionalOnProperty`, disabled by d
 
 ## Verification
 
-Benchmark: `src/test/java/com/example/taskflow/benchmark/RateLimiterBenchmarkTest.java` (Redis `8.10.1-alpine` at `localhost:6379`, H2 profile, `@Tag("benchmark")`) compares two-step vs Lua path and asserts TTL and burst atomicity. `P1AndP2BenchmarkTest` checks `RateLimiterConfig.java` for `EVAL` Lua shape and `HIGHEST_PRECEDENCE+20`.
+Benchmark: `src/test/java/com/example/taskflow/benchmark/RateLimiterBenchmarkTest.java` (Redis `8.10.2-alpine` at `localhost:6379`, H2 profile, `@Tag("benchmark")`) compares two-step vs Lua path and asserts TTL and burst atomicity. `P1AndP2BenchmarkTest` checks `RateLimiterConfig.java` for `EVAL` Lua shape and `HIGHEST_PRECEDENCE+20`.

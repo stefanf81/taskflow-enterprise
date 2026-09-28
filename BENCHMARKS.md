@@ -1040,7 +1040,7 @@ return c
 
 `KEYS[1]=rate_limit:{ip}:{auth|api}` `ARGV[1]=60000` (1-minute fixed window). `DefaultRedisScript<Long>` executed via `StringRedisTemplate.execute()`. Filter runs at `Ordered.HIGHEST_PRECEDENCE + 20` (before Spring Security JWT/BCrypt), skips `/actuator/health/**` probes.
 
-**Benchmark:** `src/test/java/com/example/taskflow/benchmark/RateLimiterBenchmarkTest.java` — Redis `8.10.1-alpine` at `localhost:6379`, `WARMUP 2_000` / `MEASUREMENT 10_000`, distinct keys per op (each `INCR` starts at 1 → `PEXPIRE`).
+**Benchmark:** `src/test/java/com/example/taskflow/benchmark/RateLimiterBenchmarkTest.java` — Redis `8.10.2-alpine` at `localhost:6379`, `WARMUP 2_000` / `MEASUREMENT 10_000`, distinct keys per op (each `INCR` starts at 1 → `PEXPIRE`).
 
 | Strategy | Avg | Throughput | RTT | Correctness |
 | :--- | ---: | ---: | :--- | :--- |
