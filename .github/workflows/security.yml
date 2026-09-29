@@ -154,7 +154,9 @@ jobs:
       # Cache note: trivy-action caches the ~970 MB vulnerability DB under a
       # per-day key (`cache-trivy-<date>`). All four matrix legs and the CI
       # image scans share that key; `trivy-cache-retention` below retains the
-      # newest default-branch entry per cache version to bound storage use.
+      # newest default-branch entry per cache family and version to bound
+      # storage use. The ~930 MB Java index DB the backend image scan needs is
+      # cached separately (`trivy-java-db-*`, see ci.yml) and pruned there too.
       - name: Trivy Filesystem Scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -189,11 +191,15 @@ jobs:
   # Trivy DB cache retention
   ###########################################################
 
-  # Keep the newest existing default-branch DB per cache version. Selecting
-  # from the API snapshot preserves a fallback when scans fail to save or a
-  # run crosses midnight. Trivy still checks database freshness on each scan.
-  # Wait for all matrix post-steps before taking the snapshot; branch/PR
-  # caches and entries created after the snapshot are not deletion candidates.
+  # Two Trivy DB caches rotate on a schedule: trivy-action's vulnerability DB
+  # (`cache-trivy-<date>`, daily) and the Java index DB the backend image scan
+  # caches separately (`trivy-java-db-<version>-<3-day bucket>`, ci.yml). Keep
+  # the newest existing default-branch entry per family and cache version.
+  # Selecting from the API snapshot preserves a fallback when scans fail to
+  # save or a run crosses midnight. Trivy still checks database freshness on
+  # each scan. Wait for all matrix post-steps before taking the snapshot;
+  # branch/PR caches and entries created after the snapshot are not deletion
+  # candidates.
   trivy-cache-retention:
     name: Prune stale Trivy DB caches
     needs: trivy
@@ -216,14 +222,20 @@ jobs:
 
           snapshot="$(gh api --method GET --paginate --slurp \
             "/repos/$REPO/actions/caches" \
-            -f per_page=100 -f key=cache-trivy- -f ref="$DEFAULT_REF")"
+            -f per_page=100 -f ref="$DEFAULT_REF")"
           # Cache versions encode path/compression compatibility. Retain one
-          # replacement within each version, never merely a matching date key.
+          # replacement within each family/version, never merely a matching
+          # date key.
           stale_ids="$(jq -r --arg ref "$DEFAULT_REF" '
+            def family:
+              if (.key | test("^cache-trivy-[0-9]{4}-[0-9]{2}-[0-9]{2}$")) then "vuln-db"
+              elif (.key | startswith("trivy-java-db-")) then "java-db"
+              else null end;
             [.[].actions_caches[]
               | select(.ref == $ref)
-              | select(.key | test("^cache-trivy-[0-9]{4}-[0-9]{2}-[0-9]{2}$"))]
-            | group_by(.version)[]
+              | {id, version, created_at, family: family}
+              | select(.family != null)]
+            | group_by([.family, .version])[]
             | sort_by([.created_at, .id])
             | .[0:-1][] | .id
           ' <<< "$snapshot")"

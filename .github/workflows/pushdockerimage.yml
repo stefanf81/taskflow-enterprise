@@ -237,6 +237,10 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "backend_image=ghcr.io/${owner}/taskflow-backend" >> "$GITHUB_OUTPUT"
           echo "frontend_image=ghcr.io/${owner}/taskflow-frontend" >> "$GITHUB_OUTPUT"
+          # Trivy's Java index DB is refreshed on a 3-day window
+          # (trivy-java-db `updateInterval`). Bucket the key the same way so a
+          # fresh DB is downloaded once per window and reused otherwise.
+          echo "trivy_java_db_bucket=$(( $(date -u +%s) / 259200 ))" >> "$GITHUB_OUTPUT"
 
       ##########################################################
       # Download build artifacts (only for the matching component)
@@ -308,6 +312,26 @@ jobs:
             APT_BUST=${{ github.run_id }}-${{ github.run_attempt }}
 
       ##########################################################
+      # Trivy Java index DB (backend image only)
+      #
+      # Trivy fetches a separate ~930 MiB Java index DB to scan the JARs in
+      # the backend image. trivy-action's own cache never contains it (its
+      # key is seeded by the lightweight FS scans), so cache
+      # `<cache-dir>/java-db` separately — it carries its own metadata and
+      # Trivy skips the download while `NextUpdate` (3 days) is in the future.
+      ##########################################################
+
+      - name: Restore Trivy Java DB cache
+        if: matrix.component == 'backend' && !inputs.skip_scan
+        id: trivy-java-db-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ github.workspace }}/.cache/trivy/java-db
+          key: trivy-java-db-${{ env.TRIVY_VERSION }}-${{ steps.images.outputs.trivy_java_db_bucket }}
+          restore-keys: |
+            trivy-java-db-${{ env.TRIVY_VERSION }}-
+
+      ##########################################################
       # Hard-gate scan (HIGH/CRITICAL, exit-code: 1)
       #
       # Scans the published scan image BEFORE promoting. If the scan
@@ -328,6 +352,15 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: 1
+
+      - name: Save Trivy Java DB cache
+        # Best effort: a concurrent job may have seeded the same bucket.
+        continue-on-error: true
+        if: always() && matrix.component == 'backend' && !inputs.skip_scan && steps.trivy-java-db-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ github.workspace }}/.cache/trivy/java-db
+          key: trivy-java-db-${{ env.TRIVY_VERSION }}-${{ steps.images.outputs.trivy_java_db_bucket }}
 
       ##########################################################
       # Promote (only runs if all previous steps succeeded — meaning
