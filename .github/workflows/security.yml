@@ -151,12 +151,12 @@ jobs:
       # blocking every PR on unshipped source CVEs, or stop blocking on
       # vulnerable images entirely. Keep them different on purpose.
       #
-      # Cache note: trivy-action caches the ~970 MB vulnerability DB under a
-      # per-day key (`cache-trivy-<date>`). All four matrix legs and the CI
-      # image scans share that key; `trivy-cache-retention` below retains the
-      # newest default-branch entry per cache family and version to bound
-      # storage use. The ~930 MB Java index DB the backend image scan needs is
-      # cached separately (`trivy-java-db-*`, see ci.yml) and pruned there too.
+      # Cache note: trivy-action caches the vulnerability DB under a per-day
+      # key (`cache-trivy-<date>`) and this job owns that key — image scans
+      # restore it with `cache: false` so they cannot write a stale `java-db/`
+      # back into it. The Java index DB is cached separately
+      # (`trivy-java-db-*`, see ci.yml). `trivy-cache-retention` below keeps
+      # the newest default-branch entry per cache family and version.
       - name: Trivy Filesystem Scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:

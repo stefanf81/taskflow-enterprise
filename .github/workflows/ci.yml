@@ -919,9 +919,11 @@ jobs:
           echo "owner=$owner" >> "$GITHUB_OUTPUT"
           echo "backend_image=ghcr.io/${owner}/taskflow-backend" >> "$GITHUB_OUTPUT"
           echo "frontend_image=ghcr.io/${owner}/taskflow-frontend" >> "$GITHUB_OUTPUT"
-          # Trivy's Java index DB is refreshed on a 3-day window
-          # (trivy-java-db `updateInterval`). Bucket the key the same way so a
-          # fresh DB is downloaded once per window and reused otherwise.
+          # Trivy DB cache keys. `trivy_db_date` mirrors trivy-action's own
+          # vulnerability-DB key (`cache-trivy-<date>`); the Java index DB is
+          # refreshed on a 3-day window (trivy-java-db `updateInterval`), so
+          # bucket its key the same way.
+          echo "trivy_db_date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
           echo "trivy_java_db_bucket=$(( $(date -u +%s) / 259200 ))" >> "$GITHUB_OUTPUT"
 
       ##########################################################
@@ -990,16 +992,31 @@ jobs:
             APT_BUST=${{ github.run_id }}-${{ github.run_attempt }}
 
       ##########################################################
-      # Trivy Java index DB (backend image only)
+      # Trivy DB caches (restored here; the action's own cache is disabled)
       #
-      # Trivy fetches a separate ~930 MiB Java index DB to scan the JARs in
-      # the backend image. trivy-action caches it under `cache-trivy-<date>`,
-      # but that key is first created by the lightweight FS scans in
-      # security.yml, which never download the Java DB — so the entry never
-      # contains it and every backend image scan re-downloads it. Cache
-      # `<cache-dir>/java-db` separately; it carries its own metadata and
-      # Trivy skips the download while `NextUpdate` (3 days) is in the future.
+      # trivy-action caches the whole `.cache/trivy` tree under
+      # `cache-trivy-<date>`. That archive can carry a stale `java-db/`, and
+      # because the action restores it *after* any restore we do, it would
+      # overwrite a fresh Java DB and force a ~930 MiB re-download. So the
+      # action runs with `cache: false` and we restore in a controlled order:
+      #
+      #   1. the vulnerability DB from trivy-action's key (shared with the FS
+      #      scans in security.yml), then
+      #   2. the Java index DB (backend only) on top of it.
+      #
+      # The Java DB carries its own metadata (`NextUpdate`, 3 days), so Trivy
+      # skips the download while it is fresh. The vulnerability DB is not
+      # written back from this job — the FS scans own that cache key.
       ##########################################################
+
+      - name: Restore Trivy vulnerability DB cache
+        id: trivy-vuln-db-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ github.workspace }}/.cache/trivy
+          key: cache-trivy-${{ steps.images.outputs.trivy_db_date }}
+          restore-keys: |
+            cache-trivy-
 
       - name: Restore Trivy Java DB cache
         if: matrix.component == 'backend'
@@ -1030,6 +1047,10 @@ jobs:
           image-ref: ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:${{ env.IMAGE_TAG }}
 
           scan-type: image
+
+          # DB caches are restored above; the action's own cache would clobber
+          # the fresh Java DB — see the cache section note.
+          cache: false
 
           format: sarif
           output: trivy-results.sarif
