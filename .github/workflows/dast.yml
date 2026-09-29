@@ -62,10 +62,13 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
+      # Read-only: CI's `backend` job owns the Gradle cache writes. DAST runs
+      # close to the nightly CI window, so a concurrent write here would race
+      # the same keys.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          cache-read-only: false
+          cache-read-only: true
 
       - name: Build Backend
         run: |

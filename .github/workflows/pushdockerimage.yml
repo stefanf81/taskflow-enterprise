@@ -124,10 +124,12 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
+      # Read-only: CI's `backend` job owns the Gradle cache writes; this manual
+      # workflow only needs to consume the restored state.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          cache-read-only: false
+          cache-read-only: true
 
       - name: Build
         run: |
@@ -289,8 +291,10 @@ jobs:
             type=gha,scope=${{ matrix.component }}-main
             type=gha,scope=${{ matrix.component }}-pr
 
+          # ignore-error: a transient GHA cache-export blip must not fail a
+          # publication run; the scan + promotion steps below are the gate.
           cache-to: |
-            type=gha,mode=max,scope=${{ matrix.component }}-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }}
+            type=gha,mode=max,scope=${{ matrix.component }}-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }},ignore-error=true
 
           provenance: true
           sbom: true

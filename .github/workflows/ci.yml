@@ -417,10 +417,13 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
+      # Within this workflow, `backend` owns Gradle cache writes. The Android
+      # and dependency-audit workflows retain their own writable caching.
+      # Read-only packaging avoids competing saves of shared cache entries.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          cache-read-only: false
+          cache-read-only: true
 
       - name: Build JAR
         run: |
@@ -473,8 +476,12 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
+      # This action already manages Gradle caching; configure it directly
+      # rather than adding setup-gradle. `backend` owns writes in this workflow.
       - name: Submit Dependency Graph
         uses: gradle/actions/dependency-submission@v6
+        with:
+          cache-read-only: true
 
   ###########################################################
   # Frontend
@@ -732,11 +739,13 @@ jobs:
 
       - name: Build production frontend image
         run: |
+          # ignore-error: a transient GHA cache-export blip (the historical
+          # "error writing layer blob: not_found") must not fail the build.
           docker buildx build \
             --cache-from type=gha,scope=frontend-main \
             --cache-from type=gha,scope=frontend-pr \
             --cache-from type=gha,scope=frontend-e2e \
-            --cache-to type=gha,mode=max,scope=frontend-e2e \
+            --cache-to type=gha,mode=max,scope=frontend-e2e,ignore-error=true \
             --load \
             --tag taskflow-e2e-frontend \
             frontend
@@ -958,8 +967,11 @@ jobs:
             type=gha,scope=${{ matrix.component }}-main
             type=gha,scope=${{ matrix.component }}-pr
 
+          # ignore-error: GHA cache-export blips (e.g. "error writing layer
+          # blob: not_found", observed in run 36245702011) must not fail the
+          # build; the image itself built fine.
           cache-to: |
-            type=gha,mode=max,scope=${{ matrix.component }}-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }}
+            type=gha,mode=max,scope=${{ matrix.component }}-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }},ignore-error=true
 
           provenance: false
           sbom: false
