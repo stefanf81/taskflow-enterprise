@@ -44,6 +44,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  renovate_version: "44"
   cache_dir: /tmp/renovate/cache/renovate/repository
   cache_key: renovate-cache
 
@@ -57,20 +58,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      # `npx --package renovate` downloads Renovate (~50s cold) on every run.
-      # Cache npm's npx + registry data so an unchanged run reuses the prior
-      # download, while a fresh key each run still lets a new Renovate release
-      # be fetched when one lands.
-      - name: Cache Renovate validator package
-        uses: actions/cache@v6
-        with:
-          path: ~/.npm
-          key: renovate-npm-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            renovate-npm-${{ runner.os }}-
-
-      - name: Validate Renovate configuration
-        run: npx --yes --package renovate renovate-config-validator .github/renovate.json
+      - name: Validate Renovate config
+        run: >
+          docker run --rm
+          -v "$PWD:/usr/src/app" -w /usr/src/app
+          --entrypoint renovate-config-validator
+          ghcr.io/renovatebot/renovate:${{ env.renovate_version }}
+          .github/renovate.json
 
       - name: Restore Renovate cache
         id: cache-restore
@@ -91,6 +85,7 @@ jobs:
         with:
           token: ${{ secrets.RENOVATE_TOKEN }}
           configurationFile: .github/renovate.json
+          renovate-version: ${{ env.renovate_version }}
         env:
           RENOVATE_PLATFORM: github
           RENOVATE_REPOSITORIES: ${{ github.repository }}
