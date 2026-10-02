@@ -29,7 +29,7 @@ Spring Boot Backend
 | Tool | Version | Verify |
 |------|---------|--------|
 | Node.js | 24.21.0 (`mobile/.nvmrc`) | `node -v` |
-| npm | 12.2.0 (native dependency patches required) | `npm -v` |
+| npm | 11.19.1 | `npm -v` |
 | Java | 21 for local Android/Detox builds | `java -version` |
 | Xcode | >=16 | `xcodebuild -version` |
 | CocoaPods | >=1.15 | `pod --version` |
@@ -87,15 +87,7 @@ running the Android Detox commands.
 
 ## First-Time Setup
 
-Use npm 12.2.0 or newer so installs apply the checked-in security patch. Older
-npm versions are rejected by `mobile/.npmrc`. See the
-[node-forge mitigation](README.md#node-forge-signature-verification-patch) for
-the patch's provenance and removal criteria.
-
 ```bash
-# Install the package manager declared by this repository.
-npm install --global npm@12.2.0
-
 # From the repository root, install the local shared package first.
 (cd shared/schemas && npm ci)
 
