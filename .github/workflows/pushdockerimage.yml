@@ -57,7 +57,7 @@ env:
   JAVA_VERSION: "21"
   NODE_VERSION: "24"
   REGISTRY: ghcr.io
-  TRIVY_VERSION: v0.73.0
+  TRIVY_VERSION: v0.75.0
 
 defaults:
   run:

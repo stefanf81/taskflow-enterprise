@@ -73,14 +73,6 @@
       "enabled": false
     },
     {
-      "description": "Frontend pins @babel/core 7.x; a Babel 8 major is not validated against the Angular 22 build toolchain yet. Revisit with the next Angular upgrade.",
-      "matchManagers": ["npm"],
-      "matchFileNames": ["frontend/package.json"],
-      "matchPackageNames": ["@babel/core"],
-      "matchUpdateTypes": ["major"],
-      "enabled": false
-    },
-    {
       "description": "Runner images are pinned deliberately (ubuntu-26.04) for reproducible native/CI behaviour; ubuntu-latest is migrated by GitHub itself. Do not auto-bump the runner major.",
       "matchManagers": ["github-actions"],
       "matchPackageNames": ["ubuntu"],
@@ -151,11 +143,11 @@
       "allowedVersions": "/^6\\./"
     },
     {
-      "description": "Keep Vitest on the Angular 22-compatible 4.x release line",
+      "description": "Keep Vitest and its coverage provider on the Angular 22.2-compatible 5.x release line",
       "matchManagers": ["npm"],
       "matchFileNames": ["frontend/package.json"],
       "matchPackageNames": ["vitest", "@vitest/coverage-v8"],
-      "allowedVersions": "/^4\\./"
+      "allowedVersions": "/^5\\./"
     },
     {
       "description": "Update the Angular framework and its compatible toolchain together",
@@ -285,10 +277,16 @@
       "groupName": "GitHub Actions"
     },
     {
-      "description": "Blocked on Expo SDK upgrade: @babel/core 8 / jest 30 / @types/jest 30 / @jest/types 30 require babel-preset-expo & jest-expo versions that do not yet support these majors (Babel 8 loadPartialConfig break vs msw; jest-expo still pins the @jest/* 29 surface). Fully suppressed: no branch, no PR, dashboard-only until this rule is removed after the SDK upgrade.",
+      "description": "Blocked on Expo SDK upgrade: @babel/core 8 / babel-plugin-transform-import-meta 3 / jest 30 / @types/jest 30 / @jest/types 30 require babel-preset-expo & jest-expo versions that do not yet support these majors (the import-meta plugin 3 requires Babel 8; jest-expo still pins the @jest/* 29 surface). Fully suppressed: no branch, no PR, dashboard-only until this rule is removed after the SDK upgrade.",
       "matchManagers": ["npm"],
       "matchFileNames": ["mobile/package.json"],
-      "matchPackageNames": ["@babel/core", "jest", "@types/jest", "@jest/types"],
+      "matchPackageNames": [
+        "@babel/core",
+        "babel-plugin-transform-import-meta",
+        "jest",
+        "@types/jest",
+        "@jest/types"
+      ],
       "matchUpdateTypes": ["major"],
       "enabled": false,
       "groupName": "Blocked on Expo SDK upgrade"

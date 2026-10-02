@@ -45,7 +45,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_TAG: ${{ github.sha }}
 
-  TRIVY_VERSION: v0.73.0
+  TRIVY_VERSION: v0.75.0
 
 defaults:
   run:
