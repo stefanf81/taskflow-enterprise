@@ -29,11 +29,19 @@ Spring Boot Backend
 | Tool | Version | Verify |
 |------|---------|--------|
 | Node.js | 24.21.0 (`mobile/.nvmrc`) | `node -v` |
-| npm | 11.19.1 | `npm -v` |
+| npm | 12.2.0 (CI pin; enforces `allowScripts`) | `npm -v` |
 | Java | 21 for local Android/Detox builds | `java -version` |
 | Xcode | >=16 | `xcodebuild -version` |
 | CocoaPods | >=1.15 | `pod --version` |
 | Docker | (for backend) | `docker ps` |
+
+Node 24 bundles npm 11.19.1, which silently ignores the `allowScripts` allowlist
+in `package.json`. CI installs npm 12.2.0 (declared in `frontend/package.json`
+via `.github/actions/npm-ci`), so install the same version locally:
+
+```bash
+npm install --global npm@12.2.0
+```
 
 Install the macOS tools with Homebrew when needed:
 

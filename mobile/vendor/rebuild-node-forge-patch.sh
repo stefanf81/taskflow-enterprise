@@ -56,3 +56,8 @@ rm -f "${OUT_FILE}"
 COPYFILE_DISABLE=1 tar czf "${OUT_FILE}" package
 
 echo "Wrote ${OUT_FILE}"
+echo
+echo "NOTE: the rebuilt tarball has new bytes, so the integrity recorded in"
+echo "mobile/package-lock.json is now stale. From mobile/ run:"
+echo "  npm install && npm ci && npm test"
+echo "then commit the tarball together with the lockfile."

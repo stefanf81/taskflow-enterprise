@@ -21,6 +21,18 @@ Regenerate with:
 ./rebuild-node-forge-patch.sh
 ```
 
+The rebuilt tarball has new bytes (gzip embeds a timestamp), so the `integrity`
+recorded for it in `mobile/package-lock.json` goes stale and the next `npm ci`
+fails. Refresh and verify before committing (from the repository root):
+
+```bash
+npm install --prefix mobile
+npm ci --prefix mobile
+npm test --prefix mobile
+```
+
+Commit the regenerated tarball together with `mobile/package-lock.json`.
+
 When upstream ships a fixed `node-forge`, delete this directory, remove the
 `node-forge` entry from `mobile/package.json` `overrides`, regenerate the
 lockfile, and rerun the mobile tests (which include the security regression

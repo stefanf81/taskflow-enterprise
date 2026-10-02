@@ -67,7 +67,7 @@
       "enabled": false
     },
     {
-      "description": "Defer Node.js and npm major upgrades until the Expo SDK upgrade validates the native toolchain against the new runtime (mobile/.nvmrc and the workflow NODE_VERSION are pinned to 22).",
+      "description": "Defer Node.js and npm major upgrades until the Expo SDK upgrade validates the native toolchain against the new runtime (mobile/.nvmrc and the workflow NODE_VERSION are pinned to 24).",
       "matchPackageNames": ["node", "npm"],
       "matchUpdateTypes": ["major"],
       "enabled": false
