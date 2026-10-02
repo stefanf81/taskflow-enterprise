@@ -166,6 +166,35 @@ manage ordinary libraries such as Axios, Zod, Zustand, TanStack Query, and React
 Hook Form. React Navigation and native test tooling remain review-only grouped
 updates because they carry React Native peer-dependency constraints.
 
+### node-forge signature verification patch
+
+Dependabot alert [#72](https://github.com/stefanf81/taskflow-enterprise/security/dependabot/72)
+tracks [GHSA-86w9-cpqp-85rv / CVE-2026-85393](https://github.com/advisories/GHSA-86w9-cpqp-85rv).
+Expo's CLI and `@expo/code-signing-certificates` use `node-forge@1.4.0`, which
+accepts extra elements inside the nested RSA PKCS#1 v1.5 `DigestAlgorithm`.
+
+There is no published fixed npm version as of 2026-10-02. The checked-in
+`patches/node-forge@1.4.0.patch` backports the validation fix from
+[upstream PR #1152](https://github.com/digitalbazaar/forge/pull/1152), commit
+`ceba34402e329f0365134f23fe19898756527d65`. It checks the nested element count
+while preserving valid encodings with and without the optional NULL parameter.
+
+`patchedDependencies` and its v4 lockfile record the patch's content hash.
+**npm 12.2.0 or newer is required:** npm applies the patch during `npm ci`, even
+with `--ignore-scripts`. `engine-strict=true` rejects older npm versions that
+would omit the patch. CI already installs the declared npm version; EAS uses
+the same mobile pin through `eas-build-pre-install` before installing dependencies.
+
+`npm test` runs `test:security` before Jest. The security suite exercises the
+actual dependency copies resolved by both Expo consumers, valid signatures,
+nested and outer garbage, and mismatched digests with RSA exponents 3 and 65537.
+
+This is a code-level mitigation, not a published version upgrade. The package
+still reports 1.4.0, so version-based vulnerability alerts may remain open.
+Once upstream publishes a fixed release, remove the patch with
+`npm patch rm node-forge@1.4.0`, update the dependency and lockfile, and rerun
+the security suite before retiring this mitigation.
+
 ---
 
 ## Development & Testing Commands

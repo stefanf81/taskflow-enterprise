@@ -2,12 +2,17 @@
   "name": "taskflow-mobile",
   "version": "1.0.0",
   "main": "node_modules/expo/AppEntry.js",
+  "packageManager": "npm@12.2.0",
+  "engines": {
+    "npm": ">=12.2.0"
+  },
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "test": "jest",
+    "test": "npm run test:security && jest",
+    "test:security": "node --test test/security/node-forge.test.cjs",
     "test:watch": "jest --watch",
     "e2e:build": "detox build --configuration ios.sim.release",
     "e2e:test": "detox test --configuration ios.sim.release",
@@ -15,7 +20,8 @@
     "e2e:test:android": "detox test --configuration android.emu.release",
     "lint": "tsc --noEmit",
     "build:android": "eas build --platform android",
-    "build:ios": "eas build --platform ios"
+    "build:ios": "eas build --platform ios",
+    "eas-build-pre-install": "npm install --global \"$(node -p \"require('./package.json').packageManager\")\""
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
@@ -78,5 +84,8 @@
     "dtrace-provider": true,
     "fsevents": true,
     "msw": true
+  },
+  "patchedDependencies": {
+    "node-forge@1.4.0": "patches/node-forge@1.4.0.patch"
   }
 }

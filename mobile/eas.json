@@ -5,6 +5,7 @@
   },
   "build": {
     "development": {
+      "node": "24.21.0",
       "environment": "development",
       "developmentClient": true,
       "distribution": "internal",
@@ -16,6 +17,7 @@
       }
     },
     "preview": {
+      "node": "24.21.0",
       "environment": "preview",
       "env": {
         "TASKFLOW_TLS_POLICY": "required"
@@ -29,6 +31,7 @@
       }
     },
     "production": {
+      "node": "24.21.0",
       "environment": "production",
       "env": {
         "TASKFLOW_TLS_POLICY": "required"
