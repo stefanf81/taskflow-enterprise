@@ -1,0 +1,20 @@
+// CI-only Gradle init script: route every Android module's CMake compiles
+// through ccache. The React Native Gradle plugin declares the native C++
+// tasks (`configureCMake*`/`buildCMake*`) non-cacheable, so ccache is the only
+// cross-run cache for that phase. Passed via `--init-script` from
+// .github/workflows/react-native-ci.yml; the invoking job caches CCACHE_DIR.
+//
+// The hook runs at plugin-application time so the launcher arguments exist
+// before AGP's afterEvaluate snapshots them into the native-build tasks.
+// Modules without CMake simply ignore the extra `externalNativeBuild`
+// arguments.
+gradle.allprojects { project ->
+    def addCcacheLaunchers = {
+        project.android.defaultConfig.externalNativeBuild.cmake.arguments.addAll([
+            '-DCMAKE_C_COMPILER_LAUNCHER=ccache',
+            '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache',
+        ])
+    }
+    project.plugins.withId('com.android.application') { addCcacheLaunchers() }
+    project.plugins.withId('com.android.library') { addCcacheLaunchers() }
+}

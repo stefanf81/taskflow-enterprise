@@ -12,6 +12,7 @@ on:
       - ".github/workflows/react-native-ci.yml"
       - ".github/actions/npm-ci/**"
       - ".github/actions/require-job-results/**"
+      - ".github/scripts/**"
   # Deliberately unfiltered: the repository's branch ruleset requires the
   # "Mobile JavaScript", "Android build and test", and "iOS simulator build"
   # contexts on every pull request. Path filtering here leaves those contexts
@@ -94,6 +95,7 @@ jobs:
               - '.github/workflows/react-native-ci.yml'
               - '.github/actions/npm-ci/**'
               - '.github/actions/require-job-results/**'
+              - '.github/scripts/**'
 
   javascript:
     name: Mobile JavaScript
@@ -151,14 +153,21 @@ jobs:
 
   android:
     name: Android native build
-    needs: javascript
+    # JavaScript runs in parallel: the native builds only need the lockfiles,
+    # not the type-check/Jest results. The android-gate still aggregates the
+    # JavaScript result, so a JS failure keeps the required context red.
+    needs: changes
     # Shared with `ios` via a YAML anchor: native builds run on the nightly,
-    # on manual dispatch, and on same-repo Renovate/Expo-maintenance PRs.
+    # on manual dispatch, and on same-repo Renovate/Expo-maintenance PRs that
+    # actually touch mobile inputs. The `mobile` guard matters because native
+    # builds no longer depend on the JavaScript job, so `changes` succeeding is
+    # not by itself proof that a backend-only Renovate PR needs a native build.
     if: &native-build-gate |
       github.event_name == 'schedule' ||
         github.event_name == 'workflow_dispatch' ||
         (
           github.event_name == 'pull_request' &&
+          needs.changes.outputs.mobile == 'true' &&
           github.event.pull_request.head.repo.full_name == github.repository &&
           (
             startsWith(github.head_ref, 'renovate/') ||
@@ -177,6 +186,14 @@ jobs:
       # `fast` builds a single ABI/arch for CI; `full` builds every target and
       # is available only through workflow_dispatch.
       NATIVE_SCOPE: ${{ inputs.native_scope || 'fast' }}
+      # ccache hashes the compiler by content (runner images re-download files)
+      # and tolerates the timestamp churn of freshly installed node_modules.
+      # Env vars outrank config files, so pinning the cache dir here guarantees
+      # the CMake compiler launcher writes exactly where the action persists.
+      CCACHE_COMPILERCHECK: content
+      CCACHE_SLOPPINESS: time_macros,include_file_mtime,include_file_ctime,file_stat_matches
+      CCACHE_MAXSIZE: 1G
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
 
     steps:
       - name: Check out repository
@@ -198,6 +215,22 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
+
+      # React Native's CMake tasks are not Gradle-cacheable, so cache the
+      # compilation results content-addressably via ccache instead. The
+      # timestamped save key keeps snapshots writable (GitHub caches are
+      # immutable, so a fixed key would freeze the first snapshot forever);
+      # restore-keys fall back to the newest earlier snapshot, including ones
+      # saved under a previous lockfile hash. Note: restore-keys must NOT end
+      # with a dash — append-timestamp adds the separator itself.
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: android-ccache-${{ runner.os }}-${{ hashFiles('mobile/package-lock.json') }}
+          restore-keys: |
+            android-ccache-${{ runner.os }}
+          append-timestamp: true
+          max-size: 1G
 
       - name: Set up Gradle caching
         uses: gradle/actions/setup-gradle@v6
@@ -232,6 +265,11 @@ jobs:
             npx expo prebuild --platform android --no-install
           fi
 
+      # Gradle configuration cache is NOT enabled: the Expo-generated
+      # app/build.gradle resolves node modules with `.execute()` at
+      # configuration time, which Gradle rejects as configuration-cache
+      # problems (build fails). Revisit when Expo stops shelling out.
+      #
       # Cache the generated project's Gradle configuration/build state. The
       # dependency graph is fixed by mobile/package-lock.json, so the key is
       # stable across runs and independent of the regenerated android/ tree.
@@ -260,6 +298,7 @@ jobs:
             --no-daemon
             --stacktrace
             --build-cache
+            --init-script "$GITHUB_WORKSPACE/.github/scripts/android-ccache.init.gradle"
           )
           if [[ "${NATIVE_SCOPE}" == "fast" ]]; then
             gradle_args+=("-PreactNativeArchitectures=arm64-v8a")
@@ -320,7 +359,9 @@ jobs:
 
   ios:
     name: iOS native build
-    needs: javascript
+    # JavaScript runs in parallel; ios-gate owns the required context and still
+    # aggregates the JavaScript result (see the android job above).
+    needs: changes
     if: *native-build-gate
     runs-on: macos-26
     timeout-minutes: 60
@@ -331,6 +372,16 @@ jobs:
       # `fast` builds a single arch for CI; `full` builds every target and is
       # available only through workflow_dispatch.
       NATIVE_SCOPE: ${{ inputs.native_scope || 'fast' }}
+      # React Native's post_install reads USE_CCACHE and routes the Pods and
+      # app projects through its bundled ccache-clang wrappers, which override
+      # CCACHE_CONFIGPATH. Env vars still outrank config files, so pin the
+      # cache dir/hash/size here — without CCACHE_DIR the objects would land in
+      # the macOS default cache dir while ccache-action persists only
+      # $GITHUB_WORKSPACE/.ccache.
+      USE_CCACHE: "1"
+      CCACHE_COMPILERCHECK: content
+      CCACHE_MAXSIZE: 1G
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
 
     steps:
       - name: Check out repository
@@ -351,6 +402,19 @@ jobs:
         uses: ./.github/actions/npm-ci
         with:
           package-path: mobile
+
+      # Must precede `pod install`: react_native_post_install only wires the
+      # ccache wrappers when `ccache` is already on PATH (USE_CCACHE=1 alone
+      # logs a hint and stays on the default compiler). Rolling timestamped key
+      # with prefix restore — see the Android step above.
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: ios-ccache-${{ runner.os }}-${{ hashFiles('mobile/package-lock.json') }}
+          restore-keys: |
+            ios-ccache-${{ runner.os }}
+          append-timestamp: true
+          max-size: 1G
 
       # The project is developed with Xcode 26.6. Select it explicitly so runner
       # image updates cannot silently switch the build to another Xcode version.
@@ -429,6 +493,21 @@ jobs:
           # JavaScript dependency graph is locked by mobile/package-lock.json;
           # generate and use CocoaPods' local lockfile during this build.
           pod install --no-repo-update
+
+      # Only Build/ is cached: restoring the sibling .xcresult bundle makes
+      # xcodebuild fail ("bundle already exists"), and the incremental build
+      # database Xcode needs lives under DerivedData/Build. The key fingerprints
+      # every native input (JS lock, generated Podfile.lock, app config, config
+      # plugins, Node pin, fast/full scope) so a changed pod graph starts a
+      # fresh snapshot that a successful build can save — a lockfile-only key
+      # would pin the first snapshot until the JS dependencies change.
+      - name: Cache Xcode DerivedData
+        uses: actions/cache@v6
+        with:
+          path: mobile/ios/build/DerivedData/Build
+          key: ios-deriveddata-${{ runner.os }}-xcode26.6-${{ inputs.native_scope || 'fast' }}-${{ hashFiles('mobile/package-lock.json', 'mobile/ios/Podfile.lock', 'mobile/app.json', 'mobile/ios/Podfile.properties.json', 'mobile/plugins/**', 'mobile/.nvmrc') }}
+          restore-keys: |
+            ios-deriveddata-${{ runner.os }}-xcode26.6-${{ inputs.native_scope || 'fast' }}-
 
       - name: Build unsigned iOS simulator application
         shell: bash
