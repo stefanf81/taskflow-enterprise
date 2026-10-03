@@ -15,3 +15,6 @@
 90027	IGNORE	(CSRF token minting on cookie drop is intentional)
 # Modern Web Application informational detection.
 10109	IGNORE	(Modern Web Application detection is informational)
+# ZAP's unsolicited method probes flag REST verbs without proving exposure; PUT/PATCH/DELETE
+# are intentional, per-endpoint-authorized routes, and unauthenticated calls are rejected.
+90028	IGNORE	(Method probes are rejected; REST verbs are authorized per endpoint)

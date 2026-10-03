@@ -23,3 +23,9 @@
 10035	IGNORE	(HSTS on external domains is out of scope)
 10050	IGNORE	(Caching on external domains is out of scope)
 10098	IGNORE	(CORS on external domains is out of scope)
+# ZAP's unsolicited method probes flag REST verbs without proving exposure; PUT/PATCH/DELETE
+# are intentional, per-endpoint-authorized routes, and unauthenticated calls are rejected.
+90028	IGNORE	(Method probes are rejected; REST verbs are authorized per endpoint)
+# The production ingress is an intentional nginx reverse proxy; `server_tokens off` already
+# suppresses the version, and the proxy cannot be hidden from DAST scans of the SPA.
+40025	IGNORE	(Intentional nginx reverse proxy; no version disclosure)
