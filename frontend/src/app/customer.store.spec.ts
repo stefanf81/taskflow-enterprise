@@ -227,9 +227,7 @@ describe('CustomerStore', () => {
     fixture.detectChanges();
 
     store.cancelAppointment('pub-1');
-    const del = httpMock.expectOne((r) =>
-      r.url.includes('/api/v1/customer/appointments/pub-1'),
-    );
+    const del = httpMock.expectOne((r) => r.url.includes('/api/v1/customer/appointments/pub-1'));
     del.flush(null);
     await Promise.resolve();
     fixture.detectChanges();

@@ -56,9 +56,7 @@ export class AppointmentsApi {
           context: new HttpContext().set(PUBLIC_REQUEST, true),
         })
         .pipe(
-          map((raw) =>
-            parseResponse(appointmentResponseSchema, raw, 'POST /api/v1/appointments'),
-          ),
+          map((raw) => parseResponse(appointmentResponseSchema, raw, 'POST /api/v1/appointments')),
         );
     });
   }

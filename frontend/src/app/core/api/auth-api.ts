@@ -25,9 +25,7 @@ export class AuthApi {
           context: new HttpContext().set(PUBLIC_REQUEST, true),
         })
         .pipe(
-          map((raw) =>
-            parseResponse(registerResponseSchema, raw, 'POST /api/v1/auth/register'),
-          ),
+          map((raw) => parseResponse(registerResponseSchema, raw, 'POST /api/v1/auth/register')),
         );
     });
   }
@@ -42,9 +40,7 @@ export class AuthApi {
         .post<LoginResponse>(`${this.base}/login`, validated, {
           context: new HttpContext().set(PUBLIC_REQUEST, true),
         })
-        .pipe(
-          map((raw) => parseResponse(loginResponseSchema, raw, 'POST /api/v1/auth/login')),
-        );
+        .pipe(map((raw) => parseResponse(loginResponseSchema, raw, 'POST /api/v1/auth/login')));
     });
   }
 

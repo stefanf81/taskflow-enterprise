@@ -39,9 +39,8 @@ export function parseResponse<T>(
     const detail = issues
       .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
       .join('; ');
-    throw new Error(
-      `Invalid response from ${endpoint} (${detail || 'validation failed'})`,
-      { cause: err },
-    );
+    throw new Error(`Invalid response from ${endpoint} (${detail || 'validation failed'})`, {
+      cause: err,
+    });
   }
 }

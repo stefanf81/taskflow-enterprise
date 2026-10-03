@@ -11,6 +11,9 @@ ARG ALPINE_IMAGE=alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda9
 # QEMU emulation slowdowns in cross-architecture builds.
 FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE} AS compression
 
+# Fail the CSP hash build if any command in its pipelines fails.
+SHELL ["/bin/ash", "-o", "pipefail", "-c"]
+
 RUN apk add --no-cache brotli gzip openssl
 
 WORKDIR /assets
