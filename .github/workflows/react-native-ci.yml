@@ -221,8 +221,11 @@ jobs:
       # timestamped save key keeps snapshots writable (GitHub caches are
       # immutable, so a fixed key would freeze the first snapshot forever);
       # restore-keys fall back to the newest earlier snapshot, including ones
-      # saved under a previous lockfile hash. Note: restore-keys must NOT end
-      # with a dash — append-timestamp adds the separator itself.
+      # saved under a previous lockfile hash. `evict-old-files: job` drops
+      # entries not touched by this run so each snapshot stays lean instead of
+      # accumulating every historical object until max-size forces LRU churn.
+      # Note: restore-keys must NOT end with a dash — append-timestamp adds the
+      # separator itself.
       - name: Set up ccache
         uses: hendrikmuhs/ccache-action@v1
         with:
@@ -231,6 +234,7 @@ jobs:
             android-ccache-${{ runner.os }}
           append-timestamp: true
           max-size: 1G
+          evict-old-files: job
 
       - name: Set up Gradle caching
         uses: gradle/actions/setup-gradle@v6

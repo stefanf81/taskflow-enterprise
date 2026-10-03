@@ -1443,3 +1443,37 @@ And `ARCHITECTURE.md` / `BENCHMARKS.md` inventories (§9) amplify: **>2 replicas
 **Caveats:** single host, container limits (4 CPU / 2.5 GiB), 30 s runs and 3 reps → treat ±3–5% as noise; RSS medians include G1 heap growth, so allocator deltas should be read as directional. The arena delta is consistent across all three pairs and matches the known glibc-arena failure mode for many-threaded JVMs.
 
 **Verification:** `GlibcTuningBenchmarkTest` asserts the compose arena cap, the pinned `-resolute` base, the absence of jemalloc/`LD_PRELOAD`, this section's evidence, and the presence of the sweep harness.
+
+---
+
+## ⚡ 52. React Native CI — Native Build Caching & Job Parallelization
+
+**Goal:** the nightly `react-native-ci.yml` run was dominated by the two native jobs (iOS ~4 m 47 s, Android ~4 m 08 s) and serialized the JavaScript job (48 s) ahead of both. Cut wall time without weakening the required contexts (`Mobile JavaScript`, `Android build and test`, `iOS simulator build`).
+
+**Methodology (reproducible):** baseline = schedule run [`37085556676`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37085556676) (2026-10-03); measurements = `workflow_dispatch` runs [`37107920313`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37107920313) (cold cache), [`37108349235`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37108349235) and [`37108903761`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37108903761) (warm). Per-step timings come from the Actions jobs API; `CompileC` counts validate that no work was skipped.
+
+### Results
+
+| Measurement | Baseline | Cold cache | Warm cache |
+| :--- | ---: | ---: | ---: |
+| Android Gradle step (`lintDebug` + `testDebugUnitTest` + `assembleDebug`) | 154 s | 195 s | **95–97 s** |
+| Android native job | 4 m 08 s | 5 m 03 s | **3 m 15 s** |
+| iOS `xcodebuild` (144 `CompileC` invocations in every run) | 3 m 04 s | 3 m 04 s | 3 m 45 s → 4 m 20 s (runner variance) |
+
+Warm Android ccache stats: `46 / 104 direct hits (100 % direct)`, ~46 MB stored. `:app:configureCMakeDebug` / `:app:buildCMakeDebug` drop from ~95 s combined to a fraction of that. The hit rate is expected to rise as objects accumulate across more runs.
+
+### Adopted
+
+* **Android ccache via a Gradle init script** (`.github/scripts/android-ccache.init.gradle`): the React Native Gradle plugin declares the CMake tasks (`configureCMake*`/`buildCMake*`) non-cacheable, so ccache is the only cross-run cache for them. The init script injects `-DCMAKE_C_COMPILER_LAUNCHER=ccache` / `-DCMAKE_CXX_COMPILER_LAUNCHER=ccache` at plugin-application time (before AGP snapshots the arguments) into every `com.android.application` / `com.android.library` module. `CCACHE_DIR` / `CCACHE_COMPILERCHECK=content` / `CCACHE_SLOPPINESS` / `CCACHE_MAXSIZE` are job env — Gradle and ninja inherit process env, so unlike Xcode this works. Rolling timestamped keys (`append-timestamp: true`) keep snapshots writable (GitHub caches are immutable; a fixed key would freeze the first save), with prefix `restore-keys` and `evict-old-files: job` to keep snapshots lean.
+* **JavaScript runs in parallel with the native jobs.** Native builds only need the lockfiles, not Jest/tsc; the `android-gate` / `ios-gate` aggregators still consume `needs.javascript.result`, so a JS failure keeps the required contexts red (~50 s off the nightly wall time).
+* **PR native-build guard.** Because native jobs no longer depend on the JS job, the shared PR condition additionally requires `needs.changes.outputs.mobile == 'true'`; backend-only Renovate PRs no longer launch native runners.
+
+### Rejected (do not retry blindly)
+
+* **iOS ccache via RN's built-in wiring.** `USE_CCACHE=1` does make `pod install` log `[Ccache]: Setting CC, LD, CXX & LDPLUSPLUS build settings` and the Xcode command lines do invoke `node_modules/react-native/scripts/xcode/ccache-clang.sh` for all 146 C/C++ compile/link tasks. A dedicated probe (run [`37109517466`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37109517466)) passed `CCACHE_*` as xcodebuild build settings **and** `CCACHE_LOGFILE=$RUNNER_TEMP/ccache.log`: the build succeeded, but **no log file and no cache directory were ever created** (neither `${GITHUB_WORKSPACE}/.ccache` nor `~/Library/Caches/ccache`). Root cause: custom build settings are only exported into the environment of *shell* task types (script phases); the ObjC/C++ compiler task environment does not receive `CCACHE_BINARY`, so the wrapper's `exec $CCACHE_BINARY clang "$@"` silently degrades to `exec clang` — a no-op cache paying only wrapper overhead. A local reproduction of the same wrapper/config with `CCACHE_BINARY` set stores correctly, so the failure is Xcode-side. Revisiting requires a repo-owned wrapper that hardcodes the ccache path and exports `CCACHE_DIR` itself.
+* **iOS DerivedData cache.** Restoring `DerivedData/Build` made the build slower (184 s → 225 s): `expo prebuild` and `pod install` regenerate the Xcode projects on every run, invalidating the incremental build database.
+* **Gradle configuration cache.** `org.gradle.configuration-cache=true` fails the Android build: the Expo-generated `app/build.gradle` shells out to `node` with `.execute()` at configuration time (7 configuration-cache problems). Revisit when Expo stops resolving modules at configuration time.
+
+**Caveats:** macOS runner hardware varies materially — the identical 144-file iOS workload measured 3 m 04 s to 4 m 20 s across runs — so iOS numbers need ≥3 samples before drawing conclusions; the Android ccache win is stable across two warm runs. The nightly is bounded by iOS, which stays uncached by design.
+
+**Verification:** runs `37107920313`, `37108349235`, `37108903761` all green with the required contexts emitted; `actionlint` 1.7.12 (pinned in `ci.yml`) validates the workflow; the Android init script was exercised against the real generated project (`:app`, `:expo-modules-core`, `:react-native-screens`, `:react-native-safe-area-context`, `:expo`, `:expo-constants`, `:expo-log-box` all received the launcher arguments).
