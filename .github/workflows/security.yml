@@ -53,7 +53,7 @@ jobs:
       matrix:
         include:
           - language: java-kotlin
-            build-mode: autobuild
+            build-mode: manual
 
           - language: javascript-typescript
             build-mode: none
@@ -111,10 +111,22 @@ jobs:
         if: matrix.build-mode == 'autobuild'
         uses: github/codeql-action/autobuild@v4
 
+      # Manual build for java-kotlin: the same compile tasks autobuild runs
+      # (`testClasses`), but in a single Gradle invocation. Autobuild spends a
+      # full extra `--no-daemon` JVM + configuration phase (~13 s) on a
+      # separate `clean` that is a no-op on a fresh runner. Same javac
+      # invocations -> same CodeQL traps -> same analysis results.
+      - name: Build (manual)
+        if: matrix.build-mode == 'manual'
+        run: ./gradlew --no-daemon testClasses
+
       - name: Analyze
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{ matrix.language }}"
+          # The results (SARIF) are uploaded either way; this only skips
+          # bundling/uploading the CodeQL database as a debug artifact.
+          upload-database: false
 
   ###########################################################
   # Trivy Filesystem Scan
