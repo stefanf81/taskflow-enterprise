@@ -373,14 +373,11 @@ jobs:
       # available only through workflow_dispatch.
       NATIVE_SCOPE: ${{ inputs.native_scope || 'fast' }}
       # React Native's post_install reads USE_CCACHE and routes the Pods and
-      # app projects through its bundled ccache-clang wrappers, which override
-      # CCACHE_CONFIGPATH. Env vars still outrank config files, so pin the
-      # cache dir/hash/size here — without CCACHE_DIR the objects would land in
-      # the macOS default cache dir while ccache-action persists only
-      # $GITHUB_WORKSPACE/.ccache.
+      # app projects through its bundled ccache-clang wrappers. Xcode exports
+      # build settings (not arbitrary job env) into compiler task
+      # environments, so the build step passes CCACHE_* explicitly; this
+      # job-level CCACHE_DIR is what ccache-action reads for stats and archive.
       USE_CCACHE: "1"
-      CCACHE_COMPILERCHECK: content
-      CCACHE_MAXSIZE: 1G
       CCACHE_DIR: ${{ github.workspace }}/.ccache
 
     steps:
@@ -533,7 +530,13 @@ jobs:
             xcodebuild_args+=('ARCHS=arm64 x86_64' 'ONLY_ACTIVE_ARCH=NO')
           fi
 
+          # Xcode exports build settings into compiler task environments but
+          # not arbitrary job env, so the ccache wrapper only sees these here.
+          # (The job-level CCACHE_DIR is what ccache-action reads for stats.)
           "${xcodebuild_args[@]}" \
+            CCACHE_DIR="$GITHUB_WORKSPACE/.ccache" \
+            CCACHE_COMPILERCHECK=content \
+            CCACHE_MAXSIZE=1G \
             COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
