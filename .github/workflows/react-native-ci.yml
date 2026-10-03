@@ -372,13 +372,6 @@ jobs:
       # `fast` builds a single arch for CI; `full` builds every target and is
       # available only through workflow_dispatch.
       NATIVE_SCOPE: ${{ inputs.native_scope || 'fast' }}
-      # React Native's post_install reads USE_CCACHE and routes the Pods and
-      # app projects through its bundled ccache-clang wrappers. Xcode exports
-      # build settings (not arbitrary job env) into compiler task
-      # environments, so the build step passes CCACHE_* explicitly; this
-      # job-level CCACHE_DIR is what ccache-action reads for stats and archive.
-      USE_CCACHE: "1"
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
 
     steps:
       - name: Check out repository
@@ -399,19 +392,6 @@ jobs:
         uses: ./.github/actions/npm-ci
         with:
           package-path: mobile
-
-      # Must precede `pod install`: react_native_post_install only wires the
-      # ccache wrappers when `ccache` is already on PATH (USE_CCACHE=1 alone
-      # logs a hint and stays on the default compiler). Rolling timestamped key
-      # with prefix restore — see the Android step above.
-      - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@v1
-        with:
-          key: ios-ccache-${{ runner.os }}-${{ hashFiles('mobile/package-lock.json') }}
-          restore-keys: |
-            ios-ccache-${{ runner.os }}
-          append-timestamp: true
-          max-size: 1G
 
       # The project is developed with Xcode 26.6. Select it explicitly so runner
       # image updates cannot silently switch the build to another Xcode version.
@@ -491,21 +471,11 @@ jobs:
           # generate and use CocoaPods' local lockfile during this build.
           pod install --no-repo-update
 
-      # Only Build/ is cached: restoring the sibling .xcresult bundle makes
-      # xcodebuild fail ("bundle already exists"), and the incremental build
-      # database Xcode needs lives under DerivedData/Build. The key fingerprints
-      # every native input (JS lock, generated Podfile.lock, app config, config
-      # plugins, Node pin, fast/full scope) so a changed pod graph starts a
-      # fresh snapshot that a successful build can save — a lockfile-only key
-      # would pin the first snapshot until the JS dependencies change.
-      - name: Cache Xcode DerivedData
-        uses: actions/cache@v6
-        with:
-          path: mobile/ios/build/DerivedData/Build
-          key: ios-deriveddata-${{ runner.os }}-xcode26.6-${{ inputs.native_scope || 'fast' }}-${{ hashFiles('mobile/package-lock.json', 'mobile/ios/Podfile.lock', 'mobile/app.json', 'mobile/ios/Podfile.properties.json', 'mobile/plugins/**', 'mobile/.nvmrc') }}
-          restore-keys: |
-            ios-deriveddata-${{ runner.os }}-xcode26.6-${{ inputs.native_scope || 'fast' }}-
-
+      # Native compile caching is deliberately not enabled on iOS: with the
+      # Expo-generated Pods project the ccache objects never landed in the
+      # configured directory, and a restored DerivedData/Build snapshot made
+      # xcodebuild slower (fresh project UUIDs invalidate the incremental
+      # database). Revisit if Expo/RN make the pod graph cache-stable.
       - name: Build unsigned iOS simulator application
         shell: bash
         run: |
@@ -530,13 +500,7 @@ jobs:
             xcodebuild_args+=('ARCHS=arm64 x86_64' 'ONLY_ACTIVE_ARCH=NO')
           fi
 
-          # Xcode exports build settings into compiler task environments but
-          # not arbitrary job env, so the ccache wrapper only sees these here.
-          # (The job-level CCACHE_DIR is what ccache-action reads for stats.)
           "${xcodebuild_args[@]}" \
-            CCACHE_DIR="$GITHUB_WORKSPACE/.ccache" \
-            CCACHE_COMPILERCHECK=content \
-            CCACHE_MAXSIZE=1G \
             COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
