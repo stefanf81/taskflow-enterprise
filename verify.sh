@@ -92,6 +92,23 @@ fi
 # cannot exercise the strict-CSP path — report that instead of passing silently.
 if ! printf '%s' "$INDEX_HTML" | grep -qE 'main-[A-Za-z0-9_-]+\.js'; then
   echo -e "${YELLOW}Warning: http://localhost:4200/ is not serving a hashed production bundle (dev server?), so the production CSP/CSS check was skipped. Stop 'npm start' and re-run to verify the Docker image.${NC}"
+else
+  # The production Angular build emits an inline SRI import map. Nginx must
+  # authorize its exact bytes with the sha384 source expression generated in
+  # the frontend Dockerfile; without it the import map is blocked and the SRI
+  # metadata for every lazy chunk is silently discarded.
+  IMPORT_MAP_COUNT="$(printf '%s' "$INDEX_HTML" | grep -o '<script type="importmap">[^<]*</script>' | wc -l | tr -d ' ' || true)"
+  if [ "$IMPORT_MAP_COUNT" -ne 1 ]; then
+    echo -e "${RED}Expected exactly one inline import map in the served index.html, found ${IMPORT_MAP_COUNT}!${NC}"
+    exit 1
+  fi
+  IMPORT_MAP_JSON="$(printf '%s' "$INDEX_HTML" | grep -o '<script type="importmap">[^<]*</script>' | sed -e 's#^<script type="importmap">##' -e 's#</script>$##' || true)"
+  IMPORT_MAP_HASH="$(printf '%s' "$IMPORT_MAP_JSON" | openssl dgst -sha384 -binary | openssl base64 -A)"
+  CSP_HEADER="$(curl -fsSI --max-time 5 http://localhost:4200/ | tr -d '\r' | grep -i '^content-security-policy:' || true)"
+  if ! printf '%s' "$CSP_HEADER" | grep -q "sha384-${IMPORT_MAP_HASH}"; then
+    echo -e "${RED}Served Content-Security-Policy does not authorize the inline import map (missing sha384-${IMPORT_MAP_HASH})!${NC}"
+    exit 1
+  fi
 fi
 
 if ! (cd frontend && E2E_DOCKER=true npm run e2e); then

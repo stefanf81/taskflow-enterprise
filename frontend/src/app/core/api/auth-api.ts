@@ -1,10 +1,15 @@
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { Service, inject } from '@angular/core';
-import { defer, Observable } from 'rxjs';
+import { defer, map, Observable } from 'rxjs';
 import { LoginResponse, RegisterRequest, RegisterResponse } from '../../types/api';
 import { PUBLIC_REQUEST } from '../http/public-request.token';
-import { parseRequest } from './request-validation';
-import { loginSchema, registerSchema } from '@taskflow/schemas';
+import { parseRequest, parseResponse } from './request-validation';
+import {
+  loginResponseSchema,
+  loginSchema,
+  registerResponseSchema,
+  registerSchema,
+} from '@taskflow/schemas';
 
 /** Customer account and session endpoints (`/api/v1/auth`). */
 @Service()
@@ -15,9 +20,15 @@ export class AuthApi {
   register(request: RegisterRequest): Observable<RegisterResponse> {
     return defer(() => {
       const validated = parseRequest(registerSchema, request);
-      return this.http.post<RegisterResponse>(`${this.base}/register`, validated, {
-        context: new HttpContext().set(PUBLIC_REQUEST, true),
-      });
+      return this.http
+        .post<RegisterResponse>(`${this.base}/register`, validated, {
+          context: new HttpContext().set(PUBLIC_REQUEST, true),
+        })
+        .pipe(
+          map((raw) =>
+            parseResponse(registerResponseSchema, raw, 'POST /api/v1/auth/register'),
+          ),
+        );
     });
   }
 
@@ -27,15 +38,21 @@ export class AuthApi {
   login(username: string, password: string): Observable<LoginResponse> {
     return defer(() => {
       const validated = parseRequest(loginSchema, { username, password });
-      return this.http.post<LoginResponse>(`${this.base}/login`, validated, {
-        context: new HttpContext().set(PUBLIC_REQUEST, true),
-      });
+      return this.http
+        .post<LoginResponse>(`${this.base}/login`, validated, {
+          context: new HttpContext().set(PUBLIC_REQUEST, true),
+        })
+        .pipe(
+          map((raw) => parseResponse(loginResponseSchema, raw, 'POST /api/v1/auth/login')),
+        );
     });
   }
 
   // Returns the currently authenticated principal (used to restore UI role after a page refresh).
   me(): Observable<LoginResponse> {
-    return this.http.get<LoginResponse>(`${this.base}/me`);
+    return this.http
+      .get<LoginResponse>(`${this.base}/me`)
+      .pipe(map((raw) => parseResponse(loginResponseSchema, raw, 'GET /api/v1/auth/me')));
   }
 
   // Fetches the CSRF token from the server, which causes Spring Security's

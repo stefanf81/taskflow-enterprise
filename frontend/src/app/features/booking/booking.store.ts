@@ -203,6 +203,15 @@ export class BookingStore {
    */
   private busySlotsRequestSeq = 0;
 
+  /**
+   * Idempotency key for the current logical booking attempt. Generated on the
+   * first submit (or when the payload changes) and retained across failures so
+   * an ambiguous timeout + re-tap replays the original booking instead of
+   * creating a second one. Cleared on success and on a 409 conflict.
+   */
+  private idempotencyKey: string | null = null;
+  private idempotencyFingerprint: string | null = null;
+
   onSearchChange(value: string): void {
     this.serviceSearchQuery.set(value);
   }
@@ -354,8 +363,17 @@ export class BookingStore {
       serviceType: model.serviceType,
     };
 
+    // Reuse the key only while the payload is byte-for-byte identical, so an
+    // edited booking (different slot, service, or contact details) is treated
+    // as a new request rather than replayed against the old one.
+    const fingerprint = JSON.stringify(payload);
+    if (this.idempotencyKey === null || this.idempotencyFingerprint !== fingerprint) {
+      this.idempotencyKey = crypto.randomUUID();
+      this.idempotencyFingerprint = fingerprint;
+    }
+
     this.appointmentsApi
-      .createAppointment(payload)
+      .createAppointment(payload, this.idempotencyKey)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (created) => {
@@ -365,6 +383,12 @@ export class BookingStore {
           this.resetBookingForm();
         },
         error: (err) => {
+          // A 409 means this key was already used for a different payload; the
+          // next attempt must use a fresh key.
+          if (err?.status === 409) {
+            this.idempotencyKey = null;
+            this.idempotencyFingerprint = null;
+          }
           // Verbose error logging only in dev builds to avoid leaking backend
           // error details (validation field names, partial payloads) into the
           // production browser console.
@@ -401,5 +425,7 @@ export class BookingStore {
     this.busySlots.set([]);
     this.activeStep.set(1);
     this.isSubmitting.set(false);
+    this.idempotencyKey = null;
+    this.idempotencyFingerprint = null;
   }
 }

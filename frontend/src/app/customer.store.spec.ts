@@ -168,4 +168,77 @@ describe('CustomerStore', () => {
 
     httpMock.expectNone((r) => r.url.includes('/api/v1/customer/appointments'));
   });
+
+  it('should expose pagination metadata and page through results', async () => {
+    expect(store.totalPages()).toBe(2);
+    expect(store.totalElements()).toBe(11);
+
+    store.nextPage();
+    fixture.detectChanges();
+    await Promise.resolve();
+
+    const req = httpMock.expectOne(
+      (r) => r.url.includes('/api/v1/customer/appointments') && r.url.includes('page=1'),
+    );
+    req.flush({ content: [], page: { ...mockAppointments.page, number: 1, totalPages: 2 } });
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(store.currentPage()).toBe(1);
+  });
+
+  it('should not page before the first or past the last page', () => {
+    store.prevPage();
+    expect(store.currentPage()).toBe(0);
+
+    store.setPage(5);
+    expect(store.currentPage()).toBe(0);
+  });
+
+  it('should surface a distinct load error instead of an empty list', async () => {
+    store.loadAppointments();
+    fixture.detectChanges();
+
+    const req = httpMock.expectOne(
+      (r) => r.url.includes('/api/v1/customer/appointments') && r.method === 'GET',
+    );
+    req.error(new ProgressEvent('error'), { status: 500, statusText: 'Server Error' });
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(store.loadErrorMessage()).toBe('Could not load your appointments. Please retry.');
+    expect(store.isLoading()).toBe(false);
+  });
+
+  it('should step back a page when cancelling the last row on a non-zero page', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    store.currentPage.set(1);
+    fixture.detectChanges();
+    await Promise.resolve();
+    const pageOne = httpMock.expectOne(
+      (r) => r.url.includes('/api/v1/customer/appointments') && r.url.includes('page=1'),
+    );
+    pageOne.flush({
+      content: [{ ...mockAppointments.content[0]!, id: 11 }],
+      page: { ...mockAppointments.page, number: 1 },
+    });
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    store.cancelAppointment('pub-1');
+    const del = httpMock.expectOne((r) =>
+      r.url.includes('/api/v1/customer/appointments/pub-1'),
+    );
+    del.flush(null);
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(store.currentPage()).toBe(0);
+    const reload = httpMock.expectOne(
+      (r) => r.url.includes('/api/v1/customer/appointments') && r.url.includes('page=0'),
+    );
+    reload.flush(mockAppointments);
+    await Promise.resolve();
+  });
 });

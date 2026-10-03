@@ -12,6 +12,7 @@ export class CustomerStore {
   private readonly appointmentsApi = inject(AppointmentsApi);
   private readonly authState = inject(AuthState);
   readonly currentPage = signal<number>(0);
+  readonly pageSize = 10;
 
   // Gated on auth: httpResource fires eagerly on creation, so without this
   // guard every guest visit would fire a 401 against a protected endpoint at
@@ -20,7 +21,7 @@ export class CustomerStore {
   private readonly appointmentsResource = httpResource<AppointmentPage>(
     () => {
       if (!this.authState.isLoggedIn()) return undefined;
-      return this.appointmentsApi.customerPageUrl(this.currentPage(), 10);
+      return this.appointmentsApi.customerPageUrl(this.currentPage(), this.pageSize);
     },
     {
       parse: (raw) => pagedAppointmentResponseSchema.parse(raw),
@@ -32,6 +33,17 @@ export class CustomerStore {
   );
 
   readonly appointments = computed(() => this.appointmentsResource.value()?.content ?? []);
+  readonly totalPages = computed(() => this.appointmentsResource.value()?.page.totalPages ?? 1);
+  readonly totalElements = computed(
+    () => this.appointmentsResource.value()?.page.totalElements ?? 0,
+  );
+
+  // Load-failure state kept separate from the dismissible action `errorMessage`
+  // on AppointmentStore, so a failed list load never masquerades as "no bookings".
+  readonly isLoading = this.appointmentsResource.isLoading;
+  readonly loadErrorMessage = computed(() =>
+    this.appointmentsResource.error() ? 'Could not load your appointments. Please retry.' : null,
+  );
 
   // Action-level cancel error surfaced to the UI (e.g. wrong email, already
   // cancelled). Separate from the read-only load errors above.
@@ -41,6 +53,21 @@ export class CustomerStore {
 
   loadAppointments(): void {
     this.appointmentsResource.reload();
+  }
+
+  /** Page change — resource reactivity refetches; no manual reload. */
+  setPage(page: number): void {
+    if (page >= 0 && page < this.totalPages()) {
+      this.currentPage.set(page);
+    }
+  }
+
+  nextPage(): void {
+    this.setPage(this.currentPage() + 1);
+  }
+
+  prevPage(): void {
+    this.setPage(this.currentPage() - 1);
   }
 
   cancelAppointment(publicId: string): void {
@@ -55,6 +82,11 @@ export class CustomerStore {
         next: () => {
           this.isCancelling.set(false);
           this.cancelErrorMessage.set(null);
+          // Cancelling the only row on a non-zero page would leave it empty;
+          // step back so the user still sees data.
+          if (this.appointments().length === 1 && this.currentPage() > 0) {
+            this.currentPage.update((p) => p - 1);
+          }
           this.loadAppointments();
         },
         error: (err) => {

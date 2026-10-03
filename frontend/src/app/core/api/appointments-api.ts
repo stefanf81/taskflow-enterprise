@@ -1,14 +1,19 @@
 import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Service, inject } from '@angular/core';
-import { defer, Observable } from 'rxjs';
+import { defer, map, Observable } from 'rxjs';
 import {
   AppointmentCreateRequest,
   AppointmentItem,
   AppointmentUpdateRequest,
 } from '../../types/api';
 import { PUBLIC_REQUEST } from '../http/public-request.token';
-import { parseRequest } from './request-validation';
-import { appointmentCreateSchema, appointmentUpdateSchema } from '@taskflow/schemas';
+import { parseRequest, parseResponse } from './request-validation';
+import {
+  appointmentCreateSchema,
+  appointmentResponseSchema,
+  appointmentUpdateSchema,
+  busySlotsResponseSchema,
+} from '@taskflow/schemas';
 
 /** Appointment lifecycle endpoints (`/api/v1/appointments`, `/api/v1/customer`). */
 @Service()
@@ -34,21 +39,42 @@ export class AppointmentsApi {
     return `${this.customerBase}?page=${page}&size=${size}`;
   }
 
-  createAppointment(request: AppointmentCreateRequest): Observable<AppointmentItem> {
+  /**
+   * Creates a booking. An optional stable {@code Idempotency-Key} makes an
+   * ambiguous-timeout retry replay the original booking instead of creating a
+   * second one (the backend may resolve "No Preference" to a different barber).
+   */
+  createAppointment(
+    request: AppointmentCreateRequest,
+    idempotencyKey?: string,
+  ): Observable<AppointmentItem> {
     return defer(() => {
       const validated = parseRequest(appointmentCreateSchema, request);
-      return this.http.post<AppointmentItem>(this.base, validated, {
-        context: new HttpContext().set(PUBLIC_REQUEST, true),
-      });
+      return this.http
+        .post<AppointmentItem>(this.base, validated, {
+          ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
+          context: new HttpContext().set(PUBLIC_REQUEST, true),
+        })
+        .pipe(
+          map((raw) =>
+            parseResponse(appointmentResponseSchema, raw, 'POST /api/v1/appointments'),
+          ),
+        );
     });
   }
 
   getBusySlots(barberName: string, bookingDate: string): Observable<string[]> {
     const params = new HttpParams().set('barberName', barberName).set('bookingDate', bookingDate);
-    return this.http.get<string[]>(`${this.base}/public/busy-slots`, {
-      params,
-      context: new HttpContext().set(PUBLIC_REQUEST, true),
-    });
+    return this.http
+      .get<string[]>(`${this.base}/public/busy-slots`, {
+        params,
+        context: new HttpContext().set(PUBLIC_REQUEST, true),
+      })
+      .pipe(
+        map((raw) =>
+          parseResponse(busySlotsResponseSchema, raw, 'GET /api/v1/appointments/public/busy-slots'),
+        ),
+      );
   }
 
   publicCancelAppointment(publicId: string, email: string): Observable<void> {
@@ -65,7 +91,13 @@ export class AppointmentsApi {
   ): Observable<AppointmentItem> {
     return defer(() => {
       const validated = parseRequest(appointmentUpdateSchema, { status: statusValue });
-      return this.http.put<AppointmentItem>(`${this.base}/${id}`, validated);
+      return this.http
+        .put<AppointmentItem>(`${this.base}/${id}`, validated)
+        .pipe(
+          map((raw) =>
+            parseResponse(appointmentResponseSchema, raw, `PUT /api/v1/appointments/${id}`),
+          ),
+        );
     });
   }
 

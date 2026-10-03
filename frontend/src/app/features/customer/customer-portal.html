@@ -54,7 +54,28 @@
   }
 
   <div class="card bg-zinc-950 border border-white/10 rounded-2xl p-6">
-    @if (customerStore.appointments().length === 0) {
+    @if (loadErrorMessage()) {
+      <div
+        class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20"
+      >
+        <span class="text-3xl block mb-2">⚠️</span>
+        <h3 class="text-white font-bold text-sm">{{ loadErrorMessage() }}</h3>
+        <button
+          type="button"
+          class="btn btn-secondary py-2 px-4 text-xs mt-4"
+          (click)="loadAppointments()"
+        >
+          Retry
+        </button>
+      </div>
+    } @else if (isLoading()) {
+      <div
+        class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20"
+      >
+        <span class="text-3xl block mb-2 animate-pulse">⏳</span>
+        <h3 class="text-white font-bold text-sm">Loading your appointments…</h3>
+      </div>
+    } @else if (customerStore.appointments().length === 0) {
       <div
         class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20"
       >
@@ -108,6 +129,29 @@
           </div>
         }
       </div>
+
+      @if (totalPages() > 1) {
+        <div class="flex justify-between items-center border-t border-white/5 pt-5 mt-6">
+          <button
+            class="btn btn-secondary btn-page"
+            [disabled]="currentPage() === 0"
+            (click)="prevPage()"
+          >
+            &larr; Prev
+          </button>
+          <span class="text-xs text-zinc-500"
+            >Page <strong class="text-zinc-100">{{ currentPage() + 1 }}</strong> of
+            <strong class="text-zinc-100">{{ totalPages() }}</strong></span
+          >
+          <button
+            class="btn btn-secondary btn-page"
+            [disabled]="currentPage() >= totalPages() - 1"
+            (click)="nextPage()"
+          >
+            Next &rarr;
+          </button>
+        </div>
+      }
     }
   </div>
 </div>

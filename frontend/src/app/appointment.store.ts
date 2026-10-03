@@ -98,6 +98,13 @@ export class AppointmentStore {
     () => this.appointmentsResource.value()?.page.page.totalElements ?? 0,
   );
 
+  // Load-failure state kept separate from the dismissible action `errorMessage`,
+  // which is shared with BookingStore and must not carry dashboard load errors.
+  readonly isLoading = this.appointmentsResource.isLoading;
+  readonly loadErrorMessage = computed(() =>
+    this.appointmentsResource.error() ? 'Could not load appointments. Please retry.' : null,
+  );
+
   // Alerts & Loading State (Signals)
   readonly errorMessage = signal<string | null>(null);
   readonly successMessage = signal<string | null>(null);

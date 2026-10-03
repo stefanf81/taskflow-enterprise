@@ -19,6 +19,8 @@ export class AdminAppointmentsTab {
   readonly selectedFilter = this.store.selectedFilter;
   readonly currentPage = this.store.currentPage;
   readonly totalPages = this.store.totalPages;
+  readonly isLoading = this.store.isLoading;
+  readonly loadErrorMessage = this.store.loadErrorMessage;
 
   setFilter(filter: string): void {
     this.store.setFilter(filter);

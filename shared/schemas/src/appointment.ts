@@ -62,6 +62,9 @@ export const appointmentResponseSchema = object({
 
 export type AppointmentResponse = zInfer<typeof appointmentResponseSchema>;
 
+/** GET /api/v1/appointments/public/busy-slots response (HH:mm strings). */
+export const busySlotsResponseSchema = string().array();
+
 export const pageMetadataSchema = object({
   number: number(),
   size: number(),

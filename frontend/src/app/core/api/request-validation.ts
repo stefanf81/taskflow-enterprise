@@ -21,3 +21,27 @@ export function parseRequest<T>(schema: { parse(value: unknown): T }, value: unk
     throw new Error(`Invalid request payload (${detail || 'validation failed'})`, { cause: err });
   }
 }
+
+/**
+ * Validates an incoming response against its shared zod schema before it
+ * reaches application state (auth role, route decisions, receipt rendering).
+ * A schema mismatch becomes an observable error rather than undefined UI state.
+ */
+export function parseResponse<T>(
+  schema: { parse(value: unknown): T },
+  value: unknown,
+  endpoint: string,
+): T {
+  try {
+    return schema.parse(value);
+  } catch (err) {
+    const issues = (err as { issues?: { path: PropertyKey[]; message: string }[] }).issues ?? [];
+    const detail = issues
+      .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+      .join('; ');
+    throw new Error(
+      `Invalid response from ${endpoint} (${detail || 'validation failed'})`,
+      { cause: err },
+    );
+  }
+}

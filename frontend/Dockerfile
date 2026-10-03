@@ -11,11 +11,42 @@ ARG ALPINE_IMAGE=alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda9
 # QEMU emulation slowdowns in cross-architecture builds.
 FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE} AS compression
 
-RUN apk add --no-cache brotli gzip
+RUN apk add --no-cache brotli gzip openssl
 
 WORKDIR /assets
 
 COPY dist/frontend/browser/ ./
+
+# Angular's production build emits an inline SRI import map
+# (<script type="importmap">{"integrity":{...}}</script>). A `script-src 'self'`
+# policy blocks that inline element and silently discards the SRI hashes it
+# carries for lazy chunks. The HTML spec forbids a `src` attribute on import
+# maps and static files cannot carry a nonce, so the exact element text is
+# hashed here at image build time and authorized via a sha384 source
+# expression. The build fails loudly if the import map is missing or
+# duplicated so the served hash can never silently drift from the assets.
+RUN IMPORT_MAP_COUNT="$(grep -o '<script type="importmap">[^<]*</script>' index.html | wc -l)" \
+    && if [ "${IMPORT_MAP_COUNT}" -ne 1 ]; then \
+        echo "Expected exactly one inline import map in index.html, found ${IMPORT_MAP_COUNT}" >&2; \
+        exit 1; \
+    fi \
+    && IMPORT_MAP_JSON="$(grep -o '<script type="importmap">[^<]*</script>' index.html | sed -e 's#^<script type="importmap">##' -e 's#</script>$##')" \
+    && HASH="$(printf '%s' "${IMPORT_MAP_JSON}" | openssl dgst -sha384 -binary | openssl base64 -A)" \
+    && printf 'add_header Content-Security-Policy "default-src %s; base-uri %s; form-action %s; frame-ancestors %s; object-src %s; script-src %s %s; style-src %s %s; font-src %s data:; img-src %s data:; connect-src %s;" always;\n' \
+        "'self'" \
+        "'self'" \
+        "'self'" \
+        "'self'" \
+        "'none'" \
+        "'self'" \
+        "'sha384-${HASH}'" \
+        "'self'" \
+        "'unsafe-inline'" \
+        "'self'" \
+        "'self'" \
+        "'self'" \
+        > /csp-importmap.conf \
+    && cat /csp-importmap.conf
 
 # Generate precompressed Brotli and gzip sidecars.
 #
@@ -115,6 +146,12 @@ COPY nginx-main.conf /etc/nginx/nginx.conf
 
 # Your existing HTTP server block
 COPY nginx.conf /etc/nginx/http.d/default.conf
+
+# CSP snippet generated in the compression stage. It carries the sha384 hash of
+# the exact inline import-map text baked into this image; nginx.conf includes it
+# wherever the policy header is emitted. `RUN nginx -t` below fails the build if
+# this include is missing or the snippet is malformed.
+COPY --from=compression /csp-importmap.conf /etc/nginx/csp-importmap.conf
 
 # Default upstream uses Docker's embedded DNS. CI mounts a static alternative
 # over this file when the backend runs directly on the runner host.

@@ -206,7 +206,20 @@ describe('BookingStore', () => {
       serviceType: 'Classic Haircut',
     });
 
-    const created = { id: 1, publicId: 'pub-1' } as AppointmentItem;
+    const created: AppointmentItem = {
+      id: 1,
+      publicId: 'pub-1',
+      customerName: 'Jane Smith',
+      customerEmail: 'jane@example.com',
+      customerPhone: '555-0100',
+      barberName: 'Sara the Stylist',
+      bookingDate: '2999-06-25',
+      bookingTime: '10:00',
+      serviceType: 'Classic Haircut',
+      status: 'PENDING',
+      createdAt: '2999-06-01T10:00:00',
+      updatedAt: '2999-06-01T10:00:00',
+    };
     req.flush(created);
     await fixture.whenStable();
 
@@ -253,6 +266,78 @@ describe('BookingStore', () => {
 
     expect(store.errorMessage()).toBe('Slot conflict');
     expect(store.isSubmitting()).toBe(false);
+    consoleError.mockRestore();
+  });
+
+  it('reuses the Idempotency-Key across retries and rotates it after success', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const payload = {
+      customerName: 'Jane Smith',
+      customerEmail: 'jane@example.com',
+      customerPhone: '555-0100',
+      barberName: 'No Preference (First Available)',
+      bookingDate: '2999-06-25',
+      bookingTime: '10:00',
+      serviceType: 'Classic Haircut',
+    };
+    const created: AppointmentItem = {
+      id: 1,
+      publicId: 'pub-1',
+      ...payload,
+      status: 'PENDING',
+      createdAt: '2999-06-01T10:00:00',
+      updatedAt: '2999-06-01T10:00:00',
+    };
+
+    store.bookingModel.set(payload);
+    store.submitBooking();
+    const first = httpMock.expectOne('/api/v1/appointments');
+    const firstKey = first.request.headers.get('Idempotency-Key');
+    expect(firstKey).toBeTruthy();
+    first.flush({ message: 'Server error' }, { status: 500, statusText: 'Server Error' });
+    await fixture.whenStable();
+
+    // Identical retry must reuse the key so the server can replay the booking.
+    store.submitBooking();
+    const retry = httpMock.expectOne('/api/v1/appointments');
+    expect(retry.request.headers.get('Idempotency-Key')).toBe(firstKey);
+    retry.flush(created);
+    await fixture.whenStable();
+
+    // A new booking after success must use a fresh key.
+    store.bookingModel.set(payload);
+    store.submitBooking();
+    const next = httpMock.expectOne('/api/v1/appointments');
+    expect(next.request.headers.get('Idempotency-Key')).not.toBe(firstKey);
+    next.flush(created);
+    await fixture.whenStable();
+    consoleError.mockRestore();
+  });
+
+  it('mints a new Idempotency-Key when the payload changes after a failure', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    store.bookingModel.set({
+      customerName: 'Jane Smith',
+      customerEmail: 'jane@example.com',
+      customerPhone: '555-0100',
+      barberName: 'No Preference (First Available)',
+      bookingDate: '2999-06-25',
+      bookingTime: '10:00',
+      serviceType: 'Classic Haircut',
+    });
+
+    store.submitBooking();
+    const first = httpMock.expectOne('/api/v1/appointments');
+    const firstKey = first.request.headers.get('Idempotency-Key');
+    first.flush({ message: 'Server error' }, { status: 500, statusText: 'Server Error' });
+    await fixture.whenStable();
+
+    store.bookingModel.update((m) => ({ ...m, serviceType: 'Modern Skin Fade' }));
+    store.submitBooking();
+    const second = httpMock.expectOne('/api/v1/appointments');
+    expect(second.request.headers.get('Idempotency-Key')).not.toBe(firstKey);
+    second.flush({ message: 'Server error' }, { status: 500, statusText: 'Server Error' });
+    await fixture.whenStable();
     consoleError.mockRestore();
   });
 });

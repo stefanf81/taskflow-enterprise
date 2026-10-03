@@ -121,7 +121,7 @@ describe('AuthModalComponent', () => {
       fullName: 'Jane Smith',
       phone: '+1-555-0000',
     });
-    req.flush(null);
+    req.flush({ message: 'Account created successfully.' });
 
     expect(component.isRegisterMode()).toBe(false);
     expect(component.successMessage()).toBe('Account created! You can now log in.');

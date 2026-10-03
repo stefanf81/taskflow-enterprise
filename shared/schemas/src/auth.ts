@@ -1,4 +1,10 @@
-import { object, string, type infer as zInfer } from "zod";
+import { enum as zEnum, literal, number, object, string, type infer as zInfer } from "zod";
+
+/**
+ * Roles the backend can issue. Validating the enum at the transport boundary
+ * prevents an unknown role from reaching navigation/route decisions.
+ */
+export const roleSchema = zEnum(["ROLE_ADMIN", "ROLE_CUSTOMER"]);
 
 export const loginSchema = object({
   username: string().trim().min(1, "Username is required"),
@@ -24,3 +30,23 @@ export const registerSchema = object({
 });
 
 export type RegisterRequest = zInfer<typeof registerSchema>;
+
+/** POST /api/v1/auth/login and GET /api/v1/auth/me response. */
+export const loginResponseSchema = object({
+  username: string().min(1),
+  role: roleSchema,
+});
+
+/** POST /api/v1/auth/mobile/login response (native bearer login). */
+export const mobileLoginResponseSchema = object({
+  accessToken: string().min(1),
+  tokenType: literal("Bearer"),
+  expiresIn: number().int().positive(),
+  username: string().min(1),
+  role: roleSchema,
+});
+
+/** POST /api/v1/auth/register response. */
+export const registerResponseSchema = object({
+  message: string(),
+});

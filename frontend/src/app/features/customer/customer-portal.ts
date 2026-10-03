@@ -25,6 +25,22 @@ export class CustomerPortal {
   readonly errorMessage = this.store.errorMessage;
   readonly successMessage = this.store.successMessage;
   readonly cancelErrorMessage = this.customerStore.cancelErrorMessage;
+  readonly isLoading = this.customerStore.isLoading;
+  readonly loadErrorMessage = this.customerStore.loadErrorMessage;
+  readonly currentPage = this.customerStore.currentPage;
+  readonly totalPages = this.customerStore.totalPages;
+
+  loadAppointments(): void {
+    this.customerStore.loadAppointments();
+  }
+
+  nextPage(): void {
+    this.customerStore.nextPage();
+  }
+
+  prevPage(): void {
+    this.customerStore.prevPage();
+  }
 
   formatTime12Hour(time24: string): string {
     return formatTime12Hour(time24);
