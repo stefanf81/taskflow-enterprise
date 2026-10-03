@@ -119,9 +119,9 @@ test('android: writes the network security config and registers the manifest att
     );
     const xml = fs.readFileSync(xmlPath, 'utf8');
     assert.match(xml, /cleartextTrafficPermitted="false"/);
-    assert.match(xml, new RegExp(HOSTNAME));
-    assert.match(xml, new RegExp(PIN_A.replace(/\+/g, '\\+')));
-    assert.match(xml, new RegExp(PIN_B.replace(/\+/g, '\\+')));
+    assert.ok(xml.includes(`<domain includeSubdomains="false">${HOSTNAME}</domain>`));
+    assert.ok(xml.includes(`<pin digest="SHA-256">${PIN_A}</pin>`));
+    assert.ok(xml.includes(`<pin digest="SHA-256">${PIN_B}</pin>`));
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
