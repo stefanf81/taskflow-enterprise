@@ -36,12 +36,16 @@ jobs:
   codeql:
     name: CodeQL (${{ matrix.language }})
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    timeout-minutes: 20
 
+    # `security-events: write` is the only permission CodeQL advanced setup
+    # requires (contents: read applies to private repositories); the action
+    # uses the runner runtime token for artifact/cache uploads, so
+    # `actions: write` is not needed here. The prune job below scopes
+    # `actions: write` for cache deletion instead.
     permissions:
       contents: read
       security-events: write
-      actions: write
 
     strategy:
       fail-fast: false
@@ -52,6 +56,16 @@ jobs:
             build-mode: autobuild
 
           - language: javascript-typescript
+            build-mode: none
+
+          # Scans scripts/*.py (the SARIF translators used by dast.yml and
+          # nightly-external-server-scan.yml) and the GitHub Actions workflow
+          # YAML itself (script-injection / untrusted-input sinks). All matrix
+          # legs run in parallel, so this adds no wall-clock time to the run.
+          - language: python
+            build-mode: none
+
+          - language: actions
             build-mode: none
 
     steps:
@@ -82,6 +96,17 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
           queries: security-extended
 
+          # Test code does not ship; extracting it only adds scan time and
+          # non-shipping findings. Patterns are JS/TS-specific, so the
+          # java-kotlin/python/actions legs are unaffected. Secrets in test
+          # fixtures remain covered by the gitleaks workflow.
+          config: |
+            paths-ignore:
+              - '**/__tests__/**'
+              - '**/*.spec.ts'
+              - '**/*.test.ts'
+              - '**/*.test.tsx'
+
       - name: Autobuild
         if: matrix.build-mode == 'autobuild'
         uses: github/codeql-action/autobuild@v4
@@ -96,36 +121,14 @@ jobs:
   ###########################################################
 
   trivy:
-    name: Trivy FS (${{ matrix.component.name }})
+    name: Trivy FS
 
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 10
 
     permissions:
       contents: read
       security-events: write
-
-    strategy:
-      fail-fast: false
-
-      matrix:
-        component:
-          # Keep findings attributable to the component that owns the lockfile.
-          - name: Backend
-            path: .
-            skip-dirs: frontend,mobile,shared,.git,.gradle,build
-
-          - name: Frontend
-            path: frontend
-            skip-dirs: node_modules,dist
-
-          - name: Mobile
-            path: mobile
-            skip-dirs: node_modules,android,ios
-
-          - name: Shared
-            path: shared/schemas
-            skip-dirs: node_modules
 
     steps:
       - name: Checkout
@@ -134,9 +137,22 @@ jobs:
           persist-credentials: false
 
       #####################################################
-      # Filesystem Scan
-      #####################################################
-
+      # Filesystem Scans
+      #
+      # All components are scanned sequentially in this one job (no matrix).
+      # The first scan seeds trivy-action's binary
+      # (`trivy-binary-<version>-<os>-<arch>`) and vulnerability-DB
+      # (`cache-trivy-<date>`) caches; the remaining scans hit them and skip
+      # their save attempts. The former 4-leg matrix raced to save those same
+      # keys every night, so three legs logged "Cache save failed". One job
+      # also means one checkout and one Trivy/DB download. Wall clock is
+      # unchanged: the nightly run is bounded by the CodeQL java-kotlin leg.
+      #
+      # Each scan uploads under its own category and output file — GitHub
+      # Code Scanning rejects multiple SARIF uploads from the same tool with
+      # the same category in one workflow run. Distinct output files keep a
+      # failed scan from uploading a stale SARIF under the next category.
+      #
       # NOTE ON SEVERITY GATING (intentional asymmetry):
       # This filesystem/source scan is REPORT-ONLY (exit-code: 0) — it never
       # fails the build. It's meant to surface vulnerable dependencies early
@@ -151,41 +167,125 @@ jobs:
       # blocking every PR on unshipped source CVEs, or stop blocking on
       # vulnerable images entirely. Keep them different on purpose.
       #
-      # Cache note: trivy-action caches the vulnerability DB under a per-day
-      # key (`cache-trivy-<date>`) and this job owns that key — image scans
+      # Cache ownership: this job owns `cache-trivy-<date>` — image scans
       # restore it with `cache: false` so they cannot write a stale `java-db/`
       # back into it. The Java index DB is cached separately
       # (`trivy-java-db-*`, see ci.yml). `trivy-cache-retention` below keeps
       # the newest default-branch entry per cache family and version.
-      - name: Trivy Filesystem Scan
+      #####################################################
+
+      - name: Trivy FS (Backend)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           version: ${{ env.TRIVY_VERSION }}
           scan-type: fs
           scanners: vuln
-          scan-ref: ${{ matrix.component.path }}
-          skip-dirs: ${{ matrix.component.skip-dirs }}
+          scan-ref: .
+          skip-dirs: frontend,mobile,shared,.git,.gradle,build
+          # The root package-lock.json (workspace tooling: knip) is scanned
+          # as its own component below so findings are not misattributed to
+          # the Backend component.
+          skip-files: package-lock.json
           trivyignores: .trivyignore
+          ignore-unfixed: true
           format: sarif
-          output: trivy-results.sarif
+          output: trivy-results-backend.sarif
 
           # Non-blocking scan — see note above. Do not change without
           # also reconsidering the image scan's exit-code.
           exit-code: 0
 
-      #####################################################
-      # Upload Results
-      #####################################################
-
-      # Distinct category per matrix component is required: GitHub Code
-      # Scanning rejects (or overwrites) multiple SARIF uploads from the
-      # same tool with the same category in one workflow run.
-      - name: Upload SARIF
-        if: always() && hashFiles('trivy-results.sarif') != ''
+      - name: Upload Backend SARIF
+        if: always() && hashFiles('trivy-results-backend.sarif') != ''
         uses: ./.github/actions/upload-sarif
         with:
-          path: trivy-results.sarif
-          category: trivy-fs-${{ matrix.component.name }}
+          path: trivy-results-backend.sarif
+          category: trivy-fs-Backend
+
+      - name: Trivy FS (Frontend)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: fs
+          scanners: vuln
+          scan-ref: frontend
+          skip-dirs: node_modules,dist
+          trivyignores: .trivyignore
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-results-frontend.sarif
+          exit-code: 0
+
+      - name: Upload Frontend SARIF
+        if: always() && hashFiles('trivy-results-frontend.sarif') != ''
+        uses: ./.github/actions/upload-sarif
+        with:
+          path: trivy-results-frontend.sarif
+          category: trivy-fs-Frontend
+
+      - name: Trivy FS (Mobile)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: fs
+          scanners: vuln
+          scan-ref: mobile
+          skip-dirs: node_modules,android,ios
+          trivyignores: .trivyignore
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-results-mobile.sarif
+          exit-code: 0
+
+      - name: Upload Mobile SARIF
+        if: always() && hashFiles('trivy-results-mobile.sarif') != ''
+        uses: ./.github/actions/upload-sarif
+        with:
+          path: trivy-results-mobile.sarif
+          category: trivy-fs-Mobile
+
+      - name: Trivy FS (Shared)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: fs
+          scanners: vuln
+          scan-ref: shared/schemas
+          skip-dirs: node_modules
+          trivyignores: .trivyignore
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-results-shared.sarif
+          exit-code: 0
+
+      - name: Upload Shared SARIF
+        if: always() && hashFiles('trivy-results-shared.sarif') != ''
+        uses: ./.github/actions/upload-sarif
+        with:
+          path: trivy-results-shared.sarif
+          category: trivy-fs-Shared
+
+      # Workspace tooling lockfile (root package.json: knip). Kept as its own
+      # component so findings are attributable to the lockfile's owner.
+      - name: Trivy FS (Root)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: fs
+          scanners: vuln
+          scan-ref: package-lock.json
+          trivyignores: .trivyignore
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-results-root.sarif
+          exit-code: 0
+
+      - name: Upload Root SARIF
+        if: always() && hashFiles('trivy-results-root.sarif') != ''
+        uses: ./.github/actions/upload-sarif
+        with:
+          path: trivy-results-root.sarif
+          category: trivy-fs-Root
 
   ###########################################################
   # Trivy DB cache retention
@@ -197,7 +297,7 @@ jobs:
   # the newest existing default-branch entry per family and cache version.
   # Selecting from the API snapshot preserves a fallback when scans fail to
   # save or a run crosses midnight. Trivy still checks database freshness on
-  # each scan. Wait for all matrix post-steps before taking the snapshot;
+  # each scan. Wait for the Trivy scans to finish before taking the snapshot;
   # branch/PR caches and entries created after the snapshot are not deletion
   # candidates.
   trivy-cache-retention:
