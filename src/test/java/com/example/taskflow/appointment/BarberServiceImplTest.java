@@ -7,8 +7,10 @@ import com.example.taskflow.core.ResourceNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -31,13 +33,13 @@ class BarberServiceImplTest {
     private BarberTimeOffRepository timeOffRepository;
 
     @Mock
-    private AppointmentStatsService statsService;
+    private ApplicationEventPublisher eventPublisher;
 
     private BarberServiceImpl barberService;
 
     @BeforeEach
     void setUp() {
-        barberService = new BarberServiceImpl(barberRepository, scheduleRepository, timeOffRepository, statsService);
+        barberService = new BarberServiceImpl(barberRepository, scheduleRepository, timeOffRepository, eventPublisher);
     }
 
     @Test
@@ -74,6 +76,11 @@ class BarberServiceImplTest {
         BarberResponse result = barberService.createBarber(request);
 
         assertEquals("Alex", result.name());
+        // A new barber can serve every date, so the whole availability cache is
+        // invalidated after commit via the all-barbers event.
+        ArgumentCaptor<AvailabilityChangedEvent> captor = ArgumentCaptor.forClass(AvailabilityChangedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertTrue(captor.getValue().affectsAllBarbers());
     }
 
     @Test
@@ -109,9 +116,15 @@ class BarberServiceImplTest {
 
         assertNotNull(result);
         assertEquals(LocalDate.of(2026, 7, 22), result.startDate());
-        // Cache evicted for each date in the range (2 days: 7/22 and 7/23).
-        verify(statsService).clearBusySlotsCache("Alex the Barber", LocalDate.of(2026, 7, 22));
-        verify(statsService).clearBusySlotsCache("Alex the Barber", LocalDate.of(2026, 7, 23));
+        // The full inclusive range is published; the AFTER_COMMIT listener evicts
+        // both the concrete and the First-Available aggregate key per date.
+        ArgumentCaptor<AvailabilityChangedEvent> captor = ArgumentCaptor.forClass(AvailabilityChangedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        AvailabilityChangedEvent event = captor.getValue();
+        assertFalse(event.affectsAllBarbers());
+        assertEquals("Alex the Barber", event.barberName());
+        assertEquals(LocalDate.of(2026, 7, 22), event.startDate());
+        assertEquals(LocalDate.of(2026, 7, 23), event.endDate());
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.example.taskflow.core.ResourceNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -56,6 +57,9 @@ class AppointmentServiceImplTest {
     @Mock
     private BarberTimeOffRepository barberTimeOffRepository;
 
+    @Mock
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
     private BusySlotsService busySlotsService;
 
     private AppointmentServiceImpl appointmentService;
@@ -67,7 +71,8 @@ class AppointmentServiceImplTest {
         busySlotsService = new BusySlotsService(barberRepository, barberScheduleRepository, barberTimeOffRepository, appointmentRepository);
         appointmentService = new AppointmentServiceImpl(
                 appointmentRepository, eventPublisher, statsService, tracer,
-                busySlotsService, barberRepository, barberScheduleRepository, barberTimeOffRepository, catalogService
+                busySlotsService, barberRepository, barberScheduleRepository, barberTimeOffRepository,
+                catalogService, transactionManager
         );
 
         testAppointment = new Appointment("John Doe", "john@test.com", "1234567890", "Barber Alex", LocalDate.now(), "10:00", "Haircut");
@@ -204,7 +209,15 @@ class AppointmentServiceImplTest {
         assertFalse(result.replayed());
         assertEquals("John Doe", result.appointment().customerName());
         verify(appointmentRepository).save(any(Appointment.class));
-        verify(eventPublisher).publishEvent(any(AppointmentAdminEvent.class));
+        ArgumentCaptor<Object> published = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, times(2)).publishEvent(published.capture());
+        AvailabilityChangedEvent availability = published.getAllValues().stream()
+                .filter(AvailabilityChangedEvent.class::isInstance)
+                .map(AvailabilityChangedEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals(testAppointment.getBarberName(), availability.barberName());
+        assertEquals(LocalDate.now(), availability.startDate());
     }
 
     @Test
@@ -352,6 +365,7 @@ class AppointmentServiceImplTest {
         assertEquals("APPROVED", response.status());
         verify(appointmentRepository).save(testAppointment);
         verify(eventPublisher).publishEvent(any(AppointmentAdminEvent.class));
+        verify(eventPublisher).publishEvent(any(AvailabilityChangedEvent.class));
     }
     
     @Test
@@ -427,6 +441,7 @@ class AppointmentServiceImplTest {
         appointmentService.deleteAppointment(1L);
         verify(appointmentRepository).delete(testAppointment);
         verify(eventPublisher).publishEvent(any(AppointmentAdminEvent.class));
+        verify(eventPublisher).publishEvent(any(AvailabilityChangedEvent.class));
     }
 
     @Test
@@ -457,6 +472,7 @@ class AppointmentServiceImplTest {
         appointmentService.publicCancelAppointment("test-public-id", "john@test.com");
         verify(appointmentRepository).delete(testAppointment);
         verify(eventPublisher).publishEvent(any(AppointmentAdminEvent.class));
+        verify(eventPublisher).publishEvent(any(AvailabilityChangedEvent.class));
     }
 
     @Test

@@ -17,7 +17,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.Optional;
 import io.micrometer.tracing.Tracer;
@@ -49,6 +52,8 @@ public class AppointmentServiceImpl implements AppointmentService {
     private final BarberScheduleRepository barberScheduleRepository;
     private final BarberTimeOffRepository barberTimeOffRepository;
     private final CatalogService catalogService;
+    private final TransactionTemplate createTransactionTemplate;
+    private final TransactionTemplate idempotencyLookupTemplate;
 
     public AppointmentServiceImpl(AppointmentRepository appointmentRepository,
                                   ApplicationEventPublisher eventPublisher,
@@ -58,7 +63,8 @@ public class AppointmentServiceImpl implements AppointmentService {
                                    BarberRepository barberRepository,
                                    BarberScheduleRepository barberScheduleRepository,
                                    BarberTimeOffRepository barberTimeOffRepository,
-                                   CatalogService catalogService) {
+                                   CatalogService catalogService,
+                                   PlatformTransactionManager transactionManager) {
         this.appointmentRepository = appointmentRepository;
         this.eventPublisher = eventPublisher;
         this.statsService = statsService;
@@ -68,6 +74,11 @@ public class AppointmentServiceImpl implements AppointmentService {
         this.barberScheduleRepository = barberScheduleRepository;
         this.barberTimeOffRepository = barberTimeOffRepository;
         this.catalogService = catalogService;
+        this.createTransactionTemplate = new TransactionTemplate(transactionManager);
+        this.createTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.idempotencyLookupTemplate = new TransactionTemplate(transactionManager);
+        this.idempotencyLookupTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.idempotencyLookupTemplate.setReadOnly(true);
     }
 
     /** Safely tag the current tracing span — swallowed on failure. */
@@ -137,79 +148,25 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
-    @Transactional
     public AppointmentCreationResult createAppointment(AppointmentCreateRequest request, String idempotencyKey) {
-        String trimmedKey = idempotencyKey == null ? null : idempotencyKey.trim();
-        if (trimmedKey != null && !trimmedKey.isEmpty()) {
-            Appointment existing = appointmentRepository.findByIdempotencyKey(trimmedKey);
+        String trimmedKey = normalizeIdempotencyKey(idempotencyKey);
+
+        if (trimmedKey != null) {
+            Appointment existing = lookupByIdempotencyKey(trimmedKey);
             if (existing != null) {
                 return replayOrConflict(existing, request, trimmedKey);
             }
         }
 
-        // H2: "No Preference (First Available)" is an input-only sentinel. Resolve
-        // it to a concrete, available barber BEFORE persisting so the partial
-        // unique slot index and the per-barber availability queries both see the
-        // booking. Persisting the sentinel verbatim let a real barber be booked at
-        // the same slot because the sentinel looked like a distinct fictitious
-        // barber to the unique index.
-        Barber resolvedBarber = resolveBarber(request);
-        String effectiveBarberName = resolvedBarber.getName();
-
-        // A2: enforce that the requested time falls within the barber's scheduled
-        // working window for that day of week (returns a clear 400 rather than
-        // relying on the busy-slot side effect). Backed by BarberSchedule.
-        validateBookingTimeWithinSchedule(resolvedBarber, request.bookingDate(), request.bookingTime());
-
-        // Atomic (in-transaction) time-off recheck. The busy-slot lookup below is
-        // cached for up to 2 minutes, so an admin time-off insertion between the
-        // cache load and this save would otherwise let a booking slip through.
-        // This fresh DB read closes that window for the common case. (A truly
-        // concurrent insert racing this transaction remains a documented residual
-        // race best closed by a database exclusion constraint if/when needed.)
-        if (!barberTimeOffRepository.findTimeOffForBarberOnDate(resolvedBarber.getId(), request.bookingDate()).isEmpty()) {
-            throw new IllegalArgumentException(
-                    "The selected barber is unavailable on this date (time off). Please choose another date or barber.");
-        }
-
-        // Validate slot availability (prevent double-bookings)
-        // Call via injected BusySlotsService so the @Cacheable proxy is actually used.
-        java.util.List<String> busy = busySlotsService.getBusySlots(effectiveBarberName, request.bookingDate().toString());
-        if (busy.contains(request.bookingTime())) {
-            throw new IllegalArgumentException("The selected slot is already booked or unavailable.");
-        }
-
-        Appointment item = new Appointment();
-        item.setIdempotencyKey(trimmedKey);
-        item.setCustomerName(request.customerName());
-        item.setCustomerEmail(request.customerEmail());
-        item.setCustomerPhone(request.customerPhone());
-        // A1: keep denormalized name cache in sync with the FK (renders instantly
-        // in the UI without an extra join) AND resolve the real catalog FKs.
-        item.setBarberName(effectiveBarberName);
-        item.setServiceType(request.serviceType());
-        resolveAndSetCatalogReferences(item, resolvedBarber, request.serviceType());
-        item.setBookingDate(request.bookingDate());
-        item.setBookingTime(request.bookingTime());
-        item.setStatus("PENDING");
-
         // A4: idempotency is enforced by a unique constraint on idempotency_key.
         // The check-then-save above is non-atomic, so concurrent duplicates can
-        // race past the check. Catch the constraint violation and resolve it to
-        // either a verified replay, an idempotency conflict, or a slot collision.
+        // race past the check. The attempt runs in its own transaction so that a
+        // constraint violation is fully rolled back before we query for the
+        // winner: on PostgreSQL the losing transaction is aborted at the first
+        // error, and re-querying inside it (the previous behaviour) failed with
+        // "session flushed after exception" / "current transaction is aborted".
         try {
-            Appointment savedItem = appointmentRepository.save(item);
-            statsService.clearStatsCache();
-            statsService.clearBusySlotsCache(savedItem.getBarberName(), savedItem.getBookingDate());
-            publishAdminEvent(AppointmentAdminEvent.Type.CREATED, savedItem.getId());
-
-            tagSpan(
-                "appointment.id", String.valueOf(savedItem.getId()),
-                "appointment.customer", savedItem.getCustomerName(),
-                "appointment.status", savedItem.getStatus()
-            );
-
-            return AppointmentCreationResult.created(AppointmentResponse.fromEntity(savedItem));
+            return createAppointmentInTransaction(request, trimmedKey);
         } catch (org.springframework.dao.DataIntegrityViolationException ex) {
             // H1: Inspect the root cause to distinguish constraint violations.
             // Previously, ANY DataIntegrityViolationException was treated as either
@@ -217,11 +174,12 @@ public class AppointmentServiceImpl implements AppointmentService {
             // (FK, NOT NULL, CHECK) would incorrectly return "slot was just booked".
             //
             // Next steps:
-            //   1. Try idempotency-key lookup — verified replay or 409 conflict.
+            //   1. Try idempotency-key lookup in a fresh transaction — verified
+            //      replay or 409 conflict.
             //   2. If SQLState = 23505 (unique_violation), treat as slot collision.
             //   3. Otherwise, surface a generic "data conflict" error.
-            if (trimmedKey != null && !trimmedKey.isEmpty()) {
-                Appointment existing = appointmentRepository.findByIdempotencyKey(trimmedKey);
+            if (trimmedKey != null) {
+                Appointment existing = lookupByIdempotencyKey(trimmedKey);
                 if (existing != null) {
                     return replayOrConflict(existing, request, trimmedKey);
                 }
@@ -230,7 +188,7 @@ public class AppointmentServiceImpl implements AppointmentService {
                 // Slot was booked between our busy-slots check and save (TOCTOU).
                 // The partial unique index idx_appointment_slot_active caught it.
                 logger.warn("Slot collision for {} at {} on {} — request raced with another booking.",
-                        LogSanitizer.stripNewlines(effectiveBarberName),
+                        LogSanitizer.stripNewlines(request.barberName()),
                         LogSanitizer.stripNewlines(request.bookingTime()),
                         request.bookingDate());
                 throw new IllegalArgumentException(
@@ -242,6 +200,93 @@ public class AppointmentServiceImpl implements AppointmentService {
             throw new IllegalArgumentException(
                     "Unable to process the booking due to a data conflict. Please try again.");
         }
+    }
+
+    /**
+     * Runs one booking attempt in its own transaction. Kept separate from the
+     * idempotency resolution above so a failed attempt can be rolled back without
+     * poisoning the transaction used to detect a concurrent replay.
+     */
+    private AppointmentCreationResult createAppointmentInTransaction(
+            AppointmentCreateRequest request, String trimmedKey) {
+        return createTransactionTemplate.execute(status -> {
+            // H2: "No Preference (First Available)" is an input-only sentinel. Resolve
+            // it to a concrete, available barber BEFORE persisting so the partial
+            // unique slot index and the per-barber availability queries both see the
+            // booking. Persisting the sentinel verbatim let a real barber be booked at
+            // the same slot because the sentinel looked like a distinct fictitious
+            // barber to the unique index.
+            Barber resolvedBarber = resolveBarber(request);
+            String effectiveBarberName = resolvedBarber.getName();
+
+            // A2: enforce that the requested time falls within the barber's scheduled
+            // working window for that day of week (returns a clear 400 rather than
+            // relying on the busy-slot side effect). Backed by BarberSchedule.
+            validateBookingTimeWithinSchedule(resolvedBarber, request.bookingDate(), request.bookingTime());
+
+            // Atomic (in-transaction) time-off recheck. The busy-slot lookup below is
+            // cached for up to 2 minutes, so an admin time-off insertion between the
+            // cache load and this save would otherwise let a booking slip through.
+            // This fresh DB read closes that window for the common case. (A truly
+            // concurrent insert racing this transaction remains a documented residual
+            // race best closed by a database exclusion constraint if/when needed.)
+            if (!barberTimeOffRepository.findTimeOffForBarberOnDate(resolvedBarber.getId(), request.bookingDate()).isEmpty()) {
+                throw new IllegalArgumentException(
+                        "The selected barber is unavailable on this date (time off). Please choose another date or barber.");
+            }
+
+            // Validate slot availability (prevent double-bookings)
+            // Call via injected BusySlotsService so the @Cacheable proxy is actually used.
+            java.util.List<String> busy = busySlotsService.getBusySlots(effectiveBarberName, request.bookingDate().toString());
+            if (busy.contains(request.bookingTime())) {
+                throw new IllegalArgumentException("The selected slot is already booked or unavailable.");
+            }
+
+            Appointment item = new Appointment();
+            item.setIdempotencyKey(trimmedKey);
+            item.setCustomerName(request.customerName());
+            item.setCustomerEmail(request.customerEmail());
+            item.setCustomerPhone(request.customerPhone());
+            // A1: keep denormalized name cache in sync with the FK (renders instantly
+            // in the UI without an extra join) AND resolve the real catalog FKs.
+            item.setBarberName(effectiveBarberName);
+            item.setServiceType(request.serviceType());
+            resolveAndSetCatalogReferences(item, resolvedBarber, request.serviceType());
+            item.setBookingDate(request.bookingDate());
+            item.setBookingTime(request.bookingTime());
+            item.setStatus("PENDING");
+
+            Appointment savedItem = appointmentRepository.save(item);
+            publishAvailabilityChange(
+                    AvailabilityChangedEvent.single(savedItem.getBarberName(), savedItem.getBookingDate()));
+            publishAdminEvent(AppointmentAdminEvent.Type.CREATED, savedItem.getId());
+
+            tagSpan(
+                "appointment.id", String.valueOf(savedItem.getId()),
+                "appointment.customer", savedItem.getCustomerName(),
+                "appointment.status", savedItem.getStatus()
+            );
+
+            return AppointmentCreationResult.created(AppointmentResponse.fromEntity(savedItem));
+        });
+    }
+
+    /**
+     * Blank/whitespace keys are treated as absent. Persisting the empty string
+     * instead would occupy the unique {@code idempotency_key} index and make
+     * every subsequent blank-key booking fail as a false slot collision.
+     */
+    private static String normalizeIdempotencyKey(String idempotencyKey) {
+        if (idempotencyKey == null) {
+            return null;
+        }
+        String trimmed = idempotencyKey.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /** Looks up an existing booking in its own short read-only transaction. */
+    private Appointment lookupByIdempotencyKey(String key) {
+        return idempotencyLookupTemplate.execute(status -> appointmentRepository.findByIdempotencyKey(key));
     }
 
     /**
@@ -371,8 +416,8 @@ public class AppointmentServiceImpl implements AppointmentService {
 
         item.setStatus(request.status().toUpperCase());
         Appointment savedItem = appointmentRepository.save(item);
-        statsService.clearStatsCache();
-        statsService.clearBusySlotsCache(savedItem.getBarberName(), savedItem.getBookingDate());
+        publishAvailabilityChange(
+                AvailabilityChangedEvent.single(savedItem.getBarberName(), savedItem.getBookingDate()));
 
         tagSpan(
             "appointment.id", String.valueOf(savedItem.getId()),
@@ -394,8 +439,8 @@ public class AppointmentServiceImpl implements AppointmentService {
         Appointment item = appointmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found with id: " + id));
         appointmentRepository.delete(item);
-        statsService.clearStatsCache();
-        statsService.clearBusySlotsCache(item.getBarberName(), item.getBookingDate());
+        publishAvailabilityChange(
+                AvailabilityChangedEvent.single(item.getBarberName(), item.getBookingDate()));
         publishAdminEvent(AppointmentAdminEvent.Type.DELETED, item.getId());
 
         tagSpan(
@@ -424,8 +469,8 @@ public class AppointmentServiceImpl implements AppointmentService {
         // This ensures notification outbox entries are written for the cancellation.
         eventPublisher.publishEvent(new AppointmentStatusChangedEvent(this, item));
         appointmentRepository.delete(item);
-        statsService.clearStatsCache();
-        statsService.clearBusySlotsCache(item.getBarberName(), item.getBookingDate());
+        publishAvailabilityChange(
+                AvailabilityChangedEvent.single(item.getBarberName(), item.getBookingDate()));
         publishAdminEvent(AppointmentAdminEvent.Type.DELETED, item.getId());
 
         tagSpan(
@@ -443,6 +488,15 @@ public class AppointmentServiceImpl implements AppointmentService {
         if (appointmentId != null) {
             eventPublisher.publishEvent(new AppointmentAdminEvent(type, appointmentId, Instant.now()));
         }
+    }
+
+    /**
+     * Signals that availability changed. The event is handled after the
+     * transaction commits so a rollback never clears committed cache state and
+     * a cache failure never rolls back a committed booking.
+     */
+    private void publishAvailabilityChange(AvailabilityChangedEvent event) {
+        eventPublisher.publishEvent(event);
     }
 
     @Override

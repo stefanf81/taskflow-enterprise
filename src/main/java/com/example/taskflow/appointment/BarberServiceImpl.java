@@ -4,36 +4,30 @@ import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 
 import com.example.taskflow.core.ResourceNotFoundException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.util.List;
 
 @Service
 public class BarberServiceImpl implements BarberService {
 
-    private static final Logger logger = LoggerFactory.getLogger(BarberServiceImpl.class);
-    /** Safety cap on the per-time-off cache-eviction loop to avoid pathological ranges. */
-    private static final int MAX_EVICT_DAYS = 366;
-
     private final BarberRepository barberRepository;
     private final BarberScheduleRepository scheduleRepository;
     private final BarberTimeOffRepository timeOffRepository;
-    private final AppointmentStatsService statsService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public BarberServiceImpl(BarberRepository barberRepository,
                              BarberScheduleRepository scheduleRepository,
                              BarberTimeOffRepository timeOffRepository,
-                             AppointmentStatsService statsService) {
+                             ApplicationEventPublisher eventPublisher) {
         this.barberRepository = barberRepository;
         this.scheduleRepository = scheduleRepository;
         this.timeOffRepository = timeOffRepository;
-        this.statsService = statsService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -55,6 +49,10 @@ public class BarberServiceImpl implements BarberService {
     @CacheEvict(value = {"barbers", "publicBarbers"}, allEntries = true)
     public BarberResponse createBarber(BarberRequest request) {
         Barber saved = barberRepository.save(request.toEntity());
+        // A new barber can serve every date, so the "First Available" aggregate
+        // is stale for every date. Invalidate the whole availability cache
+        // (after commit, via the listener) rather than enumerating dates.
+        eventPublisher.publishEvent(AvailabilityChangedEvent.allBarbers());
         return BarberResponse.fromEntity(saved);
     }
 
@@ -76,29 +74,13 @@ public class BarberServiceImpl implements BarberService {
         }
         BarberTimeOff saved = timeOffRepository.save(request.toEntity(barber));
 
-        // Eagerly evict the busy-slots cache for every affected date so a
-        // freshly-added time-off immediately blocks bookings instead of waiting
-        // up to 2 minutes for the cached entry to expire. Without this, an
-        // admin marking a barber unavailable could see the slot remain bookable.
-        evictBusySlotsCacheForRange(barber.getName(), request.startDate(), request.endDate());
+        // Invalidate the busy-slots cache for every affected date after commit so
+        // a freshly-added time-off immediately blocks bookings instead of waiting
+        // up to 2 minutes for the cached entry to expire. The listener evicts both
+        // the concrete barber key and the "First Available" aggregate.
+        eventPublisher.publishEvent(
+                AvailabilityChangedEvent.range(barber.getName(), request.startDate(), request.endDate()));
 
         return BarberTimeOffResponse.fromEntity(saved);
-    }
-
-    private void evictBusySlotsCacheForRange(String barberName, LocalDate startDate, LocalDate endDate) {
-        if (startDate == null || endDate == null) {
-            return;
-        }
-        LocalDate date = startDate;
-        int count = 0;
-        while (!date.isAfter(endDate) && count < MAX_EVICT_DAYS) {
-            statsService.clearBusySlotsCache(barberName, date);
-            date = date.plusDays(1);
-            count++;
-        }
-        if (!date.isAfter(endDate)) {
-            logger.warn("Busy-slot cache eviction for barber {} capped at {} days (range exceeded the limit).",
-                    barberName, MAX_EVICT_DAYS);
-        }
     }
 }
