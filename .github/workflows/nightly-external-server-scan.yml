@@ -348,7 +348,9 @@ jobs:
   ##########################################################
   # Web Application & TLS Security Scan
   ##########################################################
-  web-scan:
+  # Preserve the original analysis key so successful uploads refresh the existing
+  # Nuclei Code Scanning configuration instead of leaving its old warning stale.
+  external-security-scan:
     name: Web Application & TLS Security Scan
     if: ${{ inputs.scan_components != 'network_only' }}
     runs-on: ubuntu-26.04
@@ -603,12 +605,21 @@ jobs:
           # quality-gate step; do not hard-fail this step on a scanner error.
           exit 0
 
+      - name: Prepare Nuclei SARIF
+        if: always()
+        run: |
+          if ! python3 scripts/prepare-nuclei-sarif.py reports --version "${NUCLEI_VERSION}"; then
+            echo "::error::Nuclei SARIF preparation failed; the scan must not be reported as clean."
+            rm -f reports/nuclei-complete reports/nuclei-upload.sarif
+            touch reports/nuclei-failed
+            exit 1
+          fi
+
       - name: Upload Nuclei SARIF
-        if: always() && hashFiles('reports/nuclei-results.sarif') != ''
-        continue-on-error: true
+        if: always() && hashFiles('reports/nuclei-upload.sarif') != ''
         uses: ./.github/actions/upload-sarif
         with:
-          path: reports/nuclei-results.sarif
+          path: reports/nuclei-upload.sarif
           category: nightly-external-nuclei
 
       - name: Generate web & TLS step summary

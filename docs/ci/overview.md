@@ -153,7 +153,7 @@ Audits the public external perimeter, exposed ports, HTTP/TLS compliance, and we
 
 - **Two-Job Parallel Execution:** Runs the network and web scans as concurrent jobs, and the three web/TLS detectors concurrently within the web job, so the wall clock is bounded by the slowest scanner (Nuclei, ~23 min; observed end-to-end web scan ~30 min) instead of the former serial sum of 60–90 minutes:
   - `network-scan`: Scans the target IP with Nmap across configurable port scopes (`top_1000` fast probe, `full_65k` deep audit, or `expected_only`) selected by the manual `port_scan_scope` input (default `top_1000`). Automatically flags any ports outside `EXPECTED_PUBLIC_TCP_PORTS: "80,443"` and runs non-intrusive safe service scripts on open ports.
-  - `web-scan`: Runs `Nuclei`, `testssl.sh`, and `Nikto` **concurrently** in one job (the slowest, Nuclei at ~23 min, sets the wall clock) under a 45-minute timeout, so a scan can no longer be cancelled mid-run as it was under the former serial 35-minute budget.
+  - `external-security-scan`: Runs `Nuclei`, `testssl.sh`, and `Nikto` **concurrently** in one job (the slowest, Nuclei at ~23 min, sets the wall clock) under a 45-minute timeout, so a scan can no longer be cancelled mid-run as it was under the former serial 35-minute budget. The original job ID is retained to refresh the existing Nuclei Code Scanning configuration.
 - **Origin IP & SNI Alignment:** Pins `TARGET_HOST` to `TARGET_IP` in `/etc/hosts` and passes `--add-host` to containerized scanners, eliminating CDN/DNS resolution drift while preserving exact TLS SNI and HTTP `Host` virtual routing.
 - **Port 80 Redirect Verification:** Validates that port 80 enforces an immediate HTTP-to-HTTPS redirect (301/302/307/308) to the target domain, including it in web analysis rather than misclassifying it as a non-HTTP protocol.
 - **Strict Quality Gates:**
@@ -162,6 +162,7 @@ Audits the public external perimeter, exposed ports, HTTP/TLS compliance, and we
   - Fails if `testssl.sh` detects `CRITICAL` or `HIGH` TLS vulnerabilities (e.g. SSLv3, POODLE, Heartbleed, expired certs).
   - Fails on operational scanner crashes or missing/empty reports (preventing false successes).
 - **Reconnaissance Protection:** Raw network and scanner dumps are excluded from public artifacts by default (`upload_raw_artifacts: false`). Sanitized tables and metrics are rendered in GitHub Step Summary, while Nuclei findings upload to GitHub Code Scanning via SARIF.
+- **Reliable Nuclei SARIF:** `scripts/prepare-nuclei-sarif.py` adds execution metadata from the recorded exit status and completion markers. Confirmed successful zero-match scans upload an empty report (the upstream exporter omits it); failed scans retain any partial findings with `executionSuccessful: false`. Missing or inconsistent reports cannot become successful empty uploads, and upload failures fail the job. The `nightly-external-nuclei` category and `nuclei` tool identity stay stable. Regression tests run in the Workflow Lint job with `python3 -m unittest discover -s scripts -p 'test_nuclei_sarif.py' -v`.
 
 ## 10. Job: `docker-build`
 

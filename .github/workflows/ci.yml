@@ -114,6 +114,8 @@ jobs:
               - '.github/workflows/**'
               - '.github/actions/**'
               - '.github/actionlint.yaml'
+              - 'scripts/prepare-nuclei-sarif.py'
+              - 'scripts/test_nuclei_sarif.py'
 
             docker:
               - Dockerfile*
@@ -226,6 +228,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Test Nuclei SARIF preparation
+        run: python3 -m unittest discover -s scripts -p 'test_nuclei_sarif.py' -v
 
       - name: Lint workflows
         run: |
