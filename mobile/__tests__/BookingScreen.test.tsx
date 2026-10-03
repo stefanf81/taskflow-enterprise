@@ -46,6 +46,10 @@ jest.mock('../src/hooks/useBarbers', () => ({
   usePublicBarbers: () => ({ data: [{ id: 1, name: 'Alex the Barber' }] }),
 }));
 
+jest.mock('expo-crypto', () => ({
+  randomUUID: jest.fn(() => '123e4567-e89b-12d3-a456-426614174000'),
+}));
+
 jest.mock('../src/hooks/useAppointments', () => {
   const mutateAsync = jest.fn();
   mockMutateAsync = mutateAsync;
@@ -302,14 +306,43 @@ describe('BookingScreen', () => {
     await waitFor(() => {
       expect(mockMutateAsync).toHaveBeenCalledWith(
         expect.objectContaining({
-          customerName: 'John Smith',
-          customerEmail: 'john@example.com',
-          customerPhone: '+15551234567',
-          serviceType: 'Classic Haircut',
-          barberName: 'No Preference (First Available)',
+          data: expect.objectContaining({
+            customerName: 'John Smith',
+            customerEmail: 'john@example.com',
+            customerPhone: '+15551234567',
+            serviceType: 'Classic Haircut',
+            barberName: 'No Preference (First Available)',
+          }),
+          idempotencyKey: expect.any(String),
         }),
       );
     });
+  });
+
+  it('reuses the Idempotency-Key across an identical retry and rotates after success', async () => {
+    mockMutateAsync
+      .mockRejectedValueOnce({ response: { data: { message: 'Timed out' } } })
+      .mockResolvedValueOnce({ id: 1, publicId: 'pub-1' });
+
+    const { getByText, getByPlaceholderText } = await render(<BookingScreen />);
+
+    await fireEvent.press(getByText('Continue to Stylist'));
+    await fireEvent.press(getByText('Continue'));
+    mockBusySlotsData = [];
+    await fireEvent.press(getByText('Continue'));
+    await fireEvent.changeText(getByPlaceholderText(/john doe/i), 'John Smith');
+    await fireEvent.changeText(getByPlaceholderText(/john\.doe/i), 'john@example.com');
+    await fireEvent.changeText(getByPlaceholderText(/\+1 \(555\)/i), '+15551234567');
+
+    await fireEvent.press(getByText('Confirm & Request Booking'));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+
+    await fireEvent.press(getByText('Confirm & Request Booking'));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(2));
+
+    const first = mockMutateAsync.mock.calls[0][0];
+    const retry = mockMutateAsync.mock.calls[1][0];
+    expect(retry.idempotencyKey).toBe(first.idempotencyKey);
   });
 
   it('shows error when booking submission fails', async () => {

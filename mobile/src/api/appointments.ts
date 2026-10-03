@@ -11,6 +11,7 @@ import {
   appointmentDashboardResponseSchema,
   appointmentResponseSchema,
   appointmentUpdateSchema,
+  busySlotsResponseSchema,
 } from '@taskflow/schemas';
 
 export const appointmentsApi = {
@@ -40,9 +41,16 @@ export const appointmentsApi = {
     );
   },
 
-  createAppointment: async (data: AppointmentCreateRequest): Promise<AppointmentItem> => {
+  createAppointment: async (
+    data: AppointmentCreateRequest,
+    idempotencyKey?: string
+  ): Promise<AppointmentItem> => {
     const payload = parseContract(appointmentCreateSchema, data, 'POST /api/v1/appointments');
-    const response = await apiClient.post<AppointmentItem>('/api/v1/appointments', payload);
+    const response = idempotencyKey
+      ? await apiClient.post<AppointmentItem>('/api/v1/appointments', payload, {
+          headers: { 'Idempotency-Key': idempotencyKey },
+        })
+      : await apiClient.post<AppointmentItem>('/api/v1/appointments', payload);
     return parseContract(
       appointmentResponseSchema,
       response.data,
@@ -54,7 +62,11 @@ export const appointmentsApi = {
     const response = await apiClient.get<string[]>('/api/v1/appointments/public/busy-slots', {
       params: { barberName, bookingDate },
     });
-    return response.data;
+    return parseContract(
+      busySlotsResponseSchema,
+      response.data,
+      'GET /api/v1/appointments/public/busy-slots',
+    );
   },
 
   publicCancelAppointment: async (publicId: string, email: string): Promise<void> => {

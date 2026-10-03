@@ -85,6 +85,22 @@ describe('appointmentsApi', () => {
       expect(mockedPost).toHaveBeenCalledWith('/api/v1/appointments', expect.any(Object));
       expect(result).toEqual(mockAppt);
     });
+
+    it('sends the Idempotency-Key header when provided', async () => {
+      mockedPost.mockResolvedValueOnce({ data: mockAppt });
+
+      await appointmentsApi.createAppointment(
+        {
+          customerName: 'John', customerEmail: 'j@ex.com', customerPhone: '+1',
+          barberName: 'Alex', bookingDate: '2026-08-01', bookingTime: '10:00', serviceType: 'Haircut',
+        },
+        'attempt-key-1',
+      );
+
+      expect(mockedPost).toHaveBeenCalledWith('/api/v1/appointments', expect.any(Object), {
+        headers: { 'Idempotency-Key': 'attempt-key-1' },
+      });
+    });
   });
 
   describe('getBusySlots', () => {

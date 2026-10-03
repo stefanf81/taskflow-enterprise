@@ -16,6 +16,7 @@ import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import { LoadingIndicator } from '../components/common/LoadingIndicator';
 import { EmptyState } from '../components/common/EmptyState';
+import { ErrorState } from '../components/common/ErrorState';
 import { ErrorMessage } from '../components/common/ErrorMessage';
 import {
   useAppointments,
@@ -43,7 +44,7 @@ export const AdminDashboardScreen: React.FC = () => {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading, refetch } = useAppointments(filter, debouncedSearch, page, 10);
+  const { data, isLoading, isError, refetch } = useAppointments(filter, debouncedSearch, page, 10);
   const updateStatusMutation = useUpdateAppointmentStatus();
   const deleteMutation = useDeleteAppointment();
   const { logout } = useAuthStore();
@@ -232,7 +233,9 @@ export const AdminDashboardScreen: React.FC = () => {
             </View>
 
             {/* List of Appointments */}
-            {isLoading ? (
+            {isError ? (
+              <ErrorState message="Couldn't load appointments." onRetry={() => refetch()} />
+            ) : isLoading ? (
               <LoadingIndicator message="Loading bookings..." />
             ) : appointments.length === 0 ? (
               <EmptyState

@@ -15,6 +15,16 @@ function getPinningConfig() {
     return null;
   }
 
+  // EXPO_PUBLIC_E2E_LOCAL_API is the documented runtime HTTPS bypass in
+  // src/api/client.ts. A release build that requires pinning must never ship
+  // with it enabled.
+  if (process.env.EXPO_PUBLIC_E2E_LOCAL_API === 'true') {
+    throw new Error(
+      'TASKFLOW_TLS_POLICY=required forbids EXPO_PUBLIC_E2E_LOCAL_API=true. ' +
+        'Local HTTP E2E builds must use the default (optional) TLS policy.',
+    );
+  }
+
   let apiUrl;
   try {
     apiUrl = new URL(process.env.EXPO_PUBLIC_API_URL);
@@ -88,3 +98,8 @@ module.exports = function withTaskflowTlsPinning(config) {
     return config;
   });
 };
+
+// Test seams for test/security/tls-pinning.test.cjs (the default export stays
+// the Expo config plugin).
+module.exports.getPinningConfig = getPinningConfig;
+module.exports.androidNetworkSecurityConfig = androidNetworkSecurityConfig;

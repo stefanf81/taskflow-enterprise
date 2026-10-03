@@ -3,11 +3,13 @@ import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card } from '../components/common/Card';
 import { LoadingIndicator } from '../components/common/LoadingIndicator';
+import { EmptyState } from '../components/common/EmptyState';
+import { ErrorState } from '../components/common/ErrorState';
 import { useCatalog } from '../hooks/useCatalog';
 import { colors } from '../theme/colors';
 
 export const AdminCatalogScreen: React.FC = () => {
-  const { data: services = [], isLoading } = useCatalog();
+  const { data: services = [], isLoading, isError, refetch } = useCatalog();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -17,8 +19,16 @@ export const AdminCatalogScreen: React.FC = () => {
           <Text style={styles.title}>Menu & Pricing</Text>
         </View>
 
-        {isLoading ? (
+        {isError ? (
+          <ErrorState message="Couldn't load the service catalog." onRetry={() => refetch()} />
+        ) : isLoading ? (
           <LoadingIndicator message="Loading service catalog..." />
+        ) : services.length === 0 ? (
+          <EmptyState
+            icon="pricetags-outline"
+            title="No Services Found"
+            message="The service catalog is currently empty."
+          />
         ) : (
           <FlatList
             data={services}

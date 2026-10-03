@@ -15,6 +15,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
+import { ErrorState } from '../components/common/ErrorState';
 import { StylistCard } from '../components/booking/StylistCard';
 import { LookbookGallery } from '../components/lookbook/LookbookGallery';
 import { useBarberRatings } from '../hooks/useReviews';
@@ -57,8 +58,9 @@ export const HomeScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const { isAuthenticated, role } = useAuthStore();
   const { data: ratings = [] } = useBarberRatings();
-  const { data: apiBarbers = [] } = usePublicBarbers();
-  const { data: services = [] } = useCatalog();
+  const { data: apiBarbers = [], isError: barbersError, refetch: refetchBarbers } =
+    usePublicBarbers();
+  const { data: services = [], isError: servicesError, refetch: refetchServices } = useCatalog();
 
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
   const pingAnim = useRef(new Animated.Value(1)).current;
@@ -183,16 +185,25 @@ export const HomeScreen: React.FC = () => {
         <Card style={styles.menuCard}>
           <Text style={styles.menuHeader}>Grooming Menu</Text>
 
-          {services.map((svc) => (
-            <View key={svc.id} style={styles.menuItem}>
-              <View style={styles.menuTop}>
-                <Text style={styles.menuName}>{svc.name}</Text>
-                <Text style={styles.menuPrice}>${svc.price.toFixed(0)}</Text>
+          {servicesError ? (
+            <ErrorState
+              title="Menu Unavailable"
+              message="Couldn't load the grooming menu."
+              onRetry={() => refetchServices()}
+              testID="grooming-menu-error"
+            />
+          ) : (
+            services.map((svc) => (
+              <View key={svc.id} style={styles.menuItem}>
+                <View style={styles.menuTop}>
+                  <Text style={styles.menuName}>{svc.name}</Text>
+                  <Text style={styles.menuPrice}>${svc.price.toFixed(0)}</Text>
+                </View>
+                <Text style={styles.menuDuration}>Duration: {svc.durationMinutes} mins</Text>
+                <Text style={styles.menuDesc}>{svc.description}</Text>
               </View>
-              <Text style={styles.menuDuration}>Duration: {svc.durationMinutes} mins</Text>
-              <Text style={styles.menuDesc}>{svc.description}</Text>
-            </View>
-          ))}
+            ))
+          )}
 
           {/* Operating Hours */}
           <View style={styles.hoursCard}>
@@ -244,25 +255,34 @@ export const HomeScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>Master Stylists</Text>
           <Text style={styles.sectionSub}>Select a barber or choose first available</Text>
 
-          {barbers.map((b) => {
-            const dbRating = ratings.find((r) => r.barberName === b.name);
-            const ratingText = dbRating ? `${dbRating.averageRating.toFixed(1)} ★` : '5.0 ★';
-            const reviewsCount = dbRating ? `${dbRating.reviewCount} reviews` : 'New';
-            const meta = BARBER_META[b.name] || { title: 'Stylist', specialty: 'Salon Services' };
+          {barbersError ? (
+            <ErrorState
+              title="Stylists Unavailable"
+              message="Couldn't load the stylist roster."
+              onRetry={() => refetchBarbers()}
+              testID="master-stylists-error"
+            />
+          ) : (
+            barbers.map((b) => {
+              const dbRating = ratings.find((r) => r.barberName === b.name);
+              const ratingText = dbRating ? `${dbRating.averageRating.toFixed(1)} ★` : '5.0 ★';
+              const reviewsCount = dbRating ? `${dbRating.reviewCount} reviews` : 'New';
+              const meta = BARBER_META[b.name] || { title: 'Stylist', specialty: 'Salon Services' };
 
-            return (
-              <StylistCard
-                key={b.id?.toString() || b.name}
-                name={b.name}
-                title={meta.title}
-                specialty={meta.specialty}
-                rating={ratingText}
-                reviewsCount={reviewsCount}
-                badge={meta.badge}
-                onSelect={() => navigation.navigate('Booking', { preselectedBarber: b.name })}
-              />
-            );
-          })}
+              return (
+                <StylistCard
+                  key={b.id?.toString() || b.name}
+                  name={b.name}
+                  title={meta.title}
+                  specialty={meta.specialty}
+                  rating={ratingText}
+                  reviewsCount={reviewsCount}
+                  badge={meta.badge}
+                  onSelect={() => navigation.navigate('Booking', { preselectedBarber: b.name })}
+                />
+              );
+            })
+          )}
         </View>
 
         {/* ===== FAQS ===== */}

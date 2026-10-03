@@ -13,8 +13,7 @@ export const handlers = [
   http.get('*/api/v1/auth/me', () =>
     HttpResponse.json({ username: 'admin', role: 'ROLE_ADMIN' }),
   ),
-  http.post(
-    '*/api/v1/auth/register',
-    () => new HttpResponse(null, { status: 201 }),
+  http.post('*/api/v1/auth/register', () =>
+    HttpResponse.json({ message: 'Account created successfully.' }, { status: 201 }),
   ),
 ];

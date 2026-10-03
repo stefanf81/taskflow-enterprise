@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ScrollView,
   View,
@@ -33,6 +33,7 @@ import {
   getUpcomingDays,
   toLocalDateString,
 } from '../utils/time-utils';
+import { AttemptKey, resolveAttemptKey } from '../utils/idempotency';
 
 type RouteProps = RouteProp<GuestTabParamList, 'Booking'>;
 
@@ -132,6 +133,11 @@ export const BookingScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [receiptAppointment, setReceiptAppointment] = useState<AppointmentItem | null>(null);
 
+  // Stable Idempotency-Key for the current booking attempt: retained across a
+  // failed/ambiguous submit so a re-tap replays the original booking, and
+  // rotated once the payload changes or the booking succeeds.
+  const attemptKeyRef = useRef<AttemptKey | null>(null);
+
   // Real-time busy slots query — when "No Preference" is selected, show no busy indicators
   // since the backend will assign the first available barber automatically
   const effectiveBarber =
@@ -220,19 +226,37 @@ export const BookingScreen: React.FC = () => {
     }
 
     setError(null);
+
+    const payload = {
+      customerName: customerName.trim(),
+      customerEmail: customerEmail.trim(),
+      customerPhone: customerPhone.trim(),
+      barberName: selectedBarber,
+      bookingDate: selectedDate,
+      bookingTime: selectedTime,
+      serviceType: selectedService,
+    };
+    const attempt = resolveAttemptKey(attemptKeyRef.current, JSON.stringify(payload));
+    attemptKeyRef.current = attempt;
+
     try {
       const result = await createMutation.mutateAsync({
-        customerName: customerName.trim(),
-        customerEmail: customerEmail.trim(),
-        customerPhone: customerPhone.trim(),
-        barberName: selectedBarber,
-        bookingDate: selectedDate,
-        bookingTime: selectedTime,
-        serviceType: selectedService,
+        data: payload,
+        idempotencyKey: attempt.key,
       });
 
+      attemptKeyRef.current = null;
       setReceiptAppointment(result);
     } catch (err: unknown) {
+      // A 409 means the key was already used for a different payload; the next
+      // attempt must use a fresh key.
+      const status =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { status?: number } }).response?.status
+          : undefined;
+      if (status === 409) {
+        attemptKeyRef.current = null;
+      }
       const message =
         err && typeof err === 'object' && 'response' in err
           ? (err as { response?: { data?: { message?: string } } }).response?.data?.message

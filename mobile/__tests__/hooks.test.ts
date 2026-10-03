@@ -157,12 +157,18 @@ describe('Hooks', () => {
 
       await act(async () => {
         await result.current.mutateAsync({
-          customerName: 'John', customerEmail: 'j@ex.com', customerPhone: '+1',
-          barberName: 'Alex', bookingDate: '2026-08-01', bookingTime: '10:00', serviceType: 'Haircut',
+          data: {
+            customerName: 'John', customerEmail: 'j@ex.com', customerPhone: '+1',
+            barberName: 'Alex', bookingDate: '2026-08-01', bookingTime: '10:00', serviceType: 'Haircut',
+          },
+          idempotencyKey: 'attempt-key-1',
         });
       });
 
-      expect(mockCreateAppointmentFn).toHaveBeenCalled();
+      expect(mockCreateAppointmentFn).toHaveBeenCalledWith(
+        expect.objectContaining({ customerName: 'John' }),
+        'attempt-key-1',
+      );
     });
   });
 

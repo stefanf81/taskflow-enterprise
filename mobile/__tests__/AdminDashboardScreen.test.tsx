@@ -5,6 +5,7 @@ import { Alert } from 'react-native';
 // ==================== Controllable mocks ====================
 const mockRefetch = jest.fn();
 let mockIsLoading: boolean;
+let mockIsError: boolean;
 let mockAppointmentsData: any;
 let mockUpdateMutate: jest.Mock;
 let mockDeleteMutate: jest.Mock;
@@ -16,6 +17,7 @@ jest.mock('../src/hooks/useAppointments', () => ({
     return {
       data: mockAppointmentsData,
       isLoading: mockIsLoading,
+      isError: mockIsError,
       refetch: mockRefetch,
     };
   },
@@ -56,6 +58,7 @@ describe('AdminDashboardScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockIsLoading = false;
+    mockIsError = false;
     mockAppointmentsData = buildData();
     mockUpdateMutate = jest.fn();
     mockDeleteMutate = jest.fn();
@@ -121,6 +124,15 @@ describe('AdminDashboardScreen', () => {
     await render(<AdminDashboardScreen />);
     expect(screen.getByText('No Appointments Found')).toBeTruthy();
     expect(screen.getByText('No records match your filter criteria.')).toBeTruthy();
+  });
+
+  it('shows error state and retries when appointments fail to load', async () => {
+    mockIsError = true;
+    await render(<AdminDashboardScreen />);
+    expect(screen.getByText("Couldn't load appointments.")).toBeTruthy();
+    expect(screen.queryByText('No Appointments Found')).toBeNull();
+    await fireEvent.press(screen.getByText('Retry'));
+    expect(mockRefetch).toHaveBeenCalledTimes(1);
   });
 
   // ============ FILTERS ============

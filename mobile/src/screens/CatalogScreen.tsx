@@ -18,6 +18,7 @@ import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { LoadingIndicator } from '../components/common/LoadingIndicator';
 import { EmptyState } from '../components/common/EmptyState';
+import { ErrorState } from '../components/common/ErrorState';
 import { useCatalog } from '../hooks/useCatalog';
 import { GuestTabParamList, RootStackParamList } from '../types/navigation';
 import { colors } from '../theme/colors';
@@ -39,7 +40,7 @@ type CatalogNavProp = CompositeNavigationProp<
 
 export const CatalogScreen: React.FC = () => {
   const navigation = useNavigation<CatalogNavProp>();
-  const { data: services = [], isLoading } = useCatalog();
+  const { data: services = [], isLoading, isError, refetch } = useCatalog();
 
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,7 +96,9 @@ export const CatalogScreen: React.FC = () => {
         </ScrollView>
 
         {/* List of Services */}
-        {isLoading ? (
+        {isError ? (
+          <ErrorState message="Couldn't load the service catalog." onRetry={() => refetch()} />
+        ) : isLoading ? (
           <LoadingIndicator message="Fetching catalog..." />
         ) : filteredServices.length === 0 ? (
           <EmptyState

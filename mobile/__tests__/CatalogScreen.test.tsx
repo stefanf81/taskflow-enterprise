@@ -7,6 +7,9 @@ jest.mock('@react-navigation/native', () => ({
   CompositeNavigationProp: jest.fn(),
 }));
 
+let mockIsError: boolean;
+const mockRefetch = jest.fn();
+
 jest.mock('../src/hooks/useCatalog', () => ({
   useCatalog: () => ({
     data: [
@@ -15,12 +18,19 @@ jest.mock('../src/hooks/useCatalog', () => ({
       { id: 3, name: 'Gold Combo', price: 90, durationMinutes: 75, category: 'combo', description: 'Full package' },
     ],
     isLoading: false,
+    isError: mockIsError,
+    refetch: mockRefetch,
   }),
 }));
 
 import { CatalogScreen } from '../src/screens/CatalogScreen';
 
 describe('CatalogScreen', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockIsError = false;
+  });
+
   it('renders catalog title', async () => {
     await render(<CatalogScreen />);
     expect(screen.getByText('Service Catalog')).toBeTruthy();
@@ -66,5 +76,16 @@ describe('CatalogScreen', () => {
     await fireEvent.press(screen.getAllByText('Combos')[0]);
     expect(screen.getByText('Gold Combo')).toBeTruthy();
     expect(screen.queryByText('Luxury Shave')).toBeNull();
+  });
+
+  // ============ ERROR STATE ============
+  it('shows error state and retries when the catalog fails to load', async () => {
+    mockIsError = true;
+    await render(<CatalogScreen />);
+    expect(screen.getByText("Couldn't load the service catalog.")).toBeTruthy();
+    expect(screen.queryByText('No Services Found')).toBeNull();
+    expect(screen.queryByText('Classic Haircut')).toBeNull();
+    await fireEvent.press(screen.getByText('Retry'));
+    expect(mockRefetch).toHaveBeenCalledTimes(1);
   });
 });

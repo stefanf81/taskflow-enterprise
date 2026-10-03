@@ -200,6 +200,35 @@ Once upstream publishes a fixed release, remove the `node-forge` override,
 delete the `vendor/` artifact, update the dependency and lockfile, and rerun the
 security suite before retiring this mitigation.
 
+### braces nesting-depth patch
+
+Dependabot alert [#73](https://github.com/stefanf81/taskflow-enterprise/security/dependabot/73)
+tracks [GHSA-vfj7-8cjw-p6xm / CVE-2026-93687](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+Jest's `micromatch@4.0.8` uses `braces@3.0.3`, whose recursive AST walkers
+(`compile`, `expand`, `stringify`) have no nesting-depth guard: a deeply nested
+brace pattern under the 10,000-character cap exhausts the call stack and
+terminates the Node process with an uncaught `RangeError`.
+
+There is no published fixed npm version as of 2026-10-03. `vendor/braces-3.0.3.patch`
+backports [upstream PR #72](https://github.com/micromatch/braces/pull/72), commit
+`d0d575e55e74a4e0218e5248fafb79efc3e54ebb`, which caps nesting at
+`MAX_DEPTH = 100` in `parse()` and adds matching guards to the
+`compile`/`expand`/`stringify` walkers. It is vendored as
+`vendor/braces-3.0.3-patched.tgz` and applied through `overrides`, using the
+same lockfileVersion 3 approach as node-forge. Regenerate with
+`./vendor/rebuild-braces-patch.sh`; it downloads the official 3.0.3 tarball,
+verifies its registry checksum, applies `vendor/braces-3.0.3.patch`, and
+rewrites the vendored tarball.
+
+`test/security/braces-depth-guard.test.cjs` exercises the copy resolved by
+`micromatch`: 101-level brace and parenthesis patterns throw `exceeds max
+depth` instead of overflowing the stack, callers can lower `maxDepth`, and
+ordinary patterns still expand.
+
+Once upstream publishes a fixed release, remove the `braces` override, delete
+the `vendor/braces-3.0.3*` artifacts, update the dependency and lockfile, and
+rerun the security suite before retiring this mitigation.
+
 ---
 
 ## Development & Testing Commands

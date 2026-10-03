@@ -4,11 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card } from '../components/common/Card';
 import { LoadingIndicator } from '../components/common/LoadingIndicator';
 import { EmptyState } from '../components/common/EmptyState';
+import { ErrorState } from '../components/common/ErrorState';
 import { useNotifications } from '../hooks/useNotifications';
 import { colors } from '../theme/colors';
 
 export const AdminNotificationsScreen: React.FC = () => {
-  const { data: notifications = [], isLoading } = useNotifications();
+  const { data: notifications = [], isLoading, isError, refetch } = useNotifications();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -18,7 +19,12 @@ export const AdminNotificationsScreen: React.FC = () => {
           <Text style={styles.title}>Email Audit Log</Text>
         </View>
 
-        {isLoading ? (
+        {isError ? (
+          <ErrorState
+            message="Couldn't load the notification outbox."
+            onRetry={() => refetch()}
+          />
+        ) : isLoading ? (
           <LoadingIndicator message="Loading email outbox..." />
         ) : notifications.length === 0 ? (
           <EmptyState

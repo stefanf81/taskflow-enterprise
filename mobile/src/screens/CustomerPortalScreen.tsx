@@ -14,6 +14,7 @@ import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { LoadingIndicator } from '../components/common/LoadingIndicator';
 import { EmptyState } from '../components/common/EmptyState';
+import { ErrorState } from '../components/common/ErrorState';
 import { ErrorMessage } from '../components/common/ErrorMessage';
 import { useCustomerAppointments, useCancelCustomerAppointment } from '../hooks/useCustomer';
 import { useAuthStore } from '../store/useAuthStore';
@@ -22,7 +23,7 @@ import { formatTime12Hour } from '../utils/time-utils';
 
 export const CustomerPortalScreen: React.FC = () => {
   const [page, setPage] = useState(0);
-  const { data, isLoading, refetch } = useCustomerAppointments(page, 10);
+  const { data, isLoading, isError, refetch } = useCustomerAppointments(page, 10);
   const cancelMutation = useCancelCustomerAppointment();
   const { username, logout } = useAuthStore();
 
@@ -105,7 +106,9 @@ export const CustomerPortalScreen: React.FC = () => {
 
         <Text style={styles.sectionTitle}>My Bookings</Text>
 
-        {isLoading ? (
+        {isError ? (
+          <ErrorState message="Couldn't load your bookings." onRetry={() => refetch()} />
+        ) : isLoading ? (
           <LoadingIndicator message="Loading your appointments..." />
         ) : appointments.length === 0 ? (
           <EmptyState

@@ -1,6 +1,9 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent, screen } from '@testing-library/react-native';
 import { AdminNotificationsScreen } from '../src/screens/AdminNotificationsScreen';
+
+let mockIsError: boolean;
+const mockRefetch = jest.fn();
 
 jest.mock('../src/hooks/useNotifications', () => ({
   useNotifications: () => ({
@@ -9,10 +12,17 @@ jest.mock('../src/hooks/useNotifications', () => ({
       { id: 2, recipient: 'customer@ex.com', type: 'CANCELLATION', message: 'Booking cancelled', sentAt: '2026-07-23T15:00:00', status: 'SENT' },
     ],
     isLoading: false,
+    isError: mockIsError,
+    refetch: mockRefetch,
   }),
 }));
 
 describe('AdminNotificationsScreen', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockIsError = false;
+  });
+
   it('renders notification outbox title', async () => {
     const { getByText } = await render(<AdminNotificationsScreen />);
     expect(getByText('Email Audit Log')).toBeTruthy();
@@ -39,5 +49,14 @@ describe('AdminNotificationsScreen', () => {
   it('renders NOTIFICATION OUTBOX badge', async () => {
     const { getByText } = await render(<AdminNotificationsScreen />);
     expect(getByText('NOTIFICATION OUTBOX')).toBeTruthy();
+  });
+
+  it('shows error state and retries when the outbox fails to load', async () => {
+    mockIsError = true;
+    await render(<AdminNotificationsScreen />);
+    expect(screen.getByText("Couldn't load the notification outbox.")).toBeTruthy();
+    expect(screen.queryByText('Outbox Empty')).toBeNull();
+    await fireEvent.press(screen.getByText('Retry'));
+    expect(mockRefetch).toHaveBeenCalledTimes(1);
   });
 });

@@ -22,7 +22,13 @@ export const useBusySlots = (barberName: string, bookingDate: string) => {
 export const useCreateAppointment = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: AppointmentCreateRequest) => appointmentsApi.createAppointment(data),
+    mutationFn: ({
+      data,
+      idempotencyKey,
+    }: {
+      data: AppointmentCreateRequest;
+      idempotencyKey?: string;
+    }) => appointmentsApi.createAppointment(data, idempotencyKey),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
       queryClient.invalidateQueries({ queryKey: ['busySlots'] });

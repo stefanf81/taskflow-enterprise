@@ -6,6 +6,7 @@ import type { AppointmentPage } from '../src/types/api';
 
 // ==================== Controllable mocks ====================
 let mockIsLoading: boolean;
+let mockIsError: boolean;
 let mockAppointmentsData: AppointmentPage;
 let mockRefetch: jest.Mock;
 let mockCancelMutate: jest.Mock;
@@ -19,6 +20,7 @@ jest.mock('../src/hooks/useCustomer', () => ({
     return {
       data: mockAppointmentsData,
       isLoading: mockIsLoading,
+      isError: mockIsError,
       refetch: mockRefetch,
     };
   },
@@ -54,6 +56,7 @@ describe('CustomerPortalScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockIsLoading = false;
+    mockIsError = false;
     mockAppointmentsData = buildData();
     mockRefetch = jest.fn();
     mockCancelMutate = jest.fn();
@@ -116,6 +119,15 @@ describe('CustomerPortalScreen', () => {
     await render(<CustomerPortalScreen />);
     expect(screen.getByText('No Bookings Found')).toBeTruthy();
     expect(screen.getByText("You haven't reserved any appointments yet.")).toBeTruthy();
+  });
+
+  it('shows error state and retries when bookings fail to load', async () => {
+    mockIsError = true;
+    await render(<CustomerPortalScreen />);
+    expect(screen.getByText("Couldn't load your bookings.")).toBeTruthy();
+    expect(screen.queryByText('No Bookings Found')).toBeNull();
+    await fireEvent.press(screen.getByText('Retry'));
+    expect(mockRefetch).toHaveBeenCalledTimes(1);
   });
 
   // ============ SIGN OUT ============

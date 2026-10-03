@@ -10,7 +10,7 @@
  * workspace package may resolve its own zod copy, and nominal zod types from
  * two copies are not assignable to each other.
  */
-class ApiContractError extends Error {
+export class ApiContractError extends Error {
   constructor(
     public readonly endpoint: string,
     detail: string,
