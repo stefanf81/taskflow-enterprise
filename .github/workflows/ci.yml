@@ -841,10 +841,13 @@ jobs:
       # Frontend image
       ##########################################################
 
+      # The E2E job only needs Playwright from these deps; an exact-match
+      # node_modules cache skips the npm upgrade + `npm ci` (~11 s) on a hit.
       - name: Install Frontend
         uses: ./.github/actions/npm-ci
         with:
           package-path: frontend
+          cache-node-modules: "true"
 
       - name: Download Frontend Bundle
         uses: actions/download-artifact@v8
@@ -1174,6 +1177,9 @@ jobs:
         with:
           path: trivy-results.sarif
           category: docker-backend
+          # Trivy's exit-code 1 is the gate; waiting for Code Scanning to
+          # process the upload added ~5 s to the push critical path.
+          wait-for-processing: "false"
 
   docker-frontend:
     name: Build Docker (frontend)
@@ -1288,3 +1294,4 @@ jobs:
         with:
           path: trivy-results.sarif
           category: docker-frontend
+          wait-for-processing: "false"

@@ -142,6 +142,7 @@ Runs Playwright E2E tests against a real, running backend and database.
 - **Decoupled dependencies (`needs: [changes, package, frontend]`)**:
   The E2E job depends on the packaged backend JAR and the production frontend bundle — not on the test suite — so Playwright starts as soon as the artifacts exist while unit/integration tests run concurrently in the `Backend build` and `Backend integration` jobs (whose results the required `Backend` gate mirrors).
 - **Overlapped Backend Startup:** `start-backend` runs with `wait: "false"`, so JVM startup (~11–18s) overlaps the frontend `npm ci`, the bundle download, Buildx setup, the image build, and the Playwright browser restore. The `wait-backend` composite then blocks on `/actuator/health/liveness`, before the ingress container starts.
+- **Cached Install:** the job's `npm-ci` call sets `cache-node-modules: "true"`. On an exact-match hit it restores `frontend/node_modules` and `shared/schemas/node_modules` and skips the npm self-upgrade and `npm ci` (~11 s). The key covers OS, architecture, Node and npm versions, install flags, the lockfiles, both `package.json` files (npm 12 `allowScripts`), the `.npmrc` files and the action itself, so any change that would alter the installed tree misses.
 - **Parallel Playwright Workers:** `playwright.config.ts` runs `fullyParallel` with 2 workers. All workers share one client IP, and the suite makes ~32 `/api/v1/auth/*` requests, past production's 20/min per-IP limit. The job therefore sets `APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE=200`, as `verify.sh` and `npm run e2e:docker` already do. The limiter stays enabled. Measured locally on a replica of this stack: 34.6s → 22.3s, with 0 throttled requests (BENCHMARKS.md §53).
 - **Fast Service Readiness:** The PostgreSQL and Redis service containers use `--health-interval 2s --health-timeout 2s --health-retries 30`, so GitHub's `Initialize containers` phase detects readiness within seconds instead of waiting out a 10-second health interval — the E2E job's largest fixed cost.
 - **Single-Stack PR Coverage:** On Pull Requests, any backend or frontend change builds both application artifacts and runs E2E. This intentionally trades the extra untouched-stack build for production integration coverage on every application change. Docker-only changes retain component-specific build behavior.
@@ -209,7 +210,7 @@ Compiles secure, production-grade container images for the backend and frontend 
 - **Change-Driven Execution:** The `changes` job emits `build_backend_image` / `build_frontend_image` booleans, so only images that actually had changes are built and scanned.
 - **Artifact-Driven Fan-In:** Each job pulls its input from the producing job's artifact (`backend-jar`, `frontend-dist`), so image build and Trivy scan never wait for the backend test suites.
 - **Smart Job-Level Gating (Skip Optimization):** Job-level conditions respect path filters on both pull requests and ordinary `main` pushes. Documentation-only changes skip heavyweight runners, while scheduled and manual runs retain full coverage.
-- **Hard-Gate Trivy Scan:** The image is scanned with `exit-code: 1` and `severity: HIGH,CRITICAL` — a blocking gate. This is the intentional counterpart to the report-only Trivy filesystem scan in `security.yml`. If a high/critical CVE is found, the build fails but the SARIF is still uploaded (via `if: always()`).
+- **Hard-Gate Trivy Scan:** The image is scanned with `exit-code: 1` and `severity: HIGH,CRITICAL` — a blocking gate. The SARIF upload passes `wait-for-processing: "false"`, because the Trivy exit code (not Code Scanning processing) is the gate. This is the intentional counterpart to the report-only Trivy filesystem scan in `security.yml`. If a high/critical CVE is found, the build fails but the SARIF is still uploaded (via `if: always()`).
 - **Builder and Layer Cache per Image:**
   - **Frontend:** builds with Buildx (`prepull-buildkit`) and a GitHub Actions layer cache (`type=gha`, scopes `frontend-main` / `frontend-pr`). Its brotli/gzip compression stage depends only on the bundle and is expensive to rebuild.
   - **Backend:** builds with the runner's default `docker` builder, with no Buildx container and no layer cache, and the image lands directly in the daemon for Trivy. Every commit produces a new JAR, which invalidates the extractor and CDS-training layers, and `APT_BUST` invalidates the apt layer, so the cache almost never hit. Exporting it cost ~40s per build, plus ~7s of BuildKit setup and ~5–9s of OCI tarball load. `pushdockerimage.yml` keeps its own `backend-main` cache.
@@ -351,7 +352,9 @@ Shared step logic lives in local composite actions under `.github/actions/`, so
 the same implementation is not copied across workflows (and cannot drift):
 
 - `npm-ci` — installs `shared/schemas` then a target package with `npm ci`
-  (`package-path`, `shared-schemas`, `ignore-scripts` inputs).
+  (`package-path`, `shared-schemas`, `ignore-scripts` inputs). Opt-in
+  `cache-node-modules` restores an exact-match `node_modules` cache and skips
+  the install on a hit (used by the E2E job).
 - `start-backend` — generates disposable RSA keys, launches the JAR, and waits
   for `/actuator/health/liveness`, exposing the PID as an output. `wait: "false"`
   returns right after launch, so callers can overlap JVM startup with other setup.
