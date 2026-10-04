@@ -223,22 +223,22 @@ Our Docker build configurations (`Dockerfile` and `Dockerfile.x64`) implement st
 - **Architecture-Independent Layer Extraction:** JAR extraction runs natively on `$BUILDPLATFORM` without emulation via Spring Boot tools (`RUN --network=none java -Djarmode=tools -jar application.jar extract --layers --destination extracted`), producing an optimized `application.jar` + `lib/` layout.
 - **COPY --link:** Copies multi-stage compiled artifacts using independent image layers, bypassing full filesystem rewrites and facilitating immediate image layer linking.
 - **Isolated JVM Class Data Sharing (CDS / AppCDS):**
-  - Executes a network-isolated headless training run in a dedicated `cds-training` stage under non-root UID `10001`:
+  - Executes a network-isolated headless training run of the full application (default profile, in-memory H2) in a dedicated `cds-training` stage under non-root UID `10001`. `env -i` drops build-injected variables such as BuildKit's `OTEL_*` tracing-socket endpoint, which Spring Boot's OTLP exporters reject:
     ```dockerfile
-    RUN --network=none java -XX:ArchiveClassesAtExit=/tmp/application.jsa \
+    RUN --network=none env -i PATH="$PATH" LANG="$LANG" LC_ALL="$LC_ALL" \
+             java -XX:ArchiveClassesAtExit=/tmp/application.jsa \
              -Dspring.context.exit=onRefresh \
-             -Dapp.cds-training=true \
-             -Dspring.flyway.enabled=false \
              -Dspring.cache.type=redis \
              -Dotel.sdk.disabled=true \
-             -cp application.jar com.example.cdstraining.CdsTrainingApplication \
+             -jar application.jar \
         && test -s /tmp/application.jsa
     ```
   - Copies only the generated archive into runtime (`COPY --link --from=cds-training --chown=0:0 --chmod=0444 /tmp/application.jsa ./application.jsa`), preventing training artifacts or caches from bloating the production image.
   - Separates CDS training from the final stage's package-refresh layer (`APT_BUST` → `apt-get upgrade` on the backend's Ubuntu-based Temurin image, `APK_BUST` → `apk upgrade` on the frontend's Alpine image): routine OS security package refreshes reuse the cached CDS archive instead of retraining on every build.
   - Validates archive mapping at image build time using `--mount=type=tmpfs,target=/tmp` and `-Xshare:on`.
   - Mounts the shared archive at runtime via sizing-agnostic `CMD` arguments `"-XX:SharedArchiveFile=application.jsa"` and `"-Xshare:auto"`, launching the extracted JAR directly with `"-jar", "application.jar"`.
-  - **Results:** Eliminates class-loading overhead, reducing cold-start times by ~20% (~740 ms saved, with over 15,000 application and framework classes mapped directly from the archive).
+  - **Results:** ~90% of `prod` startup classes (21,322 of 23,611) are mapped directly from the archive: 8.0 s median cold start vs 12.9 s without CDS and 9.35 s with the previous trimmed training context (BENCHMARKS.md §56).
+- **Slim production runtime (`Dockerfile.x64`):** purges `curl`, `wget`, `gnupg` and their 30 dependencies before the package refresh, and strips setuid/setgid bits. Kubernetes probes must therefore be `httpGet`. The local `Dockerfile` keeps `wget` for its `HEALTHCHECK`.
 
 ---
 

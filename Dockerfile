@@ -39,15 +39,16 @@ COPY --link --from=extractor --chown=0:0 /app/extracted/application/ ./
 
 USER 10001:10001
 
-# Headless training run generating JVM Class Data Sharing (CDS) archive.
-# -cp application.jar uses manifest Class-Path to run CdsTrainingApplication directly.
-RUN --network=none java -XX:ArchiveClassesAtExit=/tmp/application.jsa \
+# Headless training run of the full application (default profile, in-memory H2)
+# generating the JVM Class Data Sharing (CDS) archive; it halts at refresh
+# (BENCHMARKS.md §56). env -i drops build-injected variables such as BuildKit's
+# OTEL_* tracing-socket endpoint, which Spring Boot's OTLP exporters reject.
+RUN --network=none env -i PATH="$PATH" LANG="$LANG" LC_ALL="$LC_ALL" \
+         java -XX:ArchiveClassesAtExit=/tmp/application.jsa \
          -Dspring.context.exit=onRefresh \
-         -Dapp.cds-training=true \
-         -Dspring.flyway.enabled=false \
          -Dspring.cache.type=redis \
          -Dotel.sdk.disabled=true \
-         -cp application.jar com.example.cdstraining.CdsTrainingApplication \
+         -jar application.jar \
     && test -s /tmp/application.jsa
 
 FROM java-base AS runtime

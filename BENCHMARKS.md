@@ -878,6 +878,8 @@ GC: G1 Old Generation (collections: 2, time: 82 ms)
 
 **Verdict:** CDS is already deployed and provides a **19.8% cold-start improvement** (0.74 s saved). This is a pure win with no tradeoffs — the archive is built once at image build time and benefits every container startup.
 
+> **Update (2026-10-04):** Training moved from `CdsTrainingApplication` to the full application. Under the `prod` profile (PostgreSQL + Redis) the trimmed archive served only 69% of startup classes; the full-application archive serves 90% and starts a further 1.0–1.3 s faster. `CdsTrainingApplication` was deleted. See §56.
+
 ---
 
 ## ⚡ Recent Angular 22 and Expo 57 Performance Verification
@@ -1646,3 +1648,48 @@ npm: on macOS, an exact hit was within runner noise in these samples (35 s cold 
 **Caveats:** the dispatch runs wrote branch-scoped caches, which `main` cannot read. After merge, the first `main` push creates the Linux npm entry, and the next nightly creates the macOS npm and ExpoModulesJSI entries. Until then, pull requests run cold, as before. The pull-request fallback is verified locally, not yet on a CI pull-request run.
 
 **Verification:** runs 1–4 green, each emitting the required `Mobile JavaScript`, `Android build and test` and `iOS simulator build` contexts. `actionlint` 1.7.12 passes. The build-step shell logic (exit status through the formatter pipe, timing summary, activity-log outcome) was exercised locally against a stub `xcodebuild` for the success and failure paths.
+
+---
+
+## ⚡ 56. CDS Training Coverage & Production Image Slimming
+
+**Goal:** re-measure the CDS archive under the production profile (§36 measured the default H2 profile on an M4), and trim the production image (`Dockerfile.x64`) to what the JVM needs.
+
+**Methodology (reproducible):** `IMAGES="<before> <after>" NOCDS=1 RUNS=7 scripts/benchmark-cds-startup.sh`. The harness boots each image 7 times, interleaved, with `SPRING_PROFILES_ACTIVE=prod` against PostgreSQL 18.6 and Redis 8.10.2 (the compose images, schema already migrated). It uses the compose `JAVA_TOOL_OPTIONS`, `--cpus 2 --memory 2g`, a read-only root and dropped capabilities. Host: x86_64 Linux VM (amd64, the production architecture), Temurin 21.0.12.1, Spring Boot 4.1.1. Startup is Spring Boot's "process running for". The CDS share counts the classes logged as `source: shared objects file` by `-Xlog:class+load` in one extra boot per variant. The no-archive reference replaces the image `CMD` with `-Xshare:off`, which also disables the JDK base archive. Passing `-Xshare:off` in `JAVA_TOOL_OPTIONS` has no effect: the `CMD`'s later `-Xshare:auto` wins.
+
+### Results
+
+| Archive | Median startup | Range | Classes from CDS | Archive (raw / gzip) |
+| :--- | ---: | :--- | ---: | ---: |
+| None (`-Xshare:off`) | 12.89 s | 12.22–13.46 s | 0% | — |
+| `CdsTrainingApplication` (before) | 9.35 s | 9.09–10.37 s | 69% (16,371 / 23,706) | 116 MB / 29.8 MB |
+| **Full application (after)** | **8.03 s** | 7.69–8.66 s | **90%** (21,322 / 23,611) | 150 MB / 38.7 MB |
+
+An earlier harness run on the same host measured 9.35 s → 8.34 s. The full-application archive therefore saves **1.0–1.3 s (−11% to −14%)** per cold start over the trimmed one, and ~4.9 s (−38%) over no CDS.
+
+### Why the trimmed context missed classes
+
+`CdsTrainingApplication` excluded the persistence stack (its JDBC/JPA exclusions also used Spring Boot 3 class names, which Boot 4 silently ignores) and scanned no entities or repositories. Production starts therefore loaded these from JARs. Top misses under `prod`, before → after: `hibernate-core` 1,481 → 354, `spring-data-jpa` 529 → 64, `byte-buddy` 375 → 0, `flyway-core` 292 → 0. The remaining misses are mostly runtime-generated classes that JDK 21 dynamic CDS cannot archive (`LookupDefineClass` 617, dynamic proxies 221) and the PostgreSQL driver (221), which the H2 training run never loads.
+
+### Adopted
+
+* **Full-application training (`Dockerfile`, `Dockerfile.x64`):** `java -XX:ArchiveClassesAtExit=… -Dspring.context.exit=onRefresh -Dspring.cache.type=redis -jar application.jar` under `RUN --network=none`. The default profile uses in-memory H2, so Flyway runs every migration (Java migrations included) in memory. `onRefresh` halts before lifecycle beans start: no port bind, no schedulers, no runners. Startup must stay infrastructure-free. A startup call to an external service now fails the image build.
+* **`env -i PATH LANG LC_ALL` for training:** BuildKit can inject `OTEL_*` variables that point at `unix:///dev/otel-grpc.sock` into `RUN` steps; this was observed in CI (SYSTEM-HARDENING.md Finding 20). Spring Boot 4 maps them onto its OTLP exporters ahead of `application.properties` and rejects the endpoint. Verified: with the variables injected, training failed on the span exporter, then on the log exporter once span export was disabled by property. With `env -i` it passes.
+* **Production image slimming (`Dockerfile.x64` only):** `apt-get purge --auto-remove curl wget gnupg` runs before the upgrade. It removes 33 packages, including krb5, OpenLDAP, GnuTLS, libssh2, nghttp2 and SQLite (141 → 109 packages). The base has no other orphaned packages, and the JRE's missing shared libraries (`ldd`) are identical before and after: X11/ALSA, which a headless JRE never loads. setuid/setgid bits are then stripped (11 → 0 binaries: `su`, `mount`, `passwd`, `chsh`, …). The local `Dockerfile` keeps `wget` for its `HEALTHCHECK`.
+
+### Costs
+
+* **Build:** CDS training 18.5 s → 27.5 s (+9 s) in `Build Docker (backend)`, which is on the `main`-push critical path (§53).
+* **Per-deploy push:** the archive layer changes on every commit, +8.9 MB gzip. Image content size 233 → 242 MB.
+* **Purging does not shrink the image:** the files stay in the base layer, with whiteouts on top. The gain is attack and scan surface. Trivy OS findings today: 32 → 31 unique CVEs (CVE-2021-31879, `wget`), with 0 fixable HIGH/CRITICAL before and after. curl, krb5, GnuTLS, libssh2 and SQLite are frequent CVE sources, so the main value is fewer future gate failures and no download tools left for an intruder.
+* **Operations:** no `kubectl exec … curl`; use `kubectl debug` ephemeral containers instead. Probes must be `httpGet`; check `homelab/TF/gitops/apps/taskflow/backend.yaml` before deploying.
+
+### Not adopted
+
+* **jlink runtime:** a smaller JRE, but it loses Temurin's base CDS archive unless that is regenerated, and it complicates the Renovate digest flow.
+* **Java 25 AOT cache (JEP 483/514/515):** larger startup gains than CDS, but blocked by the Java 21 policy.
+* **Spring AOT on the JVM (`processAot`):** freezes bean conditions and profiles at build time. It needs its own decision.
+* **`useradd --no-log-init`:** no effect, because Ubuntu 26.04's shadow no longer writes `lastlog`.
+* **`-XX:-UsePerfData`:** a marginal startup gain that breaks `jstat`/`jps`.
+
+**Verification:** the `Dockerfile.x64` image boots under `prod` with liveness/readiness 200, `/api/v1/catalog` and `/api/v1/barbers` 200, Redis cache and rate-limit keys written, and no `ERROR` log lines. The local `Dockerfile` was built with `PLATFORM=linux/amd64` (no arm64 emulator on the host), and its training run and archive validation pass. The build-time `-Xshare:on` validation passes for both images. hadolint passes on `Dockerfile.x64` with the CI ignore list. `ContainerImageBenchmarkTest` locks the configuration.
