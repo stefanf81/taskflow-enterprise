@@ -278,7 +278,9 @@ contract, and the sync script) so unrelated PRs skip the mobile JavaScript
 check, and runs Android and iOS native jobs for same-repository Renovate and
 `maintenance/expo-sdk` branches. Its concurrency group includes the event name
 and only cancels pull-request runs, so a push to `main` cannot cancel the
-nightly native build.
+nightly native build. Its npm, CocoaPods and ExpoModulesJSI caches are saved
+only from non-PR runs. Lockfile pull requests restore the newest `main`
+snapshots instead (`BENCHMARKS.md` §54).
 
 The following version-coupled ecosystems are grouped into cohesive Renovate
 PRs: Angular and its toolchain, Tailwind CSS, Zod across monorepo packages,
