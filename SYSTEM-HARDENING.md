@@ -145,6 +145,7 @@ Two critical architectural alignments were identified and resolved to ensure run
 *   **Resolution:**
     1. Extended the `@EnableAutoConfiguration` exclusions in `CdsTrainingApplication` to encompass all modern namespaces (including `WebMvcObservationAutoConfiguration`, `ObservationAutoConfiguration`, `MicrometerTracingAutoConfiguration`, `OpenTelemetryTracingAutoConfiguration`, and `OpenTelemetrySdkAutoConfiguration`), fully isolating the warm-up context.
     2. The Dockerfiles retain `-Dotel.sdk.disabled=true` during pre-warming. The complete auto-configuration exclusion list is the primary guard, so obsolete Spring Boot 3 tracing properties are not passed to the CDS JVM.
+*   **Update (2026-10-04):** `CdsTrainingApplication` was removed. Both Dockerfiles now train on the full application (BENCHMARKS.md §56), so auto-configuration exclusions no longer apply. The training JVM runs under `env -i PATH="$PATH" LANG="$LANG" LC_ALL="$LC_ALL"`, which drops any build-injected `OTEL_*` variable before Spring Boot can map it onto an OTLP exporter. Reproduced locally by injecting `OTEL_EXPORTER_OTLP_ENDPOINT=unix:///dev/otel-grpc.sock`: training fails without `env -i` and passes with it.
 
 ### Finding 21: Sandbox Dependency Scanning Vulnerability Mitigation (Jackson Databind CVE-2026-54515)
 *   **Location:** `/.trivyignore` (New File), `/build.gradle` (Reverted experimental properties)
@@ -253,6 +254,11 @@ Two critical architectural alignments were identified and resolved to ensure run
     4. **Matrix & Canonical Identifiers:** Differentiated job names via `name: CodeQL (${{ matrix.language }})`, modernized identifiers to `java-kotlin` and `javascript-typescript`, and routed SARIF outputs to `/language:${{ matrix.language }}`.
     5. **Least Privilege:** Removed `packages: read` from the `trivy` job.
     6. **Targeted Exclusions & Scanners:** Specified explicit build/dependency ignore directories per component (`.git`, `build`, `.gradle`, `node_modules`, `dist`, `android`, `ios`), added `scanners: vuln`, and removed the dead `NODE_VERSION` variable.
+
+### Finding 35: Unused Network Tools & setuid Binaries in the Production Image
+*   **Location:** `/Dockerfile.x64`
+*   **Issue:** The Temurin base installs `curl`, `wget` and `gnupg` for its own build. They pull in 30 more packages (krb5, OpenLDAP, GnuTLS, libssh2, nghttp2, SQLite), none of which the JVM uses. The base also keeps 11 setuid/setgid binaries (`su`, `mount`, `passwd`, `chsh`, …). In a compromised container, the download tools are ready-made exfiltration and payload fetchers, and the libraries are recurring CVE sources for the Trivy gate.
+*   **Resolution:** The runtime stage runs `apt-get purge -y --auto-remove curl wget gnupg` before `apt-get upgrade` (141 → 109 packages), then `find / -xdev -type f -perm /6000 -exec chmod a-s {} +` (11 → 0 setuid/setgid binaries). This is defense in depth for pods admitted without `allowPrivilegeEscalation: false`. The JRE's shared-library dependencies are unchanged (`ldd`). Kubernetes probes must be `httpGet`, not `exec curl/wget`. The local `Dockerfile` keeps `wget` for its `HEALTHCHECK` (BENCHMARKS.md §56).
 
 ---
 

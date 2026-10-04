@@ -41,17 +41,20 @@ COPY --link --from=extractor --chown=0:0 /app/extracted/application/ ./
 
 USER 10001:10001
 
-# The dedicated training context initializes cache/serialization classes and
-# exits at refresh. Network isolation enforces its infrastructure-free contract.
-# -cp application.jar honors the same manifest Class-Path as runtime's -jar,
-# while selecting the training main directly. Only the archive is published.
-RUN --network=none java -XX:ArchiveClassesAtExit=/tmp/application.jsa \
+# Train on the real application in its default profile (in-memory H2) so
+# Hibernate, Spring Data, Flyway, and the web/security graph are archived; a
+# trimmed context missed ~30% of prod startup classes (BENCHMARKS.md §56).
+# It halts at refresh, before runners, schedulers, or binding the port, and
+# network isolation keeps that startup infrastructure-free. cache.type=redis
+# builds the production cache manager without connecting. env -i drops
+# build-injected variables such as BuildKit's OTEL_* tracing-socket endpoint,
+# which Spring Boot's OTLP exporters reject. Only the archive is published.
+RUN --network=none env -i PATH="$PATH" LANG="$LANG" LC_ALL="$LC_ALL" \
+         java -XX:ArchiveClassesAtExit=/tmp/application.jsa \
          -Dspring.context.exit=onRefresh \
-         -Dapp.cds-training=true \
-         -Dspring.flyway.enabled=false \
          -Dspring.cache.type=redis \
          -Dotel.sdk.disabled=true \
-         -cp application.jar com.example.cdstraining.CdsTrainingApplication \
+         -jar application.jar \
     && test -s /tmp/application.jsa
 
 FROM java-base AS runtime
@@ -60,12 +63,19 @@ FROM java-base AS runtime
 # the JVM base pinned, but package resolution intentionally remains build-time.
 # Temurin's JRE lives in /opt/java/openjdk and is not managed by dpkg.
 # tini installs to /usr/bin/tini on the Ubuntu-based Temurin image.
+# The base ships curl, wget, and gnupg (plus ~30 dependencies: krb5, LDAP,
+# GnuTLS, libssh2, SQLite) for its own build; the JVM uses none of them, so
+# Kubernetes probes must be httpGet rather than exec curl/wget. Purge them
+# before the upgrade so they are neither refreshed nor left for an intruder,
+# then drop setuid/setgid bits in case a pod is admitted with escalation.
 ARG APT_BUST=stable
 RUN : "${APT_BUST}" \
     && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get purge -y --auto-remove curl wget gnupg \
     && DEBIAN_FRONTEND=noninteractive apt-get -y upgrade \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && find / -xdev -type f -perm /6000 -exec chmod a-s {} +
 
 # Stable dependencies first; root-owned application files are readable but not
 # writable by the runtime user, including outside a read-only deployment.
