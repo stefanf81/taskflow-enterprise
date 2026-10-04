@@ -1596,3 +1596,53 @@ The five report-only Trivy FS uploads got the same `wait-for-processing: "false"
 | Job | 123 s | 37 s |
 
 Only the upload row is this change (−27 s). The scan steps were faster in the measurement run for reasons outside this change (likely warm Trivy DB/binary caches restored from `main`), so the job total overstates the saving. The workflow's wall clock is still bounded by CodeQL (java-kotlin): 150 s → 133 s, not affected by this change.
+
+---
+
+## ⚡ 55. React Native CI — Lockfile-PR Caches, ExpoModulesJSI Reuse & Readable iOS Logs
+
+**Goal:** the native jobs run on the nightly, on manual dispatch, and on Renovate / `maintenance/expo-sdk` pull requests. Those pull requests change `mobile/package-lock.json`, so every cache keyed on the exact lockfile hash misses exactly where native builds run on PRs. The iOS job is the workflow's critical path, and its log (30,519 lines on nightly [`37169165720`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37169165720)) was larger than the Actions log API returns (the last 5,000 lines), so `pod install` and most of `xcodebuild` could not be inspected.
+
+**Findings from the logs:**
+
+* `setup-node`'s `cache: npm` has no fallback key. Renovate run [`36610928778`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/36610928778) logged `npm cache is not found`, and `npm ci` took 21 s on Linux and 61 s on macOS (the nightly, with a cache hit: 12 s / 28 s). The PR then saved its own ~190 MB npm cache per OS (post step 3 s on Linux, 7 s on macOS).
+* The CocoaPods cache's post step saved a PR-scoped copy on the same run, costing 9 s at the end of the iOS job.
+* Expo SDK 57 compiles `ExpoModulesJSI.xcframework` from its SwiftPM sources (42 Swift + 2 C++ files, Release, arm64 + x86_64 simulator) in the `[CP-User] Build ExpoModulesJSI xcframework` phase. The script skips the build only when a slice's `.build-hash` matches. `npm ci` leaves stub slices with empty hashes, so CI rebuilt it on every run.
+
+**Methodology (reproducible):** four `workflow_dispatch` runs (fast scope) on the change branch: [`37223875454`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37223875454), [`37224420426`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37224420426), [`37225028423`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37225028423) and [`37225618060`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37225618060). Step timings come from the Actions jobs API, per-phase task totals from `-showBuildTimingSummary`, and the ExpoModulesJSI outcome from the `.xcactivitylog` (xcodebuild does not echo script-phase output). The pull-request fallback cannot run from a dispatch, so it was measured locally (4 cores, `npm ci --prefer-offline --ignore-scripts` of the current lockfile).
+
+### Results (CI, iOS job)
+
+| | Run 1 | Run 2 | Run 3 | Run 4 |
+| :--- | :--- | :--- | :--- | :--- |
+| npm cache | miss (new key), saved | exact hit | exact hit | exact hit |
+| ExpoModulesJSI | rebuilt (not cached yet) | miss, rebuilt, saved | **hit, skipped** | hit, skipped |
+| `CompileC` task time (145 tasks) | 266 s | 434 s | 414 s | 354 s |
+| `PhaseScriptExecution` task time (40 tasks) | 54 s | 102 s | **28.6 s** | **21.9 s** |
+| `xcodebuild` step | 168 s | 297 s | 278 s | 230 s |
+| iOS job | 4 m 31 s | 7 m 17 s | 6 m 56 s | 5 m 23 s |
+| `npm ci` step (macOS / Linux JavaScript job) | 35 s / 24 s | 41 s / 19 s | 39 s / 20 s | 28 s / 20 s |
+| iOS log lines | 4,106 | 4,148 | 3,058 | 3,972 |
+
+Runs 2 and 3 landed on macOS runners that were ~60 % slower than run 1 for the same 145 `CompileC` tasks. Between those two comparable runs, restoring ExpoModulesJSI removed 74 s of script task time and 19 s of `xcodebuild` wall time. The wall gain is smaller than the task-time drop because the JSI build overlaps other targets. Normalized by compile work across all four runs, script task time was 0.20–0.24 × `CompileC` with a cold JSI build (runs 1–2) and 0.06–0.07 × with the cached slice (runs 3–4).
+
+npm: on macOS, an exact hit was within runner noise in these samples (35 s cold in run 1 vs 28–41 s warm in runs 2–4). On Linux it saved ~4 s. Locally, a cold cache took 20.3 s, an exact hit 13.7 s, and a cache built from the `0b7ce37` lockfile (a 34+/24− line lockfile diff) 16.7 s, so the PR fallback recovers about half of the cold-cache penalty. The gains that hold by construction are the removed PR saves (npm ~3 s on Linux and ~7 s on macOS, CocoaPods ~9 s at the end of the iOS job) and ~190 MB × 2 fewer PR-scoped npm entries per lockfile PR.
+
+### Adopted
+
+* **npm download cache with a PR-only fallback:** `actions/cache/restore` on `~/.npm` with key `npm-<os>-<arch>-<lockfile hash>` replaces `setup-node`'s `cache: npm` (`package-manager-cache: false`). Pull requests fall back to the newest `main` snapshot and never save. Other events restore by exact key only, so the snapshot `main` saves holds just the current lockfile's tarballs instead of growing with every fallback. The three jobs share the steps through YAML anchors.
+* **CocoaPods cache:** restored everywhere, saved right after `pod install` and only from non-PR runs.
+* **ExpoModulesJSI xcframework cache:** `Products/ExpoModulesJSI.xcframework` is restored before `pod install` (Expo's stub stamping keeps existing slices) with a prefix fallback on every event. That is safe because a stale slice is rebuilt by Expo's own hash check (sources, `jsi.h`, React Native version, Swift toolchain, absolute paths). It is saved only from non-PR runs. The build step prints Expo's outcome line (`… skipping build` or `Built xcframework successfully in Ns`).
+* **Readable iOS logs:** `xcodebuild` output goes through `xcbeautify` (preinstalled on `macos-26`, falling back to `cat`). The raw log is uploaded as `ios-xcodebuild-log`, and `-showBuildTimingSummary` totals are echoed to the log and the job summary. The step result follows `xcodebuild`'s exit status only.
+
+### Not adopted
+
+* **Android NDK pin:** `ubuntu-26.04` ships NDK 27.3.13750724, not the 27.1.12297006 that Expo/React Native pin, so `sdkmanager` downloads and unzips it on every run (~14 s of the 22–39 s SDK step), and AGP installs CMake 3.22.1. Not changed: the Android job finished before iOS in every sampled run (by 48 s on the nightly, by up to 4 min here), so it is not on the critical path, and a CI-only NDK override would diverge from EAS and local builds.
+* **Android lint scope:** after `assembleDebug` finished, ~17 s of the Gradle step was lint analysis only, mostly the `:expo` module and its test sources (`checkDependencies`, test-source analysis). Off the critical path, and narrowing what lint covers is a policy decision.
+* **`node_modules` cache:** lockfile PRs, the only PRs that run native builds, would always miss it.
+* **Expo precompiled third-party modules:** `pod install` logs `RNScreens` and `react-native-safe-area-context` as `building from source (prebuilt tarball not found)`. Using prebuilt tarballs requires self-hosting them behind `EXPO_PRECOMPILED_MODULES_BASE_URL`.
+* **Jest `--maxWorkers=3` instead of `50%` (2 workers on 4 vCPUs):** locally 26.5–28.0 s vs 28.5–32.2 s. A ~2–4 s gain was not worth changing the worker budget.
+
+**Caveats:** the dispatch runs wrote branch-scoped caches, which `main` cannot read. After merge, the first `main` push creates the Linux npm entry, and the next nightly creates the macOS npm and ExpoModulesJSI entries. Until then, pull requests run cold, as before. The pull-request fallback is verified locally, not yet on a CI pull-request run.
+
+**Verification:** runs 1–4 green, each emitting the required `Mobile JavaScript`, `Android build and test` and `iOS simulator build` contexts. `actionlint` 1.7.12 passes. The build-step shell logic (exit status through the formatter pipe, timing summary, activity-log outcome) was exercised locally against a stub `xcodebuild` for the success and failure paths.
