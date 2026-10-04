@@ -571,9 +571,11 @@ jobs:
             printf '### iOS build timing\n\n```\n%s\n```\n' "${timing}" >> "${GITHUB_STEP_SUMMARY}"
           fi
 
-          # xcbeautify drops script-phase output; surface whether the cached
-          # ExpoModulesJSI slice was reused or rebuilt (and how long it took).
-          grep -F '[ExpoModulesJSI]' "${raw_log}" || true
+          # xcodebuild does not echo script-phase output, but Xcode's activity
+          # log keeps it: show whether the cached ExpoModulesJSI slice was
+          # reused or rebuilt (and how long the rebuild took).
+          find ios/build/DerivedData/Logs/Build -name '*.xcactivitylog' -exec gzip -dc {} + 2>/dev/null \
+            | LC_ALL=C grep -a -o '\[ExpoModulesJSI\] [[:print:]]*' || true
 
           exit "${pipe_status[0]}"
 
