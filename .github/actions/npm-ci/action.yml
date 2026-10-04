@@ -16,15 +16,56 @@ inputs:
     description: Pass --ignore-scripts to both installs (supply-chain hardening).
     required: false
     default: "false"
+  cache-node-modules:
+    description: >-
+      Opt-in. Restore <package-path>/node_modules and shared/schemas/node_modules
+      from an exact-match cache keyed on OS, architecture, Node and declared npm
+      versions, install flags, both lockfiles and package.json files (npm 12
+      allowScripts), the .npmrc files and this action itself. On a hit, skip the npm upgrade
+      and `npm ci`. On a miss, install as usual and save. There are no restore
+      keys, so a partial or stale tree is never reused.
+    required: false
+    default: "false"
 runs:
   using: composite
   steps:
+    - name: Compute node_modules cache key
+      id: nm-key
+      if: inputs.cache-node-modules == 'true'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        PACKAGE_PATH: ${{ inputs.package-path }}
+        SHARED_SCHEMAS: ${{ inputs.shared-schemas }}
+        IGNORE_SCRIPTS: ${{ inputs.ignore-scripts }}
+        # package.json carries npm 12's `allowScripts` (which install scripts
+        # run) and is not reflected in the lockfile; this file carries the
+        # `npm ci` arguments. Hash both so a policy or flag change misses.
+        INPUTS_HASH: ${{ hashFiles(format('{0}/package-lock.json', inputs.package-path), format('{0}/package.json', inputs.package-path), format('{0}/.npmrc', inputs.package-path), 'shared/schemas/package-lock.json', 'shared/schemas/package.json', 'shared/schemas/.npmrc', '.npmrc', '.github/actions/npm-ci/action.yml') }}
+      run: |
+        set -euo pipefail
+        declared="$(node -p "require('./frontend/package.json').packageManager || 'npm'")"
+        key="node-modules-v1-${RUNNER_OS}-${RUNNER_ARCH}-node$(node --version)-${declared}"
+        key+="-${PACKAGE_PATH//\//_}-shared${SHARED_SCHEMAS}-ignore${IGNORE_SCRIPTS}-${INPUTS_HASH}"
+        echo "key=${key}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore node_modules
+      id: nm-cache
+      if: inputs.cache-node-modules == 'true'
+      uses: actions/cache/restore@v6
+      with:
+        path: |
+          ${{ inputs.package-path }}/node_modules
+          shared/schemas/node_modules
+        key: ${{ steps.nm-key.outputs.key }}
+
     # setup-node only reads `packageManager` to enable npm caching; it never
     # installs that npm version, and Node 24 bundles npm 11. Corepack is
     # deprecated and being removed from Node distributions, so install the
     # declared npm explicitly. Derived from frontend/package.json so the pin
     # cannot drift; npm 12 also enforces the `allowScripts` allowlists.
     - name: Ensure declared npm version
+      if: steps.nm-cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: ${{ github.workspace }}
       run: |
@@ -47,7 +88,7 @@ runs:
         fi
 
     - name: Install shared/schemas
-      if: inputs.shared-schemas == 'true'
+      if: inputs.shared-schemas == 'true' && steps.nm-cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: ${{ github.workspace }}
       env:
@@ -68,6 +109,7 @@ runs:
         npm ci "${args[@]}" 2> >(grep -v '^npm warn deprecated' >&2)
 
     - name: Install ${{ inputs.package-path }}
+      if: steps.nm-cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: ${{ github.workspace }}
       env:
@@ -87,3 +129,12 @@ runs:
         # lines from stderr; every other warning and error still surfaces.
         # (The dependency-health audit keeps them - deprecation is signal there.)
         npm ci "${args[@]}" 2> >(grep -v '^npm warn deprecated' >&2)
+
+    - name: Save node_modules
+      if: inputs.cache-node-modules == 'true' && steps.nm-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: |
+          ${{ inputs.package-path }}/node_modules
+          shared/schemas/node_modules
+        key: ${{ steps.nm-key.outputs.key }}

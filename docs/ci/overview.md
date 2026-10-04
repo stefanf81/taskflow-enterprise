@@ -58,7 +58,7 @@ This job handles the Spring Boot backend compilation, testing, and quality gates
 - **Automatic & Conditional Test Execution:**
   Unit and integration tests run automatically on all Pull Requests. On manual runs (`workflow_dispatch`), they are executed conditionally if `run_tests` is enabled, or skipped entirely to fast-track packaging.
 - **Gradle Task Parallelism & Caching:** We explicitly pass the `--parallel` and `--build-cache` arguments to `./gradlew`. This compiles independent modules across multiple threads, leveraging build outputs from previous runs. The flag flips to `--no-build-cache` whenever actually executing tests is the point of the run — the nightly `schedule`, and manual `workflow_dispatch` runs with `run_tests: true`. Without it, `setup-gradle` restores the Gradle user home build cache and the test tasks resolve `FROM-CACHE`, so the run reports success without executing a single test. PR and `main` push runs keep the cache for speed; the nightly remains the authoritative full execution. `backend-integration` (§6b) applies the same policy.
-- **Configuration Cache Key:** `setup-gradle` receives `cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}` (generate with `openssl rand -base64 16`), which setup-gradle requires before it stores configuration-cache data at all. Every run still recalculates the task graph (~10s, logged as "no cached configuration is available"). In the first three runs with the key set, no configuration-cache entry was restored, and pull-request runs cannot read caches written on other branches anyway. Treat any saving as unverified until a `main` run logs "Reusing configuration cache".
+- **Configuration Cache Is Not Persisted Across Runs:** every run recalculates the task graph (~10s, logged as "no cached configuration is available"). Passing setup-gradle a `cache-encryption-key` was tried and removed. In 4 runs, including 2 consecutive `main` runs, no configuration-cache entry was ever restored (BENCHMARKS.md §53).
 - **Gradle Caching Write Access (`cache-read-only: false`):** We configure `cache-read-only: false` on the setup-gradle action. By default, setup-gradle disables cache writes on non-default branches (e.g. Pull Requests). Overriding this ensures that PR branches can cache new/updated dependencies, avoiding slow downloads on subsequent commits.
 - **Unit Suite and Coverage Gate:** A single Gradle invocation runs `assemble`, `test`, `jacocoTestReport`, and `jacocoTestCoverageVerification`, so the enforced JaCoCo coverage gate (≥ 0.80, computed from `test` only) blocks the build instead of only producing reports. `testcontainersTest` and `spotbugsMain` run in the parallel `backend-integration` job (§6b), so the unit suite (this job's long pole) has the runner to itself. When `run_tests` is disabled, the packaging-only `assemble` fallback still compiles the backend.
 - **Unit-Test JVM Tuning (`build.gradle`):** The first Spring context in each test fork boots from a cold JVM (~36s on the 4-vCPU runner versus ~5s once warm), so the `test` task runs at most 2 forks with `-XX:TieredStopAtLevel=1` (C1 JIT only). Measured locally on equivalent 4-core hardware, median of 3: 92s with 3 forks → 64s. Each Spring context gets its own H2 database (`spring.datasource.url=jdbc:h2:mem:${random.uuid}…`). The shared `tododb` URL leaked rows between contexts in the same fork, so changing the fork count made `AppointmentControllerIntegrationTest` fail.
@@ -116,7 +116,7 @@ Submits the complete, deep Java and Gradle dependency tree directly to the GitHu
 
 See [`security.yml`](../../.github/workflows/security.yml) for details on:
 
-- **Trivy Filesystem Scan:** Report-only (`exit-code: 0`, `scanners: vuln`) SARIF upload partitioned across four distinct components: Backend (`.`), Frontend (`frontend/`), Mobile (`mobile/`), and Shared Schemas (`shared/schemas/`), surfaced in the Code Scanning tab with dedicated category namespaces. Non-component and build directories (`node_modules/`, `build/`, `.gradle/`, `dist/`, `android/`, `ios/`, `.git/`) are explicitly excluded. Severity asymmetry vs. the Docker image hard gate is deliberately maintained — see the inline notes.
+- **Trivy Filesystem Scan:** Report-only (`exit-code: 0`, `scanners: vuln`) SARIF upload partitioned across four distinct components: Backend (`.`), Frontend (`frontend/`), Mobile (`mobile/`), and Shared Schemas (`shared/schemas/`), surfaced in the Code Scanning tab with dedicated category namespaces. Because the scans gate nothing, the uploads skip `wait-for-processing` (7–8 s → ~2 s each). Non-component and build directories (`node_modules/`, `build/`, `.gradle/`, `dist/`, `android/`, `ios/`, `.git/`) are explicitly excluded. Severity asymmetry vs. the Docker image hard gate is deliberately maintained — see the inline notes.
 - **Trivy Database Caching:** `trivy-action` manages its own workspace-local
   vulnerability database cache and binary cache. The workflows do not layer a
   second cache over it.
@@ -142,6 +142,8 @@ Runs Playwright E2E tests against a real, running backend and database.
 - **Decoupled dependencies (`needs: [changes, package, frontend]`)**:
   The E2E job depends on the packaged backend JAR and the production frontend bundle — not on the test suite — so Playwright starts as soon as the artifacts exist while unit/integration tests run concurrently in the `Backend build` and `Backend integration` jobs (whose results the required `Backend` gate mirrors).
 - **Overlapped Backend Startup:** `start-backend` runs with `wait: "false"`, so JVM startup (~11–18s) overlaps the frontend `npm ci`, the bundle download, Buildx setup, the image build, and the Playwright browser restore. The `wait-backend` composite then blocks on `/actuator/health/liveness`, before the ingress container starts.
+- **Cached Install:** the job's `npm-ci` call sets `cache-node-modules: "true"`. On an exact-match hit it restores `frontend/node_modules` and `shared/schemas/node_modules` and skips the npm self-upgrade and `npm ci` (~11 s). The key covers OS, architecture, Node and npm versions, install flags, the lockfiles, both `package.json` files (npm 12 `allowScripts`), the `.npmrc` files and the action itself, so any change that would alter the installed tree misses.
+- **Parallel Playwright Workers:** `playwright.config.ts` runs `fullyParallel` with 2 workers. All workers share one client IP, and the suite makes ~32 `/api/v1/auth/*` requests, past production's 20/min per-IP limit. The job therefore sets `APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE=200`, as `verify.sh` and `npm run e2e:docker` already do. The limiter stays enabled. Measured locally on a replica of this stack: 34.6s → 22.3s, with 0 throttled requests (BENCHMARKS.md §53).
 - **Fast Service Readiness:** The PostgreSQL and Redis service containers use `--health-interval 2s --health-timeout 2s --health-retries 30`, so GitHub's `Initialize containers` phase detects readiness within seconds instead of waiting out a 10-second health interval — the E2E job's largest fixed cost.
 - **Single-Stack PR Coverage:** On Pull Requests, any backend or frontend change builds both application artifacts and runs E2E. This intentionally trades the extra untouched-stack build for production integration coverage on every application change. Docker-only changes retain component-specific build behavior.
 - **Production Ingress:** E2E downloads the frontend production bundle, builds the production Nginx image with a BuildKit GHA cache that restores the shared `frontend-main`/`frontend-pr` scopes and writes a dedicated `frontend-e2e` scope, then serves it on port 4200 with the same read-only filesystem and dropped capabilities used by Compose. Playwright sets `E2E_DOCKER=true`, so it tests the production bundle and reverse proxy instead of `ng serve`.
@@ -183,6 +185,18 @@ Audits the public external perimeter, exposed ports, HTTP/TLS compliance, and we
 - **Reconnaissance Protection:** Raw network and scanner dumps are excluded from public artifacts by default (`upload_raw_artifacts: false`). Sanitized tables and metrics are rendered in GitHub Step Summary, while Nuclei findings upload to GitHub Code Scanning via SARIF.
 - **Reliable Nuclei SARIF:** `scripts/prepare-nuclei-sarif.py` adds execution metadata from the recorded exit status and completion markers. Confirmed successful zero-match scans upload an empty report (the upstream exporter omits it); failed scans retain any partial findings with `executionSuccessful: false`. Missing or inconsistent reports cannot become successful empty uploads, and upload failures fail the job. The `nightly-external-nuclei` category and `nuclei` tool identity stay stable. Regression tests run in the Workflow Lint job with `python3 -m unittest discover -s scripts -p 'test_nuclei_sarif.py' -v`.
 
+## 9c. Secret Scanning — see `gitleaks.yml`
+
+> Runs on pushes to and PRs against `main`, nightly (cron `24 22 * * *`, executing ~**03:24 UTC**), and via manual `workflow_dispatch`. `Gitleaks Secret Scan` is a required status check; the workflow has no path filter, so every PR reports it.
+
+- **Direct CLI, pinned and verified:** downloads the gitleaks release named by `GITLEAKS_VERSION` and checks it against `GITLEAKS_SHA256` before extracting. Bump both together; the hash is in the release's `checksums.txt`. The workflow no longer uses `gitleaks/gitleaks-action`. That action hardcoded gitleaks 8.24.3, listed PR commits through the API without pagination (so only the first 30 commits of a PR were scanned), and uploaded a second copy of the SARIF report with default retention.
+- **Scan scope:** a PR scans only the commits it adds (`--log-opts=--no-merges <base>..<head>`), after checking that both commits are in the checkout, because gitleaks exits 0 on an invalid range. Push, schedule and manual runs scan the full history of every fetched branch (~2 s for this repository).
+- **One Code Scanning category (`gitleaks`):** every analysis on `main` covers the full history, so a push no longer replaces the nightly full-history analysis with a one-commit delta that would close its alerts. While `main` has no open alerts, a PR's analysis compared with `main` shows exactly the PR's findings.
+- **Concurrency:** superseded runs on the same ref are cancelled. This is safe because PR runs rescan all PR commits and every other run scans the full history.
+- **Fast reporting:** the scan's exit code is the gate, so the SARIF upload does not wait for Code Scanning processing (`wait-for-processing: "false"`, previously ~5 s per run). The `gitleaks-report` artifact (14-day retention) is uploaded only when the job fails. The job summary lists each finding with its `.gitleaksignore` fingerprint.
+- **Fork PRs:** the SARIF upload uses `continue-on-error` for PRs from forks. codeql-action supports fork uploads with the read-only token, but if GitHub ever rejects one, the required check still reflects only the scan.
+- **Hardening:** checkout uses `persist-credentials: false`, the scan gets no `GITHUB_TOKEN`, and `security-events: write` is scoped to the job.
+
 ## 10. Jobs: `docker-backend` and `docker-frontend`
 
 Compiles secure, production-grade container images for the backend and frontend components.
@@ -196,7 +210,7 @@ Compiles secure, production-grade container images for the backend and frontend 
 - **Change-Driven Execution:** The `changes` job emits `build_backend_image` / `build_frontend_image` booleans, so only images that actually had changes are built and scanned.
 - **Artifact-Driven Fan-In:** Each job pulls its input from the producing job's artifact (`backend-jar`, `frontend-dist`), so image build and Trivy scan never wait for the backend test suites.
 - **Smart Job-Level Gating (Skip Optimization):** Job-level conditions respect path filters on both pull requests and ordinary `main` pushes. Documentation-only changes skip heavyweight runners, while scheduled and manual runs retain full coverage.
-- **Hard-Gate Trivy Scan:** The image is scanned with `exit-code: 1` and `severity: HIGH,CRITICAL` — a blocking gate. This is the intentional counterpart to the report-only Trivy filesystem scan in `security.yml`. If a high/critical CVE is found, the build fails but the SARIF is still uploaded (via `if: always()`).
+- **Hard-Gate Trivy Scan:** The image is scanned with `exit-code: 1` and `severity: HIGH,CRITICAL` — a blocking gate. The SARIF upload passes `wait-for-processing: "false"`, because the Trivy exit code (not Code Scanning processing) is the gate. This is the intentional counterpart to the report-only Trivy filesystem scan in `security.yml`. If a high/critical CVE is found, the build fails but the SARIF is still uploaded (via `if: always()`).
 - **Builder and Layer Cache per Image:**
   - **Frontend:** builds with Buildx (`prepull-buildkit`) and a GitHub Actions layer cache (`type=gha`, scopes `frontend-main` / `frontend-pr`). Its brotli/gzip compression stage depends only on the bundle and is expensive to rebuild.
   - **Backend:** builds with the runner's default `docker` builder, with no Buildx container and no layer cache, and the image lands directly in the daemon for Trivy. Every commit produces a new JAR, which invalidates the extractor and CDS-training layers, and `APT_BUST` invalidates the apt layer, so the cache almost never hit. Exporting it cost ~40s per build, plus ~7s of BuildKit setup and ~5–9s of OCI tarball load. `pushdockerimage.yml` keeps its own `backend-main` cache.
@@ -280,7 +294,7 @@ check, and runs Android and iOS native jobs for same-repository Renovate and
 and only cancels pull-request runs, so a push to `main` cannot cancel the
 nightly native build. Its npm, CocoaPods and ExpoModulesJSI caches are saved
 only from non-PR runs. Lockfile pull requests restore the newest `main`
-snapshots instead (`BENCHMARKS.md` §54).
+snapshots instead (`BENCHMARKS.md` §55).
 
 The following version-coupled ecosystems are grouped into cohesive Renovate
 PRs: Angular and its toolchain, Tailwind CSS, Zod across monorepo packages,
@@ -318,12 +332,12 @@ complete:
 - `Mobile JavaScript`
 - `Android build and test`
 - `iOS simulator build`
+- `Gitleaks Secret Scan` (from `gitleaks.yml`; runs on every PR, no path filter)
 
 GitHub's platform automerge waits for every required check above. Docker image
-builds and the hard Trivy image scan run in `ci.yml`, while secret scanning runs
-in `gitleaks.yml`; neither is currently included in the active ruleset's
-required-status-check list. Major, pin, digest, and lock-file-maintenance
-updates remain reviewable PRs.
+builds and the hard Trivy image scan run in `ci.yml` and are not included in
+the active ruleset's required-status-check list. Major, pin, digest, and
+lock-file-maintenance updates remain reviewable PRs.
 
 The `Backend`, `Frontend`, `End-to-End Tests`, `Android build and test`, and
 `iOS simulator build` contexts are emitted by dedicated aggregator jobs
@@ -340,7 +354,9 @@ Shared step logic lives in local composite actions under `.github/actions/`, so
 the same implementation is not copied across workflows (and cannot drift):
 
 - `npm-ci` — installs `shared/schemas` then a target package with `npm ci`
-  (`package-path`, `shared-schemas`, `ignore-scripts` inputs).
+  (`package-path`, `shared-schemas`, `ignore-scripts` inputs). Opt-in
+  `cache-node-modules` restores an exact-match `node_modules` cache and skips
+  the install on a hit (used by the E2E job).
 - `start-backend` — generates disposable RSA keys, launches the JAR, and waits
   for `/actuator/health/liveness`, exposing the PID as an output. `wait: "false"`
   returns right after launch, so callers can overlap JVM startup with other setup.
@@ -351,6 +367,9 @@ the same implementation is not copied across workflows (and cannot drift):
   configures `buildx` with `driver-opts: image=<image>` so the pre-pull and the
   builder cannot diverge.
 - `upload-sarif` — uploads a SARIF file to Code Scanning under a stable category.
+  Optional `wait-for-processing` (default `"true"`); `gitleaks.yml` (the
+  scanner's exit code is its gate) and the report-only Trivy FS uploads in
+  `security.yml` set it to `"false"`.
 - `require-job-results` — fails unless a required prerequisite result is
   `success` and every dependent result is `success` or `skipped`; backs the
   required-status-check aggregator jobs (`required`, `may-skip` inputs).

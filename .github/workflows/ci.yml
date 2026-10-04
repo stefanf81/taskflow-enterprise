@@ -294,16 +294,10 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      # setup-gradle only stores configuration-cache data when given an
-      # encryption key (task-graph calculation is ~10s per run). As of
-      # BENCHMARKS.md §53 no configuration-cache entry has been observed being
-      # restored yet, so treat any saving as unverified until a `main` run
-      # logs "Reusing configuration cache".
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: false
-          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       # `testcontainersTest` and `spotbugsMain` run in `backend-integration`:
       # on one 4-vCPU runner they competed with the 3 unit-test forks for CPU,
@@ -793,6 +787,11 @@ jobs:
       SPRING_DATASOURCE_PASSWORD: taskflow
       SPRING_DATA_REDIS_HOST: localhost
       SPRING_DATA_REDIS_PORT: 6379
+      # Same headroom as verify.sh and `npm run e2e:docker`: all Playwright
+      # workers share one client IP and the suite makes ~32 auth requests,
+      # past production's 20/min. At 20, 12 csrf/me calls were throttled, and
+      # a throttled login would fail a test. The limiter itself stays enabled.
+      APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE: "200"
 
     steps:
       - name: Checkout
@@ -842,10 +841,13 @@ jobs:
       # Frontend image
       ##########################################################
 
+      # The E2E job only needs Playwright from these deps; an exact-match
+      # node_modules cache skips the npm upgrade + `npm ci` (~11 s) on a hit.
       - name: Install Frontend
         uses: ./.github/actions/npm-ci
         with:
           package-path: frontend
+          cache-node-modules: "true"
 
       - name: Download Frontend Bundle
         uses: actions/download-artifact@v8
@@ -1175,6 +1177,9 @@ jobs:
         with:
           path: trivy-results.sarif
           category: docker-backend
+          # Trivy's exit-code 1 is the gate; waiting for Code Scanning to
+          # process the upload added ~5 s to the push critical path.
+          wait-for-processing: "false"
 
   docker-frontend:
     name: Build Docker (frontend)
@@ -1289,3 +1294,4 @@ jobs:
         with:
           path: trivy-results.sarif
           category: docker-frontend
+          wait-for-processing: "false"

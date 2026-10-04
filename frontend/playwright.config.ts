@@ -11,12 +11,16 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
-  // The local backend rate-limits authentication and CSRF endpoints. Running
-  // independent browser contexts concurrently causes artificial 429 failures.
-  fullyParallel: false,
+  // The prod-profile backend meters /api/v1/auth/* per client IP, and every
+  // worker shares one IP. Each E2E stack (CI e2e job, verify.sh, e2e:docker)
+  // therefore raises APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE to 200: the
+  // suite makes ~32 auth requests, well past production's 20/min. With that
+  // headroom, tests run in parallel: the two ~10s journeys (booking, a11y) no
+  // longer run back to back (BENCHMARKS.md §53: ~35s -> ~22s locally).
+  fullyParallel: true,
   forbidOnly: !!process.env['CI'],
   retries: process.env['CI'] ? 2 : 0,
-  workers: 1,
+  workers: 2,
   reporter: 'html',
 
   use: {

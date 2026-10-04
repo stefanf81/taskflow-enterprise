@@ -18,18 +18,32 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
+# Cancelling a superseded run never leaves commits unscanned: a PR run rescans
+# every commit of the PR, and push, schedule and manual runs scan the full
+# history.
 concurrency:
   group: gitleaks-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  # Bump both together. The SHA-256 of gitleaks_<version>_linux_x64.tar.gz is
+  # listed in the release's gitleaks_<version>_checksums.txt.
+  GITLEAKS_VERSION: 8.30.1
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
 
 jobs:
   gitleaks:
     name: Gitleaks Secret Scan
 
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    timeout-minutes: 5
+
+    # codeql-action/upload-sarif needs security-events: write; scoped to this
+    # job.
+    permissions:
+      contents: read
+      security-events: write
 
     steps:
       ##########################################################
@@ -39,17 +53,87 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v7
         with:
-          # Scan the entire git history
+          # Full history: push, schedule and manual runs scan every commit,
+          # and PR runs need the base commit of the PR range.
           fetch-depth: 0
+          persist-credentials: false
+
+      ##########################################################
+      # Install Gitleaks
+      ##########################################################
+
+      # The CLI is called directly instead of through gitleaks/gitleaks-action:
+      # the action hardcodes gitleaks 8.24.3, lists PR commits through the API
+      # without pagination (only the first 30 commits of a PR were scanned),
+      # and uploads a second copy of the SARIF report with default retention.
+      - name: Install Gitleaks
+        run: |
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL --retry 3 -o "${RUNNER_TEMP}/${archive}" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum --check --strict
+          mkdir -p "${RUNNER_TEMP}/gitleaks"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/gitleaks" gitleaks
+          echo "${RUNNER_TEMP}/gitleaks" >> "${GITHUB_PATH}"
 
       ##########################################################
       # Run Gitleaks
       ##########################################################
 
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v3
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          args=(--redact --verbose --no-banner --exit-code=2
+            --report-format=sarif --report-path=results.sarif)
+
+          # PRs scan only the commits they add. Every other event scans the
+          # full history of all fetched branches (gitleaks' default
+          # `git log --full-history --all`, ~2 s here), so every analysis in
+          # the `gitleaks` Code Scanning category covers all of history. A
+          # per-push delta in that category would replace the nightly
+          # full-history analysis and close its alerts.
+          if [ "${GITHUB_EVENT_NAME}" = pull_request ]; then
+            # gitleaks logs an invalid revision range as an error but still
+            # exits 0 with "0 commits scanned", so check the range first.
+            for sha in "${BASE_SHA}" "${HEAD_SHA}"; do
+              if ! git cat-file -e "${sha}^{commit}"; then
+                echo "::error::Commit ${sha} is not in the checkout; cannot scan the PR range."
+                exit 1
+              fi
+            done
+            args+=("--log-opts=--no-merges ${BASE_SHA}..${HEAD_SHA}")
+          fi
+
+          status=0
+          gitleaks git "${args[@]}" . || status=$?
+
+          case "${status}" in
+            0)
+              echo "### ✅ Gitleaks: no leaks found" >> "${GITHUB_STEP_SUMMARY}"
+              ;;
+            2)
+              {
+                echo "### 🛑 Gitleaks: leaks found"
+                echo
+                echo "Rotate every real secret. For a false positive, append its fingerprint to \`.gitleaksignore\`."
+                echo
+                echo "| Rule | File | Line | Fingerprint |"
+                echo "| --- | --- | --- | --- |"
+                jq -r '.runs[0].results[]
+                  | .ruleId as $rule
+                  | .partialFingerprints.commitSha as $commit
+                  | .locations[0].physicalLocation as $loc
+                  | "| \($rule) | \($loc.artifactLocation.uri) | \($loc.region.startLine) | `\($commit):\($loc.artifactLocation.uri):\($rule):\($loc.region.startLine)` |"' \
+                  results.sarif
+              } >> "${GITHUB_STEP_SUMMARY}"
+              ;;
+            *)
+              echo "### ❌ Gitleaks failed with exit code ${status}" >> "${GITHUB_STEP_SUMMARY}"
+              ;;
+          esac
+          exit "${status}"
 
       ##########################################################
       # Upload SARIF to GitHub Security
@@ -57,21 +141,29 @@ jobs:
 
       - name: Upload SARIF
         if: always() && hashFiles('results.sarif') != ''
+        # A fork PR's token is read-only. codeql-action treats fork PR
+        # uploads as a supported path, but if GitHub rejects one, it must not
+        # fail this required check: the scan step above is the gate.
+        continue-on-error: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         uses: ./.github/actions/upload-sarif
         with:
           path: results.sarif
           category: gitleaks
+          # The scan step's exit code is the gate. Waiting for Code Scanning
+          # to process the upload added ~5 s to every run.
+          wait-for-processing: "false"
 
       ##########################################################
-      # Upload Reports
+      # Upload Report
       ##########################################################
 
+      # Every result is already in Code Scanning; keep the raw report only
+      # when there is something to investigate.
       - name: Upload Report
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: gitleaks-report
-          path: |
-            results.sarif
+          path: results.sarif
           if-no-files-found: ignore
           retention-days: 14

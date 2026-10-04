@@ -1521,19 +1521,85 @@ Root cause: the first Spring context in each fork boots from a cold JVM (`Starte
 * **Docker matrix split:** `docker-backend` needs only `package` and `docker-frontend` needs only `frontend`. Check names are unchanged.
 * **OpenAPI contract check moved off Backend build** (~12 s): first into `package`, then into its own `contract` job (see the follow-up below).
 * **E2E overlaps backend startup:** `start-backend` with `wait: "false"`, then the new `wait-backend` action before the ingress. JVM startup now runs alongside `npm ci`, the image build and the Playwright cache restore.
-* **Gradle configuration-cache key (no effect measured yet):** setup-gradle gets `cache-encryption-key` (`GRADLE_ENCRYPTION_KEY` secret, added 2026-10-04), which it requires before storing configuration-cache data. Run 2 and PR run [`37221670899`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37221670899) both logged "no cached configuration is available", and neither job summary lists a configuration-cache entry as restored. PR runs also cannot read caches written on the feature branch. Kept because it is harmless. Verify on `main`.
+* ~~**Gradle configuration-cache key**~~ **(rejected, removed):** setup-gradle got `cache-encryption-key` (`GRADLE_ENCRYPTION_KEY` secret). In 4 runs, including the consecutive `main` runs [`37222275489`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37222275489) and [`37222936455`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37222936455), every Backend build logged "Calculating task graph as no cached configuration is available". The job summaries list a restored Gradle User Home but never a configuration-cache entry. The ~10 s of task-graph calculation remains. The unused secret can be deleted.
 
 ### `main` push: measured regression of the estimate, and follow-up
 
 The first `main` push with these changes, run [`37222275489`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37222275489), took **2 m 54 s** of execution, plus 21 s queued before the first job. A backend-touching push before the change took ~2 m 52 s (e.g. [`37106683239`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37106683239)), so pushes did **not** improve. The ~2 m 00 s estimate above was wrong. E2E is skipped on pushes, so the critical path is `package` (74 s) → `Build Docker (backend)` (88 s). The contract check inside `package` cost ~24 s of that (Node setup 9 s, backend start 14 s, verify 1 s), directly in front of the image build. Backend build (1 m 54 s) finished 49 s earlier and was not on the critical path.
 
-* **Adopted follow-up: a dedicated `contract` job** (`needs: [changes, package]`). It runs alongside `docker-backend` and `e2e` instead of in front of them, and the required `Backend` gate asserts it. Expected: ~25 s off both the push and PR critical paths, at the cost of one more runner (~40 s of runner time). Measured result: see the next push run.
+* **Adopted follow-up: a dedicated `contract` job** (`needs: [changes, package]`). It runs alongside `docker-backend` and `e2e` instead of in front of them, and the required `Backend` gate asserts it. Cost: one more runner (~40 s of runner time). Measured in `workflow_dispatch` run [`37222936455`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37222936455) on `main` (`--no-build-cache`, all jobs, ~4 s queue). Total **2 m 36 s** vs the 2 m 52 s nightly baseline:
 
-**Verification:** runs `37219206901` and `37221275777` green, with all required contexts (`Backend`, `Frontend`, `End-to-End Tests`) and both `Build Docker (…)` checks. `actionlint` 1.7.12 passes. Trivy scanned the locally loaded backend image (hard gate unchanged).
+| Job | Baseline | After follow-up |
+| :--- | ---: | ---: |
+| Backend Package | 38 s (74 s with contract) | **36 s** |
+| OpenAPI Contract (parallel) | — | 27 s |
+| Build Docker (backend) | 1 m 48 s | **1 m 03 s** |
+| Backend build | 2 m 19 s | 1 m 30 s |
+| End-to-End Playwright (the remaining tail) | 1 m 37 s | 1 m 29 s |
+
+The `package` → `Build Docker (backend)` chain ended at **1 m 54 s** in that run. A backend-touching `main` push runs the same jobs minus E2E.
+
+**Measured `main` push:** run [`37224513696`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37224513696) (backend + frontend changes, 4 s queue) took **2 m 13 s**, vs ~2 m 52 s for backend pushes before this work. That is slower than the ~1 m 55 s derived above, because `Build Docker (backend)` took 78 s here instead of 63 s: image build 30 s, Trivy Java DB restore 12 s, scan 10 s, SARIF 9 s. `package` took 38 s and the `Backend` gate finished at 2 m 02 s, so the image chain is still the push critical path.
+
+### Parallel Playwright
+
+* **Root cause of the single worker:** the prod-profile backend meters `/api/v1/auth/*` per client IP in a fixed 60 s window (Redis `INCR` + `PEXPIRE`), at 20/min in production, and all workers share one IP. A local replica of the CI E2E stack (prod profile, Postgres, Redis, production bundle behind an `/api` proxy) showed the suite makes **32 auth requests**. Even with 1 worker, 12 `csrf`/`me` calls got 429. Tests passed only because the frontend treats those as "signed out", and a throttled login would fail a test.
+* **Fix:** the CI e2e job sets `APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE=200`, the value `verify.sh` and `npm run e2e:docker` already used. The limiter stays enabled. `playwright.config.ts` now runs `fullyParallel` with 2 workers.
+* **Local (4 cores, 3 runs each; 0 throttled requests at 200):** 1 worker 36.0 / 34.6 / 33.2 s (median 34.6 s); 2 workers per file 26.6 s; **2 workers fully parallel 21.4 / 23.3 / 22.3 s (22.3 s)**; 3 workers 21.8 / 19.0 s. Not adopted, because the two ~10.5 s journeys (booking, a11y) set the floor, and CI's 4 cores also run the backend, Postgres, Redis and the nginx container.
+* **CI:** run [`37224716997`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37224716997) logged "Running 11 tests using 2 workers" → "11 passed (21.5s)", vs 31.2 s on 1 worker (run `37222936455`), with no flaky tests or retries. The E2E job overall only went 89 s → 85 s, because container init (16 s vs 11 s) and Buildx setup (11 s vs 8 s) were slower in that run. Total 2 m 34 s.
+
+### Rejected: Spring test-context consolidation
+
+Profiled with 2 forks + C1: each fork pays one cold context start of ~18–19 s (unavoidable), plus 6 warm starts of ~4.5–5 s (~28 s of fork time). Merging contexts could save at most ~12 s of Backend build wall time. That job isn't on the critical path: it finishes 5–10 s before the backend image chain on pushes, and E2E sets the total on PRs. Merging would also make test classes share a database again, which made `AppointmentControllerIntegrationTest` fail during this work. Not worth it.
+
+**Verification:** runs `37219206901`, `37221275777`, `37222936455`, `37224513696` and `37224716997` green, with all required contexts (`Backend`, `Frontend`, `End-to-End Tests`) and both `Build Docker (…)` checks. `actionlint` 1.7.12 passes. Trivy scanned the locally loaded backend image (hard gate unchanged).
+
+## ⚡ 54. Secret Scanning — Direct Gitleaks CLI
+
+**Goal:** make `gitleaks.yml` faster and close the coverage gaps found in its job logs and in `gitleaks/gitleaks-action`'s source.
+
+**Methodology:** baseline = schedule run [`37168917955`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37168917955) (full history) and push run [`37222786747`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37222786747) (one-commit delta). Measurement = `workflow_dispatch` run [`37223595536`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37223595536) (full history, which is now also what a push runs). Step timings come from the Actions jobs API. The scanner comparison ran locally on 4 cores against a full clone (605 commits, 3 samples each).
+
+### Results (CI)
+
+| Step | Baseline schedule (full) | Baseline push (delta) | New (full) |
+| :--- | ---: | ---: | ---: |
+| Install + scan | 5 s (action: user API call, cache restore, scan, artifact) | 1 s | **2 s** (download 0.1 s, scan 1.3 s) |
+| Upload SARIF | 8 s (5.3 s waiting for processing) | 7 s | **2 s** (`wait-for-processing: "false"`) |
+| Upload Report | 1 s | 1 s | skipped (failure only) |
+| **Job** | **21 s** | **14 s** | **9 s** |
+
+### Scanner (local)
+
+| gitleaks | Rules | Full-history scan (median) | Findings |
+| :--- | ---: | ---: | ---: |
+| 8.24.3 (hardcoded by the action) | 208 | 2.0 s | 0 |
+| **8.30.1** | **222** | **1.5 s** | 0 |
+
+### Adopted
+
+* **Direct CLI** pinned by `GITLEAKS_VERSION` and verified against `GITLEAKS_SHA256`. A wrong checksum fails before extraction.
+* **PR range `<base>..<head>`:** the action listed PR commits via the API without pagination, so only the first 30 were scanned. Reproduced locally: a token in commit 33 of a 35-commit PR passed the action-equivalent range and is caught (exit 2) by the new range. gitleaks exits 0 on an invalid range ("0 commits scanned"), so the step first checks that both commits exist.
+* **Full-history scan on push:** costs ~1 s more than the delta, but keeps the `gitleaks` Code Scanning category meaning "all of history" and makes `cancel-in-progress` safe.
+* **No duplicate artifact:** the action uploaded `gitleaks-results.sarif` with default retention on every run, in addition to `gitleaks-report`.
+
+**Verification:** run `37223595536` green (595 commits scanned, SARIF uploaded under `gitleaks`). Locally: push/schedule/PR paths, planted-secret detection, redaction in logs and SARIF, the `.gitleaksignore` fingerprint from the job summary, a merge-only PR, and the invalid-range guard. `actionlint` 1.7.12 passes, including its shellcheck pass on `gitleaks.yml`. The PR path has not yet run on GitHub; the first PR to `main` exercises it.
+
+### Follow-up: Trivy FS uploads in `security.yml`
+
+The five report-only Trivy FS uploads got the same `wait-for-processing: "false"`. Baseline = nightly run [`37165270432`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37165270432); measurement = `workflow_dispatch` run [`37224263986`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37224263986).
+
+| Trivy FS job | Baseline | New |
+| :--- | ---: | ---: |
+| 5 × Upload SARIF | 36 s (7–8 s each) | **9 s** (1–2 s each) |
+| 5 × Trivy scan | 63 s | 20 s |
+| Job | 123 s | 37 s |
+
+Only the upload row is this change (−27 s). The scan steps were faster in the measurement run for reasons outside this change (likely warm Trivy DB/binary caches restored from `main`), so the job total overstates the saving. The workflow's wall clock is still bounded by CodeQL (java-kotlin): 150 s → 133 s, not affected by this change.
 
 ---
 
-## ⚡ 54. React Native CI — Lockfile-PR Caches, ExpoModulesJSI Reuse & Readable iOS Logs
+## ⚡ 55. React Native CI — Lockfile-PR Caches, ExpoModulesJSI Reuse & Readable iOS Logs
 
 **Goal:** the native jobs run on the nightly, on manual dispatch, and on Renovate / `maintenance/expo-sdk` pull requests. Those pull requests change `mobile/package-lock.json`, so every cache keyed on the exact lockfile hash misses exactly where native builds run on PRs. The iOS job is the workflow's critical path, and its log (30,519 lines on nightly [`37169165720`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37169165720)) was larger than the Actions log API returns (the last 5,000 lines), so `pod install` and most of `xcodebuild` could not be inspected.
 
