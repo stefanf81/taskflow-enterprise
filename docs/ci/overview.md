@@ -116,7 +116,7 @@ Submits the complete, deep Java and Gradle dependency tree directly to the GitHu
 
 See [`security.yml`](../../.github/workflows/security.yml) for details on:
 
-- **Trivy Filesystem Scan:** Report-only (`exit-code: 0`, `scanners: vuln`) SARIF upload partitioned across four distinct components: Backend (`.`), Frontend (`frontend/`), Mobile (`mobile/`), and Shared Schemas (`shared/schemas/`), surfaced in the Code Scanning tab with dedicated category namespaces. Non-component and build directories (`node_modules/`, `build/`, `.gradle/`, `dist/`, `android/`, `ios/`, `.git/`) are explicitly excluded. Severity asymmetry vs. the Docker image hard gate is deliberately maintained — see the inline notes.
+- **Trivy Filesystem Scan:** Report-only (`exit-code: 0`, `scanners: vuln`) SARIF upload partitioned across four distinct components: Backend (`.`), Frontend (`frontend/`), Mobile (`mobile/`), and Shared Schemas (`shared/schemas/`), surfaced in the Code Scanning tab with dedicated category namespaces. Because the scans gate nothing, the uploads skip `wait-for-processing` (7–8 s → ~2 s each). Non-component and build directories (`node_modules/`, `build/`, `.gradle/`, `dist/`, `android/`, `ios/`, `.git/`) are explicitly excluded. Severity asymmetry vs. the Docker image hard gate is deliberately maintained — see the inline notes.
 - **Trivy Database Caching:** `trivy-action` manages its own workspace-local
   vulnerability database cache and binary cache. The workflows do not layer a
   second cache over it.
@@ -186,13 +186,14 @@ Audits the public external perimeter, exposed ports, HTTP/TLS compliance, and we
 
 ## 9c. Secret Scanning — see `gitleaks.yml`
 
-> Runs on pushes to and PRs against `main`, nightly (cron `24 22 * * *`, executing ~**03:24 UTC**), and via manual `workflow_dispatch`. It is not a required status check.
+> Runs on pushes to and PRs against `main`, nightly (cron `24 22 * * *`, executing ~**03:24 UTC**), and via manual `workflow_dispatch`. `Gitleaks Secret Scan` is a required status check; the workflow has no path filter, so every PR reports it.
 
 - **Direct CLI, pinned and verified:** downloads the gitleaks release named by `GITLEAKS_VERSION` and checks it against `GITLEAKS_SHA256` before extracting. Bump both together; the hash is in the release's `checksums.txt`. The workflow no longer uses `gitleaks/gitleaks-action`. That action hardcoded gitleaks 8.24.3, listed PR commits through the API without pagination (so only the first 30 commits of a PR were scanned), and uploaded a second copy of the SARIF report with default retention.
 - **Scan scope:** a PR scans only the commits it adds (`--log-opts=--no-merges <base>..<head>`), after checking that both commits are in the checkout, because gitleaks exits 0 on an invalid range. Push, schedule and manual runs scan the full history of every fetched branch (~2 s for this repository).
 - **One Code Scanning category (`gitleaks`):** every analysis on `main` covers the full history, so a push no longer replaces the nightly full-history analysis with a one-commit delta that would close its alerts. While `main` has no open alerts, a PR's analysis compared with `main` shows exactly the PR's findings.
 - **Concurrency:** superseded runs on the same ref are cancelled. This is safe because PR runs rescan all PR commits and every other run scans the full history.
 - **Fast reporting:** the scan's exit code is the gate, so the SARIF upload does not wait for Code Scanning processing (`wait-for-processing: "false"`, previously ~5 s per run). The `gitleaks-report` artifact (14-day retention) is uploaded only when the job fails. The job summary lists each finding with its `.gitleaksignore` fingerprint.
+- **Fork PRs:** the SARIF upload uses `continue-on-error` for PRs from forks. codeql-action supports fork uploads with the read-only token, but if GitHub ever rejects one, the required check still reflects only the scan.
 - **Hardening:** checkout uses `persist-credentials: false`, the scan gets no `GITHUB_TOKEN`, and `security-events: write` is scoped to the job.
 
 ## 10. Jobs: `docker-backend` and `docker-frontend`
@@ -328,12 +329,12 @@ complete:
 - `Mobile JavaScript`
 - `Android build and test`
 - `iOS simulator build`
+- `Gitleaks Secret Scan` (from `gitleaks.yml`; runs on every PR, no path filter)
 
 GitHub's platform automerge waits for every required check above. Docker image
-builds and the hard Trivy image scan run in `ci.yml`, while secret scanning runs
-in `gitleaks.yml`; neither is currently included in the active ruleset's
-required-status-check list. Major, pin, digest, and lock-file-maintenance
-updates remain reviewable PRs.
+builds and the hard Trivy image scan run in `ci.yml` and are not included in
+the active ruleset's required-status-check list. Major, pin, digest, and
+lock-file-maintenance updates remain reviewable PRs.
 
 The `Backend`, `Frontend`, `End-to-End Tests`, `Android build and test`, and
 `iOS simulator build` contexts are emitted by dedicated aggregator jobs
@@ -361,8 +362,9 @@ the same implementation is not copied across workflows (and cannot drift):
   configures `buildx` with `driver-opts: image=<image>` so the pre-pull and the
   builder cannot diverge.
 - `upload-sarif` — uploads a SARIF file to Code Scanning under a stable category.
-  Optional `wait-for-processing` (default `"true"`); `gitleaks.yml` sets it to
-  `"false"` because the scanner's exit code is its gate.
+  Optional `wait-for-processing` (default `"true"`); `gitleaks.yml` (the
+  scanner's exit code is its gate) and the report-only Trivy FS uploads in
+  `security.yml` set it to `"false"`.
 - `require-job-results` — fails unless a required prerequisite result is
   `success` and every dependent result is `success` or `skipped`; backs the
   required-status-check aggregator jobs (`required`, `may-skip` inputs).
