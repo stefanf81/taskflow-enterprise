@@ -34,8 +34,12 @@ on:
 permissions:
   contents: read
 
+# The event is part of the group so a push to main cannot cancel the nightly
+# schedule or a manual `run_tests` dispatch that is running on the same ref
+# (run 37227832537 was cancelled this way two minutes after it started).
+# Superseded runs of the same kind (PR, main push, ...) are still cancelled.
 concurrency:
-  group: taskflow-${{ github.workflow }}-${{ github.ref }}
+  group: taskflow-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 env:
@@ -492,7 +496,9 @@ jobs:
           name: backend-jar
           path: build/libs/*.jar
           compression-level: 0
-          retention-days: 14
+          # Intra-run hand-off (~95 MB per run) to contract/e2e/docker-backend;
+          # nothing downloads it after the run, so keep it short.
+          retention-days: 3
 
   ###########################################################
   # OpenAPI Contract
@@ -1045,8 +1051,10 @@ jobs:
       ##########################################################
       - name: Compute Image Refs
         id: images
+        env:
+          OWNER: ${{ github.repository_owner }}
         run: |
-          owner="$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           echo "image=ghcr.io/${owner}/taskflow-backend" >> "$GITHUB_OUTPUT"
           # Trivy DB cache keys. `trivy_db_date` mirrors trivy-action's own
           # vulnerability-DB key (`cache-trivy-<date>`); the Java index DB is
@@ -1210,8 +1218,10 @@ jobs:
       # GHCR uses lowercase owner; see `docker-backend`.
       - name: Compute Image Refs
         id: images
+        env:
+          OWNER: ${{ github.repository_owner }}
         run: |
-          owner="$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           echo "image=ghcr.io/${owner}/taskflow-frontend" >> "$GITHUB_OUTPUT"
           echo "trivy_db_date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
 

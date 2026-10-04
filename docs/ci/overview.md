@@ -22,11 +22,13 @@ A daily **schedule** (`0 22 * * *`) runs the full build, test, and Docker build+
 
 ```yaml
 concurrency:
-  group: taskflow-${{ github.workflow }}-${{ github.ref }}
+  group: taskflow-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 ```
 
 **Why:** If a developer (or Renovate) pushes multiple commits to a branch in rapid succession, GitHub Actions cancels the older, now-obsolete pipeline runs. This saves significant compute minutes and prevents a queue of stale builds. `main` is included because merge bursts otherwise queue a full ~6-minute run per commit; the surviving run always verifies the cumulative tree, and required status checks are evaluated per pull request, so cancelling a superseded `main` run has no effect on merge gating.
+
+The **event name is part of the group** so only runs of the same kind supersede each other. Without it, a `push` to `main` shared a group with the nightly `schedule` and with manual `workflow_dispatch` runs on `main` and cancelled them (a `run_tests` dispatch was cancelled two minutes after it started by a merge). `react-native-ci.yml` uses the same event-scoped group.
 
 ## 3. Least-Privilege Permissions (`permissions`)
 
@@ -244,7 +246,7 @@ Our Docker build configurations (`Dockerfile` and `Dockerfile.x64`) implement st
 
 ## 12. Repository & GHCR Setup
 
-The Docker push workflow (`.github/workflows/pushdockerimage.yml`) pushes images to the GitHub Container Registry (GHCR) using the default `GITHUB_TOKEN`.
+The Docker push workflow (`.github/workflows/pushdockerimage.yml`) pushes images to the GitHub Container Registry (GHCR) using the default `GITHUB_TOKEN`. The workflow default is `contents: read`; only the `push` job is granted `packages: write` and `security-events: write`, so the jobs that run Gradle and npm hold no write token. The `image_tag` input is passed through `env` and validated against Docker tag syntax (and must not end in `-scan`, the staging suffix) before use.
 
 ### Workflow permissions
 

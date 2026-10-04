@@ -233,13 +233,14 @@ jobs:
         run: |
           python3 <<'PY'
           from pathlib import Path
+          import os
           import xml.etree.ElementTree as ET
 
           summary_lines = [
               "## Network Port Discovery & Surface Audit",
               "",
-              f"- **Target IP:** `{Path('reports/open-ports.csv').parent.name}`",
-              f"- **Configured Expected Ports:** `{Path('reports/unexpected-public-ports.txt').exists()}`",
+              f"- **Target IP:** `{os.environ.get('TARGET_IP', '')}`",
+              f"- **Configured Expected Ports:** `{os.environ.get('EXPECTED_PUBLIC_TCP_PORTS', '')}`",
           ]
 
           service_xml = Path("reports/nmap-services.xml")
