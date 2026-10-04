@@ -575,7 +575,8 @@ jobs:
           # log keeps it: show whether the cached ExpoModulesJSI slice was
           # reused or rebuilt (and how long the rebuild took).
           find ios/build/DerivedData/Logs/Build -name '*.xcactivitylog' -exec gzip -dc {} + 2>/dev/null \
-            | LC_ALL=C grep -a -o '\[ExpoModulesJSI\] [[:print:]]*' || true
+            | LC_ALL=C grep -a -o -E '\[ExpoModulesJSI\] (Built xcframework successfully in [0-9]+s|xcframework slices up to date, skipping build)' \
+            | sort -u || true
 
           exit "${pipe_status[0]}"
 
