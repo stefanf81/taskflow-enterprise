@@ -183,6 +183,17 @@ Audits the public external perimeter, exposed ports, HTTP/TLS compliance, and we
 - **Reconnaissance Protection:** Raw network and scanner dumps are excluded from public artifacts by default (`upload_raw_artifacts: false`). Sanitized tables and metrics are rendered in GitHub Step Summary, while Nuclei findings upload to GitHub Code Scanning via SARIF.
 - **Reliable Nuclei SARIF:** `scripts/prepare-nuclei-sarif.py` adds execution metadata from the recorded exit status and completion markers. Confirmed successful zero-match scans upload an empty report (the upstream exporter omits it); failed scans retain any partial findings with `executionSuccessful: false`. Missing or inconsistent reports cannot become successful empty uploads, and upload failures fail the job. The `nightly-external-nuclei` category and `nuclei` tool identity stay stable. Regression tests run in the Workflow Lint job with `python3 -m unittest discover -s scripts -p 'test_nuclei_sarif.py' -v`.
 
+## 9c. Secret Scanning — see `gitleaks.yml`
+
+> Runs on pushes to and PRs against `main`, nightly (cron `24 22 * * *`, executing ~**03:24 UTC**), and via manual `workflow_dispatch`. It is not a required status check.
+
+- **Direct CLI, pinned and verified:** downloads the gitleaks release named by `GITLEAKS_VERSION` and checks it against `GITLEAKS_SHA256` before extracting. Bump both together; the hash is in the release's `checksums.txt`. The workflow no longer uses `gitleaks/gitleaks-action`. That action hardcoded gitleaks 8.24.3, listed PR commits through the API without pagination (so only the first 30 commits of a PR were scanned), and uploaded a second copy of the SARIF report with default retention.
+- **Scan scope:** a PR scans only the commits it adds (`--log-opts=--no-merges <base>..<head>`), after checking that both commits are in the checkout, because gitleaks exits 0 on an invalid range. Push, schedule and manual runs scan the full history of every fetched branch (~2 s for this repository).
+- **One Code Scanning category (`gitleaks`):** every analysis on `main` covers the full history, so a push no longer replaces the nightly full-history analysis with a one-commit delta that would close its alerts. While `main` has no open alerts, a PR's analysis compared with `main` shows exactly the PR's findings.
+- **Concurrency:** superseded runs on the same ref are cancelled. This is safe because PR runs rescan all PR commits and every other run scans the full history.
+- **Fast reporting:** the scan's exit code is the gate, so the SARIF upload does not wait for Code Scanning processing (`wait-for-processing: "false"`, previously ~5 s per run). The `gitleaks-report` artifact (14-day retention) is uploaded only when the job fails. The job summary lists each finding with its `.gitleaksignore` fingerprint.
+- **Hardening:** checkout uses `persist-credentials: false`, the scan gets no `GITHUB_TOKEN`, and `security-events: write` is scoped to the job.
+
 ## 10. Jobs: `docker-backend` and `docker-frontend`
 
 Compiles secure, production-grade container images for the backend and frontend components.
@@ -349,6 +360,8 @@ the same implementation is not copied across workflows (and cannot drift):
   configures `buildx` with `driver-opts: image=<image>` so the pre-pull and the
   builder cannot diverge.
 - `upload-sarif` — uploads a SARIF file to Code Scanning under a stable category.
+  Optional `wait-for-processing` (default `"true"`); `gitleaks.yml` sets it to
+  `"false"` because the scanner's exit code is its gate.
 - `require-job-results` — fails unless a required prerequisite result is
   `success` and every dependent result is `success` or `skipped`; backs the
   required-status-check aggregator jobs (`required`, `may-skip` inputs).
