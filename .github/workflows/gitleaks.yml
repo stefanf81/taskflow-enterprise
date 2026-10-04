@@ -141,6 +141,10 @@ jobs:
 
       - name: Upload SARIF
         if: always() && hashFiles('results.sarif') != ''
+        # A fork PR's token is read-only. codeql-action treats fork PR
+        # uploads as a supported path, but if GitHub rejects one, it must not
+        # fail this required check: the scan step above is the gate.
+        continue-on-error: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         uses: ./.github/actions/upload-sarif
         with:
           path: results.sarif

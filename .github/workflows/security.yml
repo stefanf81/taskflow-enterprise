@@ -165,6 +165,10 @@ jobs:
       # the same category in one workflow run. Distinct output files keep a
       # failed scan from uploading a stale SARIF under the next category.
       #
+      # The uploads skip `wait-for-processing`: the scans are report-only, so
+      # waiting for Code Scanning to process each SARIF (7-8 s per upload vs
+      # ~2 s without, ~25 s per run) gated nothing.
+      #
       # NOTE ON SEVERITY GATING (intentional asymmetry):
       # This filesystem/source scan is REPORT-ONLY (exit-code: 0) — it never
       # fails the build. It's meant to surface vulnerable dependencies early
@@ -213,6 +217,7 @@ jobs:
         with:
           path: trivy-results-backend.sarif
           category: trivy-fs-Backend
+          wait-for-processing: "false"
 
       - name: Trivy FS (Frontend)
         uses: aquasecurity/trivy-action@v0.36.0
@@ -234,6 +239,7 @@ jobs:
         with:
           path: trivy-results-frontend.sarif
           category: trivy-fs-Frontend
+          wait-for-processing: "false"
 
       - name: Trivy FS (Mobile)
         uses: aquasecurity/trivy-action@v0.36.0
@@ -255,6 +261,7 @@ jobs:
         with:
           path: trivy-results-mobile.sarif
           category: trivy-fs-Mobile
+          wait-for-processing: "false"
 
       - name: Trivy FS (Shared)
         uses: aquasecurity/trivy-action@v0.36.0
@@ -276,6 +283,7 @@ jobs:
         with:
           path: trivy-results-shared.sarif
           category: trivy-fs-Shared
+          wait-for-processing: "false"
 
       # Workspace tooling lockfile (root package.json: knip). Kept as its own
       # component so findings are attributable to the lockfile's owner.
@@ -298,6 +306,7 @@ jobs:
         with:
           path: trivy-results-root.sarif
           category: trivy-fs-Root
+          wait-for-processing: "false"
 
   ###########################################################
   # Trivy DB cache retention
