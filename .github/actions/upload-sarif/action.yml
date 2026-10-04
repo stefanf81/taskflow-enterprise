@@ -9,6 +9,13 @@ inputs:
   category:
     description: Code Scanning category (must be unique per tool and component).
     required: true
+  wait-for-processing:
+    description: >-
+      Wait until Code Scanning has processed the upload, so processing errors
+      fail the job. Set to "false" when the job gates on the scanner's own exit
+      code.
+    required: false
+    default: "true"
 runs:
   using: composite
   steps:
@@ -17,3 +24,4 @@ runs:
       with:
         sarif_file: ${{ inputs.path }}
         category: ${{ inputs.category }}
+        wait-for-processing: ${{ inputs.wait-for-processing }}
