@@ -1530,3 +1530,34 @@ The first `main` push with these changes, run [`37222275489`](https://github.com
 * **Adopted follow-up: a dedicated `contract` job** (`needs: [changes, package]`). It runs alongside `docker-backend` and `e2e` instead of in front of them, and the required `Backend` gate asserts it. Expected: ~25 s off both the push and PR critical paths, at the cost of one more runner (~40 s of runner time). Measured result: see the next push run.
 
 **Verification:** runs `37219206901` and `37221275777` green, with all required contexts (`Backend`, `Frontend`, `End-to-End Tests`) and both `Build Docker (…)` checks. `actionlint` 1.7.12 passes. Trivy scanned the locally loaded backend image (hard gate unchanged).
+
+## ⚡ 54. Secret Scanning — Direct Gitleaks CLI
+
+**Goal:** make `gitleaks.yml` faster and close the coverage gaps found in its job logs and in `gitleaks/gitleaks-action`'s source.
+
+**Methodology:** baseline = schedule run [`37168917955`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37168917955) (full history) and push run [`37222786747`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37222786747) (one-commit delta). Measurement = `workflow_dispatch` run [`37223595536`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37223595536) (full history, which is now also what a push runs). Step timings come from the Actions jobs API. The scanner comparison ran locally on 4 cores against a full clone (605 commits, 3 samples each).
+
+### Results (CI)
+
+| Step | Baseline schedule (full) | Baseline push (delta) | New (full) |
+| :--- | ---: | ---: | ---: |
+| Install + scan | 5 s (action: user API call, cache restore, scan, artifact) | 1 s | **2 s** (download 0.1 s, scan 1.3 s) |
+| Upload SARIF | 8 s (5.3 s waiting for processing) | 7 s | **2 s** (`wait-for-processing: "false"`) |
+| Upload Report | 1 s | 1 s | skipped (failure only) |
+| **Job** | **21 s** | **14 s** | **9 s** |
+
+### Scanner (local)
+
+| gitleaks | Rules | Full-history scan (median) | Findings |
+| :--- | ---: | ---: | ---: |
+| 8.24.3 (hardcoded by the action) | 208 | 2.0 s | 0 |
+| **8.30.1** | **222** | **1.5 s** | 0 |
+
+### Adopted
+
+* **Direct CLI** pinned by `GITLEAKS_VERSION` and verified against `GITLEAKS_SHA256`. A wrong checksum fails before extraction.
+* **PR range `<base>..<head>`:** the action listed PR commits via the API without pagination, so only the first 30 were scanned. Reproduced locally: a token in commit 33 of a 35-commit PR passed the action-equivalent range and is caught (exit 2) by the new range. gitleaks exits 0 on an invalid range ("0 commits scanned"), so the step first checks that both commits exist.
+* **Full-history scan on push:** costs ~1 s more than the delta, but keeps the `gitleaks` Code Scanning category meaning "all of history" and makes `cancel-in-progress` safe.
+* **No duplicate artifact:** the action uploaded `gitleaks-results.sarif` with default retention on every run, in addition to `gitleaks-report`.
+
+**Verification:** run `37223595536` green (595 commits scanned, SARIF uploaded under `gitleaks`). Locally: push/schedule/PR paths, planted-secret detection, redaction in logs and SARIF, the `.gitleaksignore` fingerprint from the job summary, a merge-only PR, and the invalid-range guard. `actionlint` 1.7.12 passes, including its shellcheck pass on `gitleaks.yml`. The PR path has not yet run on GitHub; the first PR to `main` exercises it.
