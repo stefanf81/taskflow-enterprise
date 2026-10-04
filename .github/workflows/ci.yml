@@ -294,16 +294,10 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      # setup-gradle only stores configuration-cache data when given an
-      # encryption key (task-graph calculation is ~10s per run). As of
-      # BENCHMARKS.md §53 no configuration-cache entry has been observed being
-      # restored yet, so treat any saving as unverified until a `main` run
-      # logs "Reusing configuration cache".
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: false
-          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       # `testcontainersTest` and `spotbugsMain` run in `backend-integration`:
       # on one 4-vCPU runner they competed with the 3 unit-test forks for CPU,

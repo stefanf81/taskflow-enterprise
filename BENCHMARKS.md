@@ -1521,12 +1521,22 @@ Root cause: the first Spring context in each fork boots from a cold JVM (`Starte
 * **Docker matrix split:** `docker-backend` needs only `package` and `docker-frontend` needs only `frontend`. Check names are unchanged.
 * **OpenAPI contract check moved off Backend build** (~12 s): first into `package`, then into its own `contract` job (see the follow-up below).
 * **E2E overlaps backend startup:** `start-backend` with `wait: "false"`, then the new `wait-backend` action before the ingress. JVM startup now runs alongside `npm ci`, the image build and the Playwright cache restore.
-* **Gradle configuration-cache key (no effect measured yet):** setup-gradle gets `cache-encryption-key` (`GRADLE_ENCRYPTION_KEY` secret, added 2026-10-04), which it requires before storing configuration-cache data. Run 2 and PR run [`37221670899`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37221670899) both logged "no cached configuration is available", and neither job summary lists a configuration-cache entry as restored. PR runs also cannot read caches written on the feature branch. Kept because it is harmless. Verify on `main`.
+* ~~**Gradle configuration-cache key**~~ **(rejected, removed):** setup-gradle got `cache-encryption-key` (`GRADLE_ENCRYPTION_KEY` secret). In 4 runs, including the consecutive `main` runs [`37222275489`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37222275489) and [`37222936455`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37222936455), every Backend build logged "Calculating task graph as no cached configuration is available". The job summaries list a restored Gradle User Home but never a configuration-cache entry. The ~10 s of task-graph calculation remains. The unused secret can be deleted.
 
 ### `main` push: measured regression of the estimate, and follow-up
 
 The first `main` push with these changes, run [`37222275489`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37222275489), took **2 m 54 s** of execution, plus 21 s queued before the first job. A backend-touching push before the change took ~2 m 52 s (e.g. [`37106683239`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37106683239)), so pushes did **not** improve. The ~2 m 00 s estimate above was wrong. E2E is skipped on pushes, so the critical path is `package` (74 s) → `Build Docker (backend)` (88 s). The contract check inside `package` cost ~24 s of that (Node setup 9 s, backend start 14 s, verify 1 s), directly in front of the image build. Backend build (1 m 54 s) finished 49 s earlier and was not on the critical path.
 
-* **Adopted follow-up: a dedicated `contract` job** (`needs: [changes, package]`). It runs alongside `docker-backend` and `e2e` instead of in front of them, and the required `Backend` gate asserts it. Expected: ~25 s off both the push and PR critical paths, at the cost of one more runner (~40 s of runner time). Measured result: see the next push run.
+* **Adopted follow-up: a dedicated `contract` job** (`needs: [changes, package]`). It runs alongside `docker-backend` and `e2e` instead of in front of them, and the required `Backend` gate asserts it. Cost: one more runner (~40 s of runner time). Measured in `workflow_dispatch` run [`37222936455`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37222936455) on `main` (`--no-build-cache`, all jobs, ~4 s queue). Total **2 m 36 s** vs the 2 m 52 s nightly baseline:
+
+| Job | Baseline | After follow-up |
+| :--- | ---: | ---: |
+| Backend Package | 38 s (74 s with contract) | **36 s** |
+| OpenAPI Contract (parallel) | — | 27 s |
+| Build Docker (backend) | 1 m 48 s | **1 m 03 s** |
+| Backend build | 2 m 19 s | 1 m 30 s |
+| End-to-End Playwright (the remaining tail) | 1 m 37 s | 1 m 29 s |
+
+The `package` → `Build Docker (backend)` chain now ends at **1 m 54 s**. A backend-touching `main` push runs the same jobs minus E2E, so it should take ~1 m 55 s instead of ~2 m 52 s. That figure is derived from this run's jobs, not measured on a push.
 
 **Verification:** runs `37219206901` and `37221275777` green, with all required contexts (`Backend`, `Frontend`, `End-to-End Tests`) and both `Build Docker (…)` checks. `actionlint` 1.7.12 passes. Trivy scanned the locally loaded backend image (hard gate unchanged).
