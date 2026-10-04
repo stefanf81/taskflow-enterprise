@@ -1537,9 +1537,22 @@ The first `main` push with these changes, run [`37222275489`](https://github.com
 | Backend build | 2 m 19 s | 1 m 30 s |
 | End-to-End Playwright (the remaining tail) | 1 m 37 s | 1 m 29 s |
 
-The `package` → `Build Docker (backend)` chain now ends at **1 m 54 s**. A backend-touching `main` push runs the same jobs minus E2E, so it should take ~1 m 55 s instead of ~2 m 52 s. That figure is derived from this run's jobs, not measured on a push.
+The `package` → `Build Docker (backend)` chain ended at **1 m 54 s** in that run. A backend-touching `main` push runs the same jobs minus E2E.
 
-**Verification:** runs `37219206901` and `37221275777` green, with all required contexts (`Backend`, `Frontend`, `End-to-End Tests`) and both `Build Docker (…)` checks. `actionlint` 1.7.12 passes. Trivy scanned the locally loaded backend image (hard gate unchanged).
+**Measured `main` push:** run [`37224513696`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37224513696) (backend + frontend changes, 4 s queue) took **2 m 13 s**, vs ~2 m 52 s for backend pushes before this work. That is slower than the ~1 m 55 s derived above, because `Build Docker (backend)` took 78 s here instead of 63 s: image build 30 s, Trivy Java DB restore 12 s, scan 10 s, SARIF 9 s. `package` took 38 s and the `Backend` gate finished at 2 m 02 s, so the image chain is still the push critical path.
+
+### Parallel Playwright
+
+* **Root cause of the single worker:** the prod-profile backend meters `/api/v1/auth/*` per client IP in a fixed 60 s window (Redis `INCR` + `PEXPIRE`), at 20/min in production, and all workers share one IP. A local replica of the CI E2E stack (prod profile, Postgres, Redis, production bundle behind an `/api` proxy) showed the suite makes **32 auth requests**. Even with 1 worker, 12 `csrf`/`me` calls got 429. Tests passed only because the frontend treats those as "signed out", and a throttled login would fail a test.
+* **Fix:** the CI e2e job sets `APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE=200`, the value `verify.sh` and `npm run e2e:docker` already used. The limiter stays enabled. `playwright.config.ts` now runs `fullyParallel` with 2 workers.
+* **Local (4 cores, 3 runs each; 0 throttled requests at 200):** 1 worker 36.0 / 34.6 / 33.2 s (median 34.6 s); 2 workers per file 26.6 s; **2 workers fully parallel 21.4 / 23.3 / 22.3 s (22.3 s)**; 3 workers 21.8 / 19.0 s. Not adopted, because the two ~10.5 s journeys (booking, a11y) set the floor, and CI's 4 cores also run the backend, Postgres, Redis and the nginx container.
+* **CI:** run [`37224716997`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37224716997) logged "Running 11 tests using 2 workers" → "11 passed (21.5s)", vs 31.2 s on 1 worker (run `37222936455`), with no flaky tests or retries. The E2E job overall only went 89 s → 85 s, because container init (16 s vs 11 s) and Buildx setup (11 s vs 8 s) were slower in that run. Total 2 m 34 s.
+
+### Rejected: Spring test-context consolidation
+
+Profiled with 2 forks + C1: each fork pays one cold context start of ~18–19 s (unavoidable), plus 6 warm starts of ~4.5–5 s (~28 s of fork time). Merging contexts could save at most ~12 s of Backend build wall time. That job isn't on the critical path: it finishes 5–10 s before the backend image chain on pushes, and E2E sets the total on PRs. Merging would also make test classes share a database again, which made `AppointmentControllerIntegrationTest` fail during this work. Not worth it.
+
+**Verification:** runs `37219206901`, `37221275777`, `37222936455`, `37224513696` and `37224716997` green, with all required contexts (`Backend`, `Frontend`, `End-to-End Tests`) and both `Build Docker (…)` checks. `actionlint` 1.7.12 passes. Trivy scanned the locally loaded backend image (hard gate unchanged).
 
 ## ⚡ 54. Secret Scanning — Direct Gitleaks CLI
 
