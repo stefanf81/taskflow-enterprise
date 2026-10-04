@@ -79,7 +79,8 @@ jobs:
       docker_backend: ${{ steps.filter.outputs.docker_backend }}
       docker_frontend: ${{ steps.filter.outputs.docker_frontend }}
 
-      docker_components: ${{ steps.components.outputs.matrix }}
+      build_backend_image: ${{ steps.components.outputs.backend }}
+      build_frontend_image: ${{ steps.components.outputs.frontend }}
 
     steps:
       - name: Checkout
@@ -155,24 +156,25 @@ jobs:
           IS_SCHEDULE: ${{ github.event_name == 'schedule' }}
 
         run: |
-          components=()
+          backend=false
+          frontend=false
 
           if [[ "$BACKEND_CHANGED" == "true" || \
                 "$DOCKER_BACKEND_CHANGED" == "true" || \
                 "$IS_MANUAL" == "true" || \
                 "$IS_SCHEDULE" == "true" ]]; then
-            components+=(backend)
+            backend=true
           fi
 
           if [[ "$FRONTEND_CHANGED" == "true" || \
                 "$DOCKER_FRONTEND_CHANGED" == "true" || \
                 "$IS_MANUAL" == "true" || \
                 "$IS_SCHEDULE" == "true" ]]; then
-            components+=(frontend)
+            frontend=true
           fi
 
-          matrix="$(jq -cn '$ARGS.positional' --args "${components[@]}")"
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
 
   ###########################################################
   # Dockerfile Lint
@@ -292,26 +294,30 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
+      # setup-gradle only stores configuration-cache data when given an
+      # encryption key (task-graph calculation is ~10s per run). As of
+      # BENCHMARKS.md §53 no configuration-cache entry has been observed being
+      # restored yet, so treat any saving as unverified until a `main` run
+      # logs "Reusing configuration cache".
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: false
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
+      # `testcontainersTest` and `spotbugsMain` run in `backend-integration`:
+      # on one 4-vCPU runner they competed with the 3 unit-test forks for CPU,
+      # and the unit suite is this job's long pole.
       - name: Build and Test
         if: env.RUN_TESTS == 'true'
         env:
           # `--no-build-cache` whenever executing tests is the explicit point of
           # the run — the nightly schedule, or a manual dispatch with
           # run_tests=true. Otherwise setup-gradle's restored build cache serves
-          # `test`, `testcontainersTest`, and `spotbugsMain` FROM-CACHE and no
-          # test actually runs (verified: manual dispatch completed in ~18s with
-          # all three FROM-CACHE). PR/push runs keep the cache for speed; the
-          # nightly remains the authoritative full execution.
+          # `test` FROM-CACHE and no test actually runs (verified: manual
+          # dispatch completed in ~18s with every test task FROM-CACHE). PR/push
+          # runs keep the cache for speed; the nightly remains the authoritative
+          # full execution.
           GRADLE_CACHE_FLAG: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)) && '--no-build-cache' || '--build-cache' }}
         run: |
           ./gradlew \
@@ -319,10 +325,8 @@ jobs:
             "$GRADLE_CACHE_FLAG" \
             assemble \
             test \
-            testcontainersTest \
             jacocoTestReport \
             jacocoTestCoverageVerification \
-            spotbugsMain \
             --stacktrace
 
       - name: Build (packaging only)
@@ -333,22 +337,6 @@ jobs:
             --build-cache \
             assemble \
             --stacktrace
-
-      - name: Start backend for contract verification
-        id: contract_backend
-        uses: ./.github/actions/start-backend
-        with:
-          log-file: openapi-contract.log
-
-      - name: Verify OpenAPI Contract
-        run: |
-          set -euo pipefail
-          node scripts/check-openapi-contract.js --auth http://localhost:8080/v3/api-docs
-          node scripts/sync-api-types.js --check api/openapi.json
-
-      - name: Stop contract-verification backend
-        if: always()
-        run: kill "${{ steps.contract_backend.outputs.pid }}" 2>/dev/null || true
 
       - name: Upload Test Reports
         if: always() && env.RUN_TESTS == 'true'
@@ -361,12 +349,77 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # PostgreSQL parity suite and static analysis, split from `backend` so they
+  # run on their own runner in parallel with the unit suite. Gated like
+  # `backend`, and skipped whenever `backend` would not run tests.
+  backend-integration:
+    name: Backend integration
+    needs: changes
+
+    if: |
+      (
+        needs.changes.outputs.renovate == 'true' ||
+        needs.changes.outputs.backend == 'true' ||
+        needs.changes.outputs.docker_backend == 'true' ||
+        github.event_name == 'workflow_dispatch' ||
+        github.event_name == 'schedule' ||
+        (
+          needs.changes.outputs.frontend == 'true' &&
+          github.event_name == 'pull_request'
+        )
+      ) &&
+      !(github.event_name == 'workflow_dispatch' && inputs.run_tests != true)
+
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      # `backend` owns Gradle cache writes in this workflow.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: true
+
+      - name: Testcontainers and SpotBugs
+        env:
+          # Same policy as `backend`: full execution on the nightly schedule
+          # and on test dispatches, build cache otherwise.
+          GRADLE_CACHE_FLAG: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '--no-build-cache' || '--build-cache' }}
+        run: |
+          ./gradlew \
+            --parallel \
+            "$GRADLE_CACHE_FLAG" \
+            testcontainersTest \
+            spotbugsMain \
+            --stacktrace
+
+      - name: Upload Test Reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-integration-results
+          path: |
+            build/reports
+            build/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
   # Owns the required "Backend" context. A skipped job reports success to
   # branch protection, so this gate fails when change detection or the build
-  # failed instead of letting a skipped `backend` job read as a pass.
+  # failed instead of letting a skipped `backend` job read as a pass. `package`
+  # is asserted too because it runs the OpenAPI contract verification.
   backend-gate:
     name: Backend
-    needs: [changes, backend]
+    needs: [changes, backend, backend-integration, package]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -380,15 +433,15 @@ jobs:
         uses: ./.github/actions/require-job-results
         with:
           required: ${{ needs.changes.result }}
-          may-skip: ${{ needs.backend.result }}
+          may-skip: ${{ needs.backend.result }} ${{ needs.backend-integration.result }} ${{ needs.package.result }}
 
   ###########################################################
   # Backend Package
   ###########################################################
 
-  # Publishes the production JAR early so `e2e`/`docker-build` can start as soon
-  # as it exists, rather than waiting ~3 minutes for the full test suite in the
-  # `backend` job. The second `assemble` is served from the Gradle build cache
+  # Publishes the production JAR early so `e2e`/`docker-backend` can start as
+  # soon as it exists, rather than waiting ~3 minutes for the full test suite in
+  # the `backend` job. The second `assemble` is served from the Gradle build cache
   # (~35-65s) and buys ~100s of wall-clock on the PR/dispatch critical path
   # (measured: consumers start at ~65s vs ~185s, run wall 308s -> ~210s).
   package:
@@ -445,6 +498,32 @@ jobs:
           path: build/libs/*.jar
           compression-level: 0
           retention-days: 14
+
+      # Contract verification lives here rather than in `backend`, where it
+      # added ~12s after the test suite on the critical path. This job already
+      # holds the freshly built JAR and otherwise finishes well before the
+      # frontend bundle that E2E also waits for. The scripts use only Node
+      # built-ins, so no npm install is needed.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Start backend for contract verification
+        id: contract_backend
+        uses: ./.github/actions/start-backend
+        with:
+          log-file: openapi-contract.log
+
+      - name: Verify OpenAPI Contract
+        run: |
+          set -euo pipefail
+          node scripts/check-openapi-contract.js --auth http://localhost:8080/v3/api-docs
+          node scripts/sync-api-types.js --check api/openapi.json
+
+      - name: Stop contract-verification backend
+        if: always()
+        run: kill "${{ steps.contract_backend.outputs.pid }}" 2>/dev/null || true
 
   ###########################################################
   # Dependency Submission
@@ -718,14 +797,19 @@ jobs:
       # Start Backend
       ##########################################################
 
+      # Launch only: JVM startup (~11-18s) overlaps the frontend install, image
+      # build, and Playwright browser restore below; `Wait for Spring Boot`
+      # gates the ingress on it.
       - name: Start Spring Boot
+        id: backend
         uses: ./.github/actions/start-backend
         with:
           jar-path: backend-jar-dir/*.jar
           profile: prod
+          wait: "false"
 
       ##########################################################
-      # Production frontend ingress
+      # Frontend image
       ##########################################################
 
       - name: Install Frontend
@@ -754,34 +838,6 @@ jobs:
             --load \
             --tag taskflow-e2e-frontend \
             frontend
-
-      - name: Start production frontend ingress
-        run: |
-          set -euo pipefail
-
-          docker run --detach \
-            --name taskflow-e2e-frontend \
-            --add-host backend:host-gateway \
-            --mount type=bind,src="$PWD/frontend/nginx-upstream-server-ci.conf",dst=/etc/nginx/upstream-server.conf,readonly \
-            --publish 4200:8080 \
-            --read-only \
-            --tmpfs /tmp:uid=10001,gid=10001 \
-            --tmpfs /var/cache/nginx:uid=10001,gid=10001 \
-            --tmpfs /var/run:uid=10001,gid=10001 \
-            --cap-drop ALL \
-            --security-opt no-new-privileges:true \
-            taskflow-e2e-frontend
-
-          for attempt in {1..30}; do
-            if curl --fail --silent http://localhost:4200/ > /dev/null && \
-               curl --fail --silent http://localhost:4200/api/v1/catalog > /dev/null; then
-              exit 0
-            fi
-            sleep 1
-          done
-
-          docker logs taskflow-e2e-frontend
-          exit 1
 
       ##########################################################
       # Playwright
@@ -812,6 +868,47 @@ jobs:
         working-directory: frontend
         run: |
           npx playwright install --with-deps chromium
+
+      ##########################################################
+      # Production frontend ingress
+      ##########################################################
+
+      - name: Wait for Spring Boot
+        uses: ./.github/actions/wait-backend
+        with:
+          pid: ${{ steps.backend.outputs.pid }}
+
+      - name: Start production frontend ingress
+        run: |
+          set -euo pipefail
+
+          docker run --detach \
+            --name taskflow-e2e-frontend \
+            --add-host backend:host-gateway \
+            --mount type=bind,src="$PWD/frontend/nginx-upstream-server-ci.conf",dst=/etc/nginx/upstream-server.conf,readonly \
+            --publish 4200:8080 \
+            --read-only \
+            --tmpfs /tmp:uid=10001,gid=10001 \
+            --tmpfs /var/cache/nginx:uid=10001,gid=10001 \
+            --tmpfs /var/run:uid=10001,gid=10001 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            taskflow-e2e-frontend
+
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:4200/ > /dev/null && \
+               curl --fail --silent http://localhost:4200/api/v1/catalog > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          docker logs taskflow-e2e-frontend
+          exit 1
+
+      ##########################################################
+      # Run Playwright
+      ##########################################################
 
       - name: Run Playwright Tests
         working-directory: frontend
@@ -872,10 +969,19 @@ jobs:
 
   ###########################################################
   # Docker
+  #
+  # One job per image (formerly a matrix) so each starts as soon as its own
+  # input exists: the backend image needs only the JAR, the frontend image only
+  # the bundle. Job names keep the former matrix check contexts. The jobs are
+  # independent, so a HIGH/CRITICAL CVE (exit-code: 1) in one image's Trivy
+  # scan never cancels the other — both scan results surface in the same run.
+  #
+  # Both build locally (load only) — never push from CI; use
+  # pushdockerimage.yml to publish images to GHCR.
   ###########################################################
 
-  docker-build:
-    name: Build Docker (${{ matrix.component }})
+  docker-backend:
+    name: Build Docker (backend)
 
     # codeql-action/upload-sarif needs security-events: write; scoped to this
     # job instead of the whole workflow to keep least privilege.
@@ -886,44 +992,30 @@ jobs:
     needs:
       - changes
       - package
-      - frontend
 
     if: |
       always() &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled') &&
-      needs.changes.outputs.docker_components != '[]'
+      needs.changes.outputs.build_backend_image == 'true'
 
     runs-on: ubuntu-26.04
     timeout-minutes: 20
-
-    strategy:
-      # fail-fast is deliberately false: backend and frontend images are
-      # built and scanned independently. A HIGH/CRITICAL CVE (and resulting
-      # exit-code: 1) in one image's Trivy scan should not cancel the other
-      # component's build — both scan results need to surface so both teams
-      # get signal in the same run.
-      fail-fast: false
-
-      matrix:
-        component: ${{ fromJSON(needs.changes.outputs.docker_components) }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       ##########################################################
-      # GHCR uses lowercase owner. Compute image refs once here so
-      # mixed/uppercase repository owners don't break docker push
-      # or the Trivy image-ref resolution below.
+      # GHCR uses lowercase owner. Compute the image ref once here
+      # so mixed/uppercase repository owners don't break the
+      # Trivy image-ref resolution below.
       ##########################################################
       - name: Compute Image Refs
         id: images
         run: |
           owner="$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
-          echo "owner=$owner" >> "$GITHUB_OUTPUT"
-          echo "backend_image=ghcr.io/${owner}/taskflow-backend" >> "$GITHUB_OUTPUT"
-          echo "frontend_image=ghcr.io/${owner}/taskflow-frontend" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${owner}/taskflow-backend" >> "$GITHUB_OUTPUT"
           # Trivy DB cache keys. `trivy_db_date` mirrors trivy-action's own
           # vulnerability-DB key (`cache-trivy-<date>`); the Java index DB is
           # refreshed on a 3-day window (trivy-java-db `updateInterval`), so
@@ -931,69 +1023,47 @@ jobs:
           echo "trivy_db_date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
           echo "trivy_java_db_bucket=$(( $(date -u +%s) / 259200 ))" >> "$GITHUB_OUTPUT"
 
-      ##########################################################
-      # Download Artifacts
-      ##########################################################
-
       - name: Download Backend JAR
-        if: matrix.component == 'backend'
         uses: actions/download-artifact@v8
         with:
           name: backend-jar
           path: build/libs
 
-      - name: Download Frontend Bundle
-        if: matrix.component == 'frontend'
-        uses: actions/download-artifact@v8
-        with:
-          name: frontend-dist
-          path: frontend/dist/frontend/browser
-
       ##########################################################
-      # Docker
-      ##########################################################
-
-      - name: Set up Buildx
-        uses: ./.github/actions/prepull-buildkit
-
-      ##########################################################
-      # Build (load only — never push from CI; use
-      # pushdockerimage.yml to publish images to GHCR)
+      # Build with the runner's default `docker` builder: no Buildx
+      # container, no GHA layer cache, and the image lands directly
+      # in the daemon for Trivy (no OCI tarball round-trip).
+      #
+      # A GHA layer cache does not pay off for this image. Every
+      # commit produces a new JAR, which invalidates the extractor
+      # and CDS-training layers, and APT_BUST invalidates the apt
+      # layer. Exporting the cache cost ~40s per build (run
+      # 36242878644) for almost no hits, plus ~7s of BuildKit
+      # pre-pull/setup and ~5-9s of tarball load. pushdockerimage.yml
+      # keeps its own `backend-main` cache.
       ##########################################################
 
       - name: Build Image
         uses: docker/build-push-action@v7
         with:
-          context: ${{ matrix.component == 'backend' && '.' || 'frontend' }}
-          file: ${{ matrix.component == 'backend' && 'Dockerfile.x64' || 'frontend/Dockerfile' }}
+          context: .
+          file: Dockerfile.x64
 
           push: false
           load: true
 
           tags: |
-            ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:${{ env.IMAGE_TAG }}
-            ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:latest
-
-          cache-from: |
-            type=gha,scope=${{ matrix.component }}-main
-            type=gha,scope=${{ matrix.component }}-pr
-
-          # ignore-error: GHA cache-export blips (e.g. "error writing layer
-          # blob: not_found", observed in run 36245702011) must not fail the
-          # build; the image itself built fine.
-          cache-to: |
-            type=gha,mode=max,scope=${{ matrix.component }}-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }},ignore-error=true
+            ${{ steps.images.outputs.image }}:${{ env.IMAGE_TAG }}
+            ${{ steps.images.outputs.image }}:latest
 
           provenance: false
           sbom: false
 
-          # Cache-busting: force the runtime package refresh to run on every
-          # CI build so the image always ships the latest OS security patches
-          # (apt on the backend, apk on the frontend). Each Dockerfile consumes
-          # its own arg; the unused one is ignored. Without this, a cached
-          # refresh layer carries stale OS packages with known CVEs.
+          # Cache-busting: force the runtime apt refresh to run on every CI
+          # build so the image always ships the latest OS security patches.
+          # Without this, a cached refresh layer carries stale OS packages with
+          # known CVEs.
           build-args: |
-            APK_BUST=${{ github.run_id }}-${{ github.run_attempt }}
             APT_BUST=${{ github.run_id }}-${{ github.run_attempt }}
 
       ##########################################################
@@ -1007,7 +1077,7 @@ jobs:
       #
       #   1. the vulnerability DB from trivy-action's key (shared with the FS
       #      scans in security.yml), then
-      #   2. the Java index DB (backend only) on top of it.
+      #   2. the Java index DB on top of it.
       #
       # The Java DB carries its own metadata (`NextUpdate`, 3 days), so Trivy
       # skips the download while it is fresh. The vulnerability DB is not
@@ -1024,7 +1094,6 @@ jobs:
             cache-trivy-
 
       - name: Restore Trivy Java DB cache
-        if: matrix.component == 'backend'
         id: trivy-java-db-cache
         uses: actions/cache/restore@v6
         with:
@@ -1033,13 +1102,9 @@ jobs:
           restore-keys: |
             trivy-java-db-${{ env.TRIVY_VERSION }}-
 
-      ##########################################################
-      # Scan
-      ##########################################################
-
       # NOTE ON SEVERITY GATING (intentional asymmetry):
       # This is the HARD GATE — exit-code: 1 with severity HIGH,CRITICAL
-      # fails the build/push. This scan targets the actual image that gets
+      # fails the build. This scan targets the actual image that gets
       # deployed, unlike the source/filesystem Trivy scan in
       # `.github/workflows/security.yml`, which is report-only (exit-code: 0)
       # by design. Do not align the two exit-codes without deliberately
@@ -1049,7 +1114,7 @@ jobs:
         with:
           version: ${{ env.TRIVY_VERSION }}
 
-          image-ref: ${{ matrix.component == 'backend' && steps.images.outputs.backend_image || steps.images.outputs.frontend_image }}:${{ env.IMAGE_TAG }}
+          image-ref: ${{ steps.images.outputs.image }}:${{ env.IMAGE_TAG }}
 
           scan-type: image
 
@@ -1068,19 +1133,129 @@ jobs:
       - name: Save Trivy Java DB cache
         # Best effort: a concurrent job may have seeded the same bucket.
         continue-on-error: true
-        if: always() && matrix.component == 'backend' && steps.trivy-java-db-cache.outputs.cache-hit != 'true'
+        if: always() && steps.trivy-java-db-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ${{ github.workspace }}/.cache/trivy/java-db
           key: trivy-java-db-${{ env.TRIVY_VERSION }}-${{ steps.images.outputs.trivy_java_db_bucket }}
-
-      ##########################################################
-      # Upload SARIF
-      ##########################################################
 
       - name: Upload SARIF
         if: always() && hashFiles('trivy-results.sarif') != ''
         uses: ./.github/actions/upload-sarif
         with:
           path: trivy-results.sarif
-          category: docker-${{ matrix.component }}
+          category: docker-backend
+
+  docker-frontend:
+    name: Build Docker (frontend)
+
+    # codeql-action/upload-sarif needs security-events: write; scoped to this
+    # job instead of the whole workflow to keep least privilege.
+    permissions:
+      contents: read
+      security-events: write
+
+    needs:
+      - changes
+      - frontend
+
+    if: |
+      always() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled') &&
+      needs.changes.outputs.build_frontend_image == 'true'
+
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # GHCR uses lowercase owner; see `docker-backend`.
+      - name: Compute Image Refs
+        id: images
+        run: |
+          owner="$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "image=ghcr.io/${owner}/taskflow-frontend" >> "$GITHUB_OUTPUT"
+          echo "trivy_db_date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
+
+      - name: Download Frontend Bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-dist
+          path: frontend/dist/frontend/browser
+
+      # Unlike the backend image, the frontend image keeps Buildx and the GHA
+      # layer cache: its brotli/gzip compression stage only depends on the
+      # bundle and is expensive to rebuild.
+      - name: Set up Buildx
+        uses: ./.github/actions/prepull-buildkit
+
+      - name: Build Image
+        uses: docker/build-push-action@v7
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+
+          push: false
+          load: true
+
+          tags: |
+            ${{ steps.images.outputs.image }}:${{ env.IMAGE_TAG }}
+            ${{ steps.images.outputs.image }}:latest
+
+          cache-from: |
+            type=gha,scope=frontend-main
+            type=gha,scope=frontend-pr
+
+          # ignore-error: GHA cache-export blips (e.g. "error writing layer
+          # blob: not_found", observed in run 36245702011) must not fail the
+          # build; the image itself built fine.
+          cache-to: |
+            type=gha,mode=max,scope=frontend-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }},ignore-error=true
+
+          provenance: false
+          sbom: false
+
+          # Cache-busting: force the runtime apk refresh to run on every CI
+          # build so the image always ships the latest OS security patches.
+          build-args: |
+            APK_BUST=${{ github.run_id }}-${{ github.run_attempt }}
+
+      # Vulnerability DB only (no Java DB for the nginx image); see the cache
+      # section note in `docker-backend`.
+      - name: Restore Trivy vulnerability DB cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ github.workspace }}/.cache/trivy
+          key: cache-trivy-${{ steps.images.outputs.trivy_db_date }}
+          restore-keys: |
+            cache-trivy-
+
+      # HARD GATE — see the severity-gating note in `docker-backend`.
+      - name: Scan Docker Image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+
+          image-ref: ${{ steps.images.outputs.image }}:${{ env.IMAGE_TAG }}
+
+          scan-type: image
+
+          cache: false
+
+          format: sarif
+          output: trivy-results.sarif
+
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+          exit-code: 1
+
+      - name: Upload SARIF
+        if: always() && hashFiles('trivy-results.sarif') != ''
+        uses: ./.github/actions/upload-sarif
+        with:
+          path: trivy-results.sarif
+          category: docker-frontend

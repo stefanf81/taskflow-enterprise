@@ -230,9 +230,17 @@ tasks.named("test") {
 	useJUnitPlatform {
 		excludeTags 'benchmark', 'testcontainers'
 	}
-	maxParallelForks = Math.max(1, (int) (Runtime.runtime.availableProcessors() * 0.75))
+	// Each fork boots its own Spring contexts from a cold JVM (~36s for the
+	// first one on a 4-vCPU CI runner), so fewer forks with C1-only JIT beat
+	// more forks: measured unit suite 92s (3 forks) -> 64s (2 forks + C1).
+	maxParallelForks = Math.min(2, Runtime.runtime.availableProcessors())
+	jvmArgs "-XX:TieredStopAtLevel=1"
 	environment "SPRING_SECURITY_PASSWORD", "admin-password"
 	systemProperty "spring.cache.type", "simple"
+	// A per-context H2 database: the shared `tododb` URL let rows written by
+	// one Spring context leak into another context in the same fork, so a
+	// change in fork assignment made AppointmentControllerIntegrationTest fail.
+	systemProperty "spring.datasource.url", 'jdbc:h2:mem:${random.uuid};MODE=PostgreSQL;DB_CLOSE_DELAY=-1'
 	finalizedBy(tasks.jacocoTestReport)
 }
 

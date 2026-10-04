@@ -1,7 +1,8 @@
 name: Start Spring Boot
 description: >-
-  Generate a disposable RSA key pair, launch the packaged JAR, and wait for the
-  liveness endpoint. Intended for the prod profile, which requires persistent keys.
+  Generate a disposable RSA key pair, launch the packaged JAR, and (unless
+  `wait` is false) wait for the liveness endpoint. Intended for the prod
+  profile, which requires persistent keys.
 inputs:
   jar-path:
     description: Path or glob to the executable JAR (glob is expanded by the shell).
@@ -27,6 +28,13 @@ inputs:
     description: Additional JVM options (space-separated).
     required: false
     default: ""
+  wait:
+    description: >-
+      Wait for the liveness endpoint before returning. Set to "false" to
+      overlap JVM startup with other setup, then call ./.github/actions/wait-backend
+      with the `pid` output before using the backend.
+    required: false
+    default: "true"
 outputs:
   pid:
     description: PID of the launched backend.
@@ -80,32 +88,9 @@ runs:
         fi
 
     - name: Wait for liveness
-      shell: bash
-      working-directory: ${{ github.workspace }}
-      env:
-        PID: ${{ steps.launch.outputs.pid }}
-        LOG_FILE: ${{ inputs.log-file }}
-        WAIT_TIMEOUT: ${{ inputs.wait-timeout-seconds }}
-      run: |
-        set -euo pipefail
-        echo "Waiting for Spring Boot..."
-
-        deadline=$(( SECONDS + WAIT_TIMEOUT ))
-        while (( SECONDS < deadline )); do
-          if ! kill -0 "$PID" 2>/dev/null; then
-            echo "Backend process terminated unexpectedly" >&2
-            cat "$LOG_FILE" >&2 || true
-            exit 1
-          fi
-
-          if curl -fsS http://localhost:8080/actuator/health/liveness > /dev/null; then
-            echo "Backend ready"
-            exit 0
-          fi
-
-          sleep 2
-        done
-
-        echo "Backend failed to start within ${WAIT_TIMEOUT}s" >&2
-        cat "$LOG_FILE" >&2 || true
-        exit 1
+      if: inputs.wait == 'true'
+      uses: ./.github/actions/wait-backend
+      with:
+        pid: ${{ steps.launch.outputs.pid }}
+        log-file: ${{ inputs.log-file }}
+        wait-timeout-seconds: ${{ inputs.wait-timeout-seconds }}

@@ -33,7 +33,7 @@ concurrency:
 `ci.yml` declares a workflow-level default of `contents: read` only. Every job that needs more receives it job-scoped:
 
 - `changes`: `contents: read` + `pull-requests: read` — `dorny/paths-filter` lists pull-request changed files through the REST API, which requires `pull-requests: read`.
-- `docker-build`: `contents: read` + `security-events: write` — the only job that uploads SARIF.
+- `docker-backend` / `docker-frontend`: `contents: read` + `security-events: write` — the only jobs that upload SARIF.
 - `dependency-submission`: `contents: write` + `actions: write`.
 
 `packages: write` is deliberately **not** granted in `ci.yml` (it never pushes images); it belongs to the manual [`pushdockerimage.yml`](../../.github/workflows/pushdockerimage.yml) publication workflow.
@@ -43,7 +43,7 @@ concurrency:
 ## 4. Job: `changes` (Path Filtering)
 
 Uses `dorny/paths-filter@v4` to detect exactly which files changed in a PR or push. The job is granted `pull-requests: read` (see above) because the action lists PR files through the REST API. We enforce a 5-minute timeout on this job to prevent it from stalling.
-The filters distinguish backend, frontend, dependency-submission, and Docker component changes. Docker context files, Nginx configuration, entrypoints, ignore files, and Trivy policy are mapped to the affected image. The selector emits a valid empty JSON array when no image needs processing.
+The filters distinguish backend, frontend, dependency-submission, and Docker component changes. Docker context files, Nginx configuration, entrypoints, ignore files, and Trivy policy are mapped to the affected image. The selector emits one boolean per image (`build_backend_image`, `build_frontend_image`), which gates the matching Docker job.
 **Why:** Monorepos (where frontend and backend live together) waste massive amounts of time running backend tests when only a CSS file changed, or vice versa. This step dynamically determines whether the backend, frontend, or both need to run (and similarly, which Docker images actually need to be built), completely skipping unaffected pipelines and avoiding missing build artifact failures.
 
 ## 5. Job: `lint` (Dockerfile Lint)
@@ -57,19 +57,30 @@ This job handles the Spring Boot backend compilation, testing, and quality gates
 
 - **Automatic & Conditional Test Execution:**
   Unit and integration tests run automatically on all Pull Requests. On manual runs (`workflow_dispatch`), they are executed conditionally if `run_tests` is enabled, or skipped entirely to fast-track packaging.
-- **Gradle Task Parallelism & Caching:** We explicitly pass the `--parallel` and `--build-cache` arguments to `./gradlew`. This compiles independent modules across multiple threads, leveraging build outputs from previous runs. The flag flips to `--no-build-cache` whenever actually executing tests is the point of the run — the nightly `schedule`, and manual `workflow_dispatch` runs with `run_tests: true`. Without it, `setup-gradle` restores the Gradle user home build cache and `test`, `testcontainersTest`, and `spotbugsMain` resolve `FROM-CACHE`, so the run reports success without executing a single test. PR and `main` push runs keep the cache for speed; the nightly remains the authoritative full execution.
+- **Gradle Task Parallelism & Caching:** We explicitly pass the `--parallel` and `--build-cache` arguments to `./gradlew`. This compiles independent modules across multiple threads, leveraging build outputs from previous runs. The flag flips to `--no-build-cache` whenever actually executing tests is the point of the run — the nightly `schedule`, and manual `workflow_dispatch` runs with `run_tests: true`. Without it, `setup-gradle` restores the Gradle user home build cache and the test tasks resolve `FROM-CACHE`, so the run reports success without executing a single test. PR and `main` push runs keep the cache for speed; the nightly remains the authoritative full execution. `backend-integration` (§6b) applies the same policy.
+- **Configuration Cache Key:** `setup-gradle` receives `cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}` (generate with `openssl rand -base64 16`), which setup-gradle requires before it stores configuration-cache data at all. Every run still recalculates the task graph (~10s, logged as "no cached configuration is available"). In the first three runs with the key set, no configuration-cache entry was restored, and pull-request runs cannot read caches written on other branches anyway. Treat any saving as unverified until a `main` run logs "Reusing configuration cache".
 - **Gradle Caching Write Access (`cache-read-only: false`):** We configure `cache-read-only: false` on the setup-gradle action. By default, setup-gradle disables cache writes on non-default branches (e.g. Pull Requests). Overriding this ensures that PR branches can cache new/updated dependencies, avoiding slow downloads on subsequent commits.
-- **Combined Build, Tests, and Quality Gates:** A single Gradle invocation runs `assemble`, `test`, `testcontainersTest`, `jacocoTestReport`, `jacocoTestCoverageVerification`, and `spotbugsMain`. The enforced gates — JaCoCo coverage ≥ 0.80 and SpotBugs at MAX effort / HIGH confidence — therefore block the build instead of only producing reports. `assemble` stays in this invocation because the OpenAPI contract verification boots the locally built JAR; when `run_tests` is disabled, the packaging-only `assemble` fallback keeps that JAR available.
+- **Unit Suite and Coverage Gate:** A single Gradle invocation runs `assemble`, `test`, `jacocoTestReport`, and `jacocoTestCoverageVerification`, so the enforced JaCoCo coverage gate (≥ 0.80, computed from `test` only) blocks the build instead of only producing reports. `testcontainersTest` and `spotbugsMain` run in the parallel `backend-integration` job (§6b), so the unit suite (this job's long pole) has the runner to itself. When `run_tests` is disabled, the packaging-only `assemble` fallback still compiles the backend.
+- **Unit-Test JVM Tuning (`build.gradle`):** The first Spring context in each test fork boots from a cold JVM (~36s on the 4-vCPU runner versus ~5s once warm), so the `test` task runs at most 2 forks with `-XX:TieredStopAtLevel=1` (C1 JIT only). Measured locally on equivalent 4-core hardware, median of 3: 92s with 3 forks → 64s. Each Spring context gets its own H2 database (`spring.datasource.url=jdbc:h2:mem:${random.uuid}…`). The shared `tododb` URL leaked rows between contexts in the same fork, so changing the fork count made `AppointmentControllerIntegrationTest` fail.
 - **Direct Artifact Uploads:** Instead of manually compressing reports into a `.tar.gz` archive, we upload the `build/reports` and `build/test-results` directories directly using `actions/upload-artifact@v7` with a 14-day retention period. The production JAR artifact (`backend-jar`) is published by the separate `package` job (see §6a) so the fan-out jobs do not wait for the test suite.
-- **OpenAPI Contract Gate:** After the build, CI starts the backend through the shared `start-backend` composite, authenticates through the mobile login endpoint, and compares the live `/v3/api-docs` document with `api/openapi.json`. It also fails if either generated platform API type file is stale. API changes therefore require a reviewed baseline update and regenerated types in the same change.
+- **OpenAPI Contract Gate:** runs in the `package` job (§6a), which already holds the freshly built JAR. Running it here added ~12s after the test suite on the critical path.
+
+## 6b. Job: `backend-integration` (Backend integration)
+
+Runs `./gradlew testcontainersTest spotbugsMain` on its own runner, in parallel with the `backend` unit suite.
+
+- **Gating:** Mirrors the `backend` job's path filters and additionally skips manual dispatches with `run_tests: false`, the only case where `backend` runs no tests.
+- **Gates:** The PostgreSQL Testcontainers parity suite and SpotBugs (MAX effort / HIGH confidence, `ignoreFailures = false`) still block the build: the required `Backend` aggregator asserts this job's result alongside `backend`.
+- **Caching:** Read-only `setup-gradle` (the `backend` job owns cache writes) with the same `--no-build-cache` policy as `backend`. Reports upload as `backend-integration-results`.
 
 ## 6a. Job: `package` (Backend Package)
 
 Produces the production JAR artifact consumed by downstream jobs, independently of the test suite.
 
-- **Fan-Out From Testing:** `package` runs `./gradlew assemble` (served from the Gradle build cache, ~35-65s) and uploads `backend-jar`. `docker-build` and `e2e` declare `needs: [changes, package, frontend]`, so the image build/scan and Playwright start as soon as the JAR and frontend bundle exist (measured start ≈65s) instead of waiting ~3 minutes for `test`, `testcontainersTest`, and `spotbugsMain` in the `backend` job. On the PR/dispatch path this buys ~100s of wall-clock (run wall 308s → ~210s).
-- **Gating:** `package` mirrors the `backend` job's path filters, so documentation-only diffs skip it. A `package` failure skips `docker-build` and `e2e`; because a skipped job reports *success* to branch protection, the `e2e-gate` treats a failed `package`/`frontend` as a failure so the required `End-to-End Tests` context cannot pass on a silently skipped run.
-- **Single Source of Truth for the Artifact:** Only `package` uploads `backend-jar`, so the artifact name is unique per run. The OpenAPI contract gate intentionally stays in the `backend` job so the required `Backend` gate still covers it.
+- **Fan-Out From Testing:** `package` runs `./gradlew assemble` (served from the Gradle build cache, ~35-65s) and uploads `backend-jar`. `docker-backend` declares `needs: [changes, package]` and `e2e` declares `needs: [changes, package, frontend]`, so the image build/scan and Playwright start as soon as their artifacts exist (measured start ≈65s) instead of waiting for the backend test suites. On the PR/dispatch path this buys ~100s of wall-clock (run wall 308s → ~210s).
+- **Gating:** `package` mirrors the `backend` job's path filters, so documentation-only diffs skip it. A `package` failure skips `docker-backend` and `e2e`; because a skipped job reports *success* to branch protection, the `e2e-gate` treats a failed `package`/`frontend` as a failure so the required `End-to-End Tests` context cannot pass on a silently skipped run.
+- **Single Source of Truth for the Artifact:** Only `package` uploads `backend-jar`, so the artifact name is unique per run.
+- **OpenAPI Contract Gate:** After uploading the JAR, `package` starts the backend through the shared `start-backend` composite, authenticates through the mobile login endpoint, and compares the live `/v3/api-docs` document with `api/openapi.json`. It also fails if either generated platform API type file is stale. API changes therefore require a reviewed baseline update and regenerated types in the same change. The scripts use only Node built-ins (no npm install). The required `Backend` aggregator asserts the `package` result, so it still covers this gate. A contract failure also skips `docker-backend` and `e2e`, because both need `package`.
 
 ## 7. Job: `frontend`
 
@@ -122,7 +133,8 @@ The standalone workflow has no change-detection dependency — it always scans b
 Runs Playwright E2E tests against a real, running backend and database.
 
 - **Decoupled dependencies (`needs: [changes, package, frontend]`)**:
-  The E2E job depends on the packaged backend JAR and the production frontend bundle — not on the test suite — so Playwright starts as soon as the artifacts exist while unit/integration tests run concurrently in the `Backend build` job (whose result the required `Backend` gate mirrors).
+  The E2E job depends on the packaged backend JAR and the production frontend bundle — not on the test suite — so Playwright starts as soon as the artifacts exist while unit/integration tests run concurrently in the `Backend build` and `Backend integration` jobs (whose results the required `Backend` gate mirrors).
+- **Overlapped Backend Startup:** `start-backend` runs with `wait: "false"`, so JVM startup (~11–18s) overlaps the frontend `npm ci`, the bundle download, Buildx setup, the image build, and the Playwright browser restore. The `wait-backend` composite then blocks on `/actuator/health/liveness`, before the ingress container starts.
 - **Fast Service Readiness:** The PostgreSQL and Redis service containers use `--health-interval 2s --health-timeout 2s --health-retries 30`, so GitHub's `Initialize containers` phase detects readiness within seconds instead of waiting out a 10-second health interval — the E2E job's largest fixed cost.
 - **Single-Stack PR Coverage:** On Pull Requests, any backend or frontend change builds both application artifacts and runs E2E. This intentionally trades the extra untouched-stack build for production integration coverage on every application change. Docker-only changes retain component-specific build behavior.
 - **Production Ingress:** E2E downloads the frontend production bundle, builds the production Nginx image with a BuildKit GHA cache that restores the shared `frontend-main`/`frontend-pr` scopes and writes a dedicated `frontend-e2e` scope, then serves it on port 4200 with the same read-only filesystem and dropped capabilities used by Compose. Playwright sets `E2E_DOCKER=true`, so it tests the production bundle and reverse proxy instead of `ng serve`.
@@ -164,20 +176,23 @@ Audits the public external perimeter, exposed ports, HTTP/TLS compliance, and we
 - **Reconnaissance Protection:** Raw network and scanner dumps are excluded from public artifacts by default (`upload_raw_artifacts: false`). Sanitized tables and metrics are rendered in GitHub Step Summary, while Nuclei findings upload to GitHub Code Scanning via SARIF.
 - **Reliable Nuclei SARIF:** `scripts/prepare-nuclei-sarif.py` adds execution metadata from the recorded exit status and completion markers. Confirmed successful zero-match scans upload an empty report (the upstream exporter omits it); failed scans retain any partial findings with `executionSuccessful: false`. Missing or inconsistent reports cannot become successful empty uploads, and upload failures fail the job. The `nightly-external-nuclei` category and `nuclei` tool identity stay stable. Regression tests run in the Workflow Lint job with `python3 -m unittest discover -s scripts -p 'test_nuclei_sarif.py' -v`.
 
-## 10. Job: `docker-build`
+## 10. Jobs: `docker-backend` and `docker-frontend`
 
 Compiles secure, production-grade container images for the backend and frontend components.
 
 > **Image publication is intentionally excluded from CI.** Docker images are built and scanned locally in CI but never pushed to GHCR. Publication is an explicit operator action via the dedicated [`.github/workflows/pushdockerimage.yml`](../../.github/workflows/pushdockerimage.yml) workflow — see that file for the push pipeline.
 
-- **Deduplicated Multi-Tag Builds:** Both the unique commit SHA (`IMAGE_TAG`) and `latest` tags are defined simultaneously in the `docker/build-push-action` step. This ensures Buildx executes a single build compilation graph, tagging the resulting local image under both tags at once.
-- **Lowercase GHCR Owner Guard:** GHCR rejects mixed/uppercase repository owners (`repository name must be lowercase`). A `Compute Image Refs` step lowercases `github.repository_owner` once and exhales fully-resolved `ghcr.io/<owner>/taskflow-{backend,frontend}` refs as step outputs, which `build-push-action` and the Trivy `image-ref` both consume. This prevents hard-failures for forks/orgs whose casing doesn't match the package's lowercase requirement.
+- **One Job per Image:** The former matrix is split so each image starts as soon as its own input exists. `docker-backend` needs only `package` (the JAR); `docker-frontend` needs only `frontend` (the bundle). The job names `Build Docker (backend)` and `Build Docker (frontend)` keep the former matrix check contexts. The jobs are independent, so a hard-gate CVE in one image never cancels the other's scan.
+- **Deduplicated Multi-Tag Builds:** Both the unique commit SHA (`IMAGE_TAG`) and `latest` tags are defined simultaneously in the `docker/build-push-action` step. This ensures a single build graph, tagging the resulting local image under both tags at once.
+- **Lowercase GHCR Owner Guard:** GHCR rejects mixed/uppercase repository owners (`repository name must be lowercase`). A `Compute Image Refs` step lowercases `github.repository_owner` once and emits the fully resolved `ghcr.io/<owner>/taskflow-<component>` ref as a step output, which `build-push-action` and the Trivy `image-ref` both consume. This prevents hard-failures for forks/orgs whose casing doesn't match the package's lowercase requirement.
 - **Local Load Only:** Images in CI (`ci.yml`) are built with `load: true`, `push: false`, `provenance: false`, `sbom: false`. GHA Buildx local loading does not support image index structures containing supply-chain annotations, so attestations are omitted. The `pushdockerimage.yml` workflow builds once to a temporary registry scan tag (`:<tag>-scan`) with `provenance: true` / `sbom: true`, scans that exact image on GHCR, and promotes it to `:<tag>` and `:latest` using `docker buildx imagetools create` without rebuilding.
-- **Dynamic Matrix Execution:** Instead of a hardcoded matrix that tries to build both components and fails when compilation is skipped, we use a dynamic `docker_components` output array calculated in the `changes` job. This only compiles and scans images that actually had changes.
-- **Artifact-Driven Fan-In:** The job declares `needs: [changes, package, frontend]` and pulls the backend JAR and frontend bundle from those jobs' artifacts, so image build and Trivy scan no longer wait for the backend test suite to complete.
-- **Smart Job-Level Gating (Skip Optimization):** Job-level conditions respect path filters on both pull requests and ordinary `main` pushes. Documentation-only changes skip heavyweight runners, while scheduled and manual runs retain full coverage. The matrix uses a valid empty array rather than a sentinel component.
+- **Change-Driven Execution:** The `changes` job emits `build_backend_image` / `build_frontend_image` booleans, so only images that actually had changes are built and scanned.
+- **Artifact-Driven Fan-In:** Each job pulls its input from the producing job's artifact (`backend-jar`, `frontend-dist`), so image build and Trivy scan never wait for the backend test suites.
+- **Smart Job-Level Gating (Skip Optimization):** Job-level conditions respect path filters on both pull requests and ordinary `main` pushes. Documentation-only changes skip heavyweight runners, while scheduled and manual runs retain full coverage.
 - **Hard-Gate Trivy Scan:** The image is scanned with `exit-code: 1` and `severity: HIGH,CRITICAL` — a blocking gate. This is the intentional counterpart to the report-only Trivy filesystem scan in `security.yml`. If a high/critical CVE is found, the build fails but the SARIF is still uploaded (via `if: always()`).
-- **GHA Cache for BuildKit:** The `cache-from` / `cache-to` directives use GitHub Actions cache (`type=gha`) with scoped keys per component and branch, so PR builds reuse layers from `main` when possible.
+- **Builder and Layer Cache per Image:**
+  - **Frontend:** builds with Buildx (`prepull-buildkit`) and a GitHub Actions layer cache (`type=gha`, scopes `frontend-main` / `frontend-pr`). Its brotli/gzip compression stage depends only on the bundle and is expensive to rebuild.
+  - **Backend:** builds with the runner's default `docker` builder, with no Buildx container and no layer cache, and the image lands directly in the daemon for Trivy. Every commit produces a new JAR, which invalidates the extractor and CDS-training layers, and `APT_BUST` invalidates the apt layer, so the cache almost never hit. Exporting it cost ~40s per build, plus ~7s of BuildKit setup and ~5–9s of OCI tarball load. `pushdockerimage.yml` keeps its own `backend-main` cache.
 - **Manual Trigger Bypass (`workflow_dispatch`):** Added the manual trigger check to all job-level `if` checks to ensure that clicking "Run workflow" in GitHub UI actually executes the pipeline on any branch, instead of silently skipping due to lack of file changes.
 
 ## 11. Container & JVM Hardening (SOTA)
@@ -318,7 +333,11 @@ the same implementation is not copied across workflows (and cannot drift):
 - `npm-ci` — installs `shared/schemas` then a target package with `npm ci`
   (`package-path`, `shared-schemas`, `ignore-scripts` inputs).
 - `start-backend` — generates disposable RSA keys, launches the JAR, and waits
-  for `/actuator/health/liveness`, exposing the PID as an output.
+  for `/actuator/health/liveness`, exposing the PID as an output. `wait: "false"`
+  returns right after launch, so callers can overlap JVM startup with other setup.
+- `wait-backend` — polls `/actuator/health/liveness` for a launched PID, failing
+  fast with the application log if the process exits (used by `start-backend`
+  and by `e2e` after a `wait: "false"` launch).
 - `prepull-buildkit` — pre-pulls the BuildKit image with bounded retries and
   configures `buildx` with `driver-opts: image=<image>` so the pre-pull and the
   builder cannot diverge.
