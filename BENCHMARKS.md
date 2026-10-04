@@ -1571,3 +1571,15 @@ The `package` → `Build Docker (backend)` chain now ends at **1 m 54 s**. A bac
 * **No duplicate artifact:** the action uploaded `gitleaks-results.sarif` with default retention on every run, in addition to `gitleaks-report`.
 
 **Verification:** run `37223595536` green (595 commits scanned, SARIF uploaded under `gitleaks`). Locally: push/schedule/PR paths, planted-secret detection, redaction in logs and SARIF, the `.gitleaksignore` fingerprint from the job summary, a merge-only PR, and the invalid-range guard. `actionlint` 1.7.12 passes, including its shellcheck pass on `gitleaks.yml`. The PR path has not yet run on GitHub; the first PR to `main` exercises it.
+
+### Follow-up: Trivy FS uploads in `security.yml`
+
+The five report-only Trivy FS uploads got the same `wait-for-processing: "false"`. Baseline = nightly run [`37165270432`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37165270432); measurement = `workflow_dispatch` run [`37224263986`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37224263986).
+
+| Trivy FS job | Baseline | New |
+| :--- | ---: | ---: |
+| 5 × Upload SARIF | 36 s (7–8 s each) | **9 s** (1–2 s each) |
+| 5 × Trivy scan | 63 s | 20 s |
+| Job | 123 s | 37 s |
+
+Only the upload row is this change (−27 s). The scan steps were faster in the measurement run for reasons outside this change (likely warm Trivy DB/binary caches restored from `main`), so the job total overstates the saving. The workflow's wall clock is still bounded by CodeQL (java-kotlin): 150 s → 133 s, not affected by this change.
