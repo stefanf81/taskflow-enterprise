@@ -1521,7 +1521,7 @@ Root cause: the first Spring context in each fork boots from a cold JVM (`Starte
 * **Docker matrix split:** `docker-backend` needs only `package` and `docker-frontend` needs only `frontend`. Check names are unchanged.
 * **OpenAPI contract check moved to `package`,** which already holds the JAR (~12 s off Backend build).
 * **E2E overlaps backend startup:** `start-backend` with `wait: "false"`, then the new `wait-backend` action before the ingress. JVM startup now runs alongside `npm ci`, the image build and the Playwright cache restore.
-* **Gradle configuration cache persisted:** setup-gradle gets `cache-encryption-key` (`GRADLE_ENCRYPTION_KEY` secret, added 2026-10-04). Run 2 still calculated the task graph, as expected for the first run after a `build.gradle` change. Reuse is unverified until the next run.
+* **Gradle configuration-cache key (no effect measured yet):** setup-gradle gets `cache-encryption-key` (`GRADLE_ENCRYPTION_KEY` secret, added 2026-10-04), which it requires before storing configuration-cache data. Run 2 and PR run [`37221670899`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37221670899) both logged "no cached configuration is available", and neither job summary lists a configuration-cache entry as restored. PR runs also cannot read caches written on the feature branch. Kept because it is harmless. Verify on `main`.
 
 ### Next lever (not adopted)
 
