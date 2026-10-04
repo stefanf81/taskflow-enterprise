@@ -63,7 +63,7 @@ This job handles the Spring Boot backend compilation, testing, and quality gates
 - **Unit Suite and Coverage Gate:** A single Gradle invocation runs `assemble`, `test`, `jacocoTestReport`, and `jacocoTestCoverageVerification`, so the enforced JaCoCo coverage gate (≥ 0.80, computed from `test` only) blocks the build instead of only producing reports. `testcontainersTest` and `spotbugsMain` run in the parallel `backend-integration` job (§6b), so the unit suite (this job's long pole) has the runner to itself. When `run_tests` is disabled, the packaging-only `assemble` fallback still compiles the backend.
 - **Unit-Test JVM Tuning (`build.gradle`):** The first Spring context in each test fork boots from a cold JVM (~36s on the 4-vCPU runner versus ~5s once warm), so the `test` task runs at most 2 forks with `-XX:TieredStopAtLevel=1` (C1 JIT only). Measured locally on equivalent 4-core hardware, median of 3: 92s with 3 forks → 64s. Each Spring context gets its own H2 database (`spring.datasource.url=jdbc:h2:mem:${random.uuid}…`). The shared `tododb` URL leaked rows between contexts in the same fork, so changing the fork count made `AppointmentControllerIntegrationTest` fail.
 - **Direct Artifact Uploads:** Instead of manually compressing reports into a `.tar.gz` archive, we upload the `build/reports` and `build/test-results` directories directly using `actions/upload-artifact@v7` with a 14-day retention period. The production JAR artifact (`backend-jar`) is published by the separate `package` job (see §6a) so the fan-out jobs do not wait for the test suite.
-- **OpenAPI Contract Gate:** runs in the `package` job (§6a), which already holds the freshly built JAR. Running it here added ~12s after the test suite on the critical path.
+- **OpenAPI Contract Gate:** runs in the dedicated `contract` job (§6c) against the packaged JAR. Running it here added ~12s after the test suite on the critical path.
 
 ## 6b. Job: `backend-integration` (Backend integration)
 
@@ -80,7 +80,14 @@ Produces the production JAR artifact consumed by downstream jobs, independently 
 - **Fan-Out From Testing:** `package` runs `./gradlew assemble` (served from the Gradle build cache, ~35-65s) and uploads `backend-jar`. `docker-backend` declares `needs: [changes, package]` and `e2e` declares `needs: [changes, package, frontend]`, so the image build/scan and Playwright start as soon as their artifacts exist (measured start ≈65s) instead of waiting for the backend test suites. On the PR/dispatch path this buys ~100s of wall-clock (run wall 308s → ~210s).
 - **Gating:** `package` mirrors the `backend` job's path filters, so documentation-only diffs skip it. A `package` failure skips `docker-backend` and `e2e`; because a skipped job reports *success* to branch protection, the `e2e-gate` treats a failed `package`/`frontend` as a failure so the required `End-to-End Tests` context cannot pass on a silently skipped run.
 - **Single Source of Truth for the Artifact:** Only `package` uploads `backend-jar`, so the artifact name is unique per run.
-- **OpenAPI Contract Gate:** After uploading the JAR, `package` starts the backend through the shared `start-backend` composite, authenticates through the mobile login endpoint, and compares the live `/v3/api-docs` document with `api/openapi.json`. It also fails if either generated platform API type file is stale. API changes therefore require a reviewed baseline update and regenerated types in the same change. The scripts use only Node built-ins (no npm install). The required `Backend` aggregator asserts the `package` result, so it still covers this gate. A contract failure also skips `docker-backend` and `e2e`, because both need `package`.
+- **Kept Lean on Purpose:** `package` only builds and uploads the JAR. On `main` pushes the `package` → `docker-backend` chain is the critical path. When the contract check ran inside `package`, it delayed the backend image build by ~25s (run `37222275489`), so it moved to its own job (§6c).
+
+## 6c. Job: `contract` (OpenAPI Contract)
+
+Runs alongside `docker-backend` and `e2e` once `package` has uploaded the JAR.
+
+- **What it checks:** downloads `backend-jar`, starts it through the shared `start-backend` composite, authenticates through the mobile login endpoint, and compares the live `/v3/api-docs` document with `api/openapi.json`. It also fails if either generated platform API type file is stale. API changes therefore require a reviewed baseline update and regenerated types in the same change. The scripts use only Node built-ins (no npm install).
+- **Gating:** `needs: [changes, package]` with the default success condition, so it runs whenever `package` runs. The required `Backend` aggregator asserts its result, and a contract failure turns `Backend` red without skipping the image build or E2E.
 
 ## 7. Job: `frontend`
 

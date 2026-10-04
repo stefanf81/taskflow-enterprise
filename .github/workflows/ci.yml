@@ -416,10 +416,11 @@ jobs:
   # Owns the required "Backend" context. A skipped job reports success to
   # branch protection, so this gate fails when change detection or the build
   # failed instead of letting a skipped `backend` job read as a pass. `package`
-  # is asserted too because it runs the OpenAPI contract verification.
+  # and `contract` are asserted too: the contract job runs the OpenAPI
+  # contract verification against the packaged JAR.
   backend-gate:
     name: Backend
-    needs: [changes, backend, backend-integration, package]
+    needs: [changes, backend, backend-integration, package, contract]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -433,7 +434,7 @@ jobs:
         uses: ./.github/actions/require-job-results
         with:
           required: ${{ needs.changes.result }}
-          may-skip: ${{ needs.backend.result }} ${{ needs.backend-integration.result }} ${{ needs.package.result }}
+          may-skip: ${{ needs.backend.result }} ${{ needs.backend-integration.result }} ${{ needs.package.result }} ${{ needs.contract.result }}
 
   ###########################################################
   # Backend Package
@@ -499,20 +500,49 @@ jobs:
           compression-level: 0
           retention-days: 14
 
-      # Contract verification lives here rather than in `backend`, where it
-      # added ~12s after the test suite on the critical path. This job already
-      # holds the freshly built JAR and otherwise finishes well before the
-      # frontend bundle that E2E also waits for. The scripts use only Node
-      # built-ins, so no npm install is needed.
+  ###########################################################
+  # OpenAPI Contract
+  ###########################################################
+
+  # Boots the packaged JAR and diffs its live /v3/api-docs against the reviewed
+  # baseline. A job of its own (needs only `package`) so it runs alongside the
+  # backend image build and E2E instead of in front of them: inside `package`
+  # it delayed both by ~25s (run 37222275489), and on `main` pushes the
+  # package -> docker-backend chain is the critical path. The scripts use only
+  # Node built-ins, so no npm install is needed.
+  contract:
+    name: OpenAPI Contract
+    needs: [changes, package]
+
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Download Backend JAR
+        uses: actions/download-artifact@v8
+        with:
+          name: backend-jar
+          path: backend-jar-dir
+
       - name: Start backend for contract verification
         id: contract_backend
         uses: ./.github/actions/start-backend
         with:
+          jar-path: backend-jar-dir/*.jar
           log-file: openapi-contract.log
 
       - name: Verify OpenAPI Contract
