@@ -1554,7 +1554,24 @@ The `package` → `Build Docker (backend)` chain ended at **1 m 54 s** in that r
 
 Profiled with 2 forks + C1: each fork pays one cold context start of ~18–19 s (unavoidable), plus 6 warm starts of ~4.5–5 s (~28 s of fork time). Merging contexts could save at most ~12 s of Backend build wall time. That job isn't on the critical path: it finishes 5–10 s before the backend image chain on pushes, and E2E sets the total on PRs. Merging would also make test classes share a database again, which made `AppointmentControllerIntegrationTest` fail during this work. Not worth it.
 
-**Verification:** runs `37219206901`, `37221275777`, `37222936455`, `37224513696` and `37224716997` green, with all required contexts (`Backend`, `Frontend`, `End-to-End Tests`) and both `Build Docker (…)` checks. `actionlint` 1.7.12 passes. Trivy scanned the locally loaded backend image (hard gate unchanged).
+### SARIF no-wait and E2E `node_modules` cache
+
+Two small changes (commit `eea3fa1`), measured with two `workflow_dispatch` runs on `main`. Run A ([`37227832537`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37227832537)) was cancelled at its final gate by an unrelated push to `main`, but every real job had finished. Run B ([`37228757998`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37228757998)) ran green on `fd7accf`.
+
+* **`wait-for-processing: "false"` on the Trivy SARIF uploads.** Trivy's `exit-code: 1` stays the gate; the wait only polled GitHub's code-scanning ingestion. "Upload SARIF" took **3 s** (backend, frontend) in run A and **2 s / 3 s** in run B, vs 7–9 s before. That is ~5 s off the push critical path (`package` → `Build Docker (backend)`).
+* **Opt-in `cache-node-modules` in the `npm-ci` composite, enabled only for the E2E job.** Exact-match key (OS, arch, Node, declared npm, install flags, both lockfiles and `package.json` files for npm 12 `allowScripts`, `.npmrc` files, the action file); no restore keys, so a stale tree is never reused. A hit skips the npm self-upgrade and both `npm ci` runs.
+
+| E2E "Install Frontend" | Time |
+| :--- | ---: |
+| Before (npm upgrade + 2 × `npm ci`) | 10–12 s |
+| Run A, cache miss (install + save) | 16 s |
+| Run B, cache hit | **5 s** |
+
+Run B's log shows `Cache hit for: node-modules-v1-Linux-X64-nodev24.21.0-npm@12.2.0-frontend-sharedtrue-ignorefalse-665ac79b…` and the install steps skipped. Both runs logged "Running 11 tests using 2 workers" and passed with no retries (20.5 s, 24.6 s).
+
+The step saves **~6 s** on a hit, and a miss costs ~5 s more than before, paid once per key (any lockfile, `package.json` or action change). The E2E job total did not visibly move: 87 s in run B vs 85–89 s before, because the install overlaps the backend start and the job is bounded by container init, Buildx, the production image build and Playwright, which varied by more than 6 s between runs. Kept: it removes work and network from every PR and nightly run without weakening anything. Other `npm-ci` callers keep the default (cache off).
+
+**Verification:** runs `37219206901`, `37221275777`, `37222936455`, `37224513696`, `37224716997`, `37227832537` (cancelled at the final gate only) and `37228757998` green, with all required contexts (`Backend`, `Frontend`, `End-to-End Tests`) and both `Build Docker (…)` checks. `actionlint` 1.7.12 passes. Trivy scanned the locally loaded backend image (hard gate unchanged).
 
 ## ⚡ 54. Secret Scanning — Direct Gitleaks CLI
 
