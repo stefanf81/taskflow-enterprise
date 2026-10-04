@@ -1477,3 +1477,54 @@ Warm Android ccache stats: `46 / 104 direct hits (100 % direct)`, ~46 MB stored.
 **Caveats:** macOS runner hardware varies materially — the identical 144-file iOS workload measured 3 m 04 s to 4 m 20 s across runs — so iOS numbers need ≥3 samples before drawing conclusions; the Android ccache win is stable across two warm runs. The nightly is bounded by iOS, which stays uncached by design.
 
 **Verification:** runs `37107920313`, `37108349235`, `37108903761` all green with the required contexts emitted; `actionlint` 1.7.12 (pinned in `ci.yml`) validates the workflow; the Android init script was exercised against the real generated project (`:app`, `:expo-modules-core`, `:react-native-screens`, `:react-native-safe-area-context`, `:expo`, `:expo-constants`, `:expo-log-box` all received the launcher arguments).
+
+---
+
+## ⚡ 53. CI/CD Critical Path — Job Split, Backend Image Build & Test JVM Tuning
+
+**Goal:** in `ci.yml` three jobs finished within ~10 s of each other — Backend build (2 m 19 s), Build Docker (backend) (1 m 48 s), and End-to-End Playwright (1 m 37 s) — so the wall clock only drops if all three get shorter.
+
+**Methodology (reproducible):** baseline = schedule run [`37164445110`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37164445110) (2026-10-04, `--no-build-cache`). Measurements = `workflow_dispatch` (`run_tests=true`, the same `--no-build-cache` path) runs [`37219206901`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37219206901) (workflow changes only) and [`37221275777`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37221275777) (plus test JVM tuning). Per-step timings come from the Actions jobs API. The unit-suite experiments ran locally on equivalent 4-core / 15 GB hardware with `./gradlew --no-build-cache test --rerun`, 3 samples each.
+
+### Results (CI)
+
+| Job (execution time, excluding queue) | Baseline | Run 1 | Run 2 |
+| :--- | ---: | ---: | ---: |
+| Backend build | 2 m 19 s | 2 m 21 s | **1 m 41 s** |
+| └ unit `test` task | ~90 s | ~100 s | **~62 s** |
+| Backend integration (new: Testcontainers + SpotBugs) | — | 2 m 02 s | 1 m 24 s |
+| Backend Package (now including the OpenAPI contract check) | 38 s | 56 s | 47 s |
+| Build Docker (backend) | 1 m 48 s | 1 m 14 s | **1 m 08 s** |
+| End-to-End Playwright (`Wait for Spring Boot` step) | 1 m 37 s (11 s serial) | 1 m 23 s (0 s) | 1 m 24 s (1 s) |
+| Observed wall clock | 2 m 52 s | 2 m 47 s | 2 m 50 s |
+
+Run 2's wall clock includes runner queueing on the critical path: `Backend Package` waited 21 s for a runner and the `Backend` gate 40 s. The baseline jobs started within ~4 s. Without queueing, the run 2 critical path (changes → package → E2E → gate) is ~2 m 30 s. A `main` push skips E2E, so its tail becomes Backend build / Build Docker (backend) at ~2 m 00 s instead of ~2 m 50 s. That figure is derived from the job durations above, not measured on a push run.
+
+### Unit suite (local, 4 cores)
+
+| Setting | Samples | Median |
+| :--- | :--- | ---: |
+| 3 forks (previous: 0.75 × cores) | 92.4 / 87.3 / 95.9 s | 92 s |
+| 2 forks | 76.8 / 82.7 / 78.8 s | 79 s |
+| 1 fork | 69.8 / 71.3 / 69.1 s | 70 s |
+| **2 forks + `-XX:TieredStopAtLevel=1`** | 62.4 / 66.8 / 63.9 s | **64 s** |
+| 1 fork + `-XX:TieredStopAtLevel=1` | 83.3 s | — |
+
+Root cause: the first Spring context in each fork boots from a cold JVM (`Started TaskflowApplicationTest in 36.4 seconds`), while the same context restarted later in that JVM took 5.0 s. Every fork pays the cold boot, so fewer forks win, and C1-only JIT shortens the boot. A single long-lived fork is slower with C1 because the heavier test bodies (ArchUnit, Modulith) lose C2.
+
+### Adopted
+
+* **Parallel `backend-integration` job:** `testcontainersTest` and `spotbugsMain` run on their own runner. The required `Backend` gate asserts `backend`, `backend-integration` and `package`.
+* **Unit-test forks:** `maxParallelForks = min(2, cores)` plus `-XX:TieredStopAtLevel=1` for the `test` task (see the table above).
+* **Per-context H2 database:** `spring.datasource.url=jdbc:h2:mem:${random.uuid};MODE=PostgreSQL;DB_CLOSE_DELAY=-1` for the `test` task. With the shared `tododb` URL, all contexts in a fork used one database, so the 2-fork layout failed 5 tests in `AppointmentControllerIntegrationTest` (it passed before only because of how classes were assigned to forks). All 219 tests and the JaCoCo gate pass with 1, 2 and 3 forks.
+* **Backend image without Buildx or a GHA layer cache:** every commit produces a new JAR, which invalidates the extractor and CDS-training layers, and `APT_BUST` invalidates the apt layer. The cache export cost 39.6 s (run `36242878644`) for almost no hits. The default `docker` builder also skips the BuildKit pre-pull/setup (~7 s) and the OCI tarball load (~5–9 s). The frontend image keeps Buildx and its cache.
+* **Docker matrix split:** `docker-backend` needs only `package` and `docker-frontend` needs only `frontend`. Check names are unchanged.
+* **OpenAPI contract check moved to `package`,** which already holds the JAR (~12 s off Backend build).
+* **E2E overlaps backend startup:** `start-backend` with `wait: "false"`, then the new `wait-backend` action before the ingress. JVM startup now runs alongside `npm ci`, the image build and the Playwright cache restore.
+* **Gradle configuration cache persisted:** setup-gradle gets `cache-encryption-key` (`GRADLE_ENCRYPTION_KEY` secret, added 2026-10-04). Run 2 still calculated the task graph, as expected for the first run after a `build.gradle` change. Reuse is unverified until the next run.
+
+### Next lever (not adopted)
+
+* **Contract check in its own job:** in `package` it adds ~17 s before E2E and the backend image can start, and those jobs now form the critical path. A separate job that needs `package` would take it off the path at the cost of one more runner.
+
+**Verification:** runs `37219206901` and `37221275777` green, with all required contexts (`Backend`, `Frontend`, `End-to-End Tests`) and both `Build Docker (…)` checks. `actionlint` 1.7.12 passes. Trivy scanned the locally loaded backend image (hard gate unchanged).
