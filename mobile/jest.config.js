@@ -8,6 +8,12 @@ module.exports = {
     '^.+\\.mjs$': 'babel-jest',
   },
   testPathIgnorePatterns: ['/node_modules/', '/e2e/'],
+  // The first render in each screen suite loads the whole React Native screen tree
+  // (components, icon set) inside that test's own budget. With two workers sharing a
+  // CI runner that can exceed Jest's 5 s default and fail the first test of a suite
+  // intermittently (AdminDashboardScreen, 1 in 15 cold runs). Slow tests are not
+  // slower; only the failure threshold moves.
+  testTimeout: 15000,
   setupFiles: ['<rootDir>/test/polyfills.ts'],
   setupFilesAfterEnv: [
     '@testing-library/react-native/matchers',
