@@ -479,6 +479,22 @@ jobs:
         shell: bash
         run: printf 'export NODE_BINARY=%s\n' "$(command -v node)" > ios/.xcode.env.local
 
+      # Expo compiles ExpoModulesJSI.xcframework from its SwiftPM sources in a
+      # build phase, and skips that only when a slice's recorded .build-hash
+      # (sources, jsi.h, RN version, Swift toolchain, absolute paths) matches.
+      # A fresh `npm ci` leaves only stub slices, so CI rebuilt it every run.
+      # Restored before `pod install`, whose stub stamping keeps existing
+      # slices; a stale snapshot is simply rebuilt by Expo's own hash check,
+      # so a prefix fallback is safe on every event.
+      - name: Restore ExpoModulesJSI xcframework
+        id: jsi-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: mobile/node_modules/expo-modules-jsi/apple/Products/ExpoModulesJSI.xcframework
+          key: expo-modules-jsi-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mobile/package-lock.json') }}
+          restore-keys: |
+            expo-modules-jsi-${{ runner.os }}-${{ runner.arch }}-
+
       - name: Install CocoaPods dependencies
         working-directory: mobile/ios
         shell: bash
@@ -555,7 +571,19 @@ jobs:
             printf '### iOS build timing\n\n```\n%s\n```\n' "${timing}" >> "${GITHUB_STEP_SUMMARY}"
           fi
 
+          # xcbeautify drops script-phase output; surface whether the cached
+          # ExpoModulesJSI slice was reused or rebuilt (and how long it took).
+          grep -F '[ExpoModulesJSI]' "${raw_log}" || true
+
           exit "${pipe_status[0]}"
+
+      - name: Save ExpoModulesJSI xcframework
+        if: github.event_name != 'pull_request' && steps.jsi-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: mobile/node_modules/expo-modules-jsi/apple/Products/ExpoModulesJSI.xcframework
+          key: ${{ steps.jsi-cache.outputs.cache-primary-key }}
 
       - name: Upload iOS simulator application
         uses: actions/upload-artifact@v7
