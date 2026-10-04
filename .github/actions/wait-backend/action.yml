@@ -1,0 +1,49 @@
+name: Wait for Spring Boot
+description: >-
+  Poll the liveness endpoint of a backend launched by start-backend until it
+  responds, failing fast (with the application log) if the process exits.
+inputs:
+  pid:
+    description: PID of the launched backend (start-backend's `pid` output).
+    required: true
+  log-file:
+    description: File that receives the application log output.
+    required: false
+    default: spring.log
+  wait-timeout-seconds:
+    description: Maximum seconds to wait for the liveness endpoint.
+    required: false
+    default: "180"
+runs:
+  using: composite
+  steps:
+    - name: Wait for liveness
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        PID: ${{ inputs.pid }}
+        LOG_FILE: ${{ inputs.log-file }}
+        WAIT_TIMEOUT: ${{ inputs.wait-timeout-seconds }}
+      run: |
+        set -euo pipefail
+        echo "Waiting for Spring Boot..."
+
+        deadline=$(( SECONDS + WAIT_TIMEOUT ))
+        while (( SECONDS < deadline )); do
+          if ! kill -0 "$PID" 2>/dev/null; then
+            echo "Backend process terminated unexpectedly" >&2
+            cat "$LOG_FILE" >&2 || true
+            exit 1
+          fi
+
+          if curl -fsS http://localhost:8080/actuator/health/liveness > /dev/null; then
+            echo "Backend ready"
+            exit 0
+          fi
+
+          sleep 2
+        done
+
+        echo "Backend failed to start within ${WAIT_TIMEOUT}s" >&2
+        cat "$LOG_FILE" >&2 || true
+        exit 1
