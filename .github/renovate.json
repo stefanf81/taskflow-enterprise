@@ -8,7 +8,7 @@
   ],
   "branchPrefix": "renovate/",
   "rebaseWhen": "auto",
-  "schedule": ["before 6am on monday"],
+  "schedule": ["on monday"],
   "updateNotScheduled": false,
   "dependencyDashboard": true,
   "labels": ["dependencies"],
@@ -24,7 +24,7 @@
   "lockFileMaintenance": {
     "enabled": true,
     "automerge": false,
-    "schedule": ["before 5am on monday"]
+    "schedule": ["on monday"]
   },
   "packageRules": [
     {
