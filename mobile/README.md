@@ -90,6 +90,7 @@ openssl s_client -connect api.example.com:443 </dev/null 2>/dev/null \
 mobile/
 ├── assets/                  # App icons, splash screens
 ├── e2e/                     # Detox E2E test suite (booking.e2e.test.ts, jest.config.js, README.md)
+├── plugins/                 # Expo config plugins (withTaskflowTlsPinning.js — native SSL/TLS cert pinning)
 ├── src/
 │   ├── api/                 # Axios REST API client layers
 │   │   ├── client.ts
@@ -100,18 +101,20 @@ mobile/
 │   │   ├── notifications.ts
 │   │   ├── reviews.ts
 │   │   ├── customer.ts
+│   │   └── contracts.ts     # Runtime zod validation at the transport boundary
 │   ├── components/          # Reusable UI components
-│   │   ├── common/          # Button, Card, Input, Modal, Badge, LoadingIndicator, EmptyState, ErrorMessage
+│   │   ├── common/          # Button, Card, Input, Modal, Badge, LoadingIndicator, EmptyState, ErrorMessage, ErrorBoundary, ErrorState
 │   │   ├── booking/         # StylistCard, TimeSlotPicker, ReceiptModal, PublicCancelModal, PublicReviewModal
 │   │   └── lookbook/        # LookbookGallery
 │   ├── hooks/               # TanStack Query custom hooks
 │   ├── navigation/          # React Navigation Navigators (Guest, Customer, Admin, Root)
+│   ├── query/                # TanStack Query client (queryClient.ts)
 │   ├── screens/             # HomeScreen, BookingScreen, CatalogScreen, LookbookScreen, LoginScreen, RegisterScreen, PublicActionsScreen, CustomerPortalScreen, AdminDashboardScreen, AdminCatalogScreen, AdminSchedulesScreen, AdminNotificationsScreen
 │   ├── store/               # Zustand state store (useAuthStore)
 │   ├── theme/               # Gold & Obsidian palette, tokens, and colors
 │   ├── types/               # TypeScript API models & Navigation ParamLists
-│   └── utils/               # Secure storage, time utilities, and optional SSL pinning
-├── __tests__/               # Jest & React Native Testing Library unit test suites (336 tests, 47 suites)
+│   └── utils/               # Secure storage (expo-secure-store), time utilities, idempotency keys
+├── __tests__/               # Jest & React Native Testing Library unit test suites (49 suites)
 ├── .detoxrc.js              # Detox dual-platform E2E configuration (Android APK & iOS App)
 ├── App.tsx                  # Application entry point
 ├── app.json                 # Expo configuration
@@ -125,7 +128,7 @@ mobile/
 TaskFlow Mobile enforces a dual-layered testing strategy combining Unit/Component tests with End-to-End (E2E) automation:
 
 ### 1. Unit & Component Tests (Jest + RNTL)
-* **Coverage:** 336 unit & component tests across 47 test suites (**100% PASS**).
+* **Coverage:** 49 unit & component test suites (**100% PASS**).
 * **Thresholds:** Enforced in `jest.config.js` (**>70%** across branches, functions, lines, and statements).
 * **Stack:** `jest-expo` + `@testing-library/react-native` v14 + `test-renderer`.
 

@@ -8,7 +8,7 @@ The UI is custom-styled with **Tailwind CSS v4** in a premium enterprise **gold 
 
 ## 🛠️ 1. Styling & Design System (Tailwind CSS v4)
 
-This project uses **Tailwind CSS v4** (`^4.3.1`) natively within Angular 22's modern esbuild-based application compiler (`@angular/build:application`).
+This project uses **Tailwind CSS v4** (`^4.3.3`) natively within Angular 22's modern esbuild-based application compiler (`@angular/build:application`).
 
 ### Key Architecture Configuration Blocks:
 
@@ -69,7 +69,7 @@ From the repository root, run `npm run sync:api-types` after the reviewed OpenAP
 
 ### Prerequisites
 
-Make sure you have **Node.js 22.23.2** and **npm 11.19.1** installed. The
+Make sure you have **Node.js 24.21.0** and **npm 12.2.0** installed. The
 repository pins these versions through `mobile/.nvmrc` and
 `frontend/package.json`.
 
