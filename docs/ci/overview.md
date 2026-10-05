@@ -282,8 +282,9 @@ uses the `RENOVATE_TOKEN` secret instead of `GITHUB_TOKEN`, because pull
 requests created with `GITHUB_TOKEN` require manual workflow approval. The
 current secret is a PAT with repository and workflow access so Renovate can
 write branches, pull requests, issues, statuses, and GitHub Actions updates.
-The workflow needs no checkout: Renovate clones the repository and reads
-`.github/renovate.json` as repository config. It persists Renovate's cache
+The workflow checks out only `.github/renovate.json` (sparse), which the action
+also loads as global config so the global `gitAuthor` is this repository's
+identity; Renovate clones the repository itself. It persists Renovate's cache
 directory (`actions/cache`) across runs: the repository cache (extract results)
 and the file-based package/HTTP cache, so datasource lookups revalidate with
 ETags instead of starting cold on every ephemeral runner. It also offers

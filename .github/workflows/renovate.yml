@@ -60,12 +60,18 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 20
 
-    # No checkout: Renovate clones the repository itself and reads
-    # .github/renovate.json from it as repository config. The config is validated
-    # at PR time (ci.yml, Workflow Lint) rather than here, where a validator
-    # warning from a newer 44.x image would block every update, security
-    # fixes included.
+    # The config is validated at PR time (ci.yml, Workflow Lint) rather than
+    # here, where a validator warning from a newer 44.x image would block every
+    # update, security fixes included.
     steps:
+      # Only the config file is needed: Renovate clones the repository itself.
+      - name: Checkout Renovate config
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/renovate.json
+          sparse-checkout-cone-mode: false
+
       - name: Restore Renovate cache
         id: cache-restore
         if: github.event.inputs.repoCache != 'disabled' && github.event.inputs.repoCache != 'reset'
@@ -84,6 +90,10 @@ jobs:
         uses: renovatebot/github-action@v46.3.6
         with:
           token: ${{ secrets.RENOVATE_TOKEN }}
+          # Also loaded as global config so the global gitAuthor is this repo's
+          # identity; without it Renovate warns on every run about its default
+          # Mend address (repo config would still set the commit author).
+          configurationFile: .github/renovate.json
           renovate-version: ${{ env.renovate_version }}
         env:
           RENOVATE_PLATFORM: github
