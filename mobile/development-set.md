@@ -16,8 +16,13 @@ React Native (Expo)
 
 Spring Boot Backend
   ├── OAuth2 Resource Server (RSA-2048 JWT)
-  ├── JWT in HttpOnly `access_token` cookie (with Bearer header fallback)
-  └── CSRF double-submit cookie pattern — `XSRF-TOKEN` cookie + `X-XSRF-TOKEN` header required on all POST/PUT/DELETE (except public guest endpoints)
+  ├── Mobile path (this app): POST /api/v1/auth/mobile/login returns a bearer
+  │   token, sent as `Authorization: Bearer <token>` on every request —
+  │   `src/api/client.ts` sets `withCredentials: false`, so there is no cookie
+  │   jar and no CSRF handshake on the mobile client at all.
+  └── Web path (frontend/, not this app): JWT in HttpOnly `access_token`
+      cookie + CSRF double-submit (`XSRF-TOKEN` cookie + `X-XSRF-TOKEN`
+      header required on all POST/PUT/DELETE except public guest endpoints)
 ```
 
 **Important:** The app uses `expo-secure-store` which is a native module. Expo Go **cannot** run it — you must use a development build.
@@ -140,7 +145,7 @@ The backend is secured using enterprise-grade DevSecOps controls:
 * **Stateless Asymmetric JWT (RSA-2048)**: Requests to protected endpoints must present an asymmetric RSA-2048 signed token via `Authorization: Bearer <token>`.
 * **Role-Based Access Control (RBAC)**: Public guest endpoints (`GET /api/v1/catalog`, `GET /api/v1/barbers`, `POST /api/v1/auth/login`) are open. Admin endpoints (`/api/v1/notifications/**`, catalog/staff management) strictly require `ROLE_ADMIN`.
 * **Redis-Backed Rate Limiting**: All client IPs are rate-limited per minute (capped at 20 req/min on `/api/v1/auth/*`) to prevent brute-force attacks and DoS.
-* **Double-Submit CSRF**: State-changing endpoints (`POST`, `PUT`, `DELETE`) require a matching `X-XSRF-TOKEN` header validated against the `XSRF-TOKEN` cookie (auto-fetched lazily by `src/api/client.ts`).
+* **Double-Submit CSRF (web only)**: The web frontend's state-changing requests (`POST`, `PUT`, `DELETE`) require a matching `X-XSRF-TOKEN` header validated against the `XSRF-TOKEN` cookie. This mobile app does not use cookies at all — `src/api/client.ts` sets `withCredentials: false` and authenticates purely via the `Authorization: Bearer` header, which is CSRF-exempt on the backend.
 * **Container Hardening**: Unprivileged numeric user (`10001:10001`), read-only root filesystem (`read_only: true`), and complete Linux capability dropping (`cap_drop: [ALL]`).
 
 ---
@@ -195,20 +200,22 @@ EXPO_PUBLIC_API_URL=https://api.taskflow.example.com npx expo start -c
 ```
 
 #### Method C: EAS Build Profiles (`eas.json`)
-For standalone production builds or preview binaries shared with testers, configure the environment variable in `mobile/eas.json`:
+For standalone production builds or preview binaries shared with testers, `mobile/eas.json`'s `preview`/`production` profiles each set an `"environment"` field (`preview` / `production`) that pulls EAS-hosted environment variables configured on the EAS servers — `EXPO_PUBLIC_API_URL` is not a literal inline value in the checked-in file. The file itself currently only sets a build-time literal for TLS pinning:
 
 ```json
 "preview": {
-  "distribution": "internal",
+  "environment": "preview",
   "env": {
-    "EXPO_PUBLIC_API_URL": "https://api.taskflow.example.com"
-  }
+    "TASKFLOW_TLS_POLICY": "required"
+  },
+  "distribution": "internal"
 },
 "production": {
-  "distribution": "store",
+  "environment": "production",
   "env": {
-    "EXPO_PUBLIC_API_URL": "https://api.taskflow.example.com"
-  }
+    "TASKFLOW_TLS_POLICY": "required"
+  },
+  "distribution": "store"
 }
 ```
 
@@ -324,7 +331,7 @@ docker compose down
 ### 1. Unit & Component Tests (Jest + RNTL)
 
 ```bash
-npm test                 # run once with coverage check (336 tests, 47 suites)
+npm test                 # run once with coverage check (49 test suites)
 npm run test:watch       # watch mode
 npm run lint             # TypeScript type-check (tsc --noEmit)
 ```

@@ -24,19 +24,20 @@ Because `status` was part of the unique key, `PENDING` and `APPROVED` on the sam
 
 ## Decision
 
-Introduce a **partial unique index** that enforces uniqueness only for active statuses, allowing `DENIED` (cancelled) slots to be re-booked. Delivered as a Java-based Flyway migration `src/main/java/db/migration/V21__fix_double_booking_index.java` (Java migration handles existing duplicate data before the index is created):
+Introduce a **partial unique index** that enforces uniqueness only for active statuses, allowing `DENIED` (cancelled) slots to be re-booked. Delivered across three migrations, not one:
 
 **Migration steps:**
 
-1. Normalize `booking_time` 4-char `H:mm` → 5-char `HH:mm` via `LPAD(booking_time, 5, '0')` where `LENGTH=4` (V22 later converts the column to `TIME`, but V21 must work while it is still `VARCHAR` on a fresh database).
-2. Deduplicate active rows:
-   * `PENDING` rows that overlap an existing `APPROVED` on the same `(barber, date, time)` → `DENIED`.
-   * Multiple `APPROVED` on the same slot → keep earliest (`id` smallest), mark rest `DENIED`.
-   * Multiple `PENDING` on the same slot → keep earliest, mark rest `DENIED`.
-3. Drop legacy indexes `idx_appointment_slot` and `idx_appointment_slot_active`.
-4. Create the partial index:
-   * **PostgreSQL:** `CREATE UNIQUE INDEX idx_appointment_slot_active ON appointments(barber_name, booking_date, booking_time) WHERE status IN ('PENDING','APPROVED')` — the predicate excludes `DENIED`, so cancelled slots are not indexed and can be re-booked.
-   * **H2 (test):** PostgreSQL partial-index syntax is not reliably available, so a **generated marker column** emulates it:
+1. `src/main/java/db/migration/V21__fix_double_booking_index.java` — the initial fix:
+   * Denies any `PENDING` row that overlaps an existing `APPROVED` on the same `(barber, date, time)`.
+   * Drops the legacy `idx_appointment_slot` index.
+   * Creates `idx_appointment_slot_active`:
+     * **PostgreSQL:** `CREATE UNIQUE INDEX idx_appointment_slot_active ON appointments(barber_name, booking_date, booking_time) WHERE status IN ('PENDING','APPROVED')` — the predicate excludes `DENIED`, so cancelled slots are not indexed and can be re-booked.
+     * **H2 (test):** PostgreSQL partial-index syntax is not reliably available, so V21's H2 fallback is a plain `CREATE UNIQUE INDEX idx_appointment_slot_active ON appointments(barber_name, booking_date, booking_time, status)` — weaker than the Postgres partial index, since it doesn't yet dedupe two `PENDING` or two `APPROVED` rows on the same slot.
+2. `src/main/resources/db/migration/V22__convert_booking_time_to_time.sql` — normalizes `booking_time` 4-char `H:mm` → 5-char `HH:mm` via `LPAD(booking_time, 5, '0')` where `LENGTH=4`, then converts the column to `TIME`. Independent of the index work above.
+3. `src/main/java/db/migration/V25__converge_appointment_slot_index.java` — converges both database paths onto the same semantics:
+   * Full dedup: denies `PENDING` rows conflicting with `APPROVED`, then denies duplicate `PENDING` keeping the earliest (`id` smallest), then denies duplicate `APPROVED` keeping the earliest.
+   * Drops and recreates `idx_appointment_slot_active`. **PostgreSQL** keeps the same partial index. **H2** is upgraded with a **generated marker column** that emulates the partial index:
      ```sql
      ALTER TABLE appointments ADD COLUMN IF NOT EXISTS active_slot_marker INTEGER
        AS (CASE WHEN status IN ('PENDING','APPROVED') THEN 1 ELSE NULL END);
@@ -55,16 +56,16 @@ Introduce a **partial unique index** that enforces uniqueness only for active st
 - **Double-booking impossible:** Even with TOCTOU interleaving, the database serializes concurrent inserts on the same active slot. Benchmark `SlotContentionBenchmarkTest` (BENCHMARKS.md §41, H2, 1 barber + 7 schedules + 1 service, date `2026-06-15` slot `10:00`): sequential double-booking blocked in **2347 µs**; **50-way concurrent race → exactly 1 success / 49 blocked** (**808 bookings/sec** serialized wall throughput); `active rows for slot == 1` invariant verified.
 - **`DENIED` slots stay re-bookable:** Because `DENIED` is excluded from the predicate/marker, cancelling a booking removes it from the unique constraint and from `busySlots` — verified: `DENIED` → `busySlots` no longer contains slot → new `PENDING` inserts successfully.
 - **Read path stays fast:** `busySlots` remains **43 µs** avg (5000 iters) and `EXPLAIN` shows `idx_appointment_slot_active` usage; old `idx_appointment_slot` is absent (`INFORMATION_SCHEMA` verified).
-- **H2/PostgreSQL parity:** Generated-column trick gives H2 the same partial-index semantics as PostgreSQL without branching application code.
+- **H2/PostgreSQL parity:** V25's generated-column trick gives H2 the same partial-index semantics as PostgreSQL without branching application code.
 
 ### Negative
 - **Hibernate session artifact under contention:** Under 50-way burst, some losing threads hit `AssertionFailure` / `null identifier` after the `23505` exception leaves the Hibernate session in a bad state before rollback — counted as `collision` (same root cause). All 50 threads are blocked except the single winner; zero silent double-bookings, but log noise may need filtering.
-- **Flyway Java migration complexity:** `V21__fix_double_booking_index` is imperative Java, not declarative SQL — it must normalize times, deduplicate, and handle both PostgreSQL and H2 dialects. Future migrations that touch `appointments` must be aware of `active_slot_marker` (H2) and the partial predicate (PostgreSQL).
+- **Flyway Java migration complexity:** `V21__fix_double_booking_index` and `V25__converge_appointment_slot_index` are imperative Java, not declarative SQL — together they normalize times (via V22's SQL migration), deduplicate, and handle both PostgreSQL and H2 dialects. Future migrations that touch `appointments` must be aware of `active_slot_marker` (H2) and the partial predicate (PostgreSQL).
 - **Cache staleness window:** `busySlots` is cached 2m; a stale cache could show a just-booked slot as free for up to 2m, but the partial index still blocks the insert — the UX shows a transient "slot free" that fails on submit with a retryable "just booked" error rather than a silent double-booking.
 
 ## Verification
 
-Benchmark: `src/test/java/com/example/taskflow/benchmark/SlotContentionBenchmarkTest.java` (`@Tag("benchmark")`) covers sequential double-booking, `busySlots` after `PENDING`/`DENIED`, re-book after `DENIED`, 50-way contention, and `EXPLAIN` / `INFORMATION_SCHEMA` index presence. `P1AndP2BenchmarkTest` asserts `V21__fix_double_booking_index.java` contains `WHERE status IN ('PENDING','APPROVED')` and `active_slot_marker`.
+Benchmark: `src/test/java/com/example/taskflow/benchmark/SlotContentionBenchmarkTest.java` (`@Tag("benchmark")`) covers sequential double-booking, `busySlots` after `PENDING`/`DENIED`, re-book after `DENIED`, 50-way contention, and verifies at runtime (via `EXPLAIN` and `INFORMATION_SCHEMA.INDEX_COLUMNS` queries against H2) that `idx_appointment_slot_active` exists and the old `idx_appointment_slot` does not.
 
 ## Alternatives Considered
 - **Row-level `SELECT … FOR UPDATE` on barber+date:** Serializes correctly but holds locks longer and hurts throughput (Hikari 25-pool contention). Rejected in favor of the declarative partial index.

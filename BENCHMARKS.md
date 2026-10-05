@@ -11,7 +11,7 @@ All benchmarks were run locally on an **Apple M4 Pro (14-Core, AArch64)** utiliz
 The **TaskFlow Enterprise** stack is fully optimized across every layer. Below is the truly exhaustive, production-grade inventory of every framework, library, and tool we utilize, along with the exact high-performance tunings and configurations applied to each:
 
 ### ☕ 1. JVM & Runtime Layer
-*   **OpenJDK 21 (Eclipse Temurin Alpine)**:
+*   **OpenJDK 21 (Eclipse Temurin, Ubuntu/glibc `-resolute` base — see §51)**:
      *   **GC Model (G1GC — verified against ZGC on allocation-heavy paths)**: The collector is left unpinned so the JVM uses **G1GC** (the JDK 21 default). Earlier benchmarks (§1) showed G1GC and ParallelGC are **statistically identical** (~189 RPS on the CPU-bound `/login` path). A deeper **G1GC vs Generational ZGC** comparison on allocation-heavy endpoints (§30) confirms G1GC wins by **2–104% throughput** depending on allocation intensity, while ZGC's sub-millisecond pauses offer no practical advantage at this scale. G1GC remains the default.
      *   **Deterministic Heap Allocation (local benchmark)**: Sized to a static `1GB` (`-Xms1g -Xmx1g`) for local benchmarking to eliminate heap-expansion noise. Runtime images do not embed heap sizing; Docker Compose and production deployment manifests use `-XX:MaxRAMPercentage=50.0`, with the local 2560M limit yielding approximately 1.25 GiB of heap.
      *   **Project Loom / Virtual Threads**: Explicitly enabled with `spring.threads.virtual.enabled=true` and kept alive with `spring.main.keep-alive=true`. §32 benchmarks the full I/O-bound mixed workload — VT delivers marginal gains on H2 in-memory (+0.4% throughput) but significantly higher throughput on PostgreSQL when combined with larger HikariCP pool sizes (§33). The earlier §3 finding that VT hurts the CPU-bound `/login` (BCrypt/RSA) path is absorbed by the read-heavy workload mix in production.
@@ -38,7 +38,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 ### 📦 3. Serialization & Caching (Jackson 3.x & Redis)
 *   **Jackson 3.x Library**:
     *   Upgraded from Jackson 2.x to **Jackson 3.x** (under the `tools.jackson` namespace) as standard in Spring Boot 4.1.1, leveraging modernized factories, fast parser constraints, and low-latency JSON serialization.
-    *   **Custom Caching Alignment**: Bypassed Jackson 3's automatic `tools.jackson` conversion issues inside `CacheConfig.java` and integration tests by explicitly instantiating a custom local `ObjectMapper` to streamline native caching buffers and Redis connection transactions.
+    *   **Custom Caching Alignment**: `CacheConfig.java` deliberately stays on the deprecated Jackson 2 polymorphic-typing APIs (`BasicPolymorphicTypeValidator`, `activateDefaultTyping`) via a locally instantiated `ObjectMapper`, rather than adopting the Jackson 3 successor serializer — switching would change the on-the-wire Redis cache format and break deserialization of entries written before the switch until their TTL expires. An explicit allow-list keeps the deserialization surface secure in the meantime.
 *   **Netty (Off-Heap Buffers)**:
      *   Custom pooling alignment (`io.netty.allocator.useCacheForAllThreads=true`) to enable Tomcat threads to reuse pooled thread-local buffers during Redis cache transactions, completely avoiding global Netty allocator lock contentions.
 *   **Reference Data Caching (P0-2 §39)**:
@@ -63,8 +63,8 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   Disabled Open Session in View (OSIV) to release connection resources back to the pool instantly after transactions close.
 *   **Lazy JDBC Connection Fetching (New in SB 4.1)**:
      *   Enforced **`spring.datasource.connection-fetch=lazy`** in dev and prod profiles. Database connections are held lazily by a `LazyConnectionDataSourceProxy` and only requested from HikariCP when a SQL statement is actually prepared and executed, completely eliminating connection borrowing overhead for cache hits or request pre-validation filters.
-*   **Partial Unique Slot Index (P0-4 V21 §41)**:
-     *   `V21__fix_double_booking_index` replaces `idx_appointment_slot` with **`idx_appointment_slot_active` ON appointments(barber_name, booking_date, booking_time) WHERE status IN ('PENDING','APPROVED')`** (PostgreSQL partial) / H2 via generated `active_slot_marker INTEGER AS (CASE WHEN status IN ('PENDING','APPROVED') THEN 1 ELSE NULL END)` + `UNIQUE(barber, date, time, marker)`. Sequential blocked in **2347 µs**, concurrent **50-way race → exactly 1/49** (808 bookings/sec serialized, §41), `busySlots` `findDistinctBookingTimes` **43 µs** on H2 and index-verified via `EXPLAIN`.
+*   **Partial Unique Slot Index (P0-4 V21/V25 §41)**:
+     *   `V21__fix_double_booking_index` replaces `idx_appointment_slot` with **`idx_appointment_slot_active` ON appointments(barber_name, booking_date, booking_time) WHERE status IN ('PENDING','APPROVED')`** (PostgreSQL partial) / a plain 4-column unique index on H2. `V25__converge_appointment_slot_index` later upgrades the H2 fallback to a generated `active_slot_marker INTEGER AS (CASE WHEN status IN ('PENDING','APPROVED') THEN 1 ELSE NULL END)` + `UNIQUE(barber, date, time, marker)`. Sequential blocked in **2347 µs**, concurrent **50-way race → exactly 1/49** (808 bookings/sec serialized, §41), `busySlots` `findDistinctBookingTimes` **43 µs** on H2 and index-verified via `EXPLAIN`.
 
 ### 🅰️ 5. Angular 22 Frontend Layer
 *   **Zoneless Change Detection**:
@@ -84,7 +84,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **`NgOptimizedImage` Directive Integration**:
     *   Integrated `<img ngSrc>` and the standard `NgOptimizedImage` directive in `app.html` to render our core landing hero image. Configured with required aspect ratio sizing (to prevent layout shifts) and the `priority` tag to speed up **Largest Contentful Paint (LCP)**.
 *   **Build Budget Regression Guards & Cache Busting**:
-    *   Enforced rigorous build failure boundaries in `angular.json` for initial total (`350kB` warning, `500kB` error) and individual chunks (`400kB` warning, `600kB` error) to automatically catch bundle bloat in CI.
+    *   Enforced rigorous build failure boundaries in `angular.json` for initial total (`400kB` warning, `500kB` error) and individual chunks (`400kB` warning, `500kB` error) to automatically catch bundle bloat in CI.
     *   Enforced `outputHashing: "all"` to aggressively bust caches on deployments.
 *   **CSP-Compatible Critical CSS Handling**:
     *   Kept `"inlineCritical": false` in the production workspace. Angular's critical-style inlining can inject dynamic attributes that conflict with the hardened production CSP, so this is intentionally disabled rather than treated as a performance toggle.
@@ -102,9 +102,9 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Spring Boot Actuator**:
     *   Exposed native health check probes (`/actuator/health/liveness`, `readiness`) integrated with orchestrator state machines, and a dedicated `/actuator/prometheus` endpoint.
 *   **OpenTelemetry Tracing**:
-     *   Integrated OTel 1.64.0 tracing with a 10% sampling probability (`management.tracing.sampling.probability=0.1`) to achieve robust coverage while stripping only ~0.7% overhead.
+     *   Integrated OTel 1.66.0 tracing with a 10% sampling probability (`management.tracing.sampling.probability=0.1`) to achieve robust coverage while stripping only ~0.7% overhead.
 *   **Jaeger Server & Micrometer**:
-     *   Collected traces via a Dockerized Jaeger `2.20.0` backend with trace propagation, mapped to Prometheus/Micrometer metrics.
+     *   Collected traces via a Dockerized Jaeger `2.21.0` backend with trace propagation, mapped to Prometheus/Micrometer metrics.
 *   **Micrometer Histograms & SLAs (P1-5 §46)**:
      *   `management.metrics.distribution.percentiles.http.server.requests=0.5,0.95,0.99` + `percentiles-histogram.http.server.requests=true` + `sla.http.server.requests=50ms,100ms,200ms` (in `application-prod.properties`) exposes **p50/p95/p99** via `/actuator/prometheus` for Prometheus quantile queries. Overhead ~1–2% cardinality per time-series (§46).
 
@@ -114,7 +114,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Nginx (Alpine-Unprivileged)**:
      *   **Elite Upstream Connection Pooling**: Enforced permanent persistent connection reuse (`upstream { keepalive 64; }`) to completely bypass the 3-way TCP handshake latency between Nginx and the backend.
      *   **Proxy Buffering**: Tuned `proxy_buffers 8 16k;` and `proxy_buffer_size 32k;` specifically to handle the high-throughput transmission of large JSON payloads without blocking worker threads.
-     *   **Aggressive Static Caching (P1-1 §42)**: Split `location ~* \.(?:js|css)$` with `Cache-Control "public, immutable, max-age=15552000"` (6M immutable, `outputHashing:all` hashed bundles → 0 revalidation) vs `location ~* \.(?:ico|gif|jpe?g|png|svg|woff2?|eot|ttf|otf)$` with `Cache-Control "public"` (revalidated, no `immutable`). `index.html` served via `location / try_files` (no immutable). See §42.
+     *   **Aggressive Static Caching (P1-1 §42)**: Split `location ~* \.(?:js|css)$` with `Cache-Control "public, immutable, max-age=15552000"` (6M immutable, `outputHashing:all` hashed bundles → 0 revalidation) vs `location ~* \.(?:ico|gif|jpe?g|png|svg|woff2?|eot|ttf|otf)$` with `Cache-Control "public, max-age=3600, must-revalidate"` (short-lived, revalidated, no `immutable`). `index.html` served via `location / try_files` (no immutable). See §42.
      *   **Socket Optimization**: Enabled kernel zero-copy transfer (`sendfile on`), aggregated packet transfers (`tcp_nopush on`), and disabled Nagle's algorithm (`tcp_nodelay on`) to deliver JSON payloads instantly.
 *   **Zero-Trust Containers & Quotas**:
     *   **Resource Quotas**: Hardcoded CPU `limits` and memory `reservations` in `docker-compose.yml` to prevent noisy-neighbor starvation across the stack.
@@ -129,7 +129,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   Leveraged real Dockerized PostgreSQL database containers within Spring Boot integration test environments via **Testcontainers** to guarantee perfect schema/SQL execution parity during compilation.
 *   **Gradle Build Velocity**:
     *   **Incremental Compilation**: Enforced `options.incremental = true` for rapid local `javac` evaluations.
-    *   **Parallel Test Execution**: Configured `maxParallelForks` to dynamically scale JVM test forks based on `availableProcessors() * 0.75` to saturate CI pipelines without starving the host (Testcontainers tests are I/O- and container-bound, not CPU-bound, so over-subscribing cores is safe).
+    *   **Parallel Test Execution**: Configured `maxParallelForks = min(2, availableProcessors())` for the `test` task (see §53) to cap JVM test fork count on CI runners without starving the host.
 *   **Code Quality & Static Analysis Guards**:
     *   **SpotBugs & FindSecBugs**: Integrated `spotbugs` plugin with `findsecbugs-plugin` at `effort = 'max'` to automatically break CI builds on detected security anti-patterns.
      *   **JaCoCo Coverage Enforcement**: Defined a strict validation rule (`minimum = 0.80` instruction coverage) to fail pipelines on untested code paths.
@@ -143,7 +143,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 
 ### 📱 8. Mobile & Client Layer
 *   **React Native (Expo 57) QueryClient Caching (P1-4 §45)**:
-     *   `mobile/src/query/queryClient.ts` sets `staleTime: 60_000` (was 0, refetched on every mount), `gcTime: 5 * 60_000` (keep cache across navigation), exponential `retryDelay: min(1000 * 2^attempt, 30000)` with `retry:1` and `refetchOnWindowFocus:false`. `mobile/src/api/client.ts` `timeout: 10000` (was 15000, now < server 5s JPA timeout + 20s Hikari, fail-fast). Cuts catalog/barbers refetch ~50% (§45).
+     *   `mobile/src/query/queryClient.ts` sets `staleTime: 60_000` (was 0, refetched on every mount), `gcTime: 5 * 60_000` (keep cache across navigation), exponential `retryDelay: min(1000 * 2^attempt, 30000)` with `retry:1` and `refetchOnWindowFocus:false`. `mobile/src/api/client.ts` `timeout: 10000` (was 15000; still above the server's ~9s worst case of 5s JPA timeout + 4s Hikari connection-timeout, so the server times out first). Cuts catalog/barbers refetch ~50% (§45).
 *   **Lookbook Virtualization Fix (P2 §49)**:
      *   `mobile/src/components/lookbook/LookbookGallery.tsx` replaces `FlatList scrollEnabled={false}` inside parent `ScrollView` (which defeats virtualization, renders all items) with plain `LOOKBOOK_DATA.map` + `View` + `Card`. Parent `ScrollView` handles scrolling; swap to `FlashList` when catalogue exceeds 50 items.
 
@@ -481,11 +481,11 @@ By setting `spring.jpa.properties.hibernate.query.in_clause_parameter_padding=tr
 
 | Budget | Previous | New |
 | :--- | :--- | :--- |
-| `initial` | 350kB warn / 500kB err | unchanged |
+| `initial` | 400kB warn / 500kB err | unchanged |
 | `anyComponentStyle` | 20kB / 50kB | unchanged |
-| `any` (per chunk) | *none* | **400kB warn / 600kB err** |
+| `any` (per chunk) | *none* | **400kB warn / 500kB err** |
 
-**Verdict:** Without an `any` budget, a single bloated chunk can slip through CI unnoticed. The guard fails the production build if any individual chunk exceeds 600kB (warning at 400kB), catching regressions such as a heavy dependency pulled into one route before merge.
+**Verdict:** Without an `any` budget, a single bloated chunk can slip through CI unnoticed. The guard fails the production build if any individual chunk exceeds 500kB (warning at 400kB), catching regressions such as a heavy dependency pulled into one route before merge.
 
 ---
 
@@ -1067,17 +1067,15 @@ Delta **353 µs saved (1.6× faster)** — primarily one fewer network round-tri
 
 ---
 
-## ⚡ 41. Partial Unique Slot Index — Anti Double-Booking (P0-4 V21)
+## ⚡ 41. Partial Unique Slot Index — Anti Double-Booking (P0-4 V21/V25)
 
 **Goal:** Close the TOCTOU race in `AppointmentServiceImpl.createAppointment()` (busySlots check at `:173` then `save` at `:195` — non-atomic) where two concurrent requests with different `Idempotency-Key` could both pass the busySlots check and double-book the same `(barber, date, time)`. V1's `CREATE UNIQUE INDEX idx_appointment_slot ON appointments(barber, date, time, status)` allowed `PENDING + APPROVED` on the same slot because `status` differed.
 
-**Implementation:** `src/main/java/db/migration/V21__fix_double_booking_index.java:45` — Java-based Flyway migration (handles existing duplicate data before index creation):
+**Implementation:** the fix spans three migrations, not one:
 
-*   Normalizes `booking_time` `LPAD` 4-char → 5-char.
-*   Deduplicates: keeps earliest `APPROVED`, else earliest `PENDING`, marks rest `DENIED` via `EXISTS` subqueries.
-*   Drops `idx_appointment_slot` and `idx_appointment_slot_active`.
-*   **PostgreSQL:** `CREATE UNIQUE INDEX idx_appointment_slot_active ON appointments(barber_name, booking_date, booking_time) WHERE status IN ('PENDING','APPROVED')` — partial index excludes `DENIED`, so cancelled slots are re-bookable.
-*   **H2 (test):** Generated `active_slot_marker INTEGER AS (CASE WHEN status IN ('PENDING','APPROVED') THEN 1 ELSE NULL END)` + `CREATE UNIQUE INDEX idx_appointment_slot_active ON appointments(barber_name, booking_date, booking_time, active_slot_marker)` — `NULL` markers for `DENIED` don't conflict (SQL `NULL <> NULL` semantics), preserving partial-index behavior. Column is `GENERATED`, so status changes auto-update the marker.
+*   `src/main/java/db/migration/V21__fix_double_booking_index.java` — denies any `PENDING` row conflicting with an existing `APPROVED` row at the same slot, drops `idx_appointment_slot`, and creates `idx_appointment_slot_active`. **PostgreSQL:** `CREATE UNIQUE INDEX idx_appointment_slot_active ON appointments(barber_name, booking_date, booking_time) WHERE status IN ('PENDING','APPROVED')` — partial index excludes `DENIED`, so cancelled slots are re-bookable. **H2 (test):** a plain `CREATE UNIQUE INDEX idx_appointment_slot_active ON appointments(barber_name, booking_date, booking_time, status)` — weaker than the Postgres partial index (doesn't yet dedupe two `PENDING` or two `APPROVED` rows on the same slot).
+*   `src/main/resources/db/migration/V22__convert_booking_time_to_time.sql` — normalizes `booking_time` via `LPAD` 4-char → 5-char, independent of the index work above.
+*   `src/main/java/db/migration/V25__converge_appointment_slot_index.java` — converges both database paths onto the same semantics: full dedup (denies PENDING-vs-APPROVED conflicts, then duplicate PENDING keeping the earliest, then duplicate APPROVED keeping the earliest), drops and recreates `idx_appointment_slot_active`. **PostgreSQL** keeps the same partial index. **H2** is upgraded with a generated `active_slot_marker INTEGER AS (CASE WHEN status IN ('PENDING','APPROVED') THEN 1 ELSE NULL END)` column + `CREATE UNIQUE INDEX idx_appointment_slot_active ON appointments(barber_name, booking_date, booking_time, active_slot_marker)` — `NULL` markers for `DENIED` don't conflict (SQL `NULL <> NULL` semantics), finally giving H2 true partial-index-equivalent behavior. Column is `GENERATED`, so status changes auto-update the marker.
 
 `AppointmentServiceImpl.java:230` catches `DataIntegrityViolationException` `23505` (unique_violation) and maps it to `IllegalArgumentException("Slot already booked... just booked")` — the partial index is the second, database-enforced guard after the application `busySlots` check.
 
@@ -1098,10 +1096,10 @@ Delta **353 µs saved (1.6× faster)** — primarily one fewer network round-tri
 
 1. **Two-guard defense.** `BusySlotsService.getBusySlots()` (application check, 43 µs, cached `busySlots` TTL 2m) catches most collisions cheaply; the **partial unique index** is the idempotent, serialization-guaranteed fallback that wins the TOCTOU race — even if `busySlots` cache is stale or two requests interleave before commit.
 2. **DENIED slots stay re-bookable.** Because the predicate excludes `DENIED`, the index does **not** block re-booking a cancelled slot — verified: `DENIED` → `busySlots` no longer contains slot → new `PENDING` inserts successfully.
-3. **H2 marker trick preserves PG semantics.** `ACTIVE_SLOT_MARKER IS NULL` for `DENIED` rows exploits SQL three-valued logic: `UNIQUE(barber, date, time, NULL)` never collides, so multiple `DENIED` rows on the same slot coexist (as they should), while `PENDING`+`PENDING` or `PENDING`+`APPROVED` collide on `(barber, date, time, 1)`.
+3. **H2 marker trick (V25) preserves PG semantics.** `ACTIVE_SLOT_MARKER IS NULL` for `DENIED` rows exploits SQL three-valued logic: `UNIQUE(barber, date, time, NULL)` never collides, so multiple `DENIED` rows on the same slot coexist (as they should), while `PENDING`+`PENDING` or `PENDING`+`APPROVED` collide on `(barber, date, time, 1)`.
 4. **Hibernate session artifact under contention.** Under 50-way burst, some threads hit `AssertionFailure` / `null identifier` after the `23505` exception leaves the Hibernate session in a bad state before rollback — counted as `collision` (same root cause). All 50 threads are blocked except the single winner; zero silent double-bookings.
 
-**Verdict:** Partial unique index `WHERE status IN ('PENDING','APPROVED')` (V21) is the correct anti-double-booking guarantee. It serializes the 50-way race to **exactly 1/49**, re-opens `DENIED` slots, keeps `busySlots` at **43 µs**, and pairs with the application check for layered defense. Validated via `EXPLAIN` and `INFORMATION_SCHEMA`.
+**Verdict:** Partial unique index `WHERE status IN ('PENDING','APPROVED')` (V21, converged across PostgreSQL and H2 by V25) is the correct anti-double-booking guarantee. It serializes the 50-way race to **exactly 1/49**, re-opens `DENIED` slots, keeps `busySlots` at **43 µs**, and pairs with the application check for layered defense. Validated via `EXPLAIN` and `INFORMATION_SCHEMA`.
 
 ---
 
@@ -1117,10 +1115,9 @@ location ~* \.(?:js|css)$ {
     expires 6M;
     add_header Cache-Control "public, immutable, max-age=15552000" always;
 }
-# Static images/fonts — cache 6M but revalidate (no immutable)
+# Static images/fonts — short-lived, must revalidate (no immutable)
 location ~* \.(?:ico|gif|jpe?g|png|svg|woff2?|eot|ttf|otf)$ {
-    expires 6M;
-    add_header Cache-Control "public";
+    add_header Cache-Control "public, max-age=3600, must-revalidate" always;
 }
 # index.html — no immutable, must revalidate for new bundle hashes
 location / { try_files $uri $uri/ /index.html; }
@@ -1130,9 +1127,9 @@ location / { try_files $uri $uri/ /index.html; }
 | :--- | :--- | :--- | :--- |
 | **`main-*.js` / `styles-*.css`** (hashed) | `public` (revalidated each load, `If-None-Match` → `304`) | **`public, immutable, max-age=15552000`** | **0 revalidation** for 15552000 s (~6M) — browser skips `If-None-Match` entirely |
 | **`index.html`** | `public` | via `location /` (no immutable) | Correctly revalidated so new hashes are discovered |
-| **Images / fonts** (`ico`/`png`/`svg`/`woff2`) | `public` | `public` (unchanged) | No risk: non-hashed names must revalidate |
+| **Images / fonts** (`ico`/`png`/`svg`/`woff2`) | `public` | **`public, max-age=3600, must-revalidate`** | Short-lived cache; non-hashed names must revalidate |
 
-**Verification:** `P1AndP2BenchmarkTest.p1_1_nginx_immutable_config` asserts `frontend/nginx.conf` contains `location ~* \.(?:js|css)$` + `immutable, max-age=15552000`, `location ~* \.(?:ico|gif` + `public`, `oldSingle` mixed block is `false`, and `location / {` + `try_files` for `index.html`.
+**Verification:** `P1AndP2BenchmarkTest.p1_1_nginx_immutable_config` asserts `frontend/nginx.conf` contains `location ~* \.(?:js|css)$` + `immutable, max-age=15552000`, `location ~* \.(?:ico|gif` + `public, max-age=3600, must-revalidate`, `oldSingle` mixed block is `false`, and `location / {` + `try_files` for `index.html`.
 
 **Verdict:** Split `immutable` is a pure win with `outputHashing:all`. Hashed bundles finish with **~0 ms revalidate** vs `If-None-Match` round-trip; `index.html` stays fresh so updates propagate instantly. Zero application changes, verifiable by `nginx -T` and `curl -I` headers.
 
@@ -1213,13 +1210,13 @@ BusySlots Cache-Control: private, max-age=30, must-revalidate
 | `staleTime` | `0` (default, refetch on every `useQuery` mount) | **`60_000` (60s)** | Catalog/barbers change infrequently; 60s stale avoids refetch when navigating between tabs |
 | `gcTime` | `5 * 60_000` (default) | **`5 * 60_000` (5m)** | Explicit — keep cache across navigation for 5m before GC |
 | `retryDelay` | — | **`min(1000 * 2^attempt, 30000)` exponential + `retry:1`** | One retry with exponential backoff (1s → 2s → capped 30s), `refetchOnWindowFocus:false` |
-| `timeout` | `15000` (15s) | **`10000` (10s)** | Fail-fast: `<` server `jakarta.persistence.query.timeout=5000` + `Hikari connectionTimeout=20000`. 10s client timeout surfaces error before user perceives hang |
+| `timeout` | `15000` (15s) | **`10000` (10s)** | Fail-fast on flaky networks, while still exceeding the server's own worst case (`jakarta.persistence.query.timeout=5000` + `Hikari connection-timeout=4000` ≈ 9s) so the server's own timeout fires first and returns a proper error response rather than an abrupt client-side abort |
 
 **Expected Impact:**
 
 * `staleTime 0→60s` cuts `catalog`/`barbers`/`publicBarbers` GETs by **~50%** under normal tab navigation (every mount no longer refetches within the 60s window).
 * `gcTime 5m` retains data when the user switches tabs and returns within 5m — no loading spinner on back-navigation.
-* `timeout 10s` vs old 15s: user sees an error boundary 5s sooner on flaky mobile networks instead of waiting past the server's 5s query timeout plus Hikari's 20s connection wait.
+* `timeout 10s` vs old 15s: user sees an error boundary 5s sooner on flaky mobile networks, while the 10s ceiling still sits above the server's ~9s worst case (5s JPA + 4s Hikari), so most failures surface as a server-side timeout response rather than a client-side abort.
 
 **Verification:** `P1AndP2BenchmarkTest.p1_4_mobile_tuning` asserts `queryClient.ts` contains `staleTime: 60_000`, `gcTime: 5 * 60_000`, `retryDelay`, and `client.ts` contains `timeout: 10000` and no `timeout: 15000`.
 
