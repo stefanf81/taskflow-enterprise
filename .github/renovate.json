@@ -150,6 +150,18 @@
       "allowedVersions": "/^5\\./"
     },
     {
+      "description": "Catch-all: batch patch/pin/digest updates of packages that no named group below matches into one automerged PR. Must stay above the named groups: later packageRules override earlier ones, so named groups win.",
+      "matchUpdateTypes": ["patch", "pin", "digest"],
+      "groupName": "all patch updates",
+      "groupSlug": "all-patch"
+    },
+    {
+      "description": "Catch-all: batch minor updates of packages that no named group below matches into one PR for manual review. Must stay above the named groups: later packageRules override earlier ones, so named groups win.",
+      "matchUpdateTypes": ["minor"],
+      "groupName": "all minor updates",
+      "groupSlug": "all-minor"
+    },
+    {
       "description": "Update the Angular framework and its compatible toolchain together",
       "matchManagers": ["npm"],
       "matchFileNames": ["frontend/package.json"],
@@ -290,18 +302,6 @@
       "matchUpdateTypes": ["major"],
       "enabled": false,
       "groupName": "Blocked on Expo SDK upgrade"
-    },
-    {
-      "description": "Batch all patch/pin/digest updates into a single automerged PR",
-      "matchUpdateTypes": ["patch", "pin", "digest"],
-      "groupName": "all patch updates",
-      "groupSlug": "all-patch"
-    },
-    {
-      "description": "Batch all minor updates into a single PR for manual review",
-      "matchUpdateTypes": ["minor"],
-      "groupName": "all minor updates",
-      "groupSlug": "all-minor"
     }
   ]
 }

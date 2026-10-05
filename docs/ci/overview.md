@@ -22,11 +22,13 @@ A daily **schedule** (`0 22 * * *`) runs the full build, test, and Docker build+
 
 ```yaml
 concurrency:
-  group: taskflow-${{ github.workflow }}-${{ github.ref }}
+  group: taskflow-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 ```
 
 **Why:** If a developer (or Renovate) pushes multiple commits to a branch in rapid succession, GitHub Actions cancels the older, now-obsolete pipeline runs. This saves significant compute minutes and prevents a queue of stale builds. `main` is included because merge bursts otherwise queue a full ~6-minute run per commit; the surviving run always verifies the cumulative tree, and required status checks are evaluated per pull request, so cancelling a superseded `main` run has no effect on merge gating.
+
+The **event name is part of the group** so only runs of the same kind supersede each other. Without it, a `push` to `main` shared a group with the nightly `schedule` and with manual `workflow_dispatch` runs on `main` and cancelled them (a `run_tests` dispatch was cancelled two minutes after it started by a merge). `react-native-ci.yml` uses the same event-scoped group.
 
 ## 3. Least-Privilege Permissions (`permissions`)
 
@@ -48,7 +50,7 @@ The filters distinguish backend, frontend, dependency-submission, and Docker com
 
 ## 5. Job: `lint` (Dockerfile Lint)
 
-A lightweight job that runs `hadolint` against `Dockerfile.x64` and `frontend/Dockerfile` to verify linting and compliance. It only runs if Docker-related files were changed. The backend lint intentionally ignores `DL3005` (`apt-get upgrade`) and `DL3008` (apt version pinning) because the runtime stage refreshes Ubuntu security packages on every build instead of pinning versions that would freeze out CVE fixes (the same rationale as the frontend's ignored `DL3018`).
+A lightweight job that runs `hadolint` against `Dockerfile.x64`, the arm64 local-dev `Dockerfile`, and `frontend/Dockerfile` to verify linting and compliance. It only runs if Docker-related files were changed. The backend lint intentionally ignores `DL3005` (`apt-get upgrade`) and `DL3008` (apt version pinning) because the runtime stage refreshes Ubuntu security packages on every build instead of pinning versions that would freeze out CVE fixes (the same rationale as the frontend's ignored `DL3018`).
 **Why:** Fails fast. By running these checks early and separately, we don't waste 5 minutes booting up JVMs and Node environments just to tell a developer they missed a Dockerfile best practice.
 
 ## 6. Job: `backend`
@@ -244,7 +246,7 @@ Our Docker build configurations (`Dockerfile` and `Dockerfile.x64`) implement st
 
 ## 12. Repository & GHCR Setup
 
-The Docker push workflow (`.github/workflows/pushdockerimage.yml`) pushes images to the GitHub Container Registry (GHCR) using the default `GITHUB_TOKEN`.
+The Docker push workflow (`.github/workflows/pushdockerimage.yml`) pushes images to the GitHub Container Registry (GHCR) using the default `GITHUB_TOKEN`. The workflow default is `contents: read`; only the `push` job is granted `packages: write` and `security-events: write`, so the jobs that run Gradle and npm hold no write token. The `image_tag` input is passed through `env` and validated against Docker tag syntax (and must not end in `-scan`, the staging suffix) before use.
 
 ### Workflow permissions
 
@@ -283,6 +285,11 @@ regressions). Major updates are held for 30 days and require manual review.
 Security vulnerability alerts bypass the release quarantine so CVE patches open
 immediately with a `security` label. Routine lock-file maintenance runs weekly
 on Monday mornings, deduplicating npm workspaces via `npmDedupe`.
+Patch/pin/digest and minor updates of packages outside any named group are
+batched into `all-patch` / `all-minor`. Those two catch-all rules sit *above* the
+named groups in `packageRules`, because later rules override earlier ones: a
+version-coupled group (e.g. Hibernate core + JCache) therefore always gets its
+own PR instead of being folded into `all-patch`.
 Branches use `rebaseWhen: auto` globally to avoid rebase churn, while automerging
 patch PRs override to `rebaseWhen: behind-base-branch` to satisfy branch protection.
 `ci.yml` detects same-repository `renovate/` branches and runs the backend,

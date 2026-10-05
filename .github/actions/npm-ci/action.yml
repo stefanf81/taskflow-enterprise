@@ -106,7 +106,7 @@ runs:
         # warnings are not actionable in normal installs. Filter only those
         # lines from stderr; every other warning and error still surfaces.
         # (The dependency-health audit keeps them - deprecation is signal there.)
-        npm ci "${args[@]}" 2> >(grep -v '^npm warn deprecated' >&2)
+        npm ci "${args[@]}" 2> >(grep --line-buffered -v '^npm warn deprecated' >&2)
 
     - name: Install ${{ inputs.package-path }}
       if: steps.nm-cache.outputs.cache-hit != 'true'
@@ -128,7 +128,7 @@ runs:
         # warnings are not actionable in normal installs. Filter only those
         # lines from stderr; every other warning and error still surfaces.
         # (The dependency-health audit keeps them - deprecation is signal there.)
-        npm ci "${args[@]}" 2> >(grep -v '^npm warn deprecated' >&2)
+        npm ci "${args[@]}" 2> >(grep --line-buffered -v '^npm warn deprecated' >&2)
 
     - name: Save node_modules
       if: inputs.cache-node-modules == 'true' && steps.nm-cache.outputs.cache-hit != 'true'
