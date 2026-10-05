@@ -114,7 +114,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Nginx (Alpine-Unprivileged)**:
      *   **Elite Upstream Connection Pooling**: Enforced permanent persistent connection reuse (`upstream { keepalive 64; }`) to completely bypass the 3-way TCP handshake latency between Nginx and the backend.
      *   **Proxy Buffering**: Tuned `proxy_buffers 8 16k;` and `proxy_buffer_size 32k;` specifically to handle the high-throughput transmission of large JSON payloads without blocking worker threads.
-     *   **Aggressive Static Caching (P1-1 §42)**: Split `location ~* \.(?:js|css)$` with `Cache-Control "public, immutable, max-age=15552000"` (6M immutable, `outputHashing:all` hashed bundles → 0 revalidation) vs `location ~* \.(?:ico|gif|jpe?g|png|svg|woff2?|eot|ttf|otf)$` with `Cache-Control "public"` (revalidated, no `immutable`). `index.html` served via `location / try_files` (no immutable). See §42.
+     *   **Aggressive Static Caching (P1-1 §42)**: Split `location ~* \.(?:js|css)$` with `Cache-Control "public, immutable, max-age=15552000"` (6M immutable, `outputHashing:all` hashed bundles → 0 revalidation) vs `location ~* \.(?:ico|gif|jpe?g|png|svg|woff2?|eot|ttf|otf)$` with `Cache-Control "public, max-age=3600, must-revalidate"` (short-lived, revalidated, no `immutable`). `index.html` served via `location / try_files` (no immutable). See §42.
      *   **Socket Optimization**: Enabled kernel zero-copy transfer (`sendfile on`), aggregated packet transfers (`tcp_nopush on`), and disabled Nagle's algorithm (`tcp_nodelay on`) to deliver JSON payloads instantly.
 *   **Zero-Trust Containers & Quotas**:
     *   **Resource Quotas**: Hardcoded CPU `limits` and memory `reservations` in `docker-compose.yml` to prevent noisy-neighbor starvation across the stack.
@@ -1115,10 +1115,9 @@ location ~* \.(?:js|css)$ {
     expires 6M;
     add_header Cache-Control "public, immutable, max-age=15552000" always;
 }
-# Static images/fonts — cache 6M but revalidate (no immutable)
+# Static images/fonts — short-lived, must revalidate (no immutable)
 location ~* \.(?:ico|gif|jpe?g|png|svg|woff2?|eot|ttf|otf)$ {
-    expires 6M;
-    add_header Cache-Control "public";
+    add_header Cache-Control "public, max-age=3600, must-revalidate" always;
 }
 # index.html — no immutable, must revalidate for new bundle hashes
 location / { try_files $uri $uri/ /index.html; }
@@ -1128,9 +1127,9 @@ location / { try_files $uri $uri/ /index.html; }
 | :--- | :--- | :--- | :--- |
 | **`main-*.js` / `styles-*.css`** (hashed) | `public` (revalidated each load, `If-None-Match` → `304`) | **`public, immutable, max-age=15552000`** | **0 revalidation** for 15552000 s (~6M) — browser skips `If-None-Match` entirely |
 | **`index.html`** | `public` | via `location /` (no immutable) | Correctly revalidated so new hashes are discovered |
-| **Images / fonts** (`ico`/`png`/`svg`/`woff2`) | `public` | `public` (unchanged) | No risk: non-hashed names must revalidate |
+| **Images / fonts** (`ico`/`png`/`svg`/`woff2`) | `public` | **`public, max-age=3600, must-revalidate`** | Short-lived cache; non-hashed names must revalidate |
 
-**Verification:** `P1AndP2BenchmarkTest.p1_1_nginx_immutable_config` asserts `frontend/nginx.conf` contains `location ~* \.(?:js|css)$` + `immutable, max-age=15552000`, `location ~* \.(?:ico|gif` + `public`, `oldSingle` mixed block is `false`, and `location / {` + `try_files` for `index.html`.
+**Verification:** `P1AndP2BenchmarkTest.p1_1_nginx_immutable_config` asserts `frontend/nginx.conf` contains `location ~* \.(?:js|css)$` + `immutable, max-age=15552000`, `location ~* \.(?:ico|gif` + `public, max-age=3600, must-revalidate`, `oldSingle` mixed block is `false`, and `location / {` + `try_files` for `index.html`.
 
 **Verdict:** Split `immutable` is a pure win with `outputHashing:all`. Hashed bundles finish with **~0 ms revalidate** vs `If-None-Match` round-trip; `index.html` stays fresh so updates propagate instantly. Zero application changes, verifiable by `nginx -T` and `curl -I` headers.
 
