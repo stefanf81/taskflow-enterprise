@@ -282,10 +282,16 @@ uses the `RENOVATE_TOKEN` secret instead of `GITHUB_TOKEN`, because pull
 requests created with `GITHUB_TOKEN` require manual workflow approval. The
 current secret is a PAT with repository and workflow access so Renovate can
 write branches, pull requests, issues, statuses, and GitHub Actions updates.
-The workflow includes pre-flight schema validation via
-`renovate-config-validator`, repository caching (`actions/cache`) for both the
-Renovate repository cache and the validator's npm/npx download, and interactive
-`workflow_dispatch` inputs (`dryRun`, `logLevel`, `repoCache`).
+The workflow needs no checkout: Renovate clones the repository and reads
+`.github/renovate.json` as repository config. It persists Renovate's cache
+directory (`actions/cache`) across runs: the repository cache (extract results)
+and the file-based package/HTTP cache, so datasource lookups revalidate with
+ETags instead of starting cold on every ephemeral runner. It also offers
+interactive `workflow_dispatch` inputs (`dryRun`, `logLevel`, `repoCache`). The
+config is validated as repository config (`renovate-config-validator
+--no-global`) in `ci.yml`'s Workflow Lint job on pull requests that touch it and
+on nightly runs, not before each Renovate run, where a validator warning from a
+newer Renovate image would block every update, security fixes included.
 
 Renovate opens reviewable PRs for all dependency updates. Ordinary patch, pin,
 and digest updates enable platform automerge after required CI checks pass and

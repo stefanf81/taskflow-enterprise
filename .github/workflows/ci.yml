@@ -122,6 +122,7 @@ jobs:
               - '.github/actions/**'
               - '.github/scripts/**'
               - '.github/actionlint.yaml'
+              - '.github/renovate.json'
               - 'scripts/prepare-nuclei-sarif.py'
               - 'scripts/test_nuclei_sarif.py'
 
@@ -274,6 +275,20 @@ jobs:
             rhysd/actionlint:1.7.12 \
             -color \
             -shellcheck=
+
+      # renovate.yml no longer validates before each run (a validator warning
+      # from a newer image would block every update), so the config is checked
+      # here, before it merges. A file argument is validated as global
+      # self-hosted config unless --no-global is passed; this is repo config.
+      # Keep the image tag in sync with renovate.yml's renovate_version.
+      - name: Validate Renovate config
+        run: >
+          docker run --rm
+          --volume "$PWD:/usr/src/app:ro"
+          --workdir /usr/src/app
+          --entrypoint renovate-config-validator
+          ghcr.io/renovatebot/renovate:44
+          --no-global .github/renovate.json
 
   ###########################################################
   # Backend
