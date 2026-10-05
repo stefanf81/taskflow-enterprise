@@ -928,7 +928,7 @@ jobs:
       # The former `--cache-from/--cache-to type=gha` flags never took effect
       # in this `run:` step (no "importing cache manifest" in any log, every
       # layer rebuilt), because only actions such as build-push-action hand
-      # BuildKit the Actions cache token. The whole build is ~5 s uncached.
+      # BuildKit the Actions cache token. The uncached build takes 6-9 s.
       - name: Build production frontend image
         run: docker build --tag taskflow-e2e-frontend frontend
 
