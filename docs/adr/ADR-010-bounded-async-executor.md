@@ -45,4 +45,4 @@ awaitTerminationSeconds=30
 
 ## Verification
 
-Benchmark: `src/test/java/com/example/taskflow/benchmark/AsyncExecutorBenchmarkTest.java` (`@Tag("benchmark")`, synthetic burst with 500 tasks, warm-up 50). Verification checks in `P1AndP2BenchmarkTest` confirm `AsyncConfig` contains `maxPoolSize=64`, `queueCapacity=100`, and `CallerRunsPolicy`.
+Benchmark: `src/test/java/com/example/taskflow/benchmark/AsyncExecutorBenchmarkTest.java` (`@Tag("benchmark")`, synthetic burst with 500 tasks, warm-up 50) exercises `AsyncConfig`'s `maxPoolSize=64`, `queueCapacity=100`, and `CallerRunsPolicy` under load.

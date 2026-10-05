@@ -129,9 +129,9 @@ following setup is the shortest supported path after cloning the repository.
 ### Install prerequisites
 
 - Git
-- OpenJDK 21. Gradle is supplied by the checked-in Gradle 9.7.1 wrapper, so a
+- OpenJDK 21. Gradle is supplied by the checked-in Gradle 9.8.0 wrapper, so a
   separate Gradle installation is not needed.
-- Node.js 22.23.2 and npm 11.19.1. Mobile pins Node in `mobile/.nvmrc`; the
+- Node.js 24.21.0 and npm 12.2.0. Mobile pins Node in `mobile/.nvmrc`; the
   frontend declares its npm version in `frontend/package.json`.
 - Docker Desktop with a running daemon and at least 5 GB available to Docker
   for the full Compose stack.
@@ -385,3 +385,5 @@ Renovate authentication details.
   - `ADR-011` — Reference Data Caching (Barbers & Services)
   - `ADR-012` — Lua-Atomic Rate Limiter
   - `ADR-013` — Partial Unique Slot Index (Anti Double-Booking)
+  - `ADR-014` — Resolve "No Preference" Bookings to a Concrete Barber
+  - `ADR-015` — Bind Idempotency-Key Replays to the Original Request

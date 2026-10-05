@@ -118,7 +118,7 @@ Submits the complete, deep Java and Gradle dependency tree directly to the GitHu
 
 See [`security.yml`](../../.github/workflows/security.yml) for details on:
 
-- **Trivy Filesystem Scan:** Report-only (`exit-code: 0`, `scanners: vuln`) SARIF upload partitioned across four distinct components: Backend (`.`), Frontend (`frontend/`), Mobile (`mobile/`), and Shared Schemas (`shared/schemas/`), surfaced in the Code Scanning tab with dedicated category namespaces. Because the scans gate nothing, the uploads skip `wait-for-processing` (7–8 s → ~2 s each). Non-component and build directories (`node_modules/`, `build/`, `.gradle/`, `dist/`, `android/`, `ios/`, `.git/`) are explicitly excluded. Severity asymmetry vs. the Docker image hard gate is deliberately maintained — see the inline notes.
+- **Trivy Filesystem Scan:** Report-only (`exit-code: 0`, `scanners: vuln`) SARIF upload partitioned across five distinct scans: Backend (`.`), Frontend (`frontend/`), Mobile (`mobile/`), Shared Schemas (`shared/schemas/`), and Root (repository-root `package-lock.json`), surfaced in the Code Scanning tab with dedicated category namespaces (`trivy-fs-Backend`, `-Frontend`, `-Mobile`, `-Shared`, `-Root`). Because the scans gate nothing, the uploads skip `wait-for-processing` (7–8 s → ~2 s each). Non-component and build directories (`node_modules/`, `build/`, `.gradle/`, `dist/`, `android/`, `ios/`, `.git/`) are explicitly excluded. Severity asymmetry vs. the Docker image hard gate is deliberately maintained — see the inline notes.
 - **Trivy Database Caching:** `trivy-action` manages its own workspace-local
   vulnerability database cache and binary cache. The workflows do not layer a
   second cache over it.
@@ -128,14 +128,16 @@ See [`security.yml`](../../.github/workflows/security.yml) for details on:
 
 > CodeQL analysis (`java-kotlin` + `javascript-typescript`) has also been extracted to `.github/workflows/security.yml`.
 
-Runs deep semantic security analysis in parallel for both languages on every nightly run:
+Runs deep semantic security analysis in parallel across a four-leg matrix on every nightly run:
 
-- **Java/Kotlin (`build-mode: autobuild`):** CodeQL performs its own Gradle build tracking with `actions: write` permission for Gradle build caching — it does not consume the production JAR from the `backend` job, so there is no serialization bottleneck.
+- **Java/Kotlin (`build-mode: manual`):** CodeQL does not use `autobuild` here — an explicit "Build (manual)" step runs `./gradlew --no-daemon testClasses` so the build is deterministic and reproducible. The job's permissions are scoped to `contents: read` + `security-events: write` only; `actions: write` is explicitly **not** granted to this job (a separate cache-prune job elsewhere in the workflow scopes `actions: write` for cache deletion instead — CodeQL itself uses the runner's runtime token for artifact/cache uploads and doesn't need it).
 - **JavaScript/TypeScript (`build-mode: none`):** Scans the Angular 22 and React Native TypeScript sources directly without building, keeping the analysis lightweight.
+- **Python (`build-mode: none`):** Scans any Python scripts in the repository (e.g. tooling/CI helper scripts); runs in parallel with the other legs at no added wall-clock cost.
+- **GitHub Actions (`build-mode: none`):** Scans the repository's own workflow YAML for Actions-specific security issues (e.g. script injection via untrusted event data).
 - **Extended Security Queries:** Configured with `queries: security-extended` to perform deep semantic checks for injection flaws, authentication bypasses, path traversals, and cryptographic weaknesses beyond the minimal default suite.
 - **Matrix Naming & SARIF Category Isolation:** Job matrix displays distinct language names (`CodeQL (${{ matrix.language }})`) and emits SARIF results categorized under `/language:${{ matrix.language }}`. Workspace checkout runs with `persist-credentials: false`.
 
-The standalone workflow has no change-detection dependency — it always scans both languages on every scheduled/manual run.
+The standalone workflow has no change-detection dependency — it always scans all four legs on every scheduled/manual run.
 
 ## 9. Job: `e2e` (End-to-End Tests)
 
@@ -300,13 +302,13 @@ batched into `all-patch` / `all-minor`. Those two catch-all rules sit *above* th
 named groups in `packageRules`, because later rules override earlier ones: a
 version-coupled group (e.g. Hibernate core + JCache) therefore always gets its
 own PR instead of being folded into `all-patch`.
-Branches use `rebaseWhen: auto` globally to avoid rebase churn, while automerging
-patch PRs override to `rebaseWhen: behind-base-branch` to satisfy branch protection.
+Branches use a single global `rebaseWhen: auto` to avoid rebase churn; there is no
+per-rule override to `behind-base-branch` for automerging patch PRs.
 `ci.yml` detects same-repository `renovate/` branches and runs the backend,
 frontend, Testcontainers, and Playwright suites regardless of path filters.
-`react-native-ci.yml` path-filters pull requests (mobile, shared schemas, API
-contract, and the sync script) so unrelated PRs skip the mobile JavaScript
-check, and runs Android and iOS native jobs for same-repository Renovate and
+`react-native-ci.yml`'s `pull_request` trigger is deliberately **unfiltered** (a `paths:` filter on the trigger would make unrelated PRs show the required check as permanently "Expected" under branch protection). Instead, filtering happens via an internal `changes` job that computes whether mobile-relevant files changed (mobile, shared schemas, API
+contract, and the sync script); each downstream job's own `if:` then skips on
+unrelated PRs, and runs Android and iOS native jobs for same-repository Renovate and
 `maintenance/expo-sdk` branches. Its concurrency group includes the event name
 and only cancels pull-request runs, so a push to `main` cannot cancel the
 nightly native build. Its npm, CocoaPods and ExpoModulesJSI caches are saved

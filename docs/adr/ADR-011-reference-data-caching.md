@@ -45,4 +45,4 @@ Controllers add a complementary HTTP tier (see ADR for Finding 31 / BENCHMARKS.m
 
 ## Verification
 
-`ReferenceDataCacheBenchmarkTest` (`@Tag("benchmark")`, 200 barbers × 200 services, H2) asserts per-cache TTL, `sync=true` presence, and eviction semantics. `P1AndP2BenchmarkTest` checks `CacheConfig.java` for `RedisCacheConfiguration` 10m TTL and `@CacheEvict(allEntries=true)` on mutations.
+`ReferenceDataCacheBenchmarkTest` (`@Tag("benchmark")`, 200 barbers × 200 services, H2) asserts per-cache TTL, `sync=true` presence, and eviction semantics, including `CacheConfig.java`'s `RedisCacheConfiguration` 10m TTL and `@CacheEvict(allEntries=true)` behavior on mutations.
