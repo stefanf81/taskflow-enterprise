@@ -199,6 +199,16 @@ Audits the public external perimeter, exposed ports, HTTP/TLS compliance, and we
 - **Fork PRs:** the SARIF upload uses `continue-on-error` for PRs from forks. codeql-action supports fork uploads with the read-only token, but if GitHub ever rejects one, the required check still reflects only the scan.
 - **Hardening:** checkout uses `persist-credentials: false`, the scan gets no `GITHUB_TOKEN`, and `security-events: write` is scoped to the job.
 
+## 9d. Cache Housekeeping
+
+GitHub evicts caches unused for 7 days and evicts least-recently-used entries once a repository passes 10 GB. Three jobs remove entries earlier, where it is known they will never be read again:
+
+- **`cleanup-pr-caches.yml`:** when a same-repository pull request closes or merges, deletes every cache scoped to `refs/pull/<n>/merge`. Only later runs of that PR could restore them. Fork PRs are skipped: their read-only token cannot delete, and `pull_request_target` is deliberately not used.
+- **`react-native-ci.yml` `ccache-retention`:** after a successful non-PR Android build, keeps only the newest `ccache-android-ccache-*` snapshot on the ref. ccache-action saves a new timestamped snapshot (~37 MB) on every run and restores only the newest one.
+- **`security.yml` `trivy-cache-retention`:** keeps the newest Trivy vulnerability and Java DB entry per family.
+
+`delete-old-caches.yml` additionally sweeps anything unused for 3+ days every Saturday.
+
 ## 10. Jobs: `docker-backend` and `docker-frontend`
 
 Compiles secure, production-grade container images for the backend and frontend components.
