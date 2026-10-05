@@ -440,8 +440,8 @@ jobs:
       - name: Assert mobile job results
         uses: ./.github/actions/require-job-results
         with:
-          required: ${{ needs.changes.result }}
-          may-skip: ${{ needs.javascript.result }} ${{ needs.android.result }}
+          needs: ${{ toJSON(needs) }}
+          required: changes
 
   ios:
     name: iOS native build
@@ -696,5 +696,5 @@ jobs:
       - name: Assert mobile job results
         uses: ./.github/actions/require-job-results
         with:
-          required: ${{ needs.changes.result }}
-          may-skip: ${{ needs.javascript.result }} ${{ needs.ios.result }}
+          needs: ${{ toJSON(needs) }}
+          required: changes

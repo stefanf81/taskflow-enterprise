@@ -472,8 +472,8 @@ jobs:
       - name: Assert job results
         uses: ./.github/actions/require-job-results
         with:
-          required: ${{ needs.changes.result }}
-          may-skip: ${{ needs.backend.result }} ${{ needs.backend-integration.result }} ${{ needs.package.result }} ${{ needs.contract.result }}
+          needs: ${{ toJSON(needs) }}
+          required: changes
 
   ###########################################################
   # Backend Package
@@ -779,8 +779,8 @@ jobs:
       - name: Assert job results
         uses: ./.github/actions/require-job-results
         with:
-          required: ${{ needs.changes.result }}
-          may-skip: ${{ needs.frontend.result }}
+          needs: ${{ toJSON(needs) }}
+          required: changes
 
   ###########################################################
   # End-to-End Tests
@@ -869,15 +869,6 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: |
-            frontend/package-lock.json
-            shared/schemas/package-lock.json
-
       ##########################################################
       # Download Backend
       ##########################################################
@@ -892,9 +883,10 @@ jobs:
       # Start Backend
       ##########################################################
 
-      # Launch only: JVM startup (~11-18s) overlaps the frontend install, image
-      # build, and Playwright browser restore below; `Wait for Spring Boot`
-      # gates the ingress on it.
+      # Launch only: JVM startup (~11-18s) overlaps the Node setup, frontend
+      # install, image build, and Playwright browser restore below; `Wait for
+      # Spring Boot` gates the ingress on it. Launched before Node setup (which
+      # it does not need) so the JVM gets that step's ~3 s as a head start.
       - name: Start Spring Boot
         id: backend
         uses: ./.github/actions/start-backend
@@ -906,6 +898,15 @@ jobs:
       ##########################################################
       # Frontend image
       ##########################################################
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            shared/schemas/package-lock.json
 
       # The E2E job only needs Playwright from these deps; an exact-match
       # node_modules cache skips the npm upgrade + `npm ci` (~11 s) on a hit.
@@ -921,21 +922,15 @@ jobs:
           name: frontend-dist
           path: frontend/dist/frontend/browser
 
-      - name: Set up Buildx
-        uses: ./.github/actions/prepull-buildkit
-
+      # The runner's default `docker` builder: no BuildKit container to pull
+      # and boot (`prepull-buildkit` cost ~10 s here) and no OCI tarball to
+      # load; the image lands directly in the daemon for `docker run` below.
+      # The former `--cache-from/--cache-to type=gha` flags never took effect
+      # in this `run:` step (no "importing cache manifest" in any log, every
+      # layer rebuilt), because only actions such as build-push-action hand
+      # BuildKit the Actions cache token. The uncached build takes 6-9 s.
       - name: Build production frontend image
-        run: |
-          # ignore-error: a transient GHA cache-export blip (the historical
-          # "error writing layer blob: not_found") must not fail the build.
-          docker buildx build \
-            --cache-from type=gha,scope=frontend-main \
-            --cache-from type=gha,scope=frontend-pr \
-            --cache-from type=gha,scope=frontend-e2e \
-            --cache-to type=gha,mode=max,scope=frontend-e2e,ignore-error=true \
-            --load \
-            --tag taskflow-e2e-frontend \
-            frontend
+        run: docker build --tag taskflow-e2e-frontend frontend
 
       ##########################################################
       # Playwright
@@ -1062,8 +1057,8 @@ jobs:
       - name: Assert job results
         uses: ./.github/actions/require-job-results
         with:
-          required: ${{ needs.changes.result }}
-          may-skip: ${{ needs.package.result }} ${{ needs.frontend.result }} ${{ needs.e2e.result }}
+          needs: ${{ toJSON(needs) }}
+          required: changes
 
   ###########################################################
   # Docker

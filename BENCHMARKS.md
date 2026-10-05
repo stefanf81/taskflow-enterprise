@@ -1722,3 +1722,50 @@ An earlier harness run on the same host measured 9.35 s → 8.34 s. The full-app
 * **`-XX:-UsePerfData`:** a marginal startup gain that breaks `jstat`/`jps`.
 
 **Verification:** the `Dockerfile.x64` image boots under `prod` with liveness/readiness 200, `/api/v1/catalog` and `/api/v1/barbers` 200, Redis cache and rate-limit keys written, and no `ERROR` log lines. The local `Dockerfile` was built with `PLATFORM=linux/amd64` (no arm64 emulator on the host), and its training run and archive validation pass. The build-time `-Xshare:on` validation passes for both images. hadolint passes on `Dockerfile.x64` with the CI ignore list. `ContainerImageBenchmarkTest` locks the configuration.
+
+## ⚡ 57. CI Composite Actions — E2E Without Buildx, Faster Backend Polling & `needs`-Driven Gates
+
+**Goal:** review the six composite actions under `.github/actions/` and remove what their callers measurably pay for.
+
+**Methodology:** baseline = `workflow_dispatch` run [`37228757998`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37228757998) (§53 run B, green). Measurement = `workflow_dispatch` run [`37315126394`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37315126394) on `1ba867a` (`run_tests: true`, every job ran, green). Step timings come from the Actions jobs API and the log timestamps. One sample each, so differences of a few seconds in unrelated steps (service-container init, Playwright) are run-to-run variance.
+
+### Finding: the E2E layer cache never worked
+
+The E2E job set up Buildx (`prepull-buildkit`) only to pass `--cache-from/--cache-to type=gha` to `docker buildx build` in a `run:` step. No E2E log shows an `importing cache manifest` line, and every layer was rebuilt. A `run:` step does not receive the Actions cache token that `docker/build-push-action` hands to BuildKit. `Build Docker (frontend)` uses that action and does import the cache (`importing cache manifest from gha:…`, layers `CACHED`).
+
+The 10 s "Set up Buildx" step in the baseline broke down into 3.9 s for our `docker pull` and 5.2 s for `docker/setup-buildx-action`. The setup action spent ~1.3 s on `docker info`/`buildx version`, 0.85 s on its own `docker pull` of the same image, and 2.4 s booting the builder, including another 0.8 s registry check.
+
+### Results (CI)
+
+| E2E step | Baseline | New |
+| :--- | ---: | ---: |
+| Set up Buildx (`prepull-buildkit`) | 10 s | — (removed) |
+| Build production frontend image | 6 s (`docker buildx build --load`, no cache hit) | 9 s (`docker build`, default builder) |
+| **Image path total** | **16 s** | **9 s** |
+| Wait for Spring Boot | 0 s | 0 s (JVM launched 25 s earlier) |
+| **E2E job** | **87 s** | **75 s** |
+
+About 7 s of the 12 s job difference comes from the image path. The remainder is Playwright (26 s → 20 s) and service-container init (12 s → 10 s), which these changes do not touch. In the 9 s default-builder build, ~1 s is the first `docker` call, 1.6 s resolving the `docker/dockerfile:1.27` frontend and 0.8 s the `alpine` metadata. The image is unpacked straight into the daemon's containerd store (the runner reports `driver-type: io.containerd.snapshotter.v1`), with no OCI tarball load.
+
+| OpenAPI Contract "Start backend" | Baseline | New |
+| :--- | ---: | ---: |
+| Launch + liveness wait | 19 s | 16 s (`Backend ready after 16s`) |
+| Log lines while polling | 9 × `curl: (7) Failed to connect` | 0 |
+
+At a 1 s interval the expected detection lag after readiness is ~0.5 s instead of ~1 s. The rest of the 3 s difference is JVM start variance.
+
+### Adopted
+
+* **E2E builds the ingress image with the default `docker` builder** (`docker build --tag taskflow-e2e-frontend frontend`), the same choice §53 made for `Build Docker (backend)`. `prepull-buildkit` stays on the jobs that use Buildx features: `Build Docker (frontend)` (GHA cache via build-push-action) and `pushdockerimage.yml` (registry push with provenance/SBOM).
+* **E2E launches the backend before Node setup.** It needs only Java and the JAR, so the JVM gets Node setup's ~3 s as a head start. That keeps startup hidden now that ~7 s less work runs ahead of `Wait for Spring Boot`; the wait stayed at 0 s.
+* **`wait-backend` polls every 1 s (was 2 s)** and keeps the expected connection-refused quiet. On a timeout it prints the final curl error and the application log.
+* **`start-backend` resolves `jar-path` to exactly one file.** Previously a glob that matched nothing launched the literal pattern, and a second match was passed to the first JAR as a program argument. Both surfaced only later as "Backend process terminated unexpectedly".
+* **`require-job-results` reads `toJSON(needs)`.** The five gates used to list their dependents a second time in a hand-maintained `may-skip` string; a job added to `needs:` but not to that string would have had its failure masked. The action now asserts every job in `needs` (`required: changes` must be `success`, every other job `success` or `skipped`), prints each result, and names every failing job. Verified locally against 8 cases (all success, docs-only skips, `changes` skipped/failed, two failing dependents, a required job missing from `needs`, empty and non-JSON input). In the CI run, the `Backend` gate logged all five results.
+
+### Reviewed, unchanged
+
+* **`npm-ci`:** in `Frontend build` the npm self-upgrade takes 2.0 s, `shared/schemas` 0.5 s and `frontend` `npm ci` 5.0 s. Running the two installs in parallel would save ≤0.5 s. Caching the upgraded npm would trade the 2 s for a ~1 s cache restore plus a tool-cache overwrite. Neither job is on the critical path, since `Backend Package` gates E2E.
+* **`prepull-buildkit`:** its pull is the retry wrapper around Docker Hub transient errors, and `setup-buildx-action` re-checks the image anyway. Overlapping the pull with earlier steps would hide only ~1–2 s in `Build Docker (frontend)`, which has little work before Buildx.
+* **`upload-sarif`:** a pin-holding wrapper; the processing wait was already removed where the scanner's exit code is the gate (§53).
+
+**Verification:** `actionlint` 1.7.12 passes, including the composite input check of the new `needs`/`required` inputs. shellcheck 0.11.0 passes on every composite `run:` script. The `wait-backend` ready, crash and timeout paths and the `start-backend` 0/1/2-match cases were exercised locally. Run `37315126394` is green with every job, including the three ci.yml gates. The two React Native gates (`android-gate`, `ios-gate`) use the identical call and first run on the next mobile change.
