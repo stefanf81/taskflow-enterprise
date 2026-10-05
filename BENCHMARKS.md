@@ -1662,7 +1662,22 @@ npm: on macOS, an exact hit was within runner noise in these samples (35 s cold 
 * **Expo precompiled third-party modules:** `pod install` logs `RNScreens` and `react-native-safe-area-context` as `building from source (prebuilt tarball not found)`. Using prebuilt tarballs requires self-hosting them behind `EXPO_PRECOMPILED_MODULES_BASE_URL`.
 * **Jest `--maxWorkers=3` instead of `50%` (2 workers on 4 vCPUs):** locally 26.5–28.0 s vs 28.5–32.2 s. A ~2–4 s gain was not worth changing the worker budget.
 
-**Caveats:** the dispatch runs wrote branch-scoped caches, which `main` cannot read. After merge, the first `main` push creates the Linux npm entry, and the next nightly creates the macOS npm and ExpoModulesJSI entries. Until then, pull requests run cold, as before. The pull-request fallback is verified locally, not yet on a CI pull-request run.
+**Caveats:** the dispatch runs wrote branch-scoped caches, which `main` cannot read. After merge, the first `main` push created the Linux npm entry and the first nightly created the macOS npm and ExpoModulesJSI entries (see "Nightly after merge"). The pull-request fallback is verified locally, not yet on a CI pull-request run.
+
+### Nightly after merge
+
+The first scheduled run on `main` after the merge, [`37250132535`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/37250132535) (head `fd58ba0`), passed with all required contexts and confirmed the cache lifecycle:
+
+| | Result |
+| :--- | :--- |
+| Linux npm (`Mobile JavaScript`, Android) | exact hit from the merge push; save skipped; `npm ci` 19 s |
+| macOS npm | miss on the new key, saved (`npm-macOS-ARM64-…`); `npm ci` 43 s |
+| CocoaPods spec cache | exact hit; save skipped |
+| ExpoModulesJSI | miss, **built in 54 s**, saved |
+| `CompileC` / `PhaseScriptExecution` task time | 303.5 s / 75.1 s |
+| `xcodebuild` step / iOS job | 211 s / 5 m 21 s |
+
+This run is the cold-JSI baseline: its `xcodebuild` step (211 s) is not faster than the previous nightly's (182 s, different runner), as expected, because the saving only applies when the cache hits. The next nightly with an unchanged lockfile, and the next Renovate pull request (which falls back to the newest snapshot), are the first runs that can show the hit path outside manual dispatches.
 
 **Verification:** runs 1–4 green, each emitting the required `Mobile JavaScript`, `Android build and test` and `iOS simulator build` contexts. `actionlint` 1.7.12 passes. The build-step shell logic (exit status through the formatter pipe, timing summary, activity-log outcome) was exercised locally against a stub `xcodebuild` for the success and failure paths.
 
