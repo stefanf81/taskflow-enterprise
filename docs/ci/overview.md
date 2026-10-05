@@ -299,8 +299,11 @@ a 3-day release quarantine soak expires to protect against supply-chain attacks.
 Minor updates require manual review (also holding for 3 days to catch immediate
 regressions). Major updates are held for 30 days and require manual review.
 Security vulnerability alerts bypass the release quarantine so CVE patches open
-immediately with a `security` label. Routine lock-file maintenance runs weekly
-on Monday mornings, deduplicating npm workspaces via `npmDedupe`.
+immediately with a `security` label. Routine updates and lock-file maintenance
+run weekly in an `on monday` (UTC) window, deduplicating npm workspaces via
+`npmDedupe`. The window spans the whole day because the daily 22:40 UTC cron
+lands hours late by a lag that varies: exactly one daily run starts on Monday
+whatever the lag, so a week cannot be skipped.
 Patch/pin/digest and minor updates of packages outside any named group are
 batched into `all-patch` / `all-minor`. Those two catch-all rules sit *above* the
 named groups in `packageRules`, because later rules override earlier ones: a
