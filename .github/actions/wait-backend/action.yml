@@ -26,6 +26,7 @@ runs:
         WAIT_TIMEOUT: ${{ inputs.wait-timeout-seconds }}
       run: |
         set -euo pipefail
+        url=http://localhost:8080/actuator/health/liveness
         echo "Waiting for Spring Boot..."
 
         deadline=$(( SECONDS + WAIT_TIMEOUT ))
@@ -36,15 +37,21 @@ runs:
             exit 1
           fi
 
-          # Bounded so a hung connection cannot stall the poll past the deadline.
-          if curl -fsS --connect-timeout 2 --max-time 3 http://localhost:8080/actuator/health/liveness > /dev/null; then
-            echo "Backend ready"
+          # Silent while the port is still closed: a refused connection fails
+          # in ~0 ms and is expected until Tomcat binds. Bounded so a hung
+          # connection cannot stall the poll past the deadline.
+          if curl -fs --connect-timeout 2 --max-time 3 "$url" > /dev/null; then
+            echo "Backend ready after ${SECONDS}s"
             exit 0
           fi
 
-          sleep 2
+          # 1 s (was 2 s) halves the average lag between readiness and
+          # detection, which lands on the critical path whenever startup is
+          # not fully overlapped.
+          sleep 1
         done
 
         echo "Backend failed to start within ${WAIT_TIMEOUT}s" >&2
+        curl -fsS --connect-timeout 2 --max-time 3 "$url" > /dev/null || true
         cat "$LOG_FILE" >&2 || true
         exit 1

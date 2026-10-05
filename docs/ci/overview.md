@@ -145,12 +145,12 @@ Runs Playwright E2E tests against a real, running backend and database.
 
 - **Decoupled dependencies (`needs: [changes, package, frontend]`)**:
   The E2E job depends on the packaged backend JAR and the production frontend bundle — not on the test suite — so Playwright starts as soon as the artifacts exist while unit/integration tests run concurrently in the `Backend build` and `Backend integration` jobs (whose results the required `Backend` gate mirrors).
-- **Overlapped Backend Startup:** `start-backend` runs with `wait: "false"`, so JVM startup (~11–18s) overlaps the frontend `npm ci`, the bundle download, Buildx setup, the image build, and the Playwright browser restore. The `wait-backend` composite then blocks on `/actuator/health/liveness`, before the ingress container starts.
+- **Overlapped Backend Startup:** `start-backend` runs with `wait: "false"` right after the JAR download (before Node setup, which it does not need), so JVM startup (~11–18s) overlaps Node setup, the frontend `npm ci`, the bundle download, the image build, and the Playwright browser restore. The `wait-backend` composite then polls `/actuator/health/liveness` every second before the ingress container starts.
 - **Cached Install:** the job's `npm-ci` call sets `cache-node-modules: "true"`. On an exact-match hit it restores `frontend/node_modules` and `shared/schemas/node_modules` and skips the npm self-upgrade and `npm ci` (~11 s). The key covers OS, architecture, Node and npm versions, install flags, the lockfiles, both `package.json` files (npm 12 `allowScripts`), the `.npmrc` files and the action itself, so any change that would alter the installed tree misses.
 - **Parallel Playwright Workers:** `playwright.config.ts` runs `fullyParallel` with 2 workers. All workers share one client IP, and the suite makes ~32 `/api/v1/auth/*` requests, past production's 20/min per-IP limit. The job therefore sets `APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE=200`, as `verify.sh` and `npm run e2e:docker` already do. The limiter stays enabled. Measured locally on a replica of this stack: 34.6s → 22.3s, with 0 throttled requests (BENCHMARKS.md §53).
 - **Fast Service Readiness:** The PostgreSQL and Redis service containers use `--health-interval 2s --health-timeout 2s --health-retries 30`, so GitHub's `Initialize containers` phase detects readiness within seconds instead of waiting out a 10-second health interval — the E2E job's largest fixed cost.
 - **Single-Stack PR Coverage:** On Pull Requests, any backend or frontend change builds both application artifacts and runs E2E. This intentionally trades the extra untouched-stack build for production integration coverage on every application change. Docker-only changes retain component-specific build behavior.
-- **Production Ingress:** E2E downloads the frontend production bundle, builds the production Nginx image with a BuildKit GHA cache that restores the shared `frontend-main`/`frontend-pr` scopes and writes a dedicated `frontend-e2e` scope, then serves it on port 4200 with the same read-only filesystem and dropped capabilities used by Compose. Playwright sets `E2E_DOCKER=true`, so it tests the production bundle and reverse proxy instead of `ng serve`.
+- **Production Ingress:** E2E downloads the frontend production bundle, builds the production Nginx image with the runner's default `docker` builder (`docker build`, ~5 s uncached), then serves it on port 4200 with the same read-only filesystem and dropped capabilities used by Compose. Playwright sets `E2E_DOCKER=true`, so it tests the production bundle and reverse proxy instead of `ng serve`. The job used to set up Buildx (`prepull-buildkit`, ~10 s) for a `type=gha` layer cache, but that cache never took effect: a `run:` step does not receive the Actions cache token that `docker/build-push-action` passes to BuildKit, so no log ever showed a cache import and every layer was rebuilt (BENCHMARKS.md §57).
 - **Playwright Browser Cache Keyed by Image and Playwright Version:** Playwright browsers are cached under a key derived from the pinned `ubuntu-26.04` image and the resolved `playwright-core` version in `frontend/package-lock.json` (the browser bundles are glibc/OS-specific), so unrelated frontend dependency bumps no longer invalidate ~300 MB of browsers and force `playwright install --with-deps` (12–18s) on every run. The cache key naturally rotates when Playwright or the runner image is upgraded, and `cache-hit` still gates the install step.
 - **Cache-Aware Browser Installation:** Instead of installing all available major browsers (Chromium, Firefox, WebKit), we only install `chromium` (`npx playwright install --with-deps chromium`), which matches the Desktop Chrome browser used in `playwright.config.ts`. The install runs only on a Playwright cache miss, so `--with-deps` does not re-run `apt` on every build.
 - **Direct Playwright Reports Upload:** We upload `spring.log`, `frontend/playwright-report`, and `frontend/test-results` directly using the `upload-artifact` action with default compression and a 7-day retention policy; these text-heavy artifacts compress well, so the default keeps storage down.
@@ -386,22 +386,30 @@ the same implementation is not copied across workflows (and cannot drift):
   (`package-path`, `shared-schemas`, `ignore-scripts` inputs). Opt-in
   `cache-node-modules` restores an exact-match `node_modules` cache and skips
   the install on a hit (used by the E2E job).
-- `start-backend` — generates disposable RSA keys, launches the JAR, and waits
-  for `/actuator/health/liveness`, exposing the PID as an output. `wait: "false"`
-  returns right after launch, so callers can overlap JVM startup with other setup.
-- `wait-backend` — polls `/actuator/health/liveness` for a launched PID, failing
-  fast with the application log if the process exits (used by `start-backend`
-  and by `e2e` after a `wait: "false"` launch).
+- `start-backend` — generates disposable RSA keys, launches the JAR (`jar-path`
+  must match exactly one file), and waits for `/actuator/health/liveness`,
+  exposing the PID as an output. `wait: "false"` returns right after launch, so
+  callers can overlap JVM startup with other setup.
+- `wait-backend` — polls `/actuator/health/liveness` once a second for a
+  launched PID, failing fast with the application log if the process exits
+  (used by `start-backend` and by `e2e` after a `wait: "false"` launch).
 - `prepull-buildkit` — pre-pulls the BuildKit image with bounded retries and
   configures `buildx` with `driver-opts: image=<image>` so the pre-pull and the
-  builder cannot diverge.
+  builder cannot diverge. Only for builds that use Buildx features (the
+  `type=gha` cache via `docker/build-push-action`, registry push with
+  attestations): `Build Docker (frontend)` and `pushdockerimage.yml`. It costs
+  ~7–10 s per job, so `e2e` and `Build Docker (backend)` use the default
+  `docker` builder instead.
 - `upload-sarif` — uploads a SARIF file to Code Scanning under a stable category.
   Optional `wait-for-processing` (default `"true"`); `gitleaks.yml` (the
   scanner's exit code is its gate) and the report-only Trivy FS uploads in
   `security.yml` set it to `"false"`.
-- `require-job-results` — fails unless a required prerequisite result is
-  `success` and every dependent result is `success` or `skipped`; backs the
-  required-status-check aggregator jobs (`required`, `may-skip` inputs).
+- `require-job-results` — backs the required-status-check aggregator jobs.
+  Callers pass `needs: ${{ toJSON(needs) }}` and `required: changes`: the
+  `required` jobs must be `success`, and every other job in `needs` must be
+  `success` or `skipped`. Because it reads the whole `needs` context, a job
+  added to a gate's `needs:` is asserted automatically (there is no second list
+  to forget), and a failure names the job.
 
 Callers reference them as `uses: ./.github/actions/<name>`. Job-level concerns
 such as `permissions` and `services` remain in the calling job.
