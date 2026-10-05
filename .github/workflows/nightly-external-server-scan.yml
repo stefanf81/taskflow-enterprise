@@ -805,7 +805,9 @@ jobs:
           fi
 
           if [[ "${FAIL_ON_TLS_ISSUES}" == "true" ]]; then
-            python3 <<'PY'
+            # `|| failed=1`: under `set -e` a bare failing heredoc aborted the
+            # step here, before the Nikto verdict below was evaluated.
+            python3 <<'PY' || failed=1
           from pathlib import Path
           import json
           import sys
@@ -829,9 +831,6 @@ jobs:
           else:
               print("No CRITICAL or HIGH testssl.sh TLS issues detected.")
           PY
-            if (( $? != 0 )); then
-              failed=1
-            fi
           fi
 
           if [[ -f reports/nikto-failed ]]; then

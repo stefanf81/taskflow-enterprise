@@ -195,9 +195,10 @@ jobs:
         uses: actions/cache@v6
         with:
           path: frontend/.angular/cache
-          key: angular-push-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json', 'shared/schemas/package-lock.json') }}
+          # Same prefix as ci.yml so a publish run reuses CI's warm cache.
+          key: angular-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json', 'shared/schemas/package-lock.json') }}
           restore-keys: |
-            angular-push-${{ runner.os }}-
+            angular-${{ runner.os }}-
 
       - name: Build Production Bundle
         run: npx ng build
@@ -222,7 +223,8 @@ jobs:
 
     # Run regardless of which artifact job was skipped (we only `need` them
     # to gate ordering — downloads are individually conditionally skipped).
-    if: always() && !contains(needs.*.result, 'failure')
+    # `cancelled` too: a cancelled artifact job leaves no artifact to download.
+    if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
 
     runs-on: ubuntu-26.04
     timeout-minutes: 30

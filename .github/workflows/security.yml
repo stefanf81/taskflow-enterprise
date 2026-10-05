@@ -197,7 +197,8 @@ jobs:
           scan-type: fs
           scanners: vuln
           scan-ref: .
-          skip-dirs: frontend,mobile,shared,.git,.gradle,build
+          # `.cache`: trivy-action keeps its DB under $GITHUB_WORKSPACE/.cache/trivy.
+          skip-dirs: frontend,mobile,shared,.git,.gradle,build,.cache
           # The root package-lock.json (workspace tooling: knip) is scanned
           # as its own component below so findings are not misattributed to
           # the Backend component.

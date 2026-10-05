@@ -50,7 +50,7 @@ The filters distinguish backend, frontend, dependency-submission, and Docker com
 
 ## 5. Job: `lint` (Dockerfile Lint)
 
-A lightweight job that runs `hadolint` against `Dockerfile.x64` and `frontend/Dockerfile` to verify linting and compliance. It only runs if Docker-related files were changed. The backend lint intentionally ignores `DL3005` (`apt-get upgrade`) and `DL3008` (apt version pinning) because the runtime stage refreshes Ubuntu security packages on every build instead of pinning versions that would freeze out CVE fixes (the same rationale as the frontend's ignored `DL3018`).
+A lightweight job that runs `hadolint` against `Dockerfile.x64`, the arm64 local-dev `Dockerfile`, and `frontend/Dockerfile` to verify linting and compliance. It only runs if Docker-related files were changed. The backend lint intentionally ignores `DL3005` (`apt-get upgrade`) and `DL3008` (apt version pinning) because the runtime stage refreshes Ubuntu security packages on every build instead of pinning versions that would freeze out CVE fixes (the same rationale as the frontend's ignored `DL3018`).
 **Why:** Fails fast. By running these checks early and separately, we don't waste 5 minutes booting up JVMs and Node environments just to tell a developer they missed a Dockerfile best practice.
 
 ## 6. Job: `backend`
@@ -285,6 +285,11 @@ regressions). Major updates are held for 30 days and require manual review.
 Security vulnerability alerts bypass the release quarantine so CVE patches open
 immediately with a `security` label. Routine lock-file maintenance runs weekly
 on Monday mornings, deduplicating npm workspaces via `npmDedupe`.
+Patch/pin/digest and minor updates of packages outside any named group are
+batched into `all-patch` / `all-minor`. Those two catch-all rules sit *above* the
+named groups in `packageRules`, because later rules override earlier ones: a
+version-coupled group (e.g. Hibernate core + JCache) therefore always gets its
+own PR instead of being folded into `all-patch`.
 Branches use `rebaseWhen: auto` globally to avoid rebase churn, while automerging
 patch PRs override to `rebaseWhen: behind-base-branch` to satisfy branch protection.
 `ci.yml` detects same-repository `renovate/` branches and runs the backend,

@@ -36,7 +36,8 @@ runs:
             exit 1
           fi
 
-          if curl -fsS http://localhost:8080/actuator/health/liveness > /dev/null; then
+          # Bounded so a hung connection cannot stall the poll past the deadline.
+          if curl -fsS --connect-timeout 2 --max-time 3 http://localhost:8080/actuator/health/liveness > /dev/null; then
             echo "Backend ready"
             exit 0
           fi
