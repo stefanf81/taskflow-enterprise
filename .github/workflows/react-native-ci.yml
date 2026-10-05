@@ -354,6 +354,68 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # ccache-action saves a new timestamped snapshot on every run
+  # (`ccache-android-ccache-<os>-<lockfile hash>-<timestamp>`, ~37 MB) and
+  # restores only the newest one through its prefix restore key. Older
+  # snapshots on the same ref are never read again, so keep just the newest.
+  # Pull-request snapshots are left to cleanup-pr-caches.yml, which deletes
+  # every cache of the PR ref when it closes.
+  ccache-retention:
+    name: Prune old Android ccache snapshots
+    needs: android
+    if: github.event_name != 'pull_request' && needs.android.result == 'success'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+
+    permissions:
+      actions: write
+
+    # No checkout: this job only calls the GitHub API.
+    steps:
+      - name: Delete all but the newest snapshot on this ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+
+          stale_ids="$(gh api --method GET --paginate --slurp \
+            "/repos/$REPO/actions/caches" -f per_page=100 -f ref="$REF" \
+            | jq -r '
+              [.[].actions_caches[] | select(.key | startswith("ccache-android-ccache-"))]
+              | sort_by([.created_at, .id])
+              | .[0:-1][] | .id
+            ')"
+
+          if [[ -z "$stale_ids" ]]; then
+            echo "No stale ccache snapshots on $REF."
+            exit 0
+          fi
+
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+          deleted=0
+          failures=0
+          while IFS= read -r id; do
+            if gh api --silent --method DELETE "/repos/$REPO/actions/caches/$id" 2> "$error_file"; then
+              deleted=$((deleted + 1))
+              continue
+            fi
+            error="$(<"$error_file")"
+            # 404: already evicted or deleted by a concurrent run.
+            if [[ "$error" != *"(HTTP 404)"* ]]; then
+              echo "::error::Failed to delete cache $id: $error"
+              failures=$((failures + 1))
+            fi
+          done <<< "$stale_ids"
+
+          echo "Deleted $deleted stale ccache snapshot(s) on $REF." | tee -a "$GITHUB_STEP_SUMMARY"
+          if (( failures > 0 )); then
+            echo "::error::$failures cache deletion(s) failed."
+            exit 1
+          fi
+
   # The branch ruleset requires the exact context "Android build and test".
   # This aggregator owns it: it always reports (so non-mobile PRs are not
   # blocked) and fails when an upstream prerequisite failed, rather than
