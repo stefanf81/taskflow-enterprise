@@ -167,6 +167,19 @@ public class AppointmentServiceImpl implements AppointmentService {
         // "session flushed after exception" / "current transaction is aborted".
         try {
             return createAppointmentInTransaction(request, trimmedKey);
+        } catch (IllegalArgumentException ex) {
+            // A same-key request can commit between the pre-check above and this
+            // attempt's busy-slot read. The after-commit eviction then makes the
+            // reload see the winner's slot as busy, so the attempt rejects the
+            // slot before it ever reaches the unique index. Re-check the key so
+            // that loser gets a verified replay (or 409) instead of a 400.
+            if (trimmedKey != null) {
+                Appointment existing = lookupByIdempotencyKey(trimmedKey);
+                if (existing != null) {
+                    return replayOrConflict(existing, request, trimmedKey);
+                }
+            }
+            throw ex;
         } catch (org.springframework.dao.DataIntegrityViolationException ex) {
             // H1: Inspect the root cause to distinguish constraint violations.
             // Previously, ANY DataIntegrityViolationException was treated as either

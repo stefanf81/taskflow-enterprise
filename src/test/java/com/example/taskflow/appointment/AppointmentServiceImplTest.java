@@ -289,6 +289,66 @@ class AppointmentServiceImplTest {
         verify(appointmentRepository, never()).save(any(Appointment.class));
     }
 
+    /**
+     * A same-key request commits between this request's idempotency pre-check and
+     * its busy-slot read; the after-commit eviction makes the reload see the
+     * winner's slot. The loser must get a verified replay, not a 400.
+     */
+    @Test
+    void testCreateAppointment_SameKeyCommittedBeforeBusySlotRead_ReturnsReplay() {
+        LocalDate bookingDate = LocalDate.now();
+        Appointment winner = stubConcreteBarberWithBusySlot(bookingDate);
+        when(appointmentRepository.findByIdempotencyKey("race-key")).thenReturn(null, winner);
+
+        AppointmentCreateRequest request = new AppointmentCreateRequest(
+                "John Doe", "john@test.com", "123", "Alex the Barber", bookingDate, "10:00", "Haircut");
+
+        AppointmentCreationResult result = appointmentService.createAppointment(request, "race-key");
+
+        assertTrue(result.replayed());
+        assertEquals(42L, result.appointment().id());
+        verify(appointmentRepository, times(2)).findByIdempotencyKey("race-key");
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+    }
+
+    @Test
+    void testCreateAppointment_KeyedRequestSlotTakenByOtherBooking_Rejected() {
+        LocalDate bookingDate = LocalDate.now();
+        stubConcreteBarberWithBusySlot(bookingDate);
+        when(appointmentRepository.findByIdempotencyKey("fresh-key")).thenReturn(null);
+
+        AppointmentCreateRequest request = new AppointmentCreateRequest(
+                "John Doe", "john@test.com", "123", "Alex the Barber", bookingDate, "10:00", "Haircut");
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.createAppointment(request, "fresh-key"));
+        assertTrue(ex.getMessage().contains("already booked"));
+        verify(appointmentRepository, times(2)).findByIdempotencyKey("fresh-key");
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+    }
+
+    /** Stubs a scheduled concrete barber whose 10:00 slot is already busy. */
+    private Appointment stubConcreteBarberWithBusySlot(LocalDate bookingDate) {
+        Barber barber = new Barber();
+        barber.setId(7L);
+        barber.setName("Alex the Barber");
+        BarberSchedule schedule = new BarberSchedule();
+        schedule.setStartTime(java.time.LocalTime.of(9, 0));
+        schedule.setEndTime(java.time.LocalTime.of(17, 0));
+        when(barberRepository.findByName("Alex the Barber")).thenReturn(Optional.of(barber));
+        when(barberScheduleRepository.findByBarberIdAndDayOfWeek(7L, bookingDate.getDayOfWeek().getValue()))
+                .thenReturn(Optional.of(schedule));
+        when(barberTimeOffRepository.findTimeOffForBarberOnDate(7L, bookingDate)).thenReturn(Collections.emptyList());
+        when(appointmentRepository.findDistinctBookingTimes("Alex the Barber", bookingDate, AppointmentStatus.DENIED))
+                .thenReturn(List.of("10:00"));
+
+        Appointment existing = new Appointment(
+                "John Doe", "john@test.com", "123", "Alex the Barber", bookingDate, "10:00", "Haircut");
+        existing.setId(42L);
+        existing.setStatus("PENDING");
+        return existing;
+    }
+
     @Test
     void testCreateAppointment_UnknownBarber_Rejected() {
         AppointmentCreateRequest request = new AppointmentCreateRequest(
