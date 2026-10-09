@@ -1,0 +1,67 @@
+name: Delete PR Caches
+
+# Caches saved by a pull request's runs are scoped to its merge ref
+# (refs/pull/<n>/merge). Only later runs of the same PR can restore them, so
+# once the PR is closed or merged they are dead weight that only waits for
+# GitHub's 7-day idle eviction while counting against the 10 GB repository
+# limit, where they can push out the default branch's caches first.
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Delete closed PR caches
+    # A fork PR's GITHUB_TOKEN is read-only, so deletion would 403. Its caches
+    # still expire through GitHub's idle eviction. This also avoids
+    # pull_request_target and its write token on untrusted events.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+
+    permissions:
+      actions: write
+
+    # No checkout: this job only calls the GitHub API.
+    steps:
+      - name: Delete caches scoped to the PR ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_REF: refs/pull/${{ github.event.pull_request.number }}/merge
+        run: |
+          set -euo pipefail
+
+          ids="$(gh api --method GET --paginate "/repos/$REPO/actions/caches" \
+            -f per_page=100 -f ref="$PR_REF" --jq '.actions_caches[].id')"
+
+          if [[ -z "$ids" ]]; then
+            echo "No caches for $PR_REF."
+            exit 0
+          fi
+
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+          deleted=0
+          failures=0
+          while IFS= read -r id; do
+            if gh api --silent --method DELETE "/repos/$REPO/actions/caches/$id" 2> "$error_file"; then
+              deleted=$((deleted + 1))
+              continue
+            fi
+            error="$(<"$error_file")"
+            # 404: GitHub's own eviction got there first.
+            if [[ "$error" != *"(HTTP 404)"* ]]; then
+              echo "::error::Failed to delete cache $id: $error"
+              failures=$((failures + 1))
+            fi
+          done <<< "$ids"
+
+          echo "Deleted $deleted cache(s) for $PR_REF." | tee -a "$GITHUB_STEP_SUMMARY"
+          if (( failures > 0 )); then
+            echo "::error::$failures cache deletion(s) failed."
+            exit 1
+          fi

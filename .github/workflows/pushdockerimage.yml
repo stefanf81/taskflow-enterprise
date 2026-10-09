@@ -44,10 +44,11 @@ on:
         type: boolean
         default: false
 
+# Least privilege: the resolve/artifact jobs run Gradle and npm (lifecycle
+# scripts, third-party plugins) and need no more than read access. Package and
+# SARIF write tokens are granted to the `push` job only.
 permissions:
   contents: read
-  packages: write
-  security-events: write
 
 concurrency:
   group: taskflow-push-${{ github.workflow }}-${{ github.ref }}
@@ -76,15 +77,27 @@ jobs:
       matrix: ${{ steps.build_matrix.outputs.matrix }}
       image_tag: ${{ steps.tag.outputs.image_tag }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
+      # No checkout: this job only reads workflow inputs.
       - name: Resolve image tag
         id: tag
+        env:
+          INPUT_TAG: ${{ inputs.image_tag }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          tag="${{ inputs.image_tag }}"
-          if [[ -z "$tag" ]]; then
-            tag="${{ github.sha }}"
+          set -euo pipefail
+          tag="${INPUT_TAG:-$COMMIT_SHA}"
+
+          # The input is operator-supplied free text: validate it against Docker
+          # tag syntax before it reaches any later step or registry call.
+          if [[ ! "$tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "::error::image_tag must match [A-Za-z0-9_][A-Za-z0-9_.-]{0,127}"
+            exit 1
+          fi
+          # `<tag>-scan` is the temporary staging tag; a final tag with that
+          # suffix would collide with another run's staging tag.
+          if [[ "$tag" == *-scan ]]; then
+            echo "::error::image_tag must not end in '-scan' (reserved for staging)"
+            exit 1
           fi
           echo "image_tag=$tag" >> "$GITHUB_OUTPUT"
 
@@ -117,6 +130,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Java
         uses: actions/setup-java@v6
@@ -159,6 +174,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -178,9 +195,10 @@ jobs:
         uses: actions/cache@v6
         with:
           path: frontend/.angular/cache
-          key: angular-push-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json', 'shared/schemas/package-lock.json') }}
+          # Same prefix as ci.yml so a publish run reuses CI's warm cache.
+          key: angular-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json', 'shared/schemas/package-lock.json') }}
           restore-keys: |
-            angular-push-${{ runner.os }}-
+            angular-${{ runner.os }}-
 
       - name: Build Production Bundle
         run: npx ng build
@@ -205,10 +223,17 @@ jobs:
 
     # Run regardless of which artifact job was skipped (we only `need` them
     # to gate ordering — downloads are individually conditionally skipped).
-    if: always() && !contains(needs.*.result, 'failure')
+    # `cancelled` too: a cancelled artifact job leaves no artifact to download.
+    if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
 
     runs-on: ubuntu-26.04
     timeout-minutes: 30
+
+    # GHCR push (login + buildx) and Code Scanning upload happen only here.
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
 
     strategy:
       # fail-fast is deliberately false: backend and frontend images are
@@ -220,6 +245,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       ##########################################################
       # GHCR uses lowercase owner. Compute image refs once here so

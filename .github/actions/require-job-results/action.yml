@@ -1,17 +1,19 @@
 name: Assert required job results
 description: >-
-  Fails unless the required prerequisite result is `success` and every
-  dependent result is `success` or `skipped`. Used by the native-build gates so
-  an upstream failure cannot be masked as a skipped — and therefore
+  Fails unless every `required` job's result is `success` and every other job
+  in the caller's `needs` is `success` or `skipped`. Used by the required-check
+  gates so an upstream failure cannot be masked as a skipped — and therefore
   successful — required status check.
 inputs:
-  required:
-    description: Result of a job that must have run successfully.
+  needs:
+    description: >-
+      The calling job's needs context as JSON (the expression `toJSON(needs)`).
+      Every job in it is asserted, so a job added to `needs:` is covered
+      without a second list to keep in sync.
     required: true
-  may-skip:
-    description: Space-separated results that may be `success` or `skipped`.
-    required: false
-    default: ""
+  required:
+    description: Space-separated job IDs from `needs` that must have run successfully.
+    required: true
 runs:
   using: composite
   steps:
@@ -19,29 +21,53 @@ runs:
       shell: bash
       working-directory: ${{ github.workspace }}
       env:
-        REQUIRED_RESULT: ${{ inputs.required }}
-        OPTIONAL_RESULTS: ${{ inputs.may-skip }}
+        NEEDS_JSON: ${{ inputs.needs }}
+        REQUIRED_JOBS: ${{ inputs.required }}
       run: |
         set -euo pipefail
 
-        echo "required=${REQUIRED_RESULT} may-skip='${OPTIONAL_RESULTS}'"
+        declare -A results=()
+        while IFS=$'\t' read -r job result; do
+          results["$job"]="$result"
+        done < <(jq -r 'to_entries[] | [.key, .value.result] | @tsv' <<<"$NEEDS_JSON")
 
-        # Change detection must actually have run: a failed `changes` job
-        # leaves its dependents skipped, and a skipped required check still
-        # reports success to branch protection.
-        if [[ "${REQUIRED_RESULT}" != "success" ]]; then
-          echo "::error::Required prerequisite did not succeed (${REQUIRED_RESULT})"
+        if (( ${#results[@]} == 0 )); then
+          echo "::error::needs is empty or not JSON; pass toJSON(needs)"
           exit 1
         fi
 
-        # Dependents may legitimately be skipped (e.g. non-mobile PRs), but a
-        # real failure must fail the gate.
-        for result in ${OPTIONAL_RESULTS}; do
-          case "${result}" in
-            success|skipped) ;;
-            *)
-              echo "::error::Dependent job did not succeed (${result})"
-              exit 1
-              ;;
-          esac
+        declare -A required=()
+        for job in ${REQUIRED_JOBS}; do
+          if [[ -z "${results[$job]+set}" ]]; then
+            echo "::error::Required job '${job}' is not in needs"
+            exit 1
+          fi
+          required["$job"]=1
         done
+
+        failed=0
+        for job in $(printf '%s\n' "${!results[@]}" | sort); do
+          result="${results[$job]}"
+          echo "${job}=${result}"
+          if [[ -n "${required[$job]+set}" ]]; then
+            # Change detection must actually have run: a failed `changes` job
+            # leaves its dependents skipped, and a skipped required check
+            # still reports success to branch protection.
+            if [[ "$result" != "success" ]]; then
+              echo "::error::Required job '${job}' did not succeed (${result})"
+              failed=1
+            fi
+          else
+            # Dependents may legitimately be skipped (e.g. non-mobile PRs),
+            # but a real failure or cancellation must fail the gate.
+            case "$result" in
+              success|skipped) ;;
+              *)
+                echo "::error::Job '${job}' did not succeed (${result})"
+                failed=1
+                ;;
+            esac
+          fi
+        done
+
+        exit "$failed"
