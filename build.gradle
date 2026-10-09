@@ -141,7 +141,7 @@ dependencies {
 	// Netty — explicit pins so dependency tooling and container scanners resolve
 	// the patched DNS codec version directly.
 	// Originally pinned for GHSA-mfg7-5gfp-c4w3 (DNS Record Decoder memory leak);
-	// bumped to 4.2.17.Final for the latest patch release.
+	// bumped to 4.2.19.Final for the latest patch release.
 	implementation libs.netty.codec.dns
 	// Tomcat embed — explicit pins so dependency tooling and container scanners
 	// resolve the patched version directly. Spring Boot 4.1.1 ships the vulnerable

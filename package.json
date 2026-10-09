@@ -18,6 +18,6 @@
     "verify:all": "./verify.sh"
   },
   "devDependencies": {
-    "knip": "6.39.0"
+    "knip": "6.40.0"
   }
 }
