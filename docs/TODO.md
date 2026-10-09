@@ -10,10 +10,12 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Location:** `src/main/java/com/example/taskflow/auth/AuthController.java:100-115`, `appointment/CustomerController.java:34-43`, `appointment/AppointmentServiceImpl.java:121-137`
 - **Problem:** `POST /api/v1/auth/register` does not verify mailbox ownership. Anyone can register `victim@example.com`, authenticate, and call `GET /api/v1/customer/appointments` to view the victim's full guest booking history (name, phone, dates, services) or `DELETE /api/v1/customer/appointments/{publicId}` to cancel them.
 - **Current State:** Documented by `CustomerOwnershipIntegrationTest.java`, but application logic still binds ownership solely to the self-asserted email string.
+- **Secondary Oracle:** Guest cancellation (`AppointmentServiceImpl.java:460-467`) returns distinct errors — 404 "Appointment booking not found." for an unknown UUID vs 400 "Verification failed..." for an email mismatch — confirming whether a `publicId` exists. The authenticated path (`cancelMyAppointment`, `AppointmentServiceImpl.java:141-148`) already unifies both cases into a single 404.
 - **Remediation:** 
   1. Introduce a high-entropy, cryptographically secure `manageToken` returned on booking creation (`201 Created`), storing only its hash in the database.
   2. Require this token for all guest-initiated cancellations and reviews (`PUT /api/v1/appointments/public/cancel/{publicId}`, `POST /api/v1/reviews/public/{publicId}`).
   3. Require email verification before newly registered accounts can view or claim prior bookings.
+  4. Unify guest-cancel error responses to a single generic message so the endpoint no longer reveals whether a booking UUID exists.
 
 ### 1.2 Production Admin Password Fallback
 - **Location:** `src/main/resources/application.properties:71`, `src/main/resources/application-prod.properties`
@@ -23,6 +25,7 @@ This document tracks unresolved security findings, architectural technical debt,
 ### 1.3 Datastore Host Interface Exposure & Redis Authentication
 - **Location:** `docker-compose.yml:42, 159`, `src/main/resources/application-prod.properties:146-149`
 - **Problem:** PostgreSQL (`5432:5432`) and Redis (`6379:6379`) bind to `0.0.0.0` on the host. Redis runs without `--requirepass`, allowing unauthorized network clients to flush rate limits, inspect cached barber contact details, or poison cache entries.
+- **Evidence:** The official `redis` Docker image disables Redis protected mode at build time (docker-library patches `protected-mode` to `0`), so a published port with no `requirepass` has no compensating control.
 - **Remediation:** 
   1. Remove host `ports:` mapping (or restrict strictly to `127.0.0.1` for local debug workflows).
   2. Configure `--requirepass ${REDIS_PASSWORD}` in `docker-compose.yml` and set `spring.data.redis.password=${REDIS_PASSWORD}` in `application-prod.properties`.
@@ -46,6 +49,16 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Location:** `src/main/java/com/example/taskflow/auth/AuthController.java:157-170`, `src/main/java/com/example/taskflow/auth/TokenProvider.java:41-48`
 - **Problem:** `POST /api/v1/auth/logout` only clears the client-side cookie; native mobile clients have no logout endpoint. Issued tokens remain valid until the 1-hour expiration.
 - **Remediation:** Add a unique `jti` claim to issued JWTs. On logout, store the `jti` in Redis with a TTL matching remaining token lifetime, and validate incoming tokens against this denylist in `SecurityConfig`.
+
+### 1.8 Account-Aware Authentication Throttling
+- **Location:** `src/main/java/com/example/taskflow/core/RateLimiterConfig.java:89-99`, `src/main/java/com/example/taskflow/auth/SecurityConfig.java:226-233`
+- **Problem:** The auth bucket keys solely on the client IP (`rate_limit:<ip>:auth`) and `CustomUserDetailsService` carries no per-account attempt state. A distributed attack (botnet / residential proxies / Tor) stays under the 20 req/min per-IP cap while guessing credentials without bound.
+- **Remediation:** Track failed attempts per account in Redis (e.g. a counter updated from `AuthenticationFailureBadCredentialsEvent`) and apply exponential backoff or a temporary throttle to that account. Do not use permanent lockout — it hands attackers a denial-of-service weapon. Retain the per-IP bucket for volumetric bursts.
+
+### 1.9 Trusted-Proxy Regex Mis-Escaped in Compose
+- **Location:** `docker-compose.yml:86`, `src/main/resources/application-prod.properties:113`
+- **Problem:** The Compose value contains doubled backslashes. YAML applies no escape processing, so the JVM receives a regex whose `\\.` sequences require a literal backslash and matches no IP. Verified with `docker compose config`: the parsed value matches neither `172.18.0.2` nor `127.0.0.1`. Tomcat's `RemoteIpValve` therefore never trusts Nginx's `X-Forwarded-For`, `getRemoteAddr()` returns the Nginx container IP, and every client shares one rate-limit bucket (also corrupting access logs). The inbound-XFF stripping in `frontend/nginx.conf` remains correct; only the trust decision fails.
+- **Remediation:** Use single backslashes in the YAML value (`^172\.([1][6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}$`), keep the scope limited to the actual proxy network, and add a startup or integration assertion that the compiled regex matches the Nginx container address. Apply the same escaping wherever the value is copied — the production value lives in the separate GitOps repository.
 
 ---
 
@@ -117,6 +130,7 @@ This document tracks unresolved security findings, architectural technical debt,
 ### 3.4 Container Hardening Documentation Drift in `AGENTS.md`
 - **Location:** `AGENTS.md` vs `docker-compose.yml`
 - **Problem:** `AGENTS.md` states that "All services completely drop kernel privileges (`cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`)" and mount read-only filesystems. In reality, only `backend` and `frontend` implement these settings; `db`, `redis`, and `jaeger` run with standard defaults.
+- **Related Drift:** `docs/adr/ADR-012-lua-rate-limiter.md` states `server.forward-headers-strategy=framework`, but `application-prod.properties:110` uses `native`; the `RateLimiterConfig` comment referencing Spring's `ForwardedHeaderFilter` is likewise stale on the `native`/`RemoteIpValve` path. Align the ADR and comment with the deployed strategy.
 - **Remediation:** Either harden `db`/`redis`/`jaeger` with non-root execution and capability dropping, or update `AGENTS.md` to accurately reflect that only edge containers are hardened.
 
 ### 3.5 Inactive Lettuce Connection Pool Configuration
@@ -128,6 +142,21 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Location:** `src/main/java/com/example/taskflow/appointment/Barber.java:9`, `catalog/ServiceItem.java:10`, `review/Review.java:11`
 - **Problem:** Entities carry `@Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "...")` annotations, but second-level caching is disabled in Spring Boot properties. The region names match Spring Cache names (`barbers`, `services`), creating a namespace collision risk if 2LC is ever enabled.
 - **Remediation:** Remove the dead `@Cache` annotations or isolate the region names (e.g. `l2-barbers`).
+
+### 3.7 Unauthenticated `/actuator/prometheus`
+- **Location:** `src/main/java/com/example/taskflow/auth/SecurityConfig.java:127-128`, `src/main/resources/application-prod.properties:123`
+- **Problem:** `GET /actuator/prometheus` is `permitAll()` and exposes per-route labels (URI/method/status) plus application metrics. Only `/actuator/health/liveness`, `/actuator/health/readiness`, and this endpoint are unauthenticated; `/actuator/info` and the root health group remain ADMIN-gated.
+- **Remediation:** Confirm the production NetworkPolicy restricts the actuator port to the monitoring namespace (the intended control) or require authentication / a separate management port. Document the dependency so a future Service or port mapping cannot expose it silently.
+
+### 3.8 CSP `style-src 'unsafe-inline'`
+- **Location:** `frontend/Dockerfile:38-51` (build-generated `csp-importmap.conf`)
+- **Problem:** The enforced CSP permits inline styles. This is not equivalent to allowing inline script and no CSS-injection path has been demonstrated, but it prevents full style integrity and is a stepping stone if a script vector ever appears.
+- **Remediation:** Audit Angular's inline-style usage (e.g. `[style.*]` bindings, `ngStyle`) and migrate to `style-src-attr` hashes or nonces; keep `style-src` hashed where possible.
+
+### 3.9 H2 Console `permitAll()`
+- **Location:** `src/main/java/com/example/taskflow/auth/SecurityConfig.java:120`, `src/main/resources/application.properties:45-47`
+- **Problem:** The H2 console path is unauthenticated. Production disables the console entirely (`application-prod.properties:49`) and dev binds it to localhost with `web-allow-others=false`, so there is no current production impact.
+- **Remediation:** Keep the console disabled in production; if it is ever enabled outside dev, gate it behind ADMIN authentication or remove the `permitAll()` rule.
 
 ---
 
