@@ -5,11 +5,13 @@
 // flagged the Jackson families bundled transitively by two build plugins:
 //   - org.springframework.boot.gradle.plugin:4.1.1 -> tools.jackson 3.1.5 (< 3.1.6)
 //   - org.owasp.dependencycheck.gradle.plugin:13.0.0 -> com.fasterxml.jackson 2.22.1 (< 2.22.2)
+//   - org.owasp.dependencycheck.gradle.plugin:13.0.0 -> org.jsoup 1.23.1 (< 1.23.2)
 // These ship inside build tooling, not the shipped JAR, but still surface as
 // Dependabot alerts (GHSA-q4xh-88c3-wmh7, GHSA-gx83-3vf8-gh7j,
-// GHSA-wjgm-6hv5-3cvf). Force the patched releases here without disturbing the
-// runtime pins in the dependency block below. jackson-annotations is excluded:
-// its 2.22 line has no patch releases, and jackson-bom keeps it aligned.
+// GHSA-wjgm-6hv5-3cvf, GHSA-65r4-943x-97jj). Force the patched releases here
+// without disturbing the runtime pins in the dependency block below.
+// jackson-annotations is excluded: its 2.22 line has no patch releases, and
+// jackson-bom keeps it aligned.
 buildscript {
 	configurations.classpath {
 		resolutionStrategy.eachDependency { details ->
@@ -18,6 +20,8 @@ buildscript {
 			} else if (details.requested.group.startsWith('com.fasterxml.jackson')
 					&& details.requested.name != 'jackson-annotations') {
 				details.useVersion '2.22.3'
+			} else if (details.requested.group == 'org.jsoup') {
+				details.useVersion '1.23.2'
 			}
 		}
 	}
