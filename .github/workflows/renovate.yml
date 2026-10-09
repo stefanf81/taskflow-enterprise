@@ -2,9 +2,11 @@ name: Renovate
 
 on:
   schedule:
-    # Fires 22:40 UTC to land execution ~03:40 UTC (GitHub scheduler lag ~5h).
-    # The Dependency Maintenance Audit chains off this run's completion, so it
-    # executes immediately after (~03:40-03:45 UTC) on Mondays.
+    # Fires daily at 22:40 UTC; GitHub's scheduler lag lands execution later
+    # (observed 2.5-3.6h for this cron, i.e. ~01:15-02:20 UTC). renovate.json
+    # schedules branch work "on monday" (UTC), so exactly one daily run lands in
+    # the weekly window whatever the lag is. The Dependency Maintenance Audit
+    # chains off this run's completion and gates on the same Monday.
     - cron: "40 22 * * *"
   workflow_dispatch:
     inputs:
@@ -44,8 +46,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Keep in sync with the config validator image tag in ci.yml (Workflow Lint).
   renovate_version: "44"
-  cache_dir: /tmp/renovate/cache/renovate/repository
+  # Persists both the repository cache (extract results) and the file-based
+  # package/HTTP cache beside it, so datasource lookups revalidate with ETags
+  # instead of refetching from an empty cache on every ephemeral runner.
+  cache_dir: /tmp/renovate/cache/renovate
   cache_key: renovate-cache
 
 jobs:
@@ -54,17 +60,17 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 20
 
+    # The config is validated at PR time (ci.yml, Workflow Lint) rather than
+    # here, where a validator warning from a newer 44.x image would block every
+    # update, security fixes included.
     steps:
-      - name: Checkout repository
+      # Only the config file is needed: Renovate clones the repository itself.
+      - name: Checkout Renovate config
         uses: actions/checkout@v7
-
-      - name: Validate Renovate config
-        run: >
-          docker run --rm
-          -v "$PWD:/usr/src/app" -w /usr/src/app
-          --entrypoint renovate-config-validator
-          ghcr.io/renovatebot/renovate:${{ env.renovate_version }}
-          .github/renovate.json
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/renovate.json
+          sparse-checkout-cone-mode: false
 
       - name: Restore Renovate cache
         id: cache-restore
@@ -84,6 +90,9 @@ jobs:
         uses: renovatebot/github-action@v46.3.6
         with:
           token: ${{ secrets.RENOVATE_TOKEN }}
+          # Also loaded as global config so the global gitAuthor is this repo's
+          # identity; without it Renovate warns on every run about its default
+          # Mend address (repo config would still set the commit author).
           configurationFile: .github/renovate.json
           renovate-version: ${{ env.renovate_version }}
         env:
@@ -95,8 +104,10 @@ jobs:
           RENOVATE_DRY_RUN: ${{ github.event.inputs.dryRun != 'false' && github.event.inputs.dryRun || '' }}
           LOG_LEVEL: ${{ github.event.inputs.logLevel || 'info' }}
 
+      # The key is unique per run, so every successful run saves a fresh entry
+      # and the next run restores the newest one via the prefix.
       - name: Save Renovate cache
-        if: github.event.inputs.repoCache != 'disabled' && steps.cache-restore.outputs.cache-hit != 'true'
+        if: github.event.inputs.repoCache != 'disabled'
         uses: actions/cache/save@v6
         with:
           path: ${{ env.cache_dir }}

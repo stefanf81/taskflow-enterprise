@@ -23,7 +23,7 @@ Mechanics:
 
 * `AppointmentCreationResult(AppointmentResponse, boolean replayed)` conveys the outcome; the controller returns `200 OK` for a verified replay and `201 Created` for a new booking.
 * `IdempotencyConflictException` (core) is mapped to `409` by `GlobalExceptionHandler`.
-* Both the pre-check and the unique-violation catch path run the same verification, so a concurrent duplicate cannot bypass it.
+* The pre-check, the unique-violation catch path and the validation-rejection catch path all run the same verification, so a concurrent duplicate cannot bypass it. The validation-rejection path covers a duplicate whose busy-slot read happens after the original commits: the after-commit `busySlots` eviction makes the reload see the original's slot as busy, so the attempt is rejected before it reaches the unique index, and the key is re-checked before the 400 is returned.
 * The header is bounded to its database column (`@Size(max = 100)`), returning 400 for overlong keys.
 
 Keys remain globally unique (`appointments.idempotency_key`), so the constraint still serializes concurrent duplicates; only the response is now gated by ownership.
@@ -41,7 +41,8 @@ Keys remain globally unique (`appointments.idempotency_key`), so the constraint 
 
 ## Verification
 
-- `AppointmentServiceImplTest`: same-payload replay returns `replayed=true` without saving; email mismatch and payload mismatch throw `IdempotencyConflictException`.
+- `AppointmentServiceImplTest`: same-payload replay returns `replayed=true` without saving; email mismatch and payload mismatch throw `IdempotencyConflictException`; a same-key booking committed before the busy-slot read returns a replay, while a keyed request whose slot belongs to another booking is still rejected.
+- `AppointmentIdempotencyTestcontainersTest`: four concurrent same-key requests on PostgreSQL produce one row, one creator and three verified replays.
 - `AppointmentControllerIntegrationTest`: replay returns 200 with the same id; different customer → 409 with no `customerEmail`; different time → 409; overlong key → 400.
 - `api/openapi.json` documents `200`, `201`, `400`, `409` and the header's `maxLength: 100`.
 

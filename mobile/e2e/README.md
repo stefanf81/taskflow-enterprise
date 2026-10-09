@@ -52,13 +52,13 @@ Both Android and iOS share the exact same E2E test suite file (`e2e/booking.e2e.
 2. **Build Release APK & Test APK (One-Time or After Native Code Changes):**
    ```bash
    npm run e2e:build:android
-   # Executes: JAVA_HOME="/opt/homebrew/opt/openjdk@21" ./android/gradlew -p android assembleRelease assembleAndroidTest -DtestBuildType=release
+   # Executes: JAVA_HOME="/opt/homebrew/opt/openjdk@21" ANDROID_HOME="$HOME/Library/Android/sdk" ./android/gradlew -p android assembleRelease assembleAndroidTest -DtestBuildType=release
    ```
 
 3. **Run Detox E2E Test Suite:**
    ```bash
    npm run e2e:test:android
-   # Executes: detox test --configuration android.emu.release --no-build
+   # Executes: detox test --configuration android.emu.release
    ```
 
 ---
@@ -79,7 +79,7 @@ Both Android and iOS share the exact same E2E test suite file (`e2e/booking.e2e.
 3. **Run Detox E2E Test Suite on iOS Simulator:**
    ```bash
    npm run e2e:test
-   # Executes: detox test --configuration ios.sim.release --no-build
+   # Executes: detox test --configuration ios.sim.release
    ```
 
 ---

@@ -75,6 +75,10 @@ RUN --network=none --mount=type=tmpfs,target=/tmp \
          -Xlog:cds=info -cp application.jar -version
 
 # Health check for standalone docker run and compose service_healthy dependency.
+# Shell form on purpose: `|| exit 1` maps wget's exit codes (4, 8, ...) onto the
+# 0/1 contract Docker defines for health checks. hadolint 2.15 reports DL3025
+# (meant for CMD/ENTRYPOINT) on HEALTHCHECK's CMD too.
+# hadolint ignore=DL3025
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness || exit 1
 
 EXPOSE 8080

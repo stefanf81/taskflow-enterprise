@@ -5,8 +5,8 @@
 ### Prerequisites
 
 - Git
-- OpenJDK 21 (the Gradle wrapper supplies Gradle 9.7.1)
-- Node.js 22.23.2 and npm 11.19.1 (mobile/.nvmrc pins the Node version)
+- OpenJDK 21 (the Gradle wrapper supplies Gradle 9.8.0)
+- Node.js 24.21.0 and npm 12.2.0 (mobile/.nvmrc pins the Node version)
 - Docker Desktop with a running daemon for the Docker stack and PostgreSQL tests
 - At least 5 GB available to Docker Desktop for the full Compose stack
 - OpenSSL, needed to create the local Compose RSA key pair

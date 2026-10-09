@@ -233,13 +233,14 @@ jobs:
         run: |
           python3 <<'PY'
           from pathlib import Path
+          import os
           import xml.etree.ElementTree as ET
 
           summary_lines = [
               "## Network Port Discovery & Surface Audit",
               "",
-              f"- **Target IP:** `{Path('reports/open-ports.csv').parent.name}`",
-              f"- **Configured Expected Ports:** `{Path('reports/unexpected-public-ports.txt').exists()}`",
+              f"- **Target IP:** `{os.environ.get('TARGET_IP', '')}`",
+              f"- **Configured Expected Ports:** `{os.environ.get('EXPECTED_PUBLIC_TCP_PORTS', '')}`",
           ]
 
           service_xml = Path("reports/nmap-services.xml")
@@ -804,7 +805,9 @@ jobs:
           fi
 
           if [[ "${FAIL_ON_TLS_ISSUES}" == "true" ]]; then
-            python3 <<'PY'
+            # `|| failed=1`: under `set -e` a bare failing heredoc aborted the
+            # step here, before the Nikto verdict below was evaluated.
+            python3 <<'PY' || failed=1
           from pathlib import Path
           import json
           import sys
@@ -828,9 +831,6 @@ jobs:
           else:
               print("No CRITICAL or HIGH testssl.sh TLS issues detected.")
           PY
-            if (( $? != 0 )); then
-              failed=1
-            fi
           fi
 
           if [[ -f reports/nikto-failed ]]; then

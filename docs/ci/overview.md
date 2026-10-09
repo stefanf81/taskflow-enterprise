@@ -22,11 +22,13 @@ A daily **schedule** (`0 22 * * *`) runs the full build, test, and Docker build+
 
 ```yaml
 concurrency:
-  group: taskflow-${{ github.workflow }}-${{ github.ref }}
+  group: taskflow-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 ```
 
 **Why:** If a developer (or Renovate) pushes multiple commits to a branch in rapid succession, GitHub Actions cancels the older, now-obsolete pipeline runs. This saves significant compute minutes and prevents a queue of stale builds. `main` is included because merge bursts otherwise queue a full ~6-minute run per commit; the surviving run always verifies the cumulative tree, and required status checks are evaluated per pull request, so cancelling a superseded `main` run has no effect on merge gating.
+
+The **event name is part of the group** so only runs of the same kind supersede each other. Without it, a `push` to `main` shared a group with the nightly `schedule` and with manual `workflow_dispatch` runs on `main` and cancelled them (a `run_tests` dispatch was cancelled two minutes after it started by a merge). `react-native-ci.yml` uses the same event-scoped group.
 
 ## 3. Least-Privilege Permissions (`permissions`)
 
@@ -48,7 +50,7 @@ The filters distinguish backend, frontend, dependency-submission, and Docker com
 
 ## 5. Job: `lint` (Dockerfile Lint)
 
-A lightweight job that runs `hadolint` against `Dockerfile.x64` and `frontend/Dockerfile` to verify linting and compliance. It only runs if Docker-related files were changed. The backend lint intentionally ignores `DL3005` (`apt-get upgrade`) and `DL3008` (apt version pinning) because the runtime stage refreshes Ubuntu security packages on every build instead of pinning versions that would freeze out CVE fixes (the same rationale as the frontend's ignored `DL3018`).
+A lightweight job that runs `hadolint` against `Dockerfile.x64`, the arm64 local-dev `Dockerfile`, and `frontend/Dockerfile` to verify linting and compliance. It only runs if Docker-related files were changed. The backend lint intentionally ignores `DL3005` (`apt-get upgrade`) and `DL3008` (apt version pinning) because the runtime stage refreshes Ubuntu security packages on every build instead of pinning versions that would freeze out CVE fixes (the same rationale as the frontend's ignored `DL3018`).
 **Why:** Fails fast. By running these checks early and separately, we don't waste 5 minutes booting up JVMs and Node environments just to tell a developer they missed a Dockerfile best practice.
 
 ## 6. Job: `backend`
@@ -116,7 +118,7 @@ Submits the complete, deep Java and Gradle dependency tree directly to the GitHu
 
 See [`security.yml`](../../.github/workflows/security.yml) for details on:
 
-- **Trivy Filesystem Scan:** Report-only (`exit-code: 0`, `scanners: vuln`) SARIF upload partitioned across four distinct components: Backend (`.`), Frontend (`frontend/`), Mobile (`mobile/`), and Shared Schemas (`shared/schemas/`), surfaced in the Code Scanning tab with dedicated category namespaces. Because the scans gate nothing, the uploads skip `wait-for-processing` (7–8 s → ~2 s each). Non-component and build directories (`node_modules/`, `build/`, `.gradle/`, `dist/`, `android/`, `ios/`, `.git/`) are explicitly excluded. Severity asymmetry vs. the Docker image hard gate is deliberately maintained — see the inline notes.
+- **Trivy Filesystem Scan:** Report-only (`exit-code: 0`, `scanners: vuln`) SARIF upload partitioned across five distinct scans: Backend (`.`), Frontend (`frontend/`), Mobile (`mobile/`), Shared Schemas (`shared/schemas/`), and Root (repository-root `package-lock.json`), surfaced in the Code Scanning tab with dedicated category namespaces (`trivy-fs-Backend`, `-Frontend`, `-Mobile`, `-Shared`, `-Root`). Because the scans gate nothing, the uploads skip `wait-for-processing` (7–8 s → ~2 s each). Non-component and build directories (`node_modules/`, `build/`, `.gradle/`, `dist/`, `android/`, `ios/`, `.git/`) are explicitly excluded. Severity asymmetry vs. the Docker image hard gate is deliberately maintained — see the inline notes.
 - **Trivy Database Caching:** `trivy-action` manages its own workspace-local
   vulnerability database cache and binary cache. The workflows do not layer a
   second cache over it.
@@ -126,14 +128,16 @@ See [`security.yml`](../../.github/workflows/security.yml) for details on:
 
 > CodeQL analysis (`java-kotlin` + `javascript-typescript`) has also been extracted to `.github/workflows/security.yml`.
 
-Runs deep semantic security analysis in parallel for both languages on every nightly run:
+Runs deep semantic security analysis in parallel across a four-leg matrix on every nightly run:
 
-- **Java/Kotlin (`build-mode: autobuild`):** CodeQL performs its own Gradle build tracking with `actions: write` permission for Gradle build caching — it does not consume the production JAR from the `backend` job, so there is no serialization bottleneck.
+- **Java/Kotlin (`build-mode: manual`):** CodeQL does not use `autobuild` here — an explicit "Build (manual)" step runs `./gradlew --no-daemon testClasses` so the build is deterministic and reproducible. The job's permissions are scoped to `contents: read` + `security-events: write` only; `actions: write` is explicitly **not** granted to this job (a separate cache-prune job elsewhere in the workflow scopes `actions: write` for cache deletion instead — CodeQL itself uses the runner's runtime token for artifact/cache uploads and doesn't need it).
 - **JavaScript/TypeScript (`build-mode: none`):** Scans the Angular 22 and React Native TypeScript sources directly without building, keeping the analysis lightweight.
+- **Python (`build-mode: none`):** Scans any Python scripts in the repository (e.g. tooling/CI helper scripts); runs in parallel with the other legs at no added wall-clock cost.
+- **GitHub Actions (`build-mode: none`):** Scans the repository's own workflow YAML for Actions-specific security issues (e.g. script injection via untrusted event data).
 - **Extended Security Queries:** Configured with `queries: security-extended` to perform deep semantic checks for injection flaws, authentication bypasses, path traversals, and cryptographic weaknesses beyond the minimal default suite.
 - **Matrix Naming & SARIF Category Isolation:** Job matrix displays distinct language names (`CodeQL (${{ matrix.language }})`) and emits SARIF results categorized under `/language:${{ matrix.language }}`. Workspace checkout runs with `persist-credentials: false`.
 
-The standalone workflow has no change-detection dependency — it always scans both languages on every scheduled/manual run.
+The standalone workflow has no change-detection dependency — it always scans all four legs on every scheduled/manual run.
 
 ## 9. Job: `e2e` (End-to-End Tests)
 
@@ -141,12 +145,12 @@ Runs Playwright E2E tests against a real, running backend and database.
 
 - **Decoupled dependencies (`needs: [changes, package, frontend]`)**:
   The E2E job depends on the packaged backend JAR and the production frontend bundle — not on the test suite — so Playwright starts as soon as the artifacts exist while unit/integration tests run concurrently in the `Backend build` and `Backend integration` jobs (whose results the required `Backend` gate mirrors).
-- **Overlapped Backend Startup:** `start-backend` runs with `wait: "false"`, so JVM startup (~11–18s) overlaps the frontend `npm ci`, the bundle download, Buildx setup, the image build, and the Playwright browser restore. The `wait-backend` composite then blocks on `/actuator/health/liveness`, before the ingress container starts.
+- **Overlapped Backend Startup:** `start-backend` runs with `wait: "false"` right after the JAR download (before Node setup, which it does not need), so JVM startup (~11–18s) overlaps Node setup, the frontend `npm ci`, the bundle download, the image build, and the Playwright browser restore. The `wait-backend` composite then polls `/actuator/health/liveness` every second before the ingress container starts.
 - **Cached Install:** the job's `npm-ci` call sets `cache-node-modules: "true"`. On an exact-match hit it restores `frontend/node_modules` and `shared/schemas/node_modules` and skips the npm self-upgrade and `npm ci` (~11 s). The key covers OS, architecture, Node and npm versions, install flags, the lockfiles, both `package.json` files (npm 12 `allowScripts`), the `.npmrc` files and the action itself, so any change that would alter the installed tree misses.
 - **Parallel Playwright Workers:** `playwright.config.ts` runs `fullyParallel` with 2 workers. All workers share one client IP, and the suite makes ~32 `/api/v1/auth/*` requests, past production's 20/min per-IP limit. The job therefore sets `APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE=200`, as `verify.sh` and `npm run e2e:docker` already do. The limiter stays enabled. Measured locally on a replica of this stack: 34.6s → 22.3s, with 0 throttled requests (BENCHMARKS.md §53).
 - **Fast Service Readiness:** The PostgreSQL and Redis service containers use `--health-interval 2s --health-timeout 2s --health-retries 30`, so GitHub's `Initialize containers` phase detects readiness within seconds instead of waiting out a 10-second health interval — the E2E job's largest fixed cost.
 - **Single-Stack PR Coverage:** On Pull Requests, any backend or frontend change builds both application artifacts and runs E2E. This intentionally trades the extra untouched-stack build for production integration coverage on every application change. Docker-only changes retain component-specific build behavior.
-- **Production Ingress:** E2E downloads the frontend production bundle, builds the production Nginx image with a BuildKit GHA cache that restores the shared `frontend-main`/`frontend-pr` scopes and writes a dedicated `frontend-e2e` scope, then serves it on port 4200 with the same read-only filesystem and dropped capabilities used by Compose. Playwright sets `E2E_DOCKER=true`, so it tests the production bundle and reverse proxy instead of `ng serve`.
+- **Production Ingress:** E2E downloads the frontend production bundle, builds the production Nginx image with the runner's default `docker` builder (`docker build`, 6–9 s uncached), then serves it on port 4200 with the same read-only filesystem and dropped capabilities used by Compose. Playwright sets `E2E_DOCKER=true`, so it tests the production bundle and reverse proxy instead of `ng serve`. The job used to set up Buildx (`prepull-buildkit`, ~10 s) for a `type=gha` layer cache, but that cache never took effect: a `run:` step does not receive the Actions cache token that `docker/build-push-action` passes to BuildKit, so no log ever showed a cache import and every layer was rebuilt (BENCHMARKS.md §57).
 - **Playwright Browser Cache Keyed by Image and Playwright Version:** Playwright browsers are cached under a key derived from the pinned `ubuntu-26.04` image and the resolved `playwright-core` version in `frontend/package-lock.json` (the browser bundles are glibc/OS-specific), so unrelated frontend dependency bumps no longer invalidate ~300 MB of browsers and force `playwright install --with-deps` (12–18s) on every run. The cache key naturally rotates when Playwright or the runner image is upgraded, and `cache-hit` still gates the install step.
 - **Cache-Aware Browser Installation:** Instead of installing all available major browsers (Chromium, Firefox, WebKit), we only install `chromium` (`npx playwright install --with-deps chromium`), which matches the Desktop Chrome browser used in `playwright.config.ts`. The install runs only on a Playwright cache miss, so `--with-deps` does not re-run `apt` on every build.
 - **Direct Playwright Reports Upload:** We upload `spring.log`, `frontend/playwright-report`, and `frontend/test-results` directly using the `upload-artifact` action with default compression and a 7-day retention policy; these text-heavy artifacts compress well, so the default keeps storage down.
@@ -197,6 +201,16 @@ Audits the public external perimeter, exposed ports, HTTP/TLS compliance, and we
 - **Fork PRs:** the SARIF upload uses `continue-on-error` for PRs from forks. codeql-action supports fork uploads with the read-only token, but if GitHub ever rejects one, the required check still reflects only the scan.
 - **Hardening:** checkout uses `persist-credentials: false`, the scan gets no `GITHUB_TOKEN`, and `security-events: write` is scoped to the job.
 
+## 9d. Cache Housekeeping
+
+GitHub evicts caches unused for 7 days and evicts least-recently-used entries once a repository passes 10 GB. Three jobs remove entries earlier, where it is known they will never be read again:
+
+- **`cleanup-pr-caches.yml`:** when a same-repository pull request closes or merges, deletes every cache scoped to `refs/pull/<n>/merge`. Only later runs of that PR could restore them. Fork PRs are skipped: their read-only token cannot delete, and `pull_request_target` is deliberately not used.
+- **`react-native-ci.yml` `ccache-retention`:** after a successful non-PR Android build, keeps only the newest `ccache-android-ccache-*` snapshot on the ref. ccache-action saves a new timestamped snapshot (~37 MB) on every run and restores only the newest one.
+- **`security.yml` `trivy-cache-retention`:** keeps the newest Trivy vulnerability and Java DB entry per family.
+
+`delete-old-caches.yml` additionally sweeps anything unused for 3+ days every Saturday.
+
 ## 10. Jobs: `docker-backend` and `docker-frontend`
 
 Compiles secure, production-grade container images for the backend and frontend components.
@@ -244,7 +258,7 @@ Our Docker build configurations (`Dockerfile` and `Dockerfile.x64`) implement st
 
 ## 12. Repository & GHCR Setup
 
-The Docker push workflow (`.github/workflows/pushdockerimage.yml`) pushes images to the GitHub Container Registry (GHCR) using the default `GITHUB_TOKEN`.
+The Docker push workflow (`.github/workflows/pushdockerimage.yml`) pushes images to the GitHub Container Registry (GHCR) using the default `GITHUB_TOKEN`. The workflow default is `contents: read`; only the `push` job is granted `packages: write` and `security-events: write`, so the jobs that run Gradle and npm hold no write token. The `image_tag` input is passed through `env` and validated against Docker tag syntax (and must not end in `-scan`, the staging suffix) before use.
 
 ### Workflow permissions
 
@@ -270,10 +284,17 @@ uses the `RENOVATE_TOKEN` secret instead of `GITHUB_TOKEN`, because pull
 requests created with `GITHUB_TOKEN` require manual workflow approval. The
 current secret is a PAT with repository and workflow access so Renovate can
 write branches, pull requests, issues, statuses, and GitHub Actions updates.
-The workflow includes pre-flight schema validation via
-`renovate-config-validator`, repository caching (`actions/cache`) for both the
-Renovate repository cache and the validator's npm/npx download, and interactive
-`workflow_dispatch` inputs (`dryRun`, `logLevel`, `repoCache`).
+The workflow checks out only `.github/renovate.json` (sparse), which the action
+also loads as global config so the global `gitAuthor` is this repository's
+identity; Renovate clones the repository itself. It persists Renovate's cache
+directory (`actions/cache`) across runs: the repository cache (extract results)
+and the file-based package/HTTP cache, so datasource lookups revalidate with
+ETags instead of starting cold on every ephemeral runner. It also offers
+interactive `workflow_dispatch` inputs (`dryRun`, `logLevel`, `repoCache`). The
+config is validated as repository config (`renovate-config-validator
+--no-global`) in `ci.yml`'s Workflow Lint job on pull requests that touch it and
+on nightly runs, not before each Renovate run, where a validator warning from a
+newer Renovate image would block every update, security fixes included.
 
 Renovate opens reviewable PRs for all dependency updates. Ordinary patch, pin,
 and digest updates enable platform automerge after required CI checks pass and
@@ -281,15 +302,23 @@ a 3-day release quarantine soak expires to protect against supply-chain attacks.
 Minor updates require manual review (also holding for 3 days to catch immediate
 regressions). Major updates are held for 30 days and require manual review.
 Security vulnerability alerts bypass the release quarantine so CVE patches open
-immediately with a `security` label. Routine lock-file maintenance runs weekly
-on Monday mornings, deduplicating npm workspaces via `npmDedupe`.
-Branches use `rebaseWhen: auto` globally to avoid rebase churn, while automerging
-patch PRs override to `rebaseWhen: behind-base-branch` to satisfy branch protection.
+immediately with a `security` label. Routine updates and lock-file maintenance
+run weekly in an `on monday` (UTC) window, deduplicating npm workspaces via
+`npmDedupe`. The window spans the whole day because the daily 22:40 UTC cron
+lands hours late by a lag that varies: exactly one daily run starts on Monday
+whatever the lag, so a week cannot be skipped.
+Patch/pin/digest and minor updates of packages outside any named group are
+batched into `all-patch` / `all-minor`. Those two catch-all rules sit *above* the
+named groups in `packageRules`, because later rules override earlier ones: a
+version-coupled group (e.g. Hibernate core + JCache) therefore always gets its
+own PR instead of being folded into `all-patch`.
+Branches use a single global `rebaseWhen: auto` to avoid rebase churn; there is no
+per-rule override to `behind-base-branch` for automerging patch PRs.
 `ci.yml` detects same-repository `renovate/` branches and runs the backend,
 frontend, Testcontainers, and Playwright suites regardless of path filters.
-`react-native-ci.yml` path-filters pull requests (mobile, shared schemas, API
-contract, and the sync script) so unrelated PRs skip the mobile JavaScript
-check, and runs Android and iOS native jobs for same-repository Renovate and
+`react-native-ci.yml`'s `pull_request` trigger is deliberately **unfiltered** (a `paths:` filter on the trigger would make unrelated PRs show the required check as permanently "Expected" under branch protection). Instead, filtering happens via an internal `changes` job that computes whether mobile-relevant files changed (mobile, shared schemas, API
+contract, and the sync script); each downstream job's own `if:` then skips on
+unrelated PRs, and runs Android and iOS native jobs for same-repository Renovate and
 `maintenance/expo-sdk` branches. Its concurrency group includes the event name
 and only cancels pull-request runs, so a push to `main` cannot cancel the
 nightly native build. Its npm, CocoaPods and ExpoModulesJSI caches are saved
@@ -357,22 +386,30 @@ the same implementation is not copied across workflows (and cannot drift):
   (`package-path`, `shared-schemas`, `ignore-scripts` inputs). Opt-in
   `cache-node-modules` restores an exact-match `node_modules` cache and skips
   the install on a hit (used by the E2E job).
-- `start-backend` — generates disposable RSA keys, launches the JAR, and waits
-  for `/actuator/health/liveness`, exposing the PID as an output. `wait: "false"`
-  returns right after launch, so callers can overlap JVM startup with other setup.
-- `wait-backend` — polls `/actuator/health/liveness` for a launched PID, failing
-  fast with the application log if the process exits (used by `start-backend`
-  and by `e2e` after a `wait: "false"` launch).
+- `start-backend` — generates disposable RSA keys, launches the JAR (`jar-path`
+  must match exactly one file), and waits for `/actuator/health/liveness`,
+  exposing the PID as an output. `wait: "false"` returns right after launch, so
+  callers can overlap JVM startup with other setup.
+- `wait-backend` — polls `/actuator/health/liveness` once a second for a
+  launched PID, failing fast with the application log if the process exits
+  (used by `start-backend` and by `e2e` after a `wait: "false"` launch).
 - `prepull-buildkit` — pre-pulls the BuildKit image with bounded retries and
   configures `buildx` with `driver-opts: image=<image>` so the pre-pull and the
-  builder cannot diverge.
+  builder cannot diverge. Only for builds that use Buildx features (the
+  `type=gha` cache via `docker/build-push-action`, registry push with
+  attestations): `Build Docker (frontend)` and `pushdockerimage.yml`. It costs
+  ~7–10 s per job, so `e2e` and `Build Docker (backend)` use the default
+  `docker` builder instead.
 - `upload-sarif` — uploads a SARIF file to Code Scanning under a stable category.
   Optional `wait-for-processing` (default `"true"`); `gitleaks.yml` (the
   scanner's exit code is its gate) and the report-only Trivy FS uploads in
   `security.yml` set it to `"false"`.
-- `require-job-results` — fails unless a required prerequisite result is
-  `success` and every dependent result is `success` or `skipped`; backs the
-  required-status-check aggregator jobs (`required`, `may-skip` inputs).
+- `require-job-results` — backs the required-status-check aggregator jobs.
+  Callers pass `needs: ${{ toJSON(needs) }}` and `required: changes`: the
+  `required` jobs must be `success`, and every other job in `needs` must be
+  `success` or `skipped`. Because it reads the whole `needs` context, a job
+  added to a gate's `needs:` is asserted automatically (there is no second list
+  to forget), and a failure names the job.
 
 Callers reference them as `uses: ./.github/actions/<name>`. Job-level concerns
 such as `permissions` and `services` remain in the calling job.
