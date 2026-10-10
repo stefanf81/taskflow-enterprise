@@ -252,7 +252,7 @@ Our Docker build configurations (`Dockerfile` and `Dockerfile.x64`) implement st
   - Validates archive mapping at image build time using `--mount=type=tmpfs,target=/tmp` and `-Xshare:on`.
   - Mounts the shared archive at runtime via sizing-agnostic `CMD` arguments `"-XX:SharedArchiveFile=application.jsa"` and `"-Xshare:auto"`, launching the extracted JAR directly with `"-jar", "application.jar"`.
   - **Results:** ~90% of `prod` startup classes (21,322 of 23,611) are mapped directly from the archive: 8.0 s median cold start vs 12.9 s without CDS and 9.35 s with the previous trimmed training context (BENCHMARKS.md §56).
-- **Slim production runtime (`Dockerfile.x64`):** purges `curl`, `wget`, `gnupg` and their 30 dependencies before the package refresh, and strips setuid/setgid bits. Kubernetes probes must therefore be `httpGet`. The local `Dockerfile` keeps `wget` for its `HEALTHCHECK`.
+- **Slim production runtime (`Dockerfile.x64`):** purges `curl`, `wget`, `gnupg` and their 30 dependencies before the package refresh, and strips setuid/setgid bits. Kubernetes probes must therefore be `httpGet`. The local `Dockerfile` keeps `wget` for its `HEALTHCHECK`. The same layer also removes the base's unused Pebble service manager (`/usr/bin/pebble` — a static Go binary apt cannot patch — plus `/var/lib/pebble`), eliminating the 3 HIGH Go-stdlib findings that failed the 2026-10-10 scheduled image scan; the locally rebuilt image reports 0 fixable HIGH/CRITICAL (BENCHMARKS.md §56).
 
 ---
 

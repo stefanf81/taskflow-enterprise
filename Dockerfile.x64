@@ -68,6 +68,12 @@ FROM java-base AS runtime
 # Kubernetes probes must be httpGet rather than exec curl/wget. Purge them
 # before the upgrade so they are neither refreshed nor left for an intruder,
 # then drop setuid/setgid bits in case a pod is admitted with escalation.
+# The base also ships Canonical's Pebble service manager at /usr/bin/pebble
+# (not dpkg-managed, so apt cannot patch it) and a world-writable
+# /var/lib/pebble state directory. Nothing starts either one; its static Go
+# binary can only be fixed by an upstream rebuild, and Go stdlib 1.26.7 tripped
+# the Trivy HIGH gate (CVE-2026-97031/78667/78669, fixed upstream in
+# 1.26.9/1.27.2), so remove both.
 ARG APT_BUST=stable
 RUN : "${APT_BUST}" \
     && apt-get update \
@@ -75,6 +81,8 @@ RUN : "${APT_BUST}" \
     && DEBIAN_FRONTEND=noninteractive apt-get -y upgrade \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
     && rm -rf /var/lib/apt/lists/* \
+    && rm -f /usr/bin/pebble \
+    && rm -rf /var/lib/pebble \
     && find / -xdev -type f -perm /6000 -exec chmod a-s {} +
 
 # Stable dependencies first; root-owned application files are readable but not

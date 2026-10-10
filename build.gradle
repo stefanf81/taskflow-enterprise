@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.PathSensitivity
+
 // Plugin (buildscript) classpath hardening.
 //
 // Dependabot scans the Gradle plugin classpath (attributed to settings.gradle,
@@ -281,6 +283,12 @@ tasks.register("benchmarkTest", Test) {
 	maxParallelForks = 1
 	environment "SPRING_SECURITY_PASSWORD", "admin-password"
 	systemProperty "spring.cache.type", "simple"
+	// ContainerImageBenchmarkTest asserts these files' contents directly.
+	// Declared as inputs so a Dockerfile- or doc-only edit invalidates the
+	// up-to-date check and the build cache instead of reusing a stale result.
+	inputs.files("Dockerfile", "Dockerfile.x64", "BENCHMARKS.md")
+			.withPropertyName("containerImageAssertions")
+			.withPathSensitivity(PathSensitivity.RELATIVE)
 	testLogging {
 		showStandardStreams = true
 		showExceptions = true

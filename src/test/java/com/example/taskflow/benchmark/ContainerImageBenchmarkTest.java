@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -56,18 +59,24 @@ class ContainerImageBenchmarkTest {
 
         String d = Files.readString(Path.of("Dockerfile"));
         String dx = Files.readString(Path.of("Dockerfile.x64"));
+        String dxRun = runtimeInstructions(dx, "RUN");
 
-        boolean purged = dx.contains("apt-get purge -y --auto-remove curl wget gnupg");
-        boolean setuidStripped = dx.contains("-perm /6000 -exec chmod a-s");
+        boolean purged = dxRun.contains("apt-get purge -y --auto-remove curl wget gnupg");
+        boolean setuidStripped = dxRun.contains("-perm /6000 -exec chmod a-s");
         boolean purgeBeforeUpgrade = purged
-                && dx.indexOf("apt-get purge") < dx.indexOf("apt-get -y upgrade");
-        boolean localKeepsWget = !d.contains("apt-get purge") && d.contains("CMD wget");
+                && dxRun.indexOf("apt-get purge") < dxRun.indexOf("apt-get -y upgrade");
+        boolean localKeepsWget = !runtimeInstructions(d, "RUN").contains("apt-get purge")
+                && runtimeInstructions(d, "HEALTHCHECK").contains("CMD wget");
+        boolean pebbleRemoved = dxRun.contains("rm -f /usr/bin/pebble")
+                && dxRun.contains("rm -rf /var/lib/pebble");
 
         System.out.println("  Dockerfile.x64 purges curl/wget/gnupg: " + purged);
         System.out.println("  Purge runs before the package refresh: " + purgeBeforeUpgrade);
         System.out.println("  setuid/setgid bits stripped: " + setuidStripped);
         System.out.println("  Local Dockerfile keeps wget for HEALTHCHECK: " + localKeepsWget);
-        System.out.println("  Measured: 141 -> 109 packages, 11 -> 0 setuid binaries, Trivy 32 -> 31 CVEs");
+        System.out.println("  Unmanaged pebble Go binary + state dir removed: " + pebbleRemoved);
+        System.out.println("  Measured: 141 -> 109 packages, 11 -> 0 setuid binaries, Trivy 32 -> 31 CVEs; "
+                + "pebble 3 HIGH (CI run 38013091067) -> 0 fixable HIGH/CRITICAL (rebuilt image, local Trivy 0.75.0)");
         System.out.println("  ✓ §56 prod image slimming verified");
         System.out.println("=".repeat(80));
 
@@ -75,6 +84,48 @@ class ContainerImageBenchmarkTest {
         assertTrue(purgeBeforeUpgrade, "purge before apt-get upgrade so removed packages are not refreshed");
         assertTrue(setuidStripped, "Dockerfile.x64 must strip setuid/setgid bits (§56)");
         assertTrue(localKeepsWget, "local Dockerfile HEALTHCHECK needs wget (P1-6 §47)");
+        assertTrue(pebbleRemoved, "Dockerfile.x64 must remove the unmanaged pebble Go binary — "
+                + "apt cannot patch its Go stdlib (CVE-2026-97031/78667/78669) and the Trivy gate is HIGH/CRITICAL");
+    }
+
+    /**
+     * Returns the java-base runtime stage's uncommented instructions with line
+     * continuations folded, stopping at the next FROM. A commented-out command,
+     * a command in another stage, or text in a non-executed instruction (e.g.
+     * LABEL) therefore cannot satisfy the slimming assertions.
+     */
+    private static List<String> runtimeStageInstructions(String dockerfile) {
+        List<String> instructions = new ArrayList<>();
+        boolean inRuntime = false;
+        StringBuilder current = null;
+        for (String rawLine : dockerfile.lines().toList()) {
+            String line = rawLine.strip();
+            if (line.isEmpty() || line.startsWith("#")) {
+                continue;
+            }
+            if (!inRuntime) {
+                inRuntime = line.matches("FROM\\s+\\S+\\s+AS\\s+runtime");
+                continue;
+            }
+            if (current == null && line.startsWith("FROM ")) {
+                break;
+            }
+            current = current == null ? new StringBuilder(line) : current.append(' ').append(line);
+            if (!line.endsWith("\\")) {
+                instructions.add(current.toString());
+                current = null;
+            }
+        }
+        assertTrue(inRuntime, "every Dockerfile must declare a runtime stage");
+        assertNull(current, "the runtime stage must not end in an unfinished line continuation");
+        return instructions;
+    }
+
+    /** Joins the runtime stage instructions that start with the given directive. */
+    private static String runtimeInstructions(String dockerfile, String directive) {
+        return runtimeStageInstructions(dockerfile).stream()
+                .filter(instruction -> instruction.startsWith(directive + " "))
+                .collect(Collectors.joining("\n"));
     }
 
     private static boolean trainsFullApplication(String dockerfile) {
