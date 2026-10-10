@@ -86,8 +86,13 @@ jobs:
         if: steps.cache-restore.outputs.cache-matched-key != ''
         run: sudo chown -R 12021:0 /tmp/renovate/
 
+      # Pinned to the v46.3.7 commit: this action receives the write-capable
+      # RENOVATE_TOKEN, so a retargeted tag is a real supply-chain risk.
+      # CodeQL's security-extended actions/unpinned-tag query flags mutable
+      # refs; Renovate's github-actions manager keeps the digest current from
+      # the version comment below.
       - name: Run Renovate
-        uses: renovatebot/github-action@v46.3.7
+        uses: renovatebot/github-action@230ce922b08968d0a4f6f70f295601daff09ef1d # v46.3.7
         with:
           token: ${{ secrets.RENOVATE_TOKEN }}
           # Also loaded as global config so the global gitAuthor is this repo's
