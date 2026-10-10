@@ -6,6 +6,75 @@ All benchmarks were run locally on an **Apple M4 Pro (14-Core, AArch64)** utiliz
 
 ---
 
+## 📑 Table of Contents
+
+- [Frameworks & Performance Tweaks Inventory](#️-frameworks--performance-tweaks-inventory)
+- **☕ JVM, Garbage Collection & Runtime Tuning**
+  - [§1. The JVM & Garbage Collection (G1GC vs ParallelGC)](#-1-the-jvm--garbage-collection)
+  - [§2. JIT Compiler Distribution (C1 vs C2)](#-2-jit-compiler-distribution)
+  - [§3. Threading Model & Web Server](#-3-threading-model--web-server)
+  - [§12. Apple M4 Pro Silicon Custom Tuning](#-12-apple-m4-pro-silicon-custom-tuning)
+  - [§13. x64 / AMD Ryzen 5 Custom Tuning](#-13-x64--amd-ryzen-5-custom-tuning)
+  - [§30. G1GC vs Generational ZGC on Allocation-Heavy Endpoints](#-30-g1gc-vs-generational-zgc-on-allocation-heavy-endpoints)
+  - [§32. Virtual Threads vs Platform Threads (Mixed Workload)](#-32-virtual-threads-vs-platform-threads-io-bound-mixed-workload)
+  - [§35. G1GC Performance on Allocation-Heavy REST Paths](#-35-g1gc-performance-on-allocation-heavy-rest-paths)
+  - [§36. CDS (Class Data Sharing) Startup Measurement](#-36-cds-class-data-sharing-startup-measurement)
+  - [§43. JVM Diagnostics — HeapDump, GC Log & Container Support (P1-2)](#-43-jvm-diagnostics--heapdump-gc-log--container-support-p1-2)
+  - [§51. glibc Allocator & Huge-Page Tuning on Ubuntu Base (MALLOC_ARENA_MAX)](#-51-glibc-allocator--huge-page-tuning-on-the-ubuntu-base)
+  - [§56. CDS Training Coverage & Production Image Slimming](#-56-cds-training-coverage--production-image-slimming)
+- **🗄️ Database, Hibernate & Connection Pooling**
+  - [§5. Database Connection Pooling (HikariCP)](#-5-database-connection-pooling-hikaricp)
+  - [§6. Lazy Connection Fetching Under Pool Saturation](#-6-lazy-connection-fetching-under-pool-saturation)
+  - [§16. PostgreSQL 18 Parallel Engine (Maintenance)](#-16-postgresql-18-parallel-engine-database-maintenance)
+  - [§18. PostgreSQL Client-Side PreparedStatement Caching](#-18-postgresql-client-side-preparedstatement-caching-jdbc-parsing)
+  - [§19. HikariCP Connection Pool (Leak Detection Overhead)](#-19-hikaricp-connection-pool-leak-detection-overhead)
+  - [§22. Hibernate Query Engine (IN-Clause Cache Explosion)](#-22-hibernate-query-engine-in-clause-cache-explosion)
+  - [§23. Hibernate Query Plan Cache (AST Recompilation)](#-23-hibernate-query-plan-cache-ast-recompilation)
+  - [§24. PostgreSQL Production Memory, Checkpoint & WAL Tuning](#-24-postgresql-production-memory-checkpoint--wal-tuning)
+  - [§25. Hibernate Fetch Size, Query Timeout & Hardening](#-25-hibernate-fetch-size-query-timeout--production-hardening)
+  - [§31. Hibernate 2nd-Level Cache vs Spring @Cacheable vs No Cache](#-31-hibernate-2nd-level-cache-vs-spring-cacheable-vs-no-cache)
+  - [§33. HikariCP Pool Size Sweep Under Virtual Threads](#-33-hikaricp-pool-size-sweep-under-virtual-threads)
+  - [§34. DTO Projection vs Entity Loading (Read-Heavy Endpoints)](#-34-dto-projection-vs-entity-loading-read-heavy-endpoints)
+  - [§41. Partial Unique Slot Index — Anti Double-Booking (P0-4 V21/V25)](#-41-partial-unique-slot-index--anti-double-booking-p0-4-v21v25)
+  - [§50. PgBouncer & Production Pool Sizing Ceiling (P2)](#-50-pgbouncer--production-pool-sizing-documentation-p2)
+- **📦 Caching, Serialization & Rate Limiting**
+  - [§4. JSON Serialization (Reflection vs Bytecode)](#-4-json-serialization-reflection-vs-bytecode)
+  - [§17. Netty Off-Heap Memory Pooling (Socket I/O & Caching)](#-17-netty-off-heap-memory-pooling-socket-io--caching)
+  - [§21. Jackson JSON Library (Serialization Format)](#-21-jackson-json-library-serialization-format--formatting-traps)
+  - [§38. Bounded Async Executor (P0-1)](#-38-bounded-async-executor-p0-1)
+  - [§39. Reference Data Caching — Barbers & Services (P0-2)](#-39-reference-data-caching--barbers--services-p0-2)
+  - [§40. Lua-Atomic Rate Limiter (P0-3)](#-40-lua-atomic-rate-limiter-p0-3)
+  - [§44. HTTP Cache-Control Headers — API Responses (P1-3)](#-44-http-cache-control-headers--api-responses-p1-3)
+- **🌐 Network, Proxy & Compression**
+  - [§11. Nginx Reverse Proxy (Connection Pooling)](#-11-nginx-reverse-proxy-connection-pooling)
+  - [§14. Frontend-Backend Network Hyper-Optimization](#-14-frontend-backend-network-hyper-optimization)
+  - [§20. Tomcat Embedded Server (Thread Pre-Warming & Burst Latency)](#-20-tomcat-embedded-server-thread-pre-warming--burst-latency)
+  - [§27. Nginx vs Tomcat Compression Offloading](#-27-nginx-vs-tomcat-compression-offloading)
+  - [§29. Brotli vs Gzip Edge Compression Benchmark](#-29-brotli-vs-gzip-edge-compression-benchmark)
+  - [§37. Nginx Backend Proxy Protocol](#-37-nginx-backend-proxy-protocol)
+  - [§42. Nginx Immutable Hashed Assets (P1-1)](#-42-nginx-immutable-hashed-assets-p1-1)
+- **🅰️ Client Architecture (Web & Mobile)**
+  - [§26. Angular Per-Chunk Bundle Budget](#-26-angular-per-chunk-bundle-budget)
+  - [§28. Angular Client-Side Browser Benchmarks (Puppeteer)](#-28-angular-client-side-browser-benchmarks-puppeteer)
+  - [§45. Mobile QueryClient & API Timeout Tuning (P1-4)](#-45-mobile-queryclient--api-timeout-tuning-p1-4)
+  - [§49. Tightened Core Web Vitals Budgets & Lookbook Performance (P2)](#-49-tightened-core-web-vitals-budgets--lookbook-performance-p2)
+- **🐳 Containers, Observability & CI/CD**
+  - [§7. Observability Overhead (OTel Sampling)](#-7-observability-overhead)
+  - [§8. Logging Architecture (AsyncAppender)](#-8-logging-architecture)
+  - [§9. Container OS & Security (Ubuntu vs Alpine)](#-9-container-os--security-ubuntu-vs-alpine)
+  - [§10. Docker Architecture (Fat JAR vs Layered)](#-10-docker-architecture-fat-jar-vs-elite-layered)
+  - [§15. Gradle Build Tool (Developer Velocity Loop)](#-15-gradle-build-tool-developer-velocity-loop)
+  - [§46. Micrometer Histograms & SLO Buckets (P1-5)](#-46-micrometer-histograms--slo-buckets-p1-5)
+  - [§47. Dockerfile HEALTHCHECK (P1-6 Local)](#-47-dockerfile-healthcheck-p1-6--local)
+  - [§48. k6 Ramping Load Profile (P2)](#-48-k6-ramping-load-profile-p2)
+  - [§52. React Native CI — Native Build Caching & Parallelization](#-52-react-native-ci--native-build-caching--job-parallelization)
+  - [§53. CI/CD Critical Path — Job Split & Test JVM Tuning](#-53-cicd-critical-path--job-split-backend-image-build--test-jvm-tuning)
+  - [§54. Secret Scanning — Direct Gitleaks CLI](#-54-secret-scanning--direct-gitleaks-cli)
+  - [§55. React Native CI — Lockfile-PR Caches & ExpoModulesJSI Reuse](#-55-react-native-ci--lockfile-pr-caches-expomodulesjsi-reuse--readable-ios-logs)
+  - [§57. CI Composite Actions — E2E Without Buildx & Fast Backend Polling](#-57-ci-composite-actions--e2e-without-buildx-faster-backend-polling--needs-driven-gates)
+
+---
+
 ## 🛠️ Frameworks & Performance Tweaks Inventory
 
 The **TaskFlow Enterprise** stack is fully optimized across every layer. Below is the truly exhaustive, production-grade inventory of every framework, library, and tool we utilize, along with the exact high-performance tunings and configurations applied to each:

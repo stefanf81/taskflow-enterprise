@@ -121,8 +121,8 @@ Security scans (filesystem lints, container image vulnerability scans, and DAST 
 - **Container Hardening & Zero-Trust**:
   - **Numeric UIDs**: Backend containers are configured with a hardcoded, unprivileged numeric UID (`10001:10001`) to comply with strict Kubernetes Pod Security Standards (PSS).
   - **Zero-Trust Networks**: `docker-compose.yml` isolates the DB and Cache on the `backend-tier` network. The Nginx reverse proxy is on the `frontend-tier`. The backend bridges both. The frontend cannot physically talk to the database.
-  - **Read-Only Root**: Containers mount read-only filesystems with ephemeral directories mounted as `tmpfs` (e.g., `/tmp`, `/var/cache/nginx`), preventing runtime binary tampering.
-  - **Dropped Capabilities**: All services completely drop kernel privileges (`cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`).
+  - **Read-Only Root**: Application containers (`backend`, `frontend`) mount read-only filesystems with ephemeral directories mounted as `tmpfs` (e.g., `/tmp`, `/var/cache/nginx`), preventing runtime binary tampering.
+  - **Dropped Capabilities**: Edge application containers completely drop kernel privileges (`cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`); datastores (`db`, `redis`, `jaeger`) use standard container defaults.
   - **Container Lifecycle**: `docker-compose.yml` uses `restart: "no"` so containers do not linger across system/Docker reboots. Verification and E2E scripts (`./verify.sh`, `npm run e2e:docker`) use exit traps (`./stop-docker.sh`) to automatically stop containers after test completion.
   - **Graceful Shutdown**: Spring drains for 30 seconds (`server.shutdown=graceful`, `spring.lifecycle.timeout-per-shutdown-phase=30s`) and the Compose backend has a 40-second `stop_grace_period`. Keep production `terminationGracePeriodSeconds` longer than the Spring shutdown phase in the separate GitOps repository.
 - **OSIV is off** (`spring.jpa.open-in-view=false`) — connections return to Hikari pool immediately after service methods.

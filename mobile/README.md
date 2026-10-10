@@ -136,6 +136,7 @@ TaskFlow Mobile enforces a dual-layered testing strategy combining Unit/Componen
 * **Scope:** Real native execution of Guest Booking Wizard and Guest Login flows (**9/9 PASSING**).
 * **Binary Strategy:** Standalone Release builds with embedded JS bytecode bundles, eliminating Metro dev server dependency and touch-intercepting dev overlays during test runs.
 * **Dual-Platform:** Tested on Android Emulator (`Pixel_6_API_35`) and iOS Simulator (`iPhone 17 Pro`).
+* **Details:** See [`e2e/README.md`](e2e/README.md) for full architecture, device profiles, running commands, and scrolling/matching gotchas.
 
 ### 3. Runtime Performance Baseline
 
@@ -169,68 +170,15 @@ manage ordinary libraries such as Axios, Zod, Zustand, TanStack Query, and React
 Hook Form. React Navigation and native test tooling remain review-only grouped
 updates because they carry React Native peer-dependency constraints.
 
-### node-forge signature verification patch
+### Vendored Security Patches (node-forge & braces)
 
-Dependabot alert [#72](https://github.com/stefanf81/taskflow-enterprise/security/dependabot/72)
-tracks [GHSA-86w9-cpqp-85rv / CVE-2026-85393](https://github.com/advisories/GHSA-86w9-cpqp-85rv).
-Expo's CLI and `@expo/code-signing-certificates` use `node-forge@1.4.0`, which
-accepts extra elements inside the nested RSA PKCS#1 v1.5 `DigestAlgorithm`.
+TaskFlow vendors backports of upstream security fixes for two dependencies until published npm fixes are released:
+1. **`node-forge@1.4.0` (CVE-2026-85393 / GHSA-86w9-cpqp-85rv):** Fixes RSA PKCS#1 v1.5 `DigestAlgorithm` validation.
+2. **`braces@3.0.3` (CVE-2026-93687 / GHSA-vfj7-8cjw-p6xm):** Caps AST recursive parsing depth at `MAX_DEPTH = 100` to prevent call stack overflow crashes in Jest/micromatch.
 
-There is no published fixed npm version as of 2026-10-02. `vendor/node-forge-1.4.0.patch`
-backports the validation fix from
-[upstream PR #1152](https://github.com/digitalbazaar/forge/pull/1152), commit
-`ceba34402e329f0365134f23fe19898756527d65`. It checks the nested element count
-while preserving valid encodings with and without the optional NULL parameter.
+Patches are applied via npm `overrides` using local `.tgz` archives in `mobile/vendor/`. This preserves `lockfileVersion: 3` (ensuring Renovate compatibility) and requires no install-time script execution (`npm ci --ignore-scripts` compatible).
 
-Rather than npm's `patchedDependencies` (which forces lockfileVersion 4 and
-breaks Renovate's npm lockfile parser repo-wide), the patched package is
-vendored as `vendor/node-forge-1.4.0-patched.tgz` and applied through
-`overrides`. This keeps `package-lock.json` at version 3, needs no install
-scripts, and applies on every install including `npm ci --ignore-scripts`.
-
-To regenerate the artifact after changing the patch, run
-`./vendor/rebuild-node-forge-patch.sh`. It downloads the official 1.4.0
-tarball, verifies its registry checksum, applies `vendor/node-forge-1.4.0.patch`,
-and rewrites the vendored tarball.
-
-`npm test` runs `test:security` before Jest. The security suite exercises the
-actual dependency copies resolved by both Expo consumers, valid signatures,
-nested and outer garbage, and mismatched digests with RSA exponents 3 and 65537.
-
-This is a code-level mitigation, not a published version upgrade. The package
-still reports 1.4.0, so version-based vulnerability alerts may remain open.
-Once upstream publishes a fixed release, remove the `node-forge` override,
-delete the `vendor/` artifact, update the dependency and lockfile, and rerun the
-security suite before retiring this mitigation.
-
-### braces nesting-depth patch
-
-Dependabot alert [#73](https://github.com/stefanf81/taskflow-enterprise/security/dependabot/73)
-tracks [GHSA-vfj7-8cjw-p6xm / CVE-2026-93687](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
-Jest's `micromatch@4.0.8` uses `braces@3.0.3`, whose recursive AST walkers
-(`compile`, `expand`, `stringify`) have no nesting-depth guard: a deeply nested
-brace pattern under the 10,000-character cap exhausts the call stack and
-terminates the Node process with an uncaught `RangeError`.
-
-There is no published fixed npm version as of 2026-10-03. `vendor/braces-3.0.3.patch`
-backports [upstream PR #72](https://github.com/micromatch/braces/pull/72), commit
-`d0d575e55e74a4e0218e5248fafb79efc3e54ebb`, which caps nesting at
-`MAX_DEPTH = 100` in `parse()` and adds matching guards to the
-`compile`/`expand`/`stringify` walkers. It is vendored as
-`vendor/braces-3.0.3-patched.tgz` and applied through `overrides`, using the
-same lockfileVersion 3 approach as node-forge. Regenerate with
-`./vendor/rebuild-braces-patch.sh`; it downloads the official 3.0.3 tarball,
-verifies its registry checksum, applies `vendor/braces-3.0.3.patch`, and
-rewrites the vendored tarball.
-
-`test/security/braces-depth-guard.test.cjs` exercises the copy resolved by
-`micromatch`: 101-level brace and parenthesis patterns throw `exceeds max
-depth` instead of overflowing the stack, callers can lower `maxDepth`, and
-ordinary patterns still expand.
-
-Once upstream publishes a fixed release, remove the `braces` override, delete
-the `vendor/braces-3.0.3*` artifacts, update the dependency and lockfile, and
-rerun the security suite before retiring this mitigation.
+> For detailed patch diffs, tarball rebuild scripts, test suites, and upstream removal procedures, see **[`mobile/vendor/README.md`](vendor/README.md)**.
 
 ---
 

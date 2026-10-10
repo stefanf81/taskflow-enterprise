@@ -27,7 +27,7 @@ if c == 1 then redis.call('pexpire', KEYS[1], ARGV[1]) end;
 return c
 ```
 
-* `KEYS[1] = rate_limit:{clientIp}:{auth|api}` (IP from `request.getRemoteAddr()` after `ForwardedHeaderFilter` normalizes `X-Forwarded-For` from the trusted Nginx proxy; `server.forward-headers-strategy=framework` in prod, `APP_TRUSTED_PROXY_REGEX` restricts trusted proxies).
+* `KEYS[1] = rate_limit:{clientIp}:{auth|api}` (IP from `request.getRemoteAddr()` after Tomcat's `RemoteIpValve` normalizes `X-Forwarded-For` from the trusted Nginx proxy; `server.forward-headers-strategy=native` in prod, `APP_TRUSTED_PROXY_REGEX` restricts trusted proxies).
 * `ARGV[1] = 60000` (1-minute window in milliseconds, `PEXPIRE`).
 * `PEXPIRE` is set **only when `c == 1`** (first increment in the window) — the window is **fixed**, not sliding; subsequent `INCR` within the window do not extend TTL (verified: extra `INCR` after 120 ms sleep left TTL decreasing).
 * On overflow (`count > maxRequests`) the filter returns `429 Too Many Requests` with `Retry-After: 60` and JSON `{"error":"Too many requests. Please try again later."}` without calling `filterChain`. On Redis error the filter **fails open** (`log.warn … failed open`) and continues the chain — availability over strict limiting during Redis outage.

@@ -6,7 +6,7 @@
 
 The application requires a caching layer to reduce database load and improve response times for frequently accessed data. Spring Boot provides the Spring Cache abstraction, which supports multiple backend implementations — including Caffeine (in-process local cache) and Redis (external distributed cache).
 
-The application also requires Redis for rate limiting (bucket4j with Redis backend). This means Redis is already a dependency in the stack regardless of the caching decision.
+The application also requires Redis for atomic IP rate limiting (via a Lua EVAL script; see ADR-012). This means Redis is already a dependency in the stack regardless of the caching decision.
 
 ## Decision
 

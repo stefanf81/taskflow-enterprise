@@ -45,7 +45,7 @@ shared event fanout before relying on real-time updates across replicas.
  └──────────────────────────────────┘                           └──────────────────────────────────┘
 ```
 
-**Performance & Reliability Highlights (P0–P2):** Bounded async executor `AsyncConfig` (core 8 / max 64 / queue 100 `CallerRunsPolicy`) → backpressure not OOM; atomic Redis Lua rate limiter (`EVAL` `INCR`+`PEXPIRE` 1 RTT, `HIGHEST_PRECEDENCE+20`); partial unique slot index `idx_appointment_slot_active` via `V21__fix_double_booking_index` (Postgres partial `WHERE status IN ('PENDING','APPROVED')` / H2 plain unique fallback) converged by `V25__converge_appointment_slot_index` (H2 upgraded to generated `active_slot_marker`); Redis `barbers`/`publicBarbers`/`services` caches (10 m TTL, `sync=true`, `@CacheEvict` on mutation) + `busySlots` 2 m; tiered `Cache-Control` (`5 m public` catalog/barbers/ratings, `30 s private` busySlots, `no-cache private` admin) + `ShallowEtagHeaderFilter` (GET only) + Tomcat `max-keep-alive-requests` 100 / Nginx `keepalive 64` + immutable hashed assets (`public, immutable, max-age=15552000` 6 M); Micrometer histograms `p50/p95/p99` + `sla 50/100/200 ms` + `percentiles-histogram true` via `/actuator/prometheus` (see `application-prod.properties`); explicit `-XX:+UseContainerSupport` + `-XX:+HeapDumpOnOutOfMemoryError`/`HeapDumpPath=/tmp/heapdump.hprof` + `-Xlog:gc*:file=/tmp/gc.log` diagnostics; local `Dockerfile` `HEALTHCHECK` (`30 s`/`5 s`/`3`/`15 s` `wget /actuator/health/liveness`) vs `Dockerfile.x64` probe-free for K8s `livenessProbe`; isolated-stack `k6/load.js` ramping-VUs `0→50→200→0` (`p95<500`/`p99<800`) plus the rate-limit-safe production `k6/probe.js` and `k6/browser.js` CWV `ttfb<800 fcp<1800 lcp<2500`; mobile `queryClient` `staleTime 60 s`/`gcTime 5 m` + `timeout 10 s` fail-fast; PgBouncer ceiling docs (Hikari `25/10`, `pool×replicas < 100`, `>2 replicas → PgBouncer transaction`); Lookbook `FlatList scrollEnabled={false}` → `LOOKBOOK_DATA.map` fix.
+**Performance & Reliability Highlights:** Bounded async thread pools (`CallerRunsPolicy`), atomic Redis Lua rate limiting (1 RTT), PostgreSQL partial unique indexing against double-booking, multi-tier Redis and HTTP caching with ETag validation, Micrometer SLO distribution histograms, and container-hardened zero-trust deployments. See **[P0–P2 Structures & Tunings](#p0-p2-structures--tunings)** below and [`BENCHMARKS.md`](BENCHMARKS.md) for full metrics.
 
 ---
 
@@ -107,7 +107,7 @@ shared event fanout before relying on real-time updates across replicas.
 └── ARCHITECTURE.md               # End-to-End Architectural Blueprint
 ```
 
-**P0–P2 Structures & Tunings (see `ARCHITECTURE.md` / `BENCHMARKS.md`):**
+### P0–P2 Structures & Tunings (see `ARCHITECTURE.md` / `BENCHMARKS.md`)
 
 - `core/AsyncConfig.java` — bounded `ThreadPoolTaskExecutor` `core=8 max=64 queue=100 CallerRunsPolicy` (`taskflow-async-` prefix, 30 s graceful) replaces unbounded `@EnableAsync` default.
 - `core/RateLimiterConfig.java` — stateless Redis Lua `EVAL` (`INCR`+`PEXPIRE` 1 RTT, `HIGHEST_PRECEDENCE+20`, skips `/actuator/health/**`).
@@ -314,8 +314,8 @@ npm test
 - **Numeric UIDs:** Backend containers run as unprivileged numeric user `10001:10001` complying with strict Kubernetes Pod Security Standards (PSS).
 - **Zero-Trust Networks:** Docker Compose isolates PostgreSQL and Redis on `backend-tier`. Nginx lives on `frontend-tier`. Only Spring Boot bridges both.
 - **Single Public Ingress:** Docker Compose exposes only Nginx. The backend is reachable internally at `backend:8080` and receives normalized forwarding headers from Nginx.
-- **Read-Only Filesystems:** Containers run with `read_only: true` with ephemeral `/tmp` mounted as `tmpfs`.
-- **Dropped Kernel Capabilities:** All containers explicitly execute with `cap_drop: [ALL]` and `no-new-privileges:true`.
+- **Read-Only Filesystems:** Application containers (`backend` and `frontend`) run with `read_only: true` with ephemeral directories mounted as `tmpfs` (`/tmp`, `/var/cache/nginx`).
+- **Dropped Kernel Capabilities:** Application containers explicitly execute with `cap_drop: [ALL]` and `no-new-privileges:true` (datastores `db`, `redis`, and `jaeger` retain default runtime privileges).
 - **Graceful Shutdown:** Spring Boot drains requests for up to 30 seconds (`server.shutdown=graceful`, `spring.lifecycle.timeout-per-shutdown-phase=30s`). The backend Compose service waits 40 seconds before Docker escalates SIGTERM to SIGKILL.
 - **Container Lifecycle:** Services use `restart: "no"` in `docker-compose.yml` to prevent lingering background containers. `npm run e2e:docker` stops the stack it starts; `./verify.sh` stops a stack it started, or an already-running stack when invoked with `--stop-docker`.
 - **Hardware Token Security:** Mobile app stores JWT tokens in **iOS Keychain** & **Android Keystore** via `expo-secure-store`.
@@ -367,10 +367,16 @@ Renovate authentication details.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Detailed end-to-end data flow and architectural analysis
 - [AGENTS.md](AGENTS.md) — Developer guidelines and AI agent instructions
+- [BENCHMARKS.md](BENCHMARKS.md) — Exhaustive performance benchmarks, JVM tuning, and load profiles
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Development setup, quality gates, and contribution workflow
 - [SYSTEM-HARDENING.md](SYSTEM-HARDENING.md) — Zero-trust security & container hardening policy
+- [docs/TODO.md](docs/TODO.md) — Prioritized engineering backlog and security audit tracking
 - [docs/ci/](docs/ci/README.md) — CI/CD design rationale and workflow audit history
+- [frontend/README.md](frontend/README.md) — Angular 22 Signals frontend architecture & design system
+- [mobile/README.md](mobile/README.md) — React Native / Expo cross-platform mobile client
 - [mobile/development-set.md](mobile/development-set.md) — Mobile development setup, testing, and release workflow
+- [mobile/e2e/README.md](mobile/e2e/README.md) — Detox native dual-platform E2E testing
+- [mobile/vendor/README.md](mobile/vendor/README.md) — Vendored dependency security patches (lockfileVersion 3)
 - [docs/adr/README.md](docs/adr/README.md) — Architecture Decision Records (ADRs) — full index
   - `ADR-001` — Virtual Threads — Enabled Explicitly
   - `ADR-002` — ParallelGC vs G1GC (Superseded)
@@ -387,3 +393,5 @@ Renovate authentication details.
   - `ADR-013` — Partial Unique Slot Index (Anti Double-Booking)
   - `ADR-014` — Resolve "No Preference" Bookings to a Concrete Barber
   - `ADR-015` — Bind Idempotency-Key Replays to the Original Request
+  - `ADR-016` — glibc Allocator Tuning on Ubuntu Base (MALLOC_ARENA_MAX)
+  - `ADR-017` — Full-App CDS Training and Production Image Slimming

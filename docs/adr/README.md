@@ -21,3 +21,5 @@ This directory records architectural decisions made during the development of Ta
 | [ADR-013](ADR-013-partial-slot-index.md) | Partial Unique Slot Index (Anti Double-Booking) | Accepted |
 | [ADR-014](ADR-014-resolve-no-preference-at-booking.md) | Resolve "No Preference" Bookings to a Concrete Barber | Accepted |
 | [ADR-015](ADR-015-bind-idempotency-replay.md) | Bind Idempotency-Key Replays to the Original Request | Accepted |
+| [ADR-016](ADR-016-glibc-ubuntu-base-and-malloc-arena.md) | glibc Allocator Tuning on Ubuntu Base (MALLOC_ARENA_MAX) | Accepted |
+| [ADR-017](ADR-017-full-app-cds-training-and-image-slimming.md) | Full-App CDS Training and Production Image Slimming | Accepted |

@@ -116,12 +116,12 @@ public class RateLimiterConfig {
             }
 
             /**
-             * H2: Spring Boot's ForwardedHeaderFilter (registered via
-             * {@code server.forward-headers-strategy=framework} in prod
-             * properties) wraps the request so that {@code getRemoteAddr()}
+             * Tomcat's RemoteIpValve (configured via
+             * {@code server.forward-headers-strategy=native} in prod
+             * properties) normalizes the request so that {@code getRemoteAddr()}
              * returns the real client IP from the {@code X-Forwarded-For}
              * header set by the trusted Nginx reverse proxy. The
-             * ForwardedHeaderFilter runs at highest precedence, so it
+             * RemoteIpValve runs at the servlet container boundary, so it
              * executes before this custom filter — no manual header
              * parsing is needed here.
              */

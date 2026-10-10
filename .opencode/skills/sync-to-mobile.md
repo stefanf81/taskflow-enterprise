@@ -10,10 +10,10 @@ Use this skill when a user asks to port or synchronize a new feature, component 
 ## Feature Component Mapping Matrix
 Refer to `frontend/src/component-map.json` or `mobile/src/component-map.json` to identify exact target files for each feature domain:
 * **Stylist Cards**: `frontend/src/app/components/stylist-card/stylist-card.ts` ↔ `mobile/src/components/booking/StylistCard.tsx`
-* **Booking Wizard**: `frontend/src/app/app.ts` / `app.html` ↔ `mobile/src/screens/BookingScreen.tsx`
-* **Customer Portal**: `frontend/src/app/features/customer/` ↔ `mobile/src/screens/CustomerPortalScreen.tsx`
-* **Admin Dashboard**: `frontend/src/app/features/admin/` ↔ `mobile/src/screens/AdminDashboardScreen.tsx`
-* **Lookbook**: `frontend/src/app/components/lookbook/` ↔ `mobile/src/screens/LookbookScreen.tsx`
+* **Booking Wizard**: `frontend/src/app/features/booking/booking-wizard.ts` (`booking-wizard.html`) ↔ `mobile/src/screens/BookingScreen.tsx`
+* **Customer Portal**: `frontend/src/app/features/customer/customer-portal.ts` (`customer-portal.html`) ↔ `mobile/src/screens/CustomerPortalScreen.tsx`
+* **Admin Dashboard**: `frontend/src/app/features/admin/admin-dashboard.ts` (`admin-dashboard.html`) ↔ `mobile/src/screens/AdminDashboardScreen.tsx`
+* **Lookbook**: `frontend/src/app/components/lookbook/lookbook.ts` ↔ `mobile/src/screens/LookbookScreen.tsx`
 
 ## Architectural Translation Rules
 

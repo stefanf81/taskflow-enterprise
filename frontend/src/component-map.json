@@ -8,7 +8,7 @@
       "webComponent": "frontend/src/app/components/stylist-card/stylist-card.ts",
       "mobileComponent": "mobile/src/components/booking/StylistCard.tsx",
       "storeHook": {
-        "web": "frontend/src/app/barber.store.ts",
+        "web": "frontend/src/app/public-barber.store.ts",
         "mobile": "mobile/src/hooks/useBarbers.ts"
       }
     },

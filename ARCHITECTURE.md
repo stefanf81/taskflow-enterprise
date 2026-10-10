@@ -13,10 +13,10 @@ Below is the complete sequence of an authenticated, paginated API query from the
   Angular UI DOM                                       unprivileged:taskflow JRE
     │                                                    │
     ▼ (1. Signal triggers reload)                        │
-  app.ts (Angular Signals)                               │
+  Feature Component / Store (Signals)                    │
     │                                                    │
-    ▼ (2. Request created)                               │
-  appointment.service.ts (getAllAppointments)                   │
+    ▼ (2. Request created via AppointmentsApi)           │
+  AppointmentsApi / AppointmentStore                     │
     │                                                    │
     ▼ (3. Cookie & CSRF header attached)                 │
   auth.interceptor.ts (HttpOnly Cookie + XSRF Header)    │
@@ -57,23 +57,23 @@ Below is the complete sequence of an authenticated, paginated API query from the
 ## 🧵 2. Step-by-Step Architectural Flow Analysis
 
 ### **Step 1: Client Landing & Route Security Guard**
-*   **Active Files**: `app.ts`, `app.html`, `auth.guard.ts`, `auth.state.ts`
-*   **The Flow**: When the user accesses the TaskFlow app, the Angular engine bootstraps. The functional `auth.guard.ts` verifies authentication using the in-memory `AuthState` Signal (restored from the backend via `GET /api/v1/auth/me`, which reads the HttpOnly session cookie). If unauthenticated, the DOM is locked, and a custom **Login Portal Card** is rendered in `app.html`.
+*   **Active Files**: `app.ts`, `app.html`, `auth.guard.ts`, `auth.state.ts`, `auth-modal.ts`
+*   **The Flow**: When the user accesses the TaskFlow app, the Angular engine bootstraps. `app.ts` and `app.html` serve as a lightweight root shell hosting the `<router-outlet />` and session bootstrap. The functional `auth.guard.ts` gates protected routes (`/admin`, `/customer`) by verifying authentication against the in-memory `AuthState` Signal (restored from the backend via `GET /api/v1/auth/me`, which reads the HttpOnly session cookie). If unauthenticated, access is denied and the user is redirected or prompted via `AuthModalComponent`.
 
 ### **Step 2: Authenticating & Issuing the Stateless JWT**
-*   **Active Files**: `app.ts` (Angular), `appointment.service.ts` (Angular), `SecurityConfig.java` (Spring Boot), `AuthController.java` (Spring Boot), `TokenProvider.java` (Spring Boot)
+*   **Active Files**: `auth-modal.ts` (Angular), `core/api/auth-api.ts` (Angular), `SecurityConfig.java` (Spring Boot), `AuthController.java` (Spring Boot), `TokenProvider.java` (Spring Boot)
 *   **The Flow**: 
     1.  The user inputs credentials (`admin` / `admin-password`).
-    2.  `appointment.service.ts` sends a `POST /api/v1/auth/login` containing the credentials.
+    2.  `AuthApi` sends a `POST /api/v1/auth/login` containing the credentials.
     3.  On the backend, `SecurityConfig` recognizes `/api/v1/auth/**` as a publicly permitted endpoint and lets the request pass.
     4.  `AuthController` delegates authentication to the `AuthenticationManager`. It validates credentials against the secure in-memory `UserDetailsService` using a BCrypt password matcher.
     5.  Once authenticated, `TokenProvider` generates a cryptographically signed JSON Web Token (JWT) using asymmetric RS256 (RSA 2048-bit keys) and sets it as an `HttpOnly`, `SameSite=Strict` cookie (`access_token`). The backend also issues a readable `XSRF-TOKEN` cookie via `CookieCsrfTokenRepository` for double-submit CSRF protection.
 
 ### **Step 3: Storing and Intercepting Request Tokens**
-*   **Active Files**: `app.ts` (Angular), `auth.interceptor.ts` (Angular), `app.config.ts` (Angular), `nginx.conf` (Nginx)
+*   **Active Files**: `auth.state.ts` (Angular), `auth.interceptor.ts` (Angular), `appointment.store.ts` (Angular), `app.config.ts` (Angular), `nginx.conf` (Nginx)
 *   **The Flow**:
-    1.  The frontend receives successful authentication, updates `AuthState` in memory, and unlocks the dashboard DOM. The JWT cookie is HttpOnly and completely inaccessible to JavaScript.
-    2.  The frontend triggers `loadAppointments()`.
+    1.  The frontend receives successful authentication, updates `AuthState` in memory, and unlocks access to the feature routes. The JWT cookie is HttpOnly and completely inaccessible to JavaScript.
+    2.  The admin dashboard triggers `AppointmentStore.loadAppointments()`.
     3.  **`auth.interceptor.ts`** handles outgoing requests. Browsers automatically attach the HttpOnly `access_token` cookie for same-origin requests. Angular's `withXsrfConfiguration` reads the `XSRF-TOKEN` cookie and automatically attaches the `X-XSRF-TOKEN` header on state-changing requests.
     4.  At the web server layer, Nginx enforces strict **Content Security Policy (CSP)** and clickjacking headers (`X-Frame-Options`, `nosniff`), guaranteeing that unapproved external scripts cannot interact with the application.
 
@@ -94,11 +94,11 @@ Below is the complete sequence of an authenticated, paginated API query from the
     6.  The backend packages the paginated page content and the global stats into a single, unified `AppointmentDashboardResponse` DTO and returns it.
 
 ### **Step 6: Fine-Grained UI Repainting & Observability Scrapes**
-*   **Active Files**: `app.ts` (Angular), `app.html` (Angular), `application.properties` (Actuator)
+*   **Active Files**: `admin-dashboard.ts` (Angular), `admin-dashboard.html` (Angular), `appointment.store.ts` (Angular), `application.properties` (Actuator)
 *   **The Flow**:
     1.  The Angular frontend receives the unified `AppointmentDashboardResponse`.
-    2.  It updates its fine-grained **Signals** (`appointments`, `stats`, `totalPages`).
-    3.  Since Angular 22 Signals are highly reactive, Angular does not waste CPU running heavy Zone.js digest loops. It immediately repaints *only* the specific bound DOM elements (the stats cards, progress bar, and card lists) in `app.html`.
+    2.  It updates its fine-grained **Signals** in `AppointmentStore` (`appointments`, `stats`, `totalPages`).
+    3.  Since Angular 22 Signals are highly reactive and zoneless, Angular does not waste CPU running heavy Zone.js digest loops. It immediately repaints *only* the specific bound DOM elements (the stats cards, progress bar, and appointment lists) in `admin-dashboard.html`.
     4.  In the background, Prometheus periodically scrapes JVM metrics, connection pool stats, and API request latency from `/actuator/prometheus` (permitted by `SecurityConfig`), providing complete observability.
 
 ### **Step 7: Real-Time Admin Appointment Refreshes**
@@ -183,8 +183,8 @@ To comply with the absolute highest standards in production-grade container arch
 
 To match the clean code patterns of leading Angular repositories, we refactored our single-page application into a highly decoupled, state-isolated, and strictly checked architecture:
 
-1.  **Lightweight Signal State Store**: We extracted all state properties, page variables, and asynchronous HTTP calls out of the main component and centralized them inside a modular, injectable `AppointmentStore` service.
-2.  **Model-View-Controller (MVC) Decoupling**: By exposing the store's signals directly as read-only local properties in `app.ts` (e.g., `readonly appointments = this.store.appointments;`), we achieved 100% logic-view separation while keeping our massive HTML templates completely untouched and 100% compile-safe.
+1.  **Lightweight Signal State Stores**: We extracted state properties, page variables, and asynchronous HTTP calls out of UI components and centralized them inside modular, injectable stores (`AppointmentStore`, `BookingStore`, `CustomerStore`, `BarberStore`).
+2.  **Modular Feature Architecture & MVC Decoupling**: Organized features into dedicated domain packages (`features/landing`, `features/booking`, `features/admin`, `features/customer`) with lazy route loading, keeping `app.ts` and `app.html` as a clean, router-outlet application shell. Exposing store signals directly to templates ensures 100% logic-view separation while keeping components compile-safe.
 3.  **Componentization & Signal Inputs**: We extracted the monolithic styling selectors into a dedicated, standalone `<app-stylist-card>` component. This component utilizes Angular 22's cutting-edge Signal-based **`input.required()`** and **`output()`** APIs, guaranteeing strict compile-time binding safety and instant reactive repaints.
 4.  **Strict Template Type-Checking**: We activated `"strictTemplates": true` and `"strictNullInputTypes": true` in `tsconfig.json`. This instructs the Angular compiler to rigorously type-check every single property, input binding, and event handler directly inside the HTML templates, ensuring compile-time safety and zero runtime null pointer crashes.
 5.  **Nginx Header Inheritance Safeguard & Immutable Split (P1-1)**: Due to Nginx's `add_header` overriding mechanics, caching blocks on static assets normally wipe out parent security headers. We explicitly duplicated our Content Security Policy (CSP), X-Frame-Options, and X-Content-Type headers inside Nginx's static files caching location blocks, keeping your assets fully secured and guaranteeing an **A+ rating** on security audits. The former single `location ~* \.(?:ico|css|js|gif|...)` is split into `js|css` (`Cache-Control "public, immutable, max-age=15552000"`, 6M immutable for `outputHashing:all` hashed bundles, 0 revalidation) vs `ico|gif|jpe?g|png|svg|woff2?|eot|ttf|otf` (`Cache-Control "public, max-age=3600, must-revalidate"`, short-lived, revalidated) plus `location / try_files` for `index.html` (must revalidate) — see BENCHMARKS.md §42.

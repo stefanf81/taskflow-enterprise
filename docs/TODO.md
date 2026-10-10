@@ -127,11 +127,9 @@ This document tracks unresolved security findings, architectural technical debt,
   2. Rule `100000` ("Error response code returned") is globally ignored, masking unintended 500 server crashes during fuzzing.
 - **Remediation:** Add dedicated unauthenticated and `ROLE_CUSTOMER` scan jobs to `dast.yml`. Refine rule `100000` to ignore only expected 4xx client errors while alerting on 5xx server errors.
 
-### 3.4 Container Hardening Documentation Drift in `AGENTS.md`
-- **Location:** `AGENTS.md` vs `docker-compose.yml`
-- **Problem:** `AGENTS.md` states that "All services completely drop kernel privileges (`cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`)" and mount read-only filesystems. In reality, only `backend` and `frontend` implement these settings; `db`, `redis`, and `jaeger` run with standard defaults.
-- **Related Drift:** `docs/adr/ADR-012-lua-rate-limiter.md` states `server.forward-headers-strategy=framework`, but `application-prod.properties:110` uses `native`; the `RateLimiterConfig` comment referencing Spring's `ForwardedHeaderFilter` is likewise stale on the `native`/`RemoteIpValve` path. Align the ADR and comment with the deployed strategy.
-- **Remediation:** Either harden `db`/`redis`/`jaeger` with non-root execution and capability dropping, or update `AGENTS.md` to accurately reflect that only edge containers are hardened.
+### 3.4 Container Hardening Documentation Drift in `AGENTS.md` (Resolved)
+- **Resolved:** Aligned `AGENTS.md`, `README.md`, and `SYSTEM-HARDENING.md` to accurately document that `cap_drop: [ALL]` and `read_only: true` apply specifically to application edge containers (`backend` and `frontend`), while data stores (`db`, `redis`, `jaeger`) run with standard defaults. `docs/adr/ADR-012-lua-rate-limiter.md` and the comment in `RateLimiterConfig.java` were updated to reflect `server.forward-headers-strategy=native` and Tomcat's `RemoteIpValve`.
+- **Location:** `AGENTS.md`, `README.md`, `docs/adr/ADR-012-lua-rate-limiter.md`, `RateLimiterConfig.java`
 
 ### 3.5 Inactive Lettuce Connection Pool Configuration
 - **Location:** `src/main/resources/application-prod.properties:151-154`

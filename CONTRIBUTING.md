@@ -186,7 +186,11 @@ the mobile test and native build suites.
 - `src/` — Spring Boot backend (Java 21, Gradle)
 - `frontend/` — Angular 22 SPA (TypeScript, Tailwind CSS)
 - `mobile/` — React Native / Expo application (TypeScript)
+- `shared/schemas/` — Shared Zod validation schemas (`@taskflow/schemas`)
+- `api/` — Canonical OpenAPI contract baseline (`api/openapi.json`)
+- `scripts/` — Monorepo utility, benchmarking, and contract scripts
 - `docs/adr/` — Architecture Decision Records
+- `docs/` — Engineering backlog, deployment manifests, and CI rationale
 
 ## Branches & PRs
 
