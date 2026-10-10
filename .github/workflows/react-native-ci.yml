@@ -83,7 +83,7 @@ jobs:
 
       - name: Detect mobile changes
         id: filter
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         with:
           filters: |
             mobile:
@@ -249,7 +249,7 @@ jobs:
       # Note: restore-keys must NOT end with a dash — append-timestamp adds the
       # separator itself.
       - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@v1
+        uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639 # v1
         with:
           key: android-ccache-${{ runner.os }}-${{ hashFiles('mobile/package-lock.json') }}
           restore-keys: |
@@ -259,7 +259,7 @@ jobs:
           evict-old-files: job
 
       - name: Set up Gradle caching
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
 
       - name: Install Android SDK components
         shell: bash

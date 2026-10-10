@@ -66,7 +66,7 @@ jobs:
       # close to the nightly CI window, so a concurrent write here would race
       # the same keys.
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
         with:
           cache-read-only: true
 
@@ -200,7 +200,7 @@ jobs:
       - name: Run authenticated OWASP ZAP API Scan
         id: zap_api
         continue-on-error: true
-        uses: zaproxy/action-api-scan@v0.10.0
+        uses: zaproxy/action-api-scan@5158fe4d9d8fcc75ea204db81317cce7f9e5453d # v0.10.0
         env:
           ZAP_AUTH_HEADER: Authorization
           ZAP_AUTH_HEADER_VALUE: Bearer ${{ steps.auth.outputs.token }}
@@ -493,7 +493,7 @@ jobs:
       - name: Run authenticated OWASP ZAP frontend scan
         id: zap_web
         continue-on-error: true
-        uses: zaproxy/action-full-scan@v0.13.0
+        uses: zaproxy/action-full-scan@3c58388149901b9a03b7718852c5ba889646c27c # v0.13.0
         env:
           ZAP_AUTH_HEADER: Authorization
           ZAP_AUTH_HEADER_VALUE: Bearer ${{ steps.auth.outputs.token }}

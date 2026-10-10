@@ -85,7 +85,7 @@ jobs:
       # autobuild only needs the restored dependency state.
       - name: Set up Gradle
         if: matrix.language == 'java-kotlin'
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
         with:
           cache-read-only: true
 
@@ -191,7 +191,7 @@ jobs:
       #####################################################
 
       - name: Trivy FS (Backend)
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: ${{ env.TRIVY_VERSION }}
           scan-type: fs
@@ -221,7 +221,7 @@ jobs:
           wait-for-processing: "false"
 
       - name: Trivy FS (Frontend)
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: ${{ env.TRIVY_VERSION }}
           scan-type: fs
@@ -243,7 +243,7 @@ jobs:
           wait-for-processing: "false"
 
       - name: Trivy FS (Mobile)
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: ${{ env.TRIVY_VERSION }}
           scan-type: fs
@@ -265,7 +265,7 @@ jobs:
           wait-for-processing: "false"
 
       - name: Trivy FS (Shared)
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: ${{ env.TRIVY_VERSION }}
           scan-type: fs
@@ -289,7 +289,7 @@ jobs:
       # Workspace tooling lockfile (root package.json: knip). Kept as its own
       # component so findings are attributable to the lockfile's owner.
       - name: Trivy FS (Root)
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: ${{ env.TRIVY_VERSION }}
           scan-type: fs

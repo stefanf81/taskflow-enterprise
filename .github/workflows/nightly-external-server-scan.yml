@@ -433,7 +433,7 @@ jobs:
           fi
 
       - name: Install Nuclei
-        uses: projectdiscovery/nuclei-action@v3
+        uses: projectdiscovery/nuclei-action@ca21b8962d4bcddc942944acaa2679e27e97bc0a # v3
         with:
           version: ${{ env.NUCLEI_VERSION }}
           install-only: true

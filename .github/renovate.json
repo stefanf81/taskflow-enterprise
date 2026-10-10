@@ -284,6 +284,12 @@
       "groupName": "React Native test tooling"
     },
     {
+      "description": "Pin third-party GitHub Actions to commit digests: CodeQL's security-extended actions/unpinned-tag rule flags mutable tag refs for non-GitHub actions, and only a digest prevents a retargeted tag from running with the workflow's credentials. GitHub-owned actions (actions/*, github/*) stay on tag refs. Renovate keeps each pin current from its '# vX.Y.Z' comment.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["!actions/*", "!github/*"],
+      "pinDigests": true
+    },
+    {
       "description": "Group GitHub Actions updates",
       "matchManagers": ["github-actions"],
       "groupName": "GitHub Actions"

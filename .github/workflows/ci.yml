@@ -94,7 +94,7 @@ jobs:
 
       - name: Detect file changes
         id: filter
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         with:
           filters: |
             backend:
@@ -208,7 +208,7 @@ jobs:
           persist-credentials: false
 
       - name: Lint Backend Dockerfile
-        uses: hadolint/hadolint-action@v3.5.0
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
           dockerfile: Dockerfile.x64
           # DL3005 (apt-get upgrade) and DL3008 (apt pinning) are intentional:
@@ -219,13 +219,13 @@ jobs:
       # The arm64 local-dev Dockerfile is built by docker-compose and
       # verify.sh but was never linted. Same ignores as Dockerfile.x64.
       - name: Lint Local Dockerfile
-        uses: hadolint/hadolint-action@v3.5.0
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
           dockerfile: Dockerfile
           ignore: DL3005,DL3008,DL3029
 
       - name: Lint Frontend Dockerfile
-        uses: hadolint/hadolint-action@v3.5.0
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
           dockerfile: frontend/Dockerfile
           ignore: DL3018,DL3029
@@ -338,7 +338,7 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
         with:
           cache-read-only: false
 
@@ -424,7 +424,7 @@ jobs:
 
       # `backend` owns Gradle cache writes in this workflow.
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
         with:
           cache-read-only: true
 
@@ -521,7 +521,7 @@ jobs:
       # and dependency-audit workflows retain their own writable caching.
       # Read-only packaging avoids competing saves of shared cache entries.
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
         with:
           cache-read-only: true
 
@@ -646,7 +646,7 @@ jobs:
       # This action already manages Gradle caching; configure it directly
       # rather than adding setup-gradle. `backend` owns writes in this workflow.
       - name: Submit Dependency Graph
-        uses: gradle/actions/dependency-submission@v6
+        uses: gradle/actions/dependency-submission@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
         with:
           cache-read-only: true
 
@@ -1141,7 +1141,7 @@ jobs:
       ##########################################################
 
       - name: Build Image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: Dockerfile.x64
@@ -1207,7 +1207,7 @@ jobs:
       # by design. Do not align the two exit-codes without deliberately
       # reconsidering both.
       - name: Scan Docker Image
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: ${{ env.TRIVY_VERSION }}
 
@@ -1297,7 +1297,7 @@ jobs:
         uses: ./.github/actions/prepull-buildkit
 
       - name: Build Image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: frontend
           file: frontend/Dockerfile
@@ -1339,7 +1339,7 @@ jobs:
 
       # HARD GATE — see the severity-gating note in `docker-backend`.
       - name: Scan Docker Image
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: ${{ env.TRIVY_VERSION }}
 
