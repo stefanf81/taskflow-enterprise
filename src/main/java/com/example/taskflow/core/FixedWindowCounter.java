@@ -8,8 +8,9 @@ import java.util.function.LongSupplier;
  *
  * <p>Used where a shared Redis counter is unavailable or inappropriate: the
  * rate limiter's fallback while Redis is failing, and per-account login-failure
- * throttling. Counters are per JVM, which matches the documented single-replica
- * deployment.
+ * throttling (the whole state with {@code app.state.store=memory}, the fallback
+ * with {@code redis}). Counters are per JVM: with N replicas a limit enforced
+ * only here allows up to N times the configured count.
  *
  * <p>Memory is capped at {@code maxKeys}. When the map is full, expired windows
  * are purged first; if it is still full, the live entry with the <em>lowest</em>
