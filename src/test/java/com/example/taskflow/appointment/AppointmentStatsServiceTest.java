@@ -31,11 +31,15 @@ class AppointmentStatsServiceTest {
     @Mock
     private Cache statsCache;
 
+    /** Late evening UTC = already the next day in Tokyo: "today" must follow the shop clock. */
+    private static final java.time.Clock CLOCK = java.time.Clock.fixed(
+            java.time.Instant.parse("2026-10-11T23:30:00Z"), java.time.ZoneId.of("Asia/Tokyo"));
+
     private AppointmentStatsService service;
 
     @BeforeEach
     void setUp() {
-        service = new AppointmentStatsService(cacheManager);
+        service = new AppointmentStatsService(cacheManager, CLOCK);
     }
 
     @Test
@@ -66,7 +70,7 @@ class AppointmentStatsServiceTest {
 
         service.clearStatsCache();
 
-        verify(statsCache).evictIfPresent(LocalDate.now());
+        verify(statsCache).evictIfPresent(LocalDate.of(2026, 10, 12));
         verify(statsCache, never()).evict(any());
     }
 

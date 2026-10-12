@@ -71,12 +71,19 @@ class AppointmentCacheInvalidationIntegrationTest {
 
     private static final String BARBER = "Alex the Barber";
     private static final String SERVICE = "Classic Haircut";
-    private static final LocalDate DATE = LocalDate.of(2030, 5, 16);
+    /** A Thursday inside the booking window (bookings must be in the future and within 90 days). */
+    private static final LocalDate DATE = LocalDate.now().plusDays(7)
+            .with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.THURSDAY));
 
     private Cache busySlotsCache;
 
+    @Autowired
+    private com.example.taskflow.review.internal.ReviewRepository reviewRepository;
+
     @BeforeEach
     void setUp() {
+        // reviews.appointment_id is ON DELETE RESTRICT (V27): delete the seeded reviews first
+        reviewRepository.deleteAll();
         appointmentRepository.deleteAll();
         barberTimeOffRepository.deleteAll();
         barberScheduleRepository.deleteAll();
@@ -127,8 +134,6 @@ class AppointmentCacheInvalidationIntegrationTest {
 
     @Test
     void booking_evictsConcreteAndAggregateAndStats() {
-        // Seed one row first: the stats aggregate uses bare SUM() which returns
-        // NULL on an empty table (pre-existing query behaviour, out of scope here).
         var created = appointmentService.createAppointment(bookingRequest("10:00"), null);
         primeAvailability();
         statsService.getStatsCached(appointmentRepository);

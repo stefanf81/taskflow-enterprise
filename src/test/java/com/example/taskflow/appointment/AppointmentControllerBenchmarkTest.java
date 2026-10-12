@@ -55,8 +55,13 @@ public class AppointmentControllerBenchmarkTest {
     private static final int TOTAL_REQUESTS = 50;     // Total load requests
     private static final long MAX_LATENCY_MS = 100;   // Max tolerated avg latency per call
 
+    @Autowired
+    private com.example.taskflow.review.internal.ReviewRepository reviewRepository;
+
     @BeforeEach
     void setUp() throws Exception {
+        // reviews.appointment_id is ON DELETE RESTRICT (V27): delete the seeded reviews first
+        reviewRepository.deleteAll();
         appointmentRepository.deleteAll();
 
         // 1. Populate the database with dummy appointments to simulate load volume

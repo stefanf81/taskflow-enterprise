@@ -1,12 +1,12 @@
 package com.example.taskflow.appointment;
-import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
-import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 
 import com.example.taskflow.catalog.CatalogService;
 import com.example.taskflow.catalog.ServiceItem;
+import com.example.taskflow.core.ConflictException;
 import com.example.taskflow.core.IdempotencyConflictException;
+import com.example.taskflow.core.InvalidStatusTransitionException;
 import com.example.taskflow.core.LogSanitizer;
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.slf4j.Logger;
@@ -16,6 +16,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -25,9 +26,13 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.util.Optional;
 import io.micrometer.tracing.Tracer;
 
-import java.time.LocalDate;
-import java.time.LocalTime;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 public class AppointmentServiceImpl implements AppointmentService {
@@ -49,9 +54,9 @@ public class AppointmentServiceImpl implements AppointmentService {
     private final Tracer tracer;
     private final BusySlotsService busySlotsService;
     private final BarberRepository barberRepository;
-    private final BarberScheduleRepository barberScheduleRepository;
-    private final BarberTimeOffRepository barberTimeOffRepository;
     private final CatalogService catalogService;
+    private final Clock clock;
+    private final BookingProperties bookingProperties;
     private final TransactionTemplate createTransactionTemplate;
     private final TransactionTemplate idempotencyLookupTemplate;
 
@@ -61,9 +66,9 @@ public class AppointmentServiceImpl implements AppointmentService {
                                    Tracer tracer,
                                    BusySlotsService busySlotsService,
                                    BarberRepository barberRepository,
-                                   BarberScheduleRepository barberScheduleRepository,
-                                   BarberTimeOffRepository barberTimeOffRepository,
                                    CatalogService catalogService,
+                                   Clock clock,
+                                   BookingProperties bookingProperties,
                                    PlatformTransactionManager transactionManager) {
         this.appointmentRepository = appointmentRepository;
         this.eventPublisher = eventPublisher;
@@ -71,9 +76,9 @@ public class AppointmentServiceImpl implements AppointmentService {
         this.tracer = tracer;
         this.busySlotsService = busySlotsService;
         this.barberRepository = barberRepository;
-        this.barberScheduleRepository = barberScheduleRepository;
-        this.barberTimeOffRepository = barberTimeOffRepository;
         this.catalogService = catalogService;
+        this.clock = clock;
+        this.bookingProperties = bookingProperties;
         this.createTransactionTemplate = new TransactionTemplate(transactionManager);
         this.createTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.idempotencyLookupTemplate = new TransactionTemplate(transactionManager);
@@ -99,24 +104,56 @@ public class AppointmentServiceImpl implements AppointmentService {
     @Transactional(readOnly = true)
     public AppointmentDashboardResponse getAllAppointments(String status, String searchName, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("bookingDate").ascending().and(Sort.by("bookingTime").ascending()));
-        Page<Appointment> itemPage;
 
-        if (status != null && !status.trim().isEmpty() && "OVERDUE".equalsIgnoreCase(status.trim())) {
-            itemPage = appointmentRepository.findByStatusAndBookingDateBefore(AppointmentStatus.PENDING, LocalDate.now(), pageable);
-        } else if (status != null && !status.trim().isEmpty() && searchName != null && !searchName.trim().isEmpty()) {
-            itemPage = appointmentRepository.findByStatusAndCustomerNameContainingIgnoreCase(AppointmentStatus.fromString(status.trim()), searchName.trim(), pageable);
-        } else if (status != null && !status.trim().isEmpty()) {
-            itemPage = appointmentRepository.findByStatus(AppointmentStatus.fromString(status.trim()), pageable);
-        } else if (searchName != null && !searchName.trim().isEmpty()) {
-            itemPage = appointmentRepository.findByCustomerNameContainingIgnoreCase(searchName.trim(), pageable);
-        } else {
-            itemPage = appointmentRepository.findAll(pageable);
+        List<Specification<Appointment>> filters = new ArrayList<>();
+        String statusFilter = status == null ? "" : status.trim();
+        if ("OVERDUE".equalsIgnoreCase(statusFilter)) {
+            // Overdue = still PENDING although the booking date has passed. The search
+            // term below applies on top of it (it used to be silently ignored).
+            LocalDate today = LocalDate.now(clock);
+            filters.add((root, query, cb) -> cb.and(
+                    cb.equal(root.get("status"), AppointmentStatus.PENDING),
+                    cb.lessThan(root.<LocalDate>get("bookingDate"), today)));
+        } else if (!statusFilter.isEmpty()) {
+            // Unknown statuses are a 400, not a silent fall back to PENDING.
+            AppointmentStatus parsed = AppointmentStatus.fromString(statusFilter);
+            filters.add((root, query, cb) -> cb.equal(root.get("status"), parsed));
         }
+
+        String term = searchName == null ? "" : searchName.trim();
+        if (!term.isEmpty()) {
+            filters.add(matchesSearchTerm(term));
+        }
+
+        Page<Appointment> itemPage = filters.isEmpty()
+                ? appointmentRepository.findAll(pageable)
+                : appointmentRepository.findAll(
+                        (root, query, cb) -> cb.and(filters.stream()
+                                .map(f -> f.toPredicate(root, query, cb))
+                                .toArray(jakarta.persistence.criteria.Predicate[]::new)),
+                        pageable);
 
         Page<AppointmentResponse> responsePage = itemPage.map(AppointmentResponse::fromEntity);
 
         AppointmentStats stats = statsService.getStatsCached(appointmentRepository);
         return new AppointmentDashboardResponse(responsePage, stats);
+    }
+
+    /**
+     * Admin search: case-insensitive "contains" on customer name, e-mail and phone, or an
+     * exact public id (a UUID, so a partial match would be meaningless).
+     */
+    private static Specification<Appointment> matchesSearchTerm(String term) {
+        String pattern = "%" + escapeLike(term.toLowerCase(java.util.Locale.ROOT)) + "%";
+        return (root, query, cb) -> cb.or(
+                cb.like(cb.lower(root.<String>get("customerName")), pattern, '\\'),
+                cb.like(cb.lower(root.<String>get("customerEmail")), pattern, '\\'),
+                cb.like(cb.lower(root.<String>get("customerPhone")), pattern, '\\'),
+                cb.equal(root.<String>get("publicId"), term));
+    }
+
+    private static String escapeLike(String value) {
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     @Override
@@ -144,7 +181,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         if (!appointment.getCustomerEmail().equalsIgnoreCase(email)) {
             throw new ResourceNotFoundException("Appointment not found or unauthorized.");
         }
-        deleteAppointment(appointment.getId());
+        cancelAppointment(appointment, AppointmentCancelledEvent.CancelledBy.CUSTOMER, true);
     }
 
     @Override
@@ -223,36 +260,60 @@ public class AppointmentServiceImpl implements AppointmentService {
     private AppointmentCreationResult createAppointmentInTransaction(
             AppointmentCreateRequest request, String trimmedKey) {
         return createTransactionTemplate.execute(status -> {
+            LocalDateTime now = LocalDateTime.now(clock);
+            LocalDate today = now.toLocalDate();
+            LocalDate bookingDate = request.bookingDate();
+
+            // BKG-1: a booking must start on the shared hourly grid. Every other layer
+            // (busy-slot list, unique index) is keyed on the exact start time, so an
+            // off-grid start such as 10:30 would slip past them.
+            if (!BusySlotsService.isGridSlot(request.bookingTime())) {
+                throw new IllegalArgumentException("Booking time must be one of the available time slots: "
+                        + String.join(", ", BusySlotsService.ALL_SLOTS) + ".");
+            }
+            LocalTime bookingTime = LocalTime.parse(request.bookingTime().trim());
+
+            // BKG-2: not in the past (shop time zone), not too far ahead.
+            if (!LocalDateTime.of(bookingDate, bookingTime).isAfter(now)) {
+                throw new IllegalArgumentException("The appointment must be in the future. Please choose a later date or time.");
+            }
+            if (bookingDate.isAfter(today.plusDays(bookingProperties.maxAdvanceDays()))) {
+                throw new IllegalArgumentException("Appointments can be booked at most "
+                        + bookingProperties.maxAdvanceDays() + " days in advance.");
+            }
+
+            // A1: resolve the catalog service first - its duration drives every availability rule.
+            ServiceItem service = catalogService.findServiceByName(request.serviceType())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Unknown service: '" + LogSanitizer.stripNewlines(request.serviceType())
+                                    + "'. Please select a service from the catalog."));
+            int durationMinutes = service.getDurationMinutes() != null && service.getDurationMinutes() > 0
+                    ? service.getDurationMinutes() : BusySlotsService.DEFAULT_DURATION_MINUTES;
+
             // H2: "No Preference (First Available)" is an input-only sentinel. Resolve
             // it to a concrete, available barber BEFORE persisting so the partial
             // unique slot index and the per-barber availability queries both see the
-            // booking. Persisting the sentinel verbatim let a real barber be booked at
-            // the same slot because the sentinel looked like a distinct fictitious
-            // barber to the unique index.
-            Barber resolvedBarber = resolveBarber(request);
+            // booking. The resolver applies the same rules as a named barber.
+            Barber resolvedBarber = resolveBarber(request, durationMinutes);
             String effectiveBarberName = resolvedBarber.getName();
 
-            // A2: enforce that the requested time falls within the barber's scheduled
-            // working window for that day of week (returns a clear 400 rather than
-            // relying on the busy-slot side effect). Backed by BarberSchedule.
-            validateBookingTimeWithinSchedule(resolvedBarber, request.bookingDate(), request.bookingTime());
+            // Authoritative, in-transaction availability check (time off, schedule, service
+            // length vs. closing time, overlap with PENDING/APPROVED bookings). It reads the
+            // database rather than the 2-minute busy-slots cache. A truly concurrent insert
+            // racing this transaction is caught by the partial unique slot index for the
+            // same start time; overlapping different start times (only possible for services
+            // longer than the grid step) remain a documented residual race.
+            busySlotsService.findConflict(resolvedBarber, bookingDate, bookingTime, durationMinutes, null)
+                    .ifPresent(message -> {
+                        throw new IllegalArgumentException(message);
+                    });
 
-            // Atomic (in-transaction) time-off recheck. The busy-slot lookup below is
-            // cached for up to 2 minutes, so an admin time-off insertion between the
-            // cache load and this save would otherwise let a booking slip through.
-            // This fresh DB read closes that window for the common case. (A truly
-            // concurrent insert racing this transaction remains a documented residual
-            // race best closed by a database exclusion constraint if/when needed.)
-            if (!barberTimeOffRepository.findTimeOffForBarberOnDate(resolvedBarber.getId(), request.bookingDate()).isEmpty()) {
-                throw new IllegalArgumentException(
-                        "The selected barber is unavailable on this date (time off). Please choose another date or barber.");
-            }
-
-            // Validate slot availability (prevent double-bookings)
-            // Call via injected BusySlotsService so the @Cacheable proxy is actually used.
-            java.util.List<String> busy = busySlotsService.getBusySlots(effectiveBarberName, request.bookingDate().toString());
-            if (busy.contains(request.bookingTime())) {
-                throw new IllegalArgumentException("The selected slot is already booked or unavailable.");
+            // BKG-2: bound the number of upcoming bookings one e-mail address can hold.
+            long upcoming = appointmentRepository.countActiveFromDate(request.customerEmail().trim(), today);
+            if (upcoming >= bookingProperties.maxActivePerEmail()) {
+                throw new IllegalArgumentException("This email address already has "
+                        + bookingProperties.maxActivePerEmail() + " upcoming appointments, which is the maximum. "
+                        + "Please cancel one before booking another.");
             }
 
             Appointment item = new Appointment();
@@ -261,13 +322,16 @@ public class AppointmentServiceImpl implements AppointmentService {
             item.setCustomerEmail(request.customerEmail());
             item.setCustomerPhone(request.customerPhone());
             // A1: keep denormalized name cache in sync with the FK (renders instantly
-            // in the UI without an extra join) AND resolve the real catalog FKs.
+            // in the UI without an extra join) AND wire the real catalog FKs.
             item.setBarberName(effectiveBarberName);
+            item.setBarber(resolvedBarber);
             item.setServiceType(request.serviceType());
-            resolveAndSetCatalogReferences(item, resolvedBarber, request.serviceType());
-            item.setBookingDate(request.bookingDate());
-            item.setBookingTime(request.bookingTime());
-            item.setStatus("PENDING");
+            item.setService(service);
+            // Freeze the price: later catalog price edits must not rewrite revenue history.
+            item.setPriceAtBooking(service.getPrice());
+            item.setBookingDate(bookingDate);
+            item.setBookingTime(request.bookingTime().trim());
+            item.setStatus(AppointmentStatus.PENDING);
 
             Appointment savedItem = appointmentRepository.save(item);
             publishAvailabilityChange(
@@ -316,6 +380,8 @@ public class AppointmentServiceImpl implements AppointmentService {
             throw new IdempotencyConflictException(
                     "The Idempotency-Key was already used for a different request. Please retry with a new key.");
         }
+        // A replay of a booking that was cancelled (or declined) in the meantime answers with
+        // that row - including its CANCELLED status - rather than silently re-booking the slot.
         logger.info("Idempotency-Key replay matched appointment id {}.", existing.getId());
         return AppointmentCreationResult.replayed(AppointmentResponse.fromEntity(existing));
     }
@@ -371,12 +437,13 @@ public class AppointmentServiceImpl implements AppointmentService {
     /**
      * Resolves the requested barber name to a catalog entity. The
      * {@link #NO_PREFERENCE_BARBER} sentinel is resolved to the first barber who
-     * is scheduled and free for the requested slot; unknown concrete names are
-     * rejected with a 400.
+     * can take the booking (schedule, time off, service length, overlap); unknown
+     * concrete names are rejected with a 400.
      */
-    private Barber resolveBarber(AppointmentCreateRequest request) {
+    private Barber resolveBarber(AppointmentCreateRequest request, int durationMinutes) {
         if (NO_PREFERENCE_BARBER.equals(request.barberName())) {
-            return busySlotsService.findFirstAvailableBarber(request.bookingDate(), request.bookingTime())
+            return busySlotsService.findFirstAvailableBarber(
+                            request.bookingDate(), request.bookingTime(), durationMinutes)
                     .orElseThrow(() -> new IllegalArgumentException(
                             "No barber is available for the selected time. Please choose another time or barber."));
         }
@@ -386,49 +453,34 @@ public class AppointmentServiceImpl implements AppointmentService {
                                 + "'. Please select a barber from the list."));
     }
 
-    /**
-     * A2: confirm the requested {@code bookingTime} is inside the barber's
-     * {@link BarberSchedule} window for the weekday of {@code bookingDate}.
-     * Throws {@link IllegalArgumentException} (→ 400) when the barber is not
-     * scheduled that day or the time is outside working hours.
-     */
-    private void validateBookingTimeWithinSchedule(Barber barber, LocalDate bookingDate, String bookingTime) {
-        BarberSchedule schedule = barberScheduleRepository
-                .findByBarberIdAndDayOfWeek(barber.getId(), bookingDate.getDayOfWeek().getValue())
-                .orElseThrow(() -> new IllegalArgumentException("The selected barber is not scheduled to work on the requested date."));
-
-        LocalTime requested = LocalTime.parse(bookingTime);
-        if (requested.isBefore(schedule.getStartTime()) || !requested.isBefore(schedule.getEndTime())) {
-            throw new IllegalArgumentException(
-                    "Booking time must be within the barber's working hours (" +
-                            schedule.getStartTime() + "–" + schedule.getEndTime() + ").");
-        }
-    }
-
-    /**
-     * A1: resolve the catalog FKs from the free-text names submitted by the
-     * booking form. The denormalized name columns are already set by the caller;
-     * this additionally wires the real {@code barber} / {@code service}
-     * associations for relational integrity and correct stats joins.
-     *
-     * <p>Unknown service names are rejected with a 400.
-     */
-    private void resolveAndSetCatalogReferences(Appointment item, Barber barber, String serviceType) {
-        item.setBarber(barber);
-        ServiceItem service = catalogService.findServiceByName(serviceType)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Unknown service: '" + LogSanitizer.stripNewlines(serviceType)
-                                + "'. Please select a service from the catalog."));
-        item.setService(service);
-    }
-
     @Override
     @Transactional
     public AppointmentResponse updateAppointmentStatus(Long id, AppointmentUpdateRequest request) {
         Appointment item = appointmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found with id: " + id));
 
-        item.setStatus(request.status().toUpperCase());
+        AppointmentStatus current = item.getStatusEnum();
+        AppointmentStatus target = AppointmentStatus.fromString(request.status());
+
+        // A cancelled booking is final: its slot may already belong to someone else.
+        if (current == AppointmentStatus.CANCELLED) {
+            throw new InvalidStatusTransitionException(current.name(), target.name());
+        }
+        // Same status: nothing to do - no write, no event, no e-mail to the customer.
+        if (current == target) {
+            return AppointmentResponse.fromEntity(item);
+        }
+        if (!isAllowedTransition(current, target)) {
+            throw new InvalidStatusTransitionException(current.name(), target.name());
+        }
+        if (target == AppointmentStatus.APPROVED) {
+            // PENDING -> APPROVED and DENIED -> APPROVED both put the booking on the calendar,
+            // so the full availability check runs again (the slot of a DENIED booking may have
+            // been re-booked, the barber may have gone on leave, the time may have passed).
+            requireCanApprove(item);
+        }
+
+        item.setStatus(target);
         Appointment savedItem = appointmentRepository.save(item);
         publishAvailabilityChange(
                 AvailabilityChangedEvent.single(savedItem.getBarberName(), savedItem.getBookingDate()));
@@ -447,20 +499,87 @@ public class AppointmentServiceImpl implements AppointmentService {
         return AppointmentResponse.fromEntity(savedItem);
     }
 
+    /** PENDING -> APPROVED|DENIED, APPROVED -> DENIED, DENIED -> APPROVED. */
+    private static boolean isAllowedTransition(AppointmentStatus from, AppointmentStatus to) {
+        return switch (from) {
+            case PENDING -> to == AppointmentStatus.APPROVED || to == AppointmentStatus.DENIED;
+            case APPROVED -> to == AppointmentStatus.DENIED;
+            case DENIED -> to == AppointmentStatus.APPROVED;
+            case CANCELLED -> false;
+        };
+    }
+
+    /**
+     * Re-validates a booking before it is (re-)approved. Every refusal is a 409: the request
+     * is well-formed, but the booking's current state no longer allows it.
+     */
+    private void requireCanApprove(Appointment item) {
+        Barber barber = item.getBarber();
+        if (barber == null || NO_PREFERENCE_BARBER.equals(item.getBarberName())) {
+            throw new ConflictException("This appointment has no assigned barber and cannot be approved. "
+                    + "Deny or cancel it instead.");
+        }
+        LocalTime start = LocalTime.parse(item.getBookingTime());
+        if (!LocalDateTime.of(item.getBookingDate(), start).isAfter(LocalDateTime.now(clock))) {
+            throw new ConflictException("A past appointment cannot be approved.");
+        }
+        busySlotsService.findConflict(barber, item.getBookingDate(), start,
+                        BusySlotsService.durationOf(item), item.getId())
+                .ifPresent(message -> {
+                    throw new ConflictException(message);
+                });
+    }
+
+    /** Admin DELETE: soft-cancels (the row is kept as CANCELLED). Past bookings may be cancelled by an admin. */
     @Override
     @Transactional
     public void deleteAppointment(Long id) {
         Appointment item = appointmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found with id: " + id));
-        appointmentRepository.delete(item);
+        cancelAppointment(item, AppointmentCancelledEvent.CancelledBy.ADMIN, false);
+    }
+
+    /**
+     * Soft-cancels an appointment: status becomes CANCELLED, the slot is released (the active-slot
+     * index ignores CANCELLED), the idempotency key and any review stay on the row, and the
+     * customer is notified through {@link AppointmentCancelledEvent}.
+     *
+     * <ul>
+     *   <li>already CANCELLED: idempotent no-op (no second e-mail);</li>
+     *   <li>DENIED: 400 - there is nothing to cancel;</li>
+     *   <li>{@code enforceNotPast}: customers and guests cannot cancel a booking that has started.</li>
+     * </ul>
+     */
+    private void cancelAppointment(Appointment item, AppointmentCancelledEvent.CancelledBy cancelledBy,
+                                   boolean enforceNotPast) {
+        AppointmentStatus current = item.getStatusEnum();
+        if (current == AppointmentStatus.CANCELLED) {
+            return;
+        }
+        if (current == AppointmentStatus.DENIED) {
+            throw new IllegalArgumentException("A declined appointment cannot be cancelled.");
+        }
+        if (enforceNotPast && !startOf(item).isAfter(LocalDateTime.now(clock))) {
+            throw new IllegalArgumentException(
+                    "This appointment has already started or passed and can no longer be cancelled online.");
+        }
+
+        item.setStatus(AppointmentStatus.CANCELLED);
+        Appointment saved = appointmentRepository.save(item);
+        eventPublisher.publishEvent(new AppointmentCancelledEvent(saved, cancelledBy));
         publishAvailabilityChange(
-                AvailabilityChangedEvent.single(item.getBarberName(), item.getBookingDate()));
-        publishAdminEvent(AppointmentAdminEvent.Type.DELETED, item.getId());
+                AvailabilityChangedEvent.single(saved.getBarberName(), saved.getBookingDate()));
+        publishAdminEvent(AppointmentAdminEvent.Type.UPDATED, saved.getId());
 
         tagSpan(
-            "appointment.id", String.valueOf(id),
-            "appointment.action", "delete"
+            "appointment.id", String.valueOf(saved.getId()),
+            "appointment.action", "cancel",
+            "appointment.cancelledBy", cancelledBy.name()
         );
+    }
+
+    private static LocalDateTime startOf(Appointment item) {
+        return LocalDateTime.of(item.getBookingDate(), LocalTime.parse(item.getBookingTime()));
     }
 
     @Override
@@ -479,18 +598,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         if (!item.getCustomerEmail().equalsIgnoreCase(email.trim())) {
             throw new IllegalArgumentException("Verification failed: The provided email address does not match this booking ID.");
         }
-        // Publish event BEFORE deletion so listeners can read the entity fields.
-        // This ensures notification outbox entries are written for the cancellation.
-        eventPublisher.publishEvent(new AppointmentStatusChangedEvent(this, item));
-        appointmentRepository.delete(item);
-        publishAvailabilityChange(
-                AvailabilityChangedEvent.single(item.getBarberName(), item.getBookingDate()));
-        publishAdminEvent(AppointmentAdminEvent.Type.DELETED, item.getId());
-
-        tagSpan(
-            "appointment.publicId", LogSanitizer.stripNewlines(publicId),
-            "appointment.action", "publicCancel"
-        );
+        cancelAppointment(item, AppointmentCancelledEvent.CancelledBy.GUEST, true);
     }
 
     @Override
@@ -500,7 +608,7 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     private void publishAdminEvent(AppointmentAdminEvent.Type type, Long appointmentId) {
         if (appointmentId != null) {
-            eventPublisher.publishEvent(new AppointmentAdminEvent(type, appointmentId, Instant.now()));
+            eventPublisher.publishEvent(new AppointmentAdminEvent(type, appointmentId, Instant.now(clock)));
         }
     }
 
@@ -522,7 +630,10 @@ public class AppointmentServiceImpl implements AppointmentService {
     @Override
     @Transactional(readOnly = true)
     public java.util.Optional<Appointment> lockForReminder(Long id) {
-        return appointmentRepository.findByIdForUpdate(id);
+        // Only APPROVED bookings get reminders: one cancelled or declined after the id sweep
+        // (but before this lock) must not be reminded about.
+        return appointmentRepository.findByIdForUpdate(id)
+                .filter(a -> a.getStatusEnum() == AppointmentStatus.APPROVED);
     }
 
     @Override

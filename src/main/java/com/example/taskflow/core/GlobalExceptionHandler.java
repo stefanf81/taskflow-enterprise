@@ -7,6 +7,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.dao.TransientDataAccessException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.security.access.AccessDeniedException;
@@ -42,6 +46,37 @@ public class GlobalExceptionHandler {
                 HttpStatus.CONFLICT.value(),
                 HttpStatus.CONFLICT.getReasonPhrase(),
                 ex.getMessage(),
+                request.getRequestURI()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ErrorResponse> handleConflictException(
+            ConflictException ex, HttpServletRequest request) {
+
+        ErrorResponse errorResponse = new ErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
+    }
+
+    /**
+     * Another request changed the same row between this request's read and its
+     * write (JPA {@code @Version}). The caller should reload and decide again.
+     */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleOptimisticLockingFailure(
+            OptimisticLockingFailureException ex, HttpServletRequest request) {
+        logger.warn("Optimistic lock conflict on {}", LogSanitizer.stripNewlines(request.getRequestURI()));
+
+        ErrorResponse errorResponse = new ErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                "The record was changed by someone else. Please reload and try again.",
                 request.getRequestURI()
         );
         return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
@@ -261,9 +296,21 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(errorResponse, HttpStatus.FORBIDDEN);
     }
 
-    @ExceptionHandler(DataAccessResourceFailureException.class)
+    /**
+     * Temporary infrastructure failures: the database is unreachable, the pool is
+     * exhausted, a query timed out, or a lock/deadlock was lost. None of these say
+     * anything about the request itself, so the client is told to retry shortly
+     * instead of receiving a 500. (Optimistic-lock conflicts are also transient
+     * data-access exceptions but have their own, more specific 409 handler.)
+     */
+    @ExceptionHandler({
+        DataAccessResourceFailureException.class,
+        QueryTimeoutException.class,
+        TransientDataAccessException.class,
+        CannotCreateTransactionException.class
+    })
     public ResponseEntity<ErrorResponse> handleDataAccessResourceFailure(
-            DataAccessResourceFailureException ex, HttpServletRequest request) {
+            Exception ex, HttpServletRequest request) {
         logger.warn("Database resource unavailable on {}: {}", LogSanitizer.stripNewlines(request.getRequestURI()),
                 LogSanitizer.safeMessage(ex));
 

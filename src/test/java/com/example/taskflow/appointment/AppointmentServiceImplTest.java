@@ -4,34 +4,45 @@ import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 
+import com.example.taskflow.catalog.ServiceItem;
+import com.example.taskflow.core.ConflictException;
+import com.example.taskflow.core.IdempotencyConflictException;
+import com.example.taskflow.core.InvalidStatusTransitionException;
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
-import java.util.Arrays;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class AppointmentServiceImplTest {
+
+    /** Monday 2026-10-12, 08:00 shop time (UTC). */
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-12T08:00:00Z"), ZoneOffset.UTC);
+    private static final LocalDate TODAY = LocalDate.of(2026, 10, 12);
+    private static final LocalDate TOMORROW = TODAY.plusDays(1);
 
     @Mock
     private AppointmentRepository appointmentRepository;
@@ -64,246 +75,371 @@ class AppointmentServiceImplTest {
 
     private AppointmentServiceImpl appointmentService;
 
-    private Appointment testAppointment;
+    private Barber alex;
+    private ServiceItem haircut;
+    private final List<Object> events = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
         busySlotsService = new BusySlotsService(barberRepository, barberScheduleRepository, barberTimeOffRepository, appointmentRepository);
         appointmentService = new AppointmentServiceImpl(
                 appointmentRepository, eventPublisher, statsService, tracer,
-                busySlotsService, barberRepository, barberScheduleRepository, barberTimeOffRepository,
-                catalogService, transactionManager
+                busySlotsService, barberRepository,
+                catalogService, CLOCK, BookingProperties.defaults(), transactionManager
         );
 
-        testAppointment = new Appointment("John Doe", "john@test.com", "1234567890", "Barber Alex", LocalDate.now(), "10:00", "Haircut");
-        testAppointment.setId(1L);
-        testAppointment.setPublicId("test-public-id");
-        testAppointment.setStatus("PENDING");
+        alex = new Barber();
+        alex.setId(7L);
+        alex.setName("Alex the Barber");
+        BarberSchedule schedule = new BarberSchedule();
+        schedule.setStartTime(LocalTime.of(9, 0));
+        schedule.setEndTime(LocalTime.of(17, 0));
+        haircut = new ServiceItem("Haircut", new BigDecimal("25.00"), 30, "hair", "");
+
+        lenient().when(barberRepository.findByName("Alex the Barber")).thenReturn(Optional.of(alex));
+        lenient().when(barberRepository.findAll()).thenReturn(List.of(alex));
+        lenient().when(barberScheduleRepository.findByBarberIdAndDayOfWeek(any(), any())).thenReturn(Optional.of(schedule));
+        lenient().when(barberTimeOffRepository.findTimeOffForBarberOnDate(any(), any())).thenReturn(Collections.emptyList());
+        lenient().when(catalogService.findServiceByName("Haircut")).thenReturn(Optional.of(haircut));
+        lenient().when(appointmentRepository.save(any(Appointment.class))).thenAnswer(inv -> {
+            Appointment saved = inv.getArgument(0);
+            if (saved.getId() == null) {
+                saved.setId(100L);
+            }
+            return saved;
+        });
+        lenient().doAnswer(inv -> events.add(inv.getArgument(0))).when(eventPublisher).publishEvent(any(Object.class));
+        lenient().doAnswer(inv -> events.add(inv.getArgument(0))).when(eventPublisher).publishEvent(any(ApplicationEvent.class));
     }
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    private AppointmentCreateRequest request(String barber, LocalDate date, String time) {
+        return new AppointmentCreateRequest("John Doe", "john@test.com", "123", barber, date, time, "Haircut");
+    }
+
+    private Appointment appointment(long id, AppointmentStatus status, LocalDate date, String time) {
+        Appointment appointment = new Appointment("John Doe", "john@test.com", "123",
+                "Alex the Barber", date, time, "Haircut");
+        appointment.setId(id);
+        appointment.setPublicId("public-" + id);
+        appointment.setBarber(alex);
+        appointment.setService(haircut);
+        appointment.setStatus(status);
+        return appointment;
+    }
+
+    private <T> List<T> eventsOfType(Class<T> type) {
+        return events.stream().filter(type::isInstance).map(type::cast).toList();
+    }
+
+    // ── admin listing ────────────────────────────────────────────────────────
 
     @Test
     void testGetAllAppointments_NoFilters() {
-        Page<Appointment> page = new PageImpl<>(Collections.singletonList(testAppointment));
+        Page<Appointment> page = new PageImpl<>(List.of(appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00")));
         when(appointmentRepository.findAll(any(Pageable.class))).thenReturn(page);
-        
-        AppointmentStats stats = new AppointmentStats(1L, 1L, 0L, 0L, 0L, 0, 0.0);
-        when(statsService.getStatsCached(appointmentRepository)).thenReturn(stats);
+        when(statsService.getStatsCached(appointmentRepository)).thenReturn(new AppointmentStats(1L, 1L, 0L, 0L, 0L, 0, 0.0));
 
         AppointmentDashboardResponse response = appointmentService.getAllAppointments(null, null, 0, 10);
 
-        assertNotNull(response);
         assertEquals(1, response.page().getTotalElements());
         assertEquals("John Doe", response.page().getContent().get(0).customerName());
         assertEquals(1L, response.stats().total());
-        assertEquals(0, response.stats().progress());
     }
 
     @Test
-    void testGetAllAppointments_WithProgressCalc() {
-        Page<Appointment> page = new PageImpl<>(Collections.singletonList(testAppointment));
-        when(appointmentRepository.findAll(any(Pageable.class))).thenReturn(page);
-        
-        // 1 approved out of 4 total -> 25%
-        AppointmentStats stats = new AppointmentStats(4L, 2L, 1L, 1L, 0L, 0, 25.0);
-        when(statsService.getStatsCached(appointmentRepository)).thenReturn(stats);
+    void testGetAllAppointments_BlankFiltersMeanNoFilter() {
+        when(appointmentRepository.findAll(any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+        when(statsService.getStatsCached(appointmentRepository)).thenReturn(new AppointmentStats(4L, 2L, 1L, 1L, 0L, 0, 25.0));
 
-        AppointmentDashboardResponse response = appointmentService.getAllAppointments("", "", 0, 10);
+        AppointmentDashboardResponse response = appointmentService.getAllAppointments("", "  ", 0, 10);
 
         assertEquals(25, response.stats().progress());
-        assertEquals(25.0, response.stats().approvedRevenue());
+        verify(appointmentRepository, never()).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test
-    void testGetAllAppointments_OverdueStatus() {
-        Page<Appointment> page = new PageImpl<>(Collections.singletonList(testAppointment));
-        when(appointmentRepository.findByStatusAndBookingDateBefore(eq(AppointmentStatus.PENDING), any(LocalDate.class), any(Pageable.class))).thenReturn(page);
-        when(statsService.getStatsCached(appointmentRepository)).thenReturn(new AppointmentStats(0L,0L,0L,0L,0L,0,0.0));
-
-        appointmentService.getAllAppointments("OVERDUE", null, 0, 10);
-
-        verify(appointmentRepository).findByStatusAndBookingDateBefore(eq(AppointmentStatus.PENDING), any(LocalDate.class), any(Pageable.class));
-    }
-
-    @Test
-    void testGetAllAppointments_StatusAndSearch() {
-        Page<Appointment> page = new PageImpl<>(Collections.singletonList(testAppointment));
-        when(appointmentRepository.findByStatusAndCustomerNameContainingIgnoreCase(eq(AppointmentStatus.PENDING), eq("John"), any(Pageable.class))).thenReturn(page);
-        when(statsService.getStatsCached(appointmentRepository)).thenReturn(new AppointmentStats(0L,0L,0L,0L,0L,0,0.0));
+    @SuppressWarnings("unchecked")
+    void testGetAllAppointments_StatusSearchAndOverdueUseASpecification() {
+        when(appointmentRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+        when(statsService.getStatsCached(appointmentRepository)).thenReturn(new AppointmentStats(0L, 0L, 0L, 0L, 0L, 0, 0.0));
 
         appointmentService.getAllAppointments("PENDING", "John", 0, 10);
+        appointmentService.getAllAppointments("cancelled", null, 0, 10);
+        appointmentService.getAllAppointments(null, "john@test.com", 0, 10);
+        appointmentService.getAllAppointments("OVERDUE", "john", 0, 10);
 
-        verify(appointmentRepository).findByStatusAndCustomerNameContainingIgnoreCase(eq(AppointmentStatus.PENDING), eq("John"), any(Pageable.class));
+        verify(appointmentRepository, times(4)).findAll(any(Specification.class), any(Pageable.class));
+        verify(appointmentRepository, never()).findAll(any(Pageable.class));
     }
 
     @Test
-    void testGetAllAppointments_StatusOnly() {
-        Page<Appointment> page = new PageImpl<>(Collections.singletonList(testAppointment));
-        when(appointmentRepository.findByStatus(eq(AppointmentStatus.PENDING), any(Pageable.class))).thenReturn(page);
-        when(statsService.getStatsCached(appointmentRepository)).thenReturn(new AppointmentStats(0L,0L,0L,0L,0L,0,0.0));
-
-        appointmentService.getAllAppointments("PENDING", "  ", 0, 10);
-
-        verify(appointmentRepository).findByStatus(eq(AppointmentStatus.PENDING), any(Pageable.class));
+    void testGetAllAppointments_UnknownStatusIsRejected() {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.getAllAppointments("BOGUS", null, 0, 10));
+        assertTrue(ex.getMessage().contains("Unknown status"));
+        verifyNoInteractions(statsService);
     }
 
     @Test
-    void testGetAllAppointments_SearchOnly() {
-        Page<Appointment> page = new PageImpl<>(Collections.singletonList(testAppointment));
-        when(appointmentRepository.findByCustomerNameContainingIgnoreCase(eq("John"), any(Pageable.class))).thenReturn(page);
-        when(statsService.getStatsCached(appointmentRepository)).thenReturn(new AppointmentStats(0L,0L,0L,0L,0L,0,0.0));
-
-        appointmentService.getAllAppointments("   ", "John", 0, 10);
-
-        verify(appointmentRepository).findByCustomerNameContainingIgnoreCase(eq("John"), any(Pageable.class));
+    void testGetAppointmentById() {
+        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00")));
+        assertEquals(1L, appointmentService.getAppointmentById(1L).id());
+        when(appointmentRepository.findById(2L)).thenReturn(Optional.empty());
+        assertThrows(ResourceNotFoundException.class, () -> appointmentService.getAppointmentById(2L));
     }
 
-    @Test
-    void testGetAppointmentById_Success() {
-        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(testAppointment));
-        AppointmentResponse response = appointmentService.getAppointmentById(1L);
-        assertNotNull(response);
-        assertEquals(1L, response.id());
-    }
+    // ── creation: BKG-1 grid / schedule / duration / overlap ────────────────
 
     @Test
-    void testGetAppointmentById_NotFound() {
-        when(appointmentRepository.findById(1L)).thenReturn(Optional.empty());
-        assertThrows(ResourceNotFoundException.class, () -> appointmentService.getAppointmentById(1L));
-    }
+    void testCreateAppointment_NamedBarber_Success_SnapshotsPriceAndPublishesEvents() {
+        AppointmentCreationResult result = appointmentService.createAppointment(
+                request("Alex the Barber", TOMORROW, "10:00"), null);
 
-    @Test
-    void testCreateAppointment() {
-        // H2: the NO_PREFERENCE_BARBER sentinel is resolved to the first working,
-        // free barber before persisting. Stub a working barber so the requested
-        // 10:00 slot is available.
-        Barber workingBarber = new Barber();
-        workingBarber.setId(1L);
-        workingBarber.setName("Alex");
-        BarberSchedule schedule = new BarberSchedule();
-        schedule.setStartTime(java.time.LocalTime.of(9, 0));
-        schedule.setEndTime(java.time.LocalTime.of(17, 0));
-
-        when(barberRepository.findAll()).thenReturn(List.of(workingBarber));
-        when(barberTimeOffRepository.findTimeOffForBarberOnDate(1L, LocalDate.now()))
-                .thenReturn(Collections.emptyList());
-        when(barberScheduleRepository.findByBarberIdAndDayOfWeek(1L, LocalDate.now().getDayOfWeek().getValue()))
-                .thenReturn(Optional.of(schedule));
-        when(appointmentRepository.findDistinctBookingTimes("Alex", LocalDate.now(), AppointmentStatus.DENIED))
-                .thenReturn(Collections.emptyList());
-
-        AppointmentCreateRequest request = new AppointmentCreateRequest(
-                "John Doe", "john@test.com", "123",
-                AppointmentServiceImpl.NO_PREFERENCE_BARBER, LocalDate.now(), "10:00", "Haircut");
-        when(appointmentRepository.save(any(Appointment.class))).thenAnswer(invocation -> {
-            Appointment toSave = invocation.getArgument(0);
-            assertEquals("Alex", toSave.getBarberName());
-            assertNotNull(toSave.getBarber());
-            return testAppointment;
-        });
-        when(catalogService.findServiceByName("Haircut")).thenReturn(Optional.of(
-                new com.example.taskflow.catalog.ServiceItem("Haircut", java.math.BigDecimal.TEN, 30, "hair", "")));
-
-        AppointmentCreationResult result = appointmentService.createAppointment(request, null);
-
-        assertNotNull(result);
         assertFalse(result.replayed());
-        assertEquals("John Doe", result.appointment().customerName());
-        verify(appointmentRepository).save(any(Appointment.class));
-        ArgumentCaptor<Object> published = ArgumentCaptor.forClass(Object.class);
-        verify(eventPublisher, times(2)).publishEvent(published.capture());
-        AvailabilityChangedEvent availability = published.getAllValues().stream()
-                .filter(AvailabilityChangedEvent.class::isInstance)
-                .map(AvailabilityChangedEvent.class::cast)
-                .findFirst()
-                .orElseThrow();
-        assertEquals(testAppointment.getBarberName(), availability.barberName());
-        assertEquals(LocalDate.now(), availability.startDate());
+        assertEquals("PENDING", result.appointment().status());
+        org.mockito.ArgumentCaptor<Appointment> saved = org.mockito.ArgumentCaptor.forClass(Appointment.class);
+        verify(appointmentRepository).save(saved.capture());
+        assertEquals(new BigDecimal("25.00"), saved.getValue().getPriceAtBooking());
+        assertSame(alex, saved.getValue().getBarber());
+        assertSame(haircut, saved.getValue().getService());
+        assertEquals(1, eventsOfType(AvailabilityChangedEvent.class).size());
+        assertEquals(AppointmentAdminEvent.Type.CREATED, eventsOfType(AppointmentAdminEvent.class).get(0).type());
+    }
+
+    @Test
+    void testCreateAppointment_NoPreference_ResolvesToConcreteBarber() {
+        AppointmentCreationResult result = appointmentService.createAppointment(
+                request(AppointmentServiceImpl.NO_PREFERENCE_BARBER, TOMORROW, "10:00"), null);
+
+        assertEquals("Alex the Barber", result.appointment().barberName());
     }
 
     @Test
     void testCreateAppointment_NoPreferenceNoBarberAvailable_Rejected() {
         when(barberRepository.findAll()).thenReturn(Collections.emptyList());
 
-        AppointmentCreateRequest request = new AppointmentCreateRequest(
-                "John Doe", "john@test.com", "123",
-                AppointmentServiceImpl.NO_PREFERENCE_BARBER, LocalDate.now(), "10:00", "Haircut");
-
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> appointmentService.createAppointment(request, null));
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> appointmentService.createAppointment(
+                request(AppointmentServiceImpl.NO_PREFERENCE_BARBER, TOMORROW, "10:00"), null));
         assertTrue(ex.getMessage().contains("No barber is available"));
         verify(appointmentRepository, never()).save(any(Appointment.class));
     }
 
+    /** BKG-1: 10:30 and 10:01 are not grid slots and must never reach the busy/overlap logic. */
+    @Test
+    void testCreateAppointment_OffGridTimesAreRejected() {
+        for (String time : new String[] {"10:30", "10:01", "12:00", "08:00", "17:00", "23:59"}) {
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                    () -> appointmentService.createAppointment(request("Alex the Barber", TOMORROW, time), null),
+                    "time " + time);
+            assertTrue(ex.getMessage().contains("available time slots"), ex.getMessage());
+        }
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+    }
+
+    @Test
+    void testCreateAppointment_NoPreferenceOffGridIsRejectedToo() {
+        assertThrows(IllegalArgumentException.class, () -> appointmentService.createAppointment(
+                request(AppointmentServiceImpl.NO_PREFERENCE_BARBER, TOMORROW, "10:30"), null));
+    }
+
+    @Test
+    void testCreateAppointment_ServiceRunningPastClosingTimeIsRejected() {
+        ServiceItem longService = new ServiceItem("Luxury", BigDecimal.TEN, 90, "combo", "");
+        when(catalogService.findServiceByName("Luxury")).thenReturn(Optional.of(longService));
+
+        // 16:00 + 90 min = 17:30 > 17:00 closing time
+        AppointmentCreateRequest tooLate = new AppointmentCreateRequest(
+                "John Doe", "john@test.com", "123", "Alex the Barber", TOMORROW, "16:00", "Luxury");
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.createAppointment(tooLate, null));
+        assertTrue(ex.getMessage().contains("closing time"));
+
+        // 15:00 + 90 = 16:30 is fine
+        AppointmentCreateRequest fits = new AppointmentCreateRequest(
+                "John Doe", "john@test.com", "123", "Alex the Barber", TOMORROW, "15:00", "Luxury");
+        assertEquals("PENDING", appointmentService.createAppointment(fits, null).appointment().status());
+    }
+
+    @Test
+    void testCreateAppointment_OverlapWithLongerExistingAppointmentIsRejected() {
+        Appointment existing = appointment(50, AppointmentStatus.APPROVED, TOMORROW, "10:00");
+        existing.setService(new ServiceItem("Luxury", BigDecimal.TEN, 120, "combo", ""));
+        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW)).thenReturn(List.of(existing));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.createAppointment(request("Alex the Barber", TOMORROW, "11:00"), null));
+        assertTrue(ex.getMessage().contains("already booked"));
+        // sentinel resolution applies the same rule: the only barber is busy
+        assertThrows(IllegalArgumentException.class, () -> appointmentService.createAppointment(
+                request(AppointmentServiceImpl.NO_PREFERENCE_BARBER, TOMORROW, "11:00"), null));
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+    }
+
+    @Test
+    void testCreateAppointment_SameStartAsExistingIsRejected() {
+        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW))
+                .thenReturn(List.of(appointment(50, AppointmentStatus.PENDING, TOMORROW, "10:00")));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.createAppointment(request("Alex the Barber", TOMORROW, "10:00"), null));
+        assertTrue(ex.getMessage().contains("already booked"));
+    }
+
+    @Test
+    void testCreateAppointment_AdjacentToExistingIsAllowed() {
+        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW))
+                .thenReturn(List.of(appointment(50, AppointmentStatus.PENDING, TOMORROW, "10:00")));
+
+        assertEquals("PENDING", appointmentService.createAppointment(
+                request("Alex the Barber", TOMORROW, "11:00"), null).appointment().status());
+    }
+
+    @Test
+    void testCreateAppointment_TimeOffIsRejectedDespiteCachedAvailability() {
+        BarberTimeOff timeOff = new BarberTimeOff();
+        timeOff.setBarber(alex);
+        when(barberTimeOffRepository.findTimeOffForBarberOnDate(7L, TOMORROW)).thenReturn(List.of(timeOff));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.createAppointment(request("Alex the Barber", TOMORROW, "10:00"), null));
+        assertTrue(ex.getMessage().contains("time off"));
+    }
+
+    @Test
+    void testCreateAppointment_UnknownBarberAndServiceRejected() {
+        when(barberRepository.findByName("Ghost Barber")).thenReturn(Optional.empty());
+        IllegalArgumentException barber = assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.createAppointment(request("Ghost Barber", TOMORROW, "10:00"), null));
+        assertTrue(barber.getMessage().contains("Unknown barber"));
+
+        when(catalogService.findServiceByName("Phantom")).thenReturn(Optional.empty());
+        IllegalArgumentException service = assertThrows(IllegalArgumentException.class, () ->
+                appointmentService.createAppointment(new AppointmentCreateRequest(
+                        "John Doe", "john@test.com", "123", "Alex the Barber", TOMORROW, "10:00", "Phantom"), null));
+        assertTrue(service.getMessage().contains("Unknown service"));
+    }
+
+    // ── creation: BKG-2 date window and per-email limit ──────────────────────
+
+    @Test
+    void testCreateAppointment_PastDateAndPastTimeTodayAreRejected() {
+        IllegalArgumentException yesterday = assertThrows(IllegalArgumentException.class, () ->
+                appointmentService.createAppointment(request("Alex the Barber", TODAY.minusDays(1), "10:00"), null));
+        assertTrue(yesterday.getMessage().contains("future"));
+
+        // clock is 08:00 today: 09:00 today is still ahead, but "now" itself is not
+        assertEquals("PENDING", appointmentService.createAppointment(
+                request("Alex the Barber", TODAY, "09:00"), null).appointment().status());
+
+        Clock noon = Clock.fixed(Instant.parse("2026-10-12T10:00:00Z"), ZoneOffset.UTC);
+        AppointmentServiceImpl atTen = new AppointmentServiceImpl(
+                appointmentRepository, eventPublisher, statsService, tracer, busySlotsService, barberRepository,
+                catalogService, noon,
+                BookingProperties.defaults(), transactionManager);
+        assertThrows(IllegalArgumentException.class,
+                () -> atTen.createAppointment(request("Alex the Barber", TODAY, "10:00"), null));
+        assertThrows(IllegalArgumentException.class,
+                () -> atTen.createAppointment(request("Alex the Barber", TODAY, "09:00"), null));
+    }
+
+    @Test
+    void testCreateAppointment_UsesTheShopTimeZoneNotTheJvmZone() {
+        // 00:30 UTC on Oct 12 is already 09:30 in Tokyo. Read as UTC, a 09:00 booking that day would
+        // still look like the future; in the shop's own zone it is already past.
+        Clock tokyo = Clock.fixed(Instant.parse("2026-10-12T00:30:00Z"), java.time.ZoneId.of("Asia/Tokyo"));
+        AppointmentServiceImpl service = new AppointmentServiceImpl(
+                appointmentRepository, eventPublisher, statsService, tracer, busySlotsService, barberRepository,
+                catalogService, tokyo,
+                BookingProperties.defaults(), transactionManager);
+
+        assertEquals("PENDING", service.createAppointment(request("Alex the Barber", TODAY, "10:00"), null)
+                .appointment().status());
+        assertThrows(IllegalArgumentException.class,
+                () -> service.createAppointment(request("Alex the Barber", TODAY, "09:00"), null));
+    }
+
+    @Test
+    void testCreateAppointment_MaxAdvanceDaysBoundary() {
+        // exactly 90 days ahead is allowed, 91 is not
+        assertEquals("PENDING", appointmentService.createAppointment(
+                request("Alex the Barber", TODAY.plusDays(90), "10:00"), null).appointment().status());
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                appointmentService.createAppointment(request("Alex the Barber", TODAY.plusDays(91), "10:00"), null));
+        assertTrue(ex.getMessage().contains("90 days"));
+    }
+
+    @Test
+    void testCreateAppointment_PerEmailActiveLimit() {
+        when(appointmentRepository.countActiveFromDate("john@test.com", TODAY)).thenReturn(5L);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.createAppointment(request("Alex the Barber", TOMORROW, "10:00"), null));
+        assertTrue(ex.getMessage().contains("maximum"));
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+
+        // one below the limit is fine
+        when(appointmentRepository.countActiveFromDate("john@test.com", TODAY)).thenReturn(4L);
+        assertEquals("PENDING", appointmentService.createAppointment(
+                request("Alex the Barber", TOMORROW, "10:00"), null).appointment().status());
+    }
+
+    // ── idempotency ──────────────────────────────────────────────────────────
+
     @Test
     void testCreateAppointment_IdempotentReplay_SamePayload_ReturnsReplay() {
-        Appointment existing = new Appointment(
-                "John Doe", "john@test.com", "123", "Alex the Barber",
-                LocalDate.now(), "10:00", "Haircut");
-        existing.setId(42L);
-        existing.setStatus("PENDING");
+        Appointment existing = appointment(42, AppointmentStatus.PENDING, TOMORROW, "10:00");
         when(appointmentRepository.findByIdempotencyKey("idem-1")).thenReturn(existing);
 
-        AppointmentCreateRequest request = new AppointmentCreateRequest(
-                "John Doe", "JOHN@test.com", "999", "Alex the Barber",
-                LocalDate.now(), "10:00", "Haircut");
-
-        AppointmentCreationResult result = appointmentService.createAppointment(request, "idem-1");
+        AppointmentCreationResult result = appointmentService.createAppointment(
+                new AppointmentCreateRequest("John Doe", "JOHN@test.com", "999", "Alex the Barber", TOMORROW, "10:00", "Haircut"),
+                "idem-1");
 
         assertTrue(result.replayed());
         assertEquals(42L, result.appointment().id());
         verify(appointmentRepository, never()).save(any(Appointment.class));
     }
 
+    /** BKG-5: a late replay of the original create request returns the cancelled row, it does not rebook. */
     @Test
-    void testCreateAppointment_IdempotentReplay_EmailMismatch_ThrowsConflict() {
-        Appointment existing = new Appointment(
-                "Victim", "victim@test.com", "123", "Alex the Barber",
-                LocalDate.now(), "10:00", "Haircut");
-        existing.setId(42L);
-        when(appointmentRepository.findByIdempotencyKey("idem-1")).thenReturn(existing);
+    void testCreateAppointment_IdempotentReplayOfCancelledBooking_ReturnsTheCancelledRowWithoutRebooking() {
+        Appointment cancelled = appointment(42, AppointmentStatus.CANCELLED, TOMORROW, "10:00");
+        when(appointmentRepository.findByIdempotencyKey("idem-1")).thenReturn(cancelled);
 
-        AppointmentCreateRequest request = new AppointmentCreateRequest(
-                "Attacker", "attacker@test.com", "999", "Alex the Barber",
-                LocalDate.now(), "10:00", "Haircut");
+        AppointmentCreationResult result = appointmentService.createAppointment(
+                request("Alex the Barber", TOMORROW, "10:00"), "idem-1");
 
-        assertThrows(com.example.taskflow.core.IdempotencyConflictException.class,
-                () -> appointmentService.createAppointment(request, "idem-1"));
+        assertTrue(result.replayed());
+        assertEquals("CANCELLED", result.appointment().status());
         verify(appointmentRepository, never()).save(any(Appointment.class));
     }
 
     @Test
-    void testCreateAppointment_IdempotentReplay_PayloadMismatch_ThrowsConflict() {
-        Appointment existing = new Appointment(
-                "John Doe", "john@test.com", "123", "Alex the Barber",
-                LocalDate.now(), "10:00", "Haircut");
-        existing.setId(42L);
+    void testCreateAppointment_IdempotentReplay_EmailOrPayloadMismatch_ThrowsConflict() {
+        Appointment existing = appointment(42, AppointmentStatus.PENDING, TOMORROW, "10:00");
         when(appointmentRepository.findByIdempotencyKey("idem-1")).thenReturn(existing);
 
-        // Same customer and key, but a different time — not the same request.
-        AppointmentCreateRequest request = new AppointmentCreateRequest(
-                "John Doe", "john@test.com", "123", "Alex the Barber",
-                LocalDate.now(), "11:00", "Haircut");
-
-        assertThrows(com.example.taskflow.core.IdempotencyConflictException.class,
-                () -> appointmentService.createAppointment(request, "idem-1"));
+        assertThrows(IdempotencyConflictException.class, () -> appointmentService.createAppointment(
+                new AppointmentCreateRequest("Attacker", "attacker@test.com", "999", "Alex the Barber", TOMORROW, "10:00", "Haircut"),
+                "idem-1"));
+        assertThrows(IdempotencyConflictException.class, () -> appointmentService.createAppointment(
+                request("Alex the Barber", TOMORROW, "11:00"), "idem-1"));
         verify(appointmentRepository, never()).save(any(Appointment.class));
     }
 
     /**
-     * A same-key request commits between this request's idempotency pre-check and
-     * its busy-slot read; the after-commit eviction makes the reload see the
-     * winner's slot. The loser must get a verified replay, not a 400.
+     * A same-key request commits between this request's idempotency pre-check and its
+     * availability read; the loser must get a verified replay, not a 400.
      */
     @Test
-    void testCreateAppointment_SameKeyCommittedBeforeBusySlotRead_ReturnsReplay() {
-        LocalDate bookingDate = LocalDate.now();
-        Appointment winner = stubConcreteBarberWithBusySlot(bookingDate);
+    void testCreateAppointment_SameKeyCommittedBeforeAvailabilityRead_ReturnsReplay() {
+        Appointment winner = appointment(42, AppointmentStatus.PENDING, TOMORROW, "10:00");
         when(appointmentRepository.findByIdempotencyKey("race-key")).thenReturn(null, winner);
+        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW)).thenReturn(List.of(winner));
 
-        AppointmentCreateRequest request = new AppointmentCreateRequest(
-                "John Doe", "john@test.com", "123", "Alex the Barber", bookingDate, "10:00", "Haircut");
-
-        AppointmentCreationResult result = appointmentService.createAppointment(request, "race-key");
+        AppointmentCreationResult result = appointmentService.createAppointment(
+                request("Alex the Barber", TOMORROW, "10:00"), "race-key");
 
         assertTrue(result.replayed());
         assertEquals(42L, result.appointment().id());
@@ -313,258 +449,294 @@ class AppointmentServiceImplTest {
 
     @Test
     void testCreateAppointment_KeyedRequestSlotTakenByOtherBooking_Rejected() {
-        LocalDate bookingDate = LocalDate.now();
-        stubConcreteBarberWithBusySlot(bookingDate);
+        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW))
+                .thenReturn(List.of(appointment(43, AppointmentStatus.PENDING, TOMORROW, "10:00")));
         when(appointmentRepository.findByIdempotencyKey("fresh-key")).thenReturn(null);
 
-        AppointmentCreateRequest request = new AppointmentCreateRequest(
-                "John Doe", "john@test.com", "123", "Alex the Barber", bookingDate, "10:00", "Haircut");
-
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> appointmentService.createAppointment(request, "fresh-key"));
+                () -> appointmentService.createAppointment(request("Alex the Barber", TOMORROW, "10:00"), "fresh-key"));
         assertTrue(ex.getMessage().contains("already booked"));
         verify(appointmentRepository, times(2)).findByIdempotencyKey("fresh-key");
+    }
+
+    // ── status updates: BKG-3 ────────────────────────────────────────────────
+
+    @Test
+    void testUpdateStatus_PendingToApproved_Success() {
+        Appointment pending = appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00");
+        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(pending));
+        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW)).thenReturn(List.of(pending));
+
+        AppointmentResponse response = appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED"));
+
+        assertEquals("APPROVED", response.status());
+        verify(appointmentRepository).save(pending);
+        assertEquals(1, eventsOfType(AppointmentStatusChangedEvent.class).size());
+        assertEquals(1, eventsOfType(AvailabilityChangedEvent.class).size());
+        assertEquals(AppointmentAdminEvent.Type.UPDATED, eventsOfType(AppointmentAdminEvent.class).get(0).type());
+    }
+
+    @Test
+    void testUpdateStatus_ApprovedToDenied_And_PendingToDenied() {
+        Appointment approved = appointment(1, AppointmentStatus.APPROVED, TOMORROW, "10:00");
+        Appointment pending = appointment(2, AppointmentStatus.PENDING, TODAY.minusDays(3), "10:00");
+        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(approved));
+        when(appointmentRepository.findById(2L)).thenReturn(Optional.of(pending));
+
+        assertEquals("DENIED", appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("DENIED")).status());
+        // denying an overdue pending booking must stay possible (no availability check on deny)
+        assertEquals("DENIED", appointmentService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("DENIED")).status());
+    }
+
+    /** BKG-3: same-status requests are a no-op: no write, no event, hence no e-mail. */
+    @Test
+    void testUpdateStatus_SameStatusIsANoOp() {
+        Appointment approved = appointment(1, AppointmentStatus.APPROVED, TOMORROW, "10:00");
+        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(approved));
+
+        AppointmentResponse response = appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED"));
+
+        assertEquals("APPROVED", response.status());
         verify(appointmentRepository, never()).save(any(Appointment.class));
-    }
-
-    /** Stubs a scheduled concrete barber whose 10:00 slot is already busy. */
-    private Appointment stubConcreteBarberWithBusySlot(LocalDate bookingDate) {
-        Barber barber = new Barber();
-        barber.setId(7L);
-        barber.setName("Alex the Barber");
-        BarberSchedule schedule = new BarberSchedule();
-        schedule.setStartTime(java.time.LocalTime.of(9, 0));
-        schedule.setEndTime(java.time.LocalTime.of(17, 0));
-        when(barberRepository.findByName("Alex the Barber")).thenReturn(Optional.of(barber));
-        when(barberScheduleRepository.findByBarberIdAndDayOfWeek(7L, bookingDate.getDayOfWeek().getValue()))
-                .thenReturn(Optional.of(schedule));
-        when(barberTimeOffRepository.findTimeOffForBarberOnDate(7L, bookingDate)).thenReturn(Collections.emptyList());
-        when(appointmentRepository.findDistinctBookingTimes("Alex the Barber", bookingDate, AppointmentStatus.DENIED))
-                .thenReturn(List.of("10:00"));
-
-        Appointment existing = new Appointment(
-                "John Doe", "john@test.com", "123", "Alex the Barber", bookingDate, "10:00", "Haircut");
-        existing.setId(42L);
-        existing.setStatus("PENDING");
-        return existing;
+        assertTrue(events.isEmpty(), "no event may be published for a no-op: " + events);
     }
 
     @Test
-    void testCreateAppointment_UnknownBarber_Rejected() {
-        AppointmentCreateRequest request = new AppointmentCreateRequest(
-                "John Doe", "john@test.com", "123",
-                "Ghost Barber", LocalDate.now(), "10:00", "Haircut");
-        when(barberRepository.findByName("Ghost Barber")).thenReturn(Optional.empty());
+    void testUpdateStatus_AnythingOnCancelledIsAConflict() {
+        Appointment cancelled = appointment(1, AppointmentStatus.CANCELLED, TOMORROW, "10:00");
+        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(cancelled));
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> appointmentService.createAppointment(request, null));
-        assertTrue(ex.getMessage().contains("Unknown barber"));
+        assertThrows(InvalidStatusTransitionException.class,
+                () -> appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")));
+        assertThrows(InvalidStatusTransitionException.class,
+                () -> appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("DENIED")));
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+        assertTrue(events.isEmpty());
     }
 
     @Test
-    void testCreateAppointment_UnknownService_Rejected() {
-        // H3: NO_PREFERENCE_BARBER now hits findAll() in BusySlotsService.
-        // Stub working barber so 10:00 is available, then the service rejection fires.
-        Barber workingBarber = new Barber();
-        workingBarber.setId(1L);
-        workingBarber.setName("Alex");
-        BarberSchedule schedule = new BarberSchedule();
-        schedule.setStartTime(java.time.LocalTime.of(9, 0));
-        schedule.setEndTime(java.time.LocalTime.of(17, 0));
+    void testUpdateStatus_DeniedToApproved_ReChecksAvailability() {
+        Appointment denied = appointment(1, AppointmentStatus.DENIED, TOMORROW, "10:00");
+        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(denied));
 
-        when(barberRepository.findAll()).thenReturn(List.of(workingBarber));
-        when(barberTimeOffRepository.findTimeOffForBarberOnDate(1L, LocalDate.now()))
-                .thenReturn(Collections.emptyList());
-        when(barberScheduleRepository.findByBarberIdAndDayOfWeek(1L, LocalDate.now().getDayOfWeek().getValue()))
-                .thenReturn(Optional.of(schedule));
-        when(appointmentRepository.findDistinctBookingTimes("Alex", LocalDate.now(), AppointmentStatus.DENIED))
-                .thenReturn(Collections.emptyList());
+        // slot still free: re-approval works
+        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW)).thenReturn(List.of());
+        assertEquals("APPROVED", appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")).status());
+    }
 
-        AppointmentCreateRequest request = new AppointmentCreateRequest(
-                "John Doe", "john@test.com", "123",
-                AppointmentServiceImpl.NO_PREFERENCE_BARBER, LocalDate.now(), "10:00", "Phantom Service");
-        when(catalogService.findServiceByName("Phantom Service")).thenReturn(Optional.empty());
+    /** BKG-3: the slot of a DENIED booking was re-booked meanwhile -> 409, status untouched. */
+    @Test
+    void testUpdateStatus_DeniedToApproved_SlotRebookedMeanwhile_IsAConflict() {
+        Appointment denied = appointment(1, AppointmentStatus.DENIED, TOMORROW, "10:00");
+        Appointment rebooked = appointment(2, AppointmentStatus.PENDING, TOMORROW, "10:00");
+        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(denied));
+        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW)).thenReturn(List.of(rebooked));
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> appointmentService.createAppointment(request, null));
-        assertTrue(ex.getMessage().contains("Unknown service"));
+        ConflictException ex = assertThrows(ConflictException.class,
+                () -> appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")));
+        assertTrue(ex.getMessage().contains("already booked"));
+        assertEquals(AppointmentStatus.DENIED, denied.getStatusEnum());
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+        assertTrue(events.isEmpty());
     }
 
     @Test
-    void testCreateAppointment_TimeOff_RejectedDespiteCachedAvailability() {
-        Barber barber = new Barber();
-        barber.setId(7L);
-        barber.setName("Alex the Barber");
-        BarberSchedule schedule = new BarberSchedule();
-        schedule.setStartTime(java.time.LocalTime.of(9, 0));
-        schedule.setEndTime(java.time.LocalTime.of(17, 0));
-        BarberTimeOff timeOff = new BarberTimeOff();
-        timeOff.setBarber(barber);
+    void testUpdateStatus_ApproveRefusesRowsWithoutAConcreteBarber() {
+        Appointment sentinel = appointment(1, AppointmentStatus.DENIED, TOMORROW, "10:00");
+        sentinel.setBarberName(AppointmentServiceImpl.NO_PREFERENCE_BARBER);
+        sentinel.setBarber(null);
+        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(sentinel));
 
-        LocalDate bookingDate = LocalDate.now();
-        AppointmentCreateRequest request = new AppointmentCreateRequest(
-                "John Doe", "john@test.com", "123", "Alex the Barber", bookingDate, "10:00", "Haircut");
-        when(barberRepository.findByName("Alex the Barber")).thenReturn(Optional.of(barber));
-        when(barberScheduleRepository.findByBarberIdAndDayOfWeek(7L, bookingDate.getDayOfWeek().getValue()))
-                .thenReturn(Optional.of(schedule));
-        when(barberTimeOffRepository.findTimeOffForBarberOnDate(7L, bookingDate)).thenReturn(List.of(timeOff));
+        ConflictException ex = assertThrows(ConflictException.class,
+                () -> appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")));
+        assertTrue(ex.getMessage().contains("no assigned barber"));
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> appointmentService.createAppointment(request, null));
+        // a null FK on its own is enough
+        Appointment noFk = appointment(2, AppointmentStatus.PENDING, TOMORROW, "11:00");
+        noFk.setBarber(null);
+        when(appointmentRepository.findById(2L)).thenReturn(Optional.of(noFk));
+        assertThrows(ConflictException.class,
+                () -> appointmentService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("APPROVED")));
+        // ...but such a row can still be denied
+        assertEquals("DENIED", appointmentService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("DENIED")).status());
+    }
+
+    @Test
+    void testUpdateStatus_ApproveRefusesPastAppointments() {
+        Appointment past = appointment(1, AppointmentStatus.PENDING, TODAY.minusDays(1), "10:00");
+        Appointment earlierToday = appointment(2, AppointmentStatus.PENDING, TODAY, "07:00");
+        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(past));
+        when(appointmentRepository.findById(2L)).thenReturn(Optional.of(earlierToday));
+
+        ConflictException ex = assertThrows(ConflictException.class,
+                () -> appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")));
+        assertTrue(ex.getMessage().contains("past"));
+        assertThrows(ConflictException.class,
+                () -> appointmentService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("APPROVED")));
+    }
+
+    @Test
+    void testUpdateStatus_ApproveRefusesWhenBarberNowOnLeave() {
+        Appointment pending = appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00");
+        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(pending));
+        when(barberTimeOffRepository.findTimeOffForBarberOnDate(7L, TOMORROW)).thenReturn(List.of(new BarberTimeOff()));
+
+        ConflictException ex = assertThrows(ConflictException.class,
+                () -> appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")));
         assertTrue(ex.getMessage().contains("time off"));
     }
 
     @Test
-    void testUpdateAppointmentStatus_Success() {
-        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(testAppointment));
-        when(appointmentRepository.save(any(Appointment.class))).thenReturn(testAppointment);
-
-        AppointmentUpdateRequest request = new AppointmentUpdateRequest("APPROVED");
-        AppointmentResponse response = appointmentService.updateAppointmentStatus(1L, request);
-
-        assertEquals("APPROVED", response.status());
-        verify(appointmentRepository).save(testAppointment);
-        verify(eventPublisher).publishEvent(any(AppointmentAdminEvent.class));
-        verify(eventPublisher).publishEvent(any(AvailabilityChangedEvent.class));
-    }
-    
-    @Test
-    void testUpdateAppointmentStatus_Denied() {
-        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(testAppointment));
-        when(appointmentRepository.save(any(Appointment.class))).thenReturn(testAppointment);
-
-        AppointmentUpdateRequest request = new AppointmentUpdateRequest("DENIED");
-        AppointmentResponse response = appointmentService.updateAppointmentStatus(1L, request);
-
-        assertEquals("DENIED", response.status());
-        verify(appointmentRepository).save(testAppointment);
-    }
-    
-    @Test
-    void testNullEntityToResponse() {
-        assertNull(AppointmentResponse.fromEntity(null));
-    }
-
-    @Test
-    void testMaskMethodsThroughNotification() throws Exception {
-        // We can test email dispatching edges by manipulating Appointment
-        Appointment appt = new Appointment();
-        appt.setCustomerEmail(null);
-        appt.setCustomerName(null);
-        appt.setStatus("PENDING");
-        appt.setBarberName("Barber");
-        appt.setBookingDate(LocalDate.now());
-        appt.setBookingTime("10:00");
-        appt.setServiceType("Haircut");
-        appt.setId(2L);
-
-        when(appointmentRepository.findById(2L)).thenReturn(Optional.of(appt));
-        when(appointmentRepository.save(any(Appointment.class))).thenReturn(appt);
-        
-        AppointmentResponse res1 = appointmentService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("OTHER"));
-        assertNotNull(res1);
-        
-        appt.setCustomerEmail("a@"); // edge case
-        appt.setCustomerName("ab"); // edge case
-        AppointmentResponse res2 = appointmentService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("OTHER"));
-        assertNotNull(res2);
-        
-        appt.setCustomerEmail("a"); // edge case
-        appt.setCustomerName(""); // edge case
-        AppointmentResponse res3 = appointmentService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("APPROVED"));
-        assertNotNull(res3);
-        
-        verify(appointmentRepository, times(3)).save(any(Appointment.class));
-        verify(eventPublisher, times(3)).publishEvent(any(AppointmentStatusChangedEvent.class));
-    }
-
-    @Test
-    void testGetBusySlots_NullOrShortDate() {
-        // maskInput edge cases
-        List<String> slots1 = appointmentService.getBusySlots("Barber Alex", null);
-        assertTrue(slots1.isEmpty());
-        
-        List<String> slots2 = appointmentService.getBusySlots("Barber Alex", "123");
-        assertTrue(slots2.isEmpty());
-    }
-
-    @Test
-    void testUpdateAppointmentStatus_NotFound() {
+    void testUpdateStatus_NotFoundAndUnknownTarget() {
         when(appointmentRepository.findById(1L)).thenReturn(Optional.empty());
-        AppointmentUpdateRequest request = new AppointmentUpdateRequest("APPROVED");
-        assertThrows(ResourceNotFoundException.class, () -> appointmentService.updateAppointmentStatus(1L, request));
+        assertThrows(ResourceNotFoundException.class,
+                () -> appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")));
+
+        when(appointmentRepository.findById(2L)).thenReturn(Optional.of(appointment(2, AppointmentStatus.PENDING, TOMORROW, "10:00")));
+        assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("OTHER")));
+        // PENDING / CANCELLED are not valid targets of this endpoint
+        assertThrows(InvalidStatusTransitionException.class,
+                () -> appointmentService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("CANCELLED")));
+    }
+
+    // ── cancel: BKG-5 ────────────────────────────────────────────────────────
+
+    @Test
+    void testPublicCancel_SoftCancelsAndPublishesDedicatedEvent() {
+        Appointment pending = appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00");
+        when(appointmentRepository.findByPublicId("public-1")).thenReturn(pending);
+
+        appointmentService.publicCancelAppointment("public-1", " JOHN@test.com ");
+
+        assertEquals(AppointmentStatus.CANCELLED, pending.getStatusEnum());
+        verify(appointmentRepository).save(pending);
+        verify(appointmentRepository, never()).delete(any(Appointment.class));
+        AppointmentCancelledEvent event = eventsOfType(AppointmentCancelledEvent.class).get(0);
+        assertSame(pending, event.appointment());
+        assertEquals(AppointmentCancelledEvent.CancelledBy.GUEST, event.cancelledBy());
+        assertTrue(eventsOfType(AppointmentStatusChangedEvent.class).isEmpty(),
+                "cancel must not publish the status-change event with the stale status");
+        assertEquals(1, eventsOfType(AvailabilityChangedEvent.class).size());
+        assertEquals(1, eventsOfType(AppointmentAdminEvent.class).size());
     }
 
     @Test
-    void testDeleteAppointment_Success() {
-        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(testAppointment));
+    void testPublicCancel_AlreadyCancelledIsIdempotent() {
+        Appointment cancelled = appointment(1, AppointmentStatus.CANCELLED, TOMORROW, "10:00");
+        when(appointmentRepository.findByPublicId("public-1")).thenReturn(cancelled);
+
+        appointmentService.publicCancelAppointment("public-1", "john@test.com");
+
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+        assertTrue(events.isEmpty());
+    }
+
+    @Test
+    void testPublicCancel_DeniedIsRejected_PastIsRejected_WrongEmailIsRejected_UnknownIs404() {
+        Appointment denied = appointment(1, AppointmentStatus.DENIED, TOMORROW, "10:00");
+        Appointment past = appointment(2, AppointmentStatus.APPROVED, TODAY, "07:00");
+        Appointment ok = appointment(3, AppointmentStatus.APPROVED, TOMORROW, "10:00");
+        when(appointmentRepository.findByPublicId("public-1")).thenReturn(denied);
+        when(appointmentRepository.findByPublicId("public-2")).thenReturn(past);
+        when(appointmentRepository.findByPublicId("public-3")).thenReturn(ok);
+        when(appointmentRepository.findByPublicId("nope")).thenReturn(null);
+
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.publicCancelAppointment("public-1", "john@test.com")).getMessage().contains("declined"));
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.publicCancelAppointment("public-2", "john@test.com")).getMessage().contains("already started"));
+        assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.publicCancelAppointment("public-3", "wrong@test.com"));
+        assertThrows(ResourceNotFoundException.class,
+                () -> appointmentService.publicCancelAppointment("nope", "john@test.com"));
+        assertEquals(AppointmentStatus.APPROVED, ok.getStatusEnum());
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+    }
+
+    @Test
+    void testCustomerCancel_OwnershipPastAndEvent() {
+        Appointment mine = appointment(1, AppointmentStatus.APPROVED, TOMORROW, "10:00");
+        Appointment past = appointment(2, AppointmentStatus.APPROVED, TODAY.minusDays(1), "10:00");
+        when(appointmentRepository.findByPublicId("public-1")).thenReturn(mine);
+        when(appointmentRepository.findByPublicId("public-2")).thenReturn(past);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> appointmentService.cancelMyAppointment("public-1", "someone-else@test.com"));
+        assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.cancelMyAppointment("public-2", "john@test.com"));
+
+        appointmentService.cancelMyAppointment("public-1", "John@Test.com");
+        assertEquals(AppointmentStatus.CANCELLED, mine.getStatusEnum());
+        assertEquals(AppointmentCancelledEvent.CancelledBy.CUSTOMER,
+                eventsOfType(AppointmentCancelledEvent.class).get(0).cancelledBy());
+    }
+
+    @Test
+    void testAdminDelete_SoftCancelsEvenPastBookings_ButNotDeniedOnes() {
+        Appointment past = appointment(1, AppointmentStatus.APPROVED, TODAY.minusDays(5), "10:00");
+        Appointment denied = appointment(2, AppointmentStatus.DENIED, TOMORROW, "10:00");
+        Appointment cancelled = appointment(3, AppointmentStatus.CANCELLED, TOMORROW, "11:00");
+        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(past));
+        when(appointmentRepository.findById(2L)).thenReturn(Optional.of(denied));
+        when(appointmentRepository.findById(3L)).thenReturn(Optional.of(cancelled));
+
         appointmentService.deleteAppointment(1L);
-        verify(appointmentRepository).delete(testAppointment);
-        verify(eventPublisher).publishEvent(any(AppointmentAdminEvent.class));
-        verify(eventPublisher).publishEvent(any(AvailabilityChangedEvent.class));
+        assertEquals(AppointmentStatus.CANCELLED, past.getStatusEnum());
+        assertEquals(AppointmentCancelledEvent.CancelledBy.ADMIN,
+                eventsOfType(AppointmentCancelledEvent.class).get(0).cancelledBy());
+        verify(appointmentRepository, never()).delete(any(Appointment.class));
+        verify(appointmentRepository, never()).deleteById(any());
+
+        assertThrows(IllegalArgumentException.class, () -> appointmentService.deleteAppointment(2L));
+        events.clear();
+        appointmentService.deleteAppointment(3L); // idempotent
+        assertTrue(events.isEmpty());
+
+        when(appointmentRepository.findById(9L)).thenReturn(Optional.empty());
+        assertThrows(ResourceNotFoundException.class, () -> appointmentService.deleteAppointment(9L));
+    }
+
+    // ── misc ─────────────────────────────────────────────────────────────────
+
+    @Test
+    void testLockForReminderOnlyReturnsApprovedBookings() {
+        when(appointmentRepository.findByIdForUpdate(1L))
+                .thenReturn(Optional.of(appointment(1, AppointmentStatus.APPROVED, TOMORROW, "10:00")));
+        when(appointmentRepository.findByIdForUpdate(2L))
+                .thenReturn(Optional.of(appointment(2, AppointmentStatus.CANCELLED, TOMORROW, "10:00")));
+
+        assertTrue(appointmentService.lockForReminder(1L).isPresent());
+        assertTrue(appointmentService.lockForReminder(2L).isEmpty());
     }
 
     @Test
-    void testDeleteAppointment_NotFound() {
-        when(appointmentRepository.findById(1L)).thenReturn(Optional.empty());
-        assertThrows(ResourceNotFoundException.class, () -> appointmentService.deleteAppointment(1L));
+    void testFindAppointmentIdsNeedingRemindersAsksForApprovedOnly() {
+        when(appointmentRepository.findReminderIds(TOMORROW, false, AppointmentStatus.APPROVED)).thenReturn(List.of(5L));
+
+        assertEquals(List.of(5L), appointmentService.findAppointmentIdsNeedingReminders(TOMORROW));
     }
 
     @Test
-    void testGetBusySlots_Success() {
-        List<String> expectedSlots = Arrays.asList("10:00", "11:00");
-        when(appointmentRepository.findDistinctBookingTimes(eq("Barber Alex"), any(LocalDate.class), eq(AppointmentStatus.DENIED)))
-                .thenReturn(expectedSlots);
+    void testGetBusySlots_DelegatesAndPropagatesValidationErrors() {
+        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW))
+                .thenReturn(List.of(appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00")));
+        assertEquals(List.of("10:00"), appointmentService.getBusySlots("Alex the Barber", TOMORROW.toString()));
 
-        List<String> slots = appointmentService.getBusySlots("Barber Alex", LocalDate.now().toString());
-        assertEquals(2, slots.size());
-    }
-
-    @Test
-    void testGetBusySlots_ParseException() {
-        List<String> slots = appointmentService.getBusySlots("Barber Alex", "invalid-date");
-        assertTrue(slots.isEmpty());
-    }
-
-    @Test
-    void testPublicCancelAppointment_Success() {
-        when(appointmentRepository.findByPublicId("test-public-id")).thenReturn(testAppointment);
-        appointmentService.publicCancelAppointment("test-public-id", "john@test.com");
-        verify(appointmentRepository).delete(testAppointment);
-        verify(eventPublisher).publishEvent(any(AppointmentAdminEvent.class));
-        verify(eventPublisher).publishEvent(any(AvailabilityChangedEvent.class));
-    }
-
-    @Test
-    void testPublicCancelAppointment_NotFound() {
-        when(appointmentRepository.findByPublicId("test-public-id")).thenReturn(null);
-        assertThrows(ResourceNotFoundException.class, () -> appointmentService.publicCancelAppointment("test-public-id", "john@test.com"));
-    }
-
-    @Test
-    void testPublicCancelAppointment_EmailMismatch() {
-        when(appointmentRepository.findByPublicId("test-public-id")).thenReturn(testAppointment);
-        assertThrows(IllegalArgumentException.class, () -> appointmentService.publicCancelAppointment("test-public-id", "wrong@test.com"));
+        assertThrows(IllegalArgumentException.class, () -> appointmentService.getBusySlots("Alex the Barber", "invalid-date"));
+        when(barberRepository.findByName("Ghost")).thenReturn(Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> appointmentService.getBusySlots("Ghost", TOMORROW.toString()));
     }
 
     @Test
     void testFindByPublicId() {
-        when(appointmentRepository.findByPublicId("test-public-id")).thenReturn(testAppointment);
-        Appointment found = appointmentService.findByPublicId("test-public-id");
-        assertNotNull(found);
+        Appointment appt = appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00");
+        when(appointmentRepository.findByPublicId("public-1")).thenReturn(appt);
+        assertSame(appt, appointmentService.findByPublicId("public-1"));
     }
 
     @Test
-    void testGetAppointmentStatsCached_CacheHit() {
-        AppointmentStats cachedStats = new AppointmentStats(10L, 5L, 3L, 2L, 0L, 30, 75.0);
-        when(statsService.getStatsCached(appointmentRepository)).thenReturn(cachedStats);
-
-        // Verify statsService delegates correctly (was previously a direct CacheManager call)
-        AppointmentStats stats = statsService.getStatsCached(appointmentRepository);
-
-        assertNotNull(stats);
-        assertEquals(10L, stats.total());
-        assertEquals(5L, stats.pending());
-        assertEquals(75.0, stats.approvedRevenue());
+    void testNullEntityToResponse() {
+        assertNull(AppointmentResponse.fromEntity(null));
     }
 }
