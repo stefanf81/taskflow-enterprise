@@ -1,0 +1,53 @@
+package com.example.taskflow.appointment;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.time.Instant;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+/** BKG-8: the controller hands the access token's expiry to the SSE service. */
+class AppointmentControllerEventStreamTest {
+
+    private final AppointmentService appointmentService = mock(AppointmentService.class);
+    private final AppointmentEventStreamService streams = mock(AppointmentEventStreamService.class);
+    private final AppointmentController controller = new AppointmentController(appointmentService, streams);
+
+    @Test
+    void jwtPrincipalPassesItsExpiryToTheStream() {
+        Instant expiresAt = Instant.parse("2031-03-10T11:00:00Z");
+        Jwt jwt = Jwt.withTokenValue("token").header("alg", "none").subject("admin")
+                .issuedAt(expiresAt.minusSeconds(3600)).expiresAt(expiresAt).build();
+        SseEmitter emitter = new SseEmitter();
+        when(streams.subscribe("admin", expiresAt)).thenReturn(emitter);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        SseEmitter result = controller.streamAppointmentEvents(new JwtAuthenticationToken(jwt, List.of()), response);
+
+        assertEquals(emitter, result);
+        verify(streams).subscribe("admin", expiresAt);
+        assertEquals("no-cache", response.getHeader("Cache-Control"));
+        assertEquals("no", response.getHeader("X-Accel-Buffering"));
+    }
+
+    @Test
+    void nonJwtPrincipalHasNoExpiry() {
+        when(streams.subscribe(any(), any())).thenReturn(new SseEmitter());
+
+        assertNotNull(controller.streamAppointmentEvents(
+                new UsernamePasswordAuthenticationToken("admin", "n/a"), new MockHttpServletResponse()));
+
+        verify(streams).subscribe("admin", null);
+    }
+}

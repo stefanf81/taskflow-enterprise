@@ -4,10 +4,12 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.cache.autoconfigure.RedisCacheManagerBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
+import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.RedisSerializer;
@@ -108,6 +110,26 @@ public class CacheConfig {
      */
     static RedisSerializer<Object> cacheValueSerializer() {
         return CACHE_VALUE_SERIALIZER;
+    }
+
+    /**
+     * BKG-7: wraps the Redis cache manager (only) in a {@link SingleFlightCacheManager}. Spring Data
+     * Redis' default non-locking writer ignores {@code @Cacheable(sync = true)}, so without this a
+     * cold or just-evicted key is loaded once per concurrent request. The decorator serialises loads
+     * per (cache, key) inside this JVM with no extra Redis round-trip; it is NOT a distributed lock,
+     * so with several replicas each instance can still load once per expiry. The dev/test
+     * {@code simple} manager already serialises and is left untouched.
+     *
+     * <p>Static so the post-processor is available early without instantiating this configuration.
+     */
+    @Bean
+    public static BeanPostProcessor singleFlightCacheManagerPostProcessor() {
+        return new BeanPostProcessor() {
+            @Override
+            public Object postProcessAfterInitialization(Object bean, String beanName) {
+                return bean instanceof RedisCacheManager redis ? new SingleFlightCacheManager(redis) : bean;
+            }
+        };
     }
 
     @Bean
