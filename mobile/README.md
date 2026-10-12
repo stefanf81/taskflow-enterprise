@@ -60,23 +60,72 @@ Production environments enforce TLS/HTTPS encryption, hardware token encryption 
 
 ### SSL Certificate Pinning (Production)
 
-Preview and production builds use platform-native SPKI public-key pinning. The Expo
-prebuild fails unless the API URL is HTTPS and two pins are configured:
+Preview and production builds use platform-native SPKI public-key pinning
+(`plugins/withTaskflowTlsPinning.js`). The Expo prebuild fails unless the API URL is
+HTTPS, a current pin **and a backup pin** are configured, and (Android) the pin-set
+has a valid expiration date.
 
 ```bash
-# Set current and backup SHA-256 SPKI hashes (Base64, without a sha256/ prefix).
+# Current + backup SHA-256 SPKI hashes (Base64, without a sha256/ prefix).
 TASKFLOW_API_SPKI_PINS=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=,BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=
+# Optional: Android pin-set expiration (YYYY-MM-DD, must be in the future).
+# Default: build date + 365 days.
+TASKFLOW_API_PIN_EXPIRY=2027-09-30
+# Optional, iOS only: extra NSPinnedLeafIdentities. Leave unset unless you have a reason.
+TASKFLOW_API_SPKI_LEAF_PINS=
 ```
 
 Configuration:
 - **Development**: Local HTTP remains available for simulators and emulators.
 - **Preview and production (EAS)**: Set `TASKFLOW_TLS_POLICY=required` and configure `TASKFLOW_API_SPKI_PINS` in the selected EAS environment.
-- **Enforcement**: `plugins/withTaskflowTlsPinning.js` writes Android and iOS native pinning settings during prebuild; Axios traffic is pinned by the platform networking stack.
+- **Enforcement**: the plugin writes the Android `network_security_config` (`<pin-set expiration="...">`) and the iOS `NSPinnedDomains` entry (`NSPinnedCAIdentities`) during prebuild; Axios traffic is pinned by the platform networking stack.
+- **Plugin order does not matter**: a finalized config-plugin step re-checks the final `AndroidManifest.xml` and forces `android:networkSecurityConfig` to the pinned config (so `expo-detox-config-plugin`'s cleartext localhost config can never win in a pinned build). It fails the build if `android:usesCleartextTraffic="true"` is set by another plugin or the pinned XML was altered.
 
-To obtain an SPKI hash:
+**Which key to pin (do not pin only the leaf).** A pin on the server's *leaf*
+key stops matching the moment the certificate is renewed with a new key
+(Let's Encrypt-style 60-90 day rotation does exactly that), and every installed
+app then refuses to connect until users update. Instead:
+
+1. Pin the SPKI hash of an **intermediate or root CA whose renewal chain you
+   control** (the CA that will keep issuing your certificates), as the current pin.
+2. Add a **pre-generated backup pin** - the SPKI hash of a different CA/intermediate
+   (or a next key you already hold offline) that you can switch to if the current
+   one has to be replaced. The plugin refuses a single pin.
+3. Use the **same pins on both platforms**. Android's `<pin-set>` accepts the
+   connection when *any* certificate in the validated chain matches a pin; iOS
+   `NSPinnedCAIdentities` is also matched against the CA certificates in the chain,
+   so a CA SPKI hash works unchanged in both. Therefore `TASKFLOW_API_SPKI_PINS`
+   feeds both Android `<pin>` entries and iOS `NSPinnedCAIdentities`.
+4. `TASKFLOW_API_SPKI_LEAF_PINS` is optional and iOS-only (`NSPinnedLeafIdentities`).
+   Do not use it as your only pin.
+
+> **Migration note:** earlier versions applied `TASKFLOW_API_SPKI_PINS` as iOS
+> *leaf* identities. Those values must now be CA/intermediate hashes; a leaf hash
+> placed in `NSPinnedCAIdentities` will not match and iOS will refuse the connection.
+
+**Expiry is the safe failure mode (Android).** Pins stop being enforced after the
+`expiration` date and Android falls back to ordinary certificate validation instead
+of bricking the app. Ship a new build with fresh pins (and a later expiry) well
+before then. iOS ATS pinning has no expiry attribute, which is another reason to pin
+CA keys on iOS rather than leaf keys. `app.json` sets `updates.enabled: false`, so
+there is no OTA path to rotate pins: a pin change always needs a store release.
+
+Not verified in this repository: pinning behaviour on real Android/iOS devices
+(requires native builds); the unit tests (`npm run test:security`) assert the
+generated `network_security_config.xml`, the `Info.plist` entries and the merged
+`AndroidManifest.xml` for both plugin orders.
+
+To obtain an SPKI hash (works for a leaf, intermediate or root certificate PEM):
 ```bash
+# From a live server's leaf certificate:
 openssl s_client -connect api.example.com:443 </dev/null 2>/dev/null \
   | openssl x509 -pubkey -noout \
+  | openssl pkey -pubin -outform DER \
+  | openssl dgst -sha256 -binary \
+  | openssl base64 -A
+
+# From a CA/intermediate certificate file:
+openssl x509 -in intermediate.pem -pubkey -noout \
   | openssl pkey -pubin -outform DER \
   | openssl dgst -sha256 -binary \
   | openssl base64 -A
@@ -272,10 +321,12 @@ npm run e2e:test
 ## EAS Build & Distribution
 
 > **Before first EAS build:** `app.json` → `extra.eas.projectId` contains a
-> placeholder UUID. Replace it with the real project ID from
-> `npm install --global eas-cli`, then `eas login && eas project:init` (or the
+> placeholder UUID (`11111111-2222-...`). Replace it with the real project ID from
+> `npm install --global eas-cli`, then `eas login && eas init` (or the
 > EAS web dashboard).
 > OTA updates (`eas update`) will fail with an invalid projectId.
+> `npm run check:eas` fails while the placeholder is still present, and
+> `npm run build:android` / `npm run build:ios` run it first.
 
 ```bash
 # Build Android Development APK
