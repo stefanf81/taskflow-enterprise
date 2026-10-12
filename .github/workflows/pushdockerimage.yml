@@ -313,7 +313,12 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: ${{ matrix.component == 'backend' && '.' || 'frontend' }}
-          file: ${{ matrix.component == 'backend' && 'Dockerfile.x64' || 'frontend/Dockerfile' }}
+          file: ${{ matrix.component == 'backend' && 'Dockerfile' || 'frontend/Dockerfile' }}
+          # Backend: the prod target of the single Dockerfile, built for the
+          # amd64 cluster. The frontend Dockerfile has one final stage and no
+          # platform requirement, so both inputs stay empty for it.
+          target: ${{ matrix.component == 'backend' && 'prod' || '' }}
+          platforms: ${{ matrix.component == 'backend' && 'linux/amd64' || '' }}
 
           push: true
 

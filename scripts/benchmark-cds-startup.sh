@@ -9,7 +9,8 @@
 # log does not skew the timed runs).
 #
 # Usage:
-#   docker build -f Dockerfile.x64 -t taskflow-backend:after .
+#   docker build --platform linux/amd64 --target prod -t taskflow-backend:after .
+#   (--platform: §56's numbers are amd64; without it Apple Silicon builds arm64)
 #   IMAGES="taskflow-backend:before taskflow-backend:after" NOCDS=1 \
 #     scripts/benchmark-cds-startup.sh
 #

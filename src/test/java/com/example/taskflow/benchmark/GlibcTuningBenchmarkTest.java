@@ -13,8 +13,13 @@ import static org.junit.jupiter.api.Assertions.*;
  * (BENCHMARKS.md §51). The container-level sweep itself is driven by
  * {@code scripts/benchmark-glibc-tuning.sh}; this test locks the adopted config
  * so a future edit cannot silently drop it (or re-add the rejected allocator).
+ *
+ * <p>Tagged {@code container-config}: it only reads checked-in files, so it runs in the
+ * lightweight {@code containerConfigTest} task (CI backend job, and {@code check}), whose
+ * declared inputs re-run it on a Dockerfile, compose, nginx or workflow edit without
+ * invalidating the Spring {@code test} suite.
  */
-@Tag("benchmark")
+@Tag("container-config")
 class GlibcTuningBenchmarkTest {
 
     @Test
@@ -25,27 +30,23 @@ class GlibcTuningBenchmarkTest {
 
         Path compose = Path.of("docker-compose.yml");
         Path dockerfile = Path.of("Dockerfile");
-        Path dockerfileX64 = Path.of("Dockerfile.x64");
         Path benchmarks = Path.of("BENCHMARKS.md");
         Path script = Path.of("scripts/benchmark-glibc-tuning.sh");
 
         long t0 = System.nanoTime();
         String yml = Files.readString(compose);
         String d = Files.readString(dockerfile);
-        String dx = Files.readString(dockerfileX64);
         String md = Files.readString(benchmarks);
         long us = (System.nanoTime() - t0) / 1000;
 
         boolean arena = yml.contains("MALLOC_ARENA_MAX=2");
-        boolean base = d.contains("eclipse-temurin:21-jre-resolute")
-                && dx.contains("eclipse-temurin:21-jre-resolute");
-        boolean noJemalloc = !d.contains("libjemalloc2") && !dx.contains("libjemalloc2")
-                && !d.contains("LD_PRELOAD") && !dx.contains("LD_PRELOAD");
+        boolean base = d.contains("eclipse-temurin:21-jre-resolute");
+        boolean noJemalloc = !d.contains("libjemalloc2") && !d.contains("LD_PRELOAD");
         boolean documented = md.contains("MALLOC_ARENA_MAX=2") && md.contains("jemalloc");
         boolean harness = Files.isRegularFile(script);
 
         System.out.println("  MALLOC_ARENA_MAX=2 in compose: " + arena);
-        System.out.println("  Both Dockerfiles on -resolute base: " + base);
+        System.out.println("  Dockerfile on -resolute base: " + base);
         System.out.println("  No jemalloc/LD_PRELOAD shipped: " + noJemalloc);
         System.out.println("  §51 evidence in BENCHMARKS.md: " + documented);
         System.out.println("  Sweep harness present: " + harness);
@@ -56,7 +57,7 @@ class GlibcTuningBenchmarkTest {
         System.out.println("=".repeat(80));
 
         assertTrue(arena, "docker-compose.yml must cap glibc arenas (MALLOC_ARENA_MAX=2, §51)");
-        assertTrue(base, "both Dockerfiles must stay on the pinned -resolute Temurin base");
+        assertTrue(base, "the Dockerfile must stay on the pinned -resolute Temurin base");
         assertTrue(noJemalloc, "jemalloc was evaluated and rejected in §51 — do not ship libjemalloc2/LD_PRELOAD");
         assertTrue(documented, "BENCHMARKS.md must document the arena cap and the jemalloc verdict (§51)");
         assertTrue(harness, "scripts/benchmark-glibc-tuning.sh must remain for re-measurement");

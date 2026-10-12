@@ -13,7 +13,7 @@ Additionally, the upstream `eclipse-temurin:21-jre-resolute` base image bundled 
 ## Decision
 
 1. **Full-Application CDS Training:**
-   - Both `Dockerfile` and `Dockerfile.x64` train the Class Data Sharing archive on the real `application.jar` in a dedicated multi-stage build step:
+   - The Dockerfile's shared `cds-training` stage trains the Class Data Sharing archive on the real `application.jar` once, for both final targets:
      ```dockerfile
      RUN --network=none env -i PATH="$PATH" LANG="$LANG" LC_ALL="$LC_ALL" \
          java -XX:ArchiveClassesAtExit=/tmp/application.jsa \
@@ -27,11 +27,15 @@ Additionally, the upstream `eclipse-temurin:21-jre-resolute` base image bundled 
    - `spring.context.exit=onRefresh` halts execution immediately after the ApplicationContext finishes bean definition loading and class resolution, avoiding port binds, background tasks, or active connections.
    - `env -i PATH="$PATH" LANG="$LANG" LC_ALL="$LC_ALL"` strips BuildKit-injected environment variables (e.g., `OTEL_EXPORTER_OTLP_ENDPOINT=unix:///dev/otel-grpc.sock`) that would fail Spring Boot 4.1 OTLP initialization.
    - Deleted the obsolete `CdsTrainingApplication.java`.
-2. **Production Image Hardening & Slimming (`Dockerfile.x64`):**
+2. **Production Image Hardening & Slimming (`prod` target):**
    - Purges `curl`, `wget`, and `gnupg` (and 30 transitive dependencies) before the package upgrade layer.
    - Removes setuid/setgid bits (`find / -xdev -type f -perm /6000 -exec chmod a-s {} +`).
    - Removes Canonical's unmanaged `/usr/bin/pebble` and `/var/lib/pebble`.
-   - The local developer `Dockerfile` keeps `wget` for its local Docker `HEALTHCHECK`.
+   - The `local` target keeps `wget` for its Docker `HEALTHCHECK`.
+3. **One Dockerfile, two targets (amendment, 2026-10-12):**
+   - `Dockerfile.x64` was folded into `Dockerfile`. `prod` and `local` are final targets of one shared `runtime` stage (extraction, training, layers, `CMD`), so the hardening above can no longer drift from the local image: the production file had received the package refresh and the pebble removal while the local file had not.
+   - The target platform is set by the builder instead of an `ARG PLATFORM`: compose builds `local` for the host, the workflows build `prod` with `platforms: linux/amd64`. A Linux/amd64 developer no longer builds the local image under arm64 emulation.
+   - `ContainerConfigGuardTest` locks the layout (one file, two targets, `$BUILDPLATFORM` only on the extractor, compose `target: local`, workflows `target: prod` for `linux/amd64`).
 
 ## Consequences
 
@@ -48,4 +52,4 @@ Additionally, the upstream `eclipse-temurin:21-jre-resolute` base image bundled 
 ## Verification
 
 - Benchmark: `BENCHMARKS.md §56` and `scripts/benchmark-cds-startup.sh`.
-- Automated test: `src/test/java/com/example/taskflow/benchmark/ContainerImageBenchmarkTest.java` verifies CDS archive creation, base image invariants, and absence of vulnerable binaries.
+- Automated tests: `src/test/java/com/example/taskflow/benchmark/ContainerImageBenchmarkTest.java` verifies CDS archive creation, base image invariants, and absence of vulnerable binaries in the `prod` target; `ContainerConfigGuardTest` verifies the single-Dockerfile layout.

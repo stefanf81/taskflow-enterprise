@@ -234,7 +234,9 @@ spotbugs {
 }
 tasks.named("test") {
 	useJUnitPlatform {
-		excludeTags 'benchmark', 'testcontainers'
+		// container-config guards run in containerConfigTest below, so their
+		// file inputs never invalidate this (Spring-context) suite's cache.
+		excludeTags 'benchmark', 'testcontainers', 'container-config'
 	}
 	// Each fork boots its own Spring contexts from a cold JVM (~36s for the
 	// first one on a 4-vCPU CI runner), so fewer forks with C1-only JIT beat
@@ -252,6 +254,34 @@ tasks.named("test") {
 	// change in fork assignment made AppointmentControllerIntegrationTest fail.
 	systemProperty "spring.datasource.url", 'jdbc:h2:mem:${random.uuid};MODE=PostgreSQL;DB_CLOSE_DELAY=-1'
 	finalizedBy(tasks.jacocoTestReport)
+}
+
+// File-reading guards on the container configuration (tagged container-config):
+// the Dockerfile's targets, compose, nginx and the image workflows. Kept out of
+// `test` so a Dockerfile-, compose-, nginx-, workflow- or BENCHMARKS.md-only
+// edit re-runs these millisecond checks without re-running the Spring suite.
+// The guards read these files directly, so they are declared as inputs; with
+// --build-cache (CI pull requests) an edit to any of them must not be served
+// FROM-CACHE. Dockerfile.x64 is listed because its absence is asserted.
+tasks.register("containerConfigTest", Test) {
+	group = "verification"
+	description = "Runs the container-config guards (Dockerfile, compose, nginx, image workflows)."
+	useJUnitPlatform {
+		includeTags 'container-config'
+	}
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	inputs.files("Dockerfile", "Dockerfile.x64", "docker-compose.yml", "frontend/nginx.conf",
+			".github/workflows/ci.yml", ".github/workflows/pushdockerimage.yml", "BENCHMARKS.md",
+			"scripts/benchmark-cds-startup.sh", "scripts/benchmark-glibc-tuning.sh")
+			.withPropertyName("containerConfigFiles")
+			.withPathSensitivity(PathSensitivity.RELATIVE)
+	testLogging {
+		showExceptions = true
+		showCauses = true
+		showStackTraces = true
+		events "passed", "skipped", "failed"
+	}
 }
 
 // PostgreSQL parity suite. The default test task intentionally stays Docker-
@@ -287,12 +317,6 @@ tasks.register("benchmarkTest", Test) {
 	maxParallelForks = 1
 	environment "SPRING_SECURITY_PASSWORD", "admin-password"
 	systemProperty "spring.cache.type", "simple"
-	// ContainerImageBenchmarkTest asserts these files' contents directly.
-	// Declared as inputs so a Dockerfile- or doc-only edit invalidates the
-	// up-to-date check and the build cache instead of reusing a stale result.
-	inputs.files("Dockerfile", "Dockerfile.x64", "BENCHMARKS.md")
-			.withPropertyName("containerImageAssertions")
-			.withPathSensitivity(PathSensitivity.RELATIVE)
 	testLogging {
 		showStandardStreams = true
 		showExceptions = true
@@ -325,7 +349,8 @@ jacocoTestCoverageVerification {
 }
 tasks.named("check") {
 	dependsOn(
-			tasks.jacocoTestCoverageVerification
+			tasks.jacocoTestCoverageVerification,
+			tasks.named("containerConfigTest")
 	)
 }
 dependencyCheck {

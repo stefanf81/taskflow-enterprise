@@ -68,6 +68,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # The local variant of the single backend Dockerfile: keeps wget for the
+      # HEALTHCHECK and skips the production package refresh. Built for the host
+      # architecture (arm64 on Apple Silicon, amd64 on a Linux workstation)
+      # because the Dockerfile pins no platform; CI builds `prod` for linux/amd64.
+      target: local
     container_name: taskflow-backend
     environment:
       - SPRING_PROFILES_ACTIVE=prod
@@ -93,7 +98,7 @@ services:
       # leave this unset (guard on); only this disposable local stack turns it off.
       - APP_REQUIRE_STRONG_ADMIN_PASSWORD=${APP_REQUIRE_STRONG_ADMIN_PASSWORD:-false}
       # JVM sizing is owned by the deployment (JAVA_TOOL_OPTIONS), not the image
-      # CMD — see Dockerfile / Dockerfile.x64 for the sizing-agnostic rationale.
+      # CMD — see the Dockerfile's shared runtime stage for the sizing-agnostic rationale.
       # This block mirrors the prod homelab/TF backend.yaml intent (modulo
       # prod-only GC logging + heap-dump paths that would clutter a laptop).
       # At 2560M limit × MaxRAMPercentage=50.0 → ~1.25 GiB heap, ~1.3 GiB off-heap.
