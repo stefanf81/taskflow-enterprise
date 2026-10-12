@@ -229,9 +229,10 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Unique/foreign-key violations are conflicts with existing data (duplicate
+     * Unique/foreign-key/exclusion violations are conflicts with existing data (duplicate
      * service name, deleting a service that has bookings, re-activating a booking
-     * whose slot was taken), not server faults. Everything else — NOT NULL, length
+     * whose slot was taken; 23P01 is PostgreSQL's appointments_no_overlap exclusion
+     * constraint), not server faults. Everything else — NOT NULL, length
      * — is left to the catch-all so it is still logged as an error.
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
@@ -239,7 +240,7 @@ public class GlobalExceptionHandler {
             DataIntegrityViolationException ex, HttpServletRequest request) {
 
         String sqlState = findSqlState(ex);
-        if (!"23505".equals(sqlState) && !"23503".equals(sqlState)) {
+        if (!"23505".equals(sqlState) && !"23503".equals(sqlState) && !"23P01".equals(sqlState)) {
             return handleGlobalException(ex, request);
         }
         logger.warn("Data conflict (SQLState {}) on {}", sqlState, LogSanitizer.stripNewlines(request.getRequestURI()));

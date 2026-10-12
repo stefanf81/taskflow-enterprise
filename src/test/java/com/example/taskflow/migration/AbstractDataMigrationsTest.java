@@ -29,8 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Real-engine (H2, PostgreSQL mode) tests of the data-integrity migrations: the dev/seed vs
  * production Flyway layout (DATA-2), V30 seed cleanup, V31 outbox backoff column, V32 catalog
- * integrity (DATA-6), V33 denial notices (DATA-10), V34 index cleanup (DATA-11) and V26's slot
- * collision handling against the schema V25 really produces.
+ * integrity (DATA-6), V33 denial notices (DATA-10), V34 index cleanup (DATA-11), V26's slot
+ * collision handling against the schema V25 really produces, and V35's end-time backfill and
+ * overlap repair (plus, on PostgreSQL, its exclusion constraint).
  *
  * <p>PostgreSQL-specific branches (the expression index in V32, the partial index in V25) are NOT
  * exercised here; see the report.
@@ -394,6 +395,148 @@ abstract class AbstractDataMigrationsTest {
             assertEquals(SENTINEL, singleString(c,
                     "SELECT barber_name FROM appointments WHERE customer_name = 'Sentinel two'"));
         }
+    }
+
+    // ------------------------------------------------------------------ V35 end time + overlap constraint
+
+    private static void linkService(Connection c, String customerName, String serviceName) throws SQLException {
+        exec(c, "UPDATE appointments SET service_id = (SELECT id FROM services WHERE name = '" + serviceName
+                + "') WHERE customer_name = '" + customerName + "'");
+    }
+
+    private static String endTimeOf(Connection c, String customerName) throws SQLException {
+        return singleString(c, "SELECT booking_end_time FROM appointments WHERE customer_name = '"
+                + customerName + "'").substring(0, 8);
+    }
+
+    @Test
+    void v35BackfillsTheEndTimeFromTheServiceDurationAndClampsBeforeMidnight() throws Exception {
+        String url = newUrl();
+        flyway(url, DEV_MIGRATION).target("34").load().migrate();
+        String date = LocalDate.now().plusDays(30).toString();
+        try (Connection c = open(url)) {
+            insertAppointment(c, "Exec", "e@x.test", "1", "Alex the Barber", "NULL", date, "09:00",
+                    "The Executive Package", "PENDING", "eeeeeeee-0000-0000-0000-000000000001");
+            linkService(c, "Exec", "The Executive Package");                                  // 60 min
+            insertAppointment(c, "Fade", "f@x.test", "1", "Alex the Barber", "NULL", date, "13:00",
+                    "Modern Skin Fade", "DENIED", "eeeeeeee-0000-0000-0000-000000000002");
+            linkService(c, "Fade", "Modern Skin Fade");                                       // 45 min, any status
+            insertAppointment(c, "Legacy", "l@x.test", "1", "Sara the Stylist", "NULL", date, "10:00",
+                    "Free text", "APPROVED", "eeeeeeee-0000-0000-0000-000000000003");         // no service
+            insertAppointment(c, "Late", "late@x.test", "1", "Sara the Stylist", "NULL", date, "23:30",
+                    "Free text", "PENDING", "eeeeeeee-0000-0000-0000-000000000004");          // would wrap
+        }
+
+        flyway(url, DEV_MIGRATION).load().migrate();
+
+        try (Connection c = open(url)) {
+            assertEquals("10:00:00", endTimeOf(c, "Exec"));
+            assertEquals("13:45:00", endTimeOf(c, "Fade"));
+            assertEquals("11:00:00", endTimeOf(c, "Legacy"), "no service = one 60-minute grid step");
+            assertEquals("23:59:59", endTimeOf(c, "Late"), "clamped, never wrapped to the next morning");
+            assertEquals(0, count(c, "SELECT COUNT(*) FROM appointments WHERE booking_end_time IS NULL"));
+            assertEquals("APPROVED", singleString(c, "SELECT status FROM appointments WHERE customer_name = 'Legacy'"),
+                    "non-overlapping rows keep their status");
+
+            // NOT NULL and end >= start from now on
+            assertThrows(SQLException.class, () -> insertAppointment(c, "NoEnd", "n@x.test", "1",
+                    "Marcus Master Blade", "NULL", date, "09:00", "Free text", "PENDING",
+                    "eeeeeeee-0000-0000-0000-000000000005"));
+            assertThrows(SQLException.class, () -> exec(c, "UPDATE appointments SET booking_end_time = TIME '08:00' "
+                    + "WHERE customer_name = 'Exec'"));
+        }
+    }
+
+    @Test
+    void v35DeniesOverlappingActiveBookingsDeterministicallyAndTellsUpcomingCustomers() throws Exception {
+        String url = newUrl();
+        flyway(url, DEV_MIGRATION).target("34").load().migrate();
+        String future = LocalDate.now().plusDays(30).toString();
+        String past = LocalDate.now().minusDays(30).toString();
+        String alex = "(SELECT id FROM barbers WHERE name = 'Alex the Barber')";
+        try (Connection c = open(url)) {
+            exec(c, "INSERT INTO services (name, price, duration_minutes, category, description) VALUES "
+                    + "('Long Treatment', 50.00, 90, 'hair', 'ninety minutes')");
+            // 10:00-11:30 PENDING (lower id) vs 11:00-11:30 APPROVED: the APPROVED booking wins
+            insertAppointment(c, "Long Pending", "lp@x.test", "1", "Alex the Barber", alex, future, "10:00",
+                    "Long Treatment", "PENDING", "ffffffff-0000-0000-0000-000000000001");
+            linkService(c, "Long Pending", "Long Treatment");
+            insertAppointment(c, "Short Approved", "sa@x.test", "1", "Alex the Barber", alex, future, "11:00",
+                    "Classic Haircut", "APPROVED", "ffffffff-0000-0000-0000-000000000002");
+            linkService(c, "Short Approved", "Classic Haircut");
+            // 13:00-14:30 PENDING vs 14:00-14:30 PENDING: the earlier booking (lower id) wins
+            insertAppointment(c, "First Pending", "fp@x.test", "1", "Alex the Barber", alex, future, "13:00",
+                    "Long Treatment", "PENDING", "ffffffff-0000-0000-0000-000000000003");
+            linkService(c, "First Pending", "Long Treatment");
+            insertAppointment(c, "Second Pending", "sp@x.test", "1", "Alex the Barber", alex, future, "14:00",
+                    "Classic Haircut", "PENDING", "ffffffff-0000-0000-0000-000000000004");
+            linkService(c, "Second Pending", "Classic Haircut");
+            // back to back with the kept 13:00-14:30 booking: no overlap, stays
+            insertAppointment(c, "Back To Back", "bb@x.test", "1", "Alex the Barber", alex, future, "15:00",
+                    "Classic Haircut", "PENDING", "ffffffff-0000-0000-0000-000000000005");
+            linkService(c, "Back To Back", "Classic Haircut");
+            // cancelled rows and other barbers never conflict
+            insertAppointment(c, "Cancelled", "cx@x.test", "1", "Alex the Barber", alex, future, "16:00",
+                    "Classic Haircut", "CANCELLED", "ffffffff-0000-0000-0000-000000000006");
+            insertAppointment(c, "Sara Same Time", "ss@x.test", "1", "Sara the Stylist",
+                    "(SELECT id FROM barbers WHERE name = 'Sara the Stylist')", future, "10:00",
+                    "Classic Haircut", "PENDING", "ffffffff-0000-0000-0000-000000000007");
+            // a past overlap is repaired too, but nobody is e-mailed about a slot long gone
+            insertAppointment(c, "Past Long", "pl@x.test", "1", "Alex the Barber", alex, past, "10:00",
+                    "Long Treatment", "APPROVED", "ffffffff-0000-0000-0000-000000000008");
+            linkService(c, "Past Long", "Long Treatment");
+            insertAppointment(c, "Past Short", "ps@x.test", "1", "Alex the Barber", alex, past, "11:00",
+                    "Classic Haircut", "APPROVED", "ffffffff-0000-0000-0000-000000000009");
+        }
+
+        flyway(url, DEV_MIGRATION).load().migrate();
+
+        try (Connection c = open(url)) {
+            assertEquals("DENIED", statusOf(c, "Long Pending"));
+            assertEquals("APPROVED", statusOf(c, "Short Approved"));
+            assertEquals("PENDING", statusOf(c, "First Pending"));
+            assertEquals("DENIED", statusOf(c, "Second Pending"));
+            assertEquals("PENDING", statusOf(c, "Back To Back"));
+            assertEquals("CANCELLED", statusOf(c, "Cancelled"));
+            assertEquals("PENDING", statusOf(c, "Sara Same Time"));
+            assertEquals("APPROVED", statusOf(c, "Past Long"));
+            assertEquals("DENIED", statusOf(c, "Past Short"));
+
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM notification_outbox WHERE recipient = 'lp@x.test' "
+                    + "AND status = 'PENDING'"));
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM notification_outbox WHERE recipient = 'sp@x.test'"));
+            assertEquals(0, count(c, "SELECT COUNT(*) FROM notification_outbox WHERE recipient = 'ps@x.test'"));
+            assertEquals(2, count(c, "SELECT COUNT(*) FROM notification_outbox"));
+
+            // identical wording to what the application writes for a DENIED status change
+            Appointment appointment = new Appointment("Long Pending", "lp@x.test", "1", "Alex the Barber",
+                    LocalDate.parse(future), "10:00", "Long Treatment");
+            appointment.setStatus("DENIED");
+            NotificationOutboxRepository repository = Mockito.mock(NotificationOutboxRepository.class);
+            new NotificationOutboxWriter(repository)
+                    .handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, appointment));
+            ArgumentCaptor<NotificationOutbox> expected = ArgumentCaptor.forClass(NotificationOutbox.class);
+            Mockito.verify(repository).save(expected.capture());
+            assertEquals(expected.getValue().getMessage(),
+                    singleString(c, "SELECT message FROM notification_outbox WHERE recipient = 'lp@x.test'"));
+
+            if (isPostgres()) {
+                assertEquals(1, count(c, "SELECT COUNT(*) FROM pg_constraint WHERE conname = 'appointments_no_overlap' "
+                        + "AND contype = 'x' AND conrelid = 'appointments'::regclass"));
+                // a different start time that overlaps the kept 13:00-14:30 booking is refused by the database
+                SQLException ex = assertThrows(SQLException.class, () -> exec(c,
+                        "INSERT INTO appointments (customer_name, customer_email, customer_phone, barber_name, "
+                                + "booking_date, booking_time, booking_end_time, service_type, status, public_id, "
+                                + "created_at, updated_at) VALUES ('Racer', 'r@x.test', '1', 'Alex the Barber', DATE '"
+                                + future + "', TIME '14:00', TIME '15:00', 'Cut', 'PENDING', "
+                                + "'ffffffff-0000-0000-0000-00000000000a', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"));
+                assertEquals("23P01", ex.getSQLState());
+            }
+        }
+    }
+
+    private static String statusOf(Connection c, String customerName) throws SQLException {
+        return singleString(c, "SELECT status FROM appointments WHERE customer_name = '" + customerName + "'");
     }
 
     private static long singleLong(Connection c, String sql) throws SQLException {

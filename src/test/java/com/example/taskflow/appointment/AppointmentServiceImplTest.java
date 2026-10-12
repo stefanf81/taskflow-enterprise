@@ -94,12 +94,13 @@ class AppointmentServiceImplTest {
         BarberSchedule schedule = new BarberSchedule();
         schedule.setStartTime(LocalTime.of(9, 0));
         schedule.setEndTime(LocalTime.of(17, 0));
+        schedule.setBarber(alex);
         haircut = new ServiceItem("Haircut", new BigDecimal("25.00"), 30, "hair", "");
 
         lenient().when(barberRepository.findByName("Alex the Barber")).thenReturn(Optional.of(alex));
-        lenient().when(barberRepository.findAll()).thenReturn(List.of(alex));
-        lenient().when(barberScheduleRepository.findByBarberIdAndDayOfWeek(any(), any())).thenReturn(Optional.of(schedule));
-        lenient().when(barberTimeOffRepository.findTimeOffForBarberOnDate(any(), any())).thenReturn(Collections.emptyList());
+        lenient().when(barberRepository.findAllByOrderByIdAsc()).thenReturn(List.of(alex));
+        lenient().when(barberScheduleRepository.findForBarbersOnDay(any(), any())).thenReturn(List.of(schedule));
+        lenient().when(barberTimeOffRepository.findBarberIdsOnTimeOff(any(), any())).thenReturn(Collections.emptyList());
         lenient().when(catalogService.findServiceByName("Haircut")).thenReturn(Optional.of(haircut));
         lenient().when(appointmentRepository.save(any(Appointment.class))).thenAnswer(inv -> {
             Appointment saved = inv.getArgument(0);
@@ -218,7 +219,7 @@ class AppointmentServiceImplTest {
 
     @Test
     void testCreateAppointment_NoPreferenceNoBarberAvailable_Rejected() {
-        when(barberRepository.findAll()).thenReturn(Collections.emptyList());
+        when(barberRepository.findAllByOrderByIdAsc()).thenReturn(Collections.emptyList());
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> appointmentService.createAppointment(
                 request(AppointmentServiceImpl.NO_PREFERENCE_BARBER, TOMORROW, "10:00"), null));
@@ -298,9 +299,7 @@ class AppointmentServiceImplTest {
 
     @Test
     void testCreateAppointment_TimeOffIsRejectedDespiteCachedAvailability() {
-        BarberTimeOff timeOff = new BarberTimeOff();
-        timeOff.setBarber(alex);
-        when(barberTimeOffRepository.findTimeOffForBarberOnDate(7L, TOMORROW)).thenReturn(List.of(timeOff));
+        when(barberTimeOffRepository.findBarberIdsOnTimeOff(List.of(7L), TOMORROW)).thenReturn(List.of(7L));
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> appointmentService.createAppointment(request("Alex the Barber", TOMORROW, "10:00"), null));
@@ -524,6 +523,66 @@ class AppointmentServiceImplTest {
         assertEquals("APPROVED", appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")).status());
     }
 
+    /** V35: an overlap only the PostgreSQL exclusion constraint saw (23P01) at approval is the same 409. */
+    @Test
+    void testUpdateStatus_ApproveHittingTheExclusionConstraintIsAConflict() {
+        Appointment denied = appointment(1, AppointmentStatus.DENIED, TOMORROW, "10:00");
+        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(denied));
+        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW)).thenReturn(List.of());
+        org.mockito.Mockito.doThrow(new org.springframework.dao.DataIntegrityViolationException("overlap",
+                        new java.sql.SQLException("conflicting key value violates exclusion constraint", "23P01")))
+                .when(appointmentRepository).flush();
+
+        ConflictException ex = assertThrows(ConflictException.class,
+                () -> appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")));
+        assertTrue(ex.getMessage().contains("already booked"));
+        assertTrue(eventsOfType(AppointmentStatusChangedEvent.class).isEmpty());
+    }
+
+    @Test
+    void testUpdateStatus_OtherIntegrityViolationsOnApprovalPropagate() {
+        Appointment pending = appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00");
+        when(appointmentRepository.findById(1L)).thenReturn(Optional.of(pending));
+        org.springframework.dao.DataIntegrityViolationException notNull =
+                new org.springframework.dao.DataIntegrityViolationException("not null",
+                        new java.sql.SQLException("null value", "23502"));
+        org.mockito.Mockito.doThrow(notNull).when(appointmentRepository).flush();
+
+        assertSame(notNull, assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
+                () -> appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED"))));
+    }
+
+    @Test
+    void testCreateAppointment_ExclusionViolationIsASlotCollision() {
+        when(appointmentRepository.save(any(Appointment.class))).thenThrow(
+                new org.springframework.dao.DataIntegrityViolationException("overlap",
+                        new java.sql.SQLException("conflicting key value violates exclusion constraint", "23P01")));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.createAppointment(request("Alex the Barber", TOMORROW, "10:00"), null));
+        assertTrue(ex.getMessage().contains("just booked"), ex.getMessage());
+    }
+
+    @Test
+    void testCreateAppointment_StoresTheValidatedEndTime() {
+        appointmentService.createAppointment(request("Alex the Barber", TOMORROW, "10:00"), null);
+
+        org.mockito.ArgumentCaptor<Appointment> saved = org.mockito.ArgumentCaptor.forClass(Appointment.class);
+        verify(appointmentRepository).save(saved.capture());
+        assertEquals(LocalTime.of(10, 30), saved.getValue().getBookingEndTime()); // 30-minute haircut
+    }
+
+    @Test
+    void testIsSlotConstraintViolationRecognisesUniqueAndExclusionViolationsOnly() {
+        assertTrue(AppointmentServiceImpl.isSlotConstraintViolation(
+                new RuntimeException(new java.sql.SQLException("dup", "23505"))));
+        assertTrue(AppointmentServiceImpl.isSlotConstraintViolation(
+                new RuntimeException(new java.sql.SQLException("overlap", "23P01"))));
+        assertFalse(AppointmentServiceImpl.isSlotConstraintViolation(
+                new RuntimeException(new java.sql.SQLException("fk", "23503"))));
+        assertFalse(AppointmentServiceImpl.isSlotConstraintViolation(new RuntimeException("no sql state")));
+    }
+
     /** BKG-3: the slot of a DENIED booking was re-booked meanwhile -> 409, status untouched. */
     @Test
     void testUpdateStatus_DeniedToApproved_SlotRebookedMeanwhile_IsAConflict() {
@@ -579,7 +638,7 @@ class AppointmentServiceImplTest {
     void testUpdateStatus_ApproveRefusesWhenBarberNowOnLeave() {
         Appointment pending = appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00");
         when(appointmentRepository.findById(1L)).thenReturn(Optional.of(pending));
-        when(barberTimeOffRepository.findTimeOffForBarberOnDate(7L, TOMORROW)).thenReturn(List.of(new BarberTimeOff()));
+        when(barberTimeOffRepository.findBarberIdsOnTimeOff(List.of(7L), TOMORROW)).thenReturn(List.of(7L));
 
         ConflictException ex = assertThrows(ConflictException.class,
                 () -> appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")));

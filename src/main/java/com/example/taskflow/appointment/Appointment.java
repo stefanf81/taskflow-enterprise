@@ -10,6 +10,8 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 import java.util.UUID;
 
 @Entity
@@ -24,6 +26,19 @@ import java.util.UUID;
     @Index(name = "idx_appointments_service_id", columnList = "service_id")
 })
 public class Appointment {
+
+    /**
+     * Length assumed for an appointment that has no service (or a service without a positive
+     * duration): one grid step, so such a row still blocks at least its own slot.
+     */
+    public static final int DEFAULT_DURATION_MINUTES = 60;
+
+    /**
+     * Latest representable end of an appointment. A booking never crosses midnight (it must end by
+     * the barber's closing time), so an end past midnight can only come from a corrupt legacy row;
+     * it is clamped here instead of wrapping to the next morning. V35 applies the same rule.
+     */
+    static final LocalTime LATEST_END_TIME = LocalTime.of(23, 59, 59);
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -71,6 +86,15 @@ public class Appointment {
     @Column(name = "booking_time", nullable = false, columnDefinition = "TIME")
     private String bookingTime;
 
+    /**
+     * End of the booked interval {@code [bookingTime, bookingEndTime)}: start + the service's
+     * duration when the booking was made (a snapshot, like {@link #priceAtBooking}). Derived by the
+     * entity whenever the start time or the service changes, and backing the PostgreSQL
+     * {@code appointments_no_overlap} exclusion constraint (V35).
+     */
+    @Column(name = "booking_end_time", nullable = false)
+    private LocalTime bookingEndTime;
+
     @NotBlank(message = "Service type is required")
     @Size(max = 100)
     @Column(name = "service_type", nullable = false, length = 100)
@@ -111,6 +135,9 @@ public class Appointment {
         if (this.publicId == null || this.publicId.isBlank()) {
             this.publicId = UUID.randomUUID().toString();
         }
+        if (this.bookingEndTime == null) {
+            deriveEndTime();
+        }
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
     }
@@ -131,6 +158,39 @@ public class Appointment {
         this.bookingDate = bookingDate;
         this.bookingTime = bookingTime;
         this.serviceType = serviceType;
+        deriveEndTime();
+    }
+
+    /**
+     * End of an appointment that starts at {@code start} and lasts {@code durationMinutes}, clamped
+     * to {@link #LATEST_END_TIME} (never before {@code start}) instead of wrapping past midnight.
+     */
+    public static LocalTime endTimeOf(LocalTime start, int durationMinutes) {
+        long endSecond = start.toSecondOfDay() + durationMinutes * 60L;
+        if (endSecond > LATEST_END_TIME.toSecondOfDay()) {
+            return start.isAfter(LATEST_END_TIME) ? start : LATEST_END_TIME;
+        }
+        return start.plusMinutes(durationMinutes);
+    }
+
+    /** Duration of a service in minutes, or {@link #DEFAULT_DURATION_MINUTES} when it has none. */
+    public static int durationOf(ServiceItem service) {
+        if (service != null && service.getDurationMinutes() != null && service.getDurationMinutes() > 0) {
+            return service.getDurationMinutes();
+        }
+        return DEFAULT_DURATION_MINUTES;
+    }
+
+    /** Recomputes {@link #bookingEndTime} from the start time and the service (left as is while the start is unparseable). */
+    private void deriveEndTime() {
+        if (bookingTime == null || bookingTime.isBlank()) {
+            return;
+        }
+        try {
+            this.bookingEndTime = endTimeOf(LocalTime.parse(bookingTime.trim()), durationOf(service));
+        } catch (DateTimeParseException e) {
+            // Bean Validation (@Pattern) rejects the row before it is written.
+        }
     }
 
     public Long getId() {
@@ -199,6 +259,16 @@ public class Appointment {
 
     public void setBookingTime(String bookingTime) {
         this.bookingTime = bookingTime;
+        deriveEndTime();
+    }
+
+    public LocalTime getBookingEndTime() {
+        return bookingEndTime;
+    }
+
+    /** Overrides the derived end time (the booking flow sets the exact interval it validated). */
+    public void setBookingEndTime(LocalTime bookingEndTime) {
+        this.bookingEndTime = bookingEndTime;
     }
 
     public String getServiceType() {
@@ -223,6 +293,7 @@ public class Appointment {
 
     public void setService(ServiceItem service) {
         this.service = service;
+        deriveEndTime();
     }
 
     public BigDecimal getPriceAtBooking() {

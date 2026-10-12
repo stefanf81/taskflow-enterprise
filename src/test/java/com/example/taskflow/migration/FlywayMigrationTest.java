@@ -107,12 +107,14 @@ class FlywayMigrationTest {
     private static void insertAppointment(Connection connection, String barber, String time, String status) throws SQLException {
         try (var ps = connection.prepareStatement(
                 "INSERT INTO appointments (customer_name, customer_email, customer_phone, barber_name, booking_date, "
-                        + "booking_time, service_type, status, public_id, created_at, updated_at) "
-                        + "VALUES ('N', 'n@x.com', '1', ?, DATE '2031-01-07', CAST(? AS TIME), 'Cut', ?, RANDOM_UUID(), "
+                        + "booking_time, booking_end_time, service_type, status, public_id, created_at, updated_at) "
+                        + "VALUES ('N', 'n@x.com', '1', ?, DATE '2031-01-07', CAST(? AS TIME), "
+                        + "DATEADD(MINUTE, 30, CAST(? AS TIME)), 'Cut', ?, RANDOM_UUID(), "
                         + "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")) {
             ps.setString(1, barber);
             ps.setString(2, time);
-            ps.setString(3, status);
+            ps.setString(3, time);
+            ps.setString(4, status);
             ps.executeUpdate();
         }
     }
