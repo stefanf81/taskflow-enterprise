@@ -71,7 +71,8 @@ class SlotContentionBenchmarkTest {
     private static final String BARBER = "Bench Barber";
     private static final String SERVICE = "Bench Service";
     private static final String SLOT = "10:00";
-    private static final LocalDate DATE = LocalDate.of(2026, 6, 15);
+    /** A date a week out: bookings must be in the future and within the 90-day window. */
+    private static final LocalDate DATE = LocalDate.now().plusDays(7);
 
     @Autowired private AppointmentRepository appointmentRepository;
     @Autowired private AppointmentService appointmentService;

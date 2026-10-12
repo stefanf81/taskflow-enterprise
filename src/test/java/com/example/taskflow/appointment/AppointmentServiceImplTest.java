@@ -84,7 +84,7 @@ class AppointmentServiceImplTest {
         busySlotsService = new BusySlotsService(barberRepository, barberScheduleRepository, barberTimeOffRepository, appointmentRepository);
         appointmentService = new AppointmentServiceImpl(
                 appointmentRepository, eventPublisher, statsService, tracer,
-                busySlotsService, barberRepository, barberScheduleRepository, barberTimeOffRepository,
+                busySlotsService, barberRepository,
                 catalogService, CLOCK, BookingProperties.defaults(), transactionManager
         );
 
@@ -336,7 +336,7 @@ class AppointmentServiceImplTest {
         Clock noon = Clock.fixed(Instant.parse("2026-10-12T10:00:00Z"), ZoneOffset.UTC);
         AppointmentServiceImpl atTen = new AppointmentServiceImpl(
                 appointmentRepository, eventPublisher, statsService, tracer, busySlotsService, barberRepository,
-                barberScheduleRepository, barberTimeOffRepository, catalogService, noon,
+                catalogService, noon,
                 BookingProperties.defaults(), transactionManager);
         assertThrows(IllegalArgumentException.class,
                 () -> atTen.createAppointment(request("Alex the Barber", TODAY, "10:00"), null));
@@ -351,7 +351,7 @@ class AppointmentServiceImplTest {
         Clock tokyo = Clock.fixed(Instant.parse("2026-10-12T00:30:00Z"), java.time.ZoneId.of("Asia/Tokyo"));
         AppointmentServiceImpl service = new AppointmentServiceImpl(
                 appointmentRepository, eventPublisher, statsService, tracer, busySlotsService, barberRepository,
-                barberScheduleRepository, barberTimeOffRepository, catalogService, tokyo,
+                catalogService, tokyo,
                 BookingProperties.defaults(), transactionManager);
 
         assertEquals("PENDING", service.createAppointment(request("Alex the Barber", TODAY, "10:00"), null)

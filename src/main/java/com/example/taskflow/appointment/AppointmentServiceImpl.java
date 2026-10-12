@@ -1,6 +1,4 @@
 package com.example.taskflow.appointment;
-import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
-import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 
@@ -56,8 +54,6 @@ public class AppointmentServiceImpl implements AppointmentService {
     private final Tracer tracer;
     private final BusySlotsService busySlotsService;
     private final BarberRepository barberRepository;
-    private final BarberScheduleRepository barberScheduleRepository;
-    private final BarberTimeOffRepository barberTimeOffRepository;
     private final CatalogService catalogService;
     private final Clock clock;
     private final BookingProperties bookingProperties;
@@ -70,8 +66,6 @@ public class AppointmentServiceImpl implements AppointmentService {
                                    Tracer tracer,
                                    BusySlotsService busySlotsService,
                                    BarberRepository barberRepository,
-                                   BarberScheduleRepository barberScheduleRepository,
-                                   BarberTimeOffRepository barberTimeOffRepository,
                                    CatalogService catalogService,
                                    Clock clock,
                                    BookingProperties bookingProperties,
@@ -82,8 +76,6 @@ public class AppointmentServiceImpl implements AppointmentService {
         this.tracer = tracer;
         this.busySlotsService = busySlotsService;
         this.barberRepository = barberRepository;
-        this.barberScheduleRepository = barberScheduleRepository;
-        this.barberTimeOffRepository = barberTimeOffRepository;
         this.catalogService = catalogService;
         this.clock = clock;
         this.bookingProperties = bookingProperties;
