@@ -9,6 +9,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.web.server.ResponseStatusException;
+
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
@@ -139,5 +141,109 @@ class CatalogServiceImplTest {
 
         verify(repository, times(1)).findById(3L);
         verify(repository, never()).delete(any(ServiceItem.class));
+    }
+
+    // ---- DATA-6: unique names, retire instead of failing, active-only lookups ----
+
+    @Test
+    void createRejectsACaseInsensitiveDuplicateOfAnActiveServiceWith409() {
+        ServiceItem existing = new ServiceItem("new haircut", BigDecimal.TEN, 30, "Hair", null);
+        existing.setId(9L);
+        when(repository.findByNameIgnoreCase("New Haircut")).thenReturn(Optional.of(existing));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> catalogService.createService(request));
+
+        assertEquals(409, ex.getStatusCode().value());
+        verify(repository, never()).save(any(ServiceItem.class));
+    }
+
+    @Test
+    void createTrimsTheNameBeforeCheckingAndSaving() {
+        when(repository.save(any(ServiceItem.class))).thenAnswer(inv -> inv.getArgument(0));
+        ServiceItemRequest padded = new ServiceItemRequest("  Padded Cut  ", BigDecimal.TEN, 30, "Hair", null);
+
+        ServiceItemResponse result = catalogService.createService(padded);
+
+        assertEquals("Padded Cut", result.name());
+        verify(repository).findByNameIgnoreCase("Padded Cut");
+    }
+
+    @Test
+    void createReactivatesARetiredServiceOfTheSameNameInsteadOfFailingOnTheUniqueIndex() {
+        ServiceItem retired = new ServiceItem("new haircut", BigDecimal.ONE, 10, "old", "old");
+        retired.setId(9L);
+        retired.setActive(false);
+        when(repository.findByNameIgnoreCase("New Haircut")).thenReturn(Optional.of(retired));
+        when(repository.save(retired)).thenReturn(retired);
+
+        ServiceItemResponse result = catalogService.createService(request);
+
+        assertEquals(9L, result.id());
+        assertTrue(retired.isActive());
+        assertEquals("New Haircut", retired.getName());
+        assertEquals(BigDecimal.valueOf(35.0), retired.getPrice());
+    }
+
+    @Test
+    void updateRejectsANameTakenByAnotherServiceWith409() {
+        when(repository.findById(1L)).thenReturn(Optional.of(item1));
+        when(repository.existsByNameIgnoreCaseAndIdNot("New Haircut", 1L)).thenReturn(true);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> catalogService.updateService(1L, request));
+
+        assertEquals(409, ex.getStatusCode().value());
+        verify(repository, never()).save(any(ServiceItem.class));
+        assertEquals("Haircut", item1.getName());
+    }
+
+    @Test
+    void updateOfARetiredServiceIsNotFound() {
+        item1.setActive(false);
+        when(repository.findById(1L)).thenReturn(Optional.of(item1));
+
+        assertThrows(ResourceNotFoundException.class, () -> catalogService.updateService(1L, request));
+    }
+
+    @Test
+    void getByIdHidesRetiredServices() {
+        item1.setActive(false);
+        when(repository.findById(1L)).thenReturn(Optional.of(item1));
+
+        assertThrows(ResourceNotFoundException.class, () -> catalogService.getServiceById(1L));
+    }
+
+    @Test
+    void deleteRetiresAServiceThatAppointmentsStillReference() {
+        when(repository.findById(1L)).thenReturn(Optional.of(item1));
+        when(repository.countAppointmentsReferencing(1L)).thenReturn(3L);
+
+        assertDoesNotThrow(() -> catalogService.deleteService(1L));
+
+        assertFalse(item1.isActive());
+        verify(repository).save(item1);
+        verify(repository, never()).delete(any(ServiceItem.class));
+    }
+
+    @Test
+    void deleteOfAnAlreadyRetiredServiceIsAnIdempotentNoOp() {
+        item1.setActive(false);
+        when(repository.findById(1L)).thenReturn(Optional.of(item1));
+        when(repository.countAppointmentsReferencing(1L)).thenReturn(3L);
+
+        assertDoesNotThrow(() -> catalogService.deleteService(1L));
+
+        verify(repository, never()).save(any(ServiceItem.class));
+        verify(repository, never()).delete(any(ServiceItem.class));
+    }
+
+    @Test
+    void findServiceByNameOnlyReturnsActiveServices() {
+        when(repository.findByNameAndActiveTrue("Haircut")).thenReturn(Optional.of(item1));
+        when(repository.findByNameAndActiveTrue("Retired")).thenReturn(Optional.empty());
+
+        assertTrue(catalogService.findServiceByName("Haircut").isPresent());
+        assertTrue(catalogService.findServiceByName("Retired").isEmpty());
     }
 }

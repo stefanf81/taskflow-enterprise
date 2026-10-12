@@ -5,20 +5,33 @@ import com.example.taskflow.appointment.Appointment;
 import com.example.taskflow.appointment.AppointmentService;
 import com.example.taskflow.appointment.AppointmentStatus;
 import com.example.taskflow.core.ResourceNotFoundException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.SQLException;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 @Service
 public class ReviewServiceImpl implements ReviewService {
 
+    /** SQL-standard SQLSTATE for a unique-constraint violation (PostgreSQL and H2). */
+    private static final String UNIQUE_VIOLATION = "23505";
+
+    private static final String ALREADY_REVIEWED = "Review has already been submitted for this appointment.";
+
     private final ReviewRepository reviewRepository;
     private final AppointmentService appointmentService;
+    private final Clock clock;
 
-    public ReviewServiceImpl(ReviewRepository reviewRepository, AppointmentService appointmentService) {
+    public ReviewServiceImpl(ReviewRepository reviewRepository, AppointmentService appointmentService, Clock clock) {
         this.reviewRepository = reviewRepository;
         this.appointmentService = appointmentService;
+        this.clock = clock;
     }
 
     @Override
@@ -55,22 +68,60 @@ public class ReviewServiceImpl implements ReviewService {
             throw new IllegalArgumentException("Only completed appointments can be reviewed.");
         }
 
+        // APPROVED only means the shop accepted the booking. A review is only meaningful once the
+        // appointment has actually taken place, so reject it until its start has passed in the
+        // shop's time zone (otherwise anyone could pre-load ratings for future bookings).
+        if (!hasStarted(appointment)) {
+            throw new IllegalArgumentException("This appointment has not taken place yet and cannot be reviewed.");
+        }
+
         if (reviewRepository.existsByAppointmentId(appointment.getId())) {
-            throw new IllegalArgumentException("Review has already been submitted for this appointment.");
+            throw new IllegalArgumentException(ALREADY_REVIEWED);
         }
 
         Review review = new Review(appointment, request.rating(), request.comment());
         try {
             reviewRepository.save(review);
-        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
-            // Concurrent duplicate review raced past the existsByAppointmentId
-            // check above. The unique appointment_id constraint (V8) caught it.
-            // Surface a controlled 400 instead of a 500 constraint-violation error.
-            if (reviewRepository.existsByAppointmentId(appointment.getId())) {
-                throw new IllegalArgumentException("Review has already been submitted for this appointment.");
+        } catch (DataIntegrityViolationException ex) {
+            // A concurrent request raced past the existsByAppointmentId check and the unique
+            // appointment_id constraint (V8) rejected this insert. Decide from the SQLSTATE of
+            // the violation itself: re-querying here would fail on PostgreSQL, where the
+            // transaction is already aborted ("current transaction is aborted") after the
+            // failed statement.
+            if (isUniqueViolation(ex)) {
+                throw new IllegalArgumentException(ALREADY_REVIEWED, ex);
             }
-            // Unknown integrity violation — rethrow so the global handler maps it.
+            // Any other integrity violation (e.g. FK, not-null) is unexpected — rethrow so the
+            // global handler maps it.
             throw ex;
         }
+    }
+
+    private boolean hasStarted(Appointment appointment) {
+        if (appointment.getBookingDate() == null || appointment.getBookingTime() == null) {
+            return false;
+        }
+        try {
+            LocalDateTime start = LocalDateTime.of(
+                    appointment.getBookingDate(), LocalTime.parse(appointment.getBookingTime().trim()));
+            return !start.isAfter(LocalDateTime.now(clock));
+        } catch (DateTimeParseException ex) {
+            // An unparseable stored time cannot be proven to be in the past.
+            return false;
+        }
+    }
+
+    /** Walks the cause chain for a {@link SQLException} with SQLSTATE 23505. */
+    static boolean isUniqueViolation(Throwable error) {
+        for (Throwable t = error; t != null; t = t.getCause() == t ? null : t.getCause()) {
+            if (t instanceof SQLException sql) {
+                for (SQLException e = sql; e != null; e = e.getNextException()) {
+                    if (UNIQUE_VIOLATION.equals(e.getSQLState())) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 }

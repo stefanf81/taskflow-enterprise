@@ -1,0 +1,13 @@
+-- DATA-3: exponential backoff for outbox retries.
+--
+-- next_attempt_at is the earliest instant at which the relay may (re-)claim a row. It is NULL
+-- for rows that are eligible immediately: every pre-existing row and every freshly enqueued
+-- PENDING row (NotificationOutboxWriter does not set it). The relay writes it when a delivery
+-- fails or a stale claim is reclaimed (30s * 2^retry_count, capped) and its claim query skips
+-- rows whose next_attempt_at is still in the future.
+--
+-- Deliberately nullable with no DEFAULT CURRENT_TIMESTAMP: the relay compares against the
+-- application's shop-time-zone Clock, whereas a database default would use the session time
+-- zone, which can delay backfilled rows by hours when the two differ. NULL means "now".
+-- ADD COLUMN IF NOT EXISTS is valid on H2 and PostgreSQL.
+ALTER TABLE notification_outbox ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMP;

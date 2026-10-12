@@ -35,6 +35,13 @@ public class NotificationOutbox {
     @Column(name = "claimed_by", length = 100)
     private String claimedBy;
 
+    /**
+     * Earliest instant the relay may claim this row again (V31). {@code null} = immediately
+     * eligible. Set by the relay after a failed delivery or a reclaimed stale claim.
+     */
+    @Column(name = "next_attempt_at")
+    private LocalDateTime nextAttemptAt;
+
     public NotificationOutbox() {}
 
     public NotificationOutbox(String recipient, String type, String message, LocalDateTime sentAt, String status) {
@@ -66,4 +73,7 @@ public class NotificationOutbox {
     public void setClaimedAt(LocalDateTime claimedAt) { this.claimedAt = claimedAt; }
     public String getClaimedBy() { return claimedBy; }
     public void setClaimedBy(String claimedBy) { this.claimedBy = claimedBy; }
+
+    public LocalDateTime getNextAttemptAt() { return nextAttemptAt; }
+    public void setNextAttemptAt(LocalDateTime nextAttemptAt) { this.nextAttemptAt = nextAttemptAt; }
 }

@@ -68,7 +68,9 @@ class FlywayMigrationTest {
         String url = "jdbc:h2:mem:v22-migration;MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
         Flyway.configure()
                 .dataSource(url, "sa", "")
-                .locations("classpath:db/migration")
+                // db/seed (V2/V11 demo data) supplies the rows the UPDATE below needs; the production
+                // layout without them is covered by DataMigrationsTest.
+                .locations("classpath:db/migration", "classpath:db/seed")
                 .load()
                 .migrate();
 

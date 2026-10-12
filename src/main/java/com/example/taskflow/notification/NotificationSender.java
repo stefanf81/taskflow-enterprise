@@ -10,13 +10,24 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+
 /**
  * Delivers a single claimed {@link NotificationOutbox} entry.
  *
  * <p>Processes by primary key so the relay can release its claim transaction
- * before dispatch: {@link #process(Long)} reloads the row inside its own
- * transaction and resolves the truthful outcome (SENT / FAILED + incremented
- * retry counter).
+ * before dispatch: {@link #process(Claim)} reloads the row inside its own
+ * transaction, verifies that the row is still PROCESSING and still owned by the
+ * caller's claim, dispatches, and records the truthful outcome (SENT / FAILED +
+ * incremented retry counter + backoff) with a <em>conditional</em> UPDATE.
+ *
+ * <p><b>Claim ownership.</b> A claim is identified by {@code (claimedBy, claimedAt)}. If a send takes
+ * longer than the stale-claim window the relay reclaims the row and another worker may claim it
+ * again; the slow sender's late outcome write then matches 0 rows and is discarded, so a stale
+ * SENT/FAILED can never overwrite a newer claim (and vice versa). Delivery is therefore
+ * at-least-once: the slow send may already have gone out, but the row's state stays consistent.
  *
  * <p>The SMTP gateway is simulated, so delivery is treated as successful. When a
  * real gateway is wired in, {@link #simulateSend(NotificationOutbox)} should
@@ -28,8 +39,13 @@ public class NotificationSender {
 
     private static final Logger logger = LoggerFactory.getLogger(NotificationSender.class);
 
+    /** Identifies one claim of an outbox row: who claimed it and at which (millisecond) instant. */
+    public record Claim(Long id, String claimedBy, LocalDateTime claimedAt) {
+    }
+
     private final NotificationOutboxRepository outboxRepository;
     private final boolean simulateFailures;
+    private final Clock clock;
 
     /**
      * @param simulateFailures test/demo switch ({@code app.notification.simulate-failures},
@@ -39,9 +55,15 @@ public class NotificationSender {
      */
     @Autowired
     public NotificationSender(NotificationOutboxRepository outboxRepository,
-                              @Value("${app.notification.simulate-failures:false}") boolean simulateFailures) {
+                              @Value("${app.notification.simulate-failures:false}") boolean simulateFailures,
+                              Clock clock) {
         this.outboxRepository = outboxRepository;
         this.simulateFailures = simulateFailures;
+        this.clock = clock;
+    }
+
+    NotificationSender(NotificationOutboxRepository outboxRepository, boolean simulateFailures) {
+        this(outboxRepository, simulateFailures, Clock.systemDefaultZone());
     }
 
     NotificationSender(NotificationOutboxRepository outboxRepository) {
@@ -49,12 +71,8 @@ public class NotificationSender {
     }
 
     /**
-     * Send a single outbox entry and persist the truthful outcome. Runs in its
-     * own transaction (REQUIRES_NEW) so a failure resolving one row does not roll
-     * back the whole relay batch. REQUIRES_NEW is explicit so that even if a
-     * caller happens to be transactional, the send is committed (or rolled back)
-     * in a dedicated transaction — matching the relay's "each entry in
-     * isolation" design.
+     * Convenience for callers that hold only an id: adopts whatever claim the row currently carries.
+     * Prefer {@link #process(Claim)}, which fails safe if the row was reclaimed in the meantime.
      *
      * @param outboxId the id of a row previously claimed as PROCESSING
      */
@@ -65,31 +83,70 @@ public class NotificationSender {
             logger.warn("Outbox id={} no longer exists; skipping.", outboxId);
             return;
         }
-        boolean delivered = simulateSend(outbox);
+        deliver(outbox, new Claim(outboxId, outbox.getClaimedBy(), outbox.getClaimedAt()));
+    }
 
-        if (delivered) {
-            outbox.setStatus("SENT");
-            outbox.setClaimedAt(null);
-            outbox.setClaimedBy(null);
-        } else {
-            outbox.setStatus("FAILED");
-            outbox.setRetryCount(outbox.getRetryCount() + 1);
-            outbox.setClaimedAt(null);
-            outbox.setClaimedBy(null);
+    /**
+     * Send a single outbox entry and persist the truthful outcome. Runs in its
+     * own transaction (REQUIRES_NEW) so a failure resolving one row does not roll
+     * back the whole relay batch.
+     *
+     * <p>Nothing is sent, and nothing is written, unless the row is still PROCESSING and still
+     * owned by {@code claim}.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void process(Claim claim) {
+        NotificationOutbox outbox = outboxRepository.findById(claim.id()).orElse(null);
+        if (outbox == null) {
+            logger.warn("Outbox id={} no longer exists; skipping.", claim.id());
+            return;
+        }
+        deliver(outbox, claim);
+    }
+
+    private void deliver(NotificationOutbox outbox, Claim claim) {
+        if (!"PROCESSING".equals(outbox.getStatus())
+                || claim.claimedBy() == null
+                || !claim.claimedBy().equals(outbox.getClaimedBy())
+                || !claim.claimedAt().equals(outbox.getClaimedAt())) {
+            logger.warn("Outbox id={} is no longer claimed by this worker (status={}); not sending.",
+                    claim.id(), outbox.getStatus());
+            return;
         }
 
+        boolean delivered;
         try {
-            outboxRepository.save(outbox);
-        } catch (Exception e) {
-            // Do NOT swallow — rethrow so the REQUIRES_NEW transaction rolls
-            // back and the relay's outer catch logs the failure. The row stays
-            // in PROCESSING (set by claimBatch in a prior committed tx) and the
-            // stale-claim reclaimer resets it to PENDING for retry after
-            // CLAIM_STALE_MINUTES. Swallowing here would silently commit an
-            // empty transaction and lose the failure signal.
-            String safeMsg = LogSanitizer.safeMessage(e);
-            logger.error("Failed to persist notification outcome for outbox id={}: {}", outbox.getId(), safeMsg);
+            delivered = simulateSend(outbox);
+        } catch (RuntimeException e) {
+            logger.error("Dispatch of outbox id={} threw: {}", claim.id(), LogSanitizer.safeMessage(e));
+            delivered = false;
+        }
+
+        int updated;
+        try {
+            if (delivered) {
+                updated = outboxRepository.markSentIfClaimed(claim.id(), claim.claimedBy(), claim.claimedAt());
+            } else {
+                int retries = Math.min(outbox.getRetryCount() + 1, OutboxBackoff.MAX_ATTEMPTS);
+                LocalDateTime next = LocalDateTime.now(clock)
+                        .plus(OutboxBackoff.delayAfter(retries))
+                        .truncatedTo(ChronoUnit.MILLIS);
+                updated = outboxRepository.markFailedIfClaimed(
+                        claim.id(), claim.claimedBy(), claim.claimedAt(), retries, next);
+            }
+        } catch (RuntimeException e) {
+            // Do NOT swallow — rethrow so the REQUIRES_NEW transaction rolls back and the relay's
+            // outer catch logs the failure. The row stays PROCESSING (set by claimBatch in a prior
+            // committed tx) and the stale-claim reclaimer retries it (counting the attempt) after
+            // CLAIM_STALE_MINUTES.
+            logger.error("Failed to persist notification outcome for outbox id={}: {}",
+                    claim.id(), LogSanitizer.safeMessage(e));
             throw e;
+        }
+
+        if (updated == 0) {
+            logger.warn("Outbox id={} was reclaimed while being sent; outcome ({}) discarded.",
+                    claim.id(), delivered ? "SENT" : "FAILED");
         }
     }
 

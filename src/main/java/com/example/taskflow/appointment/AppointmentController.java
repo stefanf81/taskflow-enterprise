@@ -21,7 +21,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.time.Instant;
 import java.util.concurrent.TimeUnit;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
@@ -67,7 +69,11 @@ public class AppointmentController {
     public SseEmitter streamAppointmentEvents(Authentication authentication, HttpServletResponse response) {
         response.setHeader(HttpHeaders.CACHE_CONTROL, "no-cache");
         response.setHeader("X-Accel-Buffering", "no");
-        return eventStreamService.subscribe(authentication.getName());
+        // The stream outlives this request: hand over the token expiry so it is closed once the
+        // token expires (non-JWT principals, e.g. in tests, simply have no expiry).
+        Instant tokenExpiresAt = authentication instanceof JwtAuthenticationToken jwt
+                ? jwt.getToken().getExpiresAt() : null;
+        return eventStreamService.subscribe(authentication.getName(), tokenExpiresAt);
     }
 
     @GetMapping("/{id}")
