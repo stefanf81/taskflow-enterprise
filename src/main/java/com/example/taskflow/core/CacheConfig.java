@@ -4,12 +4,15 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.cache.autoconfigure.RedisCacheManagerBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.RedisSerializer;
@@ -116,18 +119,38 @@ public class CacheConfig {
      * BKG-7: wraps the Redis cache manager (only) in a {@link SingleFlightCacheManager}. Spring Data
      * Redis' default non-locking writer ignores {@code @Cacheable(sync = true)}, so without this a
      * cold or just-evicted key is loaded once per concurrent request. The decorator serialises loads
-     * per (cache, key) inside this JVM with no extra Redis round-trip; it is NOT a distributed lock,
-     * so with several replicas each instance can still load once per expiry. The dev/test
-     * {@code simple} manager already serialises and is left untouched.
+     * per (cache, key) inside this JVM, and with {@code app.state.store=redis} also across replicas
+     * through a per-key Redis lease ({@link RedisCacheLoadLock}, taken on misses only; lease
+     * {@code app.cache.single-flight.lock-lease-ms}, default 10 s; a caller that lost the lease waits
+     * at most {@code app.cache.single-flight.max-wait-ms}, default 5 s, before loading itself). Any
+     * Redis error on the lease falls back to the per-JVM behaviour. The dev/test {@code simple}
+     * manager already serialises and is left untouched.
      *
-     * <p>Static so the post-processor is available early without instantiating this configuration.
+     * <p>Static so the post-processor is available early without instantiating this configuration;
+     * the Redis template is looked up lazily on the first miss, never during startup.
      */
     @Bean
-    public static BeanPostProcessor singleFlightCacheManagerPostProcessor() {
+    public static BeanPostProcessor singleFlightCacheManagerPostProcessor(
+            Environment environment, ObjectProvider<StringRedisTemplate> redisTemplate) {
+        SingleFlightCacheManager.DistributedLoadLock lock = null;
+        if (SharedStateStore.isRedis(environment)) {
+            Duration lease = Duration.ofMillis(environment.getProperty("app.cache.single-flight.lock-lease-ms",
+                    Long.class, RedisCacheLoadLock.DEFAULT_LEASE.toMillis()));
+            lock = new RedisCacheLoadLock(redisTemplate::getObject, lease);
+        }
+        Duration maxWait = Duration.ofMillis(environment.getProperty("app.cache.single-flight.max-wait-ms",
+                Long.class, SingleFlightCacheManager.DEFAULT_MAX_WAIT.toMillis()));
+        return singleFlightPostProcessor(lock, maxWait);
+    }
+
+    static BeanPostProcessor singleFlightPostProcessor(SingleFlightCacheManager.DistributedLoadLock lock,
+                                                       Duration maxWait) {
         return new BeanPostProcessor() {
             @Override
             public Object postProcessAfterInitialization(Object bean, String beanName) {
-                return bean instanceof RedisCacheManager redis ? new SingleFlightCacheManager(redis) : bean;
+                return bean instanceof RedisCacheManager redis
+                        ? new SingleFlightCacheManager(redis, lock, maxWait)
+                        : bean;
             }
         };
     }

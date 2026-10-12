@@ -294,17 +294,45 @@ class SingleFlightCacheManagerTest {
 
     @Test
     void configWrapsOnlyTheRedisCacheManager() {
-        BeanPostProcessor processor = CacheConfig.singleFlightCacheManagerPostProcessor();
+        BeanPostProcessor processor = CacheConfig.singleFlightCacheManagerPostProcessor(
+                new org.springframework.mock.env.MockEnvironment(), neverResolvedTemplate());
         RedisCacheManager redis = RedisCacheManager.builder(mock(RedisConnectionFactory.class)).build();
         CacheManager simple = new ConcurrentMapCacheManager();
 
         Object wrapped = processor.postProcessAfterInitialization(redis, "cacheManager");
         assertInstanceOf(SingleFlightCacheManager.class, wrapped);
         assertSame(redis, ((SingleFlightCacheManager) wrapped).getDelegate());
+        assertEquals(null, ((SingleFlightCacheManager) wrapped).getDistributedLock(),
+                "app.state.store=memory (default): per-JVM single flight only");
 
         assertSame(simple, processor.postProcessAfterInitialization(simple, "cacheManager"),
                 "the dev/test 'simple' manager already serialises and is left alone");
         Object other = new Object();
         assertSame(other, processor.postProcessAfterInitialization(other, "somethingElse"));
+    }
+
+    @Test
+    void withTheRedisStateStoreTheWrapperAlsoTakesACrossReplicaLeaseWithoutTouchingRedisAtStartup() {
+        var environment = new org.springframework.mock.env.MockEnvironment()
+                .withProperty("app.state.store", "redis")
+                .withProperty("app.cache.single-flight.lock-lease-ms", "2500");
+        BeanPostProcessor processor = CacheConfig.singleFlightCacheManagerPostProcessor(
+                environment, neverResolvedTemplate());
+        RedisCacheManager redis = RedisCacheManager.builder(mock(RedisConnectionFactory.class)).build();
+
+        SingleFlightCacheManager wrapped =
+                (SingleFlightCacheManager) processor.postProcessAfterInitialization(redis, "cacheManager");
+
+        RedisCacheLoadLock lock = assertInstanceOf(RedisCacheLoadLock.class, wrapped.getDistributedLock());
+        assertEquals(java.time.Duration.ofMillis(2500), lock.getLease());
+    }
+
+    /** Fails the test if the template is resolved: creating the post-processor must stay offline. */
+    @SuppressWarnings("unchecked")
+    private static org.springframework.beans.factory.ObjectProvider<org.springframework.data.redis.core.StringRedisTemplate>
+            neverResolvedTemplate() {
+        var provider = mock(org.springframework.beans.factory.ObjectProvider.class);
+        org.mockito.Mockito.when(provider.getObject()).thenThrow(new AssertionError("resolved at startup"));
+        return provider;
     }
 }

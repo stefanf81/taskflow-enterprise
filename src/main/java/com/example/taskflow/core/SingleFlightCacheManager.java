@@ -3,6 +3,7 @@ package com.example.taskflow.core;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -12,14 +13,15 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
 /**
- * Adds in-JVM "single flight" loading to every {@link Cache} of the wrapped {@link CacheManager}.
+ * Adds "single flight" loading to every {@link Cache} of the wrapped {@link CacheManager}.
  *
  * <p><b>Why.</b> {@code @Cacheable(sync = true)} makes Spring call {@link Cache#get(Object, Callable)}
  * and rely on the cache to run the loader once per key. {@code ConcurrentMapCache} does; Spring Data
  * Redis' default (non-locking) cache writer does <em>not</em>: concurrent callers that all miss each
  * run the loader and each write, so {@code sync = true} gave no stampede protection against Redis.
- * Locking in Redis ({@code RedisCacheWriter.lockingRedisCacheWriter}) would add a lock round-trip to
- * every read and write, so this decorator serialises loads inside this JVM instead.
+ * Spring Data Redis' locking writer ({@code RedisCacheWriter.lockingRedisCacheWriter}) would add a
+ * lock round-trip to every read and write (and locks the whole cache, not a key), so this decorator
+ * serialises loads inside this JVM and, optionally, takes a per-key Redis lease on misses only.
  *
  * <p><b>How.</b> A hit is served without any locking. On a miss the caller takes a per-(cache, key)
  * lock, <em>re-checks</em> the cache (a concurrent loader may have filled it while this thread waited),
@@ -28,17 +30,59 @@ import java.util.function.Supplier;
  * each other. {@link ReentrantLock} is used rather than {@code synchronized} so that waiting virtual
  * threads (enabled in this application) unmount instead of pinning a carrier thread.
  *
- * <p><b>Scope.</b> The protection is per JVM. It fully removes the stampede for the documented
- * single-replica deployment; with N replicas each instance may still run the loader once per expiry
- * (at most N concurrent loads instead of one per request). It is <em>not</em> a distributed lock.
+ * <p><b>Across replicas.</b> The local lock alone is per JVM: with N replicas each instance could
+ * still run the loader once per expiry. When a {@link DistributedLoadLock} is configured
+ * ({@code app.state.store=redis}, see {@link RedisCacheLoadLock}), the thread holding the local lock
+ * additionally takes a Redis lease for the key before loading, so one JVM sends one lock attempt and
+ * the whole deployment runs the loader once:
+ * <ul>
+ *   <li>the winner re-checks the cache, loads, writes the value and releases its own lease;</li>
+ *   <li>losers poll the cache with a short exponential backoff, re-trying the lease each round (a
+ *       winner whose load failed releases the lease, so a loser takes over at once), and after
+ *       {@code maxWait} load the value themselves (a winner that died keeps the lease until it
+ *       expires; a winner slower than {@code maxWait} costs one extra load per waiting replica);</li>
+ *   <li>any Redis error on the lock falls back to the local-only behaviour: load directly.</li>
+ * </ul>
+ * Hits never touch the lock; only misses of {@code get(key, loader)} ({@code @Cacheable(sync = true)})
+ * do.
  */
 public class SingleFlightCacheManager implements CacheManager {
 
+    /**
+     * A cross-process lease on one cache key. {@link #tryAcquire} returns a token when this caller
+     * now holds the lease, {@code null} when another holder has it, and throws when the lock store
+     * cannot be used (the caller then loads without it).
+     */
+    public interface DistributedLoadLock {
+
+        String tryAcquire(String cacheName, Object key);
+
+        /** Releases the lease only if {@code token} still owns it. Must not throw. */
+        void release(String cacheName, Object key, String token);
+    }
+
+    /** Default bound on how long a loser waits for another replica's load. */
+    public static final Duration DEFAULT_MAX_WAIT = Duration.ofSeconds(5);
+    private static final long FIRST_POLL_MILLIS = 10;
+    private static final long MAX_POLL_MILLIS = 200;
+
     private final CacheManager delegate;
+    private final DistributedLoadLock distributedLock;
+    private final long maxWaitNanos;
     private final ConcurrentMap<String, Cache> caches = new ConcurrentHashMap<>();
 
     public SingleFlightCacheManager(CacheManager delegate) {
+        this(delegate, null, DEFAULT_MAX_WAIT);
+    }
+
+    /**
+     * @param distributedLock cross-replica lease, or {@code null} for per-JVM single flight only
+     * @param maxWait how long a caller that lost the lease waits for the winner's value
+     */
+    public SingleFlightCacheManager(CacheManager delegate, DistributedLoadLock distributedLock, Duration maxWait) {
         this.delegate = delegate;
+        this.distributedLock = distributedLock;
+        this.maxWaitNanos = Math.max(0, maxWait.toNanos());
     }
 
     @Override
@@ -51,7 +95,7 @@ public class SingleFlightCacheManager implements CacheManager {
         if (target == null) {
             return null;
         }
-        return caches.computeIfAbsent(name, ignored -> new SingleFlightCache(target));
+        return caches.computeIfAbsent(name, ignored -> new SingleFlightCache(target, distributedLock, maxWaitNanos));
     }
 
     @Override
@@ -64,6 +108,11 @@ public class SingleFlightCacheManager implements CacheManager {
         return delegate;
     }
 
+    /** The cross-replica lock, or {@code null} when single flight is per JVM only. */
+    public DistributedLoadLock getDistributedLock() {
+        return distributedLock;
+    }
+
     /** A {@link Cache} whose {@code get(key, loader)} runs the loader at most once per key at a time. */
     static final class SingleFlightCache implements Cache {
 
@@ -74,10 +123,14 @@ public class SingleFlightCacheManager implements CacheManager {
         }
 
         private final Cache delegate;
+        private final DistributedLoadLock distributedLock;
+        private final long maxWaitNanos;
         private final ConcurrentMap<Object, KeyLock> locks = new ConcurrentHashMap<>();
 
-        SingleFlightCache(Cache delegate) {
+        SingleFlightCache(Cache delegate, DistributedLoadLock distributedLock, long maxWaitNanos) {
             this.delegate = delegate;
+            this.distributedLock = distributedLock;
+            this.maxWaitNanos = maxWaitNanos;
         }
 
         @Override
@@ -105,7 +158,9 @@ public class SingleFlightCacheManager implements CacheManager {
                     T value = (T) stored.get();
                     return value;
                 }
-                return delegate.get(key, valueLoader);
+                return distributedLock == null
+                        ? delegate.get(key, valueLoader)
+                        : loadUnderDistributedLock(key, valueLoader);
             } finally {
                 keyLock.lock.unlock();
                 locks.compute(key, (k, existing) -> {
@@ -115,6 +170,55 @@ public class SingleFlightCacheManager implements CacheManager {
                     existing.users--;
                     return existing.users == 0 ? null : existing;
                 });
+            }
+        }
+
+        /**
+         * Runs with this JVM's per-key lock held, so at most one thread per JVM gets here per key.
+         * See the class comment for the protocol.
+         */
+        private <T> T loadUnderDistributedLock(Object key, Callable<T> valueLoader) {
+            String name = delegate.getName();
+            long deadline = System.nanoTime() + maxWaitNanos;
+            long pollMillis = FIRST_POLL_MILLIS;
+            while (true) {
+                String token;
+                try {
+                    token = distributedLock.tryAcquire(name, key);
+                } catch (RuntimeException e) {
+                    return delegate.get(key, valueLoader); // lock store unusable: local-only
+                }
+                if (token != null) {
+                    try {
+                        // A previous lease holder may have written the value just before we got in.
+                        ValueWrapper stored = delegate.get(key);
+                        if (stored != null) {
+                            @SuppressWarnings("unchecked")
+                            T value = (T) stored.get();
+                            return value;
+                        }
+                        return delegate.get(key, valueLoader);
+                    } finally {
+                        distributedLock.release(name, key, token);
+                    }
+                }
+                long remainingNanos = deadline - System.nanoTime();
+                if (remainingNanos <= 0) {
+                    return delegate.get(key, valueLoader); // winner too slow or gone: load ourselves
+                }
+                try {
+                    Thread.sleep(Math.min(pollMillis, Math.max(1, remainingNanos / 1_000_000)));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return delegate.get(key, valueLoader);
+                }
+                pollMillis = Math.min(pollMillis * 2, MAX_POLL_MILLIS);
+                ValueWrapper published = delegate.get(key);
+                if (published != null) {
+                    @SuppressWarnings("unchecked")
+                    T value = (T) published.get();
+                    return value;
+                }
             }
         }
 
