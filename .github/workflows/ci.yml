@@ -105,12 +105,6 @@ jobs:
               - gradle.properties
               - gradlew
               - gradle/**
-              # Container configuration asserted by the default test suite
-              # (ContainerImageBenchmarkTest, GlibcTuningBenchmarkTest,
-              # ContainerConfigGuardTest), so a change to it runs those guards.
-              - Dockerfile*
-              - docker-compose.yml
-              - frontend/nginx.conf
 
             frontend:
               - frontend/**
@@ -150,6 +144,11 @@ jobs:
               - docker-compose.yml
               - .dockerignore
               - .trivyignore
+              # The backend job's containerConfigTest asserts how these
+              # workflows build the backend image (target prod, linux/amd64),
+              # so a workflow-only edit must run it too.
+              - .github/workflows/ci.yml
+              - .github/workflows/pushdockerimage.yml
 
             docker_frontend:
               - frontend/Dockerfile
@@ -362,6 +361,7 @@ jobs:
             "$GRADLE_CACHE_FLAG" \
             assemble \
             test \
+            containerConfigTest \
             jacocoTestReport \
             jacocoTestCoverageVerification \
             --stacktrace

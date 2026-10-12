@@ -4,14 +4,17 @@
 #
 #   prod   (--target prod)   production image: Ubuntu package refresh on every
 #                            build, download tools purged, setuid bits stripped,
-#                            no HEALTHCHECK (Kubernetes probes own it). Default
-#                            target, so an untargeted build yields production.
-#   local  (--target local)  docker-compose image: tini + wget kept for the
+#                            no HEALTHCHECK (Kubernetes probes own it).
+#   local  (--target local)  docker-compose image: wget kept for the
 #                            HEALTHCHECK, no apt-get upgrade so local rebuilds
-#                            stay deterministic and fast.
+#                            stay deterministic and fast. Last stage, so it is
+#                            also the default target: an untargeted
+#                            `docker build .` yields an image the compose
+#                            healthcheck (wget) works with.
 #
-# Everything above the two targets (JAR extraction, CDS training, the runtime
-# layers and the launch command) is shared, so the variants cannot drift apart.
+# Everything above the two targets (JAR extraction, CDS training, tini, the
+# runtime layers and the launch command) is shared, so the variants cannot
+# drift apart.
 #
 # The target architecture comes from the builder, not from this file: compose
 # builds for the host (`docker compose build`), the workflows pass
@@ -77,10 +80,20 @@ RUN --network=none env -i PATH="$PATH" LANG="$LANG" LC_ALL="$LC_ALL" \
          -jar application.jar \
     && test -s /tmp/application.jsa
 
-# Shared runtime: application layers, the trained archive and the launch
-# command. The two targets below add only their package layer, switch to the
-# runtime user and validate the archive under that final identity.
+# Shared runtime: tini, application layers, the trained archive and the launch
+# command. A complete, runnable image; the targets below add only the prod
+# package refresh, the runtime user, the archive validation under that final
+# identity and (local) the HEALTHCHECK.
 FROM java-base AS runtime
+
+# tini (/usr/bin/tini on the Ubuntu-based Temurin image) is the ENTRYPOINT
+# below, so it is installed here, before the application layers: a new JAR
+# then reuses this cached layer instead of re-running apt (and needing network)
+# on every local rebuild. No `apt-get upgrade` here; the prod target refreshes
+# packages on top, local stays deterministic.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
+    && rm -rf /var/lib/apt/lists/*
 
 # Stable dependencies first; root-owned application files are readable but not
 # writable by the runtime user, including outside a read-only deployment.
@@ -107,43 +120,16 @@ CMD [ \
 ]
 
 # -----------------------------------------------------------------------------
-# local: the docker-compose image (compose builds it with `target: local`).
-# -----------------------------------------------------------------------------
-FROM runtime AS local
-
-# Local development: `apt-get upgrade` is intentionally omitted so local
-# rebuilds stay deterministic and fast without pulling unpredictable packages.
-# wget stays installed for the HEALTHCHECK below; tini installs to
-# /usr/bin/tini on the Ubuntu-based Temurin image.
-RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
-    && rm -rf /var/lib/apt/lists/*
-
-USER 10001:10001
-
-# Validate the archive under the final identity and classpath (same check as
-# the prod target). Temporary JVM files do not become part of the image.
-RUN --network=none --mount=type=tmpfs,target=/tmp \
-    java -Xshare:on -XX:SharedArchiveFile=application.jsa \
-         -Xlog:cds=info -cp application.jar -version
-
-# Health check for standalone docker run and compose service_healthy dependency.
-# Shell form on purpose: `|| exit 1` maps wget's exit codes (4, 8, ...) onto the
-# 0/1 contract Docker defines for health checks. hadolint 2.15 reports DL3025
-# (meant for CMD/ENTRYPOINT) on HEALTHCHECK's CMD too.
-# hadolint ignore=DL3025
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness || exit 1
-
-# -----------------------------------------------------------------------------
 # prod: the production image (the workflows build it with --target prod for
-# linux/amd64). Last stage, so it is also the default target.
+# linux/amd64; build it by hand with --platform linux/amd64 --target prod).
 # -----------------------------------------------------------------------------
 FROM runtime AS prod
 
 # CI changes APT_BUST on every build to obtain Ubuntu package fixes. This keeps
 # the JVM base pinned, but package resolution intentionally remains build-time.
-# Temurin's JRE lives in /opt/java/openjdk and is not managed by dpkg.
-# tini installs to /usr/bin/tini on the Ubuntu-based Temurin image.
+# Temurin's JRE lives in /opt/java/openjdk and is not managed by dpkg. tini
+# comes from the shared runtime stage; it was installed explicitly, so the
+# --auto-remove below keeps it, and the upgrade refreshes it.
 # The base ships curl, wget, and gnupg (plus ~30 dependencies: krb5, LDAP,
 # GnuTLS, libssh2, SQLite) for its own build; the JVM uses none of them, so
 # Kubernetes probes must be httpGet rather than exec curl/wget. Purge them
@@ -160,7 +146,6 @@ RUN : "${APT_BUST}" \
     && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get purge -y --auto-remove curl wget gnupg \
     && DEBIAN_FRONTEND=noninteractive apt-get -y upgrade \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/bin/pebble \
     && rm -rf /var/lib/pebble \
@@ -177,4 +162,28 @@ RUN --network=none --mount=type=tmpfs,target=/tmp \
 
 # Kubernetes owns production probes (homelab/TF/gitops/apps/taskflow/backend.yaml
 # livenessProbe/readinessProbe), so this target deliberately adds no health
-# check; only the local target above has one.
+# check; only the local target below has one.
+
+# -----------------------------------------------------------------------------
+# local: the docker-compose image (compose builds it with `target: local`).
+# Last stage, so it is also the default target of an untargeted build.
+# -----------------------------------------------------------------------------
+FROM runtime AS local
+
+# Local development: no package layer at all. `apt-get upgrade` is
+# intentionally omitted so local rebuilds stay deterministic and fast, and the
+# base's wget stays installed for the HEALTHCHECK below.
+USER 10001:10001
+
+# Validate the archive under the final identity and classpath (same check as
+# the prod target). Temporary JVM files do not become part of the image.
+RUN --network=none --mount=type=tmpfs,target=/tmp \
+    java -Xshare:on -XX:SharedArchiveFile=application.jsa \
+         -Xlog:cds=info -cp application.jar -version
+
+# Health check for standalone docker run and compose service_healthy dependency.
+# Shell form on purpose: `|| exit 1` maps wget's exit codes (4, 8, ...) onto the
+# 0/1 contract Docker defines for health checks. hadolint 2.15 reports DL3025
+# (meant for CMD/ENTRYPOINT) on HEALTHCHECK's CMD too.
+# hadolint ignore=DL3025
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness || exit 1

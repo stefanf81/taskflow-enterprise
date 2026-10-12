@@ -170,7 +170,9 @@ Do not commit `.env` or the key files.
 Compose builds the Dockerfile's `local` target for the host architecture (arm64
 on Apple Silicon, amd64 on an Intel/AMD machine), so no emulation is involved.
 The production image is the `prod` target, which the workflows build for
-`linux/amd64`; build it locally with `docker build --target prod .`.
+`linux/amd64`; build it locally with
+`docker build --platform linux/amd64 --target prod .` (without `--platform`,
+Apple Silicon would produce an arm64 image the amd64 cluster cannot run).
 
 ### Choose a development mode
 
@@ -203,6 +205,7 @@ web application at `http://localhost:4200`; stop the stack with
 ```bash
 ./gradlew test                 # H2-backed tests; Docker is not required
 ./gradlew testcontainersTest   # PostgreSQL parity tests; Docker is required
+./gradlew containerConfigTest  # Dockerfile/compose/nginx/workflow guards; no Docker
 npm run lint:all
 npm run test:all
 npm run sync:api-types:check

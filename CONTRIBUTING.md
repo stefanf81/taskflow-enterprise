@@ -54,6 +54,7 @@ npm run sync:api-types:check
 ./gradlew build          # Compile, test, and package the application
 ./gradlew bootRun        # Start backend on :8080 (uses H2 in-memory DB for dev)
 ./gradlew testcontainersTest # PostgreSQL parity tests; Docker must be running
+./gradlew containerConfigTest # Dockerfile/compose/nginx/workflow guards (also run by check)
 ```
 
 ### Frontend (Angular 22)
@@ -105,8 +106,9 @@ and pulls `hadolint/hadolint` for Dockerfile linting on the first run. It needs
 the configured `.env`, a running Docker daemon, and the resources listed above.
 Compose builds the Dockerfile's `local` target for the host architecture, so
 Apple Silicon and Intel/AMD machines both get a native image. The production
-variant is the `prod` target (`docker build --target prod .`), which CI builds
-for `linux/amd64`.
+variant is the `prod` target, which CI builds for `linux/amd64`; build it by
+hand with `docker build --platform linux/amd64 --target prod .` so Apple Silicon
+does not produce an arm64 image.
 
 ### API Contract Changes
 

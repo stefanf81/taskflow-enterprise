@@ -1,5 +1,6 @@
 package com.example.taskflow.benchmark;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -13,9 +14,12 @@ import static org.junit.jupiter.api.Assertions.*;
  * {@code scripts/benchmark-glibc-tuning.sh}; this test locks the adopted config
  * so a future edit cannot silently drop it (or re-add the rejected allocator).
  *
- * <p>Deliberately not tagged {@code benchmark}: it only reads checked-in files, so it runs
- * in the default {@code test} task (and therefore in CI), where the guard is useful.
+ * <p>Tagged {@code container-config}: it only reads checked-in files, so it runs in the
+ * lightweight {@code containerConfigTest} task (CI backend job, and {@code check}), whose
+ * declared inputs re-run it on a Dockerfile, compose, nginx or workflow edit without
+ * invalidating the Spring {@code test} suite.
  */
+@Tag("container-config")
 class GlibcTuningBenchmarkTest {
 
     @Test

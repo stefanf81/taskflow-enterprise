@@ -1,5 +1,6 @@
 package com.example.taskflow.benchmark;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -13,9 +14,12 @@ import static org.junit.jupiter.api.Assertions.*;
  * test locks the adopted Dockerfile configuration so a future edit cannot silently revert
  * to the trimmed training context or re-ship the unused network tools.
  *
- * <p>Deliberately not tagged {@code benchmark}: it only reads checked-in files, so it runs
- * in the default {@code test} task (and therefore in CI), where the guard is useful.
+ * <p>Tagged {@code container-config}: it only reads checked-in files, so it runs in the
+ * lightweight {@code containerConfigTest} task (CI backend job, and {@code check}), whose
+ * declared inputs re-run it on a Dockerfile, compose, nginx or workflow edit without
+ * invalidating the Spring {@code test} suite.
  */
+@Tag("container-config")
 class ContainerImageBenchmarkTest {
 
     @Test
@@ -55,15 +59,17 @@ class ContainerImageBenchmarkTest {
         System.out.println("=".repeat(80));
 
         String d = Files.readString(Path.of("Dockerfile"));
-        String prodRun = DockerfileStages.instructions(d, "prod", "RUN");
-        String localRun = DockerfileStages.instructions(d, "local", "RUN");
+        // Inherited instructions count: a purge moved into the shared runtime stage would
+        // strip wget from the local image too, and must fail the local assertion below.
+        String prodRun = DockerfileStages.inheritedInstructions(d, "prod", "RUN");
+        String localRun = DockerfileStages.inheritedInstructions(d, "local", "RUN");
 
         boolean purged = prodRun.contains("apt-get purge -y --auto-remove curl wget gnupg");
         boolean setuidStripped = prodRun.contains("-perm /6000 -exec chmod a-s");
         boolean purgeBeforeUpgrade = purged
                 && prodRun.indexOf("apt-get purge") < prodRun.indexOf("apt-get -y upgrade");
         boolean localKeepsWget = !localRun.contains("apt-get purge")
-                && DockerfileStages.instructions(d, "local", "HEALTHCHECK").contains("CMD wget");
+                && DockerfileStages.inheritedInstructions(d, "local", "HEALTHCHECK").contains("CMD wget");
         boolean pebbleRemoved = prodRun.contains("rm -f /usr/bin/pebble")
                 && prodRun.contains("rm -rf /var/lib/pebble");
 

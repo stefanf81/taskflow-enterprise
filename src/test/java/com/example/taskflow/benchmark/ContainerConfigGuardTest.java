@@ -1,5 +1,6 @@
 package com.example.taskflow.benchmark;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -14,11 +15,13 @@ import static org.junit.jupiter.api.Assertions.*;
  * docker-compose.yml, the HEALTHCHECK that only the Dockerfile's {@code local} target carries,
  * and the single-Dockerfile layout whose target platform is chosen by the builder.
  *
- * <p>These assertions used to live in {@link P1AndP2BenchmarkTest}, which is tagged
- * {@code benchmark} and therefore excluded from the default {@code test} task; no workflow
- * runs {@code benchmarkTest}, so the guards never executed in CI. They only read checked-in
- * files, so they belong in the default suite.
+ * <p>The nginx and diagnostics assertions used to live in {@link P1AndP2BenchmarkTest}, which
+ * is tagged {@code benchmark}; no workflow runs {@code benchmarkTest}, so they never executed
+ * in CI. Tagged {@code container-config}: they only read checked-in files, so they run in the
+ * lightweight {@code containerConfigTest} task (CI backend job, and {@code check}) instead of
+ * the Spring {@code test} suite.
  */
+@Tag("container-config")
 class ContainerConfigGuardTest {
 
     @Test
@@ -80,12 +83,10 @@ class ContainerConfigGuardTest {
         assertTrue(hasUseG1GC, "G1GC must remain");
 
         String d = Files.readString(Path.of("Dockerfile"));
-        boolean localHealthcheck = !DockerfileStages.instructions(d, "local", "HEALTHCHECK").isEmpty();
+        boolean localHealthcheck = !DockerfileStages.inheritedInstructions(d, "local", "HEALTHCHECK").isEmpty();
         // prod is k8s — variables & probes are set in homelab/TF YAML, not the Dockerfile. A
-        // HEALTHCHECK is inherited, so the stages prod derives from must not carry one either.
-        boolean prodHealthcheck = !DockerfileStages.instructions(d, "prod", "HEALTHCHECK").isEmpty()
-                || !DockerfileStages.instructions(d, "runtime", "HEALTHCHECK").isEmpty()
-                || !DockerfileStages.instructions(d, "java-base", "HEALTHCHECK").isEmpty();
+        // HEALTHCHECK is inherited, so no stage in prod's ancestry may carry one either.
+        boolean prodHealthcheck = !DockerfileStages.inheritedInstructions(d, "prod", "HEALTHCHECK").isEmpty();
         assertTrue(localHealthcheck, "the local target needs a HEALTHCHECK (P1-6 local)");
         assertFalse(prodHealthcheck, "the prod target must not have a HEALTHCHECK — k8s uses livenessProbe via yaml");
 
@@ -106,9 +107,18 @@ class ContainerConfigGuardTest {
         String push = Files.readString(Path.of(".github/workflows/pushdockerimage.yml"));
 
         boolean noSecondFile = !Files.exists(Path.of("Dockerfile.x64"));
-        boolean twoTargets = d.contains("FROM runtime AS prod") && d.contains("FROM runtime AS local");
+        boolean twoTargets = "runtime".equals(DockerfileStages.parent(d, "prod"))
+                && "runtime".equals(DockerfileStages.parent(d, "local"));
         boolean sharedTraining = DockerfileStages.instructions(d, "cds-training", "RUN")
                 .contains("-XX:ArchiveClassesAtExit=/tmp/application.jsa");
+        // tini is installed once, in the shared runtime stage, before the application layers:
+        // a new JAR must not invalidate the apt layer (local rebuilds stay cached and offline).
+        List<String> runtime = DockerfileStages.instructions(d, "runtime");
+        int tiniInstall = indexOf(runtime, i -> i.startsWith("RUN ") && i.contains("install") && i.contains("tini"));
+        int firstCopy = indexOf(runtime, i -> i.startsWith("COPY "));
+        boolean tiniBeforeLayers = tiniInstall >= 0 && firstCopy >= 0 && tiniInstall < firstCopy;
+        boolean localNoApt = !DockerfileStages.instructions(d, "local", "RUN").contains("apt-get");
+        boolean localIsDefault = "local".equals(DockerfileStages.finalStage(d));
         List<String> platformFroms = d.lines().filter(line -> line.startsWith("FROM --platform=")).toList();
         boolean onlyBuildPlatform = !d.contains("ARG PLATFORM")
                 && platformFroms.equals(List.of("FROM --platform=$BUILDPLATFORM ${JAVA_IMAGE} AS extractor"));
@@ -119,6 +129,9 @@ class ContainerConfigGuardTest {
         System.out.println("  Dockerfile.x64 gone: " + noSecondFile);
         System.out.println("  prod and local both derive from the shared runtime stage: " + twoTargets);
         System.out.println("  One CDS training stage: " + sharedTraining);
+        System.out.println("  tini installed in runtime before the application layers: " + tiniBeforeLayers);
+        System.out.println("  local target runs no apt: " + localNoApt);
+        System.out.println("  local is the default (last) stage: " + localIsDefault);
         System.out.println("  Only the extractor pins a platform ($BUILDPLATFORM): " + onlyBuildPlatform);
         System.out.println("  compose builds target local: " + composeLocal);
         System.out.println("  workflows build target prod for linux/amd64: " + workflowsProd);
@@ -128,8 +141,22 @@ class ContainerConfigGuardTest {
         assertTrue(noSecondFile, "the production variant is the prod target of the single Dockerfile");
         assertTrue(twoTargets, "prod and local must both be final targets of the shared runtime stage");
         assertTrue(sharedTraining, "CDS training must happen once, in the shared cds-training stage");
+        assertTrue(tiniBeforeLayers, "install tini in the runtime stage before the COPY layers, "
+                + "or every JAR change re-runs apt");
+        assertTrue(localNoApt, "the local target must not run apt (deterministic, cached, offline rebuilds)");
+        assertTrue(localIsDefault, "local must stay the last stage: an untargeted build must work "
+                + "with the compose healthcheck, which needs wget");
         assertTrue(onlyBuildPlatform, "the target platform comes from the builder; only the extractor pins $BUILDPLATFORM");
         assertTrue(composeLocal, "docker-compose.yml must build the local target");
         assertTrue(workflowsProd, "the image workflows must build the prod target for linux/amd64");
+    }
+
+    private static int indexOf(List<String> instructions, java.util.function.Predicate<String> match) {
+        for (int i = 0; i < instructions.size(); i++) {
+            if (match.test(instructions.get(i))) {
+                return i;
+            }
+        }
+        return -1;
     }
 }
