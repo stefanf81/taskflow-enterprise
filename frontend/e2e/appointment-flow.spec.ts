@@ -268,9 +268,11 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     );
     await page.click('button:has-text("Submit Review")');
 
-    // Confirm review submission feedback matches success modal
-    await expect(page.locator('.alert-success')).toContainText(
-      'Thank you for your review! We appreciate your feedback.',
+    // Reviews are only accepted once the appointment has taken place (DATA-4). This booking is in
+    // the future, so the server refuses it and the form surfaces the server's message. (The
+    // accepted-review path is covered by FeaturesIntegrationTest with a movable shop clock.)
+    await expect(page.locator('.alert-error')).toContainText(
+      'This appointment has not taken place yet and cannot be reviewed.',
     );
 
     // ----------------------------------------------------
