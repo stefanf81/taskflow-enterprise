@@ -12,6 +12,7 @@ import { AdminTabNavigator } from './AdminTabNavigator';
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
 import { PublicActionsScreen } from '../screens/PublicActionsScreen';
+import { SessionNoticeBanner } from '../components/common/SessionNoticeBanner';
 import { useAuthStore } from '../store/useAuthStore';
 import { RootStackParamList } from '../types/navigation';
 import { colors } from '../theme/colors';
@@ -19,7 +20,16 @@ import { colors } from '../theme/colors';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator: React.FC = () => {
-  const { isAuthenticated, role, isLoading, isOffline, checkAuth, logout } = useAuthStore();
+  const {
+    isAuthenticated,
+    role,
+    isBootstrapping,
+    isOffline,
+    sessionNotice,
+    checkAuth,
+    logout,
+    clearSessionNotice,
+  } = useAuthStore();
   const isCustomer = isAuthenticated && role === 'ROLE_CUSTOMER';
   const isAdmin = isAuthenticated && role === 'ROLE_ADMIN';
   const hasAuthorizedRole = isCustomer || isAdmin;
@@ -63,7 +73,10 @@ export const RootNavigator: React.FC = () => {
     }
   }, [isAdmin, isAuthenticated, isCustomer, role]);
 
-  if (isLoading) {
+  // Splash only while the stored session is being restored. Sign-in/registration
+  // pending state lives in the screens, so a failed attempt never unmounts the
+  // NavigationContainer (which used to drop the user on Home and lose the error).
+  if (isBootstrapping) {
     return (
       <View style={styles.splash}>
         <ActivityIndicator size="large" color={colors.gold.main} />
@@ -91,67 +104,73 @@ export const RootNavigator: React.FC = () => {
   };
 
   return (
-    <NavigationContainer ref={navigationRef}>
-      <Stack.Navigator
-        initialRouteName={getInitialRouteName()}
-        screenOptions={{
-          headerStyle: {
-            backgroundColor: colors.obsidian.card,
-          },
-          headerTintColor: colors.gold.main,
-          headerTitleStyle: {
-            fontWeight: '700',
-          },
-          contentStyle: {
-            backgroundColor: colors.obsidian.bg,
-          },
-        }}
-      >
-        {/* Guest screens */}
-        <Stack.Screen
-          name="GuestTabs"
-          component={GuestTabNavigator}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Login"
-          component={LoginScreen}
-          options={{ title: 'Sign In' }}
-        />
-        <Stack.Screen
-          name="Register"
-          component={RegisterScreen}
-          options={{ title: 'Create Account' }}
-        />
-
-        {/* Only register the navigator authorized for the confirmed role. */}
-        {isCustomer && (
+    <View style={styles.root}>
+      <NavigationContainer ref={navigationRef}>
+        <Stack.Navigator
+          initialRouteName={getInitialRouteName()}
+          screenOptions={{
+            headerStyle: {
+              backgroundColor: colors.obsidian.card,
+            },
+            headerTintColor: colors.gold.main,
+            headerTitleStyle: {
+              fontWeight: '700',
+            },
+            contentStyle: {
+              backgroundColor: colors.obsidian.bg,
+            },
+          }}
+        >
+          {/* Guest screens */}
           <Stack.Screen
-            name="CustomerTabs"
-            component={CustomerTabNavigator}
+            name="GuestTabs"
+            component={GuestTabNavigator}
             options={{ headerShown: false }}
           />
-        )}
-        {isAdmin && (
           <Stack.Screen
-            name="AdminTabs"
-            component={AdminTabNavigator}
-            options={{ headerShown: false }}
+            name="Login"
+            component={LoginScreen}
+            options={{ title: 'Sign In' }}
           />
-        )}
-
-        {/* Public actions – always available */}
-        <Stack.Screen
-          name="PublicActions"
-          component={PublicActionsScreen}
-          options={{ title: 'Manage Booking' }}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+          <Stack.Screen
+            name="Register"
+            component={RegisterScreen}
+            options={{ title: 'Create Account' }}
+          />
+  
+          {/* Only register the navigator authorized for the confirmed role. */}
+          {isCustomer && (
+            <Stack.Screen
+              name="CustomerTabs"
+              component={CustomerTabNavigator}
+              options={{ headerShown: false }}
+            />
+          )}
+          {isAdmin && (
+            <Stack.Screen
+              name="AdminTabs"
+              component={AdminTabNavigator}
+              options={{ headerShown: false }}
+            />
+          )}
+  
+          {/* Public actions – always available */}
+          <Stack.Screen
+            name="PublicActions"
+            component={PublicActionsScreen}
+            options={{ title: 'Manage Booking' }}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+      <SessionNoticeBanner message={sessionNotice} onDismiss={clearSessionNotice} />
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   splash: {
     flex: 1,
     backgroundColor: colors.obsidian.bg,

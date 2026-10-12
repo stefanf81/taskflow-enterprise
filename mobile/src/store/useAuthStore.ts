@@ -1,120 +1,157 @@
 import { create } from 'zustand';
 import { storage } from '../utils/storage';
 import { authApi } from '../api/auth';
+import { setSessionEndedHandler } from '../api/client';
 import { LoginRequest, LoginResponse, RegisterRequest } from '../types/api';
 import { queryClient } from '../query/queryClient';
+import { getApiErrorMessage, getHttpStatus } from '../utils/errors';
+import { SESSION_EXPIRED_MESSAGE, computeExpiryMs, isTokenExpired } from '../utils/session';
 
 interface AuthState {
   isAuthenticated: boolean;
-  isLoading: boolean;
+  /**
+   * True only while `checkAuth` restores the session at startup/retry. The
+   * RootNavigator shows its splash for this flag alone; login/register keep
+   * their pending state local to the screens so the NavigationContainer (and
+   * therefore the screen that renders the error) is never unmounted mid-submit.
+   */
+  isBootstrapping: boolean;
   username: string | null;
   role: 'ROLE_ADMIN' | 'ROLE_CUSTOMER' | null;
   isOffline: boolean;
   error: string | null;
+  /** Shown app-wide after the session ended without a user-initiated sign-out. */
+  sessionNotice: string | null;
 
   login: (credentials: LoginRequest) => Promise<LoginResponse>;
   register: (data: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   clearError: () => void;
+  clearSessionNotice: () => void;
 }
+
+const SIGNED_OUT = {
+  isAuthenticated: false,
+  username: null,
+  role: null,
+  isOffline: false,
+} as const;
 
 export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
-  isLoading: true,
+  isBootstrapping: true,
   username: null,
   role: null,
   isOffline: false,
   error: null,
+  sessionNotice: null,
 
   login: async (credentials) => {
-    set({ isLoading: true, error: null });
+    set({ error: null, sessionNotice: null });
     try {
       const res = await authApi.login(credentials);
       await storage.setToken(res.accessToken);
+      await storage.setTokenExpiry(computeExpiryMs(res.expiresIn));
       await storage.setUserData({ username: res.username, role: res.role });
 
       set({
         isAuthenticated: true,
-        isLoading: false,
         username: res.username,
         role: res.role,
         isOffline: false,
         error: null,
+        sessionNotice: null,
       });
       return res;
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-          : err instanceof Error
-            ? err.message
-            : 'Login failed';
-      set({ isLoading: false, error: msg });
+      const msg = getApiErrorMessage(err, 'Login failed');
+      set({ error: msg });
       throw new Error(msg);
     }
   },
 
   register: async (data) => {
-    set({ isLoading: true, error: null });
+    set({ error: null });
     try {
       await authApi.register(data);
-      set({ isLoading: false, error: null });
+      set({ error: null });
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-          : err instanceof Error
-            ? err.message
-            : 'Registration failed';
-      set({ isLoading: false, error: msg });
+      const msg = getApiErrorMessage(err, 'Registration failed');
+      set({ error: msg });
       throw new Error(msg);
     }
   },
 
   logout: async () => {
-    // Bearer JWTs are stateless; logout removes the native credential. Server
-    // revocation can be added later with a jti deny-list if required.
+    // Revoke the bearer token server-side first (best effort: a network
+    // failure, timeout or an already-expired token must never block sign-out).
     try {
-      await storage.removeToken();
-      await storage.removeUserData();
-      queryClient.clear();
-      set({
-        isAuthenticated: false,
-        isLoading: false,
-        username: null,
-        role: null,
-        isOffline: false,
-        error: null,
-      });
+      await authApi.logout();
+    } catch {
+      // ignored — local cleanup below is authoritative
+    }
+
+    let cleanupError: unknown = null;
+    try {
+      await storage.clearSession();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Secure sign-out failed. Please try again.';
-      set({ isLoading: false, error: message });
-      throw new Error(message);
+      cleanupError = error;
+    }
+
+    const cleanupMessage = cleanupError
+      ? `Sign-out could not remove saved credentials from this device. ${
+          cleanupError instanceof Error && cleanupError.message
+            ? cleanupError.message
+            : 'Secure sign-out failed. Please try again.'
+        }`
+      : null;
+
+    // Always drop in-memory auth state and cached data, even when the
+    // Keychain/Keystore deletion failed, so the UI never stays signed in. A
+    // failed cleanup is surfaced app-wide (the calling screen unmounts as soon
+    // as the state flips) because the saved token could restore the session on
+    // the next launch.
+    queryClient.clear();
+    set({ ...SIGNED_OUT, error: null, sessionNotice: cleanupMessage });
+
+    if (cleanupMessage) {
+      throw new Error(cleanupMessage);
     }
   },
 
   checkAuth: async () => {
-    set({ isLoading: true });
+    set({ isBootstrapping: true });
     let token: string | null;
     try {
       token = await storage.getToken();
     } catch {
       set({
-        isLoading: false,
+        isBootstrapping: false,
         isOffline: true,
         error: 'Secure credential storage is unavailable. Please try again.',
       });
       return;
     }
     if (!token) {
+      set({ ...SIGNED_OUT, isBootstrapping: false, error: null });
+      return;
+    }
+
+    // Drop a token that is already past its stored expiry without a round
+    // trip, and tell the user why they are signed out.
+    if (isTokenExpired(await storage.getTokenExpiry())) {
+      try {
+        await storage.clearSession();
+      } catch {
+        // in-memory state is cleared below regardless
+      }
+      queryClient.clear();
       set({
-        isAuthenticated: false,
-        isLoading: false,
-        username: null,
-        role: null,
-        isOffline: false,
+        ...SIGNED_OUT,
+        isBootstrapping: false,
         error: null,
+        sessionNotice: SESSION_EXPIRED_MESSAGE,
       });
       return;
     }
@@ -127,7 +164,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
         set({
           isAuthenticated: true,
-          isLoading: false,
+          isBootstrapping: false,
           username: res.username,
           role: res.role,
           isOffline: false,
@@ -136,15 +173,12 @@ export const useAuthStore = create<AuthState>((set) => ({
         return;
       }
     } catch (error: unknown) {
-      const status =
-        error && typeof error === 'object' && 'response' in error
-          ? (error as { response?: { status?: number } }).response?.status
-          : undefined;
+      const status = getHttpStatus(error);
       if (status !== 401 && status !== 403) {
         // A timeout/offline/DNS failure does not prove the bearer token is
         // invalid. Preserve it and let the user retry when connectivity returns.
         set({
-          isLoading: false,
+          isBootstrapping: false,
           isOffline: true,
           error: 'Could not reach the server. Check your connection and retry.',
         });
@@ -153,18 +187,31 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
 
     // Only a definitive authentication failure clears native credentials.
-    await storage.removeToken();
-    await storage.removeUserData();
+    try {
+      await storage.clearSession();
+    } catch {
+      // in-memory state is cleared below regardless
+    }
     queryClient.clear();
     set({
-      isAuthenticated: false,
-      isLoading: false,
-      username: null,
-      role: null,
-      isOffline: false,
+      ...SIGNED_OUT,
+      isBootstrapping: false,
       error: null,
+      sessionNotice: SESSION_EXPIRED_MESSAGE,
     });
   },
 
   clearError: () => set({ error: null }),
+  clearSessionNotice: () => set({ sessionNotice: null }),
 }));
+
+// The API client ends the session itself (expired token before a request, 401
+// from a protected endpoint); mirror that into the store. Only a user who was
+// signed in is told their session ended.
+setSessionEndedHandler(() =>
+  useAuthStore.setState((state) => ({
+    ...SIGNED_OUT,
+    error: null,
+    sessionNotice: state.isAuthenticated ? SESSION_EXPIRED_MESSAGE : state.sessionNotice,
+  })),
+);

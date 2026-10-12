@@ -74,6 +74,30 @@ describe('appointmentsApi', () => {
     });
   });
 
+  describe('search (MOB-11)', () => {
+    it('trims the search term', async () => {
+      mockedGet.mockResolvedValueOnce({ data: emptyDashboard });
+      await appointmentsApi.getAllAppointments('overdue', '  john@ex.com ');
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments', {
+        params: { page: 0, size: 10, status: 'OVERDUE', search: 'john@ex.com' },
+      });
+    });
+
+    it('omits a blank search term', async () => {
+      mockedGet.mockResolvedValueOnce({ data: emptyDashboard });
+      await appointmentsApi.getAllAppointments(undefined, '   ');
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments', { params: { page: 0, size: 10 } });
+    });
+
+    it('sends the cancelled status filter upper-cased', async () => {
+      mockedGet.mockResolvedValueOnce({ data: emptyDashboard });
+      await appointmentsApi.getAllAppointments('cancelled');
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments', {
+        params: { page: 0, size: 10, status: 'CANCELLED' },
+      });
+    });
+  });
+
   describe('createAppointment', () => {
     it('sends POST with appointment data', async () => {
       mockedPost.mockResolvedValueOnce({ data: mockAppt });
@@ -119,6 +143,16 @@ describe('appointmentsApi', () => {
       mockedPut.mockResolvedValueOnce({});
       await appointmentsApi.publicCancelAppointment('TF-0001', 'j@ex.com');
       expect(mockedPut).toHaveBeenCalledWith('/api/v1/appointments/public/cancel/TF-0001', { email: 'j@ex.com' });
+    });
+  });
+
+  describe('publicCancelAppointment path encoding', () => {
+    it('encodes the reference so it stays a single path segment', async () => {
+      mockedPut.mockResolvedValueOnce({});
+      await appointmentsApi.publicCancelAppointment('a/b?c', 'j@ex.com');
+      expect(mockedPut).toHaveBeenCalledWith('/api/v1/appointments/public/cancel/a%2Fb%3Fc', {
+        email: 'j@ex.com',
+      });
     });
   });
 

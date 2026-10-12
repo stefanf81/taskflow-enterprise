@@ -37,11 +37,11 @@ describe('RootNavigator', () => {
     mockLogout.mockResolvedValue(undefined);
   });
 
-  it('shows loading spinner when isLoading is true', async () => {
+  it('shows the splash while bootstrapping', async () => {
     mockUseAuthStore.mockReturnValue({
       isAuthenticated: false,
       role: null,
-      isLoading: true,
+      isBootstrapping: true,
       isOffline: false,
       checkAuth: mockCheckAuth,
       logout: mockLogout,
@@ -52,11 +52,11 @@ describe('RootNavigator', () => {
     expect(mockCheckAuth).toHaveBeenCalled();
   });
 
-  it('renders navigator when not loading', async () => {
+  it('renders navigator when not bootstrapping', async () => {
     mockUseAuthStore.mockReturnValue({
       isAuthenticated: false,
       role: null,
-      isLoading: false,
+      isBootstrapping: false,
       isOffline: false,
       checkAuth: mockCheckAuth,
       logout: mockLogout,
@@ -70,7 +70,7 @@ describe('RootNavigator', () => {
     mockUseAuthStore.mockReturnValue({
       isAuthenticated: true,
       role: 'ROLE_ADMIN',
-      isLoading: false,
+      isBootstrapping: false,
       isOffline: false,
       checkAuth: mockCheckAuth,
       logout: mockLogout,
@@ -84,7 +84,7 @@ describe('RootNavigator', () => {
     mockUseAuthStore.mockReturnValue({
       isAuthenticated: true,
       role: 'ROLE_CUSTOMER',
-      isLoading: false,
+      isBootstrapping: false,
       isOffline: false,
       checkAuth: mockCheckAuth,
       logout: mockLogout,
@@ -98,7 +98,7 @@ describe('RootNavigator', () => {
     mockUseAuthStore.mockReturnValue({
       isAuthenticated: false,
       role: null,
-      isLoading: false,
+      isBootstrapping: false,
       isOffline: false,
       checkAuth: mockCheckAuth,
       logout: mockLogout,
@@ -112,7 +112,7 @@ describe('RootNavigator', () => {
     mockUseAuthStore.mockReturnValue({
       isAuthenticated: true,
       role: 'ROLE_UNKNOWN',
-      isLoading: false,
+      isBootstrapping: false,
       isOffline: false,
       checkAuth: mockCheckAuth,
       logout: mockLogout,

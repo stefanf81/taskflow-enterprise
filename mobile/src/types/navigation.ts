@@ -16,7 +16,7 @@ export type GuestTabParamList = {
 
 export type CustomerTabParamList = {
   CustomerAppointments: undefined;
-  NewBooking: undefined;
+  NewBooking: { preselectedService?: string; preselectedBarber?: string } | undefined;
   CustomerCatalog: undefined;
 };
 

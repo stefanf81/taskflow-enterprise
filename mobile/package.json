@@ -15,8 +15,9 @@
     "e2e:build:android": "detox build --configuration android.emu.release",
     "e2e:test:android": "detox test --configuration android.emu.release",
     "lint": "tsc --noEmit",
-    "build:android": "eas build --platform android",
-    "build:ios": "eas build --platform ios"
+    "check:eas": "node scripts/check-eas-config.cjs",
+    "build:android": "npm run check:eas && eas build --platform android",
+    "build:ios": "npm run check:eas && eas build --platform ios"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",

@@ -19,7 +19,7 @@ describe('PublicReviewModal', () => {
   it('renders modal with form fields', async () => {
     await render(<PublicReviewModal visible={true} onClose={() => {}} onSuccess={() => {}} />);
     expect(screen.getByText('Leave a Review')).toBeTruthy();
-    expect(screen.getByPlaceholderText('e.g. TF-9823-8A2F')).toBeTruthy();
+    expect(screen.getByPlaceholderText('e.g. 123e4567-e89b-12d3-a456-426614174000')).toBeTruthy();
     expect(screen.getByPlaceholderText('e.g. john@example.com')).toBeTruthy();
     expect(screen.getByPlaceholderText('Tell us how your hair style turned out...')).toBeTruthy();
   });
@@ -36,7 +36,7 @@ describe('PublicReviewModal', () => {
 
   it('shows error when email is empty on submit', async () => {
     await render(
-      <PublicReviewModal visible={true} initialPublicId="TF-0001" onClose={() => {}} onSuccess={() => {}} />,
+      <PublicReviewModal visible={true} initialPublicId="123e4567-e89b-12d3-a456-426614174000" onClose={() => {}} onSuccess={() => {}} />,
     );
     fireEvent.press(screen.getByText('Submit Review'));
 
@@ -57,7 +57,7 @@ describe('PublicReviewModal', () => {
     const handleSuccess = jest.fn();
     const handleClose = jest.fn();
     await render(
-      <PublicReviewModal visible={true} initialPublicId="TF-0001" onClose={handleClose} onSuccess={handleSuccess} />
+      <PublicReviewModal visible={true} initialPublicId="123e4567-e89b-12d3-a456-426614174000" onClose={handleClose} onSuccess={handleSuccess} />
     );
 
     const commentInput = screen.getByPlaceholderText('Tell us how your hair style turned out...');
@@ -73,8 +73,53 @@ describe('PublicReviewModal', () => {
     });
 
     expect(mockMutateAsync).toHaveBeenCalledWith({
-      publicId: 'TF-0001',
+      publicId: '123e4567-e89b-12d3-a456-426614174000',
       data: { rating: 5, comment: 'Great service!', customerEmail: 'john@example.com' },
     });
+  });
+
+  it('does not force upper-case input (references are lowercase UUIDs)', async () => {
+    await render(<PublicReviewModal visible={true} onClose={() => {}} onSuccess={() => {}} />);
+    const input = screen.getByPlaceholderText('e.g. 123e4567-e89b-12d3-a456-426614174000');
+    expect(input.props.autoCapitalize).toBe('none');
+    expect(input.props.autoCorrect).toBe(false);
+  });
+
+  it('trims and lower-cases the reference before submitting', async () => {
+    mockMutateAsync.mockResolvedValueOnce(undefined);
+    await render(<PublicReviewModal visible={true} onClose={() => {}} onSuccess={() => {}} />);
+    await fireEvent.changeText(
+      screen.getByPlaceholderText('e.g. 123e4567-e89b-12d3-a456-426614174000'),
+      ' 123E4567-E89B-12D3-A456-426614174000',
+    );
+    await fireEvent.changeText(screen.getByPlaceholderText('e.g. john@example.com'), 'john@example.com');
+    await fireEvent.press(screen.getByText('Submit Review'));
+    expect(mockMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ publicId: '123e4567-e89b-12d3-a456-426614174000' }),
+    );
+  });
+
+  it('re-syncs the reference when the modal is reopened with a new initialPublicId', async () => {
+    const NEW_ID = '9b2c1d3e-0000-4000-8000-00000000abcd';
+    const { rerender } = await render(
+      <PublicReviewModal visible={true} initialPublicId="123e4567-e89b-12d3-a456-426614174000" onClose={() => {}} onSuccess={() => {}} />,
+    );
+    await rerender(
+      <PublicReviewModal visible={false} initialPublicId="123e4567-e89b-12d3-a456-426614174000" onClose={() => {}} onSuccess={() => {}} />,
+    );
+    await rerender(
+      <PublicReviewModal visible={true} initialPublicId={NEW_ID} onClose={() => {}} onSuccess={() => {}} />,
+    );
+    expect(screen.getByDisplayValue(NEW_ID)).toBeTruthy();
+  });
+
+  it('shows the server message when the review is rejected', async () => {
+    mockMutateAsync.mockRejectedValueOnce({ response: { status: 400, data: { message: 'Review already submitted' } } });
+    await render(
+      <PublicReviewModal visible={true} initialPublicId="123e4567-e89b-12d3-a456-426614174000" onClose={() => {}} onSuccess={() => {}} />,
+    );
+    await fireEvent.changeText(screen.getByPlaceholderText('e.g. john@example.com'), 'john@example.com');
+    await fireEvent.press(screen.getByText('Submit Review'));
+    expect(screen.getByText('Review already submitted')).toBeTruthy();
   });
 });

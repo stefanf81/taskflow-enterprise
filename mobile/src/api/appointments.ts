@@ -28,8 +28,11 @@ export const appointmentsApi = {
     if (statusFilter && statusFilter !== 'all') {
       params.status = statusFilter.toUpperCase();
     }
-    if (search) {
-      params.search = search;
+    // The backend matches name/email/phone (contains) and publicId (exact);
+    // surrounding whitespace would make an otherwise exact match fail.
+    const term = search?.trim();
+    if (term) {
+      params.search = term;
     }
     const response = await apiClient.get<AppointmentDashboardResponse>('/api/v1/appointments', {
       params,
@@ -70,7 +73,7 @@ export const appointmentsApi = {
   },
 
   publicCancelAppointment: async (publicId: string, email: string): Promise<void> => {
-    await apiClient.put(`/api/v1/appointments/public/cancel/${publicId}`, { email });
+    await apiClient.put(`/api/v1/appointments/public/cancel/${encodeURIComponent(publicId)}`, { email });
   },
 
   updateAppointmentStatus: async (
