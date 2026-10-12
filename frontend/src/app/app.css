@@ -115,7 +115,8 @@ html {
   transition: all 0.15s ease;
 }
 
-.slot-picker-btn:hover:not(:disabled) {
+/* A selected chip/slot keeps its gold fill on hover (its labels are black). */
+.slot-picker-btn:hover:not(:disabled):not(.slot-selected) {
   border-color: var(--primary-gold) !important;
   color: var(--primary-gold) !important;
   background-color: var(--primary-gold-light) !important;
@@ -126,6 +127,46 @@ html {
   color: #000000 !important;
   border-color: var(--primary-gold) !important;
   box-shadow: 0 0 15px rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Date carousel chip labels. A selected chip has a gold fill, so its labels switch to
+   black: the default muted/white/dim-gold text would drop to 1.0–2.5:1 on gold. */
+.date-chip-weekday,
+.date-chip-day,
+.date-chip-month {
+  display: block;
+  pointer-events: none;
+}
+
+.date-chip-weekday {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.date-chip-day {
+  font-size: 1.35rem;
+  font-weight: 900;
+  margin: 0.15rem 0;
+  color: #ffffff;
+}
+
+.date-chip-month {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--gold-metallic-dim);
+}
+
+.slot-picker-btn:hover:not(:disabled):not(.slot-selected) .date-chip-month {
+  color: var(--primary-gold);
+}
+
+.slot-selected .date-chip-weekday,
+.slot-selected .date-chip-day,
+.slot-selected .date-chip-month {
+  color: #000000;
 }
 
 .slot-busy {

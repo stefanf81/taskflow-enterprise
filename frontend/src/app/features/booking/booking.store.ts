@@ -33,6 +33,16 @@ export interface BookingFormModel {
   serviceType: string;
 }
 
+/** Steps of the booking wizard, in order (1-based in the store and the template). */
+export const WIZARD_STEPS = [
+  'Select Treatment',
+  'Choose Your Stylist',
+  'Pick Date & Available Slot',
+  'Customer Info & Submit',
+] as const;
+
+const WIZARD_STEP_COUNT = WIZARD_STEPS.length;
+
 /**
  * Optional display metadata for seeded barbers (role copy and badges).
  *
@@ -422,8 +432,22 @@ export class BookingStore {
     );
   }
 
+  /**
+   * Whether the stepper may jump to `step`: any step already passed, or a later one whose
+   * preceding steps are ALL valid (the wizard is gated; skipping an invalid step is not
+   * allowed). Unreachable steps stay focusable in the tablist but are `aria-disabled`.
+   */
+  isStepReachable(step: number): boolean {
+    if (step < 1 || step > WIZARD_STEP_COUNT) return false;
+    if (step <= this.activeStep()) return true;
+    for (let previous = 1; previous < step; previous++) {
+      if (!this.isStepValid(previous)) return false;
+    }
+    return true;
+  }
+
   setStep(step: number): void {
-    if (step < this.activeStep() || this.isStepValid(step - 1)) {
+    if (this.isStepReachable(step)) {
       this.activeStep.set(step);
     }
   }
@@ -656,6 +680,8 @@ export class BookingStore {
     this.slotsError.set(null);
     this.isCheckingSlots.set(false);
     this.activeStep.set(1);
+    // A fresh booking must not open step 4 with "required" errors from the last one.
+    this.bookingForm().reset();
     this.isSubmitting.set(false);
     this.idempotencyKey = null;
     this.idempotencyFingerprint = null;

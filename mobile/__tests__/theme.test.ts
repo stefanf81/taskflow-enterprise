@@ -23,7 +23,7 @@ describe('theme/colors', () => {
   it('has text color keys', () => {
     expect(colors.text.primary).toBe('#f4f4f5');
     expect(colors.text.secondary).toBe('#a1a1aa');
-    expect(colors.text.muted).toBe('#71717a');
+    expect(colors.text.muted).toBe('#8a8a93'); // same as web (zinc-500 override)
     expect(colors.text.dark).toBe('#090d16');
   });
 
@@ -32,5 +32,54 @@ describe('theme/colors', () => {
     expect(colors.status.approved).toBe('#34d399');
     expect(colors.status.denied).toBe('#f87171');
     expect(colors.status.info).toBe('#3B82F6');
+  });
+
+  describe('WCAG AA contrast', () => {
+    /** WCAG 2.x relative luminance of an opaque #rrggbb colour. */
+    const luminance = (hex: string): number => {
+      const [r, g, b] = [1, 3, 5].map((i) => {
+        const channel = parseInt(hex.slice(i, i + 2), 16) / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      }) as [number, number, number];
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const contrast = (a: string, b: string): number => {
+      const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
+      return (light + 0.05) / (dark + 0.05);
+    };
+
+    // Obsidian tokens rendered behind text (border/muted/light are not text backgrounds).
+    const surfaces = {
+      bg: colors.obsidian.bg,
+      card: colors.obsidian.card,
+      surface: colors.obsidian.surface,
+      inputBg: colors.obsidian.inputBg,
+      dark: colors.obsidian.dark,
+    };
+    const textTokens = {
+      'text.primary': colors.text.primary,
+      'text.secondary': colors.text.secondary,
+      'text.muted': colors.text.muted,
+      'gold.main': colors.gold.main,
+      'gold.bright': colors.gold.bright,
+      'gold.light': colors.gold.light,
+      'status.pending': colors.status.pending,
+      'status.approved': colors.status.approved,
+      'status.denied': colors.status.denied,
+      'status.info': colors.status.info,
+    };
+
+    it.each(Object.entries(textTokens))('%s reaches 4.5:1 on every dark surface', (_name, fg) => {
+      for (const bg of Object.values(surfaces)) {
+        expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+
+    it('keeps dark labels readable on gold fills (buttons, selected slots, completed steps)', () => {
+      for (const fill of [colors.gold.main, colors.gold.bright, colors.gold.light]) {
+        expect(contrast(colors.text.dark, fill)).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(colors.obsidian.bg, fill)).toBeGreaterThanOrEqual(4.5);
+      }
+    });
   });
 });

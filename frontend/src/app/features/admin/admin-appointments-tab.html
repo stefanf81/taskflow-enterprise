@@ -168,7 +168,7 @@
               Approve
             </button>
             <button
-              class="flex-1 btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/100 hover:text-white py-1.5 text-xs text-center"
+              class="flex-1 btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-600 hover:text-white py-1.5 text-xs text-center"
               (click)="denyAppointment(appt.id)"
               title="Decline booking"
             >
@@ -177,7 +177,7 @@
           }
           @if (appt.status === 'APPROVED') {
             <button
-              class="flex-1 btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/100 hover:text-white py-1.5 text-xs text-center"
+              class="flex-1 btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-600 hover:text-white py-1.5 text-xs text-center"
               (click)="denyAppointment(appt.id)"
               title="Revoke and Decline booking"
             >

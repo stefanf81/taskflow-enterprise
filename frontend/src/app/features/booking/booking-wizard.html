@@ -19,23 +19,31 @@
       [style.width.%]="(activeStep() - 1) * 33.3"
     ></div>
 
-    @for (stepNum of [1, 2, 3, 4]; track stepNum) {
+    <!-- WAI-ARIA tabs, manual activation: arrows/Home/End move focus (onStepKeydown),
+         Enter/Space activate. A gated step stays focusable but is aria-disabled. -->
+    @for (step of steps; track step.num; let i = $index) {
       <button
+        #stepTab
         type="button"
         role="tab"
-        [attr.id]="'step-tab-' + stepNum"
-        [attr.aria-selected]="activeStep() === stepNum"
-        [attr.aria-controls]="'step-panel-' + stepNum"
-        [attr.tabindex]="activeStep() === stepNum ? '0' : '-1'"
-        (click)="setStep(stepNum)"
-        class="wizard-step-node relative z-20 w-9 h-9 rounded-full border bg-zinc-950 text-zinc-500 text-xs font-black flex items-center justify-center cursor-pointer transition-all duration-300"
-        [class.active]="activeStep() === stepNum"
-        [class.completed]="activeStep() > stepNum"
+        [attr.id]="'step-tab-' + step.num"
+        [attr.aria-selected]="activeStep() === step.num"
+        [attr.aria-controls]="activeStep() === step.num ? 'step-panel-' + step.num : null"
+        [attr.aria-disabled]="isStepReachable(step.num) ? null : 'true'"
+        [attr.aria-label]="stepTabLabel(step.num)"
+        [attr.tabindex]="activeStep() === step.num ? '0' : '-1'"
+        (click)="setStep(step.num)"
+        (keydown)="onStepKeydown($event, i)"
+        class="wizard-step-node relative z-20 w-9 h-9 rounded-full border bg-zinc-950 text-zinc-500 text-xs font-black flex items-center justify-center transition-all duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+        [class.cursor-pointer]="isStepReachable(step.num)"
+        [class.cursor-not-allowed]="!isStepReachable(step.num)"
+        [class.active]="activeStep() === step.num"
+        [class.completed]="activeStep() > step.num"
       >
-        @if (activeStep() > stepNum) {
+        @if (activeStep() > step.num) {
           ✓
         } @else {
-          {{ stepNum }}
+          {{ step.num }}
         }
       </button>
     }
@@ -43,15 +51,7 @@
 
   <!-- Active Step Indicator Badge label -->
   <div class="text-center font-bold text-xs text-gold uppercase tracking-wider mb-6">
-    @if (activeStep() === 1) {
-      1. Select Treatment
-    } @else if (activeStep() === 2) {
-      2. Choose Your Stylist
-    } @else if (activeStep() === 3) {
-      3. Pick Date & Available Slot
-    } @else {
-      4. Customer Info & Submit
-    }
+    {{ activeStep() }}. {{ activeStepLabel() }}
   </div>
 
   <!-- STATUS BANNERS -->
@@ -304,39 +304,9 @@
               (click)="selectBookingDate(day.dateStr)"
               style="padding: 0.75rem 0.5rem; text-align: center; border-radius: var(--radius-md)"
             >
-              <span
-                style="
-                  font-size: 0.75rem;
-                  text-transform: uppercase;
-                  color: var(--text-muted);
-                  font-weight: 700;
-                  display: block;
-                  pointer-events: none;
-                "
-                >{{ day.dayName }}</span
-              >
-              <span
-                style="
-                  font-size: 1.35rem;
-                  font-weight: 900;
-                  color: #ffffff;
-                  display: block;
-                  margin: 0.15rem 0;
-                  pointer-events: none;
-                "
-                >{{ day.dayNum }}</span
-              >
-              <span
-                style="
-                  font-size: 0.7rem;
-                  text-transform: uppercase;
-                  color: var(--gold-metallic-dim);
-                  font-weight: 700;
-                  display: block;
-                  pointer-events: none;
-                "
-                >{{ day.monthName }}</span
-              >
+              <span class="date-chip-weekday">{{ day.dayName }}</span>
+              <span class="date-chip-day">{{ day.dayNum }}</span>
+              <span class="date-chip-month">{{ day.monthName }}</span>
             </button>
           }
         </div>
@@ -451,16 +421,7 @@
         </div>
       } @else {
         <div
-          style="
-            text-align: center;
-            padding: 2.5rem 1rem;
-            color: var(--text-dim);
-            font-size: 0.9rem;
-            border: 1px dashed rgba(0, 0, 0, 0.06);
-            border-radius: var(--radius-md);
-            margin-top: 1.5rem;
-            background-color: #fafbfd;
-          "
+          class="mt-6 py-10 px-4 text-center text-sm text-zinc-300 bg-zinc-900/40 border border-dashed border-white/10 rounded-lg"
         >
           📅 Select an upcoming date above to view available time slots
         </div>
@@ -489,12 +450,12 @@
             placeholder="e.g., John Doe"
             class="form-control"
             [formField]="bookingForm.customerName"
-            [attr.aria-invalid]="!bookingModel().customerName.trim() ? 'true' : null"
-            aria-describedby="customerName-error"
+            [attr.aria-invalid]="nameError() ? 'true' : null"
+            [attr.aria-describedby]="nameError() ? 'customerName-error' : null"
           />
-          @if (!bookingModel().customerName.trim()) {
+          @if (nameError(); as nameProblem) {
             <span id="customerName-error" role="alert" class="text-rose-400 text-[10px] mt-1 block">
-              Full name is required.
+              {{ nameProblem }}
             </span>
           }
         </div>
@@ -508,10 +469,10 @@
               placeholder="e.g., john@example.com"
               class="form-control"
               [formField]="bookingForm.customerEmail"
-              [attr.aria-invalid]="emailError() ? 'true' : null"
-              aria-describedby="customerEmail-error"
+              [attr.aria-invalid]="visibleEmailError() ? 'true' : null"
+              [attr.aria-describedby]="visibleEmailError() ? 'customerEmail-error' : null"
             />
-            @if (emailError(); as emailProblem) {
+            @if (visibleEmailError(); as emailProblem) {
               <span
                 id="customerEmail-error"
                 role="alert"
@@ -530,16 +491,16 @@
               placeholder="e.g., 555-0199"
               class="form-control"
               [formField]="bookingForm.customerPhone"
-              [attr.aria-invalid]="!bookingModel().customerPhone.trim() ? 'true' : null"
-              aria-describedby="customerPhone-error"
+              [attr.aria-invalid]="phoneError() ? 'true' : null"
+              [attr.aria-describedby]="phoneError() ? 'customerPhone-error' : null"
             />
-            @if (!bookingModel().customerPhone.trim()) {
+            @if (phoneError(); as phoneProblem) {
               <span
                 id="customerPhone-error"
                 role="alert"
                 class="text-rose-400 text-[10px] mt-1 block"
               >
-                Phone number is required.
+                {{ phoneProblem }}
               </span>
             }
           </div>
