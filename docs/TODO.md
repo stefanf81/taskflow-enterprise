@@ -47,15 +47,15 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Problem:** `tag="${{ inputs.image_tag }}"` directly interpolates unvalidated workflow dispatch input into a bash script block.
 - **Remediation:** Pass the input via an environment variable (`env: RAW_TAG: ${{ inputs.image_tag }}`) and add regex validation (`^[A-Za-z0-9._-]{1,128}$`).
 
-### 1.7 Stateless JWT Revocation & Denylist on Logout (Partly resolved)
-- **Done:** tokens carry a `jti`; `POST /auth/logout` (now `permitAll`) revokes the presented token via an in-memory `TokenRevocationList` checked by the `JwtDecoder`.
-- **Still open:** the list is per-JVM (a restart forgets it; not shared between replicas) — move it to Redis with a TTL before scaling out; the mobile app still only deletes its token locally and should call `/auth/logout`; demoting/deleting a user does not revoke their tokens. The original finding follows for context.
+### 1.7 Stateless JWT Revocation & Denylist on Logout (Mostly resolved)
+- **Done:** tokens carry a `jti`; `POST /auth/logout` (now `permitAll`) revokes the presented token via `TokenRevocationList`, checked by the `JwtDecoder`. With `app.state.store=redis` (prod) the denylist is shared by all replicas (`revoked:<jti>` with a TTL equal to the token's remaining lifetime) and revocations are announced on a pub/sub channel so other replicas close the token's admin SSE streams. The mobile app calls `/auth/logout` on logout.
+- **Still open:** demoting/deleting a user does not revoke their tokens; a revocation made during a Redis outage is kept locally and written once Redis answers, but is lost if that replica restarts first; Redis without persistence forgets revocations on restart. The original finding follows for context.
 - **Location:** `src/main/java/com/example/taskflow/auth/AuthController.java:157-170`, `src/main/java/com/example/taskflow/auth/TokenProvider.java:41-48`
 - **Problem:** `POST /api/v1/auth/logout` only clears the client-side cookie; native mobile clients have no logout endpoint. Issued tokens remain valid until the 1-hour expiration.
 - **Remediation:** Add a unique `jti` claim to issued JWTs. On logout, store the `jti` in Redis with a TTL matching remaining token lifetime, and validate incoming tokens against this denylist in `SecurityConfig`.
 
-### 1.8 Account-Aware Authentication Throttling (Resolved, in-memory)
-- **Resolved:** `LoginAttemptLimiter` counts failed logins per username (10 per 300 s by default, 429 + `Retry-After`, cleared by a successful login) on both `/auth/login` and `/auth/mobile/login`. State is per JVM; use a shared Redis counter before scaling out. The original finding follows for context.
+### 1.8 Account-Aware Authentication Throttling (Resolved)
+- **Resolved:** `LoginAttemptLimiter` counts failed logins per username + client IP (10 per 300 s by default, 429 + `Retry-After`, cleared by a successful login) on both `/auth/login` and `/auth/mobile/login`. With `app.state.store=redis` (prod) the counter is a Redis fixed window shared by all replicas (`login_failures:<sha256>`); during a Redis outage a per-JVM counter applies the same limit. The original finding follows for context.
 - **Location:** `src/main/java/com/example/taskflow/core/RateLimiterConfig.java:89-99`, `src/main/java/com/example/taskflow/auth/SecurityConfig.java:226-233`
 - **Problem:** The auth bucket keys solely on the client IP (`rate_limit:<ip>:auth`) and `CustomUserDetailsService` carries no per-account attempt state. A distributed attack (botnet / residential proxies / Tor) stays under the 20 req/min per-IP cap while guessing credentials without bound.
 - **Remediation:** Track failed attempts per account in Redis (e.g. a counter updated from `AuthenticationFailureBadCredentialsEvent`) and apply exponential backoff or a temporary throttle to that account. Do not use permanent lockout — it hands attackers a denial-of-service weapon. Retain the per-IP bucket for volumetric bursts.
@@ -112,7 +112,8 @@ This document tracks unresolved security findings, architectural technical debt,
   notificationOutboxRepository.deleteByStatusAndSentAtBefore("SENT", LocalDateTime.now().minusDays(30));
   ```
 
-### 2.5 N+1 Query Loop in `findFirstAvailableBarber`
+### 2.5 N+1 Query Loop in `findFirstAvailableBarber` (Resolved)
+- **Resolved:** `BusySlotsService.loadBarberDays` preloads time off, weekday schedules and active bookings with set-based queries and the pure `evaluate` function applies the booking rules in memory, so No-Preference resolution issues 4 statements whatever the number of barbers (`NoPreferenceQueryCountIntegrationTest`). The original finding follows for context.
 - **Location:** `src/main/java/com/example/taskflow/appointment/BusySlotsService.java:137-160`
 - **Problem:** `findFirstAvailableBarber` runs inside the uncached booking transaction path. For each barber, it executes 3 separate queries (`findTimeOffForBarberOnDate`, `findByBarberIdAndDayOfWeek`, `findDistinctBookingTimes`), causing `1 + 3N` queries per booking attempt.
 - **Remediation:** Replace the per-barber loop with 3 set-based queries intersecting working barbers, time-off records, and booked slots for that time window in memory.
@@ -121,7 +122,8 @@ This document tracks unresolved security findings, architectural technical debt,
 
 ## 3. CI/CD, Supply Chain & Configuration Hygiene (P2 — Medium Priority)
 
-### 3.1 Immutable Commit SHA Pinning for GitHub Actions
+### 3.1 Immutable Commit SHA Pinning for GitHub Actions (Resolved)
+- **Resolved:** every third-party action is pinned to a full commit SHA with a version comment, and `.github/renovate.json` pins new ones (`pinDigests`). GitHub-owned `actions/*` and `github/*` stay on tags. The original finding follows for context.
 - **Location:** `.github/workflows/*.yml`
 - **Problem:** Workflows reference third-party actions by mutable release tags (`@v7`, `@v3.5.0`, etc.). If an upstream account or tag is hijacked, malicious code could execute in CI.
 - **Remediation:** Configure Renovate (`helpers:pinGitHubActionDigests`) to pin all actions to full 40-character commit SHAs with trailing version comments (e.g. `actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2`).
@@ -172,7 +174,8 @@ This document tracks unresolved security findings, architectural technical debt,
 
 ## 4. Client UX, Accessibility & Resilience (P3 — Medium/Low Priority)
 
-### 4.1 WCAG AA Color Contrast Token Alignment
+### 4.1 WCAG AA Color Contrast Token Alignment (Resolved)
+- **Resolved:** step 3's empty state uses dark tokens (`bg-zinc-900/40 text-zinc-300`, 3.87→12.96:1); the portal booking code is `text-zinc-400` (2.53→7.45:1); mobile `text.muted` is `#8a8a93` (3.67–4.35→5.18–6.14:1), including the HomeScreen footer literal. Also fixed: selected date-chip labels on gold (1.04–2.46→8.55:1), stylist initials (2.46→5.09–8.55:1), destructive hover fills (3.75–3.81→4.53–4.77:1) and the mobile completed-step check (1.68→7.91:1). Regression gates: the contrast rules in `theme:check` (web, part of `npm run lint`) and `mobile/__tests__/theme.test.ts`. The original finding follows for context.
 - **Location:** `frontend/src/app/features/booking/booking-wizard.html:409-422`, `frontend/src/app/features/customer/customer-portal.html:93`, `mobile/src/theme/tokens.json:26`
 - **Problem:**
   - **Web Wizard Step 3:** Light `#fafbfd` panel with `#7e7e8a` text achieves ~3.8:1 contrast (below 4.5:1 AA).
@@ -180,12 +183,14 @@ This document tracks unresolved security findings, architectural technical debt,
   - **Mobile Theme:** `text.muted` is `#71717a` (~4.3:1) vs Web's accessibility override `#8a8a93` (5.1:1).
 - **Remediation:** Replace light wizard panel with dark surface tokens (`bg-zinc-900/40 text-zinc-300`), update booking code to `text-zinc-400`, and align mobile `text.muted` to `#8a8a93`.
 
-### 4.2 Wizard Stepper Keyboard Navigation & WAI-ARIA Tabs Pattern
+### 4.2 Wizard Stepper Keyboard Navigation & WAI-ARIA Tabs Pattern (Resolved)
+- **Resolved:** the stepper implements the APG tabs pattern with manual activation: ArrowLeft/ArrowRight (wrapping), Home and End move focus; Enter/Space activate; steps that are not reachable yet stay focusable with `aria-disabled="true"` and are refused by `setStep` (`isStepReachable`: every previous step valid); `aria-controls` only on the selected tab; per-tab `aria-label`; visible focus outline. Covered by `booking-wizard.spec.ts`. The original finding follows for context.
 - **Location:** `frontend/src/app/features/booking/booking-wizard.html:22-41`
 - **Problem:** Stepper tabs use `role="tab"` with roving `tabindex="-1"` on inactive steps, but lack `keydown` listeners (`ArrowLeft`/`ArrowRight`/`Home`/`End`). Inactive steps are unreachable by keyboard Tab navigation alone.
 - **Remediation:** Implement standard WAI-ARIA tablist keyboard navigation on the stepper container.
 
-### 4.3 Premature `role="alert"` Announcements on Wizard Step 4
+### 4.3 Premature `role="alert"` Announcements on Wizard Step 4 (Resolved)
+- **Resolved:** step 4 errors and `aria-invalid`/`aria-describedby` appear only once a field is `touched()`; a submit marks the fields touched, shows every error and focuses the first invalid field; the touched state resets after a successful booking. Covered by `booking-wizard.spec.ts`. The original finding follows for context.
 - **Location:** `frontend/src/app/features/booking/booking-wizard.html:448-500`
 - **Problem:** Required field error elements with `role="alert"` render immediately when Step 4 mounts because validation does not check whether fields have been touched, firing false validation alerts to screen readers.
 - **Remediation:** Gate error alerts behind `touched()` signal checks (matching `auth-modal.ts:114`).
@@ -204,13 +209,13 @@ This document tracks unresolved security findings, architectural technical debt,
 
 ---
 
-## 5. Known Follow-Ups (from the BKG/DATA/FE/MOB batch)
+## 5. Known Follow-Ups
 
-- **No end-time column / exclusion constraint:** overlap is enforced in the booking transaction and by the exact-start unique index. Only services longer than the 60-minute grid step could still race on different start times; a stored end time plus PostgreSQL `EXCLUDE USING gist (barber_id WITH =, tsrange(...) WITH &&) WHERE active` closes it.
-- **Per-email booking cap is best-effort** under truly concurrent requests.
-- **Single-replica state:** the token denylist, login-failure counters, the rate-limiter fallback and the cache single-flight are per JVM. Move them to Redis before running more than one replica.
+- **End-time constraint (resolved):** `appointments.booking_end_time` (V35) plus the PostgreSQL `appointments_no_overlap` exclusion constraint close the race between overlapping bookings with different start times; V35 denies pre-existing overlaps (APPROVED first, then lowest id). H2 has no exclusion constraints, so dev/test rely on the in-transaction check. Production needs the `btree_gist` extension (see `db/migration/README.md`).
+- **Per-email booking cap** is serialised per address within one JVM; across replicas it is still best-effort.
+- **Multi-replica state:** the token denylist, login-failure counters and cache single-flight are Redis-backed with `app.state.store=redis` (prod) and degrade to per-JVM during a Redis outage. The rate-limiter fallback stays per JVM by design (up to N × the limit during an outage). Still blocking scale-out: admin SSE appointment events are per replica, and the Hikari pool (25) × replicas must stay under PostgreSQL `max_connections=50` without PgBouncer.
 - **Email ownership (TODO 1.1)** is still unverified: anyone can register a guest's email and see/cancel their bookings.
-- **Mobile:** set the real EAS `projectId` (`eas init`); iOS `NSPinnedCAIdentities` behaviour with intermediates is untested on a device; Detox E2E, Playwright e2e and axe were not run in this batch.
+- **Mobile:** set the real EAS `projectId` (`eas init`); iOS `NSPinnedCAIdentities` behaviour with intermediates is untested on a device; the Detox E2E suite has not run against these changes.
 - **Retired services** have no admin view (the catalog list is active-only).
-- **Redis `RedisCacheManager` wrapping** (`SingleFlightCacheManager`) is unit-tested but untested against a live Redis, and means Micrometer cache metrics for the Redis manager are no longer bound.
-
+- **`SingleFlightCacheManager`** is covered against a live Redis (`AbstractRedisCacheLoadLockTest`, Redis-gated and Testcontainers), but Micrometer cache metrics for the wrapped Redis manager are still not bound.
+- **Frontend bundle:** the initial bundle (~461 kB) is over the 400 kB warning budget (error at 500 kB).

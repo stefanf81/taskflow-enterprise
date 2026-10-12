@@ -44,8 +44,12 @@ database that had the seed rows. The same scenarios run against PostgreSQL when
   add a `V16`: databases that already applied V17 and later would fail Flyway validation
   (`Detected resolved migration not applied to database`) or require `outOfOrder`.
 * Use a Java migration (`BaseJavaMigration`) when SQL differs between PostgreSQL and H2: branch on
-  `connection.getMetaData().getDatabaseProductName()` (see V21, V25, V32). PostgreSQL gets the real
+  `connection.getMetaData().getDatabaseProductName()` (see V21, V25, V32, V35). PostgreSQL gets the real
   partial / expression index; H2 gets a generated-column emulation.
+* PostgreSQL extensions: V35 needs `btree_gist` (a trusted extension since PostgreSQL 13, so the
+  database owner can create it; otherwise a DBA runs `CREATE EXTENSION btree_gist;` once). The
+  official `postgres` images used by Compose, CI and Testcontainers ship it. The migration fails
+  loudly if it cannot be created.
 * Keep SQL valid on both engines (H2 runs in PostgreSQL mode in dev/test): `ADD COLUMN IF NOT
   EXISTS`, `DROP INDEX IF EXISTS`, correlated sub-queries instead of `UPDATE ... FROM`.
 * Say in the file header what the migration does, why, and what it cannot do (see V33 for an
@@ -61,3 +65,4 @@ database that had the seed rows. The same scenarios run against PostgreSQL when
 | V32 (Java) | `services.active` + collapse case-insensitive duplicate service names + unique `lower(name)` |
 | V33 | PENDING "declined" notices for sentinel bookings V26 denied silently |
 | V34 | drop unused indexes (`idx_reviews_rating_created`, `idx_appointments_service_type`, `idx_appointment_customer_name`) |
+| V35 (Java) | `appointments.booking_end_time` (backfill start + service duration, 60 min default, clamped 23:59:59; NOT NULL + CHECK), deny overlapping active rows (APPROVED first, then lowest id; ids logged, DECLINED notice for upcoming ones); PostgreSQL: `btree_gist` + `appointments_no_overlap` EXCLUDE constraint |
