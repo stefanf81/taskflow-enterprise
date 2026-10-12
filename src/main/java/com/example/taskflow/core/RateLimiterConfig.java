@@ -54,6 +54,12 @@ public class RateLimiterConfig {
      * Per-JVM fallback used while Redis is failing. Keys are the same
      * {@code rate_limit:<ip>:<kind>} strings, so both paths enforce the same
      * limits. Bounded so an attacker rotating source addresses cannot grow it.
+     *
+     * <p>Per JVM by definition: it exists for the case where the shared Redis
+     * bucket cannot be reached. With N replicas behind a load balancer, the
+     * effective limit during a Redis outage is therefore up to N × the configured
+     * limit per client (each replica counts only the requests it received);
+     * while Redis answers, the one shared bucket applies to the whole deployment.
      */
     private final FixedWindowCounter localFallback = new FixedWindowCounter(WINDOW_MILLIS, 50_000);
     private volatile long redisBackoffUntilMillis;

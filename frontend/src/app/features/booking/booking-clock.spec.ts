@@ -315,9 +315,11 @@ describe('BookingWizard UI (FE-5, FE-10, FE-11, FE-1)', () => {
     expect(next.disabled).toBe(false);
   });
 
-  it('shows the email field message for "a@b" before submit', () => {
+  it('shows the email field message for "a@b" before submit (once the field is left)', () => {
     store.activeStep.set(4);
     store.bookingModel.update((m) => ({ ...m, customerEmail: 'a@b' }));
+    fixture.detectChanges();
+    el().querySelector('#customerEmail')!.dispatchEvent(new Event('blur'));
     fixture.detectChanges();
 
     expect(el().querySelector('#customerEmail-error')?.textContent).toContain(

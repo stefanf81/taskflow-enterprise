@@ -111,7 +111,7 @@ interface ReviewFormModel {
           <div class="flex justify-end pt-2">
             <button
               type="submit"
-              class="btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/100 hover:text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all w-full sm:w-auto"
+              class="btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-600 hover:text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all w-full sm:w-auto"
               [disabled]="isSubmitting()"
             >
               {{ isSubmitting() ? 'Cancelling...' : 'Cancel Reservation' }}

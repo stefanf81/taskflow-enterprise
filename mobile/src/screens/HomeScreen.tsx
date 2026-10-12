@@ -694,7 +694,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    color: '#71717a',
+    color: colors.text.muted,
     fontSize: 11,
     lineHeight: 16,
     textAlign: 'center',

@@ -171,8 +171,12 @@ class BookingTimePreparationScriptPostgresTest {
                     .locations("classpath:db/migration").load().migrate();
 
             try (Connection c = connect(database)) {
-                assertEquals("PENDING", statuses(c).get("p1"));
-                assertEquals("APPROVED", statuses(c).get("mixA"));
+                // V35 then repairs overlapping intervals: the off-grid APPROVED a1 (09:30-10:30, no
+                // service = 60 min) wins over p1 (09:00-10:00, PENDING) and mixA (10:00-11:00, higher id).
+                assertEquals("APPROVED", statuses(c).get("a1"));
+                assertEquals("DENIED", statuses(c).get("p1"));
+                assertEquals("DENIED", statuses(c).get("mixA"));
+                assertEquals("PENDING", statuses(c).get("ok"));
                 assertThrows(SQLException.class, () -> legacyRowAfterV22(c));
             }
         });
@@ -180,8 +184,8 @@ class BookingTimePreparationScriptPostgresTest {
 
     private static void legacyRowAfterV22(Connection c) throws SQLException {
         exec(c, "INSERT INTO appointments (customer_name, customer_email, customer_phone, barber_name, "
-                + "booking_date, booking_time, service_type, status, public_id, created_at, updated_at) VALUES "
-                + "('dup', 'dup@x.test', '1', 'Alex the Barber', DATE '" + MONDAY + "', TIME '09:00', 'Cut', "
+                + "booking_date, booking_time, booking_end_time, service_type, status, public_id, created_at, updated_at) VALUES "
+                + "('dup', 'dup@x.test', '1', 'Alex the Barber', DATE '" + MONDAY + "', TIME '09:00', TIME '10:00', 'Cut', "
                 + "'PENDING', 'f0f0f0f0-0000-0000-0000-000000000001', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
     }
 

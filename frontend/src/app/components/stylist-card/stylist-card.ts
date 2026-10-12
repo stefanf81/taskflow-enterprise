@@ -23,7 +23,7 @@ export interface StylistProfile {
     >
       <!-- Initial Avatar Circle -->
       <span
-        class="w-12 h-12 rounded-full bg-gradient-to-r from-gold to-gold-dark flex items-center justify-center text-sm font-black text-white"
+        class="w-12 h-12 rounded-full bg-gradient-to-r from-gold to-gold-dark flex items-center justify-center text-sm font-black text-black"
       >
         {{ profile().name.charAt(0) }}
       </span>

@@ -382,7 +382,8 @@ export const BookingScreen: React.FC = () => {
                     <Text
                       style={[
                         styles.stepNodeText,
-                        (isActive || isCompleted) && styles.stepNodeTextActive,
+                        isActive && styles.stepNodeTextActive,
+                        isCompleted && styles.stepNodeTextCompleted,
                       ]}
                     >
                       {isCompleted ? '✓' : s}
@@ -745,9 +746,10 @@ const styles = StyleSheet.create({
     borderColor: colors.gold.main,
     backgroundColor: colors.obsidian.card,
   },
+  // Mirrors the web stepper: a gold fill with a dark check mark (gold on gold.dark was 1.7:1).
   stepNodeCompleted: {
-    borderColor: colors.gold.dark,
-    backgroundColor: colors.gold.dark,
+    borderColor: colors.gold.main,
+    backgroundColor: colors.gold.main,
   },
   stepNodeText: {
     color: colors.text.muted,
@@ -756,6 +758,9 @@ const styles = StyleSheet.create({
   },
   stepNodeTextActive: {
     color: colors.gold.main,
+  },
+  stepNodeTextCompleted: {
+    color: colors.text.dark,
   },
   stepLabel: {
     textAlign: 'center',

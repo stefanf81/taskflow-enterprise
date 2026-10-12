@@ -12,12 +12,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -25,12 +25,15 @@ import java.util.stream.Collectors;
  * Extracted from AppointmentServiceImpl to prevent self-invocation cache bypass
  * and comply with ArchUnit rules against field injection.
  *
- * <p>An appointment occupies the half-open interval {@code [start, start + service duration)}.
- * A new booking is acceptable when its start is a grid slot, lies in the barber's working
- * window, its end does not pass closing time, the barber is not on time off, and its interval
- * overlaps no PENDING/APPROVED appointment of that barber. {@link #findConflict} is the single
- * implementation of those rules; booking creation, admin approval and "No Preference"
- * resolution all go through it.
+ * <p>An appointment occupies the half-open interval {@code [start, end)}, where {@code end} is the
+ * stored {@code booking_end_time} (start + service duration at booking time). A new booking is
+ * acceptable when its start is a grid slot, lies in the barber's working window, its end does not
+ * pass closing time, the barber is not on time off, and its interval overlaps no PENDING/APPROVED
+ * appointment of that barber. {@link #evaluate} is the single implementation of those rules: a pure
+ * function over a {@link BarberDay}, which is loaded with a constant number of set-based queries
+ * whatever the number of barbers. Booking creation, admin approval, "No Preference" resolution and
+ * the busy-slot lists all go through it. On PostgreSQL the {@code appointments_no_overlap}
+ * exclusion constraint (V35) also enforces the overlap rule against concurrent inserts.
  */
 @Service
 @Transactional(readOnly = true)
@@ -45,10 +48,19 @@ public class BusySlotsService {
             List.of("09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00");
 
     /**
-     * Length assumed for a legacy appointment that has no service reference (one grid step),
-     * so such a row still blocks at least its own slot.
+     * Length assumed for a service without a positive duration, and for legacy appointments that
+     * had no service reference when V35 backfilled their end time (one grid step).
      */
-    public static final int DEFAULT_DURATION_MINUTES = 60;
+    public static final int DEFAULT_DURATION_MINUTES = Appointment.DEFAULT_DURATION_MINUTES;
+
+    /**
+     * Everything the booking rules need to know about one barber on one date.
+     *
+     * @param schedule the barber's working window on that weekday, or {@code null} when not scheduled
+     * @param active   the barber's PENDING/APPROVED appointments on that date
+     */
+    record BarberDay(Barber barber, boolean onTimeOff, BarberSchedule schedule, List<Appointment> active) {
+    }
 
     private final BarberRepository barberRepository;
     private final BarberScheduleRepository barberScheduleRepository;
@@ -87,28 +99,17 @@ public class BusySlotsService {
 
         Barber barber = barberRepository.findByName(barberName)
                 .orElseThrow(() -> unknownBarber(barberName));
+        BarberDay day = loadBarberDay(barber, date);
 
-        // 1. Barber on time off: every slot is busy (a legitimate, cacheable answer)
-        if (!barberTimeOffRepository.findTimeOffForBarberOnDate(barber.getId(), date).isEmpty()) {
-            return ALL_SLOTS;
-        }
-
-        // 2. Barber not scheduled that weekday: every slot is busy
-        Optional<BarberSchedule> scheduleOpt = barberScheduleRepository
-                .findByBarberIdAndDayOfWeek(barber.getId(), date.getDayOfWeek().getValue());
-        if (scheduleOpt.isEmpty()) {
-            return ALL_SLOTS;
-        }
-
-        // 3. Scheduled: busy = outside the working window or covered by an active appointment
-        List<Appointment> active = appointmentRepository.findActiveForBarberOnDate(barber.getName(), date);
+        // Time off or not scheduled that weekday: every slot is busy (a legitimate, cacheable
+        // answer). Otherwise busy = outside the working window or covered by an active appointment.
         return ALL_SLOTS.stream()
-                .filter(slot -> isBusy(LocalTime.parse(slot), scheduleOpt.get(), active))
+                .filter(slot -> isBusy(LocalTime.parse(slot), day))
                 .toList();
     }
 
     /**
-     * The single availability rule set for placing (or re-validating) a booking.
+     * The single availability rule set for placing (or re-validating) a booking with a named barber.
      *
      * @param excludeAppointmentId a row to ignore when checking overlap (the appointment being
      *                             re-approved), or {@code null}
@@ -116,44 +117,44 @@ public class BusySlotsService {
      */
     public Optional<String> findConflict(Barber barber, LocalDate date, LocalTime start,
                                          int durationMinutes, Long excludeAppointmentId) {
-        List<Appointment> active = appointmentRepository.findActiveForBarberOnDate(barber.getName(), date);
-        return findConflict(barber, date, start, durationMinutes, excludeAppointmentId, active);
+        return evaluate(loadBarberDay(barber, date), start, durationMinutes,
+                excludeAppointmentId);
     }
 
-    private Optional<String> findConflict(Barber barber, LocalDate date, LocalTime start,
-                                          int durationMinutes, Long excludeAppointmentId,
-                                          List<Appointment> activeForBarber) {
-        if (!barberTimeOffRepository.findTimeOffForBarberOnDate(barber.getId(), date).isEmpty()) {
+    /**
+     * The booking rules as a pure function of preloaded data: time off, schedule, working window,
+     * service length vs. closing time, then overlap with the barber's active appointments (each with
+     * its own stored end time). Checked in that order, so the reason reported is the first that applies.
+     */
+    static Optional<String> evaluate(BarberDay day, LocalTime start, int durationMinutes,
+                                     Long excludeAppointmentId) {
+        if (day.onTimeOff()) {
             return Optional.of("The selected barber is unavailable on this date (time off). "
                     + "Please choose another date or barber.");
         }
 
-        Optional<BarberSchedule> scheduleOpt = barberScheduleRepository
-                .findByBarberIdAndDayOfWeek(barber.getId(), date.getDayOfWeek().getValue());
-        if (scheduleOpt.isEmpty()) {
+        BarberSchedule schedule = day.schedule();
+        if (schedule == null) {
             return Optional.of("The selected barber is not scheduled to work on the requested date.");
         }
-        BarberSchedule schedule = scheduleOpt.get();
         if (start.isBefore(schedule.getStartTime()) || !start.isBefore(schedule.getEndTime())) {
             return Optional.of("Booking time must be within the barber's working hours ("
                     + schedule.getStartTime() + "–" + schedule.getEndTime() + ").");
         }
         // Compare in minutes of the day: LocalTime.plusMinutes wraps past midnight.
-        int startMinute = start.toSecondOfDay() / 60;
-        if (startMinute + durationMinutes > schedule.getEndTime().toSecondOfDay() / 60) {
+        int startMinute = minuteOf(start);
+        if (startMinute + durationMinutes > minuteOf(schedule.getEndTime())) {
             return Optional.of("The selected service takes " + durationMinutes
                     + " minutes and would end after the barber's closing time ("
                     + schedule.getEndTime() + "). Please choose an earlier time.");
         }
 
         int endMinute = startMinute + durationMinutes;
-        for (Appointment other : activeForBarber) {
+        for (Appointment other : day.active()) {
             if (excludeAppointmentId != null && excludeAppointmentId.equals(other.getId())) {
                 continue;
             }
-            int otherStart = LocalTime.parse(other.getBookingTime()).toSecondOfDay() / 60;
-            int otherEnd = otherStart + durationOf(other);
-            if (otherStart < endMinute && startMinute < otherEnd) {
+            if (startMinuteOf(other) < endMinute && startMinute < endMinuteOf(other)) {
                 return Optional.of("The selected slot is already booked or unavailable.");
             }
         }
@@ -168,6 +169,9 @@ public class BusySlotsService {
      * <p>Deliberately uncached: the caller persists the resolved barber inside
      * the booking transaction, so a cached choice could assign a barber who has
      * been booked since the cache entry was written. Database errors propagate.
+     *
+     * <p>Issues at most four queries whatever the number of barbers (barbers, time off, schedules,
+     * bookings of the date) and evaluates every candidate in memory.
      */
     public Optional<Barber> findFirstAvailableBarber(LocalDate date, String bookingTime, int durationMinutes) {
         if (date == null || bookingTime == null || bookingTime.isBlank()) {
@@ -182,20 +186,10 @@ public class BusySlotsService {
 
         // Deterministic order (lowest id first) so the same slot consistently
         // resolves to the same barber until that barber is booked.
-        List<Barber> barbers = barberRepository.findAll().stream()
-                .sorted(Comparator.comparing(Barber::getId,
-                        Comparator.nullsLast(Comparator.naturalOrder())))
-                .toList();
-        Map<String, List<Appointment>> activeByBarber = appointmentRepository.findActiveOnDate(date).stream()
-                .collect(Collectors.groupingBy(Appointment::getBarberName));
-
-        for (Barber barber : barbers) {
-            List<Appointment> active = activeByBarber.getOrDefault(barber.getName(), List.of());
-            if (findConflict(barber, date, requested, durationMinutes, null, active).isEmpty()) {
-                return Optional.of(barber);
-            }
-        }
-        return Optional.empty();
+        return loadBarberDays(barberRepository.findAllByOrderByIdAsc(), date).stream()
+                .filter(day -> evaluate(day, requested, durationMinutes, null).isEmpty())
+                .map(BarberDay::barber)
+                .findFirst();
     }
 
     /** True when {@code bookingTime} (HH:mm) is one of the bookable grid slots. */
@@ -203,13 +197,9 @@ public class BusySlotsService {
         return bookingTime != null && ALL_SLOTS.contains(bookingTime.trim());
     }
 
-    /** Length of an appointment in minutes (its service's duration, or the grid step if unknown). */
+    /** Booked length of an appointment in minutes: its stored interval {@code [start, end)}. */
     public static int durationOf(Appointment appointment) {
-        if (appointment.getService() != null && appointment.getService().getDurationMinutes() != null
-                && appointment.getService().getDurationMinutes() > 0) {
-            return appointment.getService().getDurationMinutes();
-        }
-        return DEFAULT_DURATION_MINUTES;
+        return endMinuteOf(appointment) - startMinuteOf(appointment);
     }
 
     /**
@@ -225,30 +215,10 @@ public class BusySlotsService {
      * as a conservative default (no availability → prevent bookings).
      */
     private List<String> computeNoPreferenceBusySlots(LocalDate date) {
-        List<Barber> allBarbers = barberRepository.findAll();
-        if (allBarbers.isEmpty()) {
-            return ALL_SLOTS;
-        }
-
-        int dayOfWeek = date.getDayOfWeek().getValue();
-        Map<String, List<Appointment>> activeByBarber = appointmentRepository.findActiveOnDate(date).stream()
-                .collect(Collectors.groupingBy(Appointment::getBarberName));
         Set<String> availableSlots = new HashSet<>();
-
-        for (Barber barber : allBarbers) {
-            // Skip barbers on time off
-            if (!barberTimeOffRepository.findTimeOffForBarberOnDate(barber.getId(), date).isEmpty()) {
-                continue;
-            }
-            // Skip barbers not scheduled that day
-            Optional<BarberSchedule> scheduleOpt =
-                    barberScheduleRepository.findByBarberIdAndDayOfWeek(barber.getId(), dayOfWeek);
-            if (scheduleOpt.isEmpty()) {
-                continue;
-            }
-            List<Appointment> active = activeByBarber.getOrDefault(barber.getName(), List.of());
+        for (BarberDay day : loadBarberDays(barberRepository.findAllByOrderByIdAsc(), date)) {
             for (String slot : ALL_SLOTS) {
-                if (!isBusy(LocalTime.parse(slot), scheduleOpt.get(), active)) {
+                if (!isBusy(LocalTime.parse(slot), day)) {
                     availableSlots.add(slot);
                 }
             }
@@ -262,7 +232,7 @@ public class BusySlotsService {
 
     /**
      * Busy grid slots for booking a service of {@code durationMinutes}: a slot is busy when the
-     * booking rules ({@link #findConflict}) would reject that start time for this barber (or, for
+     * booking rules ({@link #evaluate}) would reject that start time for this barber (or, for
      * the No Preference sentinel, for every barber). Unlike {@link #getBusySlots(String, String)}
      * this accounts for the service running into a later booking or past closing time.
      *
@@ -272,31 +242,96 @@ public class BusySlotsService {
      */
     public List<String> getBusySlots(String barberName, String bookingDate, int durationMinutes) {
         LocalDate date = parseDate(bookingDate);
-        List<Barber> candidates = AppointmentServiceImpl.NO_PREFERENCE_BARBER.equals(barberName)
-                ? barberRepository.findAll()
-                : List.of(barberRepository.findByName(barberName).orElseThrow(() -> unknownBarber(barberName)));
-        Map<String, List<Appointment>> activeByBarber = appointmentRepository.findActiveOnDate(date).stream()
-                .collect(Collectors.groupingBy(Appointment::getBarberName));
+        List<BarberDay> days = AppointmentServiceImpl.NO_PREFERENCE_BARBER.equals(barberName)
+                ? loadBarberDays(barberRepository.findAllByOrderByIdAsc(), date)
+                : List.of(loadBarberDay(barberRepository.findByName(barberName)
+                        .orElseThrow(() -> unknownBarber(barberName)), date));
         return ALL_SLOTS.stream()
-                .filter(slot -> candidates.stream().allMatch(barber -> findConflict(barber, date,
-                        LocalTime.parse(slot), durationMinutes, null,
-                        activeByBarber.getOrDefault(barber.getName(), List.of())).isPresent()))
+                .filter(slot -> days.stream().allMatch(day ->
+                        evaluate(day, LocalTime.parse(slot), durationMinutes, null).isPresent()))
                 .toList();
     }
 
-    /** A slot is busy when outside the working window or covered by an active appointment. */
-    private static boolean isBusy(LocalTime slot, BarberSchedule schedule, List<Appointment> active) {
+    /** Rule inputs of one named barber (its bookings are read with the per-barber query). */
+    private BarberDay loadBarberDay(Barber barber, LocalDate date) {
+        return loadBarberDays(List.of(barber), date, true).get(0);
+    }
+
+    /** Rule inputs of every candidate of a "No Preference" request (bookings of the whole date). */
+    private List<BarberDay> loadBarberDays(List<Barber> barbers, LocalDate date) {
+        return loadBarberDays(barbers, date, false);
+    }
+
+    /**
+     * Loads the rule inputs of the given barbers for one date with a constant number of queries:
+     * time off (one query), schedules for the weekday (one query) and the active appointments
+     * (one query: of the single named barber, or of the whole date). The schedule and appointment
+     * queries are skipped when no barber could take a booking anyway (all on time off, or none
+     * scheduled). Returns one entry per barber, in the given order.
+     */
+    private List<BarberDay> loadBarberDays(List<Barber> barbers, LocalDate date, boolean singleNamedBarber) {
+        if (barbers.isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = barbers.stream().map(Barber::getId).toList();
+        Set<Long> onTimeOff = new HashSet<>(barberTimeOffRepository.findBarberIdsOnTimeOff(ids, date));
+
+        List<Long> working = ids.stream().filter(id -> !onTimeOff.contains(id)).toList();
+        Map<Long, BarberSchedule> schedules = working.isEmpty() ? Map.of()
+                : barberScheduleRepository.findForBarbersOnDay(working, date.getDayOfWeek().getValue()).stream()
+                        .collect(Collectors.toMap(s -> s.getBarber().getId(), Function.identity()));
+
+        Map<String, List<Appointment>> activeByBarber;
+        if (schedules.isEmpty()) {
+            activeByBarber = Map.of();
+        } else if (singleNamedBarber) {
+            String name = barbers.get(0).getName();
+            activeByBarber = Map.of(name, appointmentRepository.findActiveForBarberOnDate(name, date));
+        } else {
+            activeByBarber = appointmentRepository.findActiveOnDate(date).stream()
+                    .collect(Collectors.groupingBy(Appointment::getBarberName));
+        }
+
+        return barbers.stream()
+                .map(barber -> new BarberDay(barber, onTimeOff.contains(barber.getId()),
+                        schedules.get(barber.getId()),
+                        activeByBarber.getOrDefault(barber.getName(), List.of())))
+                .toList();
+    }
+
+    /**
+     * Start-minute view used by the cached busy-slot lists: a slot is busy when the barber cannot
+     * work that day (time off, not scheduled), it is outside the working window, or it is covered
+     * by an active appointment.
+     */
+    private static boolean isBusy(LocalTime slot, BarberDay day) {
+        BarberSchedule schedule = day.schedule();
+        if (day.onTimeOff() || schedule == null) {
+            return true;
+        }
         if (slot.isBefore(schedule.getStartTime()) || !slot.isBefore(schedule.getEndTime())) {
             return true;
         }
-        int minute = slot.toSecondOfDay() / 60;
-        for (Appointment other : active) {
-            int otherStart = LocalTime.parse(other.getBookingTime()).toSecondOfDay() / 60;
-            if (otherStart <= minute && minute < otherStart + durationOf(other)) {
+        int minute = minuteOf(slot);
+        for (Appointment other : day.active()) {
+            if (startMinuteOf(other) <= minute && minute < endMinuteOf(other)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static int minuteOf(LocalTime time) {
+        return time.toSecondOfDay() / 60;
+    }
+
+    private static int startMinuteOf(Appointment appointment) {
+        return minuteOf(LocalTime.parse(appointment.getBookingTime()));
+    }
+
+    /** End of an appointment's interval: its stored end time (NOT NULL since V35). */
+    private static int endMinuteOf(Appointment appointment) {
+        return minuteOf(appointment.getBookingEndTime());
     }
 
     private static LocalDate parseDate(String bookingDate) {
