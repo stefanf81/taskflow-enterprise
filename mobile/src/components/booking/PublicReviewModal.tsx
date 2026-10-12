@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Modal } from '../common/Modal';
@@ -7,6 +7,8 @@ import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { useSubmitReview } from '../../hooks/useReviews';
 import { colors } from '../../theme/colors';
+import { getApiErrorMessage } from '../../utils/errors';
+import { normalizePublicId, PUBLIC_ID_PLACEHOLDER } from '../../utils/publicId';
 
 interface PublicReviewModalProps {
   visible: boolean;
@@ -22,6 +24,13 @@ export const PublicReviewModal: React.FC<PublicReviewModalProps> = ({
   onSuccess,
 }) => {
   const [publicId, setPublicId] = useState(initialPublicId);
+
+  // useState only reads its initial value: re-sync whenever the modal is
+  // (re)opened or the reference passed in from the route changes, so a new
+  // booking's ID is never shadowed by a stale one.
+  useEffect(() => {
+    if (visible) setPublicId(initialPublicId);
+  }, [visible, initialPublicId]);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
@@ -42,19 +51,13 @@ export const PublicReviewModal: React.FC<PublicReviewModalProps> = ({
     setError(null);
     try {
       await reviewMutation.mutateAsync({
-        publicId: publicId.trim(),
+        publicId: normalizePublicId(publicId),
         data: { rating, comment: comment.trim(), customerEmail: customerEmail.trim() },
       });
       onSuccess();
       onClose();
     } catch (err: unknown) {
-      const message =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-          : err instanceof Error
-            ? err.message
-            : 'Failed to submit review.';
-      setError(message || 'Failed to submit review.');
+      setError(getApiErrorMessage(err, 'Failed to submit review.'));
     }
   };
 
@@ -69,10 +72,11 @@ export const PublicReviewModal: React.FC<PublicReviewModalProps> = ({
 
         <Input
           label="Public Reference ID"
-          placeholder="e.g. TF-9823-8A2F"
+          placeholder={PUBLIC_ID_PLACEHOLDER}
           value={publicId}
           onChangeText={setPublicId}
-          autoCapitalize="characters"
+          autoCapitalize="none"
+          autoCorrect={false}
         />
 
         <Input

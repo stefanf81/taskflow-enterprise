@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { Card } from '../components/common/Card';
 import { LoadingIndicator } from '../components/common/LoadingIndicator';
 import { EmptyState } from '../components/common/EmptyState';
@@ -9,7 +10,11 @@ import { useNotifications } from '../hooks/useNotifications';
 import { colors } from '../theme/colors';
 
 export const AdminNotificationsScreen: React.FC = () => {
-  const { data: notifications = [], isLoading, isError, refetch } = useNotifications();
+  // Poll only while this tab is the focused one (and the app is active).
+  const isFocused = useIsFocused();
+  const { data: notifications = [], isLoading, isError, refetch } = useNotifications({
+    poll: isFocused,
+  });
 
   return (
     <SafeAreaView style={styles.safeArea}>
