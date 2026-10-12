@@ -4,13 +4,15 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Guards the container configuration decisions measured in BENCHMARKS.md §42, §43 and §47:
- * the split nginx cache locations, the deployment-owned JVM diagnostics in docker-compose.yml,
- * and the HEALTHCHECK that only the local {@code Dockerfile} carries.
+ * Guards the container configuration decisions measured in BENCHMARKS.md §42, §43, §47 and
+ * §56: the split nginx cache locations, the deployment-owned JVM diagnostics in
+ * docker-compose.yml, the HEALTHCHECK that only the Dockerfile's {@code local} target carries,
+ * and the single-Dockerfile layout whose target platform is chosen by the builder.
  *
  * <p>These assertions used to live in {@link P1AndP2BenchmarkTest}, which is tagged
  * {@code benchmark} and therefore excluded from the default {@code test} task; no workflow
@@ -77,17 +79,57 @@ class ContainerConfigGuardTest {
         assertTrue(hasContainer, "UseContainerSupport explicit");
         assertTrue(hasUseG1GC, "G1GC must remain");
 
-        Path dockerfile = Path.of("Dockerfile");
-        Path dockerfileX64 = Path.of("Dockerfile.x64");
-        String d = Files.readString(dockerfile);
-        String dx = Files.readString(dockerfileX64);
-        assertTrue(d.contains("HEALTHCHECK"), "Dockerfile HEALTHCHECK required (P1-6 local)");
-        // x64 is k8s — variables & probes are set in homelab/TF YAML, not Dockerfile
-        assertFalse(dx.contains("HEALTHCHECK"), "Dockerfile.x64 must not have HEALTHCHECK — k8s uses livenessProbe via yaml");
+        String d = Files.readString(Path.of("Dockerfile"));
+        boolean localHealthcheck = !DockerfileStages.instructions(d, "local", "HEALTHCHECK").isEmpty();
+        // prod is k8s — variables & probes are set in homelab/TF YAML, not the Dockerfile. A
+        // HEALTHCHECK is inherited, so the stages prod derives from must not carry one either.
+        boolean prodHealthcheck = !DockerfileStages.instructions(d, "prod", "HEALTHCHECK").isEmpty()
+                || !DockerfileStages.instructions(d, "runtime", "HEALTHCHECK").isEmpty()
+                || !DockerfileStages.instructions(d, "java-base", "HEALTHCHECK").isEmpty();
+        assertTrue(localHealthcheck, "the local target needs a HEALTHCHECK (P1-6 local)");
+        assertFalse(prodHealthcheck, "the prod target must not have a HEALTHCHECK — k8s uses livenessProbe via yaml");
 
         System.out.println("  Overhead: GC log ~0.7% at 10% sampling per §7, heap dump 0% until OOM, tmpfs /tmp already");
-        System.out.println("  Dockerfile local has HEALTHCHECK, Dockerfile.x64 correctly omits (k8s)");
+        System.out.println("  local target has HEALTHCHECK, prod target correctly omits (k8s)");
         System.out.println("  ✓ P1-2 JVM diagnostics verified");
         System.out.println("=".repeat(80));
+    }
+
+    @Test
+    void single_dockerfile_two_targets_builder_owned_platform() throws Exception {
+        System.out.println("\n" + "=".repeat(80));
+        System.out.println("  ▸ §56 ONE DOCKERFILE (prod + local targets, platform from the builder)");
+        System.out.println("=".repeat(80));
+        String d = Files.readString(Path.of("Dockerfile"));
+        String compose = Files.readString(Path.of("docker-compose.yml"));
+        String ci = Files.readString(Path.of(".github/workflows/ci.yml"));
+        String push = Files.readString(Path.of(".github/workflows/pushdockerimage.yml"));
+
+        boolean noSecondFile = !Files.exists(Path.of("Dockerfile.x64"));
+        boolean twoTargets = d.contains("FROM runtime AS prod") && d.contains("FROM runtime AS local");
+        boolean sharedTraining = DockerfileStages.instructions(d, "cds-training", "RUN")
+                .contains("-XX:ArchiveClassesAtExit=/tmp/application.jsa");
+        List<String> platformFroms = d.lines().filter(line -> line.startsWith("FROM --platform=")).toList();
+        boolean onlyBuildPlatform = !d.contains("ARG PLATFORM")
+                && platformFroms.equals(List.of("FROM --platform=$BUILDPLATFORM ${JAVA_IMAGE} AS extractor"));
+        boolean composeLocal = compose.contains("target: local");
+        boolean workflowsProd = ci.contains("target: prod") && ci.contains("platforms: linux/amd64")
+                && push.contains("&& 'prod'") && push.contains("&& 'linux/amd64'");
+
+        System.out.println("  Dockerfile.x64 gone: " + noSecondFile);
+        System.out.println("  prod and local both derive from the shared runtime stage: " + twoTargets);
+        System.out.println("  One CDS training stage: " + sharedTraining);
+        System.out.println("  Only the extractor pins a platform ($BUILDPLATFORM): " + onlyBuildPlatform);
+        System.out.println("  compose builds target local: " + composeLocal);
+        System.out.println("  workflows build target prod for linux/amd64: " + workflowsProd);
+        System.out.println("  ✓ single Dockerfile layout verified");
+        System.out.println("=".repeat(80));
+
+        assertTrue(noSecondFile, "the production variant is the prod target of the single Dockerfile");
+        assertTrue(twoTargets, "prod and local must both be final targets of the shared runtime stage");
+        assertTrue(sharedTraining, "CDS training must happen once, in the shared cds-training stage");
+        assertTrue(onlyBuildPlatform, "the target platform comes from the builder; only the extractor pins $BUILDPLATFORM");
+        assertTrue(composeLocal, "docker-compose.yml must build the local target");
+        assertTrue(workflowsProd, "the image workflows must build the prod target for linux/amd64");
     }
 }

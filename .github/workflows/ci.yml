@@ -213,28 +213,22 @@ jobs:
         with:
           persist-credentials: false
 
+      # One backend Dockerfile: its prod and local targets are linted together.
+      # DL3008 (apt pinning) is intentional: the prod target refreshes Ubuntu
+      # security packages on every build instead of pinning versions that would
+      # freeze out CVE fixes. DL3029 is no longer needed: only the extractor
+      # stage pins a platform, and hadolint exempts $BUILDPLATFORM.
       - name: Lint Backend Dockerfile
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
-          dockerfile: Dockerfile.x64
-          # DL3005 (apt-get upgrade) and DL3008 (apt pinning) are intentional:
-          # the runtime stage refreshes Ubuntu security packages on every build
-          # instead of pinning versions that would freeze out CVE fixes.
-          ignore: DL3005,DL3008,DL3029
-
-      # The arm64 local-dev Dockerfile is built by docker-compose and
-      # verify.sh but was never linted. Same ignores as Dockerfile.x64.
-      - name: Lint Local Dockerfile
-        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
-        with:
           dockerfile: Dockerfile
-          ignore: DL3005,DL3008,DL3029
+          ignore: DL3008
 
       - name: Lint Frontend Dockerfile
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
           dockerfile: frontend/Dockerfile
-          ignore: DL3018,DL3029
+          ignore: DL3018
 
   ###########################################################
   # Workflow Lint
@@ -1150,7 +1144,11 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
-          file: Dockerfile.x64
+          file: Dockerfile
+          # The production variant of the single backend Dockerfile, built for
+          # the amd64 cluster whatever the runner's architecture.
+          target: prod
+          platforms: linux/amd64
 
           push: false
           load: true

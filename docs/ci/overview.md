@@ -50,7 +50,7 @@ The filters distinguish backend, frontend, dependency-submission, and Docker com
 
 ## 5. Job: `lint` (Dockerfile Lint)
 
-A lightweight job that runs `hadolint` against `Dockerfile.x64`, the arm64 local-dev `Dockerfile`, and `frontend/Dockerfile` to verify linting and compliance. It only runs if Docker-related files were changed. The backend lint intentionally ignores `DL3005` (`apt-get upgrade`) and `DL3008` (apt version pinning) because the runtime stage refreshes Ubuntu security packages on every build instead of pinning versions that would freeze out CVE fixes (the same rationale as the frontend's ignored `DL3018`).
+A lightweight job that runs `hadolint` against the backend `Dockerfile` (its `prod` and `local` targets live in that one file) and `frontend/Dockerfile` to verify linting and compliance. It only runs if Docker-related files were changed. The backend lint intentionally ignores `DL3008` (apt version pinning) because the `prod` target refreshes Ubuntu security packages on every build instead of pinning versions that would freeze out CVE fixes (the same rationale as the frontend's ignored `DL3018`).
 **Why:** Fails fast. By running these checks early and separately, we don't waste 5 minutes booting up JVMs and Node environments just to tell a developer they missed a Dockerfile best practice.
 
 ## 6. Job: `backend`
@@ -232,7 +232,7 @@ Compiles secure, production-grade container images for the backend and frontend 
 
 ## 11. Container & JVM Hardening (SOTA)
 
-Our Docker build configurations (`Dockerfile` and `Dockerfile.x64`) implement state-of-the-art container optimization techniques:
+Our Docker build configurations (the backend `Dockerfile` with its shared stages plus `prod` and `local` targets, and `frontend/Dockerfile`) implement state-of-the-art container optimization techniques:
 
 - **Architecture-Independent Layer Extraction:** JAR extraction runs natively on `$BUILDPLATFORM` without emulation via Spring Boot tools (`RUN --network=none java -Djarmode=tools -jar application.jar extract --layers --destination extracted`), producing an optimized `application.jar` + `lib/` layout.
 - **COPY --link:** Copies multi-stage compiled artifacts using independent image layers, bypassing full filesystem rewrites and facilitating immediate image layer linking.
@@ -252,7 +252,7 @@ Our Docker build configurations (`Dockerfile` and `Dockerfile.x64`) implement st
   - Validates archive mapping at image build time using `--mount=type=tmpfs,target=/tmp` and `-Xshare:on`.
   - Mounts the shared archive at runtime via sizing-agnostic `CMD` arguments `"-XX:SharedArchiveFile=application.jsa"` and `"-Xshare:auto"`, launching the extracted JAR directly with `"-jar", "application.jar"`.
   - **Results:** ~90% of `prod` startup classes (21,322 of 23,611) are mapped directly from the archive: 8.0 s median cold start vs 12.9 s without CDS and 9.35 s with the previous trimmed training context (BENCHMARKS.md §56).
-- **Slim production runtime (`Dockerfile.x64`):** purges `curl`, `wget`, `gnupg` and their 30 dependencies before the package refresh, and strips setuid/setgid bits. Kubernetes probes must therefore be `httpGet`. The local `Dockerfile` keeps `wget` for its `HEALTHCHECK`. The same layer also removes the base's unused Pebble service manager (`/usr/bin/pebble` — a static Go binary apt cannot patch — plus `/var/lib/pebble`), eliminating the 3 HIGH Go-stdlib findings that failed the 2026-10-10 scheduled image scan; the locally rebuilt image reports 0 fixable HIGH/CRITICAL (BENCHMARKS.md §56).
+- **Slim production runtime (`prod` target):** purges `curl`, `wget`, `gnupg` and their 30 dependencies before the package refresh, and strips setuid/setgid bits. Kubernetes probes must therefore be `httpGet`. The `local` target keeps `wget` for its `HEALTHCHECK`. The same layer also removes the base's unused Pebble service manager (`/usr/bin/pebble` — a static Go binary apt cannot patch — plus `/var/lib/pebble`), eliminating the 3 HIGH Go-stdlib findings that failed the 2026-10-10 scheduled image scan; the locally rebuilt image reports 0 fixable HIGH/CRITICAL (BENCHMARKS.md §56).
 
 ---
 

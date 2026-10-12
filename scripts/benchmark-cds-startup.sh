@@ -9,7 +9,7 @@
 # log does not skew the timed runs).
 #
 # Usage:
-#   docker build -f Dockerfile.x64 -t taskflow-backend:after .
+#   docker build --target prod -t taskflow-backend:after .
 #   IMAGES="taskflow-backend:before taskflow-backend:after" NOCDS=1 \
 #     scripts/benchmark-cds-startup.sh
 #

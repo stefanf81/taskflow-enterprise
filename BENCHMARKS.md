@@ -208,7 +208,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Trivy & Hadolint Container Security**: Automated CI/CD pipelines run **Hadolint** for Dockerfile best-practice enforcement and **Trivy** for deep filesystem and container image vulnerability scanning.
 *   **Prettier**: Enforced strict, automated formatting rules across the frontend codebase to prevent style regressions.
 *   **CI/CD Pipeline Caching**: Maximized CI/CD velocity across GitHub Actions by explicitly caching `npm`, `gradle`, and `trivy` databases, and utilizing **Docker BuildKit** multi-arch layer caching.
-*   **Docker HEALTHCHECK (P1-6 §47)**: `HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness` in local `Dockerfile` (arm64, standalone `docker run` parity with compose). `Dockerfile.x64` intentionally omits it — K8s uses `livenessProbe` via `homelab/TF` manifests.
+*   **Docker HEALTHCHECK (P1-6 §47)**: `HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness` in the Dockerfile's `local` target (standalone `docker run` parity with compose). The `prod` target intentionally omits it — K8s uses `livenessProbe` via `homelab/TF` manifests.
 
 ### 📱 8. Mobile & Client Layer
 *   **React Native (Expo 57) QueryClient Caching (P1-4 §45)**:
@@ -342,7 +342,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 
 **Verdict:** The historical Java performance penalty on Alpine is officially gone. We migrated to `eclipse-temurin:21-jre-alpine` to gain a **20% smaller image** and a massively reduced zero-trust attack surface.
 
-> **Update (2026-09-17):** Superseded. The backend base image is now `eclipse-temurin:21-jre-resolute` (Ubuntu 26.04 LTS, `glibc`), digest-pinned in `Dockerfile`/`Dockerfile.x64`. Rationale: track Adoptium's supported glibc LTS line (the floating `21-jre` tag now resolves to `-resolute`) instead of the `musl` variant, at the cost of a larger image and larger OS CVE surface. The measured throughput delta between the two rows above is ~1% (5,790 vs 5,729 RPS) and was not the deciding factor. `Dockerfile.x64` compensates for the CVE-surface increase with a build-time `apt-get upgrade` refresh layer (cache-busted via `APT_BUST`) and the CI Trivy HIGH/CRITICAL gate remains the hard backstop.
+> **Update (2026-09-17):** Superseded. The backend base image is now `eclipse-temurin:21-jre-resolute` (Ubuntu 26.04 LTS, `glibc`), digest-pinned in `Dockerfile`. Rationale: track Adoptium's supported glibc LTS line (the floating `21-jre` tag now resolves to `-resolute`) instead of the `musl` variant, at the cost of a larger image and larger OS CVE surface. The measured throughput delta between the two rows above is ~1% (5,790 vs 5,729 RPS) and was not the deciding factor. The `prod` target compensates for the CVE-surface increase with a build-time `apt-get upgrade` refresh layer (cache-busted via `APT_BUST`) and the CI Trivy HIGH/CRITICAL gate remains the hard backstop.
 
 ---
 
@@ -382,7 +382,7 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 ## 💻 13. x64 / AMD Ryzen 5 Custom Tuning
 **Goal:** Maximize hardware utilization for an AMD Ryzen 5 7430U (Zen 3) deployment.
 
-**Retracted.** The previously published "33,983 RPS" Ryzen 5 figure (and the `2,424 RPS` baseline) was not reproducible and is inconsistent with the BCrypt-bound login bottleneck established in §1 (real peak ≈ 189 RPS on comparable hardware). The claimed `-XX:ParallelGCThreads=6` / `-XX:UseAVX=2` wins were also contradicted by the M4 re-test (pinning hurts). All such hardware-pinned GC flags have been **removed** from `Dockerfile.x64`; the production image relies on G1GC + `MaxRAMPercentage` and lets the JVM size GC workers dynamically per node. If a genuinely allocation-bound workload emerges, re-benchmark on the actual target hardware before re-introducing any pin.
+**Retracted.** The previously published "33,983 RPS" Ryzen 5 figure (and the `2,424 RPS` baseline) was not reproducible and is inconsistent with the BCrypt-bound login bottleneck established in §1 (real peak ≈ 189 RPS on comparable hardware). The claimed `-XX:ParallelGCThreads=6` / `-XX:UseAVX=2` wins were also contradicted by the M4 re-test (pinning hurts). All such hardware-pinned GC flags have been **removed** from the production Dockerfile (then `Dockerfile.x64`, today the `prod` target of `Dockerfile`); the production image relies on G1GC + `MaxRAMPercentage` and lets the JVM size GC workers dynamically per node. If a genuinely allocation-bound workload emerges, re-benchmark on the actual target hardware before re-introducing any pin.
 
 ---
 
@@ -931,7 +931,7 @@ GC: G1 Old Generation (collections: 2, time: 82 ms)
 
 ### How CDS Works in TaskFlow
 
-1. **Build time:** Both `Dockerfile` and `Dockerfile.x64` run `CdsTrainingApplication` with `-XX:ArchiveClassesAtExit=application.jsa` to record all loaded classes into a shared archive.
+1. **Build time:** Both backend Dockerfiles (since merged into the single `Dockerfile`, §56) ran `CdsTrainingApplication` with `-XX:ArchiveClassesAtExit=application.jsa` to record all loaded classes into a shared archive.
 2. **Runtime:** The JVM starts with `-XX:SharedArchiveFile=application.jsa -Xshare:auto`, mapping the pre-recorded class metadata directly into memory instead of parsing `.class` files.
 3. **Result:** Class loading overhead is eliminated, saving ~740 ms per cold start.
 
@@ -1222,7 +1222,7 @@ location / { try_files $uri $uri/ /index.html; }
 *   `-XX:+UseContainerSupport` — explicit, self-documenting cgroup limit awareness (JDK 21 defaults to `true`, but stating it prevents accidental override and satisfies hardening audits). Verified by `ContainerConfigGuardTest.p1_2_jvm_diagnostics_flags`.
 *   `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof` — post-mortem heap dump on `tmpfs` `/tmp` (RAM-backed, ephemeral, per compose `tmpfs: - /tmp`). **0% overhead until OOM**, then one file write.
 *   `-Xlog:gc*:file=/tmp/gc.log:time,uptime:filecount=3,filesize=10m` — structured GC timeline with rotation (3×10 MB). Overhead ~0.7% at 10% OTel sampling (§7 parity) — verified in §1/§30 as negligible. `filecount`/`filesize` prevent disk exhaustion.
-*   Image `CMD` (`Dockerfile:139`, `Dockerfile.x64`) stays **sizing-agnostic** — only `-XX:SharedArchiveFile=application.jsa -Xshare:auto -XX:+ExitOnOutOfMemoryError`. All heap/off-heap sizing lives in deployment env.
+*   Image `CMD` (shared `runtime` stage of `Dockerfile`) stays **sizing-agnostic** — only `-XX:SharedArchiveFile=application.jsa -Xshare:auto -XX:+ExitOnOutOfMemoryError`. All heap/off-heap sizing lives in deployment env.
 
 | Flag | Location | Overhead | Purpose |
 | :--- | :--- | :--- | :--- |
@@ -1327,16 +1327,16 @@ management.metrics.distribution.sla.http.server.requests=50ms,100ms,200ms
 
 **Configuration:**
 
-*   **Local (`Dockerfile:75`):** `HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness || exit 1` — uses `wget` (shipped in the `eclipse-temurin:21-jre-resolute` base image) against the Spring Boot `liveness` probe (`management.endpoint.health.probes.enabled=true`). `start_period 15s` matches the CDS-warmed startup (3.0s §36) plus Hikari init.
-*   **Production (`Dockerfile.x64`):** Intentionally **omits** `HEALTHCHECK` — K8s `livenessProbe`/`readinessProbe` are set in `homelab/TF/gitops/apps/taskflow/backend.yaml` (with `initialDelaySeconds` tuned to pod resources). A baked `HEALTHCHECK` would duplicate and potentially conflict with the kubelet probe, and `homelab/TF` is the single source of truth for prod health semantics.
+*   **Local (`Dockerfile`, `local` target):** `HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness || exit 1` — uses `wget` (shipped in the `eclipse-temurin:21-jre-resolute` base image) against the Spring Boot `liveness` probe (`management.endpoint.health.probes.enabled=true`). `start_period 15s` matches the CDS-warmed startup (3.0s §36) plus Hikari init.
+*   **Production (`Dockerfile`, `prod` target):** Intentionally **omits** `HEALTHCHECK` — K8s `livenessProbe`/`readinessProbe` are set in `homelab/TF/gitops/apps/taskflow/backend.yaml` (with `initialDelaySeconds` tuned to pod resources). A baked `HEALTHCHECK` would duplicate and potentially conflict with the kubelet probe, and `homelab/TF` is the single source of truth for prod health semantics.
 *   **Compose parity:** `docker-compose.yml:113` mirrors the same `wget` liveness check for `backend` (and `frontend` `http://127.0.0.1:8080/`), so `depends_on: condition: service_healthy` works locally.
 
 | Image | HEALTHCHECK | Why |
 | :--- | :--- | :--- |
-| `Dockerfile` (arm64 local) | ✅ `wget /actuator/health/liveness` 30s/5s/3/15s | Standalone `docker run` health-aware |
-| `Dockerfile.x64` (amd64 prod) | ❌ omitted | K8s `livenessProbe` owns it |
+| `local` target (compose, host architecture) | ✅ `wget /actuator/health/liveness` 30s/5s/3/15s | Standalone `docker run` health-aware |
+| `prod` target (CI, linux/amd64) | ❌ omitted | K8s `livenessProbe` owns it |
 
-**Verification:** `ContainerConfigGuardTest.p1_2_jvm_diagnostics_flags` asserts `Dockerfile` contains `HEALTHCHECK` and `Dockerfile.x64` does **not**.
+**Verification:** `ContainerConfigGuardTest.p1_2_jvm_diagnostics_flags` asserts the `local` target carries a `HEALTHCHECK` and the `prod` target (and the stages it inherits from) does **not**.
 
 **Verdict:** Local `HEALTHCHECK` improves `docker run` DX with zero prod cost. K8s parity is preserved by keeping the prod image probe-free and documenting the divergence.
 
@@ -1505,7 +1505,7 @@ And `ARCHITECTURE.md` / `BENCHMARKS.md` inventories (§9) amplify: **>2 replicas
 **Adopted configuration:**
 
 * `docker-compose.yml` backend env: `MALLOC_ARENA_MAX=2` — glibc arenas scale to 8 × cores by default; the JVM's worker/carrier threads spread native allocations across them, padding RSS. 2 recovers ~72 MiB with no measurable cost. **Mirror this in `homelab/TF/gitops/apps/taskflow/backend.yaml`** (sizing/behavior is deployment-owned).
-* `libjemalloc2` is **not** shipped (evaluated in this section, removed from both Dockerfiles). Re-add it if a future re-measurement wants the allocator comparison; `scripts/benchmark-glibc-tuning.sh JEMALLOC=1` fails fast with that instruction.
+* `libjemalloc2` is **not** shipped (evaluated in this section, removed from the Dockerfile). Re-add it if a future re-measurement wants the allocator comparison; `scripts/benchmark-glibc-tuning.sh JEMALLOC=1` fails fast with that instruction.
 * Transparent huge pages remain host/deployment-owned; the JVM flag is not set.
 
 **Caveats:** single host, container limits (4 CPU / 2.5 GiB), 30 s runs and 3 reps → treat ±3–5% as noise; RSS medians include G1 heap growth, so allocator deltas should be read as directional. The arena delta is consistent across all three pairs and matches the known glibc-arena failure mode for many-threaded JVMs.
@@ -1751,7 +1751,7 @@ This run is the cold-JSI baseline: its `xcodebuild` step (211 s) is not faster t
 
 ## ⚡ 56. CDS Training Coverage & Production Image Slimming
 
-**Goal:** re-measure the CDS archive under the production profile (§36 measured the default H2 profile on an M4), and trim the production image (`Dockerfile.x64`) to what the JVM needs.
+**Goal:** re-measure the CDS archive under the production profile (§36 measured the default H2 profile on an M4), and trim the production image (today the `prod` target of `Dockerfile`) to what the JVM needs.
 
 **Methodology (reproducible):** `IMAGES="<before> <after>" NOCDS=1 RUNS=7 scripts/benchmark-cds-startup.sh`. The harness boots each image 7 times, interleaved, with `SPRING_PROFILES_ACTIVE=prod` against PostgreSQL 18.6 and Redis 8.10.2 (the compose images, schema already migrated). It uses the compose `JAVA_TOOL_OPTIONS`, `--cpus 2 --memory 2g`, a read-only root and dropped capabilities. Host: x86_64 Linux VM (amd64, the production architecture), Temurin 21.0.12.1, Spring Boot 4.1.1. Startup is Spring Boot's "process running for". The CDS share counts the classes logged as `source: shared objects file` by `-Xlog:class+load` in one extra boot per variant. The no-archive reference replaces the image `CMD` with `-Xshare:off`, which also disables the JDK base archive. Passing `-Xshare:off` in `JAVA_TOOL_OPTIONS` has no effect: the `CMD`'s later `-Xshare:auto` wins.
 
@@ -1771,9 +1771,10 @@ An earlier harness run on the same host measured 9.35 s → 8.34 s. The full-app
 
 ### Adopted
 
-* **Full-application training (`Dockerfile`, `Dockerfile.x64`):** `java -XX:ArchiveClassesAtExit=… -Dspring.context.exit=onRefresh -Dspring.cache.type=redis -jar application.jar` under `RUN --network=none`. The default profile uses in-memory H2, so Flyway runs every migration (Java migrations included) in memory. `onRefresh` halts before lifecycle beans start: no port bind, no schedulers, no runners. Startup must stay infrastructure-free. A startup call to an external service now fails the image build.
+* **Full-application training (`Dockerfile`, shared `cds-training` stage):** `java -XX:ArchiveClassesAtExit=… -Dspring.context.exit=onRefresh -Dspring.cache.type=redis -jar application.jar` under `RUN --network=none`. The default profile uses in-memory H2, so Flyway runs every migration (Java migrations included) in memory. `onRefresh` halts before lifecycle beans start: no port bind, no schedulers, no runners. Startup must stay infrastructure-free. A startup call to an external service now fails the image build.
 * **`env -i PATH LANG LC_ALL` for training:** BuildKit can inject `OTEL_*` variables that point at `unix:///dev/otel-grpc.sock` into `RUN` steps; this was observed in CI (SYSTEM-HARDENING.md Finding 20). Spring Boot 4 maps them onto its OTLP exporters ahead of `application.properties` and rejects the endpoint. Verified: with the variables injected, training failed on the span exporter, then on the log exporter once span export was disabled by property. With `env -i` it passes.
-* **Production image slimming (`Dockerfile.x64` only):** `apt-get purge --auto-remove curl wget gnupg` runs before the upgrade. It removes 33 packages, including krb5, OpenLDAP, GnuTLS, libssh2, nghttp2 and SQLite (141 → 109 packages). The base has no other orphaned packages, and the JRE's missing shared libraries (`ldd`) are identical before and after: X11/ALSA, which a headless JRE never loads. setuid/setgid bits are then stripped (11 → 0 binaries: `su`, `mount`, `passwd`, `chsh`, …). The local `Dockerfile` keeps `wget` for its `HEALTHCHECK`. The same layer also deletes the base's Pebble service manager (`/usr/bin/pebble`, not dpkg-managed, plus its world-writable `/var/lib/pebble` state dir), which nothing starts. Its static Go binary can only be fixed by an upstream image rebuild, and Go stdlib 1.26.7 tripped the Trivy HIGH gate on 2026-10-10 (CVE-2026-97031/78667/78669, fixed upstream in 1.26.9/1.27.2). Verified locally with Trivy 0.75.0 the same day: the pristine `eclipse-temurin:21-jre-resolute` scans 3 HIGH, the rebuilt `Dockerfile.x64` image 0 fixable HIGH/CRITICAL (OS packages, JARs and Go binaries).
+* **Production image slimming (`prod` target only):** `apt-get purge --auto-remove curl wget gnupg` runs before the upgrade. It removes 33 packages, including krb5, OpenLDAP, GnuTLS, libssh2, nghttp2 and SQLite (141 → 109 packages). The base has no other orphaned packages, and the JRE's missing shared libraries (`ldd`) are identical before and after: X11/ALSA, which a headless JRE never loads. setuid/setgid bits are then stripped (11 → 0 binaries: `su`, `mount`, `passwd`, `chsh`, …). The `local` target keeps `wget` for its `HEALTHCHECK`. The same layer also deletes the base's Pebble service manager (`/usr/bin/pebble`, not dpkg-managed, plus its world-writable `/var/lib/pebble` state dir), which nothing starts. Its static Go binary can only be fixed by an upstream image rebuild, and Go stdlib 1.26.7 tripped the Trivy HIGH gate on 2026-10-10 (CVE-2026-97031/78667/78669, fixed upstream in 1.26.9/1.27.2). Verified locally with Trivy 0.75.0 the same day: the pristine `eclipse-temurin:21-jre-resolute` scans 3 HIGH, the rebuilt `prod` image 0 fixable HIGH/CRITICAL (OS packages, JARs and Go binaries).
+* **One Dockerfile, two targets (2026-10-12):** `Dockerfile.x64` was folded into `Dockerfile`. `prod` (CI, `--target prod`, `platforms: linux/amd64`) and `local` (compose `target: local`) are final targets of one shared `runtime` stage, so extraction, training, layers and `CMD` exist once and the slimming above can no longer drift from the local image. The platform is chosen by the builder instead of an `ARG PLATFORM`, so a Linux/amd64 host builds the local image natively; only the extractor stage pins `$BUILDPLATFORM`. `ContainerConfigGuardTest` locks the layout.
 
 ### Costs
 
@@ -1790,7 +1791,7 @@ An earlier harness run on the same host measured 9.35 s → 8.34 s. The full-app
 * **`useradd --no-log-init`:** no effect, because Ubuntu 26.04's shadow no longer writes `lastlog`.
 * **`-XX:-UsePerfData`:** a marginal startup gain that breaks `jstat`/`jps`.
 
-**Verification:** the `Dockerfile.x64` image boots under `prod` with liveness/readiness 200, `/api/v1/catalog` and `/api/v1/barbers` 200, Redis cache and rate-limit keys written, and no `ERROR` log lines. The local `Dockerfile` was built with `PLATFORM=linux/amd64` (no arm64 emulator on the host), and its training run and archive validation pass. The build-time `-Xshare:on` validation passes for both images. hadolint passes on `Dockerfile.x64` with the CI ignore list. `ContainerImageBenchmarkTest` locks the configuration.
+**Verification:** the production image boots under `prod` with liveness/readiness 200, `/api/v1/catalog` and `/api/v1/barbers` 200, Redis cache and rate-limit keys written, and no `ERROR` log lines. The local image was built for linux/amd64 as well (the host architecture; the Dockerfile pins no platform), and its training run and archive validation pass. The build-time `-Xshare:on` validation passes for both images. hadolint passes on `Dockerfile` with the CI ignore list. `ContainerImageBenchmarkTest` locks the configuration.
 
 ## ⚡ 57. CI Composite Actions — E2E Without Buildx, Faster Backend Polling & `needs`-Driven Gates
 

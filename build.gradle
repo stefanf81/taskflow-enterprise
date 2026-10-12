@@ -233,6 +233,14 @@ spotbugs {
 	excludeFilter = file("spotbugs-exclude.xml")
 }
 tasks.named("test") {
+	// ContainerImageBenchmarkTest, GlibcTuningBenchmarkTest and
+	// ContainerConfigGuardTest assert these files' contents directly. Declared
+	// as inputs so a Dockerfile-, compose- or nginx-only edit re-runs the suite
+	// instead of serving a cached result (CI runs PRs with --build-cache).
+	inputs.files("Dockerfile", "docker-compose.yml", "frontend/nginx.conf", "BENCHMARKS.md",
+			"scripts/benchmark-cds-startup.sh", "scripts/benchmark-glibc-tuning.sh")
+			.withPropertyName("containerConfigAssertions")
+			.withPathSensitivity(PathSensitivity.RELATIVE)
 	useJUnitPlatform {
 		excludeTags 'benchmark', 'testcontainers'
 	}
@@ -287,10 +295,10 @@ tasks.register("benchmarkTest", Test) {
 	maxParallelForks = 1
 	environment "SPRING_SECURITY_PASSWORD", "admin-password"
 	systemProperty "spring.cache.type", "simple"
-	// ContainerImageBenchmarkTest asserts these files' contents directly.
+	// Benchmark evidence tests assert these files' contents directly.
 	// Declared as inputs so a Dockerfile- or doc-only edit invalidates the
 	// up-to-date check and the build cache instead of reusing a stale result.
-	inputs.files("Dockerfile", "Dockerfile.x64", "BENCHMARKS.md")
+	inputs.files("Dockerfile", "docker-compose.yml", "BENCHMARKS.md")
 			.withPropertyName("containerImageAssertions")
 			.withPathSensitivity(PathSensitivity.RELATIVE)
 	testLogging {

@@ -96,8 +96,7 @@ shared event fanout before relying on real-time updates across replicas.
 ├── docs/                         # Architectural Decision Records (ADRs)
 │   └── adr/
 ├── docker-compose.yml            # Local Docker orchestrator (JAVA_TOOL_OPTIONS: UseContainerSupport, HeapDump, GC log, G1GC 50% heap)
-├── Dockerfile                    # arm64 local — sizing-agnostic + HEALTHCHECK (30s/5s/3/15s liveness); x64 prod image omits it (K8s probe)
-├── Dockerfile.x64                # amd64 prod — sizing-agnostic, no HEALTHCHECK (K8s livenessProbe owns it)
+├── Dockerfile                    # backend image: `prod` target (CI, linux/amd64, hardened, no HEALTHCHECK) + `local` target (compose, HEALTHCHECK)
 ├── k6/load.js                    # isolated-stack ramping-VUs 0→50→200→0 stress profile
 ├── k6/probe.js                   # production-safe one-request/second public API probe
 ├── k6/browser.js                 # k6 browser CWV gate (ttfb<800 fcp<1800 lcp<2500, Lookbook wizard)
@@ -168,10 +167,10 @@ key pair. Generate the required single-line Base64-encoded DER values from the
 repository root as documented in `.env.example`, then paste them into `.env`.
 Do not commit `.env` or the key files.
 
-The default Compose Dockerfile targets `linux/arm64` for Apple Silicon. On an
-Intel/AMD laptop Docker Desktop can emulate that image, but Compose does not
-automatically select `Dockerfile.x64`; adapt the Compose build configuration if
-you require a native amd64 build.
+Compose builds the Dockerfile's `local` target for the host architecture (arm64
+on Apple Silicon, amd64 on an Intel/AMD machine), so no emulation is involved.
+The production image is the `prod` target, which the workflows build for
+`linux/amd64`; build it locally with `docker build --target prod .`.
 
 ### Choose a development mode
 
@@ -248,7 +247,7 @@ This launches the PostgreSQL database, Redis cache, Spring Boot backend, and Ngi
 
 - **Web UI:** `http://localhost:4200` — hashed `js|css` served `immutable, max-age=15552000` (6 M), other assets `public`, `index.html` must-revalidate.
 - **API via Nginx:** `http://localhost:4200/api` — tiered `Cache-Control` (`public max-age=300` catalog/barbers/ratings, `private max-age=30` busySlots, `no-cache private` admin) + `ETag` `304` on GETs, HTTP/1.1 upstream proxying with `keepalive 64` connection reuse.
-- **Prometheus Metrics:** Internal Kubernetes backend endpoint at `/actuator/prometheus`; the request is unauthenticated so VictoriaMetrics can scrape it, while the production NetworkPolicy limits access to the `monitoring` namespace. Other Actuator endpoints require ADMIN authentication. `application-prod.properties` exposes Micrometer histograms `p50/p95/p99` + `sla 50/100/200ms` + `percentiles-histogram` for `histogram_quantile` SLO queries (see `BENCHMARKS.md §46`). Health probes remain at `/actuator/health/liveness` & `/readiness` (local `Dockerfile` `HEALTHCHECK` `wget`; prod uses K8s probes).
+- **Prometheus Metrics:** Internal Kubernetes backend endpoint at `/actuator/prometheus`; the request is unauthenticated so VictoriaMetrics can scrape it, while the production NetworkPolicy limits access to the `monitoring` namespace. Other Actuator endpoints require ADMIN authentication. `application-prod.properties` exposes Micrometer histograms `p50/p95/p99` + `sla 50/100/200ms` + `percentiles-histogram` for `histogram_quantile` SLO queries (see `BENCHMARKS.md §46`). Health probes remain at `/actuator/health/liveness` & `/readiness` (the Dockerfile's `local` target has a `wget` `HEALTHCHECK`; the `prod` target relies on K8s probes).
 - **Stop Application Stack:** `./stop-docker.sh`
 - **Full-Stack Automated Verification:** `./verify.sh` (starts Docker if needed; stops containers it started. Pass `--stop-docker` to also stop an already-running stack)
 - **Load Gate (P2):** `k6/load.js` ramping `0→50→200→0` (`p95<500 ms`, `p99<800 ms`, `checks 1.0`) is run against an isolated stack; `.github/workflows/k6.yml` runs the one-request/second public `k6/probe.js` instead, preserving production availability and cache-header checks without tripping the per-IP rate limiter. Browser CWV gate via `k6/browser.js` (`ttfb<800 fcp<1800 lcp<2500`).
@@ -325,7 +324,7 @@ npm test
 - **Tiered Cache-Control & ETag (P1-3):** `GET /api/v1/catalog` / `barbers` / `reviews/public/barber-ratings` → `Cache-Control: public, max-age=300` (5 m, aligns with 10 m `@Cacheable` + `304` via `ShallowEtagHeaderFilter` GET-only); `busySlots` → `private, max-age=30, must-revalidate`; admin `GET /appointments` / `barbers/admin` → `private, no-cache, must-revalidate` (ETag still allows `304`). Nginx additionally serves hashed `js|css` as `public, immutable, max-age=15552000` (6 M) for `outputHashing:all` bundles.
 - **Observability Histograms (P1-5):** `application-prod.properties` configures `management.metrics.distribution.percentiles=0.5,0.95,0.99` + `percentiles-histogram=true` + `sla=50ms,100ms,200ms`. Prometheus scrapes `/actuator/prometheus` for `http_server_requests_seconds{quantile}` and `_bucket{le}` — use `histogram_quantile(0.95, …)` for SLO alerts (overhead ~1–2% cardinality). OTel tracing remains at 10% sampling.
 - **Mobile Query Tuning (P1-4):** `mobile/src/query/queryClient.ts` sets `staleTime 60_000` (was 0, cuts catalog/barbers refetch ~50% on tab nav), `gcTime 5*60_000` (retain across nav), exponential `retryDelay` with `retry:1`, `refetchOnWindowFocus:false`; `mobile/src/api/client.ts` `timeout 10000` (< JPA 5 s + Hikari 20 s, fail-fast). `LookbookGallery` virtualization fix (`FlatList`+`scrollEnabled=false` → plain `map`) prevents windowing defeat.
-- **Container Diagnostics (P1-2):** `JAVA_TOOL_OPTIONS` carries explicit `-XX:+UseContainerSupport` (cgroup-aware, self-documenting), `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof` (0% until OOM, `tmpfs` `/tmp`), `-Xlog:gc*:file=/tmp/gc.log:time,uptime:filecount=3,filesize=10m` (3×10 MB rotation, ~0.7% overhead). `Dockerfile` (local) now has `HEALTHCHECK` (`wget /actuator/health/liveness`); `Dockerfile.x64` omits it — K8s `livenessProbe`/`readinessProbe` in `homelab/TF` is the source of truth.
+- **Container Diagnostics (P1-2):** `JAVA_TOOL_OPTIONS` carries explicit `-XX:+UseContainerSupport` (cgroup-aware, self-documenting), `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof` (0% until OOM, `tmpfs` `/tmp`), `-Xlog:gc*:file=/tmp/gc.log:time,uptime:filecount=3,filesize=10m` (3×10 MB rotation, ~0.7% overhead). the Dockerfile's `local` target has a `HEALTHCHECK` (`wget /actuator/health/liveness`); the `prod` target omits it — K8s `livenessProbe`/`readinessProbe` in `homelab/TF` is the source of truth.
 - **PgBouncer Ceiling (P2):** `application-prod.properties` documents Hikari `maximum-pool-size=25/minimum-idle=10` knee curve (`10→3015 RPS`, `25→4128 RPS`, `50→4257 RPS`). The deployment intentionally runs one replica; distributed SSE and PgBouncer transaction pooling are prerequisites for scale-out.
 
 ---

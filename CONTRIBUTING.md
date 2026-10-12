@@ -103,10 +103,10 @@ cd frontend && npm run e2e:docker  # Playwright E2E with auto-spinup and teardow
 `./start-docker.sh` builds the backend and frontend locally, builds the images,
 and pulls `hadolint/hadolint` for Dockerfile linting on the first run. It needs
 the configured `.env`, a running Docker daemon, and the resources listed above.
-The default Dockerfile targets `linux/arm64` for Apple Silicon. Intel/AMD
-machines can run it through Docker emulation, but the Compose file does not
-automatically select `Dockerfile.x64`; adapt the Compose build configuration if
-you need a native amd64 image.
+Compose builds the Dockerfile's `local` target for the host architecture, so
+Apple Silicon and Intel/AMD machines both get a native image. The production
+variant is the `prod` target (`docker build --target prod .`), which CI builds
+for `linux/amd64`.
 
 ### API Contract Changes
 
