@@ -45,6 +45,14 @@
     >
       Overdue
     </button>
+    <button
+      (click)="setFilter('cancelled')"
+      [class.bg-zinc-950]="selectedFilter() === 'cancelled'"
+      [class.text-gold]="selectedFilter() === 'cancelled'"
+      class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100"
+    >
+      Cancelled
+    </button>
   </div>
 </div>
 
@@ -74,6 +82,15 @@
       <p class="text-xs text-zinc-500 font-light mt-1">
         Try adjusting your filter status or search keyword.
       </p>
+      @if (currentPage() > 0) {
+        <button
+          type="button"
+          class="btn btn-secondary py-2 px-4 text-xs mt-4"
+          (click)="firstPage()"
+        >
+          Back to first page
+        </button>
+      }
     </div>
   } @else {
     @for (appt of appointments(); track appt.id) {
@@ -98,6 +115,11 @@
               <span
                 class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase tracking-wider"
                 >Denied</span
+              >
+            } @else if (appt.status === 'CANCELLED') {
+              <span
+                class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 uppercase tracking-wider"
+                >Cancelled</span
               >
             } @else if (isOverdue(appt)) {
               <span

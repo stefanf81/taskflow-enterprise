@@ -57,5 +57,14 @@ export const routes: Routes = [
       import('./features/customer/customer-portal').then((m) => m.CustomerPortal),
     title: 'My Appointments — TaskFlow',
   },
+  {
+    // Booking flow for signed-in customers. Under /customer so authGuard keeps it
+    // customer-only; unlike '/', it does not redirect the customer to their dashboard.
+    path: 'customer/book',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/customer/customer-booking').then((m) => m.CustomerBooking),
+    title: 'Book an Appointment — TaskFlow',
+  },
   { path: '**', component: NotFoundComponent, title: 'Not Found — TaskFlow' },
 ];

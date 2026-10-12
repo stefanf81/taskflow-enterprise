@@ -39,15 +39,18 @@ describe('App shell', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('router-outlet')).toBeTruthy();
   });
 
-  it('restores an existing session and forwards the user to their dashboard', async () => {
+  it('restores an existing session WITHOUT navigating away from the current URL', async () => {
     const router = TestBed.inject(Router);
     const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    const authState = TestBed.inject(AuthState);
 
     fixture.detectChanges();
-    flushMe('ok', 'ROLE_ADMIN');
+    flushMe('ok', 'ROLE_CUSTOMER');
 
     await fixture.whenStable();
-    expect(navigate).toHaveBeenCalledWith('/admin');
+    expect(authState.role()).toBe('ROLE_CUSTOMER');
+    // Redirecting from here used to bounce a deep link such as /customer/book to /customer.
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('stays logged out when no session cookie is present', async () => {
@@ -60,6 +63,8 @@ describe('App shell', () => {
 
     await fixture.whenStable();
     expect(authState.isLoggedIn()).toBe(false);
+    // The guest's 401 completes the bootstrap instead of being left "pending" forever.
+    expect(authState.isBootstrapDone()).toBe(true);
     expect(navigate).not.toHaveBeenCalled();
   });
 });

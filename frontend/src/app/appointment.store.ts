@@ -1,11 +1,29 @@
-import { Injectable, signal, computed, inject, effect, DestroyRef } from '@angular/core';
+import { Injectable, signal, computed, inject, effect, untracked, DestroyRef } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthState } from './auth.state';
 import { AppointmentDashboardResponse } from './types/api';
 import { AppointmentsApi } from './core/api/appointments-api';
-import { AuthApi } from './core/api/auth-api';
+import { extractApiError } from './core/api/extract-api-error';
+import { refreshResource, safeResourceValue } from './core/resource-utils';
+import { SessionEvents } from './core/session-events';
 import { appointmentDashboardResponseSchema } from '@taskflow/schemas';
+
+const EMPTY_DASHBOARD: AppointmentDashboardResponse = {
+  page: {
+    content: [],
+    page: { number: 0, size: 50, totalElements: 0, totalPages: 1 },
+  },
+  stats: {
+    total: 0,
+    pending: 0,
+    approved: 0,
+    denied: 0,
+    overdue: 0,
+    progress: 0,
+    approvedRevenue: 0,
+  },
+};
 
 /**
  * Admin appointment list state.
@@ -18,13 +36,18 @@ import { appointmentDashboardResponseSchema } from '@taskflow/schemas';
  * - Search is debounced: the input binds to `searchQuery`, but the resource
  *   reads the separate `searchDebounced` signal, so typing does not trigger a
  *   request per keystroke and the 300ms coalescing window actually works.
- * - `reload()` is reserved for cases where no reactive signal changed but the
- *   server data may have (approve/deny/delete success, Sync DB button, login).
+ * - `refresh()` is reserved for cases where no reactive signal changed but the
+ *   server data may have (approve/deny/delete success, Sync DB button, SSE event).
+ *   It never drops a refresh: `reload()` is a no-op while a load is in flight, so
+ *   `refresh()` falls back to bumping a counter the request function reads, which
+ *   restarts the load.
+ * - Reading `resource.value()` THROWS while the resource is in the error state, so
+ *   every list the UI reads is derived from a safe view (`safeResourceValue`).
  */
 @Injectable({ providedIn: 'root' })
 export class AppointmentStore {
   private readonly appointmentsApi = inject(AppointmentsApi);
-  private readonly authApi = inject(AuthApi);
+  private readonly sessionEvents = inject(SessionEvents);
   private readonly authState = inject(AuthState);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -42,10 +65,14 @@ export class AppointmentStore {
 
   private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /** Read by the resource request so a refresh can restart an in-flight load. */
+  private readonly refreshTick = signal(0);
+
   // Core Admin Reactive States (Declarative Signals via httpResource)
   private readonly appointmentsResource = httpResource<AppointmentDashboardResponse>(
     () => {
       if (!this.authState.isLoggedIn()) return undefined;
+      this.refreshTick();
       return this.appointmentsApi.dashboardUrl(
         this.selectedFilter(),
         this.searchDebounced(),
@@ -55,48 +82,17 @@ export class AppointmentStore {
     },
     {
       parse: (raw) => appointmentDashboardResponseSchema.parse(raw),
-      defaultValue: {
-        page: {
-          content: [],
-          page: {
-            number: 0,
-            size: 50,
-            totalElements: 0,
-            totalPages: 1,
-          },
-        },
-        stats: {
-          total: 0,
-          pending: 0,
-          approved: 0,
-          denied: 0,
-          overdue: 0,
-          progress: 0,
-          approvedRevenue: 0,
-        },
-      },
+      defaultValue: EMPTY_DASHBOARD,
     },
   );
 
-  readonly appointments = computed(() => this.appointmentsResource.value()?.page.content ?? []);
-  readonly stats = computed(
-    () =>
-      this.appointmentsResource.value()?.stats ?? {
-        total: 0,
-        pending: 0,
-        approved: 0,
-        denied: 0,
-        overdue: 0,
-        progress: 0,
-        approvedRevenue: 0,
-      },
-  );
-  readonly totalPages = computed(
-    () => this.appointmentsResource.value()?.page.page.totalPages ?? 1,
-  );
-  readonly totalElements = computed(
-    () => this.appointmentsResource.value()?.page.page.totalElements ?? 0,
-  );
+  // Error-safe view: the empty dashboard (never a throw) while loading or failed.
+  private readonly dashboard = safeResourceValue(this.appointmentsResource, EMPTY_DASHBOARD);
+
+  readonly appointments = computed(() => this.dashboard().page.content);
+  readonly stats = computed(() => this.dashboard().stats);
+  readonly totalPages = computed(() => this.dashboard().page.page.totalPages);
+  readonly totalElements = computed(() => this.dashboard().page.page.totalElements);
 
   // Load-failure state kept separate from the dismissible action `errorMessage`,
   // which is shared with BookingStore and must not carry dashboard load errors.
@@ -122,12 +118,24 @@ export class AppointmentStore {
       }
     });
 
-    // A 401 on a protected request clears the session (AuthState). Drop any
-    // stale banner as well so a logged-out dashboard never shows an alert
-    // from the previous session.
+    // When an authenticated session ends (logout, 401 expiry) drop everything the
+    // previous user left behind: page, filters, search and banners. Done on the
+    // event (not in an effect) so it runs BEFORE a failed action's error callback
+    // and can never erase the message that action sets afterwards.
+    this.sessionEvents.sessionEnded
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.resetSessionState());
+
+    // Approving/denying/deleting under a status filter (or an SSE refresh) can
+    // leave the current page past the last one. Clamp back once the server has
+    // answered. Only a RESOLVED response counts: while a new page is loading the
+    // resource reports its default (1 page), which must not trigger a clamp.
     effect(() => {
-      if (!this.authState.isLoggedIn()) {
-        this.errorMessage.set(null);
+      if (this.appointmentsResource.status() !== 'resolved') return;
+      const totalPages = this.totalPages();
+      const page = untracked(this.currentPage);
+      if (page > 0 && page >= totalPages) {
+        this.currentPage.set(Math.max(0, totalPages - 1));
       }
     });
   }
@@ -180,26 +188,62 @@ export class AppointmentStore {
       this.searchQuery.set(searchQuery);
       this.searchDebounced.set(searchQuery);
     }
-    this.appointmentsResource.reload();
+    this.refresh();
   }
 
-  // Handle Admin Logout — drop UI state before the request returns: the landing
-  // page redirects any still-signed-in role back to its dashboard, so a late
-  // clear would bounce the user to /admin while the logout POST is in flight.
-  onLogout(): void {
-    this.resetAuthState();
-    this.authApi
-      .logout()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        error: () => this.resetAuthState(),
-      });
+  /** Refetch now; a request already in flight is restarted rather than the refresh dropped. */
+  refresh(): void {
+    refreshResource(this.appointmentsResource, this.refreshTick);
+  }
+
+  /**
+   * Signs out. The session stays alive (and the user stays on the dashboard)
+   * until the server confirms: a failed logout leaves a still-valid HttpOnly
+   * cookie, so pretending to be signed out would be a lie. Resolves `true` once
+   * signed out; `false` after showing an error and keeping the session.
+   */
+  async onLogout(): Promise<boolean> {
+    try {
+      await this.authState.logoutAndWait();
+      return true;
+    } catch (err) {
+      this.errorMessage.set(
+        extractApiError(err, 'Could not sign out. Please check your connection and try again.'),
+      );
+      return false;
+    }
   }
 
   // Reset local auth signals (also invoked when the session is dropped by a 401).
   resetAuthState(): void {
     this.authState.clear();
+  }
+
+  /**
+   * Reports a failed admin action. A 401 is skipped: the session-expiry flow
+   * already told the user (and navigated away); a stale "Failed to approve"
+   * banner would just leak onto the landing page's shared alert area.
+   */
+  reportActionError(err: unknown, fallback: string): void {
+    if ((err as { status?: number })?.status === 401) return;
+    this.errorMessage.set(extractApiError(err, fallback));
+  }
+
+  private resetSessionState(): void {
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+      this.searchDebounceTimer = null;
+    }
+    if (this.successTimer) {
+      clearTimeout(this.successTimer);
+      this.successTimer = null;
+    }
+    this.currentPage.set(0);
+    this.selectedFilter.set('all');
+    this.searchQuery.set('');
+    this.searchDebounced.set('');
     this.errorMessage.set(null);
+    this.successMessage.set(null);
   }
 
   private successTimer: ReturnType<typeof setTimeout> | null = null;

@@ -85,117 +85,132 @@
     </div>
   }
 
-  <!-- STATS BOARD GRID (SAAS CLEAN TILES) -->
-  <section class="grid grid-cols-2 lg:grid-cols-5 gap-5 mb-8 text-zinc-100">
-    <!-- Tile 1 -->
+  <!-- STATS: a failed load shows an explicit retry instead of a board of misleading zeros -->
+  @if (loadErrorMessage()) {
     <div
-      class="card p-5 border border-white/10 bg-zinc-950 rounded-2xl flex justify-between items-center"
+      role="alert"
+      class="alert alert-error mb-8 py-4 px-5 rounded-2xl text-xs flex items-center gap-3 border border-red-500/20"
     >
-      <div class="flex flex-col">
-        <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider"
-          >Total Bookings</span
-        >
-        <span class="text-2xl font-black text-white mt-1 leading-none">{{ stats().total }}</span>
-      </div>
-      <div
-        class="w-10 h-10 rounded-xl bg-white/5 text-zinc-400 flex items-center justify-center font-bold"
+      <span class="text-rose-400 leading-normal font-medium flex-1"
+        >⚠️ {{ loadErrorMessage() }}</span
       >
-        🗒️
-      </div>
+      <button type="button" class="btn btn-secondary py-2 px-4 text-xs" (click)="retryLoad()">
+        Retry
+      </button>
     </div>
-
-    <!-- Tile 2 -->
-    <div
-      class="card p-5 border border-white/10 bg-zinc-950 rounded-2xl flex justify-between items-center"
-    >
-      <div class="flex flex-col">
-        <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider"
-          >Pending Approval</span
-        >
-        <span class="text-2xl font-black text-amber-400 mt-1 leading-none">{{
-          stats().pending
-        }}</span>
-      </div>
+  } @else {
+    <!-- STATS BOARD GRID (SAAS CLEAN TILES) -->
+    <section class="grid grid-cols-2 lg:grid-cols-5 gap-5 mb-8 text-zinc-100">
+      <!-- Tile 1 -->
       <div
-        class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold"
+        class="card p-5 border border-white/10 bg-zinc-950 rounded-2xl flex justify-between items-center"
       >
-        ⏳
-      </div>
-    </div>
-
-    <!-- Tile 3 -->
-    <div
-      class="card p-5 border border-white/10 bg-zinc-950 rounded-2xl flex justify-between items-center"
-    >
-      <div class="flex flex-col">
-        <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider"
-          >Approved Slots</span
+        <div class="flex flex-col">
+          <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider"
+            >Total Bookings</span
+          >
+          <span class="text-2xl font-black text-white mt-1 leading-none">{{ stats().total }}</span>
+        </div>
+        <div
+          class="w-10 h-10 rounded-xl bg-white/5 text-zinc-400 flex items-center justify-center font-bold"
         >
-        <span class="text-2xl font-black text-emerald-500 mt-1 leading-none">{{
-          stats().approved
-        }}</span>
+          🗒️
+        </div>
       </div>
-      <div
-        class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold"
-      >
-        ✓
-      </div>
-    </div>
 
-    <!-- Tile 4 -->
-    <div
-      class="card p-5 border border-white/10 bg-zinc-950 rounded-2xl flex justify-between items-center"
-    >
-      <div class="flex flex-col">
-        <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider"
-          >Overdue Pending</span
+      <!-- Tile 2 -->
+      <div
+        class="card p-5 border border-white/10 bg-zinc-950 rounded-2xl flex justify-between items-center"
+      >
+        <div class="flex flex-col">
+          <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider"
+            >Pending Approval</span
+          >
+          <span class="text-2xl font-black text-amber-400 mt-1 leading-none">{{
+            stats().pending
+          }}</span>
+        </div>
+        <div
+          class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold"
         >
-        <span class="text-2xl font-black text-rose-500 mt-1 leading-none">{{
-          stats().overdue
-        }}</span>
+          ⏳
+        </div>
       </div>
-      <div
-        class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center font-bold"
-      >
-        ⚠️
-      </div>
-    </div>
 
-    <!-- Tile 5 -->
-    <div
-      class="card p-5 border border-white/10 bg-zinc-950 rounded-2xl flex justify-between items-center col-span-2 lg:col-span-1"
-    >
-      <div class="flex flex-col">
-        <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider"
-          >Estimated Revenue</span
+      <!-- Tile 3 -->
+      <div
+        class="card p-5 border border-white/10 bg-zinc-950 rounded-2xl flex justify-between items-center"
+      >
+        <div class="flex flex-col">
+          <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider"
+            >Approved Slots</span
+          >
+          <span class="text-2xl font-black text-emerald-500 mt-1 leading-none">{{
+            stats().approved
+          }}</span>
+        </div>
+        <div
+          class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold"
         >
-        <span class="text-2xl font-black text-gold mt-1 leading-none">{{
-          stats().approvedRevenue | currency: 'USD'
-        }}</span>
+          ✓
+        </div>
       </div>
-      <div
-        class="w-10 h-10 rounded-xl bg-gold/10 text-gold flex items-center justify-center font-extrabold"
-      >
-        $
-      </div>
-    </div>
-  </section>
 
-  <!-- APPROVAL PROGRESS RATE BAR -->
-  <div class="card bg-zinc-950 border border-white/10 rounded-2xl p-5 mb-10">
-    <div
-      class="flex justify-between items-center text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2"
-    >
-      <span>Slot Approval Completion Rate</span>
-      <span class="text-gold font-extrabold text-sm">{{ stats().progress }}%</span>
-    </div>
-    <div class="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+      <!-- Tile 4 -->
       <div
-        class="h-full bg-gradient-to-r from-gold to-gold-dark rounded-full"
-        [style.width.%]="stats().progress"
-      ></div>
+        class="card p-5 border border-white/10 bg-zinc-950 rounded-2xl flex justify-between items-center"
+      >
+        <div class="flex flex-col">
+          <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider"
+            >Overdue Pending</span
+          >
+          <span class="text-2xl font-black text-rose-500 mt-1 leading-none">{{
+            stats().overdue
+          }}</span>
+        </div>
+        <div
+          class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center font-bold"
+        >
+          ⚠️
+        </div>
+      </div>
+
+      <!-- Tile 5 -->
+      <div
+        class="card p-5 border border-white/10 bg-zinc-950 rounded-2xl flex justify-between items-center col-span-2 lg:col-span-1"
+      >
+        <div class="flex flex-col">
+          <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider"
+            >Estimated Revenue</span
+          >
+          <span class="text-2xl font-black text-gold mt-1 leading-none">{{
+            stats().approvedRevenue | currency: 'USD'
+          }}</span>
+        </div>
+        <div
+          class="w-10 h-10 rounded-xl bg-gold/10 text-gold flex items-center justify-center font-extrabold"
+        >
+          $
+        </div>
+      </div>
+    </section>
+
+    <!-- APPROVAL PROGRESS RATE BAR -->
+    <div class="card bg-zinc-950 border border-white/10 rounded-2xl p-5 mb-10">
+      <div
+        class="flex justify-between items-center text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2"
+      >
+        <span>Slot Approval Completion Rate</span>
+        <span class="text-gold font-extrabold text-sm">{{ stats().progress }}%</span>
+      </div>
+      <div class="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+        <div
+          class="h-full bg-gradient-to-r from-gold to-gold-dark rounded-full"
+          [style.width.%]="stats().progress"
+        ></div>
+      </div>
     </div>
-  </div>
+  }
 
   <!-- MAIN WORKSPACE ROWS -->
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">

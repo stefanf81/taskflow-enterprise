@@ -1,3 +1,24 @@
+interface ZodIssueLike {
+  path: PropertyKey[];
+  message: string;
+}
+
+/**
+ * Thrown by {@link parseRequest} when a client-side payload fails its shared
+ * zod schema. `message` is the first issue's user-facing text (for example
+ * "Invalid email format") so the UI can show it as-is; `field` names the
+ * offending top-level property when known.
+ */
+export class RequestValidationError extends Error {
+  readonly field: string | null;
+
+  constructor(message: string, field: string | null, cause: unknown) {
+    super(message, { cause });
+    this.name = 'RequestValidationError';
+    this.field = field;
+  }
+}
+
 /**
  * Validates an outgoing payload against its shared zod schema.
  *
@@ -14,11 +35,14 @@ export function parseRequest<T>(schema: { parse(value: unknown): T }, value: unk
   try {
     return schema.parse(value);
   } catch (err) {
-    const issues = (err as { issues?: { path: PropertyKey[]; message: string }[] }).issues ?? [];
-    const detail = issues
-      .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
-      .join('; ');
-    throw new Error(`Invalid request payload (${detail || 'validation failed'})`, { cause: err });
+    const issues = (err as { issues?: ZodIssueLike[] }).issues ?? [];
+    const first = issues[0];
+    const field = first?.path[0];
+    throw new RequestValidationError(
+      first?.message?.trim() || 'Please check the form and try again.',
+      field === undefined ? null : String(field),
+      err,
+    );
   }
 }
 
@@ -35,7 +59,7 @@ export function parseResponse<T>(
   try {
     return schema.parse(value);
   } catch (err) {
-    const issues = (err as { issues?: { path: PropertyKey[]; message: string }[] }).issues ?? [];
+    const issues = (err as { issues?: ZodIssueLike[] }).issues ?? [];
     const detail = issues
       .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
       .join('; ');

@@ -12,7 +12,7 @@ import {
   withXsrfConfiguration,
 } from '@angular/common/http';
 import { provideRouter, withInMemoryScrolling, withViewTransitions } from '@angular/router';
-import { catchError, of, timeout } from 'rxjs';
+import { catchError, of, retry, timeout } from 'rxjs';
 
 import { authInterceptor } from './auth.interceptor';
 import { AuthApi } from './core/api/auth-api';
@@ -45,11 +45,15 @@ export const appConfig: ApplicationConfig = {
     // attaches X-XSRF-TOKEN. The fetch is started but NOT awaited: blocking
     // bootstrap on it held first render for up to the timeout on slow networks
     // for no benefit — Angular reads the cookie when the first mutation is sent.
+    // Failures are retried (twice, with a short pause) so one slow/failed boot request
+    // does not leave the session without a CSRF cookie; AuthState.logout() additionally
+    // refetches the token itself when the server answers 403.
     provideAppInitializer(() => {
       inject(AuthApi)
         .fetchCsrfToken()
         .pipe(
           timeout(5000),
+          retry({ count: 2, delay: 1500 }),
           catchError(() => of(void 0)),
         )
         .subscribe();

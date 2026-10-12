@@ -33,7 +33,7 @@ describe('AdminSchedulesTab', () => {
     httpMock.expectNone((r) => r.url.includes('/time-off') && r.method === 'POST');
   });
 
-  it('posts validated time off through the Signal Form model', () => {
+  it('posts validated time off through the Signal Form model', async () => {
     const store = TestBed.inject(BarberStore);
     store.selectBarber(1);
 
@@ -42,7 +42,7 @@ describe('AdminSchedulesTab', () => {
       endDate: '2026-09-05',
       reason: 'Vacation',
     });
-    component.addTimeOff();
+    const saving = component.addTimeOff();
 
     const req = httpMock.expectOne((r) => r.url.includes('/api/v1/barbers/1/time-off'));
     expect(req.request.method).toBe('POST');
@@ -51,24 +51,39 @@ describe('AdminSchedulesTab', () => {
       endDate: '2026-09-05',
       reason: 'Vacation',
     });
+    // Not reset while the request is still in flight.
+    expect(component.timeOffModel().startDate).toBe('2026-09-01');
+
+    req.flush({ id: 9, startDate: '2026-09-01', endDate: '2026-09-05', reason: 'Vacation' });
+    await saving;
+
     expect(component.timeOffModel().startDate).toBe('');
+    expect(component.timeOffModel().reason).toBe('');
+    // The server may have cancelled conflicting bookings: the list and time-offs refetch.
+    httpMock.match(() => true);
   });
 
-  it('surfaces a time-off write error on the store action error signal', () => {
+  it('keeps the form input and shows the server message when the write fails', async () => {
     const store = TestBed.inject(BarberStore);
     store.selectBarber(1);
 
     component.timeOffModel.set({
       startDate: '2026-09-01',
       endDate: '2026-09-05',
-      reason: '',
+      reason: 'Vacation',
     });
-    component.addTimeOff();
+    const saving = component.addTimeOff();
 
     httpMock
       .expectOne((r) => r.url.includes('/api/v1/barbers/1/time-off'))
-      .error(new ProgressEvent('error'), { status: 400, statusText: 'Bad Request' });
+      .flush({ message: 'Overlaps existing time off' }, { status: 409, statusText: 'Conflict' });
+    await saving;
 
-    expect(store.actionErrorMessage()).toBeTruthy();
+    expect(store.actionErrorMessage()).toBe('Overlaps existing time off');
+    expect(component.timeOffModel()).toEqual({
+      startDate: '2026-09-01',
+      endDate: '2026-09-05',
+      reason: 'Vacation',
+    });
   });
 });

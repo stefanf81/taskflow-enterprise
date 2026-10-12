@@ -38,8 +38,12 @@ export class AdminAppointmentsTab {
     this.store.prevPage();
   }
 
+  firstPage(): void {
+    this.store.setPage(0);
+  }
+
   loadAppointments(): void {
-    this.store.loadAppointments();
+    this.store.refresh();
   }
 
   approveAppointment(id: number): void {
@@ -48,7 +52,8 @@ export class AdminAppointmentsTab {
         this.store.showSuccess('Appointment APPROVED! Client notification email dispatched.');
         this.loadAppointments();
       },
-      error: () => this.store.errorMessage.set('Failed to approve appointment.'),
+      // 409 = invalid transition / conflict: the server's message says why.
+      error: (err) => this.store.reportActionError(err, 'Failed to approve appointment.'),
     });
   }
 
@@ -58,7 +63,7 @@ export class AdminAppointmentsTab {
         this.store.showSuccess('Appointment DECLINED. Client notification email dispatched.');
         this.loadAppointments();
       },
-      error: () => this.store.errorMessage.set('Failed to decline appointment.'),
+      error: (err) => this.store.reportActionError(err, 'Failed to decline appointment.'),
     });
   }
 
@@ -68,12 +73,10 @@ export class AdminAppointmentsTab {
     this.appointmentsApi.deleteAppointment(id).subscribe({
       next: () => {
         this.store.showSuccess('Booking permanently deleted.');
-        if (this.appointments().length === 1 && this.currentPage() > 0) {
-          this.currentPage.update((p) => p - 1);
-        }
+        // If this emptied the last page, AppointmentStore steps back by itself.
         this.loadAppointments();
       },
-      error: () => this.store.errorMessage.set('Failed to delete booking.'),
+      error: (err) => this.store.reportActionError(err, 'Failed to delete booking.'),
     });
   }
 

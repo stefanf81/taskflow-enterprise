@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, DestroyRef, inject } from '@angular/core';
 import { FormField, FormRoot } from '@angular/forms/signals';
 import { formatTime12Hour } from '../../time-utils';
 import { ReceiptModalComponent } from '../../components/receipt-modal/receipt-modal';
@@ -18,6 +18,12 @@ import { BookingStore } from './booking.store';
 })
 export class BookingWizard {
   private readonly store = inject(BookingStore);
+
+  constructor() {
+    // Keep "today" (date carousel, past-slot lock) current while the wizard is on screen:
+    // refreshed now, on tab re-focus and at local midnight; torn down with this component.
+    this.store.watchToday(inject(DestroyRef));
+  }
 
   readonly bookingModel = this.store.bookingModel;
   readonly bookingForm = this.store.bookingForm;
@@ -39,6 +45,10 @@ export class BookingWizard {
   readonly noPreferenceLabel = this.store.noPreferenceLabel;
 
   readonly busySlots = this.store.busySlots;
+  readonly slotsError = this.store.slotsError;
+  readonly emailError = this.store.emailError;
+  readonly catalogError = this.store.catalogError;
+  readonly rosterError = this.store.rosterError;
   readonly isCheckingSlots = this.store.isCheckingSlots;
   readonly isSubmitting = this.store.isSubmitting;
   readonly errorMessage = this.store.errorMessage;
@@ -46,10 +56,31 @@ export class BookingWizard {
 
   readonly showReceiptModal = this.store.showReceiptModal;
   readonly lastBookedAppointment = this.store.lastBookedAppointment;
-  readonly checkoutTotal = this.store.checkoutTotal;
+  /** Price shown on the receipt: captured when the booking was submitted. */
+  readonly lastBookedTotal = this.store.lastBookedTotal;
 
   submitBooking(): void {
     this.store.submitBooking();
+  }
+
+  isSlotUnavailable(slot: string): boolean {
+    return this.store.isSlotUnavailable(slot);
+  }
+
+  isSlotPast(slot: string): boolean {
+    return this.store.isSlotPast(slot);
+  }
+
+  retrySlots(): void {
+    this.store.onBarberOrDateChange();
+  }
+
+  retryCatalog(): void {
+    this.store.retryCatalog();
+  }
+
+  retryRoster(): void {
+    this.store.retryRoster();
   }
 
   isStepValid(step: number): boolean {

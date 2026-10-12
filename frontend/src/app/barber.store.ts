@@ -4,6 +4,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Barber, BarberTimeOff, BarberTimeOffRequest } from './types/api';
 import { BarbersApi } from './core/api/barbers-api';
 import { extractApiError } from './core/api/extract-api-error';
+import { refreshResource, safeResourceValue } from './core/resource-utils';
+import { SessionEvents } from './core/session-events';
 import { barberResponseSchema, barberTimeOffResponseSchema } from '@taskflow/schemas';
 
 @Injectable({ providedIn: 'root' })
@@ -15,12 +17,16 @@ export class BarberStore {
     parse: (raw) => barberResponseSchema.array().parse(raw),
   });
 
-  readonly barbers = this.barbersResource.value;
+  /** Error-safe: an empty roster (never a throw) while loading or after a failed load. */
+  readonly barbers = safeResourceValue<Barber[]>(this.barbersResource, []);
   readonly selectedBarberId = signal<number | null>(null);
 
+  private readonly timeOffRefreshTick = signal(0);
   private readonly timeOffsResource = httpResource<BarberTimeOff[]>(
     () => {
       const id = this.selectedBarberId();
+      // Read so refreshResource() can restart a load that reload() would drop.
+      this.timeOffRefreshTick();
       return id ? this.barbersApi.timeOffUrl(id) : undefined;
     },
     {
@@ -29,7 +35,7 @@ export class BarberStore {
     },
   );
 
-  readonly timeOffs = this.timeOffsResource.value;
+  readonly timeOffs = safeResourceValue<BarberTimeOff[]>(this.timeOffsResource, []);
 
   readonly isLoading = computed(
     () => this.barbersResource.isLoading() || this.timeOffsResource.isLoading(),
@@ -50,6 +56,15 @@ export class BarberStore {
   private readonly destroyRef = inject(DestroyRef);
 
   constructor() {
+    // Drop per-session UI state when the admin signs out / the session expires.
+    inject(SessionEvents)
+      .sessionEnded.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.selectedBarberId.set(null);
+        this.actionErrorMessage.set(null);
+        this.actionSuccessMessage.set(null);
+        this.isSaving.set(false);
+      });
     effect(() => {
       const first = this.barbers()[0];
       if (first && !this.selectedBarberId()) {
@@ -68,32 +83,41 @@ export class BarberStore {
 
   loadTimeOffs(barberId: number): void {
     this.selectedBarberId.set(barberId);
-    this.timeOffsResource.reload();
+    refreshResource(this.timeOffsResource, this.timeOffRefreshTick);
   }
 
-  addTimeOff(request: BarberTimeOffRequest): void {
+  /**
+   * Adds a time-off entry. Resolves `true` on success and `false` on failure so
+   * the caller can reset its form ONLY when the server accepted the entry (the
+   * input is kept on error so the owner can fix it and retry).
+   */
+  addTimeOff(request: BarberTimeOffRequest): Promise<boolean> {
     const barberId = this.selectedBarberId();
-    if (!barberId) return;
+    if (!barberId || this.isSaving()) return Promise.resolve(false);
 
     this.actionErrorMessage.set(null);
     this.isSaving.set(true);
-    this.barbersApi
-      .addTimeOff(barberId, request)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: () => {
-          this.isSaving.set(false);
-          this.actionErrorMessage.set(null);
-          this.actionSuccessMessage.set('Time off added successfully.');
-          this.timeOffsResource.reload();
-        },
-        error: (err) => {
-          this.isSaving.set(false);
-          this.actionErrorMessage.set(
-            this.extractError(err, 'Failed to add time off. Please try again.'),
-          );
-        },
-      });
+    return new Promise<boolean>((resolve) => {
+      this.barbersApi
+        .addTimeOff(barberId, request)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: () => {
+            this.isSaving.set(false);
+            this.actionErrorMessage.set(null);
+            this.actionSuccessMessage.set('Time off added successfully.');
+            refreshResource(this.timeOffsResource, this.timeOffRefreshTick);
+            resolve(true);
+          },
+          error: (err) => {
+            this.isSaving.set(false);
+            this.actionErrorMessage.set(
+              this.extractError(err, 'Failed to add time off. Please try again.'),
+            );
+            resolve(false);
+          },
+        });
+    });
   }
 
   private extractError(err: unknown, fallback: string): string {

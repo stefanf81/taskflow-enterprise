@@ -18,9 +18,13 @@ export class ReviewsApi {
   submitReview(publicId: string, request: ReviewRequest): Observable<void> {
     return defer(() => {
       const validated = parseRequest(reviewSchema, request);
-      return this.http.post<void>(`${this.base}/public/${publicId}`, validated, {
-        context: new HttpContext().set(PUBLIC_REQUEST, true),
-      });
+      return this.http.post<void>(
+        `${this.base}/public/${encodeURIComponent(publicId)}`,
+        validated,
+        {
+          context: new HttpContext().set(PUBLIC_REQUEST, true),
+        },
+      );
     });
   }
 }

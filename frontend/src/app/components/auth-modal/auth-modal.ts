@@ -13,7 +13,8 @@ import { A11yModule } from '@angular/cdk/a11y';
 import { form, required, FormField } from '@angular/forms/signals';
 import { AuthApi } from '../../core/api/auth-api';
 import { AuthState } from '../../auth.state';
-import { extractApiError } from '../../core/api/extract-api-error';
+import { NETWORK_ERROR_MESSAGE, extractApiError } from '../../core/api/extract-api-error';
+import { RequestValidationError } from '../../core/api/request-validation';
 
 /** Model shape for the Signal Forms login / register wizard. */
 interface AuthFormModel {
@@ -76,8 +77,18 @@ interface AuthFormModel {
           </p>
         </div>
 
+        @if (sessionNotice() && !errorMessage()) {
+          <div
+            role="status"
+            class="alert mb-4 py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-amber-500/20 bg-amber-500/10"
+          >
+            <span class="text-amber-400 leading-normal font-medium">{{ sessionNotice() }}</span>
+          </div>
+        }
+
         @if (errorMessage()) {
           <div
+            role="alert"
             class="alert alert-error mb-4 py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-red-500/20"
           >
             <span class="text-rose-400 leading-normal font-medium">{{ errorMessage() }}</span>
@@ -167,11 +178,16 @@ interface AuthFormModel {
               [attr.aria-invalid]="
                 authForm.password().touched() && authForm.password().invalid() ? 'true' : null
               "
-              aria-describedby="password-error"
+              aria-describedby="password-error password-policy"
             />
             @if (authForm.password().touched() && authForm.password().invalid()) {
               <span id="password-error" class="text-rose-400 text-[10px]">
                 Password is required.
+              </span>
+            }
+            @if (isRegisterMode()) {
+              <span id="password-policy" class="text-zinc-500 text-[10px]">
+                {{ passwordPolicy }}
               </span>
             }
           </div>
@@ -234,6 +250,12 @@ export class AuthModalComponent {
   readonly successMessage = signal<string | null>(null);
   readonly isSubmitting = signal(false);
 
+  /** "Your session expired" notice when the user was sent here by an expired session. */
+  readonly sessionNotice = this.authState.sessionNotice;
+  /** Mirrors the backend password rule so the requirement is visible BEFORE a failed submit. */
+  readonly passwordPolicy =
+    'Password must be at least 8 characters long and contain both letters and numbers.';
+
   /** Handle login submission (or delegates to onRegister when in register mode). */
   onLogin(): void {
     if (this.isRegisterMode()) {
@@ -257,7 +279,7 @@ export class AuthModalComponent {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
-          this.authState.applyRole(response.role);
+          this.authState.applyRole(response.role, response.username);
           this.isSubmitting.set(false);
           this.errorMessage.set(null);
 
@@ -267,7 +289,7 @@ export class AuthModalComponent {
           this.closed.emit();
         },
         error: (err) => {
-          this.errorMessage.set('Invalid credentials. Please try again.');
+          this.errorMessage.set(this.describeLoginError(err));
           this.isSubmitting.set(false);
           // Verbose error logging only in dev builds to avoid leaking backend
           // error details into the production browser console.
@@ -276,6 +298,41 @@ export class AuthModalComponent {
           }
         },
       });
+  }
+
+  /**
+   * Maps a failed login to copy that tells the user what to DO:
+   * 401 wrong credentials, 429 throttled (with the Retry-After wait), 0 offline,
+   * 5xx server trouble. Client-side validation failures show their own message.
+   */
+  private describeLoginError(err: unknown): string {
+    if (err instanceof RequestValidationError) return err.message;
+    const status = (err as { status?: number } | null)?.status;
+    if (status === 401) return 'Invalid credentials. Please try again.';
+    if (status === 429) return this.describeThrottle(err);
+    if (status === 0) return NETWORK_ERROR_MESSAGE;
+    // 5xx, an unexpected 4xx, or a malformed response: nothing more useful to tell the user.
+    return 'Something went wrong. Please try again.';
+  }
+
+  /** "Too many attempts. Try again in 45 seconds / 2 minutes." from the Retry-After header. */
+  private describeThrottle(err: unknown): string {
+    const headers = (err as { headers?: { get(name: string): string | null } }).headers;
+    const header = headers?.get('Retry-After') ?? null;
+    let seconds = header === null || header.trim() === '' ? NaN : Number(header);
+    if (Number.isNaN(seconds) && header) {
+      // Retry-After may also be an HTTP date.
+      const at = Date.parse(header);
+      seconds = Number.isNaN(at) ? NaN : Math.ceil((at - Date.now()) / 1000);
+    }
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      return 'Too many attempts. Please try again in a moment.';
+    }
+    const wait =
+      seconds < 60
+        ? `${Math.ceil(seconds)} second${Math.ceil(seconds) === 1 ? '' : 's'}`
+        : `${Math.ceil(seconds / 60)} minute${Math.ceil(seconds / 60) === 1 ? '' : 's'}`;
+    return `Too many attempts. Try again in ${wait}.`;
   }
 
   /** Handle registration submission. */
@@ -304,7 +361,12 @@ export class AuthModalComponent {
           this.errorMessage.set(null);
         },
         error: (err) => {
-          this.errorMessage.set(extractApiError(err, 'Failed to create account.'));
+          // A password-policy failure shows the whole policy, not just the first rule that tripped.
+          this.errorMessage.set(
+            err instanceof RequestValidationError && err.field === 'password'
+              ? this.passwordPolicy
+              : extractApiError(err, 'Failed to create account.'),
+          );
           this.isSubmitting.set(false);
         },
       });
@@ -319,6 +381,7 @@ export class AuthModalComponent {
 
   /** User-requested close (X button or Escape). */
   closeModal(): void {
+    this.authState.sessionNotice.set(null);
     this.closed.emit();
   }
 }

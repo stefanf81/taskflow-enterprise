@@ -3,6 +3,7 @@ import { HttpContext, httpResource } from '@angular/common/http';
 import { PublicBarber } from './types/api';
 import { BarbersApi } from './core/api/barbers-api';
 import { PUBLIC_REQUEST } from './core/http/public-request.token';
+import { safeResourceValue } from './core/resource-utils';
 import { publicBarberResponseSchema } from '@taskflow/schemas';
 
 /**
@@ -27,7 +28,8 @@ export class PublicBarberStore {
     },
   );
 
-  readonly barbers = this.barbersResource.value;
+  /** Error-safe: an empty roster (never a throw) while loading or after a failed load. */
+  readonly barbers = safeResourceValue<PublicBarber[]>(this.barbersResource, []);
   readonly isLoading = this.barbersResource.isLoading;
   readonly errorMessage = computed(() => {
     const err = this.barbersResource.error();

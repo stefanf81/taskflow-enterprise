@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { form, required, FormField } from '@angular/forms/signals';
+import { AppointmentStore } from '../../appointment.store';
 import { BarberStore } from '../../barber.store';
 import { formatLocalDate } from '../../time-utils';
 
@@ -18,12 +19,15 @@ interface TimeOffFormModel {
 })
 export class AdminSchedulesTab {
   private readonly barberStore = inject(BarberStore);
+  private readonly appointmentStore = inject(AppointmentStore);
 
   readonly barbersList = this.barberStore.barbers;
   readonly timeOffs = this.barberStore.timeOffs;
   readonly selectedBarberId = this.barberStore.selectedBarberId;
   readonly timeOffActionError = this.barberStore.actionErrorMessage;
   readonly timeOffActionSuccess = this.barberStore.actionSuccessMessage;
+  readonly isSaving = this.barberStore.isSaving;
+  readonly loadError = this.barberStore.errorMessage;
 
   readonly timeOffModel = signal<TimeOffFormModel>({ startDate: '', endDate: '', reason: '' });
   readonly timeOffForm = form(this.timeOffModel, (f) => {
@@ -35,19 +39,31 @@ export class AdminSchedulesTab {
     this.barberStore.selectBarber(id);
   }
 
-  addTimeOff(): void {
+  async addTimeOff(): Promise<void> {
     const model = this.timeOffModel();
     if (!model.startDate || !model.endDate) {
       this.barberStore.actionErrorMessage.set('Start and end dates are required.');
       return;
     }
     this.barberStore.actionSuccessMessage.set(null);
-    this.barberStore.addTimeOff({
+    const saved = await this.barberStore.addTimeOff({
       startDate: model.startDate,
       endDate: model.endDate,
       reason: model.reason,
     });
-    this.timeOffModel.set({ startDate: '', endDate: '', reason: '' });
+    // Reset ONLY after the server accepted the entry; on error the input stays so the
+    // owner can correct it (the store already shows the server's message).
+    if (saved) {
+      this.timeOffModel.set({ startDate: '', endDate: '', reason: '' });
+      // The server may have cancelled conflicting bookings: refresh the appointment list.
+      this.appointmentStore.refresh();
+    }
+  }
+
+  retryLoad(): void {
+    this.barberStore.loadBarbers();
+    const barberId = this.selectedBarberId();
+    if (barberId) this.barberStore.loadTimeOffs(barberId);
   }
 
   formatLocalDate(dateStr: string): string {

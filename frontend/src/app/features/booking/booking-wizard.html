@@ -173,6 +173,19 @@
         </button>
       </div>
 
+      @if (catalogError()) {
+        <div role="alert" class="text-center text-xs text-rose-400 py-4">
+          <p>{{ catalogError() }}</p>
+          <button
+            type="button"
+            class="btn btn-secondary py-2 px-4 text-xs mt-3"
+            (click)="retryCatalog()"
+          >
+            Retry
+          </button>
+        </div>
+      }
+
       <div class="services-list max-h-[380px] overflow-y-auto pr-0.5 space-y-3">
         @for (service of filteredServices(); track service.name) {
           <button
@@ -210,6 +223,18 @@
       aria-labelledby="step-tab-2"
       class="space-y-4 animate-fadeIn"
     >
+      @if (rosterError()) {
+        <div role="alert" class="text-center text-xs text-rose-400 py-2">
+          <p>{{ rosterError() }} You can still choose "No Preference".</p>
+          <button
+            type="button"
+            class="btn btn-secondary py-2 px-4 text-xs mt-3"
+            (click)="retryRoster()"
+          >
+            Retry
+          </button>
+        </div>
+      }
       @for (profile of stylistProfiles(); track profile.name) {
         <app-stylist-card
           [profile]="profile"
@@ -363,6 +388,23 @@
             Checking slot availability...
           </p>
         </div>
+      } @else if (slotsError()) {
+        <div
+          role="alert"
+          class="alert alert-error animate-fadeIn py-4 px-5 rounded-xl text-xs border border-red-500/20 text-center"
+        >
+          <p class="text-rose-400 font-medium leading-normal">{{ slotsError() }}</p>
+          <p class="text-zinc-500 font-light mt-1">
+            We can't show available times until this loads.
+          </p>
+          <button
+            type="button"
+            class="btn btn-secondary py-2 px-4 text-xs mt-3"
+            (click)="retrySlots()"
+          >
+            Retry
+          </button>
+        </div>
       } @else if (bookingDate()) {
         <div class="form-group" style="margin-top: 1.5rem">
           <span
@@ -385,9 +427,9 @@
               <button
                 type="button"
                 class="btn btn-secondary slot-picker-btn"
-                [class.slot-busy]="busySlots().includes(slot)"
+                [class.slot-busy]="isSlotUnavailable(slot)"
                 [class.slot-selected]="bookingTime() === slot"
-                [disabled]="busySlots().includes(slot)"
+                [disabled]="isSlotUnavailable(slot)"
                 (click)="selectTimeSlot(slot)"
                 style="
                   padding: 0.65rem 0.5rem;
@@ -396,7 +438,9 @@
                   font-weight: 600;
                 "
               >
-                @if (busySlots().includes(slot)) {
+                @if (isSlotPast(slot)) {
+                  ⏱️ Passed
+                } @else if (busySlots().includes(slot)) {
                   🚫 Taken
                 } @else {
                   {{ formatTime12Hour(slot) }}
@@ -464,16 +508,16 @@
               placeholder="e.g., john@example.com"
               class="form-control"
               [formField]="bookingForm.customerEmail"
-              [attr.aria-invalid]="!bookingModel().customerEmail.trim() ? 'true' : null"
+              [attr.aria-invalid]="emailError() ? 'true' : null"
               aria-describedby="customerEmail-error"
             />
-            @if (!bookingModel().customerEmail.trim()) {
+            @if (emailError(); as emailProblem) {
               <span
                 id="customerEmail-error"
                 role="alert"
                 class="text-rose-400 text-[10px] mt-1 block"
               >
-                Valid email address is required.
+                {{ emailProblem }}
               </span>
             }
           </div>
@@ -594,7 +638,7 @@
   @if (showReceiptModal()) {
     <app-receipt-modal
       [appointment]="lastBookedAppointment()"
-      [checkoutTotal]="checkoutTotal()"
+      [checkoutTotal]="lastBookedTotal()"
       (closed)="showReceiptModal.set(false)"
     />
   }
