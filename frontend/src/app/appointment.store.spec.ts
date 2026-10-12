@@ -113,38 +113,37 @@ describe('AppointmentStore', () => {
     expect(store.stats().pending).toBe(0);
   });
 
-  it('should handle onLogout by calling the logout API and clearing state', () => {
+  it('signs out only after the server confirms (the session stays alive until then)', async () => {
     authState.isLoggedIn.set(true);
     fixture.detectChanges();
     httpMock.match(() => true).forEach((r) => r.flush(mockDashboard));
     fixture.detectChanges();
 
-    store.onLogout();
+    const done = store.onLogout();
+    expect(authState.isLoggedIn()).toBe(true);
 
     const req = httpMock.expectOne((r) => r.url.includes('/api/v1/auth/logout'));
     expect(req.request.method).toBe('POST');
     req.flush(null);
 
+    expect(await done).toBe(true);
     expect(authState.isLoggedIn()).toBe(false);
   });
 
-  it('should call onLogout that resets state even on API failure', () => {
-    authState.isLoggedIn.set(true);
-    store.onLogout();
+  it('keeps the session and shows an error when logout fails', async () => {
+    authState.applyRole('ROLE_ADMIN', 'admin');
+    fixture.detectChanges();
+    httpMock.match(() => true).forEach((r) => r.flush(mockDashboard));
 
+    const done = store.onLogout();
     const req = httpMock.expectOne((r) => r.url.includes('/api/v1/auth/logout'));
     req.error(new ProgressEvent('error'), { status: 500, statusText: 'Server Error' });
 
-    expect(authState.isLoggedIn()).toBe(false);
-  });
-
-  it('should reset auth state via resetAuthState', () => {
-    authState.isLoggedIn.set(true);
-    store.errorMessage.set('Some error');
-    store.resetAuthState();
-
-    expect(authState.isLoggedIn()).toBe(false);
-    expect(store.errorMessage()).toBeNull();
+    expect(await done).toBe(false);
+    expect(authState.isLoggedIn()).toBe(true);
+    expect(store.errorMessage()).toBe(
+      'Could not sign out. Please check your connection and try again.',
+    );
   });
 
   it('should navigate multiple pages and enforce boundaries using nested metadata', async () => {
@@ -233,5 +232,162 @@ describe('AppointmentStore', () => {
     store.setFilter('approved');
     expect(store.selectedFilter()).toBe('approved');
     expect(store.currentPage()).toBe(0);
+  });
+
+  describe('error-safe lists (FE-1)', () => {
+    it('keeps every list signal readable after a failed load', async () => {
+      authState.isLoggedIn.set(true);
+      fixture.detectChanges();
+      httpMock
+        .expectOne((r) => r.url.includes('/api/v1/appointments'))
+        .error(new ProgressEvent('error'), { status: 500, statusText: 'Server Error' });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(store.loadErrorMessage()).toBe('Could not load appointments. Please retry.');
+      expect(() => store.appointments()).not.toThrow();
+      expect(store.appointments()).toEqual([]);
+      expect(store.stats().total).toBe(0);
+      expect(store.totalPages()).toBe(1);
+      expect(store.totalElements()).toBe(0);
+    });
+
+    it('recovers when a retry succeeds after a failure', async () => {
+      authState.isLoggedIn.set(true);
+      fixture.detectChanges();
+      httpMock
+        .expectOne((r) => r.url.includes('/api/v1/appointments'))
+        .error(new ProgressEvent('error'), { status: 500, statusText: 'Server Error' });
+      await fixture.whenStable();
+
+      store.refresh();
+      fixture.detectChanges();
+      httpMock.expectOne((r) => r.url.includes('/api/v1/appointments')).flush(mockDashboard);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(store.loadErrorMessage()).toBeNull();
+      expect(store.stats().total).toBe(6);
+    });
+  });
+
+  describe('refresh never drops an update (FE-6)', () => {
+    it('restarts a load that is already in flight instead of ignoring the second refresh', async () => {
+      authState.isLoggedIn.set(true);
+      fixture.detectChanges();
+      const first = httpMock.expectOne((r) => r.url.includes('/api/v1/appointments'));
+
+      // reload() alone is a no-op while this first load is still running.
+      store.refresh();
+      fixture.detectChanges();
+
+      const open = httpMock.match((r) => r.url.includes('/api/v1/appointments'));
+      expect(first.cancelled).toBe(true);
+      expect(open.filter((r) => !r.cancelled)).toHaveLength(1);
+      open.filter((r) => !r.cancelled).forEach((r) => r.flush(mockDashboard));
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(store.stats().total).toBe(6);
+    });
+
+    it('refetches a settled list on refresh', async () => {
+      authState.isLoggedIn.set(true);
+      fixture.detectChanges();
+      httpMock.expectOne((r) => r.url.includes('/api/v1/appointments')).flush(mockDashboard);
+      await fixture.whenStable();
+
+      store.loadAppointments();
+      fixture.detectChanges();
+
+      httpMock.expectOne((r) => r.url.includes('/api/v1/appointments')).flush(mockDashboard);
+    });
+  });
+
+  describe('page clamping (FE-8)', () => {
+    /** Lets resource effects run without waiting on requests that are intentionally left open. */
+    const settle = async () => {
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+    };
+
+    it('steps back when the current page no longer exists after a refresh', async () => {
+      authState.isLoggedIn.set(true);
+      fixture.detectChanges();
+      httpMock.expectOne(() => true).flush(mockDashboard); // 3 pages
+      await settle();
+      store.setPage(2);
+      await settle();
+      httpMock.expectOne('/api/v1/appointments?page=2&size=50').flush({
+        ...mockDashboard,
+        page: { content: [], page: { number: 2, size: 50, totalElements: 100, totalPages: 2 } },
+      } satisfies AppointmentDashboardResponse);
+      await settle();
+
+      expect(store.currentPage()).toBe(1);
+      httpMock.expectOne('/api/v1/appointments?page=1&size=50').flush({
+        ...mockDashboard,
+        page: {
+          ...mockDashboard.page,
+          page: { number: 1, size: 50, totalElements: 100, totalPages: 2 },
+        },
+      } satisfies AppointmentDashboardResponse);
+      await settle();
+      expect(store.currentPage()).toBe(1);
+    });
+
+    it('does not clamp while a later page is still loading', async () => {
+      authState.isLoggedIn.set(true);
+      fixture.detectChanges();
+      httpMock.expectOne(() => true).flush(mockDashboard);
+      await settle();
+
+      store.setPage(2);
+      await settle();
+
+      // While page 2 loads the resource reports its 1-page default; that must not clamp.
+      expect(store.currentPage()).toBe(2);
+      httpMock.expectOne('/api/v1/appointments?page=2&size=50').flush(mockDashboard);
+      await settle();
+      expect(store.currentPage()).toBe(2);
+    });
+  });
+
+  describe('session end (FE-8)', () => {
+    it('resets page, filters, search and banners when the session ends', () => {
+      authState.applyRole('ROLE_ADMIN', 'admin');
+      store.currentPage.set(2);
+      store.selectedFilter.set('pending');
+      store.searchQuery.set('Alice');
+      store.searchDebounced.set('Alice');
+      store.errorMessage.set('boom');
+      store.showSuccess('done');
+
+      authState.clear();
+
+      expect(store.currentPage()).toBe(0);
+      expect(store.selectedFilter()).toBe('all');
+      expect(store.searchQuery()).toBe('');
+      expect(store.searchDebounced()).toBe('');
+      expect(store.errorMessage()).toBeNull();
+      expect(store.successMessage()).toBeNull();
+      // The dashboard request that the logged-in state had started is moot now.
+      httpMock.match(() => true);
+    });
+
+    it('does not erase the message of an action that fails after the session ended', () => {
+      authState.applyRole('ROLE_ADMIN', 'admin');
+      authState.clear();
+
+      store.reportActionError({ status: 409, error: { message: 'Already approved' } }, 'fallback');
+      fixture.detectChanges();
+
+      expect(store.errorMessage()).toBe('Already approved');
+    });
+
+    it('skips the action banner for a 401 (the session-expiry flow explains it)', () => {
+      store.reportActionError({ status: 401 }, 'Failed to approve appointment.');
+      expect(store.errorMessage()).toBeNull();
+    });
   });
 });

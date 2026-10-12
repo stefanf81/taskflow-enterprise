@@ -35,6 +35,7 @@ export class AdminDashboard {
   private readonly adminEvents = inject(AdminEventsService);
 
   readonly stats = this.store.stats;
+  readonly loadErrorMessage = this.store.loadErrorMessage;
   readonly errorMessage = this.store.errorMessage;
   readonly successMessage = this.store.successMessage;
 
@@ -43,9 +44,11 @@ export class AdminDashboard {
   );
 
   constructor() {
+    // Every event, and every catch-up after the stream reconnects, refetches the list.
+    // store.refresh() restarts a load already in flight instead of dropping the update.
     this.adminEvents.appointmentChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.store.loadAppointments());
+      .subscribe(() => this.store.refresh());
     this.adminEvents.connect();
     this.destroyRef.onDestroy(() => this.adminEvents.close());
   }
@@ -58,8 +61,14 @@ export class AdminDashboard {
     this.store.loadAppointments(this.store.selectedFilter(), this.store.searchQuery());
   }
 
-  onLogout(): void {
-    this.store.onLogout();
-    this.router.navigateByUrl('');
+  retryLoad(): void {
+    this.store.refresh();
+  }
+
+  /** Navigates away only once the server confirmed the sign-out; on failure the error banner shows. */
+  async onLogout(): Promise<void> {
+    if (await this.store.onLogout()) {
+      await this.router.navigateByUrl('');
+    }
   }
 }

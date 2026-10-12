@@ -232,11 +232,80 @@ describe('CustomerStore', () => {
     await Promise.resolve();
     fixture.detectChanges();
 
+    // The refresh finds page 1 gone (only one page left): the store steps back by itself.
+    const refreshed = httpMock.expectOne(
+      (r) => r.url.includes('/api/v1/customer/appointments') && r.url.includes('page=1'),
+    );
+    refreshed.flush({
+      content: [],
+      page: { number: 1, size: 10, totalElements: 10, totalPages: 1 },
+    });
+    await Promise.resolve();
+    fixture.detectChanges();
+    await Promise.resolve();
+    fixture.detectChanges();
+
     expect(store.currentPage()).toBe(0);
     const reload = httpMock.expectOne(
       (r) => r.url.includes('/api/v1/customer/appointments') && r.url.includes('page=0'),
     );
     reload.flush(mockAppointments);
     await Promise.resolve();
+  });
+
+  it('keeps every list signal readable after a failed load (FE-1)', async () => {
+    store.loadAppointments();
+    fixture.detectChanges();
+    httpMock
+      .expectOne((r) => r.url.includes('/api/v1/customer/appointments'))
+      .error(new ProgressEvent('error'), { status: 500, statusText: 'Server Error' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(store.loadErrorMessage()).not.toBeNull();
+    expect(() => store.appointments()).not.toThrow();
+    expect(store.appointments()).toEqual([]);
+    expect(store.totalPages()).toBe(1);
+    expect(store.totalElements()).toBe(0);
+  });
+
+  it('restarts a load already in flight instead of dropping the refresh (FE-6)', () => {
+    store.loadAppointments(); // settles into a load
+    fixture.detectChanges();
+    const first = httpMock.expectOne((r) => r.url.includes('/api/v1/customer/appointments'));
+
+    store.loadAppointments(); // reload() is a no-op now; the counter restarts the load
+    fixture.detectChanges();
+
+    const open = httpMock.match((r) => r.url.includes('/api/v1/customer/appointments'));
+    expect(first.cancelled).toBe(true);
+    const live = open.filter((r) => !r.cancelled);
+    expect(live).toHaveLength(1);
+    live[0]!.flush(mockAppointments);
+  });
+
+  it('resets page and messages when the session ends (FE-8)', () => {
+    store.currentPage.set(1);
+    store.cancelErrorMessage.set('nope');
+    store.isCancelling.set(true);
+
+    TestBed.inject(AuthState).clear();
+
+    expect(store.currentPage()).toBe(0);
+    expect(store.cancelErrorMessage()).toBeNull();
+    expect(store.isCancelling()).toBe(false);
+    httpMock.match(() => true);
+  });
+
+  it('does not show a stale cancel error for a 401 (the expiry flow explains it)', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    store.cancelAppointment('pub-1');
+    httpMock
+      .expectOne((r) => r.url.includes('/api/v1/customer/appointments/pub-1'))
+      .flush(null, { status: 401, statusText: 'Unauthorized' });
+
+    expect(store.cancelErrorMessage()).toBeNull();
+    httpMock.match(() => true);
   });
 });

@@ -5,8 +5,13 @@ import {
   formatLocalDate,
   formatMinutesToTimeString,
   formatTime12Hour,
+  MAX_BOOKING_DAYS_AHEAD,
+  isBookableDate,
   isOverdue,
+  isSlotInPast,
+  msUntilNextLocalMidnight,
   parseTimeToMinutes,
+  toLocalDateString,
 } from './time-utils';
 
 describe('time-utils', () => {
@@ -89,5 +94,41 @@ describe('time-utils', () => {
   it('exposes a non-empty default slot list', () => {
     expect(DEFAULT_TIME_SLOTS.length).toBeGreaterThan(0);
     expect(DEFAULT_TIME_SLOTS).toContain('09:00');
+  });
+
+  describe('booking window helpers', () => {
+    const monday = new Date(2026, 9, 12, 14, 30); // Mon 2026-10-12 14:30 local
+
+    it('formats local dates without the UTC shift', () => {
+      expect(toLocalDateString(new Date(2026, 0, 5, 23, 59))).toBe('2026-01-05');
+      expect(toLocalDateString(new Date(2026, 11, 31, 0, 1))).toBe('2026-12-31');
+    });
+
+    it('states the 90-day horizon in one place', () => {
+      expect(MAX_BOOKING_DAYS_AHEAD).toBe(90);
+    });
+
+    it('accepts today through day 90 and nothing outside that window', () => {
+      expect(isBookableDate('2026-10-12', monday)).toBe(true);
+      expect(isBookableDate('2027-01-10', monday)).toBe(true); // +90 days
+      expect(isBookableDate('2027-01-11', monday)).toBe(false); // +91 days
+      expect(isBookableDate('2026-10-11', monday)).toBe(false);
+      expect(isBookableDate('', monday)).toBe(false);
+    });
+
+    it('treats slots at or before now as past today only', () => {
+      expect(isSlotInPast('2026-10-12', '14:00', monday)).toBe(true);
+      expect(isSlotInPast('2026-10-12', '14:30', monday)).toBe(true);
+      expect(isSlotInPast('2026-10-12', '15:00', monday)).toBe(false);
+      expect(isSlotInPast('2026-10-11', '16:00', monday)).toBe(true);
+      expect(isSlotInPast('2026-10-13', '09:00', monday)).toBe(false);
+      expect(isSlotInPast('', '09:00', monday)).toBe(false);
+      expect(isSlotInPast('2026-10-12', '', monday)).toBe(false);
+    });
+
+    it('computes the time left until local midnight', () => {
+      expect(msUntilNextLocalMidnight(new Date(2026, 9, 12, 23, 0, 0))).toBe(3_600_000);
+      expect(msUntilNextLocalMidnight(new Date(2026, 9, 12, 0, 0, 0))).toBe(86_400_000);
+    });
   });
 });

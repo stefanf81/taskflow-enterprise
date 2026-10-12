@@ -40,8 +40,19 @@ export class LandingPage {
   readonly isLoggedIn = this.authState.isLoggedIn;
   readonly showAdminLoginModal = signal(false);
   readonly services = this.catalogStore.services;
+  readonly servicesLoading = this.catalogStore.isLoading;
+  readonly servicesError = this.catalogStore.errorMessage;
 
   constructor() {
+    // A session that expired elsewhere in the app sends the user here with the
+    // login modal requested (AuthState owns the "session expired" notice).
+    effect(() => {
+      if (this.authState.loginPromptRequested()) {
+        this.showAdminLoginModal.set(true);
+        this.authState.loginPromptRequested.set(false);
+      }
+    });
+
     // A signed-in user landing on `/` goes straight to their dashboard.
     effect(() => {
       const role = this.authState.role();
@@ -49,6 +60,10 @@ export class LandingPage {
         this.router.navigateByUrl(this.authState.dashboardPathFor(role));
       }
     });
+  }
+
+  retryServices(): void {
+    this.catalogStore.loadServices();
   }
 
   selectLookbookStyle(serviceName: string, category: string): void {

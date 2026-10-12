@@ -65,16 +65,40 @@ describe('authGuard', () => {
     expect(auth.bootstrap).not.toHaveBeenCalled();
   });
 
-  it('restores an admin role from the server and redirects to /admin', async () => {
+  it('lets a restored admin through to the exact /admin URL it asked for', async () => {
     auth.bootstrap.mockReturnValue(of('ROLE_ADMIN'));
     const result = await firstValueFrom(runGuard() as Observable<unknown>);
-    expect(asPath(result)).toBe('/admin');
+    expect(result).toBe(true);
   });
 
-  it('restores a customer role from the server and redirects to /customer', async () => {
+  it('keeps nested customer URLs (query + fragment) when the restored role matches', async () => {
     auth.bootstrap.mockReturnValue(of('ROLE_CUSTOMER'));
-    const result = await firstValueFrom(runGuard('/admin') as Observable<unknown>);
+    const result = await firstValueFrom(
+      runGuard('/customer/book?service=Fade#step-3') as Observable<unknown>,
+    );
+    expect(result).toBe(true);
+  });
+
+  it('lets a signed-in customer reach /customer/book without redirecting', () => {
+    auth.role.set('ROLE_CUSTOMER');
+    expect(runGuard('/customer/book')).toBe(true);
+  });
+
+  it('keeps an admin out of the customer booking route', () => {
+    auth.role.set('ROLE_ADMIN');
+    expect(asPath(runGuard('/customer/book'))).toBe('/admin');
+  });
+
+  it('redirects a restored customer who deep-linked to /admin to /customer', async () => {
+    auth.bootstrap.mockReturnValue(of('ROLE_CUSTOMER'));
+    const result = await firstValueFrom(runGuard('/admin?tab=x') as Observable<unknown>);
     expect(asPath(result)).toBe('/customer');
+  });
+
+  it('redirects a restored admin who deep-linked to /customer to /admin', async () => {
+    auth.bootstrap.mockReturnValue(of('ROLE_ADMIN'));
+    const result = await firstValueFrom(runGuard('/customer') as Observable<unknown>);
+    expect(asPath(result)).toBe('/admin');
   });
 
   it('sends guests to the landing page when bootstrap resolves without a role', async () => {

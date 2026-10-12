@@ -3,6 +3,7 @@ import { HttpContext, httpResource } from '@angular/common/http';
 import { ServiceItem } from './types/api';
 import { CatalogApi } from './core/api/catalog-api';
 import { PUBLIC_REQUEST } from './core/http/public-request.token';
+import { safeResourceValue } from './core/resource-utils';
 import { serviceItemResponseSchema } from '@taskflow/schemas';
 
 @Injectable({ providedIn: 'root' })
@@ -22,7 +23,8 @@ export class ServiceCatalogStore {
     },
   );
 
-  readonly services = this.servicesResource.value;
+  /** Error-safe: an empty list (never a throw) while loading or after a failed load. */
+  readonly services = safeResourceValue<ServiceItem[]>(this.servicesResource, []);
   readonly isLoading = this.servicesResource.isLoading;
   readonly errorMessage = computed(() => {
     const err = this.servicesResource.error();

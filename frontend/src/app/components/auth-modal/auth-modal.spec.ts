@@ -151,4 +151,137 @@ describe('AuthModalComponent', () => {
     overlay().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(closed).toBe(2);
   });
+
+  describe('login failures map to actionable copy (FE-10)', () => {
+    const attemptLogin = () => {
+      component.authModel.set({ username: 'admin', password: 'pw', fullName: '', phone: '' });
+      component.onLogin();
+      return httpMock.expectOne('/api/v1/auth/login');
+    };
+
+    it('401 -> invalid credentials', () => {
+      attemptLogin().flush(null, { status: 401, statusText: 'Unauthorized' });
+      expect(component.errorMessage()).toBe('Invalid credentials. Please try again.');
+    });
+
+    it('429 with Retry-After seconds -> wait in seconds', () => {
+      attemptLogin().flush(null, {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'Retry-After': '45' },
+      });
+      expect(component.errorMessage()).toBe('Too many attempts. Try again in 45 seconds.');
+      expect(component.isSubmitting()).toBe(false);
+    });
+
+    it('429 with a longer Retry-After -> wait in minutes (rounded up)', () => {
+      attemptLogin().flush(null, {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'Retry-After': '120' },
+      });
+      expect(component.errorMessage()).toBe('Too many attempts. Try again in 2 minutes.');
+    });
+
+    it('429 singular wording', () => {
+      attemptLogin().flush(null, {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'Retry-After': '1' },
+      });
+      expect(component.errorMessage()).toBe('Too many attempts. Try again in 1 second.');
+    });
+
+    it('429 with an HTTP-date Retry-After', () => {
+      vi.useFakeTimers({ now: new Date('2026-10-12T10:00:00Z') });
+      try {
+        attemptLogin().flush(null, {
+          status: 429,
+          statusText: 'Too Many Requests',
+          headers: { 'Retry-After': new Date('2026-10-12T10:03:00Z').toUTCString() },
+        });
+        expect(component.errorMessage()).toBe('Too many attempts. Try again in 3 minutes.');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('429 without a usable Retry-After still explains itself', () => {
+      attemptLogin().flush(null, { status: 429, statusText: 'Too Many Requests' });
+      expect(component.errorMessage()).toBe('Too many attempts. Please try again in a moment.');
+    });
+
+    it('network failure (status 0) -> cannot reach the server', () => {
+      attemptLogin().error(new ProgressEvent('error'));
+      expect(component.errorMessage()).toContain('Cannot reach the server');
+    });
+
+    it('5xx -> generic retry message', () => {
+      attemptLogin().flush(null, { status: 503, statusText: 'Service Unavailable' });
+      expect(component.errorMessage()).toBe('Something went wrong. Please try again.');
+    });
+  });
+
+  it('shows the password policy up front in register mode', () => {
+    component.toggleMode();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain(
+      'at least 8 characters long and contain both letters and numbers',
+    );
+  });
+
+  it('shows the whole password policy when the client-side check rejects the password', () => {
+    component.toggleMode();
+    component.authModel.set({
+      username: 'jane@example.com',
+      password: 'abcdefgh',
+      fullName: 'Jane Smith',
+      phone: '555',
+    });
+
+    component.onRegister();
+
+    expect(component.errorMessage()).toBe(component.passwordPolicy);
+    httpMock.expectNone('/api/v1/auth/register');
+  });
+
+  it('shows the field message when the registration email is malformed', () => {
+    component.toggleMode();
+    component.authModel.set({
+      username: 'not-an-email',
+      password: 'secret-password-1',
+      fullName: 'Jane Smith',
+      phone: '555',
+    });
+
+    component.onRegister();
+
+    expect(component.errorMessage()).toBe('Valid email is required');
+    httpMock.expectNone('/api/v1/auth/register');
+  });
+
+  it('shows the session-expired notice and clears it when closed', () => {
+    authState.sessionNotice.set('Your session expired. Please sign in again.');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Your session expired.');
+
+    component.closeModal();
+
+    expect(authState.sessionNotice()).toBeNull();
+  });
+
+  it('records the principal username from the login response', () => {
+    component.authModel.set({
+      username: 'jane@example.com',
+      password: 'pw',
+      fullName: '',
+      phone: '',
+    });
+    component.onLogin();
+    httpMock
+      .expectOne('/api/v1/auth/login')
+      .flush({ role: 'ROLE_CUSTOMER', username: 'jane@example.com' });
+
+    expect(authState.username()).toBe('jane@example.com');
+  });
 });

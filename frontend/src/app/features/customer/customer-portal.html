@@ -9,12 +9,19 @@
         </p>
       </div>
     </div>
-    <button
-      class="btn btn-logout bg-red-500/10 text-red-400 hover:bg-red-500/100 hover:text-white border border-red-500/20 py-2.5 px-4 rounded-xl text-xs font-semibold"
-      (click)="onLogout()"
-    >
-      Log Out
-    </button>
+    <div class="flex items-center gap-3">
+      <a
+        routerLink="/customer/book"
+        class="btn btn-submit py-2.5 px-4 rounded-xl text-xs font-semibold"
+        >Book an appointment</a
+      >
+      <button
+        class="btn btn-logout bg-red-500/10 text-red-400 hover:bg-red-500/100 hover:text-white border border-red-500/20 py-2.5 px-4 rounded-xl text-xs font-semibold"
+        (click)="onLogout()"
+      >
+        Log Out
+      </button>
+    </div>
   </header>
 
   @if (errorMessage()) {
@@ -82,6 +89,19 @@
         <span class="text-3xl block mb-2">📅</span>
         <h3 class="text-white font-bold text-sm">No scheduled appointments found</h3>
         <p class="text-xs text-zinc-500 font-light mt-1">You haven't booked any haircuts yet!</p>
+        @if (currentPage() > 0) {
+          <button
+            type="button"
+            class="btn btn-secondary py-2 px-4 text-xs mt-4"
+            (click)="customerStore.setPage(0)"
+          >
+            Back to first page
+          </button>
+        } @else {
+          <a routerLink="/customer/book" class="btn btn-submit inline-block py-2 px-5 text-xs mt-4">
+            Book an appointment
+          </a>
+        }
       </div>
     } @else {
       <div class="space-y-4">
@@ -99,9 +119,10 @@
                       appt.status === 'APPROVED',
                     'bg-amber-500/10 text-amber-400 border-amber-500/20': appt.status === 'PENDING',
                     'bg-rose-500/10 text-rose-400 border-rose-500/20': appt.status === 'DENIED',
+                    'bg-zinc-500/10 text-zinc-400 border-zinc-500/20': appt.status === 'CANCELLED',
                   }"
                 >
-                  {{ appt.status }}
+                  {{ statusLabel(appt.status) }}
                 </span>
               </div>
               <p class="text-xs text-zinc-400 font-light">
@@ -117,7 +138,7 @@
             </div>
 
             <div class="flex gap-2 w-full md:w-auto mt-3 md:mt-0">
-              @if (appt.status !== 'DENIED') {
+              @if (isCancellable(appt.status)) {
                 <button
                   class="btn bg-rose-500/10 text-rose-400 hover:bg-rose-500/100 hover:text-white border border-rose-500/20 py-2 px-4 rounded-xl text-xs font-semibold w-full md:w-auto"
                   (click)="customerStore.cancelAppointment(appt.publicId)"

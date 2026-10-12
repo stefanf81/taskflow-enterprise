@@ -77,7 +77,7 @@ export class AppointmentsApi {
 
   publicCancelAppointment(publicId: string, email: string): Observable<void> {
     return this.http.put<void>(
-      `${this.base}/public/cancel/${publicId}`,
+      `${this.base}/public/cancel/${encodeURIComponent(publicId)}`,
       { email },
       { context: new HttpContext().set(PUBLIC_REQUEST, true) },
     );
@@ -104,6 +104,6 @@ export class AppointmentsApi {
   }
 
   cancelCustomerAppointment(publicId: string): Observable<void> {
-    return this.http.delete<void>(`${this.customerBase}/${publicId}`);
+    return this.http.delete<void>(`${this.customerBase}/${encodeURIComponent(publicId)}`);
   }
 }

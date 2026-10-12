@@ -62,12 +62,48 @@ export function formatLocalDate(dateStr: string): string {
   });
 }
 
+/**
+ * How far ahead a booking may be made. Mirrors the backend rule ("at most 90
+ * days ahead"); the single place the web client states it.
+ */
+export const MAX_BOOKING_DAYS_AHEAD = 90;
+
+/** Formats a Date as YYYY-MM-DD from its LOCAL components (never the UTC-shifted `toISOString`). */
+export function toLocalDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/** Whether `dateStr` (YYYY-MM-DD) lies within [today, today + MAX_BOOKING_DAYS_AHEAD]. */
+export function isBookableDate(dateStr: string, now: Date): boolean {
+  if (!dateStr) return false;
+  const limit = new Date(now);
+  limit.setDate(limit.getDate() + MAX_BOOKING_DAYS_AHEAD);
+  return dateStr >= toLocalDateString(now) && dateStr <= toLocalDateString(limit);
+}
+
+/** Whether a same-day `HH:mm` slot has already started (so the server would reject it as past). */
+export function isSlotInPast(dateStr: string, slot: string, now: Date): boolean {
+  if (!dateStr || !slot) return false;
+  const today = toLocalDateString(now);
+  if (dateStr < today) return true;
+  if (dateStr > today) return false;
+  return parseTimeToMinutes(slot) <= now.getHours() * 60 + now.getMinutes();
+}
+
+/** Milliseconds until the next local midnight (the moment "today" changes). */
+export function msUntilNextLocalMidnight(now: Date): number {
+  const next = new Date(now);
+  next.setHours(24, 0, 0, 0);
+  return next.getTime() - now.getTime();
+}
+
 export function isOverdue(input: { bookingDate?: string } | string): boolean {
   if (!input) return false;
   const bookingDate = typeof input === 'string' ? input : input.bookingDate;
   if (!bookingDate) return false;
 
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  return bookingDate < todayStr;
+  return bookingDate < toLocalDateString(new Date());
 }
