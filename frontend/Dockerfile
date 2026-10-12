@@ -51,7 +51,8 @@ RUN IMPORT_MAP_COUNT="$(grep -o '<script type="importmap">[^<]*</script>' index.
         > /csp-importmap.conf \
     && cat /csp-importmap.conf
 
-# Generate precompressed Brotli and gzip sidecars.
+# Generate precompressed Brotli and gzip sidecars. nginx.conf serves them with
+# brotli_static / gzip_static, so neither is compressed on the fly at runtime.
 #
 # Brotli quality 11 produces the smallest files. Compression runs in parallel bounded
 # to available CPU cores via xargs -P to maximize throughput without unbounded memory usage.
