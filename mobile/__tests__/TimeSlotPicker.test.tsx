@@ -45,4 +45,37 @@ describe('TimeSlotPicker Component', () => {
     );
     expect(getByText('11:00')).toBeTruthy();
   });
+
+  it('disables passed slots, labels them and does not call onSelectSlot', async () => {
+    const handleSelect = jest.fn();
+    const { getByText, getAllByText, queryByText } = await render(
+      <TimeSlotPicker
+        slots={MOCK_SLOTS}
+        selectedSlot=""
+        busySlots={[]}
+        pastSlots={['09:00', '10:00']}
+        onSelectSlot={handleSelect}
+      />
+    );
+    expect(getAllByText('Passed').length).toBe(2);
+    fireEvent.press(getByText('09:00'));
+    expect(handleSelect).not.toHaveBeenCalled();
+    fireEvent.press(getByText('11:00'));
+    expect(handleSelect).toHaveBeenCalledWith('11:00');
+    expect(queryByText('Booked')).toBeNull();
+  });
+
+  it('shows a passed slot as Passed, not Booked, even when it is also busy', async () => {
+    const { getAllByText, queryByText } = await render(
+      <TimeSlotPicker
+        slots={MOCK_SLOTS}
+        selectedSlot=""
+        busySlots={['09:00']}
+        pastSlots={['09:00']}
+        onSelectSlot={() => {}}
+      />
+    );
+    expect(getAllByText('Passed').length).toBe(1);
+    expect(queryByText('Booked')).toBeNull();
+  });
 });

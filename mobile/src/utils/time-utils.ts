@@ -106,3 +106,103 @@ export function getUpcomingDays(from: Date, count = 7): UpcomingDay[] {
   }
   return days;
 }
+
+// ---------------------------------------------------------------------------
+// Booking-window helpers (server rules: future only, at most 90 days ahead,
+// hourly grid). Pure and clock-injected so they are deterministic in tests.
+// Times are compared in the device's local time; the server remains the
+// authority for the shop's own time zone and surfaces its message on 400.
+// ---------------------------------------------------------------------------
+
+/** Furthest day (inclusive, counted from today) the server accepts a booking for. */
+export const MAX_BOOKING_DAYS_AHEAD = 90;
+
+export const PAST_SLOT_MESSAGE = 'That time has already passed. Please choose a later slot.';
+export const OUTSIDE_WINDOW_MESSAGE = `Bookings can be made at most ${MAX_BOOKING_DAYS_AHEAD} days ahead.`;
+
+/** Local `YYYY-MM-DD` of the last bookable day relative to `now`. */
+export function getLastBookableDate(now: Date, maxDaysAhead = MAX_BOOKING_DAYS_AHEAD): string {
+  const last = new Date(now.getFullYear(), now.getMonth(), now.getDate() + maxDaysAhead);
+  return toLocalDateString(last);
+}
+
+/** True when `dateStr` is today or later and no more than `maxDaysAhead` days out. */
+export function isWithinBookingWindow(
+  dateStr: string,
+  now: Date,
+  maxDaysAhead = MAX_BOOKING_DAYS_AHEAD,
+): boolean {
+  if (!dateStr) return false;
+  return dateStr >= toLocalDateString(now) && dateStr <= getLastBookableDate(now, maxDaysAhead);
+}
+
+/** True when the slot starts at or before `now` (a booking must be strictly in the future). */
+export function isSlotInPast(dateStr: string, time24: string, now: Date): boolean {
+  if (!dateStr || !time24) return false;
+  const today = toLocalDateString(now);
+  if (dateStr < today) return true;
+  if (dateStr > today) return false;
+  return parseTimeToMinutes(time24) <= now.getHours() * 60 + now.getMinutes();
+}
+
+/** The subset of `slots` that are still in the future on `dateStr` (empty outside the window). */
+export function getSelectableSlots(
+  dateStr: string,
+  now: Date,
+  slots: readonly string[] = DEFAULT_TIME_SLOTS,
+): string[] {
+  if (!isWithinBookingWindow(dateStr, now)) return [];
+  return slots.filter((slot) => !isSlotInPast(dateStr, slot, now));
+}
+
+/** Why a date/time pair cannot be booked, or null when it can. */
+export function getSlotValidationError(dateStr: string, time24: string, now: Date): string | null {
+  if (!dateStr || !time24) return 'Please select a date and time slot.';
+  if (!isWithinBookingWindow(dateStr, now)) {
+    return dateStr < toLocalDateString(now) ? PAST_SLOT_MESSAGE : OUTSIDE_WINDOW_MESSAGE;
+  }
+  if (isSlotInPast(dateStr, time24, now)) return PAST_SLOT_MESSAGE;
+  return null;
+}
+
+export interface SlotSelection {
+  date: string;
+  time: string;
+}
+
+/** First day (in `dates` order) that still has a selectable slot, with its first slot. */
+export function getFirstSelectableSlot(
+  dates: readonly string[],
+  now: Date,
+  slots: readonly string[] = DEFAULT_TIME_SLOTS,
+): SlotSelection | null {
+  for (const date of dates) {
+    const time = getSelectableSlots(date, now, slots)[0];
+    if (time !== undefined) return { date, time };
+  }
+  return null;
+}
+
+/**
+ * Keep `current` when it is still bookable; otherwise prefer the first future
+ * slot on the same day, then the first selectable slot of the offered days.
+ * Returns null when nothing is selectable (callers keep their state).
+ */
+export function resolveBookableSelection(
+  current: SlotSelection,
+  dates: readonly string[],
+  now: Date,
+  slots: readonly string[] = DEFAULT_TIME_SLOTS,
+): SlotSelection | null {
+  if (
+    dates.includes(current.date) &&
+    getSlotValidationError(current.date, current.time, now) === null
+  ) {
+    return current;
+  }
+  if (dates.includes(current.date)) {
+    const sameDay = getSelectableSlots(current.date, now, slots)[0];
+    if (sameDay !== undefined) return { date: current.date, time: sameDay };
+  }
+  return getFirstSelectableSlot(dates, now, slots);
+}

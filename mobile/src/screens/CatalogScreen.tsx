@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { CommonActions, useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -38,8 +38,28 @@ type CatalogNavProp = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 
+/** Booking route in the CURRENT tab navigator.
+ *
+ * CatalogScreen is mounted in both the guest tabs (booking route 'Booking') and
+ * the customer tabs ('NewBooking'); the root stack has neither, so navigating
+ * to a hard-coded name is silently unhandled in one of the two flows. Pure
+ * helper — the current navigator's route names decide the target.
+ */
+export const getBookingRouteName = (routeNames: readonly string[]): 'Booking' | 'NewBooking' =>
+  routeNames.includes('NewBooking') ? 'NewBooking' : 'Booking';
+
 export const CatalogScreen: React.FC = () => {
   const navigation = useNavigation<CatalogNavProp>();
+
+  const handleBook = (serviceName: string) => {
+    const routeNames = navigation.getState?.()?.routes.map((r) => r.name) ?? [];
+    navigation.dispatch(
+      CommonActions.navigate({
+        name: getBookingRouteName(routeNames),
+        params: { preselectedService: serviceName },
+      }),
+    );
+  };
   const { data: services = [], isLoading, isError, refetch } = useCatalog();
 
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -137,9 +157,7 @@ export const CatalogScreen: React.FC = () => {
                     title="Book"
                     variant="outline"
                     size="sm"
-                    onPress={() =>
-                      navigation.navigate('Booking', { preselectedService: item.name })
-                    }
+                    onPress={() => handleBook(item.name)}
                   />
                 </View>
               </Card>
