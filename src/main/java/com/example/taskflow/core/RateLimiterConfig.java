@@ -43,8 +43,20 @@ public class RateLimiterConfig {
         RATE_LIMIT_SCRIPT.setResultType(Long.class);
     }
 
+    /** How long to skip Redis after it failed, so an outage costs one timeout, not one per request. */
+    private static final long REDIS_BACKOFF_MILLIS = 5_000;
+    private static final long WINDOW_MILLIS = 60_000;
+
     private final int maxRequestsPerMinute;
     private final int authMaxRequestsPerMinute;
+
+    /**
+     * Per-JVM fallback used while Redis is failing. Keys are the same
+     * {@code rate_limit:<ip>:<kind>} strings, so both paths enforce the same
+     * limits. Bounded so an attacker rotating source addresses cannot grow it.
+     */
+    private final FixedWindowCounter localFallback = new FixedWindowCounter(WINDOW_MILLIS, 50_000);
+    private volatile long redisBackoffUntilMillis;
 
     public RateLimiterConfig(
             @Value("${app.rate-limit.max-requests-per-minute:100}") int maxRequestsPerMinute,
@@ -68,12 +80,10 @@ public class RateLimiterConfig {
         return new OncePerRequestFilter() {
             @Override
             protected boolean shouldNotFilter(HttpServletRequest request) {
-                String path = request.getRequestURI();
+                String path = requestPath(request);
                 // Skip health/liveness/readiness probes so K8s/deployment checks
                 // don't burn rate-limit budget.
-                return path != null && (path.startsWith("/actuator/health")
-                        || path.equals("/actuator/health/liveness")
-                        || path.equals("/actuator/health/readiness"));
+                return path.startsWith("/actuator/health");
             }
 
             @Override
@@ -82,34 +92,23 @@ public class RateLimiterConfig {
                     FilterChain filterChain) throws ServletException, IOException {
 
                 String clientIp = getClientIp(request);
-                String path = request.getRequestURI();
-                if (path == null) {
-                    path = "";
-                }
+                String path = requestPath(request);
                 boolean isAuthEndpoint = path.startsWith("/api/v1/auth/");
 
                 int maxRequests = isAuthEndpoint ? authMaxRequestsPerMinute : maxRequestsPerMinute;
 
                 String redisKey = "rate_limit:" + clientIp + ":" + (isAuthEndpoint ? "auth" : "api");
 
-                try {
-                    Long currentCount = redisTemplate.execute(
-                            RATE_LIMIT_SCRIPT,
-                            Collections.singletonList(redisKey),
-                            "60000");
-
-                    if (currentCount != null && currentCount > maxRequests) {
-                        String safePath = LogSanitizer.stripNewlines(path);
-                        String safeIp = LogSanitizer.stripNewlines(clientIp);
-                        log.warn("Rate limit exceeded for IP {} on path {}", safeIp, safePath);
-                        response.setStatus(429);
-                        response.setHeader("Retry-After", "60");
-                        response.setContentType("application/json;charset=UTF-8");
-                        response.getWriter().write("{\"error\":\"Too many requests. Please try again later.\"}");
-                        return;
-                    }
-                } catch (Exception e) {
-                    log.warn("Rate limiter failed open due to Redis error: {}", LogSanitizer.safeMessage(e));
+                long currentCount = countRequest(redisTemplate, redisKey);
+                if (currentCount > maxRequests) {
+                    String safePath = LogSanitizer.stripNewlines(path);
+                    String safeIp = LogSanitizer.stripNewlines(clientIp);
+                    log.warn("Rate limit exceeded for IP {} on path {}", safeIp, safePath);
+                    response.setStatus(429);
+                    response.setHeader("Retry-After", "60");
+                    response.setContentType("application/json;charset=UTF-8");
+                    response.getWriter().write("{\"error\":\"Too many requests. Please try again later.\"}");
+                    return;
                 }
 
                 filterChain.doFilter(request, response);
@@ -129,5 +128,48 @@ public class RateLimiterConfig {
                 return request.getRemoteAddr();
             }
         };
+    }
+
+    /**
+     * Counts this request against the shared Redis bucket. If Redis is failing
+     * (or was within the last {@link #REDIS_BACKOFF_MILLIS}), the per-JVM
+     * fallback counter is used instead, so limits — in particular the strict
+     * auth bucket that protects BCrypt — keep applying during a Redis outage
+     * rather than silently disappearing.
+     */
+    private long countRequest(StringRedisTemplate redisTemplate, String redisKey) {
+        if (System.currentTimeMillis() >= redisBackoffUntilMillis) {
+            try {
+                Long count = redisTemplate.execute(
+                        RATE_LIMIT_SCRIPT,
+                        Collections.singletonList(redisKey),
+                        String.valueOf(WINDOW_MILLIS));
+                if (count != null) {
+                    return count;
+                }
+            } catch (Exception e) {
+                redisBackoffUntilMillis = System.currentTimeMillis() + REDIS_BACKOFF_MILLIS;
+                log.warn("Rate limiter Redis error; using in-memory fallback for {} ms: {}",
+                        REDIS_BACKOFF_MILLIS, LogSanitizer.safeMessage(e));
+            }
+        }
+        return localFallback.increment(redisKey);
+    }
+
+    /**
+     * The path used to pick a bucket. Built from the container-decoded servlet
+     * path rather than {@code getRequestURI()}, which is the raw request line:
+     * {@code /api/v1/%61uth/login} reaches the login handler (the container
+     * decodes it) but would not match a raw {@code startsWith("/api/v1/auth/")}
+     * and so would be billed to the looser API bucket.
+     */
+    static String requestPath(HttpServletRequest request) {
+        String servletPath = request.getServletPath();
+        String pathInfo = request.getPathInfo();
+        String path = (servletPath == null ? "" : servletPath) + (pathInfo == null ? "" : pathInfo);
+        if (path.isEmpty()) {
+            path = request.getRequestURI();
+        }
+        return path == null ? "" : path;
     }
 }

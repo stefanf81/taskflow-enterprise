@@ -26,8 +26,9 @@ import {
 import { useAuthStore } from '../store/useAuthStore';
 import { colors } from '../theme/colors';
 import { formatTime12Hour, isOverdue } from '../utils/time-utils';
+import { getApiErrorMessage } from '../utils/errors';
 
-const FILTERS = ['all', 'pending', 'approved', 'overdue', 'denied'];
+const FILTERS = ['all', 'pending', 'approved', 'overdue', 'denied', 'cancelled'];
 
 export const AdminDashboardScreen: React.FC = () => {
   const [filter, setFilter] = useState('all');
@@ -40,7 +41,7 @@ export const AdminDashboardScreen: React.FC = () => {
   // dashboard does not fire a backend request on every keystroke.
   const [debouncedSearch, setDebouncedSearch] = useState('');
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => clearTimeout(timer);
   }, [search]);
 
@@ -69,6 +70,14 @@ export const AdminDashboardScreen: React.FC = () => {
     successTimer.current = setTimeout(() => setErrorMsg(null), 4500);
   };
 
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (err: unknown) {
+      showError(getApiErrorMessage(err, 'Sign-out failed. Please try again.'));
+    }
+  };
+
   const handleApprove = (id: number) => {
     updateStatusMutation.mutate(
       { id, status: 'APPROVED' },
@@ -77,7 +86,7 @@ export const AdminDashboardScreen: React.FC = () => {
           showSuccess('Appointment APPROVED! Client notification email dispatched.');
           refetch();
         },
-        onError: () => showError('Failed to approve appointment.'),
+        onError: (err) => showError(getApiErrorMessage(err, 'Failed to approve appointment.')),
       },
     );
   };
@@ -90,7 +99,7 @@ export const AdminDashboardScreen: React.FC = () => {
           showSuccess('Appointment DECLINED. Client notification email dispatched.');
           refetch();
         },
-        onError: () => showError('Failed to decline appointment.'),
+        onError: (err) => showError(getApiErrorMessage(err, 'Failed to decline appointment.')),
       },
     );
   };
@@ -107,7 +116,7 @@ export const AdminDashboardScreen: React.FC = () => {
               showSuccess('Booking permanently deleted.');
               refetch();
             },
-            onError: () => showError('Failed to delete booking.'),
+            onError: (err) => showError(getApiErrorMessage(err, 'Failed to delete booking.')),
           });
         },
       },
@@ -131,7 +140,7 @@ export const AdminDashboardScreen: React.FC = () => {
             <TouchableOpacity onPress={() => { refetch(); showSuccess('Database synced.'); }} style={styles.syncBtn} accessibilityLabel="Sync">
               <Ionicons name="refresh-outline" size={18} color={colors.gold.main} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => logout()} style={styles.logoutBtn} accessibilityLabel="Logout">
+            <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn} accessibilityLabel="Logout">
               <Ionicons name="log-out-outline" size={20} color={colors.status.denied} />
             </TouchableOpacity>
           </View>
@@ -250,6 +259,8 @@ export const AdminDashboardScreen: React.FC = () => {
                 contentContainerStyle={styles.listContent}
                 renderItem={({ item }) => {
                   const overdue = item.status === 'PENDING' && isOverdue(item.bookingDate);
+                  // Cancelled bookings are final: no approve/decline actions.
+                  const isCancelled = item.status.toUpperCase() === 'CANCELLED';
                   return (
                     <Card style={[styles.appCard, overdue && styles.overdueCard]}>
                       <View style={styles.cardTop}>
@@ -285,7 +296,7 @@ export const AdminDashboardScreen: React.FC = () => {
 
                       {/* Actions */}
                       <View style={styles.actionRow}>
-                        {item.status !== 'APPROVED' && (
+                        {!isCancelled && item.status !== 'APPROVED' && (
                           <Button
                             title="Approve"
                             variant="primary"
@@ -294,7 +305,7 @@ export const AdminDashboardScreen: React.FC = () => {
                             style={styles.actionBtn}
                           />
                         )}
-                        {item.status !== 'DENIED' && (
+                        {!isCancelled && item.status !== 'DENIED' && (
                           <Button
                             title="Decline"
                             variant="danger"

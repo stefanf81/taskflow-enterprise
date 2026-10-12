@@ -12,11 +12,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/v1/customer")
 @Tag(name = "Customer Dashboard", description = "Endpoints for logged-in customers")
 @Validated
+@PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
 public class CustomerController {
 
     private final AppointmentService appointmentService;
@@ -45,7 +47,8 @@ public class CustomerController {
     @DeleteMapping("/appointments/{publicId}")
     @Operation(summary = "Cancel my appointment")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Appointment cancelled successfully"),
+            @ApiResponse(responseCode = "204", description = "Appointment cancelled (or already cancelled)"),
+            @ApiResponse(responseCode = "400", description = "Declined booking, or booking already started"),
             @ApiResponse(responseCode = "401", description = "Not authenticated"),
             @ApiResponse(responseCode = "404", description = "Appointment not found or not owned by user")
     })

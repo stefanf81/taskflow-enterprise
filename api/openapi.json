@@ -474,10 +474,13 @@
       "ServiceItemRequest": {
         "properties": {
           "category": {
-            "minLength": 1,
+            "maxLength": 50,
+            "minLength": 0,
             "type": "string"
           },
           "description": {
+            "maxLength": 500,
+            "minLength": 0,
             "type": "string"
           },
           "durationMinutes": {
@@ -486,7 +489,8 @@
             "type": "integer"
           },
           "name": {
-            "minLength": 1,
+            "maxLength": 100,
+            "minLength": 0,
             "type": "string"
           },
           "price": {
@@ -550,7 +554,7 @@
         "operationId": "getAllAppointments",
         "parameters": [
           {
-            "description": "Filter by status (PENDING, APPROVED, DENIED)",
+            "description": "Filter by status (PENDING, APPROVED, DENIED, CANCELLED, or OVERDUE for past PENDING bookings)",
             "in": "query",
             "name": "status",
             "required": false,
@@ -559,7 +563,7 @@
             }
           },
           {
-            "description": "Search customer name",
+            "description": "Search by customer name, e-mail or phone (contains, case-insensitive) or by exact public id",
             "in": "query",
             "name": "search",
             "required": false,
@@ -610,7 +614,7 @@
                 }
               }
             },
-            "description": "Invalid filter or pagination parameters"
+            "description": "Invalid filter (for example an unknown status) or pagination parameters"
           }
         },
         "summary": "View a list of scheduled appointments",
@@ -671,7 +675,7 @@
                 }
               }
             },
-            "description": "Invalid request payload provided"
+            "description": "Invalid request payload, off-grid or past time, too far ahead, too many upcoming bookings, or slot unavailable"
           },
           "409": {
             "content": {
@@ -707,13 +711,16 @@
         ],
         "responses": {
           "204": {
-            "description": "Successfully deleted appointment"
+            "description": "Appointment cancelled (or already cancelled)"
+          },
+          "400": {
+            "description": "A declined appointment cannot be cancelled"
           },
           "404": {
             "description": "Appointment was not found"
           }
         },
-        "summary": "Delete/Cancel an appointment",
+        "summary": "Cancel an appointment (soft cancel: the booking is kept with status CANCELLED)",
         "tags": [
           "Barber Appointment Management System"
         ]
@@ -813,6 +820,16 @@
               }
             },
             "description": "Appointment was not found"
+          },
+          "409": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            },
+            "description": "Transition not allowed, booking cannot be approved (no barber, past, slot taken), or concurrent modification"
           }
         },
         "summary": "Approve or Deny an appointment status (Owner Admin Access)",
@@ -867,6 +884,17 @@
               "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
               "type": "string"
             }
+          },
+          {
+            "description": "Optional service name: slots where that service would overlap a later booking or run past closing time are also reported as busy",
+            "in": "query",
+            "name": "serviceType",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 0,
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -894,7 +922,20 @@
                 }
               }
             },
-            "description": "Invalid barber name or date format"
+            "description": "Unknown barber or invalid date"
+          },
+          "503": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Availability temporarily cannot be computed (database busy); retry shortly"
           }
         },
         "summary": "Get a list of busy time slots for a specific barber on a specific date (Guest Access)",
@@ -929,10 +970,10 @@
         },
         "responses": {
           "204": {
-            "description": "Appointment successfully cancelled"
+            "description": "Appointment cancelled (or already cancelled)"
           },
           "400": {
-            "description": "Invalid or mismatched email"
+            "description": "Invalid or mismatched email, declined booking, or booking already started"
           },
           "404": {
             "description": "Appointment with given public ID not found"
@@ -1596,7 +1637,10 @@
         ],
         "responses": {
           "204": {
-            "description": "Appointment cancelled successfully"
+            "description": "Appointment cancelled (or already cancelled)"
+          },
+          "400": {
+            "description": "Declined booking, or booking already started"
           },
           "401": {
             "description": "Not authenticated"

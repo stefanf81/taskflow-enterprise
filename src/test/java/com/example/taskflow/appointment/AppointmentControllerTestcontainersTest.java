@@ -76,8 +76,13 @@ public class AppointmentControllerTestcontainersTest {
         registry.add("spring.flyway.enabled", () -> "true");
     }
 
+    @Autowired
+    private com.example.taskflow.review.internal.ReviewRepository reviewRepository;
+
     @BeforeEach
     void setUp() throws Exception {
+        // reviews.appointment_id is ON DELETE RESTRICT (V27): delete the seeded reviews first
+        reviewRepository.deleteAll();
         appointmentRepository.deleteAll();
 
         // Perform login to retrieve secure JWT token
@@ -104,7 +109,7 @@ public class AppointmentControllerTestcontainersTest {
         request.put("customerPhone", "555-1234");
         request.put("barberName", "Sara the Stylist");
         request.put("bookingDate", getNextWorkingDate().toString());
-        request.put("bookingTime", "10:30");
+        request.put("bookingTime", "10:00");
         request.put("serviceType", "Beard Trim & Shave");
 
         mockMvc.perform(post("/api/v1/appointments")

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Modal } from '../common/Modal';
 import { Input } from '../common/Input';
@@ -6,6 +6,8 @@ import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { usePublicCancelAppointment } from '../../hooks/useAppointments';
 import { colors } from '../../theme/colors';
+import { getApiErrorMessage } from '../../utils/errors';
+import { normalizePublicId, PUBLIC_ID_PLACEHOLDER } from '../../utils/publicId';
 
 interface PublicCancelModalProps {
   visible: boolean;
@@ -21,6 +23,13 @@ export const PublicCancelModal: React.FC<PublicCancelModalProps> = ({
   onSuccess,
 }) => {
   const [publicId, setPublicId] = useState(initialPublicId);
+
+  // useState only reads its initial value: re-sync whenever the modal is
+  // (re)opened or the reference passed in from the route changes, so a new
+  // booking's ID is never shadowed by a stale one.
+  useEffect(() => {
+    if (visible) setPublicId(initialPublicId);
+  }, [visible, initialPublicId]);
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -34,17 +43,11 @@ export const PublicCancelModal: React.FC<PublicCancelModalProps> = ({
 
     setError(null);
     try {
-      await cancelMutation.mutateAsync({ publicId: publicId.trim(), email: email.trim() });
+      await cancelMutation.mutateAsync({ publicId: normalizePublicId(publicId), email: email.trim() });
       onSuccess();
       onClose();
     } catch (err: unknown) {
-      const message =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-          : err instanceof Error
-            ? err.message
-            : 'Failed to cancel appointment.';
-      setError(message || 'Failed to cancel appointment.');
+      setError(getApiErrorMessage(err, 'Failed to cancel appointment.'));
     }
   };
 
@@ -59,10 +62,11 @@ export const PublicCancelModal: React.FC<PublicCancelModalProps> = ({
 
         <Input
           label="Public Reference ID"
-          placeholder="e.g. TF-9823-8A2F"
+          placeholder={PUBLIC_ID_PLACEHOLDER}
           value={publicId}
           onChangeText={setPublicId}
-          autoCapitalize="characters"
+          autoCapitalize="none"
+          autoCorrect={false}
         />
 
         <Input

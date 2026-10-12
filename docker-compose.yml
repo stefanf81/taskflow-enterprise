@@ -83,7 +83,15 @@ services:
       - APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE=${APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE:-20}
       # The backend accepts forwarding headers only from the Nginx container.
       # Keep this in sync with the trusted proxy network in the deployment.
-      - APP_TRUSTED_PROXY_REGEX=^172\\.([1][6-9]|2[0-9]|3[0-1])\\.\\d{1,3}\\.\\d{1,3}$
+      # Single backslashes on purpose: YAML plain scalars do no escape processing,
+      # so a doubled `\\.` reaches the JVM as a literal backslash + any-char and the
+      # pattern never matches the proxy's address (every client then shares one
+      # rate-limit bucket). Keep in sync with the real proxy network.
+      - APP_TRUSTED_PROXY_REGEX=^172\.([1][6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}$
+      # The local stack runs the prod profile, whose admin-password guard rejects the
+      # well-known development password the E2E suites log in with. Real deployments
+      # leave this unset (guard on); only this disposable local stack turns it off.
+      - APP_REQUIRE_STRONG_ADMIN_PASSWORD=${APP_REQUIRE_STRONG_ADMIN_PASSWORD:-false}
       # JVM sizing is owned by the deployment (JAVA_TOOL_OPTIONS), not the image
       # CMD — see Dockerfile / Dockerfile.x64 for the sizing-agnostic rationale.
       # This block mirrors the prod homelab/TF backend.yaml intent (modulo

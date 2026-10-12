@@ -3,6 +3,7 @@ import { HttpContext, httpResource } from '@angular/common/http';
 import { BarberRating } from './types/api';
 import { ReviewsApi } from './core/api/reviews-api';
 import { PUBLIC_REQUEST } from './core/http/public-request.token';
+import { safeResourceValue } from './core/resource-utils';
 import { barberRatingResponseSchema } from '@taskflow/schemas';
 
 @Injectable({ providedIn: 'root' })
@@ -20,7 +21,8 @@ export class ReviewStore {
     },
   );
 
-  readonly ratings = this.ratingsResource.value;
+  /** Error-safe: an empty list (never a throw) while loading or after a failed load. */
+  readonly ratings = safeResourceValue<BarberRating[]>(this.ratingsResource, []);
   readonly isLoading = this.ratingsResource.isLoading;
   readonly errorMessage = computed(() => {
     const err = this.ratingsResource.error();

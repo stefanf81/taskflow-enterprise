@@ -21,7 +21,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.time.Instant;
 import java.util.concurrent.TimeUnit;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/v1/appointments")
@@ -41,12 +44,13 @@ public class AppointmentController {
     @Operation(summary = "View a list of scheduled appointments", description = "Can be filtered by status and customer name, with pagination.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Successfully retrieved paginated appointments"),
-            @ApiResponse(responseCode = "400", description = "Invalid filter or pagination parameters")
+            @ApiResponse(responseCode = "400", description = "Invalid filter (for example an unknown status) or pagination parameters")
     })
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AppointmentDashboardResponse> getAllAppointments(
-            @Parameter(description = "Filter by status (PENDING, APPROVED, DENIED)")
+            @Parameter(description = "Filter by status (PENDING, APPROVED, DENIED, CANCELLED, or OVERDUE for past PENDING bookings)")
             @RequestParam(required = false) String status,
-            @Parameter(description = "Search customer name")
+            @Parameter(description = "Search by customer name, e-mail or phone (contains, case-insensitive) or by exact public id")
             @RequestParam(required = false) String search,
             @Parameter(description = "Page number (0-indexed)")
             @RequestParam(defaultValue = "0") int page,
@@ -61,10 +65,18 @@ public class AppointmentController {
 
     @GetMapping(value = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Operation(summary = "Subscribe to administrator appointment update events")
+    @PreAuthorize("hasRole('ADMIN')")
     public SseEmitter streamAppointmentEvents(Authentication authentication, HttpServletResponse response) {
         response.setHeader(HttpHeaders.CACHE_CONTROL, "no-cache");
         response.setHeader("X-Accel-Buffering", "no");
-        return eventStreamService.subscribe(authentication.getName());
+        // The stream outlives this request: hand over the token expiry so it is closed once the
+        // token expires (non-JWT principals, e.g. in tests, simply have no expiry).
+        // Also hand over the token id so the stream is closed when the token is revoked (logout).
+        Instant tokenExpiresAt = authentication instanceof JwtAuthenticationToken jwt
+                ? jwt.getToken().getExpiresAt() : null;
+        String tokenId = authentication instanceof JwtAuthenticationToken jwt
+                ? jwt.getToken().getId() : null;
+        return eventStreamService.subscribe(authentication.getName(), tokenExpiresAt, tokenId);
     }
 
     @GetMapping("/{id}")
@@ -73,6 +85,7 @@ public class AppointmentController {
             @ApiResponse(responseCode = "200", description = "Successfully retrieved appointment"),
             @ApiResponse(responseCode = "404", description = "Appointment was not found")
     })
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AppointmentResponse> getAppointmentById(
             @Parameter(description = "The database ID of the appointment")
             @PathVariable Long id) {
@@ -87,7 +100,8 @@ public class AppointmentController {
     @Operation(summary = "Get a list of busy time slots for a specific barber on a specific date (Guest Access)")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "List of busy time slots returned"),
-            @ApiResponse(responseCode = "400", description = "Invalid barber name or date format")
+            @ApiResponse(responseCode = "400", description = "Unknown barber or invalid date"),
+            @ApiResponse(responseCode = "503", description = "Availability temporarily cannot be computed (database busy); retry shortly")
     })
     public ResponseEntity<java.util.List<String>> getBusySlots(
             @Parameter(description = "Barber name")
@@ -97,9 +111,13 @@ public class AppointmentController {
             @Parameter(description = "Booking date (YYYY-MM-DD)")
             @NotBlank(message = "Booking date is required")
             @Pattern(regexp = "^\\d{4}-\\d{2}-\\d{2}$", message = "Date must be in YYYY-MM-DD format")
-            @RequestParam String bookingDate) {
-        
-        java.util.List<String> busySlots = appointmentService.getBusySlots(barberName, bookingDate);
+            @RequestParam String bookingDate,
+            @Parameter(description = "Optional service name: slots where that service would overlap a later "
+                    + "booking or run past closing time are also reported as busy")
+            @Size(max = 100, message = "Service type must not exceed 100 characters")
+            @RequestParam(required = false) String serviceType) {
+
+        java.util.List<String> busySlots = appointmentService.getBusySlots(barberName, bookingDate, serviceType);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(30, TimeUnit.SECONDS).cachePrivate().mustRevalidate())
                 .body(busySlots);
@@ -108,8 +126,8 @@ public class AppointmentController {
     @PutMapping("/public/cancel/{publicId}")
     @Operation(summary = "Cancel an appointment securely as a guest by verifying the booking email (Guest Access)")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Appointment successfully cancelled"),
-            @ApiResponse(responseCode = "400", description = "Invalid or mismatched email"),
+            @ApiResponse(responseCode = "204", description = "Appointment cancelled (or already cancelled)"),
+            @ApiResponse(responseCode = "400", description = "Invalid or mismatched email, declined booking, or booking already started"),
             @ApiResponse(responseCode = "404", description = "Appointment with given public ID not found")
     })
     public ResponseEntity<Void> publicCancelAppointment(
@@ -125,7 +143,7 @@ public class AppointmentController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Successfully booked appointment"),
             @ApiResponse(responseCode = "200", description = "Idempotent replay — the Idempotency-Key already created this booking"),
-            @ApiResponse(responseCode = "400", description = "Invalid request payload provided"),
+            @ApiResponse(responseCode = "400", description = "Invalid request payload, off-grid or past time, too far ahead, too many upcoming bookings, or slot unavailable"),
             @ApiResponse(responseCode = "409", description = "Idempotency-Key already used for a different request")
     })
     public ResponseEntity<AppointmentResponse> createAppointment(
@@ -144,8 +162,10 @@ public class AppointmentController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Successfully updated appointment status"),
             @ApiResponse(responseCode = "400", description = "Invalid request payload provided"),
-            @ApiResponse(responseCode = "404", description = "Appointment was not found")
+            @ApiResponse(responseCode = "404", description = "Appointment was not found"),
+            @ApiResponse(responseCode = "409", description = "Transition not allowed, booking cannot be approved (no barber, past, slot taken), or concurrent modification")
     })
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AppointmentResponse> updateAppointmentStatus(
             @Parameter(description = "The database ID of the appointment to update")
             @PathVariable Long id,
@@ -156,11 +176,13 @@ public class AppointmentController {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Delete/Cancel an appointment")
+    @Operation(summary = "Cancel an appointment (soft cancel: the booking is kept with status CANCELLED)")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Successfully deleted appointment"),
+            @ApiResponse(responseCode = "204", description = "Appointment cancelled (or already cancelled)"),
+            @ApiResponse(responseCode = "400", description = "A declined appointment cannot be cancelled"),
             @ApiResponse(responseCode = "404", description = "Appointment was not found")
     })
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteAppointment(
             @Parameter(description = "The database ID of the appointment to delete")
             @PathVariable Long id) {

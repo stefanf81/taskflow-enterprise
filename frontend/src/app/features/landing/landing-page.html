@@ -34,7 +34,6 @@
             ● Shop Open
           </span>
           <button
-            #loginBtn
             (click)="showAdminLoginModal.set(true)"
             class="text-xs font-bold text-zinc-400 hover:text-gold tracking-wide uppercase transition-colors"
           >
@@ -79,6 +78,18 @@
               ✂️ Grooming Menu
             </h2>
 
+            @if (servicesError()) {
+              <div role="alert" class="text-center text-xs text-rose-400 mb-6">
+                <p>{{ servicesError() }}</p>
+                <button
+                  type="button"
+                  class="btn btn-secondary py-2 px-4 text-xs mt-3"
+                  (click)="retryServices()"
+                >
+                  Retry
+                </button>
+              </div>
+            }
             <div class="space-y-6">
               @for (service of services(); track service.name) {
                 <div class="border-b border-white/5 pb-4 last:border-none last:pb-0">
@@ -188,8 +199,8 @@
         </p>
       </footer>
 
-      <!-- Login/Register Modal Dialog (deferred — see #loginBtn interaction trigger above) -->
-      @defer (on interaction(loginBtn)) {
+      <!-- Login/Register Modal Dialog (deferred — loads when showAdminLoginModal() first turns true) -->
+      @defer (when showAdminLoginModal()) {
         @if (showAdminLoginModal()) {
           <app-auth-modal
             (closed)="showAdminLoginModal.set(false)"
@@ -197,7 +208,7 @@
           />
         }
       } @placeholder {
-        <!-- defer loads on first click of the "Owner Portal" button -->
+        <!-- the modal chunk loads the first time showAdminLoginModal() turns true -->
       }
     </div>
   }

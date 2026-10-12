@@ -95,6 +95,8 @@ describe('ServiceCatalogStore', () => {
     fixture.detectChanges();
 
     expect(store.errorMessage()).toBe('Could not load service catalog.');
+    expect(() => store.services()).not.toThrow();
+    expect(store.services()).toEqual([]);
   });
 
   it('should reload services on repeated calls', async () => {

@@ -382,7 +382,8 @@ class HikariPoolSweepBenchmarkTest {
         String barberName = barberNames.get(random.nextInt(barberNames.size()));
         String serviceName = serviceNames.get(random.nextInt(serviceNames.size()));
         String time = times.get(random.nextInt(times.size()));
-        LocalDate date = LocalDate.of(2026, 6, 1).plusDays(random.nextInt(60));
+        // Must be in the future and within the 90-day booking window to reach the DB write path.
+        LocalDate date = LocalDate.now().plusDays(1 + random.nextInt(60));
         String cid = UUID.randomUUID().toString().substring(0, 8);
 
         AppointmentCreateRequest body = new AppointmentCreateRequest(

@@ -5,6 +5,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { BarberStore } from './barber.store';
 import { BarbersApi } from './core/api/barbers-api';
+import { AuthState } from './auth.state';
 
 @Component({ standalone: true, template: '' })
 class TestHost {
@@ -152,5 +153,63 @@ describe('BarberStore', () => {
 
     // The method returns early when no barber is selected, so no HTTP request.
     httpMock.expectNone((req) => req.url.includes('/api/v1/barbers'));
+  });
+
+  it('keeps barbers and time-offs readable after failed loads (FE-1)', async () => {
+    store.loadBarbers();
+    fixture.detectChanges();
+    httpMock
+      .match((req) => req.url.includes('/api/v1/barbers') && !req.url.includes('time-off'))
+      .forEach((r) => r.error(new ProgressEvent('error'), { status: 500, statusText: 'x' }));
+    store.loadTimeOffs(1);
+    fixture.detectChanges();
+    httpMock
+      .match((req) => req.url.includes('/api/v1/barbers/1/time-off'))
+      .forEach((r) => r.error(new ProgressEvent('error'), { status: 500, statusText: 'x' }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(store.errorMessage()).toBe('Could not load barbers.');
+    expect(() => store.barbers()).not.toThrow();
+    expect(store.barbers()).toEqual([]);
+    expect(() => store.timeOffs()).not.toThrow();
+    expect(store.timeOffs()).toEqual([]);
+  });
+
+  it('resolves addTimeOff with true/false so callers reset forms only on success (FE-13)', async () => {
+    const ok = store.addTimeOff({ startDate: '2026-10-01', endDate: '2026-10-02', reason: '' });
+    httpMock
+      .expectOne((r) => r.url.includes('/api/v1/barbers/1/time-off') && r.method === 'POST')
+      .flush({ id: 5, startDate: '2026-10-01', endDate: '2026-10-02', reason: '' });
+    expect(await ok).toBe(true);
+    fixture.detectChanges();
+    httpMock.match((r) => r.url.includes('/api/v1/barbers/1/time-off')).forEach((r) => r.flush([]));
+
+    const failed = store.addTimeOff({ startDate: '2026-10-01', endDate: '2026-10-02', reason: '' });
+    httpMock
+      .expectOne((r) => r.url.includes('/api/v1/barbers/1/time-off') && r.method === 'POST')
+      .flush({ message: 'Overlap' }, { status: 409, statusText: 'Conflict' });
+    expect(await failed).toBe(false);
+    expect(store.actionErrorMessage()).toBe('Overlap');
+  });
+
+  it('ignores a second add while one is saving', () => {
+    void store.addTimeOff({ startDate: '2026-10-01', endDate: '2026-10-02', reason: '' });
+    void store.addTimeOff({ startDate: '2026-10-03', endDate: '2026-10-04', reason: '' });
+    const posts = httpMock.match((r) => r.method === 'POST');
+    expect(posts).toHaveLength(1);
+    posts[0]!.flush({ id: 5, startDate: '2026-10-01', endDate: '2026-10-02', reason: '' });
+    httpMock.match((r) => r.url.includes('/api/v1/barbers/1/time-off')).forEach((r) => r.flush([]));
+  });
+
+  it('forgets action banners when the session ends', () => {
+    store.actionErrorMessage.set('boom');
+    store.actionSuccessMessage.set('ok');
+
+    TestBed.inject(AuthState).applyRole('ROLE_ADMIN', 'admin');
+    TestBed.inject(AuthState).clear();
+
+    expect(store.actionErrorMessage()).toBeNull();
+    expect(store.actionSuccessMessage()).toBeNull();
   });
 });

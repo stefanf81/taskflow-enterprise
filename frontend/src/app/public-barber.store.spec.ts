@@ -72,5 +72,7 @@ describe('PublicBarberStore', () => {
     fixture.detectChanges();
 
     expect(store.errorMessage()).toBe('Could not load the barber directory.');
+    expect(() => store.barbers()).not.toThrow();
+    expect(store.barbers()).toEqual([]);
   });
 });

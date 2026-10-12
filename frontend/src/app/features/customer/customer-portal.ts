@@ -1,7 +1,8 @@
 import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AppointmentStore } from '../../appointment.store';
+import { isCustomerCancellable, statusLabel } from '../../appointment-status';
 import { CustomerStore } from '../../customer.store';
 import { formatTime12Hour, formatLocalDate } from '../../time-utils';
 
@@ -13,7 +14,7 @@ import { formatTime12Hour, formatLocalDate } from '../../time-utils';
 @Component({
   selector: 'app-customer-portal',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink],
   templateUrl: './customer-portal.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -42,6 +43,15 @@ export class CustomerPortal {
     this.customerStore.prevPage();
   }
 
+  statusLabel(status: string): string {
+    return statusLabel(status);
+  }
+
+  /** Cancelled and denied bookings are final: no Cancel button. */
+  isCancellable(status: string): boolean {
+    return isCustomerCancellable(status);
+  }
+
   formatTime12Hour(time24: string): string {
     return formatTime12Hour(time24);
   }
@@ -50,8 +60,10 @@ export class CustomerPortal {
     return formatLocalDate(dateStr);
   }
 
-  onLogout(): void {
-    this.store.onLogout();
-    this.router.navigateByUrl('');
+  /** Navigates away only once the server confirmed the sign-out; on failure the error banner shows. */
+  async onLogout(): Promise<void> {
+    if (await this.store.onLogout()) {
+      await this.router.navigateByUrl('');
+    }
   }
 }

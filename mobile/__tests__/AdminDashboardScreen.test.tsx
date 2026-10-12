@@ -484,4 +484,69 @@ describe('AdminDashboardScreen', () => {
     await fireEvent.press(dismissBtn);
     expect(screen.queryByText(/Appointment APPROVED/i)).toBeNull();
   });
+
+  // ============ MOB-9: LOGOUT FAILURE ============
+  it('shows a message instead of an unhandled rejection when logout cleanup fails', async () => {
+    mockLogout.mockRejectedValueOnce(new Error('Secure credential removal failed. Please try signing out again.'));
+    await render(<AdminDashboardScreen />);
+    await fireEvent.press(screen.getByLabelText('Logout'));
+    await waitFor(() => {
+      expect(screen.getByText(/Secure credential removal failed/)).toBeTruthy();
+    });
+  });
+
+  // ============ MOB-11: SEARCH ============
+  it('trims the search term before it reaches the query', async () => {
+    await render(<AdminDashboardScreen />);
+    const input = screen.getByPlaceholderText('Search by name, email, phone, or public ID...');
+    await fireEvent.changeText(input, '  123e4567-e89b-12d3-a456-426614174000  ');
+    await waitFor(() => {
+      expect(mockHookArgs?.[1]).toBe('123e4567-e89b-12d3-a456-426614174000');
+    });
+  });
+
+  it('keeps the search term while the OVERDUE filter is active', async () => {
+    await render(<AdminDashboardScreen />);
+    await fireEvent.changeText(
+      screen.getByPlaceholderText('Search by name, email, phone, or public ID...'),
+      'john',
+    );
+    await fireEvent.press(screen.getAllByText('OVERDUE')[0]!); // [0] is the filter chip
+    await waitFor(() => {
+      expect(mockHookArgs?.slice(0, 2)).toEqual(['overdue', 'john']);
+    });
+  });
+
+  // ============ CANCELLED STATUS ============
+  it('offers a CANCELLED status filter', async () => {
+    await render(<AdminDashboardScreen />);
+    await fireEvent.press(screen.getByText('CANCELLED'));
+    expect(mockHookArgs?.[0]).toBe('cancelled');
+  });
+
+  it('shows a CANCELLED badge and no approve/decline actions for a cancelled booking', async () => {
+    mockAppointmentsData = buildData({
+      page: {
+        content: [{ ...defaultAppointment, status: 'CANCELLED' }],
+        page: { number: 0, size: 10, totalElements: 1, totalPages: 1 },
+      },
+    });
+    await render(<AdminDashboardScreen />);
+    expect(screen.getAllByText('CANCELLED').length).toBeGreaterThanOrEqual(2); // chip + badge
+    expect(screen.queryByText('Approve')).toBeNull();
+    expect(screen.queryByText('Decline')).toBeNull();
+    expect(screen.getByText('Delete')).toBeTruthy();
+  });
+
+  // ============ SERVER MESSAGES (409 etc.) ============
+  it('surfaces the server message when a status change conflicts (409)', async () => {
+    mockUpdateMutate.mockImplementation((_args, { onError }) => {
+      onError({ response: { status: 409, data: { message: 'Appointment was cancelled by the customer' } } });
+    });
+    await render(<AdminDashboardScreen />);
+    await fireEvent.press(screen.getByText('Approve'));
+    await waitFor(() => {
+      expect(screen.getByText('Appointment was cancelled by the customer')).toBeTruthy();
+    });
+  });
 });

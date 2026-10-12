@@ -1,6 +1,8 @@
 package com.example.taskflow.migration;
 
 import db.migration.V25__converge_appointment_slot_index;
+import db.migration.V27__soft_cancel_and_optimistic_lock;
+import db.migration.V28__price_snapshot_and_email_indexes;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.migration.Context;
 import org.junit.jupiter.api.Test;
@@ -15,6 +17,7 @@ import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FlywayMigrationTest {
 
@@ -65,7 +68,9 @@ class FlywayMigrationTest {
         String url = "jdbc:h2:mem:v22-migration;MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
         Flyway.configure()
                 .dataSource(url, "sa", "")
-                .locations("classpath:db/migration")
+                // db/seed (V2/V11 demo data) supplies the rows the UPDATE below needs; the production
+                // layout without them is covered by DataMigrationsTest.
+                .locations("classpath:db/migration", "classpath:db/seed")
                 .load()
                 .migrate();
 
@@ -81,6 +86,126 @@ class FlywayMigrationTest {
                     UPDATE appointments SET status = 'INVALID'
                     WHERE id = (SELECT MIN(id) FROM appointments)
                     """));
+        }
+    }
+
+    private static Connection migratedDatabase(String name) throws SQLException {
+        String url = "jdbc:h2:mem:" + name + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
+        // db/seed (V2/V11 demo data) is part of the dev/test layout these assertions rely on.
+        Flyway.configure().dataSource(url, "sa", "")
+                .locations("classpath:db/migration", "classpath:db/seed").load().migrate();
+        return DriverManager.getConnection(url, "sa", "");
+    }
+
+    private static long scalar(Connection connection, String sql) throws SQLException {
+        try (var statement = connection.createStatement(); var rs = statement.executeQuery(sql)) {
+            rs.next();
+            return rs.getLong(1);
+        }
+    }
+
+    private static void insertAppointment(Connection connection, String barber, String time, String status) throws SQLException {
+        try (var ps = connection.prepareStatement(
+                "INSERT INTO appointments (customer_name, customer_email, customer_phone, barber_name, booking_date, "
+                        + "booking_time, service_type, status, public_id, created_at, updated_at) "
+                        + "VALUES ('N', 'n@x.com', '1', ?, DATE '2031-01-07', CAST(? AS TIME), 'Cut', ?, RANDOM_UUID(), "
+                        + "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")) {
+            ps.setString(1, barber);
+            ps.setString(2, time);
+            ps.setString(3, status);
+            ps.executeUpdate();
+        }
+    }
+
+    @Test
+    void v27AcceptsCancelledAndCancelledRowsDoNotOccupyTheSlotOnH2() throws Exception {
+        try (Connection connection = migratedDatabase("v27-full")) {
+            // new columns exist with the right defaults
+            assertEquals(0, scalar(connection, "SELECT COUNT(*) FROM appointments WHERE version IS NULL"));
+            assertEquals(1, scalar(connection, "SELECT COUNT(*) FROM information_schema.columns "
+                    + "WHERE table_name = 'APPOINTMENTS' AND column_name = 'VERSION'"));
+
+            insertAppointment(connection, "Slot Barber", "10:00", "CANCELLED");
+            insertAppointment(connection, "Slot Barber", "10:00", "CANCELLED");   // many cancelled rows may share a slot
+            insertAppointment(connection, "Slot Barber", "10:00", "PENDING");     // ...and do not block a new booking
+            assertThrows(SQLException.class,
+                    () -> insertAppointment(connection, "Slot Barber", "10:00", "APPROVED")); // an active duplicate does
+            // cancelling the active one frees the slot again
+            connection.createStatement().executeUpdate(
+                    "UPDATE appointments SET status = 'CANCELLED' WHERE barber_name = 'Slot Barber' AND status = 'PENDING'");
+            insertAppointment(connection, "Slot Barber", "10:00", "APPROVED");
+            assertEquals(3, scalar(connection,
+                    "SELECT COUNT(*) FROM appointments WHERE barber_name = 'Slot Barber' AND status = 'CANCELLED'"));
+
+            // unknown statuses are still refused by the CHECK constraint
+            assertThrows(SQLException.class, () -> insertAppointment(connection, "Slot Barber", "11:00", "BOGUS"));
+        }
+    }
+
+    @Test
+    void v27ReviewsNoLongerCascadeWhenAnAppointmentIsDeleted() throws Exception {
+        try (Connection connection = migratedDatabase("v27-reviews")) {
+            long reviewed = scalar(connection, "SELECT MIN(appointment_id) FROM reviews");
+            assertTrue(reviewed > 0, "the seed data contains reviews");
+            long reviewsBefore = scalar(connection, "SELECT COUNT(*) FROM reviews");
+
+            assertThrows(SQLException.class, () -> connection.createStatement()
+                    .executeUpdate("DELETE FROM appointments WHERE id = " + reviewed));
+
+            assertEquals(reviewsBefore, scalar(connection, "SELECT COUNT(*) FROM reviews"));
+            // an appointment without a review can still be deleted
+            connection.createStatement().executeUpdate("DELETE FROM appointments WHERE id NOT IN (SELECT appointment_id FROM reviews)");
+            assertEquals(reviewsBefore, scalar(connection, "SELECT COUNT(*) FROM reviews"));
+        }
+    }
+
+    @Test
+    void v27FindsTheReviewForeignKeyWhateverItIsCalled() throws Exception {
+        try (Connection connection = DriverManager.getConnection(
+                "jdbc:h2:mem:v27-fkname;MODE=PostgreSQL;DB_CLOSE_DELAY=-1")) {
+            try (var st = connection.createStatement()) {
+                st.execute("CREATE TABLE appointments (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, "
+                        + "status VARCHAR(50) NOT NULL)");
+                st.execute("CREATE TABLE reviews (id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, "
+                        + "appointment_id BIGINT NOT NULL UNIQUE, "
+                        + "CONSTRAINT some_hand_written_name FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE CASCADE)");
+                st.execute("INSERT INTO appointments (status) VALUES ('PENDING')");
+                st.execute("INSERT INTO reviews (appointment_id) VALUES (1)");
+            }
+            Context context = Mockito.mock(Context.class);
+            Mockito.when(context.getConnection()).thenReturn(connection);
+
+            new V27__soft_cancel_and_optimistic_lock().migrate(context);
+
+            assertThrows(SQLException.class, () -> connection.createStatement().executeUpdate("DELETE FROM appointments WHERE id = 1"));
+            assertEquals(1, scalar(connection, "SELECT COUNT(*) FROM reviews"));
+            // re-running is harmless (e.g. after a repaired history)
+            new V27__soft_cancel_and_optimistic_lock().migrate(context);
+            assertEquals(0, scalar(connection, "SELECT version FROM appointments"));
+        }
+    }
+
+    @Test
+    void v28BackfillsThePriceSnapshotFromTheJoinedService() throws Exception {
+        try (Connection connection = migratedDatabase("v28-full")) {
+            assertEquals(0, scalar(connection,
+                    "SELECT COUNT(*) FROM appointments WHERE service_id IS NOT NULL AND price_at_booking IS NULL"));
+            assertTrue(scalar(connection, "SELECT COUNT(*) FROM appointments WHERE price_at_booking IS NOT NULL") > 0);
+            assertEquals(0, scalar(connection, "SELECT COUNT(*) FROM appointments a JOIN services s ON s.id = a.service_id "
+                    + "WHERE a.price_at_booking <> s.price"));
+        }
+    }
+
+    @Test
+    void v28IsRepeatableAndSkipsPostgresOnlyIndexesOnH2() throws Exception {
+        try (Connection connection = migratedDatabase("v28-twice")) {
+            Context context = Mockito.mock(Context.class);
+            Mockito.when(context.getConnection()).thenReturn(connection);
+
+            new V28__price_snapshot_and_email_indexes().migrate(context);
+
+            assertEquals(0, scalar(connection, "SELECT COUNT(*) FROM information_schema.indexes "
+                    + "WHERE index_name LIKE '%EMAIL_LOWER'"));
         }
     }
 

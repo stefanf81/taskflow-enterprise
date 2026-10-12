@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 
 @Entity
 @Table(name = "services")
-@Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "services")
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "l2-services")
 public class ServiceItem {
 
     @Id
@@ -28,6 +28,13 @@ public class ServiceItem {
 
     @Column(length = 500)
     private String description;
+
+    /**
+     * {@code false} once the service has been retired: it still has appointments that reference it,
+     * so it cannot be deleted, but it must no longer be listed or bookable. Never exposed in the API.
+     */
+    @Column(nullable = false)
+    private boolean active = true;
 
     public ServiceItem() {
     }
@@ -58,4 +65,7 @@ public class ServiceItem {
     
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public boolean isActive() { return active; }
+    public void setActive(boolean active) { this.active = active; }
 }

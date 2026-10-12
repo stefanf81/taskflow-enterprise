@@ -6,6 +6,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.dao.TransientDataAccessException;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -40,6 +46,37 @@ public class GlobalExceptionHandler {
                 HttpStatus.CONFLICT.value(),
                 HttpStatus.CONFLICT.getReasonPhrase(),
                 ex.getMessage(),
+                request.getRequestURI()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ErrorResponse> handleConflictException(
+            ConflictException ex, HttpServletRequest request) {
+
+        ErrorResponse errorResponse = new ErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
+    }
+
+    /**
+     * Another request changed the same row between this request's read and its
+     * write (JPA {@code @Version}). The caller should reload and decide again.
+     */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleOptimisticLockingFailure(
+            OptimisticLockingFailureException ex, HttpServletRequest request) {
+        logger.warn("Optimistic lock conflict on {}", LogSanitizer.stripNewlines(request.getRequestURI()));
+
+        ErrorResponse errorResponse = new ErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                "The record was changed by someone else. Please reload and try again.",
                 request.getRequestURI()
         );
         return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
@@ -130,7 +167,7 @@ public class GlobalExceptionHandler {
         ErrorResponse errorResponse = new ErrorResponse(
                 HttpStatus.NOT_FOUND.value(),
                 HttpStatus.NOT_FOUND.getReasonPhrase(),
-                "Resource not found: " + ex.getMessage(),
+                "Resource not found.",
                 request.getRequestURI()
         );
         return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
@@ -143,10 +180,11 @@ public class GlobalExceptionHandler {
         ErrorResponse errorResponse = new ErrorResponse(
                 HttpStatus.METHOD_NOT_ALLOWED.value(),
                 HttpStatus.METHOD_NOT_ALLOWED.getReasonPhrase(),
-                "Method not allowed: " + ex.getMessage(),
+                "Method not allowed.",
                 request.getRequestURI()
         );
-        return new ResponseEntity<>(errorResponse, HttpStatus.METHOD_NOT_ALLOWED);
+        // Keep the Allow header Spring computes for this exception.
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).headers(ex.getHeaders()).body(errorResponse);
     }
 
     @ExceptionHandler(org.springframework.web.HttpMediaTypeNotSupportedException.class)
@@ -156,10 +194,10 @@ public class GlobalExceptionHandler {
         ErrorResponse errorResponse = new ErrorResponse(
                 HttpStatus.UNSUPPORTED_MEDIA_TYPE.value(),
                 HttpStatus.UNSUPPORTED_MEDIA_TYPE.getReasonPhrase(),
-                "Unsupported media type: " + ex.getMessage(),
+                "Unsupported media type.",
                 request.getRequestURI()
         );
-        return new ResponseEntity<>(errorResponse, HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).headers(ex.getHeaders()).body(errorResponse);
     }
 
     @ExceptionHandler({
@@ -168,14 +206,62 @@ public class GlobalExceptionHandler {
     })
     public ResponseEntity<ErrorResponse> handleBadRequestExceptions(
             Exception ex, HttpServletRequest request) {
-        
+
+        // Only the parameter name (chosen by us) is echoed. The framework's own
+        // message for a type mismatch names Java classes ("Failed to convert value
+        // of type 'java.lang.String' to required type 'java.lang.Long'..."), which
+        // is internal detail a client has no use for.
+        String detail;
+        if (ex instanceof org.springframework.web.bind.MissingServletRequestParameterException missing) {
+            detail = "Required parameter '" + missing.getParameterName() + "' is missing.";
+        } else if (ex instanceof org.springframework.web.method.annotation.MethodArgumentTypeMismatchException mismatch) {
+            detail = "Invalid value for parameter '" + mismatch.getName() + "'.";
+        } else {
+            detail = "Invalid request.";
+        }
         ErrorResponse errorResponse = new ErrorResponse(
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
-                "Bad Request: " + ex.getMessage(),
+                "Bad Request: " + detail,
                 request.getRequestURI()
         );
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+    }
+
+    /**
+     * Unique/foreign-key violations are conflicts with existing data (duplicate
+     * service name, deleting a service that has bookings, re-activating a booking
+     * whose slot was taken), not server faults. Everything else — NOT NULL, length
+     * — is left to the catch-all so it is still logged as an error.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(
+            DataIntegrityViolationException ex, HttpServletRequest request) {
+
+        String sqlState = findSqlState(ex);
+        if (!"23505".equals(sqlState) && !"23503".equals(sqlState)) {
+            return handleGlobalException(ex, request);
+        }
+        logger.warn("Data conflict (SQLState {}) on {}", sqlState, LogSanitizer.stripNewlines(request.getRequestURI()));
+        ErrorResponse errorResponse = new ErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                "The request conflicts with existing data.",
+                request.getRequestURI()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
+    }
+
+    private static String findSqlState(Throwable ex) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (t instanceof java.sql.SQLException sql && sql.getSQLState() != null) {
+                return sql.getSQLState();
+            }
+            if (t.getCause() == t) {
+                break;
+            }
+        }
+        return null;
     }
 
     @ExceptionHandler(AuthenticationException.class)
@@ -210,9 +296,21 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(errorResponse, HttpStatus.FORBIDDEN);
     }
 
-    @ExceptionHandler(DataAccessResourceFailureException.class)
+    /**
+     * Temporary infrastructure failures: the database is unreachable, the pool is
+     * exhausted, a query timed out, or a lock/deadlock was lost. None of these say
+     * anything about the request itself, so the client is told to retry shortly
+     * instead of receiving a 500. (Optimistic-lock conflicts are also transient
+     * data-access exceptions but have their own, more specific 409 handler.)
+     */
+    @ExceptionHandler({
+        DataAccessResourceFailureException.class,
+        QueryTimeoutException.class,
+        TransientDataAccessException.class,
+        CannotCreateTransactionException.class
+    })
     public ResponseEntity<ErrorResponse> handleDataAccessResourceFailure(
-            DataAccessResourceFailureException ex, HttpServletRequest request) {
+            Exception ex, HttpServletRequest request) {
         logger.warn("Database resource unavailable on {}: {}", LogSanitizer.stripNewlines(request.getRequestURI()),
                 LogSanitizer.safeMessage(ex));
 
@@ -239,13 +337,39 @@ public class GlobalExceptionHandler {
                 message,
                 request.getRequestURI()
         );
-        return new ResponseEntity<>(errorResponse, ex.getStatusCode());
+        return ResponseEntity.status(ex.getStatusCode()).headers(ex.getHeaders()).body(errorResponse);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGlobalException(
             Exception ex, HttpServletRequest request) {
-        
+
+        // Spring MVC's own exceptions (missing header, unacceptable Accept, async
+        // timeout, upload too large, ...) implement ErrorResponse and know their
+        // status. Answering them with a 500 + ERROR stack trace misreports client
+        // errors as server faults, so honour the status they carry.
+        if (ex instanceof org.springframework.web.ErrorResponse framework) {
+            HttpStatus status = HttpStatus.resolve(framework.getStatusCode().value());
+            if (ex instanceof org.springframework.web.context.request.async.AsyncRequestTimeoutException) {
+                // e.g. an SSE stream reaching its timeout: the response is already
+                // text/event-stream and often committed, so send no JSON body.
+                logger.debug("Async request timed out on {}", LogSanitizer.stripNewlines(request.getRequestURI()));
+                return ResponseEntity.status(framework.getStatusCode()).build();
+            }
+            if (status != null && status.is4xxClientError()) {
+                logger.debug("Request rejected ({}) on {}: {}", status.value(),
+                        LogSanitizer.stripNewlines(request.getRequestURI()), LogSanitizer.safeMessage(ex));
+                HttpHeaders headers = framework.getHeaders();
+                ErrorResponse errorResponse = new ErrorResponse(
+                        status.value(),
+                        status.getReasonPhrase(),
+                        "The request could not be processed.",
+                        request.getRequestURI()
+                );
+                return ResponseEntity.status(status).headers(headers).body(errorResponse);
+            }
+        }
+
         // Log the actual exception securely on the server
         logger.error("Unhandled exception caught: ", ex);
 

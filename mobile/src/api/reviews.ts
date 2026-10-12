@@ -15,6 +15,6 @@ export const reviewsApi = {
 
   submitReview: async (publicId: string, data: ReviewRequest): Promise<void> => {
     const payload = parseContract(reviewSchema, data, 'POST /api/v1/reviews/public');
-    await apiClient.post(`/api/v1/reviews/public/${publicId}`, payload);
+    await apiClient.post(`/api/v1/reviews/public/${encodeURIComponent(publicId)}`, payload);
   },
 };

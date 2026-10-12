@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/v1/catalog")
@@ -52,6 +53,7 @@ public class CatalogController {
             @ApiResponse(responseCode = "201", description = "Service created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid service data")
     })
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ServiceItemResponse> createService(@Valid @RequestBody ServiceItemRequest request) {
         return new ResponseEntity<>(catalogService.createService(request), HttpStatus.CREATED);
     }
@@ -63,6 +65,7 @@ public class CatalogController {
             @ApiResponse(responseCode = "400", description = "Invalid service data"),
             @ApiResponse(responseCode = "404", description = "Service not found")
     })
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ServiceItemResponse> updateService(@Parameter(description = "Service database ID") @PathVariable Long id, @Valid @RequestBody ServiceItemRequest request) {
         return ResponseEntity.ok(catalogService.updateService(id, request));
     }
@@ -73,6 +76,7 @@ public class CatalogController {
             @ApiResponse(responseCode = "204", description = "Service deleted successfully"),
             @ApiResponse(responseCode = "404", description = "Service not found")
     })
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteService(@Parameter(description = "Service database ID") @PathVariable Long id) {
         catalogService.deleteService(id);
         return ResponseEntity.noContent().build();

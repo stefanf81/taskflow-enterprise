@@ -12,4 +12,10 @@ export class AdminNotificationsTab {
   private readonly notificationStore = inject(NotificationStore);
 
   readonly notificationsList = this.notificationStore.notifications;
+  readonly isLoading = this.notificationStore.isLoading;
+  readonly loadError = this.notificationStore.errorMessage;
+
+  retryLoad(): void {
+    this.notificationStore.loadNotifications();
+  }
 }

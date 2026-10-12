@@ -9,6 +9,8 @@ import {
   registerSchema,
 } from '@taskflow/schemas';
 
+const LOGOUT_TIMEOUT_MS = 5000;
+
 export const authApi = {
   login: async (credentials: LoginRequest): Promise<MobileLoginResponse> => {
     const payload = parseContract(
@@ -30,6 +32,14 @@ export const authApi = {
   me: async (): Promise<LoginResponse> => {
     const response = await apiClient.get<LoginResponse>('/api/v1/auth/me');
     return parseContract(loginResponseSchema, response.data, 'GET /api/v1/auth/me');
+  },
+
+  /**
+   * Revokes the bearer token server-side. Callers treat this as best effort
+   * (short timeout; local cleanup happens regardless of the outcome).
+   */
+  logout: async (): Promise<void> => {
+    await apiClient.post('/api/v1/auth/logout', undefined, { timeout: LOGOUT_TIMEOUT_MS });
   },
 
   register: async (data: RegisterRequest): Promise<void> => {

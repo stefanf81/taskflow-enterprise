@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import {
   ScrollView,
   View,
@@ -30,9 +30,15 @@ import {
   DEFAULT_TIME_SLOTS,
   formatTime12Hour,
   computeEstimatedEndTime,
+  getFirstSelectableSlot,
+  getSlotValidationError,
   getUpcomingDays,
+  isSlotInPast,
+  resolveBookableSelection,
   toLocalDateString,
 } from '../utils/time-utils';
+import { getApiErrorMessage, getHttpStatus } from '../utils/errors';
+import { useNow } from '../hooks/useNow';
 import { AttemptKey, resolveAttemptKey } from '../utils/idempotency';
 
 type RouteProps = RouteProp<GuestTabParamList, 'Booking'>;
@@ -41,6 +47,9 @@ type BookingNavProp = CompositeNavigationProp<
   BottomTabNavigationProp<GuestTabParamList, 'Booking'>,
   NativeStackNavigationProp<RootStackParamList>
 >;
+
+/** Input-only sentinel (ADR-014): the backend resolves it to a concrete barber. */
+export const NO_PREFERENCE_BARBER = 'No Preference (First Available)';
 
 // Backend category values (V5__create_service_catalog.sql): hair | beard | combo
 const CATEGORIES = ['all', 'hair', 'beard', 'combo'];
@@ -73,28 +82,14 @@ export const BookingScreen: React.FC = () => {
   const { data: apiBarbers = [] } = usePublicBarbers();
   const createMutation = useCreateAppointment();
 
-  // Recompute the day list when the local calendar date rolls over at midnight
-  // (memo dep on todayKey, not the effect itself). Drift-free: the timeout is
-  // scheduled to the next local midnight and re-armed on every rollover.
-  const [todayKey, setTodayKey] = useState(() => toLocalDateString(new Date()));
-  const upcomingDays = useMemo(() => getUpcomingDays(new Date()), [todayKey]);
-
-  useEffect(() => {
-    const now = new Date();
-    const nextMidnight = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() + 1,
-      0,
-      0,
-      0,
-      0,
-    );
-    const timer = setTimeout(() => {
-      setTodayKey(toLocalDateString(new Date()));
-    }, nextMidnight.getTime() - now.getTime());
-    return () => clearTimeout(timer);
-  }, [todayKey]);
+  // Wall clock for slot filtering. Ticks every minute and when the app returns
+  // to the foreground, so past slots disable themselves and a midnight
+  // rollover re-bases the day list without a dedicated timer.
+  const now = useNow();
+  const todayKey = toLocalDateString(now);
+  // The day list only depends on the calendar date, not on the minute.
+  const upcomingDays = useMemo(() => getUpcomingDays(now), [todayKey]);
+  const upcomingDates = useMemo(() => upcomingDays.map((d) => d.dateStr), [upcomingDays]);
 
   // Destination for the receipt close button (guest vs customer tab navigator)
   const postBookingDestination = useMemo(
@@ -107,7 +102,10 @@ export const BookingScreen: React.FC = () => {
 
   // API-driven roster (mirrors the web PublicBarberStore): no hardcoded names
   // that can silently drift from the backend directory.
-  const barberNames = ['No Preference (First Available)', ...apiBarbers.map((b) => b.name)];
+  const barberNames = useMemo(
+    () => [NO_PREFERENCE_BARBER, ...apiBarbers.map((b) => b.name)],
+    [apiBarbers],
+  );
 
   // Service search & category state
   const [serviceSearchQuery, setServiceSearchQuery] = useState('');
@@ -116,36 +114,44 @@ export const BookingScreen: React.FC = () => {
   // Form State
   const [step, setStep] = useState<number>(1);
   const [selectedBarber, setSelectedBarber] = useState<string>(
-    route.params?.preselectedBarber || barberNames[0]
+    route.params?.preselectedBarber || NO_PREFERENCE_BARBER
   );
   const [selectedService, setSelectedService] = useState<string>(
     route.params?.preselectedService || (services[0]?.name ?? 'Classic Haircut')
   );
   const [selectedDate, setSelectedDate] = useState<string>(
-    upcomingDays[0]?.dateStr || ''
+    () => getFirstSelectableSlot(upcomingDates, now)?.date ?? upcomingDates[0] ?? ''
   );
-  const [selectedTime, setSelectedTime] = useState<string>('09:00');
+  const [selectedTime, setSelectedTime] = useState<string>(
+    () => getFirstSelectableSlot(upcomingDates, now)?.time ?? DEFAULT_TIME_SLOTS[0] ?? ''
+  );
 
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
 
   const [error, setError] = useState<string | null>(null);
-  const [receiptAppointment, setReceiptAppointment] = useState<AppointmentItem | null>(null);
+  // The receipt keeps its own total: the wizard is reset the moment the
+  // booking succeeds, so it cannot be derived from the (cleared) selection.
+  const [receipt, setReceipt] = useState<{ appointment: AppointmentItem; total: number } | null>(
+    null,
+  );
 
   // Stable Idempotency-Key for the current booking attempt: retained across a
   // failed/ambiguous submit so a re-tap replays the original booking, and
   // rotated once the payload changes or the booking succeeds.
   const attemptKeyRef = useRef<AttemptKey | null>(null);
 
-  // Real-time busy slots query — when "No Preference" is selected, show no busy indicators
-  // since the backend will assign the first available barber automatically
-  const effectiveBarber =
-    selectedBarber === 'No Preference (First Available)' ? '' : selectedBarber;
-  const { data: busySlots = [], isLoading: checkingSlots } = useBusySlots(
-    effectiveBarber,
-    selectedDate
-  );
+  // Busy slots. "No Preference" is passed through as the sentinel name: the
+  // backend aggregates across all barbers, so the picker reflects real
+  // availability instead of showing every slot free.
+  const {
+    data: busySlots = [],
+    isLoading: checkingSlots,
+    isError: busySlotsFailed,
+    error: busySlotsError,
+    refetch: refetchBusySlots,
+  } = useBusySlots(selectedBarber, selectedDate, selectedService);
 
   // Filtered services
   const filteredServices = useMemo(() => {
@@ -174,21 +180,96 @@ export const BookingScreen: React.FC = () => {
   // Estimated end time
   const estimatedEnd = computeEstimatedEndTime(selectedTime, selectedServiceObj?.durationMinutes ?? 0);
 
-  // Keep a valid service selected once the catalog loads:
-  // - honor a route-preselected service only if it exists in the catalog
-  // - otherwise fall back to the first catalog entry (never a hardcoded name
-  //   that may not exist, which left the summary showing $0.00)
+  // Slots already in the past for the selected day (disabled in the picker).
+  const pastSlots = useMemo(
+    () => DEFAULT_TIME_SLOTS.filter((slot) => isSlotInPast(selectedDate, slot, now)),
+    [selectedDate, now],
+  );
+  const noSlotsLeft = !!selectedDate && pastSlots.length === DEFAULT_TIME_SLOTS.length;
+
+  // Keep a valid service selected once the catalog loads (never a hardcoded
+  // name that may not exist, which left the summary showing $0.00).
   useEffect(() => {
     if (services.length === 0) return;
-    const preselected = route.params?.preselectedService;
-    const candidate =
-      preselected && services.some((s) => s.name === preselected)
-        ? preselected
-        : services[0].name;
     setSelectedService((current) =>
-      current && services.some((s) => s.name === current) ? current : candidate,
+      current && services.some((s) => s.name === current) ? current : services[0].name,
     );
-  }, [services, route.params?.preselectedService]);
+  }, [services]);
+
+  // Keep the barber valid against the live roster.
+  useEffect(() => {
+    if (apiBarbers.length === 0) return;
+    setSelectedBarber((current) => (barberNames.includes(current) ? current : NO_PREFERENCE_BARBER));
+  }, [apiBarbers, barberNames]);
+
+  // Re-validate the date/time pair as the clock moves (a slot passes, the day
+  // rolls over at midnight): move to the nearest bookable slot instead of
+  // leaving a stale, unbookable selection.
+  useEffect(() => {
+    const next = resolveBookableSelection(
+      { date: selectedDate, time: selectedTime },
+      upcomingDates,
+      now,
+    );
+    if (next && (next.date !== selectedDate || next.time !== selectedTime)) {
+      setSelectedDate(next.date);
+      setSelectedTime(next.time);
+    }
+  }, [now, upcomingDates, selectedDate, selectedTime]);
+
+  // Reset every wizard field to its starting value. The idempotency key is
+  // deliberately NOT touched here: it is already cleared on success/409, and
+  // keeping it across a blur preserves replay semantics for an ambiguous
+  // timeout followed by an identical re-submission.
+  const resetWizard = useCallback(() => {
+    const first = getFirstSelectableSlot(upcomingDates, new Date());
+    setStep(1);
+    setSelectedBarber(NO_PREFERENCE_BARBER);
+    setSelectedService(services[0]?.name ?? 'Classic Haircut');
+    setSelectedDate(first?.date ?? upcomingDates[0] ?? '');
+    setSelectedTime(first?.time ?? DEFAULT_TIME_SLOTS[0] ?? '');
+    setCustomerName('');
+    setCustomerEmail('');
+    setCustomerPhone('');
+    setServiceSearchQuery('');
+    setSelectedCategory('all');
+    setError(null);
+  }, [services, upcomingDates]);
+
+  // The tab stays mounted while another tab/screen is shown, so leaving the
+  // wizard (blur) must discard in-progress state or it would reappear stale.
+  const resetWizardRef = useRef(resetWizard);
+  resetWizardRef.current = resetWizard;
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('blur', () => resetWizardRef.current());
+    return unsubscribe;
+  }, [navigation]);
+
+  // Apply navigation params (Catalog "Book", stylist cards). Keyed on the
+  // params object so re-navigating with new, or identical, params takes
+  // effect; the params are consumed afterwards so a later reset or re-visit
+  // does not re-apply stale preselections.
+  const params = route.params;
+  useEffect(() => {
+    if (!params?.preselectedBarber && !params?.preselectedService) return;
+    if (
+      params.preselectedService &&
+      (services.length === 0 || services.some((s) => s.name === params.preselectedService))
+    ) {
+      setSelectedService(params.preselectedService);
+    }
+    if (
+      params.preselectedBarber &&
+      (apiBarbers.length === 0 || barberNames.includes(params.preselectedBarber))
+    ) {
+      setSelectedBarber(params.preselectedBarber);
+    }
+    setStep(1);
+    setError(null);
+    navigation.setParams({ preselectedBarber: undefined, preselectedService: undefined });
+    // services/apiBarbers are read for validation only; the effect must fire
+    // on new params, not on every catalog refresh.
+  }, [params]);
 
   const handleNextStep = () => {
     if (step === 1) {
@@ -206,8 +287,13 @@ export const BookingScreen: React.FC = () => {
       setError(null);
       setStep(3);
     } else if (step === 3) {
-      if (!selectedDate || !selectedTime) {
-        setError('Please select a date and time slot.');
+      const slotError = getSlotValidationError(selectedDate, selectedTime, new Date());
+      if (slotError) {
+        setError(slotError);
+        return;
+      }
+      if (busySlotsFailed) {
+        setError('Could not check availability. Retry before continuing.');
         return;
       }
       if (busySlots.includes(selectedTime)) {
@@ -222,6 +308,14 @@ export const BookingScreen: React.FC = () => {
   const handleSubmitBooking = async () => {
     if (!customerName.trim() || !customerEmail.trim() || !customerPhone.trim()) {
       setError('Please fill in all customer contact fields.');
+      return;
+    }
+
+    // The slot may have passed while the contact form was being filled in.
+    const slotError = getSlotValidationError(selectedDate, selectedTime, new Date());
+    if (slotError) {
+      setError(slotError);
+      setStep(3);
       return;
     }
 
@@ -246,24 +340,17 @@ export const BookingScreen: React.FC = () => {
       });
 
       attemptKeyRef.current = null;
-      setReceiptAppointment(result);
+      setReceipt({ appointment: result, total: checkoutTotal });
+      resetWizard();
     } catch (err: unknown) {
       // A 409 means the key was already used for a different payload; the next
       // attempt must use a fresh key.
-      const status =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { status?: number } }).response?.status
-          : undefined;
-      if (status === 409) {
+      if (getHttpStatus(err) === 409) {
         attemptKeyRef.current = null;
       }
-      const message =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-          : err instanceof Error
-            ? err.message
-            : 'Failed to submit booking.';
-      setError(message || 'Failed to submit booking.');
+      // Surfaces the server rule message (past time, >90 days, off-grid hour,
+      // max 5 active bookings per email, conflicts, ...).
+      setError(getApiErrorMessage(err, 'Failed to submit booking.'));
     }
   };
 
@@ -445,13 +532,34 @@ export const BookingScreen: React.FC = () => {
                 <ActivityIndicator size="large" color={colors.gold.main} />
                 <Text style={styles.checkingText}>Checking slot availability...</Text>
               </View>
+            ) : busySlotsFailed ? (
+              <View style={styles.noDatePrompt}>
+                <Text style={styles.noDateText}>
+                  {getApiErrorMessage(busySlotsError, 'Could not check availability.')}
+                </Text>
+                <Button
+                  title="Retry"
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => refetchBusySlots()}
+                  style={{ marginTop: 12 }}
+                />
+              </View>
             ) : selectedDate ? (
-              <TimeSlotPicker
-                slots={DEFAULT_TIME_SLOTS}
-                selectedSlot={selectedTime}
-                busySlots={busySlots}
-                onSelectSlot={setSelectedTime}
-              />
+              <>
+                <TimeSlotPicker
+                  slots={DEFAULT_TIME_SLOTS}
+                  selectedSlot={selectedTime}
+                  busySlots={busySlots}
+                  pastSlots={pastSlots}
+                  onSelectSlot={setSelectedTime}
+                />
+                {noSlotsLeft && (
+                  <Text style={styles.noDateText}>
+                    No more slots are available on this day. Please pick another date.
+                  </Text>
+                )}
+              </>
             ) : (
               <View style={styles.noDatePrompt}>
                 <Text style={styles.noDateText}>📅 Select an upcoming date above to view available time slots</Text>
@@ -552,17 +660,17 @@ export const BookingScreen: React.FC = () => {
 
       {/* Confirmation Receipt Modal */}
       <ReceiptModal
-        visible={!!receiptAppointment}
-        appointment={receiptAppointment}
-        checkoutTotal={checkoutTotal}
+        visible={!!receipt}
+        appointment={receipt?.appointment ?? null}
+        checkoutTotal={receipt?.total ?? 0}
         onClose={() => {
-          setReceiptAppointment(null);
+          setReceipt(null);
           navigation.dispatch(
             CommonActions.navigate({ name: postBookingDestination }),
           );
         }}
         onOpenPublicActions={(publicId) => {
-          setReceiptAppointment(null);
+          setReceipt(null);
           navigation.navigate('PublicActions', { publicId });
         }}
       />

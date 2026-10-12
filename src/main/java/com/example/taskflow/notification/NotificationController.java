@@ -9,9 +9,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/v1/notifications")
+@PreAuthorize("hasRole('ADMIN')")
 @Tag(name = "Notification Outbox", description = "View history of sent SMS/Emails")
 public class NotificationController {
 

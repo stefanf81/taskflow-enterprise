@@ -76,6 +76,9 @@ describe('ReviewStore', () => {
     fixture.detectChanges();
 
     expect(store.errorMessage()).toBe('Could not load barber ratings.');
+    // Reading the raw resource value would throw here (FE-1): the safe view yields [].
+    expect(() => store.ratings()).not.toThrow();
+    expect(store.ratings()).toEqual([]);
   });
 
   it('should reload ratings on repeated calls', async () => {

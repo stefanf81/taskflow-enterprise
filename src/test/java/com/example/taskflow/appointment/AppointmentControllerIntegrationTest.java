@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,6 +34,9 @@ class AppointmentControllerIntegrationTest {
 
     @Autowired
     private AppointmentRepository appointmentRepository;
+
+    @Autowired
+    private com.example.taskflow.appointment.internal.BarberRepository barberRepository;
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -54,6 +58,13 @@ class AppointmentControllerIntegrationTest {
         return date;
     }
 
+    /** A persisted PENDING booking on a real barber, tomorrow-ish, so it can be approved/cancelled. */
+    private Appointment savedFutureBooking(String name, String email, String time) {
+        Appointment item = new Appointment(name, email, "123", "Alex the Barber", getNextWorkingDate(), time, "Classic Haircut");
+        item.setBarber(barberRepository.findByName("Alex the Barber").orElseThrow());
+        return appointmentRepository.save(item);
+    }
+
     private Map<String, Object> appointmentRequest(String email, String barberName, String time) {
         Map<String, Object> request = new HashMap<>();
         request.put("customerName", "Guest John");
@@ -66,8 +77,13 @@ class AppointmentControllerIntegrationTest {
         return request;
     }
 
+    @Autowired
+    private com.example.taskflow.review.internal.ReviewRepository reviewRepository;
+
     @BeforeEach
     void setUp() throws Exception {
+        // reviews.appointment_id is ON DELETE RESTRICT (V27): delete the seeded reviews first
+        reviewRepository.deleteAll();
         appointmentRepository.deleteAll();
 
         // Retrieve valid JWT token by calling the login endpoint
@@ -88,7 +104,7 @@ class AppointmentControllerIntegrationTest {
 
     @Test
     void shouldCreateAppointmentSuccessfullyAsGuestWithoutAuth() throws Exception {
-        Map<String, Object> request = appointmentRequest("john.doe@example.com", "Sara the Stylist", "10:30");
+        Map<String, Object> request = appointmentRequest("john.doe@example.com", "Sara the Stylist", "10:00");
 
         String createdId = objectMapper.readTree(mockMvc.perform(post("/api/v1/appointments")
                         .header("Idempotency-Key", "test-idempotent-key")
@@ -112,7 +128,7 @@ class AppointmentControllerIntegrationTest {
 
     @Test
     void shouldRejectOverlongIdempotencyKey() throws Exception {
-        Map<String, Object> request = appointmentRequest("john.doe@example.com", "Sara the Stylist", "10:30");
+        Map<String, Object> request = appointmentRequest("john.doe@example.com", "Sara the Stylist", "10:00");
         String overlongKey = "k".repeat(101);
 
         mockMvc.perform(post("/api/v1/appointments")
@@ -124,7 +140,7 @@ class AppointmentControllerIntegrationTest {
 
     @Test
     void shouldRejectIdempotencyReplayForDifferentCustomer() throws Exception {
-        Map<String, Object> request = appointmentRequest("owner@example.com", "Sara the Stylist", "10:30");
+        Map<String, Object> request = appointmentRequest("owner@example.com", "Sara the Stylist", "10:00");
 
         mockMvc.perform(post("/api/v1/appointments")
                         .header("Idempotency-Key", "shared-key")
@@ -132,7 +148,7 @@ class AppointmentControllerIntegrationTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
 
-        Map<String, Object> attackerRequest = appointmentRequest("attacker@example.com", "Sara the Stylist", "10:30");
+        Map<String, Object> attackerRequest = appointmentRequest("attacker@example.com", "Sara the Stylist", "10:00");
 
         mockMvc.perform(post("/api/v1/appointments")
                         .header("Idempotency-Key", "shared-key")
@@ -145,7 +161,7 @@ class AppointmentControllerIntegrationTest {
 
     @Test
     void shouldRejectIdempotencyReplayForDifferentPayload() throws Exception {
-        Map<String, Object> request = appointmentRequest("john.doe@example.com", "Sara the Stylist", "10:30");
+        Map<String, Object> request = appointmentRequest("john.doe@example.com", "Sara the Stylist", "10:00");
 
         mockMvc.perform(post("/api/v1/appointments")
                         .header("Idempotency-Key", "shared-key-2")
@@ -153,7 +169,7 @@ class AppointmentControllerIntegrationTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
 
-        Map<String, Object> otherSlot = appointmentRequest("john.doe@example.com", "Sara the Stylist", "11:30");
+        Map<String, Object> otherSlot = appointmentRequest("john.doe@example.com", "Sara the Stylist", "11:00");
 
         mockMvc.perform(post("/api/v1/appointments")
                         .header("Idempotency-Key", "shared-key-2")
@@ -165,7 +181,7 @@ class AppointmentControllerIntegrationTest {
     @Test
     void shouldResolveNoPreferenceBookingToConcreteBarber() throws Exception {
         Map<String, Object> request = appointmentRequest(
-                "no.pref@example.com", "No Preference (First Available)", "10:30");
+                "no.pref@example.com", "No Preference (First Available)", "10:00");
 
         mockMvc.perform(post("/api/v1/appointments")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -183,7 +199,7 @@ class AppointmentControllerIntegrationTest {
     @Test
     void shouldPreventSpecificBarberDoubleBookingAfterSentinelAssignment() throws Exception {
         Map<String, Object> sentinelRequest = appointmentRequest(
-                "sentinel@example.com", "No Preference (First Available)", "10:30");
+                "sentinel@example.com", "No Preference (First Available)", "10:00");
 
         String assignedBarber = objectMapper.readTree(mockMvc.perform(post("/api/v1/appointments")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -192,7 +208,7 @@ class AppointmentControllerIntegrationTest {
                 .andReturn().getResponse().getContentAsString()).get("barberName").asText();
 
         Map<String, Object> specificRequest = appointmentRequest(
-                "specific@example.com", assignedBarber, "10:30");
+                "specific@example.com", assignedBarber, "10:00");
 
         mockMvc.perform(post("/api/v1/appointments")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -203,7 +219,7 @@ class AppointmentControllerIntegrationTest {
     @Test
     void shouldRejectNoPreferenceBookingWhenNoBarberIsWorking() throws Exception {
         Map<String, Object> request = appointmentRequest(
-                "sunday@example.com", "No Preference (First Available)", "10:30");
+                "sunday@example.com", "No Preference (First Available)", "10:00");
         request.put("bookingDate", getNextSunday().toString());
 
         mockMvc.perform(post("/api/v1/appointments")
@@ -221,7 +237,7 @@ class AppointmentControllerIntegrationTest {
         request.put("customerPhone", "555-1234");
         request.put("barberName", "Sara the Stylist");
         request.put("bookingDate", getNextWorkingDate().toString());
-        request.put("bookingTime", "10:30");
+        request.put("bookingTime", "10:00");
         request.put("serviceType", "Beard Trim & Shave");
 
         mockMvc.perform(post("/api/v1/appointments")
@@ -279,8 +295,7 @@ class AppointmentControllerIntegrationTest {
 
     @Test
     void shouldUpdateAppointmentStatusSuccessfullyAsAdmin() throws Exception {
-        Appointment item = new Appointment("Alex", "alex@test.com", "123", "Barber", LocalDate.now(), "10:00", "Haircut");
-        Appointment savedItem = appointmentRepository.save(item);
+        Appointment savedItem = savedFutureBooking("Alex", "alex@test.com", "10:00");
 
         Map<String, Object> request = new HashMap<>();
         request.put("status", "APPROVED");
@@ -298,14 +313,20 @@ class AppointmentControllerIntegrationTest {
 
     @Test
     void shouldDeleteAppointmentSuccessfullyAsAdmin() throws Exception {
-        Appointment item = new Appointment("Cancel Me", "test@test.com", "123", "Barber", LocalDate.now(), "10:00", "Haircut");
-        Appointment savedItem = appointmentRepository.save(item);
+        Appointment savedItem = savedFutureBooking("Cancel Me", "test@test.com", "10:00");
 
         mockMvc.perform(delete("/api/v1/appointments/" + savedItem.getId())
                         .header("Authorization", authHeader))
                 .andExpect(status().isNoContent());
 
-        assertFalse(appointmentRepository.existsById(savedItem.getId()));
+        // Soft cancel: the row stays (history, reviews) with status CANCELLED...
+        Appointment cancelled = appointmentRepository.findById(savedItem.getId()).orElseThrow();
+        assertEquals(AppointmentStatus.CANCELLED, cancelled.getStatusEnum());
+
+        // ...and cancelling it again is an idempotent 204
+        mockMvc.perform(delete("/api/v1/appointments/" + savedItem.getId())
+                        .header("Authorization", authHeader))
+                .andExpect(status().isNoContent());
     }
 
     @Test
@@ -329,12 +350,12 @@ class AppointmentControllerIntegrationTest {
     @Test
     void shouldReturnBusySlotsSuccessfully() throws Exception {
         LocalDate testDate = getNextWorkingDate();
-        Appointment item = new Appointment("Alex", "alex@test.com", "123", "Barber Alex", testDate, "10:00", "Haircut");
+        Appointment item = new Appointment("Alex", "alex@test.com", "123", "Alex the Barber", testDate, "10:00", "Haircut");
         item.setStatus("APPROVED");
         appointmentRepository.save(item);
 
         mockMvc.perform(get("/api/v1/appointments/public/busy-slots")
-                        .param("barberName", "Barber Alex")
+                        .param("barberName", "Alex the Barber")
                         .param("bookingDate", testDate.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
@@ -343,15 +364,15 @@ class AppointmentControllerIntegrationTest {
 
     @Test
     void shouldPublicCancelAppointmentSuccessfully() throws Exception {
-        Appointment item = new Appointment("Alex", "alex@test.com", "123", "Barber", LocalDate.now(), "10:00", "Haircut");
-        Appointment savedItem = appointmentRepository.save(item);
+        Appointment savedItem = savedFutureBooking("Alex", "alex@test.com", "10:00");
 
         mockMvc.perform(put("/api/v1/appointments/public/cancel/" + savedItem.getPublicId())
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CancelRequest("alex@test.com"))))
                 .andExpect(status().isNoContent());
 
-        assertFalse(appointmentRepository.existsById(savedItem.getId()));
+        assertEquals(AppointmentStatus.CANCELLED,
+                appointmentRepository.findById(savedItem.getId()).orElseThrow().getStatusEnum());
     }
 
     @Test

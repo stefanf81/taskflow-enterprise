@@ -28,8 +28,11 @@ export const appointmentsApi = {
     if (statusFilter && statusFilter !== 'all') {
       params.status = statusFilter.toUpperCase();
     }
-    if (search) {
-      params.search = search;
+    // The backend matches name/email/phone (contains) and publicId (exact);
+    // surrounding whitespace would make an otherwise exact match fail.
+    const term = search?.trim();
+    if (term) {
+      params.search = term;
     }
     const response = await apiClient.get<AppointmentDashboardResponse>('/api/v1/appointments', {
       params,
@@ -58,9 +61,15 @@ export const appointmentsApi = {
     );
   },
 
-  getBusySlots: async (barberName: string, bookingDate: string): Promise<string[]> => {
+  getBusySlots: async (
+    barberName: string,
+    bookingDate: string,
+    serviceType?: string
+  ): Promise<string[]> => {
+    // serviceType lets the server also mark slots where a long service would overlap a later
+    // booking or run past closing time (otherwise the booking is rejected with 400 at submit).
     const response = await apiClient.get<string[]>('/api/v1/appointments/public/busy-slots', {
-      params: { barberName, bookingDate },
+      params: serviceType ? { barberName, bookingDate, serviceType } : { barberName, bookingDate },
     });
     return parseContract(
       busySlotsResponseSchema,
@@ -70,7 +79,7 @@ export const appointmentsApi = {
   },
 
   publicCancelAppointment: async (publicId: string, email: string): Promise<void> => {
-    await apiClient.put(`/api/v1/appointments/public/cancel/${publicId}`, { email });
+    await apiClient.put(`/api/v1/appointments/public/cancel/${encodeURIComponent(publicId)}`, { email });
   },
 
   updateAppointmentStatus: async (

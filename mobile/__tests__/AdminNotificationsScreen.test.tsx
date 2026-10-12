@@ -3,10 +3,16 @@ import { render, fireEvent, screen } from '@testing-library/react-native';
 import { AdminNotificationsScreen } from '../src/screens/AdminNotificationsScreen';
 
 let mockIsError: boolean;
+let mockIsFocused: boolean;
 const mockRefetch = jest.fn();
+const mockUseNotifications = jest.fn();
+
+jest.mock('@react-navigation/native', () => ({
+  useIsFocused: () => mockIsFocused,
+}));
 
 jest.mock('../src/hooks/useNotifications', () => ({
-  useNotifications: () => ({
+  useNotifications: (...args: unknown[]) => mockUseNotifications(...args) ?? ({
     data: [
       { id: 1, recipient: 'admin@taskflow.com', type: 'APPOINTMENT_CONFIRMED', message: 'Appointment confirmed for John', sentAt: '2026-07-24T10:00:00', status: 'SENT' },
       { id: 2, recipient: 'customer@ex.com', type: 'CANCELLATION', message: 'Booking cancelled', sentAt: '2026-07-23T15:00:00', status: 'SENT' },
@@ -21,6 +27,7 @@ describe('AdminNotificationsScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockIsError = false;
+    mockIsFocused = true;
   });
 
   it('renders notification outbox title', async () => {
@@ -58,5 +65,17 @@ describe('AdminNotificationsScreen', () => {
     expect(screen.queryByText('Outbox Empty')).toBeNull();
     await fireEvent.press(screen.getByText('Retry'));
     expect(mockRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('polls while the tab is focused', async () => {
+    mockIsFocused = true;
+    await render(<AdminNotificationsScreen />);
+    expect(mockUseNotifications).toHaveBeenCalledWith({ poll: true });
+  });
+
+  it('stops polling when the tab is not focused', async () => {
+    mockIsFocused = false;
+    await render(<AdminNotificationsScreen />);
+    expect(mockUseNotifications).toHaveBeenCalledWith({ poll: false });
   });
 });

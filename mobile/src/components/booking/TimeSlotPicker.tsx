@@ -6,6 +6,8 @@ interface TimeSlotPickerProps {
   slots: readonly string[];
   selectedSlot: string;
   busySlots?: string[];
+  /** Slots whose start time has already passed (not bookable, shown disabled). */
+  pastSlots?: readonly string[];
   onSelectSlot: (slot: string) => void;
 }
 
@@ -13,23 +15,27 @@ export const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
   slots,
   selectedSlot,
   busySlots = [],
+  pastSlots = [],
   onSelectSlot,
 }) => {
   return (
     <View style={styles.grid}>
       {slots.map((slot) => {
-        const isBusy = busySlots.includes(slot);
+        const isPast = pastSlots.includes(slot);
+        const isBusy = !isPast && busySlots.includes(slot);
+        const isDisabled = isPast || isBusy;
         const isSelected = selectedSlot === slot;
 
         return (
           <TouchableOpacity
             key={slot}
-            disabled={isBusy}
+            disabled={isDisabled}
             onPress={() => onSelectSlot(slot)}
             style={[
               styles.slot,
               isSelected && styles.selectedSlot,
               isBusy && styles.busySlot,
+              isPast && styles.pastSlot,
             ]}
           >
             <Text
@@ -37,11 +43,13 @@ export const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
                 styles.slotText,
                 isSelected && styles.selectedSlotText,
                 isBusy && styles.busySlotText,
+                isPast && styles.pastSlotText,
               ]}
             >
               {slot}
             </Text>
             {isBusy && <Text style={styles.busyLabel}>Booked</Text>}
+            {isPast && <Text style={styles.pastLabel}>Passed</Text>}
           </TouchableOpacity>
         );
       })}
@@ -75,6 +83,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(239, 68, 68, 0.2)',
     opacity: 0.6,
   },
+  pastSlot: {
+    opacity: 0.4,
+  },
   slotText: {
     color: colors.text.primary,
     fontSize: 13,
@@ -86,6 +97,14 @@ const styles = StyleSheet.create({
   busySlotText: {
     color: colors.status.denied,
     textDecorationLine: 'line-through',
+  },
+  pastSlotText: {
+    color: colors.text.muted,
+  },
+  pastLabel: {
+    color: colors.text.muted,
+    fontSize: 9,
+    marginTop: 2,
   },
   busyLabel: {
     color: colors.status.denied,

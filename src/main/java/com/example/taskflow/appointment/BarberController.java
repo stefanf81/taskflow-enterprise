@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/v1/barbers")
@@ -38,6 +39,7 @@ public class BarberController {
     @GetMapping("/admin")
     @Operation(summary = "Get all barbers with administrative contact details")
     @ApiResponse(responseCode = "200", description = "List of all barbers returned")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<BarberResponse>> getAdminBarbers() {
         // Admin barbers: must-revalidate to avoid stale admin view, but allow ETag 304
         return ResponseEntity.ok()
@@ -51,6 +53,7 @@ public class BarberController {
             @ApiResponse(responseCode = "201", description = "Barber created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid barber data")
     })
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<BarberResponse> createBarber(@Valid @RequestBody BarberRequest request) {
         return new ResponseEntity<>(barberService.createBarber(request), HttpStatus.CREATED);
     }
@@ -61,6 +64,7 @@ public class BarberController {
             @ApiResponse(responseCode = "200", description = "List of time-off periods returned"),
             @ApiResponse(responseCode = "404", description = "Barber not found")
     })
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<BarberTimeOffResponse>> getTimeOff(@Parameter(description = "Barber database ID") @PathVariable Long barberId) {
         return ResponseEntity.ok(barberService.getTimeOff(barberId));
     }
@@ -72,6 +76,7 @@ public class BarberController {
             @ApiResponse(responseCode = "400", description = "Invalid time-off data"),
             @ApiResponse(responseCode = "404", description = "Barber not found")
     })
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<BarberTimeOffResponse> addTimeOff(@Parameter(description = "Barber database ID") @PathVariable Long barberId, @Valid @RequestBody BarberTimeOffRequest request) {
         return new ResponseEntity<>(barberService.addTimeOff(barberId, request), HttpStatus.CREATED);
     }

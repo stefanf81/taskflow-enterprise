@@ -61,8 +61,15 @@ export class AppointmentsApi {
     });
   }
 
-  getBusySlots(barberName: string, bookingDate: string): Observable<string[]> {
-    const params = new HttpParams().set('barberName', barberName).set('bookingDate', bookingDate);
+  getBusySlots(
+    barberName: string,
+    bookingDate: string,
+    serviceType?: string,
+  ): Observable<string[]> {
+    let params = new HttpParams().set('barberName', barberName).set('bookingDate', bookingDate);
+    // Lets the server also mark slots where a long service would overlap a later booking or
+    // run past closing time (otherwise the booking would be rejected with 400 at submit).
+    if (serviceType) params = params.set('serviceType', serviceType);
     return this.http
       .get<string[]>(`${this.base}/public/busy-slots`, {
         params,
@@ -77,7 +84,7 @@ export class AppointmentsApi {
 
   publicCancelAppointment(publicId: string, email: string): Observable<void> {
     return this.http.put<void>(
-      `${this.base}/public/cancel/${publicId}`,
+      `${this.base}/public/cancel/${encodeURIComponent(publicId)}`,
       { email },
       { context: new HttpContext().set(PUBLIC_REQUEST, true) },
     );
@@ -104,6 +111,6 @@ export class AppointmentsApi {
   }
 
   cancelCustomerAppointment(publicId: string): Observable<void> {
-    return this.http.delete<void>(`${this.customerBase}/${publicId}`);
+    return this.http.delete<void>(`${this.customerBase}/${encodeURIComponent(publicId)}`);
   }
 }

@@ -150,4 +150,81 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
     // On logout the store clears auth state.
     expect(TestBed.inject(AuthState).isLoggedIn()).toBe(false);
   });
+
+  describe('cancelled bookings and booking entry (CANCELLED, FE-7)', () => {
+    const listWith = (status: string, publicId = 'pub-x'): AppointmentPage => ({
+      content: [{ ...mockAppointments.content[0]!, id: 9, publicId, status }],
+      page: { number: 0, size: 10, totalElements: 1, totalPages: 1 },
+    });
+
+    const cancelButtons = () =>
+      Array.from(fixture.nativeElement.querySelectorAll('button')).filter((b) =>
+        (b as HTMLElement).textContent?.includes('Cancel Booking'),
+      );
+
+    const reloadWith = async (page: AppointmentPage) => {
+      component.customerStore.loadAppointments();
+      fixture.detectChanges();
+      httpMock
+        .expectOne((r) => r.url.includes('/api/v1/customer/appointments') && r.method === 'GET')
+        .flush(page);
+      await fixture.whenStable();
+      fixture.detectChanges();
+    };
+
+    it('shows a Cancelled badge and offers no cancel action for a cancelled booking', async () => {
+      await reloadWith(listWith('CANCELLED'));
+
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).toContain('Cancelled');
+      expect(cancelButtons()).toHaveLength(0);
+    });
+
+    it('offers no cancel action for a denied booking either', async () => {
+      await reloadWith(listWith('DENIED'));
+      expect(cancelButtons()).toHaveLength(0);
+    });
+
+    it('still offers cancel for pending and approved bookings', () => {
+      fixture.detectChanges();
+      expect(cancelButtons()).toHaveLength(2);
+    });
+
+    it('links to the booking flow from the header', () => {
+      const link = (fixture.nativeElement as HTMLElement).querySelector('a[href="/customer/book"]');
+      expect(link?.textContent).toContain('Book an appointment');
+    });
+
+    it('shows a retry (not a blank page) when the list fails to load (FE-1)', async () => {
+      component.customerStore.loadAppointments();
+      fixture.detectChanges();
+      httpMock
+        .expectOne((r) => r.url.includes('/api/v1/customer/appointments') && r.method === 'GET')
+        .flush(null, { status: 500, statusText: 'Server Error' });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.textContent).toContain('Could not load your appointments. Please retry.');
+      expect(el.querySelector('h1')?.textContent).toContain('My Appointments');
+    });
+
+    it('stays on the page with an error when logout fails', async () => {
+      const navigate = vi
+        .spyOn(component['router'], 'navigateByUrl')
+        .mockImplementation(() => Promise.resolve(true));
+
+      const done = component.onLogout();
+      httpMock
+        .expectOne((r) => r.url.includes('/api/v1/auth/logout'))
+        .flush(null, { status: 500, statusText: 'Server Error' });
+      await done;
+      fixture.detectChanges();
+
+      expect(navigate).not.toHaveBeenCalled();
+      expect(TestBed.inject(AuthState).isLoggedIn()).toBe(true);
+      expect(component.errorMessage()).toContain('Could not sign out');
+      expect((fixture.nativeElement as HTMLElement).textContent).toContain('Could not sign out');
+    });
+  });
 });

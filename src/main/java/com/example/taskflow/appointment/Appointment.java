@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -17,10 +18,8 @@ import java.util.UUID;
     @Index(name = "idx_appointments_booking_date", columnList = "booking_date"),
     @Index(name = "idx_appointment_public_id", columnList = "public_id", unique = true),
     @Index(name = "idx_appointment_barber_date", columnList = "barber_name,booking_date"),
-    @Index(name = "idx_appointment_customer_name", columnList = "customer_name"),
     @Index(name = "idx_appointment_status_date", columnList = "status,booking_date"),
     @Index(name = "idx_appointments_customer_email", columnList = "customer_email"),
-    @Index(name = "idx_appointments_service_type", columnList = "service_type"),
     @Index(name = "idx_appointments_barber_id", columnList = "barber_id"),
     @Index(name = "idx_appointments_service_id", columnList = "service_id")
 })
@@ -84,6 +83,19 @@ public class Appointment {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private AppointmentStatus status = AppointmentStatus.PENDING;
+
+    /**
+     * The service price at the moment of booking. Revenue uses this snapshot so a
+     * later catalog price change does not rewrite history; null on legacy rows
+     * that had no service reference (revenue then falls back to the live price).
+     */
+    @Column(name = "price_at_booking", precision = 10, scale = 2)
+    private BigDecimal priceAtBooking;
+
+    /** Optimistic lock: concurrent approve/deny/cancel cannot silently interleave. */
+    @Version
+    @Column(nullable = false)
+    private Long version;
 
     @Column(name = "reminder_sent", nullable = false)
     private Boolean reminderSent = false;
@@ -205,8 +217,24 @@ public class Appointment {
         this.barber = barber;
     }
 
+    public ServiceItem getService() {
+        return service;
+    }
+
     public void setService(ServiceItem service) {
         this.service = service;
+    }
+
+    public BigDecimal getPriceAtBooking() {
+        return priceAtBooking;
+    }
+
+    public void setPriceAtBooking(BigDecimal priceAtBooking) {
+        this.priceAtBooking = priceAtBooking;
+    }
+
+    public Long getVersion() {
+        return version;
     }
 
     public String getStatus() {

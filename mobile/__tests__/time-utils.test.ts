@@ -7,6 +7,16 @@ import {
   toLocalDateString,
   getUpcomingDays,
   DEFAULT_TIME_SLOTS,
+  MAX_BOOKING_DAYS_AHEAD,
+  OUTSIDE_WINDOW_MESSAGE,
+  PAST_SLOT_MESSAGE,
+  getFirstSelectableSlot,
+  getLastBookableDate,
+  getSelectableSlots,
+  getSlotValidationError,
+  isSlotInPast,
+  isWithinBookingWindow,
+  resolveBookableSelection,
 } from '../src/utils/time-utils';
 
 describe('time-utils', () => {
@@ -200,6 +210,116 @@ describe('time-utils', () => {
         dayNum: 10,
         monthName: 'Aug',
       });
+    });
+  });
+});
+
+describe('booking-window helpers (MOB-4)', () => {
+  // Wednesday 2026-08-12, local time.
+  const at = (hh: number, mm = 0, day = 12) => new Date(2026, 7, day, hh, mm, 0, 0);
+
+  it('MAX_BOOKING_DAYS_AHEAD matches the server rule', () => {
+    expect(MAX_BOOKING_DAYS_AHEAD).toBe(90);
+  });
+
+  describe('isSlotInPast', () => {
+    it('treats earlier days as past and later days as future', () => {
+      expect(isSlotInPast('2026-08-11', '16:00', at(8))).toBe(true);
+      expect(isSlotInPast('2026-08-13', '09:00', at(23, 59))).toBe(false);
+    });
+
+    it('compares the time of day for today, and a slot starting exactly now is past', () => {
+      expect(isSlotInPast('2026-08-12', '09:00', at(8, 59))).toBe(false);
+      expect(isSlotInPast('2026-08-12', '09:00', at(9, 0))).toBe(true);
+      expect(isSlotInPast('2026-08-12', '09:00', at(9, 1))).toBe(true);
+    });
+
+    it('is false for missing input', () => {
+      expect(isSlotInPast('', '09:00', at(8))).toBe(false);
+      expect(isSlotInPast('2026-08-12', '', at(8))).toBe(false);
+    });
+  });
+
+  describe('booking window', () => {
+    it('computes the last bookable local date', () => {
+      expect(getLastBookableDate(at(10))).toBe('2026-11-10'); // 12 Aug + 90 days
+    });
+
+    it('accepts today through day 90 and rejects everything else', () => {
+      expect(isWithinBookingWindow('2026-08-12', at(10))).toBe(true);
+      expect(isWithinBookingWindow('2026-11-10', at(10))).toBe(true);
+      expect(isWithinBookingWindow('2026-11-11', at(10))).toBe(false);
+      expect(isWithinBookingWindow('2026-08-11', at(10))).toBe(false);
+      expect(isWithinBookingWindow('', at(10))).toBe(false);
+    });
+  });
+
+  describe('getSelectableSlots', () => {
+    it('removes passed slots for today only', () => {
+      expect(getSelectableSlots('2026-08-12', at(12, 30))).toEqual(['13:00', '14:00', '15:00', '16:00']);
+      expect(getSelectableSlots('2026-08-13', at(12, 30))).toEqual([...DEFAULT_TIME_SLOTS]);
+    });
+
+    it('is empty outside the booking window or after the last slot', () => {
+      expect(getSelectableSlots('2026-08-12', at(17))).toEqual([]);
+      expect(getSelectableSlots('2026-11-11', at(10))).toEqual([]);
+      expect(getSelectableSlots('2026-08-01', at(10))).toEqual([]);
+    });
+  });
+
+  describe('getSlotValidationError', () => {
+    it('returns null for a valid pair', () => {
+      expect(getSlotValidationError('2026-08-12', '13:00', at(12))).toBeNull();
+    });
+
+    it('explains each failure', () => {
+      expect(getSlotValidationError('', '13:00', at(12))).toMatch(/select a date and time/i);
+      expect(getSlotValidationError('2026-08-12', '', at(12))).toMatch(/select a date and time/i);
+      expect(getSlotValidationError('2026-08-12', '09:00', at(12))).toBe(PAST_SLOT_MESSAGE);
+      expect(getSlotValidationError('2026-08-10', '09:00', at(12))).toBe(PAST_SLOT_MESSAGE);
+      expect(getSlotValidationError('2026-12-01', '09:00', at(12))).toBe(OUTSIDE_WINDOW_MESSAGE);
+    });
+  });
+
+  describe('selection resolution', () => {
+    const dates = ['2026-08-12', '2026-08-13', '2026-08-14'];
+
+    it('finds the first selectable slot, skipping days with none left', () => {
+      expect(getFirstSelectableSlot(dates, at(8))).toEqual({ date: '2026-08-12', time: '09:00' });
+      expect(getFirstSelectableSlot(dates, at(16, 30))).toEqual({ date: '2026-08-13', time: '09:00' });
+      expect(getFirstSelectableSlot([], at(8))).toBeNull();
+      expect(getFirstSelectableSlot(['2026-08-01'], at(8))).toBeNull();
+    });
+
+    it('keeps a still-valid selection', () => {
+      const current = { date: '2026-08-13', time: '14:00' };
+      expect(resolveBookableSelection(current, dates, at(10))).toBe(current);
+    });
+
+    it('moves to the next future slot on the same day when the time passed', () => {
+      expect(
+        resolveBookableSelection({ date: '2026-08-12', time: '09:00' }, dates, at(9, 30)),
+      ).toEqual({ date: '2026-08-12', time: '10:00' });
+    });
+
+    it('moves to the next day when the whole day is over', () => {
+      expect(
+        resolveBookableSelection({ date: '2026-08-12', time: '16:00' }, dates, at(17)),
+      ).toEqual({ date: '2026-08-13', time: '09:00' });
+    });
+
+    it('re-bases a stale date that rolled out of the offered days', () => {
+      expect(
+        resolveBookableSelection(
+          { date: '2026-08-11', time: '10:00' },
+          ['2026-08-12', '2026-08-13'],
+          at(0, 5),
+        ),
+      ).toEqual({ date: '2026-08-12', time: '09:00' });
+    });
+
+    it('returns null when nothing is selectable', () => {
+      expect(resolveBookableSelection({ date: '2026-08-12', time: '16:00' }, ['2026-08-12'], at(17))).toBeNull();
     });
   });
 });

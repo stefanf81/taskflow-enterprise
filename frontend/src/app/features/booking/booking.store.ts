@@ -1,11 +1,23 @@
 import { Injectable, signal, computed, inject, DestroyRef, isDevMode } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { form, required } from '@angular/forms/signals';
+import { appointmentCreateSchema } from '@taskflow/schemas';
 import { AppointmentItem } from '../../types/api';
-import { DEFAULT_TIME_SLOTS, computeEstimatedEndTime } from '../../time-utils';
+import {
+  DEFAULT_TIME_SLOTS,
+  MAX_BOOKING_DAYS_AHEAD,
+  computeEstimatedEndTime,
+  isBookableDate,
+  isSlotInPast,
+  msUntilNextLocalMidnight,
+  toLocalDateString,
+} from '../../time-utils';
 import { AppointmentsApi } from '../../core/api/appointments-api';
 import { extractApiError } from '../../core/api/extract-api-error';
+import { SessionEvents } from '../../core/session-events';
 import { AppointmentStore } from '../../appointment.store';
+import { AuthState } from '../../auth.state';
+import { CustomerStore } from '../../customer.store';
 import { ServiceCatalogStore } from '../../service-catalog.store';
 import { PublicBarberStore } from '../../public-barber.store';
 import { ReviewStore } from '../../review.store';
@@ -61,11 +73,20 @@ export class BookingStore {
   private readonly catalogStore = inject(ServiceCatalogStore);
   private readonly publicBarberStore = inject(PublicBarberStore);
   private readonly reviewStore = inject(ReviewStore);
+  private readonly authState = inject(AuthState);
+  private readonly customerStore = inject(CustomerStore);
+  private readonly sessionEvents = inject(SessionEvents);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly noPreferenceLabel = 'No Preference (First Available)';
   readonly timeSlots = DEFAULT_TIME_SLOTS;
   readonly services = this.catalogStore.services;
+
+  // Load failures of the data the wizard depends on (the lists themselves are error-safe
+  // and simply empty), so steps 1 and 2 can say "could not load" with a retry instead of
+  // rendering an unexplained blank list.
+  readonly catalogError = this.catalogStore.errorMessage;
+  readonly rosterError = this.publicBarberStore.errorMessage;
 
   // Shared loading / alert state (single source: AppointmentStore).
   readonly errorMessage = this.appointmentStore.errorMessage;
@@ -108,6 +129,33 @@ export class BookingStore {
   readonly serviceSearchQuery = signal<string>('');
   readonly showReceiptModal = signal<boolean>(false);
   readonly lastBookedAppointment = signal<AppointmentItem | null>(null);
+  /**
+   * Price of the booking behind the open receipt, captured at SUBMIT time. The
+   * live `checkoutTotal` cannot be used for the receipt: the form is reset the
+   * moment the booking succeeds, which flips the selected service back to the
+   * catalog's first entry (and with it the displayed price).
+   */
+  readonly lastBookedTotal = signal<number>(0);
+
+  /**
+   * "Now" as the browser sees it (the shop's local time). A signal — not a bare
+   * `new Date()` inside a computed — so the date carousel and the slot grid move
+   * on when the wizard is re-entered, the tab becomes visible again, or local
+   * midnight passes. See {@link watchToday} / {@link refreshToday}.
+   */
+  readonly now = signal<Date>(new Date());
+  readonly today = computed(() => toLocalDateString(this.now()));
+
+  /** Set when the busy-slot lookup failed: availability is UNKNOWN, not "all free". */
+  readonly slotsError = signal<string | null>(null);
+
+  /** Email problem to show next to the field, or null when it is acceptable. */
+  readonly emailError = computed(() => {
+    const email = this.bookingModel().customerEmail.trim();
+    if (!email) return 'Valid email address is required.';
+    const result = appointmentCreateSchema.shape.customerEmail.safeParse(email);
+    return result.success ? null : (result.error.issues[0]?.message ?? 'Invalid email format');
+  });
 
   // Stylist Profiles: API-driven roster (PublicBarberStore) joined with ratings.
   readonly stylistProfiles = computed(() => {
@@ -128,23 +176,24 @@ export class BookingStore {
 
   readonly upcomingBookingDays = computed(() => {
     const days = [];
-    const today = new Date();
+    const today = this.now();
 
     let count = 0;
     let offset = 0;
-    while (count < 7 && offset < 14) {
+    while (count < 7 && offset < Math.min(14, MAX_BOOKING_DAYS_AHEAD)) {
       const nextDate = new Date(today);
       nextDate.setDate(today.getDate() + offset);
 
       const dayOfWeek = nextDate.getDay();
-      if (dayOfWeek !== 0) {
-        // Skip Sundays since we are closed. Use local date components to avoid
-        // the UTC shift `toISOString()` would introduce in US/EU timezones.
-        const year = nextDate.getFullYear();
-        const month = String(nextDate.getMonth() + 1).padStart(2, '0');
-        const day = String(nextDate.getDate()).padStart(2, '0');
+      // Skip Sundays (closed) and a today with no slot left to book.
+      const todayIsOver =
+        offset === 0 &&
+        this.timeSlots.every((slot) => isSlotInPast(toLocalDateString(today), slot, today));
+      if (dayOfWeek !== 0 && !todayIsOver) {
+        // Use local date components to avoid the UTC shift `toISOString()`
+        // would introduce in US/EU timezones.
         days.push({
-          dateStr: `${year}-${month}-${day}`,
+          dateStr: toLocalDateString(nextDate),
           dayName: nextDate.toLocaleDateString('en-US', { weekday: 'short' }),
           dayNum: nextDate.getDate(),
           monthName: nextDate.toLocaleDateString('en-US', { month: 'short' }),
@@ -212,6 +261,29 @@ export class BookingStore {
   private idempotencyKey: string | null = null;
   private idempotencyFingerprint: string | null = null;
 
+  /** Contact details of the signed-in customer, re-applied whenever the form resets. */
+  private sessionContact = { customerName: '', customerEmail: '', customerPhone: '' };
+
+  constructor() {
+    // Nothing of a finished session may linger for the next visitor on a shared device:
+    // the contact details, the receipt (it carries the customer's name and code) and the form.
+    this.sessionEvents.sessionEnded.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      this.sessionContact = { customerName: '', customerEmail: '', customerPhone: '' };
+      this.showReceiptModal.set(false);
+      this.lastBookedAppointment.set(null);
+      this.lastBookedTotal.set(0);
+      this.resetBookingForm();
+    });
+  }
+
+  retryCatalog(): void {
+    this.catalogStore.loadServices();
+  }
+
+  retryRoster(): void {
+    this.publicBarberStore.loadBarbers();
+  }
+
   onSearchChange(value: string): void {
     this.serviceSearchQuery.set(value);
   }
@@ -222,6 +294,8 @@ export class BookingStore {
 
   selectService(name: string): void {
     this.bookingModel.update((m) => ({ ...m, serviceType: name }));
+    // Availability depends on the service's length: refresh it if a slot grid is showing.
+    if (this.bookingBarber() && this.bookingDate()) this.onBarberOrDateChange();
   }
 
   selectStylist(name: string): void {
@@ -247,12 +321,105 @@ export class BookingStore {
       return !!m.barberName;
     }
     if (step === 3) {
-      return !!m.bookingDate && !!m.bookingTime && !this.busySlots().includes(m.bookingTime);
+      return (
+        !!m.bookingDate &&
+        !!m.bookingTime &&
+        isBookableDate(m.bookingDate, this.now()) &&
+        !this.isSlotUnavailable(m.bookingTime) &&
+        // Never validate against a stale or missing availability answer: while a lookup is
+        // running the list still belongs to the PREVIOUS date, and after a failed lookup
+        // availability is unknown (the backend refuses conservatively too).
+        !this.isCheckingSlots() &&
+        !this.slotsError()
+      );
     }
     if (step === 4) {
-      return !!m.customerName.trim() && !!m.customerEmail.trim() && !!m.customerPhone.trim();
+      return !!m.customerName.trim() && !this.emailError() && !!m.customerPhone.trim();
     }
     return false;
+  }
+
+  /** A slot of the selected date that cannot be chosen: taken, or already started today. */
+  isSlotUnavailable(slot: string): boolean {
+    return this.busySlots().includes(slot) || this.isSlotPast(slot);
+  }
+
+  /** Whether `slot` on the selected date has already started (shop-local time as the browser sees it). */
+  isSlotPast(slot: string): boolean {
+    return isSlotInPast(this.bookingDate(), slot, this.now());
+  }
+
+  /**
+   * Re-reads the clock. Called on wizard entry, when the tab becomes visible again,
+   * at local midnight, and when a date is picked. Drops a selection the new "now"
+   * has invalidated (a date that passed, a same-day time that started).
+   */
+  refreshToday(): void {
+    this.now.set(new Date());
+    this.revalidateSelection();
+  }
+
+  /**
+   * Keeps "today" fresh for as long as `owner` lives: refreshes immediately, then on
+   * `visibilitychange` and at every local midnight. The listener and timer are torn
+   * down with `owner` (the wizard component), never leaked past it.
+   */
+  watchToday(owner: DestroyRef): void {
+    this.refreshToday();
+    if (typeof document === 'undefined') return;
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') this.refreshToday();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      // +1s so the refresh lands safely after midnight even with timer drift.
+      timer = setTimeout(
+        () => {
+          this.refreshToday();
+          arm();
+        },
+        msUntilNextLocalMidnight(new Date()) + 1000,
+      );
+    };
+    arm();
+
+    owner.onDestroy(() => {
+      document.removeEventListener('visibilitychange', onVisible);
+      if (timer !== undefined) clearTimeout(timer);
+    });
+  }
+
+  private revalidateSelection(): void {
+    const m = this.bookingModel();
+    const now = this.now();
+    if (m.bookingDate && !isBookableDate(m.bookingDate, now)) {
+      this.bookingModel.update((model) => ({ ...model, bookingDate: '' }));
+      this.busySlotsRequestSeq++; // invalidate any in-flight lookup for the dead date
+      this.isCheckingSlots.set(false);
+      this.slotsError.set(null);
+      this.busySlots.set([]);
+      this.errorMessage.set(
+        'The date you selected is no longer available. Please pick a new date.',
+      );
+      return;
+    }
+    if (m.bookingDate && isSlotInPast(m.bookingDate, m.bookingTime, now)) {
+      this.bookingModel.update((model) => ({
+        ...model,
+        bookingTime: this.firstOpenSlot(model.bookingDate),
+      }));
+    }
+  }
+
+  /** First slot of `date` that has not started yet and is not known to be taken ('' if none). */
+  private firstOpenSlot(date: string): string {
+    const now = this.now();
+    return (
+      this.timeSlots.find((s) => !isSlotInPast(date, s, now) && !this.busySlots().includes(s)) ?? ''
+    );
   }
 
   setStep(step: number): void {
@@ -277,12 +444,24 @@ export class BookingStore {
   }
 
   selectBookingDate(dateStr: string): void {
+    this.refreshToday();
+    if (!isBookableDate(dateStr, this.now())) {
+      this.errorMessage.set(
+        `Please pick a date from today up to ${MAX_BOOKING_DAYS_AHEAD} days ahead.`,
+      );
+      return;
+    }
     this.bookingModel.update((m) => ({ ...m, bookingDate: dateStr }));
+    // The preselected default time may already be over on the chosen day (today).
+    const time = this.bookingTime();
+    if (isSlotInPast(dateStr, time, this.now())) {
+      this.bookingModel.update((m) => ({ ...m, bookingTime: this.firstOpenSlot(dateStr) }));
+    }
     this.onBarberOrDateChange();
   }
 
   selectTimeSlot(slot: string): void {
-    if (!this.busySlots().includes(slot)) {
+    if (!this.isSlotUnavailable(slot)) {
       this.bookingModel.update((m) => ({ ...m, bookingTime: slot }));
     }
   }
@@ -301,14 +480,16 @@ export class BookingStore {
           'Our shop is closed on Sundays. Please select a Monday through Saturday slot!',
         );
         this.bookingModel.update((m) => ({ ...m, bookingDate: '' }));
+        this.slotsError.set(null);
         this.busySlots.set([]);
         return;
       }
 
       const seq = ++this.busySlotsRequestSeq;
       this.isCheckingSlots.set(true);
+      this.slotsError.set(null);
       this.appointmentsApi
-        .getBusySlots(barber, date)
+        .getBusySlots(barber, date, this.bookingService() || undefined)
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({
           next: (busy) => {
@@ -316,28 +497,70 @@ export class BookingStore {
             this.busySlots.set(busy);
             this.isCheckingSlots.set(false);
           },
-          error: () => {
+          error: (err) => {
             if (seq !== this.busySlotsRequestSeq) return; // stale response
+            // Availability is UNKNOWN, not "everything is free": showing every slot as open
+            // would invite a booking the server may refuse. Keep step 3 blocked (see
+            // isStepValid) until a lookup succeeds; the grid offers a retry.
             this.busySlots.set([]);
+            this.slotsError.set(
+              extractApiError(err, 'Could not check availability. Please try again.'),
+            );
             this.isCheckingSlots.set(false);
           },
         });
     } else {
       this.busySlotsRequestSeq++; // invalidate any in-flight lookup
       this.isCheckingSlots.set(false);
+      this.slotsError.set(null);
       this.busySlots.set([]);
     }
   }
 
   // Submit Guest Booking (Client Calendar Interface)
   submitBooking(): void {
+    // Time may have moved on while the form was open (tab left idle past the slot, or
+    // past midnight): re-read the clock first so the checks below use a fresh selection.
+    const chosenTime = this.bookingTime();
+    this.refreshToday();
     const model = this.bookingModel();
     const name = model.customerName.trim();
     const email = model.customerEmail.trim();
     const phone = model.customerPhone.trim();
 
-    if (!name || !email || !phone || !model.bookingDate) {
+    if (!model.bookingDate) {
+      // The chosen date is gone (refreshToday() said why) or never picked: back to step 3.
+      this.errorMessage.set(
+        this.errorMessage() ?? 'Please pick a date and time to secure your slot.',
+      );
+      this.activeStep.set(3);
+      return;
+    }
+
+    if (!name || !email || !phone) {
       this.errorMessage.set('Please fill out all required fields to secure your slot.');
+      return;
+    }
+
+    // Catch an address the server would reject BEFORE the round trip ("a@b").
+    const emailProblem = this.emailError();
+    if (emailProblem) {
+      this.errorMessage.set(emailProblem);
+      return;
+    }
+
+    if (model.bookingTime !== chosenTime) {
+      // The slot started while the form sat open and refreshToday() moved the selection:
+      // never submit a time the customer did not pick.
+      this.errorMessage.set('That time has already passed. Please pick a later slot.');
+      this.activeStep.set(3);
+      return;
+    }
+
+    if (this.isCheckingSlots() || this.slotsError()) {
+      this.errorMessage.set(
+        this.slotsError() ?? 'Still checking availability. Please try again in a moment.',
+      );
       return;
     }
 
@@ -352,6 +575,8 @@ export class BookingStore {
 
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
+    // What the customer is shown and agrees to NOW; the receipt must not re-derive it later.
+    const bookedTotal = this.checkoutTotal();
 
     const payload = {
       customerName: name,
@@ -379,8 +604,13 @@ export class BookingStore {
         next: (created) => {
           this.isSubmitting.set(false);
           this.lastBookedAppointment.set(created);
+          this.lastBookedTotal.set(bookedTotal);
           this.showReceiptModal.set(true);
           this.resetBookingForm();
+          // A signed-in customer's portal list must show the new booking.
+          if (this.authState.isLoggedIn()) {
+            this.customerStore.loadAppointments();
+          }
         },
         error: (err) => {
           // A 409 means this key was already used for a different payload; the
@@ -412,9 +642,9 @@ export class BookingStore {
   resetBookingForm(): void {
     const defaultService = this.services()[0]?.name ?? '';
     this.bookingModel.set({
-      customerName: '',
-      customerEmail: '',
-      customerPhone: '',
+      customerName: this.sessionContact.customerName,
+      customerEmail: this.sessionContact.customerEmail,
+      customerPhone: this.sessionContact.customerPhone,
       barberName: this.noPreferenceLabel,
       bookingDate: '',
       bookingTime: this.timeSlots[0] ?? '',
@@ -423,9 +653,35 @@ export class BookingStore {
     this.selectedCategory.set('all');
     this.busySlotsRequestSeq++; // invalidate any in-flight slot lookup
     this.busySlots.set([]);
+    this.slotsError.set(null);
+    this.isCheckingSlots.set(false);
     this.activeStep.set(1);
     this.isSubmitting.set(false);
     this.idempotencyKey = null;
     this.idempotencyFingerprint = null;
+  }
+
+  /**
+   * Pre-fills the contact fields for a signed-in customer booking from the portal:
+   * the email from the session principal (customers sign in with their email) and
+   * name/phone from their most recent booking when one is loaded. Only EMPTY fields
+   * are filled, so anything the customer typed or edited is never overwritten; all
+   * three stay editable. No new backend endpoint is involved.
+   */
+  prefillFromSession(): void {
+    const username = this.authState.username();
+    const latest = this.customerStore.appointments()[0];
+    this.sessionContact = {
+      customerName: latest?.customerName ?? '',
+      customerEmail: username.includes('@') ? username : (latest?.customerEmail ?? ''),
+      customerPhone: latest?.customerPhone ?? '',
+    };
+    const contact = this.sessionContact;
+    this.bookingModel.update((m) => ({
+      ...m,
+      customerName: m.customerName || contact.customerName,
+      customerEmail: m.customerEmail || contact.customerEmail,
+      customerPhone: m.customerPhone || contact.customerPhone,
+    }));
   }
 }

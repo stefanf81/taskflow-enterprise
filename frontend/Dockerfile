@@ -160,6 +160,10 @@ COPY --from=compression /csp-importmap.conf /etc/nginx/csp-importmap.conf
 # over this file when the backend runs directly on the runner host.
 COPY nginx-upstream-server.conf /etc/nginx/upstream-server.conf
 
+# Empty by default; a deployment behind an ingress mounts its own over this file
+# (see the comment at the top of nginx.conf's server block).
+COPY nginx-real-ip.conf /etc/nginx/real-ip.conf
+
 # Startup entrypoint: recreates temp directories on every container start
 # (the /var/cache/nginx tmpfs mount hides image-layer directories), then
 # execs nginx. PID 1 becomes nginx so it receives signals correctly.

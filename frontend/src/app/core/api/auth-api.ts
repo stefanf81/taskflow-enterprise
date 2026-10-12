@@ -45,9 +45,14 @@ export class AuthApi {
   }
 
   // Returns the currently authenticated principal (used to restore UI role after a page refresh).
+  // Marked PUBLIC_REQUEST: a guest's boot-time 401 is the expected "no session" answer, not a
+  // session expiry. AuthState.bootstrap() handles it itself, so the interceptor must not broadcast
+  // it (that would clear state out from under the bootstrap and wipe a newer login).
   me(): Observable<LoginResponse> {
     return this.http
-      .get<LoginResponse>(`${this.base}/me`)
+      .get<LoginResponse>(`${this.base}/me`, {
+        context: new HttpContext().set(PUBLIC_REQUEST, true),
+      })
       .pipe(map((raw) => parseResponse(loginResponseSchema, raw, 'GET /api/v1/auth/me')));
   }
 
@@ -60,8 +65,14 @@ export class AuthApi {
     });
   }
 
-  // Clears the HttpOnly auth cookie on the backend.
+  // Revokes the session and clears the HttpOnly auth cookie on the backend. The endpoint is
+  // permitAll (a dead session can still sign out) but still needs the CSRF header. Marked
+  // PUBLIC_REQUEST so a 401 here never triggers the "session expired" flow mid-logout.
   logout(): Observable<void> {
-    return this.http.post<void>(`${this.base}/logout`, {});
+    return this.http.post<void>(
+      `${this.base}/logout`,
+      {},
+      { context: new HttpContext().set(PUBLIC_REQUEST, true) },
+    );
   }
 }

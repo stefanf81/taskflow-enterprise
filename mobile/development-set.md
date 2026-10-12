@@ -388,7 +388,7 @@ npm run build:ios        # eas build --platform ios
 The `extra.eas.projectId` in `app.json` is intentionally a placeholder in a
 fresh checkout. `eas project:init` replaces it with the real project ID. Before
 preview or production builds, configure `EXPO_PUBLIC_API_URL` as an HTTPS URL
-and provide the two `TASKFLOW_API_SPKI_PINS` values required by the TLS
+and provide the two `TASKFLOW_API_SPKI_CA_PINS` values required by the TLS
 pinning plugin. Do not use the local HTTP URL or placeholder pins in a release
 build.
 

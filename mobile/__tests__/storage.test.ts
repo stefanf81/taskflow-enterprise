@@ -181,4 +181,67 @@ describe('storage', () => {
     const token = await storage.getToken();
     expect(token).toBeNull();
   });
+
+  // ==================== token expiry (MOB-8) ====================
+  describe('token expiry', () => {
+    it('stores and reads the expiry through SecureStore on native', async () => {
+      await storage.setTokenExpiry(1_786_000_000_000.7);
+      expect(mockSetItemAsync).toHaveBeenCalledWith('taskflow_token_expires_at', '1786000000000');
+
+      mockGetItemAsync.mockResolvedValue('1786000000000');
+      await expect(storage.getTokenExpiry()).resolves.toBe(1_786_000_000_000);
+      expect(mockGetItemAsync).toHaveBeenCalledWith('taskflow_token_expires_at');
+    });
+
+    it('returns null when no or garbage expiry is stored', async () => {
+      mockGetItemAsync.mockResolvedValue(null);
+      await expect(storage.getTokenExpiry()).resolves.toBeNull();
+      mockGetItemAsync.mockResolvedValue('not-a-number');
+      await expect(storage.getTokenExpiry()).resolves.toBeNull();
+    });
+
+    it('does not fail requests when the expiry cannot be read', async () => {
+      mockGetItemAsync.mockRejectedValue(new Error('keychain locked'));
+      await expect(storage.getTokenExpiry()).resolves.toBeNull();
+    });
+
+    it('fails closed when the expiry cannot be written on native', async () => {
+      mockSetItemAsync.mockRejectedValue(new Error('nope'));
+      await expect(storage.setTokenExpiry(1)).rejects.toThrow('Secure credential storage is unavailable.');
+    });
+
+    it('keeps the expiry in memory on web', async () => {
+      (Platform as any).OS = 'web';
+      await storage.setTokenExpiry(123456);
+      expect(mockSetItemAsync).not.toHaveBeenCalled();
+      await expect(storage.getTokenExpiry()).resolves.toBe(123456);
+      await storage.removeTokenExpiry();
+      await expect(storage.getTokenExpiry()).resolves.toBeNull();
+    });
+
+    it('removes the expiry via SecureStore and fails closed on error', async () => {
+      await storage.removeTokenExpiry();
+      expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_token_expires_at');
+      mockDeleteItemAsync.mockRejectedValue(new Error('fail'));
+      await expect(storage.removeTokenExpiry()).rejects.toThrow('Secure credential removal failed.');
+    });
+  });
+
+  // ==================== clearSession ====================
+  describe('clearSession', () => {
+    it('removes token, expiry and user data', async () => {
+      await storage.clearSession();
+      expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_auth_token');
+      expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_token_expires_at');
+      expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_user_data');
+    });
+
+    it('attempts every removal even if one fails, then reports the failure', async () => {
+      mockDeleteItemAsync.mockImplementation(async (key: string) => {
+        if (key === 'taskflow_auth_token') throw new Error('fail');
+      });
+      await expect(storage.clearSession()).rejects.toThrow('Secure credential removal failed.');
+      expect(mockDeleteItemAsync).toHaveBeenCalledTimes(3);
+    });
+  });
 });

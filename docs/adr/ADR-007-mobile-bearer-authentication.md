@@ -29,7 +29,7 @@ deferred until a refresh-token or `jti` deny-list design is required.
 ### SSL Certificate Pinning
 
 Preview and production builds require an HTTPS API host plus two SHA-256 SPKI
-public-key hashes in `TASKFLOW_API_SPKI_PINS`. The tracked Expo config plugin
+public-key hashes in `TASKFLOW_API_SPKI_CA_PINS` (CA/intermediate hashes; the former `TASKFLOW_API_SPKI_PINS` is rejected). The tracked Expo config plugin
 `plugins/withTaskflowTlsPinning.js` generates Android network-security and iOS
 `NSPinnedDomains` configuration during prebuild, so the platform networking
 stack enforces pinning for the existing Axios client.

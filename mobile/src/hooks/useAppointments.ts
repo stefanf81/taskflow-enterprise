@@ -10,10 +10,13 @@ export const useAppointments = (filter?: string, search?: string, page = 0, size
   });
 };
 
-export const useBusySlots = (barberName: string, bookingDate: string) => {
+export const useBusySlots = (barberName: string, bookingDate: string, serviceType?: string) => {
   return useQuery({
-    queryKey: ['busySlots', barberName, bookingDate],
-    queryFn: () => appointmentsApi.getBusySlots(barberName, bookingDate),
+    queryKey: ['busySlots', barberName, bookingDate, serviceType ?? ''],
+    queryFn: () =>
+      serviceType
+        ? appointmentsApi.getBusySlots(barberName, bookingDate, serviceType)
+        : appointmentsApi.getBusySlots(barberName, bookingDate),
     enabled: !!barberName && barberName.length > 0 && !!bookingDate,
     staleTime: 5000,
   });

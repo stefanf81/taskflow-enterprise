@@ -91,6 +91,8 @@ describe('NotificationStore', () => {
     fixture.detectChanges();
 
     expect(store.errorMessage()).toBe('Could not load notification outbox.');
+    expect(() => store.notifications()).not.toThrow();
+    expect(store.notifications()).toEqual([]);
   });
 
   it('should reload notifications on repeated calls', async () => {
