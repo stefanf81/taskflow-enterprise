@@ -53,11 +53,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * Iterations: 2,000 warm-up, 10,000 measured per strategy.
  * <p>
  * <b>All Hibernate L2 cache configuration is scoped to this test's
- * properties.</b> Production continues using
- * {@code hibernate.cache.use_second_level_cache=false} (see
- * {@code application.properties}). The {@code @Cache(usage=READ_WRITE)}
- * entity annotations added in this change are harmless when L2 is disabled
- * — Hibernate simply ignores them.
+ * properties.</b> {@code application.properties} sets
+ * {@code hibernate.cache.use_second_level_cache=false} and
+ * {@code hibernate.cache.use_query_cache=false} explicitly (DATA-7;
+ * {@code HibernateCacheSettingsTest} asserts the effective values), because
+ * hibernate-jcache and caffeine-jcache are on the classpath and nothing else
+ * would pin the setting. The {@code @Cache(usage=READ_WRITE)} entity
+ * annotations only take effect where this test switches L2 on; their regions
+ * are named {@code l2-barbers}, {@code l2-services} and {@code l2-reviews} so
+ * they cannot be mistaken for the Spring cache names of the same entities.
  * <p>
  * JVM options (set via {@code JAVA_TOOL_OPTIONS}):
  * <pre>

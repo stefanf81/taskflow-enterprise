@@ -6,7 +6,7 @@ import org.hibernate.annotations.CacheConcurrencyStrategy;
 
 @Entity
 @Table(name = "barbers")
-@Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "barbers")
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "l2-barbers")
 public class Barber {
 
     @Id

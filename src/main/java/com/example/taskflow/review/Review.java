@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "reviews")
-@Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "reviews")
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "l2-reviews")
 public class Review {
 
     @Id

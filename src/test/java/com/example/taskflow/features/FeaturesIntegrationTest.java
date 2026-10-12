@@ -18,11 +18,17 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
+import com.example.taskflow.testsupport.MutableTestClock;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.HashMap;
@@ -35,7 +41,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties = {"app.rate-limit.enabled=false", "app.stats.cache.ttl=0"})
 @AutoConfigureMockMvc
+@Import(FeaturesIntegrationTest.TestClockConfig.class)
 public class FeaturesIntegrationTest {
+
+    /** The shop clock is movable so a review can be written only after the appointment has happened. */
+    @TestConfiguration
+    static class TestClockConfig {
+        @Bean
+        @Primary
+        MutableTestClock testClock() {
+            return new MutableTestClock(Instant.parse("2030-05-01T09:00:00Z"));
+        }
+    }
+
+    @Autowired
+    private MutableTestClock clock;
 
     @Autowired
     private MockMvc mockMvc;
@@ -67,6 +87,7 @@ public class FeaturesIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        clock.set(Instant.parse("2030-05-01T09:00:00Z"));
         appointmentRepository.deleteAll();
         serviceItemRepository.deleteAll();
         barberTimeOffRepository.deleteAll();
@@ -239,6 +260,16 @@ public class FeaturesIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"APPROVED\"}"))
                 .andExpect(status().isOk());
+
+        // An approved appointment still in the future (2030-05-16 10:00) cannot be reviewed yet
+        mockMvc.perform(post("/api/v1/reviews/public/" + publicId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(reviewRequest)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", is("This appointment has not taken place yet and cannot be reviewed.")));
+
+        // ... but once it has taken place it can
+        clock.set(Instant.parse("2030-05-17T09:00:00Z"));
 
         // Submit the review successfully the first time
         mockMvc.perform(post("/api/v1/reviews/public/" + publicId)
