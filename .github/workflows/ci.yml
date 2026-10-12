@@ -105,6 +105,12 @@ jobs:
               - gradle.properties
               - gradlew
               - gradle/**
+              # Container configuration asserted by the default test suite
+              # (ContainerImageBenchmarkTest, GlibcTuningBenchmarkTest,
+              # ContainerConfigGuardTest), so a change to it runs those guards.
+              - Dockerfile*
+              - docker-compose.yml
+              - frontend/nginx.conf
 
             frontend:
               - frontend/**

@@ -1,6 +1,5 @@
 package com.example.taskflow.benchmark;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -16,8 +15,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * The cold-start sweep itself is driven by {@code scripts/benchmark-cds-startup.sh}; this
  * test locks the adopted Dockerfile configuration so a future edit cannot silently revert
  * to the trimmed training context or re-ship the unused network tools.
+ *
+ * <p>Deliberately not tagged {@code benchmark}: it only reads checked-in files, so it runs
+ * in the default {@code test} task (and therefore in CI), where the guard is useful.
  */
-@Tag("benchmark")
 class ContainerImageBenchmarkTest {
 
     @Test

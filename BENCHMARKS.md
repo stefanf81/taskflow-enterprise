@@ -1198,7 +1198,7 @@ location / { try_files $uri $uri/ /index.html; }
 | **`index.html`** | `public` | via `location /` (no immutable) | Correctly revalidated so new hashes are discovered |
 | **Images / fonts** (`ico`/`png`/`svg`/`woff2`) | `public` | **`public, max-age=3600, must-revalidate`** | Short-lived cache; non-hashed names must revalidate |
 
-**Verification:** `P1AndP2BenchmarkTest.p1_1_nginx_immutable_config` asserts `frontend/nginx.conf` contains `location ~* \.(?:js|css)$` + `immutable, max-age=15552000`, `location ~* \.(?:ico|gif` + `public, max-age=3600, must-revalidate`, `oldSingle` mixed block is `false`, and `location / {` + `try_files` for `index.html`.
+**Verification:** `ContainerConfigGuardTest.p1_1_nginx_immutable_config` asserts `frontend/nginx.conf` contains `location ~* \.(?:js|css)$` + `immutable, max-age=15552000`, `location ~* \.(?:ico|gif` + `public, max-age=3600, must-revalidate`, `oldSingle` mixed block is `false`, and `location / {` + `try_files` for `index.html`.
 
 **Verdict:** Split `immutable` is a pure win with `outputHashing:all`. Hashed bundles finish with **~0 ms revalidate** vs `If-None-Match` round-trip; `index.html` stays fresh so updates propagate instantly. Zero application changes, verifiable by `nginx -T` and `curl -I` headers.
 
@@ -1219,7 +1219,7 @@ location / { try_files $uri $uri/ /index.html; }
 -XX:MaxDirectMemorySize=256m -XX:MaxMetaspaceSize=256m
 ```
 
-*   `-XX:+UseContainerSupport` — explicit, self-documenting cgroup limit awareness (JDK 21 defaults to `true`, but stating it prevents accidental override and satisfies hardening audits). Verified by `P1AndP2BenchmarkTest.p1_2_jvm_diagnostics_flags`.
+*   `-XX:+UseContainerSupport` — explicit, self-documenting cgroup limit awareness (JDK 21 defaults to `true`, but stating it prevents accidental override and satisfies hardening audits). Verified by `ContainerConfigGuardTest.p1_2_jvm_diagnostics_flags`.
 *   `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof` — post-mortem heap dump on `tmpfs` `/tmp` (RAM-backed, ephemeral, per compose `tmpfs: - /tmp`). **0% overhead until OOM**, then one file write.
 *   `-Xlog:gc*:file=/tmp/gc.log:time,uptime:filecount=3,filesize=10m` — structured GC timeline with rotation (3×10 MB). Overhead ~0.7% at 10% OTel sampling (§7 parity) — verified in §1/§30 as negligible. `filecount`/`filesize` prevent disk exhaustion.
 *   Image `CMD` (`Dockerfile:139`, `Dockerfile.x64`) stays **sizing-agnostic** — only `-XX:SharedArchiveFile=application.jsa -Xshare:auto -XX:+ExitOnOutOfMemoryError`. All heap/off-heap sizing lives in deployment env.
@@ -1232,7 +1232,7 @@ location / { try_files $uri $uri/ /index.html; }
 | `G1GC` / `MaxGCPauseMillis=100` | `JAVA_TOOL_OPTIONS` | — | Consistent with §1 winner (G1GC default) |
 | `SharedArchiveFile` / `Xshare:auto` | Image `CMD` | −19.8% start (§36) | CDS archive |
 
-**Verification:** `P1AndP2BenchmarkTest.p1_2_jvm_diagnostics_flags` checks `docker-compose.yml` for `HeapDumpOnOutOfMemoryError` + `HeapDumpPath=/tmp/heapdump.hprof`, `Xlog:gc` + `/tmp/gc.log`, `UseContainerSupport`, and `UseG1GC` retention.
+**Verification:** `ContainerConfigGuardTest.p1_2_jvm_diagnostics_flags` checks `docker-compose.yml` for `HeapDumpOnOutOfMemoryError` + `HeapDumpPath=/tmp/heapdump.hprof`, `Xlog:gc` + `/tmp/gc.log`, `UseContainerSupport`, and `UseG1GC` retention.
 
 **Verdict:** Diagnostics are a zero-cost hardening layer (0% heap-dump overhead, ~0.7% GC log) with explicit `UseContainerSupport` for container-aware sizing. Deployment owns sizing; image stays agnostic — the precedence bug is not reintroduced.
 
@@ -1336,7 +1336,7 @@ management.metrics.distribution.sla.http.server.requests=50ms,100ms,200ms
 | `Dockerfile` (arm64 local) | ✅ `wget /actuator/health/liveness` 30s/5s/3/15s | Standalone `docker run` health-aware |
 | `Dockerfile.x64` (amd64 prod) | ❌ omitted | K8s `livenessProbe` owns it |
 
-**Verification:** `P1AndP2BenchmarkTest.p1_2_jvm_diagnostics_flags` asserts `Dockerfile` contains `HEALTHCHECK` and `Dockerfile.x64` does **not**.
+**Verification:** `ContainerConfigGuardTest.p1_2_jvm_diagnostics_flags` asserts `Dockerfile` contains `HEALTHCHECK` and `Dockerfile.x64` does **not**.
 
 **Verdict:** Local `HEALTHCHECK` improves `docker run` DX with zero prod cost. K8s parity is preserved by keeping the prod image probe-free and documenting the divergence.
 
