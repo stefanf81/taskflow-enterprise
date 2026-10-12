@@ -71,7 +71,8 @@ This document tracks unresolved security findings, architectural technical debt,
 
 ## 2. Data Layer & Application Robustness (P1 — High/Medium Priority)
 
-### 2.1 NullPointerException on Empty Table in Stats Aggregate
+### 2.1 NullPointerException on Empty Table in Stats Aggregate (Resolved)
+- **Resolved:** every `SUM` in `getAppointmentStats` is wrapped in `COALESCE`. The original finding follows for context.
 - **Location:** `src/main/java/com/example/taskflow/appointment/internal/AppointmentRepository.java:51-60`
 - **Problem:** `getAppointmentStats` computes sums via `SUM(CASE WHEN ... THEN 1 ELSE 0 END)` without `COALESCE`. On a fresh database with zero appointments, SQL returns `NULL` for these sums. Hibernate unboxes these into primitive `long` fields in the `AppointmentStats` record constructor, throwing `NullPointerException`.
 - **Remediation:** Wrap all aggregate `SUM(...)` terms with `COALESCE(SUM(...), 0)`:
@@ -83,7 +84,8 @@ This document tracks unresolved security findings, architectural technical debt,
   ) FROM Appointment a LEFT JOIN a.service s
   ```
 
-### 2.2 Case-Insensitive Email Functional Indexes
+### 2.2 Case-Insensitive Email Functional Indexes (Resolved on PostgreSQL)
+- **Resolved:** lookups use explicit `lower(col) = lower(:email)` and V28 adds `lower()` indexes on PostgreSQL only (H2 has no expression indexes). The original finding follows for context.
 - **Location:** `src/main/java/com/example/taskflow/appointment/internal/AppointmentRepository.java:25`, `src/main/java/com/example/taskflow/auth/internal/UserRepository.java:11`
 - **Problem:** `findByCustomerEmailIgnoreCase` and `findByEmailIgnoreCase` generate `WHERE lower(email) = lower(?)` (or `upper`). Standard B-tree indexes on `appointments.customer_email` and `app_users.email` are ignored by PostgreSQL, causing sequential table scans.
 - **Remediation:** Add Flyway migration:
@@ -92,7 +94,8 @@ This document tracks unresolved security findings, architectural technical debt,
   CREATE INDEX idx_app_users_email_lower ON app_users (lower(email));
   ```
 
-### 2.3 Unique Constraint and Index on `services.name`
+### 2.3 Unique Constraint and Index on `services.name` (Resolved)
+- **Resolved:** V32 dedupes and adds a case-insensitive unique index; create/update answer 409; deleting a service with bookings retires it. The original finding follows for context.
 - **Location:** `src/main/resources/db/migration/V5__create_service_catalog.sql`, `src/main/java/com/example/taskflow/catalog/internal/ServiceItemRepository.java:14`
 - **Problem:** Booking creation resolves service catalog entries by name via `findByName`. The `services.name` column lacks an index and a `UNIQUE` constraint, allowing accidental duplicate names that trigger `IncorrectResultSizeDataAccessException` (HTTP 500).
 - **Remediation:** Add Flyway migration:
@@ -100,7 +103,8 @@ This document tracks unresolved security findings, architectural technical debt,
   CREATE UNIQUE INDEX idx_services_name ON services (name);
   ```
 
-### 2.4 Unbounded Growth of Notification Outbox Table
+### 2.4 Unbounded Growth of Notification Outbox Table (Resolved)
+- **Resolved:** daily purge of `SENT` rows older than `app.notification.retention-days` (30). The original finding follows for context.
 - **Location:** `src/main/java/com/example/taskflow/notification/NotificationOutbox.java`, `src/main/java/com/example/taskflow/notification/NotificationRelayScheduler.java`
 - **Problem:** Records in `notification_outbox` accumulate indefinitely with no retention, cleanup, or partitioning strategy.
 - **Remediation:** Add a scheduled daily cleanup task (`@Scheduled(cron = "0 15 3 * * *")`) purging `SENT` notifications older than 30 days:
@@ -143,7 +147,8 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Problem:** `spring.data.redis.lettuce.pool.*` properties are defined with comments about preventing connection thrashing, but `commons-pool2` is not on the classpath. Spring Boot silently ignores the pool configuration and falls back to a single shared connection.
 - **Remediation:** Add `implementation 'org.apache.commons:commons-pool2'` to `build.gradle` if pooling is desired, or remove the inactive configuration properties and document the shared-connection model.
 
-### 3.6 Dead Hibernate Second-Level Cache Annotations
+### 3.6 Dead Hibernate Second-Level Cache Annotations (Resolved)
+- **Resolved:** L2 and query caches are explicitly disabled (tested) and the `@Cache` regions are renamed `l2-*` so they cannot collide with Spring cache names. The original finding follows for context.
 - **Location:** `src/main/java/com/example/taskflow/appointment/Barber.java:9`, `catalog/ServiceItem.java:10`, `review/Review.java:11`
 - **Problem:** Entities carry `@Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "...")` annotations, but second-level caching is disabled in Spring Boot properties. The region names match Spring Cache names (`barbers`, `services`), creating a namespace collision risk if 2LC is ever enabled.
 - **Remediation:** Remove the dead `@Cache` annotations or isolate the region names (e.g. `l2-barbers`).
@@ -185,12 +190,27 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Problem:** Required field error elements with `role="alert"` render immediately when Step 4 mounts because validation does not check whether fields have been touched, firing false validation alerts to screen readers.
 - **Remediation:** Gate error alerts behind `touched()` signal checks (matching `auth-modal.ts:114`).
 
-### 4.4 Stale `initialPublicId` in Mobile Public Actions Screen
+### 4.4 Stale `initialPublicId` in Mobile Public Actions Screen (Resolved)
+- **Resolved:** the modals re-sync the id when `visible`/`initialPublicId` change. The original finding follows for context.
 - **Location:** `mobile/src/screens/PublicActionsScreen.tsx:16`, `mobile/src/components/booking/PublicCancelModal.tsx:23`
 - **Problem:** `useState(initialPublicId)` in `PublicCancelModal` and `PublicReviewModal` initializes once upon mounting. Re-navigating to the screen with a different booking code retains the initial pre-filled value.
 - **Remediation:** Add `useEffect(() => { if (visible) setPublicId(initialPublicId); }, [visible, initialPublicId]);`.
 
-### 4.5 Mobile Notification Polling in Background/Inactive Tabs
+### 4.5 Mobile Notification Polling in Background/Inactive Tabs (Resolved)
+- **Resolved:** polling is gated by `useIsFocused()` and TanStack `focusManager` follows `AppState`. The original finding follows for context.
 - **Location:** `mobile/src/hooks/useNotifications.ts:8`
 - **Problem:** `refetchInterval: 15000` polls the outbox endpoint every 15 seconds continuously as long as the tab remains mounted in the bottom tab navigator.
 - **Remediation:** Gate polling using `useIsFocused()` from `@react-navigation/native` (`refetchInterval: isFocused ? 15000 : false`).
+
+---
+
+## 5. Known Follow-Ups (from the BKG/DATA/FE/MOB batch)
+
+- **No end-time column / exclusion constraint:** overlap is enforced in the booking transaction and by the exact-start unique index. Only services longer than the 60-minute grid step could still race on different start times; a stored end time plus PostgreSQL `EXCLUDE USING gist (barber_id WITH =, tsrange(...) WITH &&) WHERE active` closes it.
+- **Per-email booking cap is best-effort** under truly concurrent requests.
+- **Single-replica state:** the token denylist, login-failure counters, the rate-limiter fallback and the cache single-flight are per JVM. Move them to Redis before running more than one replica.
+- **Email ownership (TODO 1.1)** is still unverified: anyone can register a guest's email and see/cancel their bookings.
+- **Mobile:** set the real EAS `projectId` (`eas init`); iOS `NSPinnedCAIdentities` behaviour with intermediates is untested on a device; Detox E2E, Playwright e2e and axe were not run in this batch.
+- **Retired services** have no admin view (the catalog list is active-only).
+- **Redis `RedisCacheManager` wrapping** (`SingleFlightCacheManager`) is unit-tested but untested against a live Redis, and means Micrometer cache metrics for the Redis manager are no longer bound.
+

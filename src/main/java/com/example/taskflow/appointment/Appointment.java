@@ -18,10 +18,8 @@ import java.util.UUID;
     @Index(name = "idx_appointments_booking_date", columnList = "booking_date"),
     @Index(name = "idx_appointment_public_id", columnList = "public_id", unique = true),
     @Index(name = "idx_appointment_barber_date", columnList = "barber_name,booking_date"),
-    @Index(name = "idx_appointment_customer_name", columnList = "customer_name"),
     @Index(name = "idx_appointment_status_date", columnList = "status,booking_date"),
     @Index(name = "idx_appointments_customer_email", columnList = "customer_email"),
-    @Index(name = "idx_appointments_service_type", columnList = "service_type"),
     @Index(name = "idx_appointments_barber_id", columnList = "barber_id"),
     @Index(name = "idx_appointments_service_id", columnList = "service_id")
 })

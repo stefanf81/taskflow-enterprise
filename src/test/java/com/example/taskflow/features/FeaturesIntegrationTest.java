@@ -160,7 +160,7 @@ public class FeaturesIntegrationTest {
                 .andExpect(status().isCreated());
 
         // A Thursday inside the booking window (bookings must be in the future and within 90 days)
-        LocalDate thursday = LocalDate.now().plusDays(7)
+        LocalDate thursday = LocalDate.now(clock).plusDays(7)
                 .with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.THURSDAY));
 
         // Login Customer
@@ -341,7 +341,14 @@ public class FeaturesIntegrationTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message", is("Appointment not found or unauthorized.")));
 
-        // Jane cancels her own appointment successfully (returns 204 No Content)
+        // The appointment has already taken place (the clock was moved past it for the
+        // review above), so even its owner can no longer cancel it online.
+        mockMvc.perform(delete("/api/v1/customer/appointments/" + publicId)
+                        .header("Authorization", customerToken))
+                .andExpect(status().isBadRequest());
+
+        // Before it starts, Jane cancels her own appointment successfully (204 No Content)
+        clock.set(Instant.parse("2030-05-02T09:00:00Z"));
         mockMvc.perform(delete("/api/v1/customer/appointments/" + publicId)
                         .header("Authorization", customerToken))
                 .andExpect(status().isNoContent());

@@ -56,11 +56,14 @@ class NotificationOutboxIntegrationTest {
     @Autowired private NotificationRelayScheduler relay;
     @Autowired private NotificationSender sender;
     @Autowired private NotificationRetentionScheduler retention;
+    @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     @BeforeEach
     void reset() {
         clock.set(NOW);
         outbox.deleteAll();
+        // reviews.appointment_id is ON DELETE RESTRICT (V27): clear the seeded reviews first
+        jdbc.update("DELETE FROM reviews");
         appointments.deleteAll();
     }
 

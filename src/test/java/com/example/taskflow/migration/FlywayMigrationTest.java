@@ -91,7 +91,9 @@ class FlywayMigrationTest {
 
     private static Connection migratedDatabase(String name) throws SQLException {
         String url = "jdbc:h2:mem:" + name + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
-        Flyway.configure().dataSource(url, "sa", "").locations("classpath:db/migration").load().migrate();
+        // db/seed (V2/V11 demo data) is part of the dev/test layout these assertions rely on.
+        Flyway.configure().dataSource(url, "sa", "")
+                .locations("classpath:db/migration", "classpath:db/seed").load().migrate();
         return DriverManager.getConnection(url, "sa", "");
     }
 

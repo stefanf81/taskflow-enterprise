@@ -54,6 +54,8 @@ class CatalogRetirementIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        // reviews.appointment_id is ON DELETE RESTRICT (V27): clear the seeded reviews first
+        jdbc.update("DELETE FROM reviews");
         appointmentRepository.deleteAll();
         serviceItemRepository.deleteAll();
         userRepository.deleteAll();
