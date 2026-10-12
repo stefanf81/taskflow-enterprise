@@ -275,8 +275,9 @@ public class AppointmentServiceImpl implements AppointmentService {
             publishAdminEvent(AppointmentAdminEvent.Type.CREATED, savedItem.getId());
 
             tagSpan(
+                // The customer's name is deliberately not a span attribute: traces are
+                // exported to a separate backend with different access and retention.
                 "appointment.id", String.valueOf(savedItem.getId()),
-                "appointment.customer", savedItem.getCustomerName(),
                 "appointment.status", savedItem.getStatus()
             );
 

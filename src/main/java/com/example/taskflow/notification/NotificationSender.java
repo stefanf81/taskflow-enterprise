@@ -4,6 +4,8 @@ import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 import com.example.taskflow.core.LogSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,9 +29,23 @@ public class NotificationSender {
     private static final Logger logger = LoggerFactory.getLogger(NotificationSender.class);
 
     private final NotificationOutboxRepository outboxRepository;
+    private final boolean simulateFailures;
 
-    public NotificationSender(NotificationOutboxRepository outboxRepository) {
+    /**
+     * @param simulateFailures test/demo switch ({@code app.notification.simulate-failures},
+     *        default off): treat recipients starting with "fail" or "invalid" as undeliverable
+     *        so retry paths can be exercised. It must stay off in production — otherwise a
+     *        genuine customer whose address starts with "invalid" would never be notified.
+     */
+    @Autowired
+    public NotificationSender(NotificationOutboxRepository outboxRepository,
+                              @Value("${app.notification.simulate-failures:false}") boolean simulateFailures) {
         this.outboxRepository = outboxRepository;
+        this.simulateFailures = simulateFailures;
+    }
+
+    NotificationSender(NotificationOutboxRepository outboxRepository) {
+        this(outboxRepository, false);
     }
 
     /**
@@ -78,18 +94,19 @@ public class NotificationSender {
     }
 
     /**
-     * Simulated SMTP dispatch. Succeeds by default, but supports simulated failure
-     * when the recipient email starts with "fail" or "invalid" to exercise retry paths.
+     * Simulated SMTP dispatch. Succeeds by default; with
+     * {@code app.notification.simulate-failures=true} it fails for recipients whose
+     * address starts with "fail" or "invalid" to exercise retry paths.
+     *
+     * <p>Only the outbox id, channel and a masked recipient are logged. The message
+     * body carries the customer's name, barber and appointment time, so it stays out
+     * of the logs (which are shipped and retained separately from the database).
      */
     boolean simulateSend(NotificationOutbox outbox) {
-        logger.info("=========================================================================");
-        logger.info("EMAIL DISPATCHER (SIMULATED SMTP GATEWAY - RELAY)");
-        logger.info("=========================================================================");
-        logger.info("To: {}", maskEmail(outbox.getRecipient()));
-        logger.info("{}", outbox.getMessage());
-        logger.info("=========================================================================");
+        logger.info("Dispatching notification id={} via simulated gateway to {}",
+                outbox.getId(), maskEmail(outbox.getRecipient()));
 
-        if (outbox != null && outbox.getRecipient() != null) {
+        if (simulateFailures && outbox.getRecipient() != null) {
             String recipient = outbox.getRecipient().toLowerCase().trim();
             if (recipient.startsWith("fail") || recipient.startsWith("invalid")) {
                 logger.warn("Simulated SMTP dispatch failure for recipient: {}", maskEmail(outbox.getRecipient()));

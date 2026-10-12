@@ -12,11 +12,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/v1/customer")
 @Tag(name = "Customer Dashboard", description = "Endpoints for logged-in customers")
 @Validated
+@PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
 public class CustomerController {
 
     private final AppointmentService appointmentService;

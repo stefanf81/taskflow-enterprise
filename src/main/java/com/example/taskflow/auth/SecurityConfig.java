@@ -10,6 +10,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -18,9 +19,14 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
@@ -45,6 +51,9 @@ import java.util.UUID;
 
 @Configuration
 @EnableWebSecurity
+// Defence in depth: the admin controllers also carry @PreAuthorize, so a URL
+// rule that is missing a method (HEAD, PATCH, ...) cannot expose them on its own.
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(SecurityConfig.class);
@@ -66,7 +75,7 @@ public class SecurityConfig {
              @Value("${app.rsa.require-persistent-keys:false}") boolean requirePersistentKeys,
             @Value("${app.jwt.issuer:taskflow}") String jwtIssuer,
             @Value("${app.jwt.audience:taskflow-api}") String jwtAudience,
-            @Value("${app.cookie.secure:false}") boolean cookieSecure,
+            @Value("${app.cookie.secure:true}") boolean cookieSecure,
             DataSource dataSource) {
         this.adminUsername = adminUsername;
         this.adminPassword = adminPassword;
@@ -82,7 +91,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder) throws Exception {
         JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
         grantedAuthoritiesConverter.setAuthorityPrefix("");
         grantedAuthoritiesConverter.setAuthoritiesClaimName("scope");
@@ -111,7 +120,12 @@ public class SecurityConfig {
             .cors(cors -> {})  // CorsConfigurationSource is provided by CorsConfig @Bean auto-detection
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                // Rules are listed per HTTP method, and Spring MVC serves HEAD from
+                // every @GetMapping handler. Each GET rule therefore has a HEAD twin,
+                // so HEAD can neither slip past an admin rule nor be refused on a
+                // public one. Anything not listed is denied (see the last rule).
                 .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/auth/csrf").permitAll()
                 // Swagger UI / OpenAPI docs are ADMIN-gated (fail-safe: even if
                 // springdoc is left enabled, the docs are never public). Prod
                 // additionally disables springdoc outright via
@@ -119,6 +133,10 @@ public class SecurityConfig {
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").hasRole("ADMIN")
                 .requestMatchers("/h2-console/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/mobile/login", "/api/v1/auth/register").permitAll()
+                // Logout must work for everyone: with an expired session it is the
+                // request that clears the cookie, so it cannot require authentication.
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").permitAll()
+                .requestMatchers("/api/v1/auth/me").authenticated()
                 // Liveness/readiness probes must stay reachable unauthenticated
                 // for Kubernetes/docker healthchecks. VictoriaMetrics scrapes
                 // Prometheus metrics without application credentials; production
@@ -128,18 +146,27 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments/public/busy-slots").permitAll()
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/public/busy-slots").permitAll()
                 .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/appointments").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/catalog", "/api/v1/catalog/**").permitAll()
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/catalog", "/api/v1/catalog/**").permitAll()
                 .requestMatchers("/api/v1/reviews/public/**").permitAll()
                 // Public booking only needs a barber identifier and display name.
                 // Contact data and time-off details are restricted to administrators.
                 .requestMatchers(HttpMethod.GET, "/api/v1/barbers").permitAll()
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/barbers").permitAll()
+                // Strict Admin restrictions to prevent privilege escalation / BOLA / PII leakage.
+                // GET and HEAD are both covered: HEAD reaches the same handler and would
+                // otherwise leak existence/size (Content-Length) of admin-only data.
                 .requestMatchers(HttpMethod.GET, "/api/v1/barbers/admin", "/api/v1/barbers/*/time-off").hasRole("ADMIN")
-                // Strict Admin restrictions to prevent privilege escalation / BOLA / PII leakage
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/barbers/admin", "/api/v1/barbers/*/time-off").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments/events").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/events").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments/{id}").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/{id}").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/{id}").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/appointments/{id}").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/v1/barbers/**").hasRole("ADMIN")
@@ -150,8 +177,15 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/catalog/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/notifications/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/customer/**").hasAnyRole("CUSTOMER", "ADMIN")
-                .anyRequest().authenticated()
+                // Deny by default. A new endpoint, or a method that no rule above
+                // names, is refused until someone writes an explicit rule for it —
+                // it must not silently become "any logged-in user".
+                .anyRequest().denyAll()
             )
+            // Registered ahead of CSRF/bearer processing so an invalid access_token
+            // cookie is dropped (and expired) before it can turn every request,
+            // including login and public pages, into a 401.
+            .addFilterBefore(new StaleAccessTokenCookieFilter(jwtDecoder, cookieSecure), CsrfFilter.class)
             .oauth2ResourceServer(oauth2 -> oauth2
                 .bearerTokenResolver(cookieBearerTokenResolver())
                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
@@ -235,7 +269,8 @@ public class SecurityConfig {
     @Bean
     public org.springframework.boot.CommandLineRunner initAdminUser(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         return args -> {
-            if (userRepository.findByEmailIgnoreCase(adminUsername).isEmpty()) {
+            java.util.Optional<AppUser> existing = userRepository.findByEmailIgnoreCase(adminUsername);
+            if (existing.isEmpty()) {
                 AppUser admin = new AppUser(
                     adminUsername,
                     passwordEncoder.encode(adminPassword),
@@ -245,6 +280,16 @@ public class SecurityConfig {
                 );
                 userRepository.save(admin);
                 logger.info("Default admin user created successfully.");
+            } else if ("ROLE_ADMIN".equals(existing.get().getRole())
+                    && !passwordEncoder.matches(adminPassword, existing.get().getPasswordHash())) {
+                // The configured password is the source of truth for the admin
+                // account. Without this, an admin created on a first boot with the
+                // wrong/default value would keep that password forever, and setting
+                // SPRING_SECURITY_PASSWORD afterwards would silently do nothing.
+                AppUser admin = existing.get();
+                admin.setPasswordHash(passwordEncoder.encode(adminPassword));
+                userRepository.save(admin);
+                logger.info("Admin password re-synchronised from configuration.");
             }
         };
     }
@@ -266,7 +311,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    public JwtDecoder jwtDecoder() {
+    public JwtDecoder jwtDecoder(TokenRevocationList revocationList) {
         try {
             NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(this.rsaKey.toRSAPublicKey()).build();
             // A3: validate issuer + audience (expiry is enforced by the default
@@ -275,9 +320,15 @@ public class SecurityConfig {
             org.springframework.security.oauth2.core.OAuth2TokenValidator<org.springframework.security.oauth2.jwt.Jwt> audienceValidator =
                     new org.springframework.security.oauth2.jwt.JwtClaimValidator<List<String>>(
                             "aud", aud -> aud != null && aud.contains(jwtAudience));
+            // Tokens revoked at logout are rejected for the rest of their lifetime.
+            OAuth2TokenValidator<Jwt> notRevoked = jwt -> revocationList.isRevoked(jwt.getId())
+                    ? OAuth2TokenValidatorResult.failure(
+                            new OAuth2Error("invalid_token", "The token has been revoked.", null))
+                    : OAuth2TokenValidatorResult.success();
             decoder.setJwtValidator(new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(
                     JwtValidators.createDefaultWithIssuer(jwtIssuer),
-                    audienceValidator));
+                    audienceValidator,
+                    notRevoked));
             return decoder;
         } catch (Exception e) {
             throw new IllegalStateException("Failed to configure RSA Public Key decoder", e);

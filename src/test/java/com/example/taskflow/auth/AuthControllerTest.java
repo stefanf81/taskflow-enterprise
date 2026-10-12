@@ -43,10 +43,15 @@ class AuthControllerTest {
     private HttpServletResponse response;
 
     private AuthController authController;
+    private LoginAttemptLimiter loginAttemptLimiter;
+    private TokenRevocationList tokenRevocationList;
 
     @BeforeEach
     void setUp() {
-        authController = new AuthController(authenticationManager, tokenProvider, userRepository, passwordEncoder, false);
+        loginAttemptLimiter = new LoginAttemptLimiter(3, 300);
+        tokenRevocationList = new TokenRevocationList();
+        authController = new AuthController(authenticationManager, tokenProvider, userRepository,
+                passwordEncoder, loginAttemptLimiter, tokenRevocationList, false);
     }
 
     @Test
@@ -165,7 +170,7 @@ class AuthControllerTest {
 
     @Test
     void logout_shouldClearCookie() {
-        ResponseEntity<Void> result = authController.logout(response);
+        ResponseEntity<Void> result = authController.logout(null, response);
 
         assertEquals(HttpStatus.NO_CONTENT, result.getStatusCode());
         ArgumentCaptor<String> headerValue = ArgumentCaptor.forClass(String.class);
@@ -182,5 +187,111 @@ class AuthControllerTest {
         CsrfToken result = authController.csrf(token);
 
         assertEquals("csrf-value", result.getToken());
+    }
+
+    @Test
+    void login_isThrottledPerAccountAfterRepeatedFailures() {
+        LoginRequest bad = new LoginRequest("victim@test.com", "wrong");
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new org.springframework.security.authentication.BadCredentialsException("bad"));
+
+        for (int i = 0; i < 3; i++) {
+            assertThrows(org.springframework.security.authentication.BadCredentialsException.class,
+                    () -> authController.authenticateUser(bad, response));
+        }
+
+        // Fourth attempt is refused before the password is even checked.
+        TooManyLoginAttemptsException ex = assertThrows(TooManyLoginAttemptsException.class,
+                () -> authController.authenticateUser(bad, response));
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getStatusCode());
+        assertNotNull(ex.getHeaders().getFirst("Retry-After"));
+        verify(authenticationManager, times(3)).authenticate(any());
+
+        // Same account, different casing/whitespace, is the same throttle key; the
+        // mobile endpoint shares it.
+        assertThrows(TooManyLoginAttemptsException.class,
+                () -> authController.authenticateMobileUser(new LoginRequest("  VICTIM@test.com ", "x")));
+
+        // A different account is unaffected.
+        assertThrows(org.springframework.security.authentication.BadCredentialsException.class,
+                () -> authController.authenticateUser(new LoginRequest("other@test.com", "wrong"), response));
+    }
+
+    @Test
+    void login_successClearsFailureCount() {
+        LoginRequest request = new LoginRequest("user@test.com", "pw");
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("user@test.com");
+        GrantedAuthority authority = () -> "ROLE_CUSTOMER";
+        when(authentication.getAuthorities()).thenAnswer(invocation -> List.of(authority));
+        when(tokenProvider.generateToken(authentication)).thenReturn("jwt");
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new org.springframework.security.authentication.BadCredentialsException("bad"))
+                .thenThrow(new org.springframework.security.authentication.BadCredentialsException("bad"))
+                .thenReturn(authentication);
+
+        assertThrows(org.springframework.security.authentication.BadCredentialsException.class,
+                () -> authController.authenticateUser(request, response));
+        assertThrows(org.springframework.security.authentication.BadCredentialsException.class,
+                () -> authController.authenticateUser(request, response));
+        assertEquals(HttpStatus.OK, authController.authenticateUser(request, response).getStatusCode());
+
+        // Counter was reset by the success, so three more failures are allowed again.
+        assertDoesNotThrow(() -> loginAttemptLimiter.checkAllowed("user@test.com"));
+    }
+
+    @Test
+    void nonCredentialFailuresAreNotCountedAgainstTheAccount() {
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new IllegalStateException("database down"));
+        LoginRequest request = new LoginRequest("user@test.com", "pw");
+
+        for (int i = 0; i < 5; i++) {
+            assertThrows(IllegalStateException.class, () -> authController.authenticateUser(request, response));
+        }
+        assertDoesNotThrow(() -> loginAttemptLimiter.checkAllowed("user@test.com"));
+    }
+
+    @Test
+    void registerUser_normalisesEmailBeforeCheckingAndStoring() {
+        RegisterRequest request = new RegisterRequest("New User", "  New@Test.COM ", "password123", "555");
+        when(userRepository.findByEmailIgnoreCase("new@test.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode("password123")).thenReturn("encoded");
+
+        ResponseEntity<RegisterResponse> result = authController.registerUser(request);
+
+        assertEquals(HttpStatus.CREATED, result.getStatusCode());
+        ArgumentCaptor<AppUser> saved = ArgumentCaptor.forClass(AppUser.class);
+        verify(userRepository).save(saved.capture());
+        assertEquals("new@test.com", saved.getValue().getEmail());
+    }
+
+    @Test
+    void registerUser_losingTheUniqueConstraintRaceAnswersLikeTheDuplicateCheck() {
+        RegisterRequest request = new RegisterRequest("Racer", "race@test.com", "password123", null);
+        when(userRepository.findByEmailIgnoreCase("race@test.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode("password123")).thenReturn("encoded");
+        when(userRepository.save(any(AppUser.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key"));
+
+        ResponseEntity<RegisterResponse> result = authController.registerUser(request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
+        assertEquals("Email is already registered.", result.getBody().message());
+    }
+
+    @Test
+    void logout_revokesThePresentedToken() {
+        java.time.Instant now = java.time.Instant.now();
+        org.springframework.security.oauth2.jwt.Jwt jwt = org.springframework.security.oauth2.jwt.Jwt
+                .withTokenValue("tok").header("alg", "RS256").jti("jti-1")
+                .issuedAt(now).expiresAt(now.plusSeconds(600)).subject("u@test.com").build();
+        var authentication = new org.springframework.security.oauth2.server.resource.authentication
+                .JwtAuthenticationToken(jwt);
+
+        authController.logout(authentication, response);
+
+        assertTrue(tokenRevocationList.isRevoked("jti-1"));
+        assertFalse(tokenRevocationList.isRevoked("some-other-token"));
     }
 }

@@ -16,7 +16,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.CacheControl;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -24,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.security.web.csrf.CsrfToken;
 
 import java.time.Duration;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -34,16 +38,40 @@ public class AuthController {
     private final TokenProvider tokenProvider;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final LoginAttemptLimiter loginAttemptLimiter;
+    private final TokenRevocationList tokenRevocationList;
     private final boolean cookieSecure;
 
     public AuthController(AuthenticationManager authenticationManager, TokenProvider tokenProvider,
                           UserRepository userRepository, PasswordEncoder passwordEncoder,
+                          LoginAttemptLimiter loginAttemptLimiter, TokenRevocationList tokenRevocationList,
                           @Value("${app.cookie.secure:true}") boolean cookieSecure) {
         this.authenticationManager = authenticationManager;
         this.tokenProvider = tokenProvider;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.loginAttemptLimiter = loginAttemptLimiter;
+        this.tokenRevocationList = tokenRevocationList;
         this.cookieSecure = cookieSecure;
+    }
+
+    /**
+     * Authenticates with per-account throttling: a username that has racked up
+     * too many recent failures is refused (429) before any password check, and a
+     * success clears its count. Only credential failures are counted — other
+     * errors (e.g. the database being down) are not the caller's fault.
+     */
+    private Authentication authenticate(LoginRequest loginRequest) {
+        loginAttemptLimiter.checkAllowed(loginRequest.username());
+        try {
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(loginRequest.username(), loginRequest.password()));
+            loginAttemptLimiter.recordSuccess(loginRequest.username());
+            return authentication;
+        } catch (AuthenticationException e) {
+            loginAttemptLimiter.recordFailure(loginRequest.username());
+            throw e;
+        }
     }
 
     @PostMapping("/login")
@@ -54,9 +82,7 @@ public class AuthController {
     })
     public ResponseEntity<LoginResponse> authenticateUser(@Valid @RequestBody LoginRequest loginRequest,
                                                           HttpServletResponse response) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequest.username(), loginRequest.password())
-        );
+        Authentication authentication = authenticate(loginRequest);
 
         String jwt = tokenProvider.generateToken(authentication);
         String role = extractRole(authentication);
@@ -74,9 +100,7 @@ public class AuthController {
     })
     public ResponseEntity<MobileLoginResponse> authenticateMobileUser(
             @Valid @RequestBody LoginRequest loginRequest) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequest.username(), loginRequest.password())
-        );
+        Authentication authentication = authenticate(loginRequest);
 
         MobileLoginResponse response = new MobileLoginResponse(
                 tokenProvider.generateToken(authentication),
@@ -98,20 +122,35 @@ public class AuthController {
             @ApiResponse(responseCode = "400", description = "Email already registered or invalid input")
     })
     public ResponseEntity<RegisterResponse> registerUser(@Valid @RequestBody RegisterRequest request) {
-        if (userRepository.findByEmailIgnoreCase(request.email()).isPresent()) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new RegisterResponse("Email is already registered."));
+        // Normalise once and use the same value for the duplicate check and the
+        // insert. Checking the raw input but storing the trimmed/lower-cased form
+        // let " A@x.com " pass the check and then collide with "a@x.com" (500).
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        if (userRepository.findByEmailIgnoreCase(email).isPresent()) {
+            return emailAlreadyRegistered();
         }
 
         AppUser user = new AppUser(
-            request.email().toLowerCase().trim(),
+            email,
             passwordEncoder.encode(request.password()),
             request.fullName(),
             request.phone(),
             "ROLE_CUSTOMER"
         );
-        userRepository.save(user);
+        try {
+            userRepository.save(user);
+        } catch (DataIntegrityViolationException e) {
+            // Two concurrent registrations both passed the check above; the unique
+            // constraint on email picked the winner. Answer the loser exactly like
+            // the pre-check does instead of leaking a 500.
+            return emailAlreadyRegistered();
+        }
 
         return ResponseEntity.status(HttpStatus.CREATED).body(new RegisterResponse("Account created successfully."));
+    }
+
+    private ResponseEntity<RegisterResponse> emailAlreadyRegistered() {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new RegisterResponse("Email is already registered."));
     }
 
     @GetMapping("/csrf")
@@ -157,7 +196,16 @@ public class AuthController {
     @PostMapping("/logout")
     @Operation(summary = "Clear the HttpOnly JWT cookie")
     @ApiResponse(responseCode = "204", description = "JWT cookie cleared — session ended")
-    public ResponseEntity<Void> logout(HttpServletResponse response) {
+    public ResponseEntity<Void> logout(@Parameter(hidden = true) Authentication authentication,
+                                       HttpServletResponse response) {
+        // Deny the presented token for the rest of its lifetime. Without this a
+        // copied cookie or mobile bearer token stays usable for up to an hour
+        // after the user "logged out". Anonymous callers (already expired) just
+        // get the cookie cleared.
+        if (authentication instanceof JwtAuthenticationToken jwtAuthentication) {
+            tokenRevocationList.revoke(jwtAuthentication.getToken().getId(),
+                    jwtAuthentication.getToken().getExpiresAt());
+        }
         ResponseCookie cookie = ResponseCookie.from("access_token", "")
                 .httpOnly(true)
                 .secure(cookieSecure)

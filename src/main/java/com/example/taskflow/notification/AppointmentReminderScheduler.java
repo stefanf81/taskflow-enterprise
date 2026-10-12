@@ -80,8 +80,7 @@ public class AppointmentReminderScheduler {
             return;
         }
 
-        String safeEmail = appointment.getCustomerEmail() != null ? appointment.getCustomerEmail().replace("\n", "").replace("\r", "") : "";
-        logger.info("Sending reminder to {} for appointment on {}", safeEmail, appointment.getBookingDate());
+        logger.info("Queueing reminder for appointment id={} on {}", appointment.getId(), appointment.getBookingDate());
 
         // Mock sending email
         String message = String.format("Hi %s, this is a reminder for your %s appointment with %s tomorrow at %s.",

@@ -155,4 +155,66 @@ class RateLimiterConfigTest {
 
         context.close();
     }
+
+    @Test
+    void encodedAuthPathIsBilledToTheAuthBucket() throws Exception {
+        // The raw request line hides "auth" behind %61, but the container decodes it
+        // and routes the request to the login handler.
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRequestURI("/api/v1/%61uth/login");
+        request.setServletPath("/api/v1/auth/login");
+        request.setRemoteAddr("10.0.0.9");
+        mockExecuteForKey("rate_limit:10.0.0.9:auth", 21L);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain filterChain = mock(FilterChain.class);
+        filter.doFilter(request, response, filterChain);
+
+        assertEquals(429, response.getStatus(), "auth limit (20) must apply, not the API limit (100)");
+        verify(filterChain, never()).doFilter(any(), any());
+    }
+
+    @Test
+    void redisFailureFallsBackToAnInMemoryLimitInsteadOfFailingOpen() throws Exception {
+        when(redisTemplate.execute(ArgumentMatchers.<RedisScript<Long>>any(), anyList(), anyString()))
+                .thenThrow(new RuntimeException("redis down"));
+
+        int blockedAt = -1;
+        for (int i = 1; i <= 25; i++) {
+            MockHttpServletRequest request = new MockHttpServletRequest();
+            request.setRequestURI("/api/v1/auth/login");
+            request.setRemoteAddr("203.0.113.7");
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            filter.doFilter(request, response, mock(FilterChain.class));
+            if (response.getStatus() == 429 && blockedAt < 0) {
+                blockedAt = i;
+            }
+        }
+
+        assertEquals(21, blockedAt, "the 21st auth request in the window is refused even with Redis down");
+        // After the first failure Redis is skipped for a backoff period rather than
+        // being retried (and timing out) on every request.
+        verify(redisTemplate, times(1)).execute(ArgumentMatchers.<RedisScript<Long>>any(), anyList(), anyString());
+    }
+
+    @Test
+    void fallbackStillCountsAddressesSeparately() throws Exception {
+        when(redisTemplate.execute(ArgumentMatchers.<RedisScript<Long>>any(), anyList(), anyString()))
+                .thenThrow(new RuntimeException("redis down"));
+
+        for (int i = 0; i < 21; i++) {
+            MockHttpServletRequest request = new MockHttpServletRequest();
+            request.setRequestURI("/api/v1/auth/login");
+            request.setRemoteAddr("198.51.100.1");
+            filter.doFilter(request, new MockHttpServletResponse(), mock(FilterChain.class));
+        }
+
+        MockHttpServletRequest other = new MockHttpServletRequest();
+        other.setRequestURI("/api/v1/auth/login");
+        other.setRemoteAddr("198.51.100.2");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(other, response, mock(FilterChain.class));
+
+        assertEquals(200, response.getStatus());
+    }
 }

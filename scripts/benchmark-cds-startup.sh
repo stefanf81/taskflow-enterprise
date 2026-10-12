@@ -73,6 +73,8 @@ boot() {
     -e SPRING_PROFILES_ACTIVE=prod \
     -e SPRING_DATASOURCE_PASSWORD=cds-bench \
     -e SPRING_SECURITY_PASSWORD=cds-bench-password \
+    -e APP_CORS_ALLOWED_ORIGINS=http://localhost:4200 \
+    -e APP_TRUSTED_PROXY_REGEX='^127\.0\.0\.1$' \
     -e APP_RSA_PRIVATE_KEY="$PRIVATE_KEY" -e APP_RSA_PUBLIC_KEY="$PUBLIC_KEY" \
     -e MALLOC_ARENA_MAX=2 \
     -e JAVA_TOOL_OPTIONS="$JAVA_OPTS $extra" \

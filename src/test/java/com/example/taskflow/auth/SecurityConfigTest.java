@@ -16,6 +16,17 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.util.Base64;
 
+import com.example.taskflow.auth.internal.UserRepository;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+
+import java.util.Optional;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -52,7 +63,7 @@ class SecurityConfigTest {
 
         SecurityConfig config = createConfig("admin", "pass", privBase64, pubBase64);
 
-        assertNotNull(config.jwtDecoder());
+        assertNotNull(config.jwtDecoder(new TokenRevocationList()));
         assertNotNull(config.jwkSource());
         assertNotNull(config.jwtEncoder(config.jwkSource()));
     }
@@ -60,19 +71,19 @@ class SecurityConfigTest {
     @Test
     void testLoadRsaKeyInvalid() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "invalid-base64", "invalid-base64");
-        assertNotNull(config.jwtDecoder()); // Should fallback to ephemeral keys
+        assertNotNull(config.jwtDecoder(new TokenRevocationList())); // Should fallback to ephemeral keys
     }
 
     @Test
     void testLoadRsaKeyBlank() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "", "   ");
-        assertNotNull(config.jwtDecoder());
+        assertNotNull(config.jwtDecoder(new TokenRevocationList()));
     }
 
     @Test
     void testLoadRsaKeyPartiallyBlank() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "valid-fake-base", "");
-        assertNotNull(config.jwtDecoder());
+        assertNotNull(config.jwtDecoder(new TokenRevocationList()));
     }
 
     @Test
@@ -96,7 +107,7 @@ class SecurityConfigTest {
         rsaKeyField.setAccessible(true);
         rsaKeyField.set(config, null);
 
-        assertThrows(IllegalStateException.class, () -> config.jwtDecoder());
+        assertThrows(IllegalStateException.class, () -> config.jwtDecoder(new TokenRevocationList()));
     }
 
     @Test
@@ -137,5 +148,81 @@ class SecurityConfigTest {
         assertNotNull(cookie);
         assertTrue("Strict".equals(cookie.getAttribute("SameSite")));
         assertFalse(cookie.isHttpOnly());
+    }
+
+    // ---- admin account bootstrap ----
+
+    @Test
+    void initAdminUser_createsTheAdminWhenMissing() throws Exception {
+        SecurityConfig config = createConfig("admin", "s3cret-pass", null, null);
+        UserRepository users = mock(UserRepository.class);
+        when(users.findByEmailIgnoreCase("admin")).thenReturn(Optional.empty());
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+
+        config.initAdminUser(users, encoder).run();
+
+        org.mockito.ArgumentCaptor<AppUser> saved = org.mockito.ArgumentCaptor.forClass(AppUser.class);
+        verify(users).save(saved.capture());
+        assertEquals("ROLE_ADMIN", saved.getValue().getRole());
+        assertTrue(encoder.matches("s3cret-pass", saved.getValue().getPasswordHash()));
+    }
+
+    @Test
+    void initAdminUser_resyncsAStalePasswordFromConfiguration() throws Exception {
+        // First boot used the development default; the operator has since set a real
+        // SPRING_SECURITY_PASSWORD. The stored hash must follow the configuration.
+        SecurityConfig config = createConfig("admin", "new-strong-pass", null, null);
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        AppUser existing = new AppUser("admin", encoder.encode("admin-password"), "Shop Owner", "", "ROLE_ADMIN");
+        UserRepository users = mock(UserRepository.class);
+        when(users.findByEmailIgnoreCase("admin")).thenReturn(Optional.of(existing));
+
+        config.initAdminUser(users, encoder).run();
+
+        verify(users).save(existing);
+        assertTrue(encoder.matches("new-strong-pass", existing.getPasswordHash()));
+        assertFalse(encoder.matches("admin-password", existing.getPasswordHash()));
+    }
+
+    @Test
+    void initAdminUser_leavesAMatchingPasswordAlone() throws Exception {
+        SecurityConfig config = createConfig("admin", "same-pass", null, null);
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        AppUser existing = new AppUser("admin", encoder.encode("same-pass"), "Shop Owner", "", "ROLE_ADMIN");
+        UserRepository users = mock(UserRepository.class);
+        when(users.findByEmailIgnoreCase("admin")).thenReturn(Optional.of(existing));
+
+        config.initAdminUser(users, encoder).run();
+
+        verify(users, never()).save(any());
+    }
+
+    @Test
+    void initAdminUser_neverRewritesANonAdminAccountThatSharesTheName() throws Exception {
+        SecurityConfig config = createConfig("admin", "whatever", null, null);
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        AppUser customer = new AppUser("admin", encoder.encode("customer-chosen"), "Not Admin", "", "ROLE_CUSTOMER");
+        UserRepository users = mock(UserRepository.class);
+        when(users.findByEmailIgnoreCase("admin")).thenReturn(Optional.of(customer));
+
+        config.initAdminUser(users, encoder).run();
+
+        verify(users, never()).save(any());
+        assertTrue(encoder.matches("customer-chosen", customer.getPasswordHash()));
+    }
+
+    @Test
+    void cookieSecureDefaultsToTrueInBothPlaces() throws Exception {
+        // SecurityConfig and AuthController must agree on the fail-safe default.
+        var securityConfigParam = SecurityConfig.class.getConstructors()[0].getParameters();
+        boolean found = false;
+        for (var p : securityConfigParam) {
+            var v = p.getAnnotation(org.springframework.beans.factory.annotation.Value.class);
+            if (v != null && v.value().startsWith("${app.cookie.secure")) {
+                assertEquals("${app.cookie.secure:true}", v.value());
+                found = true;
+            }
+        }
+        assertTrue(found);
     }
 }

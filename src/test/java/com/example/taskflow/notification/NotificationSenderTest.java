@@ -103,4 +103,31 @@ class NotificationSenderTest {
         assertDoesNotThrow(() -> sender.process(1L));
         verify(outboxRepository, times(1)).save(any(NotificationOutbox.class));
     }
+
+    @Test
+    void failureHookIsOffByDefaultSoRealAddressesStartingWithInvalidAreDelivered() {
+        outbox.setRecipient("invalid.joe@example.com");
+        when(outboxRepository.findById(1L)).thenReturn(Optional.of(outbox));
+        when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        new NotificationSender(outboxRepository, false).process(1L);
+
+        ArgumentCaptor<NotificationOutbox> captor = ArgumentCaptor.forClass(NotificationOutbox.class);
+        verify(outboxRepository).save(captor.capture());
+        assertEquals("SENT", captor.getValue().getStatus());
+    }
+
+    @Test
+    void failureHookCanBeEnabledForRetryTesting() {
+        outbox.setRecipient("fail-me@example.com");
+        when(outboxRepository.findById(1L)).thenReturn(Optional.of(outbox));
+        when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        new NotificationSender(outboxRepository, true).process(1L);
+
+        ArgumentCaptor<NotificationOutbox> captor = ArgumentCaptor.forClass(NotificationOutbox.class);
+        verify(outboxRepository).save(captor.capture());
+        assertEquals("FAILED", captor.getValue().getStatus());
+        assertEquals(1, captor.getValue().getRetryCount());
+    }
 }

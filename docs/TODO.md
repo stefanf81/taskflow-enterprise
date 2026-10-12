@@ -17,7 +17,8 @@ This document tracks unresolved security findings, architectural technical debt,
   3. Require email verification before newly registered accounts can view or claim prior bookings.
   4. Unify guest-cancel error responses to a single generic message so the endpoint no longer reveals whether a booking UUID exists.
 
-### 1.2 Production Admin Password Fallback
+### 1.2 Production Admin Password Fallback (Resolved)
+- **Resolved:** `AdminPasswordGuard` aborts a `prod` startup when the admin password is unset, `admin-password` or a `CHANGE_ME` placeholder, and `initAdminUser` now re-syncs the stored hash from `SPRING_SECURITY_PASSWORD` on every boot (so a wrong first boot no longer sticks). Disposable stacks opt out with `APP_REQUIRE_STRONG_ADMIN_PASSWORD=false`. The original finding follows for context.
 - **Location:** `src/main/resources/application.properties:71`, `src/main/resources/application-prod.properties`
 - **Problem:** `spring.security.user.password=${SPRING_SECURITY_PASSWORD:admin-password}` provides a weak default. Unlike persistent RSA keys (`app.rsa.require-persistent-keys=true`), `application-prod.properties` does not fail fast if `SPRING_SECURITY_PASSWORD` is omitted, allowing production instances to bootstrap with `admin` / `admin-password`.
 - **Remediation:** Remove `:admin-password` fallback in `application-prod.properties` (`spring.security.user.password=${SPRING_SECURITY_PASSWORD}`) to abort context initialization if the environment variable is missing.
@@ -35,7 +36,8 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Problem:** The `db` service imports the entire `.env` file via `env_file: .env`, unnecessarily injecting `APP_RSA_PRIVATE_KEY` and `SPRING_SECURITY_PASSWORD` into the PostgreSQL container.
 - **Remediation:** Replace `env_file` with explicit environment entries: `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`.
 
-### 1.5 Rate Limiter Fail-Closed Policy on Authentication Routes
+### 1.5 Rate Limiter Fail-Closed Policy on Authentication Routes (Resolved differently)
+- **Resolved differently:** instead of failing closed (503), the limiter now falls back to a per-JVM in-memory counter with the same limits when Redis errors, and skips Redis for 5 s after a failure. Auth routes therefore stay throttled during an outage and a Redis outage no longer adds a timeout to every request. The original finding follows for context.
 - **Location:** `src/main/java/com/example/taskflow/core/RateLimiterConfig.java:111-113`
 - **Problem:** `doFilterInternal` catches all Redis execution exceptions and logs a warning, failing open. Under Redis memory eviction (`volatile-lru`) or connection failure, rate limits (20 req/min) on `/api/v1/auth/` routes are bypassed.
 - **Remediation:** Fail closed (HTTP 503 + `Retry-After: 60`) specifically when `isAuthEndpoint` is true, while retaining fail-open behavior for general API routes.
@@ -45,17 +47,22 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Problem:** `tag="${{ inputs.image_tag }}"` directly interpolates unvalidated workflow dispatch input into a bash script block.
 - **Remediation:** Pass the input via an environment variable (`env: RAW_TAG: ${{ inputs.image_tag }}`) and add regex validation (`^[A-Za-z0-9._-]{1,128}$`).
 
-### 1.7 Stateless JWT Revocation & Denylist on Logout
+### 1.7 Stateless JWT Revocation & Denylist on Logout (Partly resolved)
+- **Done:** tokens carry a `jti`; `POST /auth/logout` (now `permitAll`) revokes the presented token via an in-memory `TokenRevocationList` checked by the `JwtDecoder`.
+- **Still open:** the list is per-JVM (a restart forgets it; not shared between replicas) — move it to Redis with a TTL before scaling out; the mobile app still only deletes its token locally and should call `/auth/logout`; demoting/deleting a user does not revoke their tokens. The original finding follows for context.
 - **Location:** `src/main/java/com/example/taskflow/auth/AuthController.java:157-170`, `src/main/java/com/example/taskflow/auth/TokenProvider.java:41-48`
 - **Problem:** `POST /api/v1/auth/logout` only clears the client-side cookie; native mobile clients have no logout endpoint. Issued tokens remain valid until the 1-hour expiration.
 - **Remediation:** Add a unique `jti` claim to issued JWTs. On logout, store the `jti` in Redis with a TTL matching remaining token lifetime, and validate incoming tokens against this denylist in `SecurityConfig`.
 
-### 1.8 Account-Aware Authentication Throttling
+### 1.8 Account-Aware Authentication Throttling (Resolved, in-memory)
+- **Resolved:** `LoginAttemptLimiter` counts failed logins per username (10 per 300 s by default, 429 + `Retry-After`, cleared by a successful login) on both `/auth/login` and `/auth/mobile/login`. State is per JVM; use a shared Redis counter before scaling out. The original finding follows for context.
 - **Location:** `src/main/java/com/example/taskflow/core/RateLimiterConfig.java:89-99`, `src/main/java/com/example/taskflow/auth/SecurityConfig.java:226-233`
 - **Problem:** The auth bucket keys solely on the client IP (`rate_limit:<ip>:auth`) and `CustomUserDetailsService` carries no per-account attempt state. A distributed attack (botnet / residential proxies / Tor) stays under the 20 req/min per-IP cap while guessing credentials without bound.
 - **Remediation:** Track failed attempts per account in Redis (e.g. a counter updated from `AuthenticationFailureBadCredentialsEvent`) and apply exponential backoff or a temporary throttle to that account. Do not use permanent lockout — it hands attackers a denial-of-service weapon. Retain the per-IP bucket for volumetric bursts.
 
-### 1.9 Trusted-Proxy Regex Mis-Escaped in Compose
+### 1.9 Trusted-Proxy Regex Mis-Escaped in Compose (Partly resolved)
+- **Done:** `docker-compose.yml` uses single backslashes (verified to match `172.18.0.3`); `application-prod.properties` no longer has a default, so an unset `APP_TRUSTED_PROXY_REGEX` aborts startup; `frontend/nginx-real-ip.conf` provides an opt-in real-IP include for ingress deployments.
+- **Still open:** confirm the production value in the separate GitOps repository uses single backslashes, and consider a startup assertion that the compiled regex matches the actual proxy address. The original finding follows for context.
 - **Location:** `docker-compose.yml:86`, `src/main/resources/application-prod.properties:113`
 - **Problem:** The Compose value contains doubled backslashes. YAML applies no escape processing, so the JVM receives a regex whose `\\.` sequences require a literal backslash and matches no IP. Verified with `docker compose config`: the parsed value matches neither `172.18.0.2` nor `127.0.0.1`. Tomcat's `RemoteIpValve` therefore never trusts Nginx's `X-Forwarded-For`, `getRemoteAddr()` returns the Nginx container IP, and every client shares one rate-limit bucket (also corrupting access logs). The inbound-XFF stripping in `frontend/nginx.conf` remains correct; only the trust decision fails.
 - **Remediation:** Use single backslashes in the YAML value (`^172\.([1][6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}$`), keep the scope limited to the actual proxy network, and add a startup or integration assertion that the compiled regex matches the Nginx container address. Apply the same escaping wherever the value is copied — the production value lives in the separate GitOps repository.

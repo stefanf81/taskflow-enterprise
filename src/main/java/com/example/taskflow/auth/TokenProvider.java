@@ -44,6 +44,8 @@ public class TokenProvider {
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(tokenLifetimeSeconds))
                 .subject(authentication.getName())
+                // Unique id so a single token can be denied at logout (TokenRevocationList).
+                .id(java.util.UUID.randomUUID().toString())
                 .claim("scope", scope)
                 .build();
 

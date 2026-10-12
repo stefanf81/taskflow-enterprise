@@ -22,6 +22,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.concurrent.TimeUnit;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/v1/appointments")
@@ -43,6 +44,7 @@ public class AppointmentController {
             @ApiResponse(responseCode = "200", description = "Successfully retrieved paginated appointments"),
             @ApiResponse(responseCode = "400", description = "Invalid filter or pagination parameters")
     })
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AppointmentDashboardResponse> getAllAppointments(
             @Parameter(description = "Filter by status (PENDING, APPROVED, DENIED)")
             @RequestParam(required = false) String status,
@@ -61,6 +63,7 @@ public class AppointmentController {
 
     @GetMapping(value = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Operation(summary = "Subscribe to administrator appointment update events")
+    @PreAuthorize("hasRole('ADMIN')")
     public SseEmitter streamAppointmentEvents(Authentication authentication, HttpServletResponse response) {
         response.setHeader(HttpHeaders.CACHE_CONTROL, "no-cache");
         response.setHeader("X-Accel-Buffering", "no");
@@ -73,6 +76,7 @@ public class AppointmentController {
             @ApiResponse(responseCode = "200", description = "Successfully retrieved appointment"),
             @ApiResponse(responseCode = "404", description = "Appointment was not found")
     })
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AppointmentResponse> getAppointmentById(
             @Parameter(description = "The database ID of the appointment")
             @PathVariable Long id) {
@@ -146,6 +150,7 @@ public class AppointmentController {
             @ApiResponse(responseCode = "400", description = "Invalid request payload provided"),
             @ApiResponse(responseCode = "404", description = "Appointment was not found")
     })
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AppointmentResponse> updateAppointmentStatus(
             @Parameter(description = "The database ID of the appointment to update")
             @PathVariable Long id,
@@ -161,6 +166,7 @@ public class AppointmentController {
             @ApiResponse(responseCode = "204", description = "Successfully deleted appointment"),
             @ApiResponse(responseCode = "404", description = "Appointment was not found")
     })
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteAppointment(
             @Parameter(description = "The database ID of the appointment to delete")
             @PathVariable Long id) {
