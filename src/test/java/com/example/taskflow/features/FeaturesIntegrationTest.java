@@ -65,8 +65,13 @@ public class FeaturesIntegrationTest {
 
     private String adminToken;
 
+    @Autowired
+    private com.example.taskflow.review.internal.ReviewRepository reviewRepository;
+
     @BeforeEach
     void setUp() throws Exception {
+        // reviews.appointment_id is ON DELETE RESTRICT (V27): delete the seeded reviews first
+        reviewRepository.deleteAll();
         appointmentRepository.deleteAll();
         serviceItemRepository.deleteAll();
         barberTimeOffRepository.deleteAll();
@@ -133,6 +138,10 @@ public class FeaturesIntegrationTest {
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isCreated());
 
+        // A Thursday inside the booking window (bookings must be in the future and within 90 days)
+        LocalDate thursday = LocalDate.now().plusDays(7)
+                .with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.THURSDAY));
+
         // Login Customer
         Map<String, String> customerLogin = new HashMap<>();
         customerLogin.put("username", "jane@example.com");
@@ -157,8 +166,8 @@ public class FeaturesIntegrationTest {
         // Create a TimeOff for the barber
         BarberTimeOff timeOff = new BarberTimeOff();
         timeOff.setBarber(barber);
-        timeOff.setStartDate(LocalDate.of(2030, 5, 20));
-        timeOff.setEndDate(LocalDate.of(2030, 5, 25));
+        timeOff.setStartDate(thursday.plusDays(4));
+        timeOff.setEndDate(thursday.plusDays(9));
         timeOff.setReason("Training");
         barberTimeOffRepository.save(timeOff);
 
@@ -180,7 +189,7 @@ public class FeaturesIntegrationTest {
         // Verify busy slots returns empty list for new date
         mockMvc.perform(get("/api/v1/appointments/public/busy-slots")
                         .param("barberName", "James the Stylist")
-                        .param("bookingDate", "2030-05-16")) // 2030-05-16 is a Thursday
+                        .param("bookingDate", thursday.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
 
@@ -190,7 +199,7 @@ public class FeaturesIntegrationTest {
         apptRequest.put("customerEmail", "jane@example.com");
         apptRequest.put("customerPhone", "555-4321");
         apptRequest.put("barberName", "James the Stylist");
-        apptRequest.put("bookingDate", "2030-05-16");
+        apptRequest.put("bookingDate", thursday.toString());
         apptRequest.put("bookingTime", "10:00");
         apptRequest.put("serviceType", "Luxury Beard Sculpture");
 

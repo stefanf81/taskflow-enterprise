@@ -78,8 +78,13 @@ class IdempotencyReplayIntegrationTest {
 
     private String adminToken;
 
+    @Autowired
+    private com.example.taskflow.review.internal.ReviewRepository reviewRepository;
+
     @BeforeEach
     void setUp() throws Exception {
+        // reviews.appointment_id is ON DELETE RESTRICT (V27): delete the seeded reviews first
+        reviewRepository.deleteAll();
         appointmentRepository.deleteAll();
         barberTimeOffRepository.deleteAll();
         userRepository.deleteAll();

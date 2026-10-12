@@ -166,7 +166,9 @@ class SecurityAuthorizationIntegrationTest {
         mockMvc.perform(get("/api/v1/barbers")).andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/catalog")).andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/appointments/public/busy-slots")
-                        .param("barberName", "Alex the Barber")
+                        // The sentinel always resolves; a concrete name that another test class
+                        // deleted from the shared H2 would now be a 400 (unknown barber).
+                        .param("barberName", "No Preference (First Available)")
                         .param("bookingDate", "2030-05-16"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/actuator/prometheus")).andExpect(status().isOk());

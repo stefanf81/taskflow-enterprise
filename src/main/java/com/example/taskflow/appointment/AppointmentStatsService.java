@@ -5,6 +5,7 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.LocalDate;
 
 /**
@@ -27,23 +28,26 @@ public class AppointmentStatsService {
     static final String STATS_CACHE = "appointmentStats";
 
     private final CacheManager cacheManager;
+    private final Clock clock;
 
-    public AppointmentStatsService(CacheManager cacheManager) {
+    public AppointmentStatsService(CacheManager cacheManager, Clock clock) {
         this.cacheManager = cacheManager;
+        this.clock = clock;
     }
 
     public AppointmentStats getStatsCached(AppointmentRepository appointmentRepository) {
+        LocalDate today = LocalDate.now(clock);
         Cache cache = cacheManager.getCache(STATS_CACHE);
         if (cache != null) {
-            return cache.get(LocalDate.now(), () -> appointmentRepository.getAppointmentStats(LocalDate.now()));
+            return cache.get(today, () -> appointmentRepository.getAppointmentStats(today));
         }
-        return appointmentRepository.getAppointmentStats(LocalDate.now());
+        return appointmentRepository.getAppointmentStats(today);
     }
 
     public void clearStatsCache() {
         Cache cache = cacheManager.getCache(STATS_CACHE);
         if (cache != null) {
-            cache.evictIfPresent(LocalDate.now());
+            cache.evictIfPresent(LocalDate.now(clock));
         }
     }
 

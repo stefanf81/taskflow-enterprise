@@ -48,7 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code CREATE UNIQUE INDEX idx_appointment_slot_active ON appointments(barber, date, time) WHERE status IN ('PENDING','APPROVED')}
  * (PG) / H2 via {@code active_slot_marker} — DENIED slots are excluded and re-bookable.
  *
- * <p>This matches {@code findDistinctBookingTimes WHERE status <> DENIED} and
+ * <p>This matches {@code findActiveForBarberOnDate (status IN PENDING, APPROVED)} and
  * {@code AppointmentServiceImpl.createAppointment} catch of 23505 unique_violation.
  *
  * <p>Tests:
@@ -279,7 +279,7 @@ class SlotContentionBenchmarkTest {
     @Test
     void benchmark_busySlots_withPartialIndex() {
         System.out.println("\n" + "=".repeat(80));
-        System.out.println("  ▸ BUSY SLOTS READ BENCHMARK — findDistinctBookingTimes with partial index");
+        System.out.println("  ▸ BUSY SLOTS READ BENCHMARK — findActiveForBarberOnDate with partial index");
         System.out.println("=".repeat(80));
 
         // Seed 7 busy slots out of ALL_SLOTS (matches BusySlotsService.ALL_SLOTS)
@@ -292,14 +292,14 @@ class SlotContentionBenchmarkTest {
         // BusySlotsService is @Cacheable; we flush to force DB query each time via direct repo call
         int warmup = 1000;
         int measure = 5000;
-        for (int i = 0; i < warmup; i++) appointmentRepository.findDistinctBookingTimes(BARBER, DATE, AppointmentStatus.DENIED);
+        for (int i = 0; i < warmup; i++) appointmentRepository.findActiveForBarberOnDate(BARBER, DATE);
 
         long start = System.nanoTime();
-        for (int i = 0; i < measure; i++) appointmentRepository.findDistinctBookingTimes(BARBER, DATE, AppointmentStatus.DENIED);
+        for (int i = 0; i < measure; i++) appointmentRepository.findActiveForBarberOnDate(BARBER, DATE);
         long totalNs = System.nanoTime() - start;
         double avgUs = (totalNs / (double) measure) / 1000.0;
         double ops = 1_000_000_000.0 / (totalNs / (double) measure);
-        System.out.printf("  Avg findDistinctBookingTimes: %.3f µs  throughput: %.1f ops/sec  (%d iters)%n", avgUs, ops, measure);
+        System.out.printf("  Avg findActiveForBarberOnDate: %.3f µs  throughput: %.1f ops/sec  (%d iters)%n", avgUs, ops, measure);
 
         // EXPLAIN via H2: show that partial index is used (or H2 marker index)
         try {

@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -84,6 +85,19 @@ public class Appointment {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private AppointmentStatus status = AppointmentStatus.PENDING;
+
+    /**
+     * The service price at the moment of booking. Revenue uses this snapshot so a
+     * later catalog price change does not rewrite history; null on legacy rows
+     * that had no service reference (revenue then falls back to the live price).
+     */
+    @Column(name = "price_at_booking", precision = 10, scale = 2)
+    private BigDecimal priceAtBooking;
+
+    /** Optimistic lock: concurrent approve/deny/cancel cannot silently interleave. */
+    @Version
+    @Column(nullable = false)
+    private Long version;
 
     @Column(name = "reminder_sent", nullable = false)
     private Boolean reminderSent = false;
@@ -205,8 +219,24 @@ public class Appointment {
         this.barber = barber;
     }
 
+    public ServiceItem getService() {
+        return service;
+    }
+
     public void setService(ServiceItem service) {
         this.service = service;
+    }
+
+    public BigDecimal getPriceAtBooking() {
+        return priceAtBooking;
+    }
+
+    public void setPriceAtBooking(BigDecimal priceAtBooking) {
+        this.priceAtBooking = priceAtBooking;
+    }
+
+    public Long getVersion() {
+        return version;
     }
 
     public String getStatus() {

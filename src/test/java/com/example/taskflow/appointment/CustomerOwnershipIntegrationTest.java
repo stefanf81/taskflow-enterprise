@@ -74,8 +74,13 @@ class CustomerOwnershipIntegrationTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Autowired
+    private com.example.taskflow.review.internal.ReviewRepository reviewRepository;
+
     @BeforeEach
     void setUp() {
+        // reviews.appointment_id is ON DELETE RESTRICT (V27): delete the seeded reviews first
+        reviewRepository.deleteAll();
         appointmentRepository.deleteAll();
         barberTimeOffRepository.deleteAll();
         userRepository.deleteAll();

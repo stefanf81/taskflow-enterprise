@@ -295,4 +295,63 @@ class GlobalExceptionHandlerTest {
         assertEquals(HttpStatus.TOO_MANY_REQUESTS, response.getStatusCode());
         assertEquals("42", response.getHeaders().getFirst("Retry-After"));
     }
+
+    @Test
+    void conflictExceptionsAreMappedTo409() {
+        ResponseEntity<ErrorResponse> plain = globalExceptionHandler.handleConflictException(
+                new ConflictException("slot taken"), request);
+        assertEquals(HttpStatus.CONFLICT, plain.getStatusCode());
+        assertEquals("slot taken", plain.getBody().message());
+
+        ResponseEntity<ErrorResponse> transition = globalExceptionHandler.handleConflictException(
+                new InvalidStatusTransitionException("CANCELLED", "APPROVED"), request);
+        assertEquals(HttpStatus.CONFLICT, transition.getStatusCode());
+        assertEquals("Cannot change an appointment from CANCELLED to APPROVED.", transition.getBody().message());
+    }
+
+    @Test
+    void optimisticLockFailuresAreMappedTo409() {
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleOptimisticLockingFailure(
+                new org.springframework.orm.ObjectOptimisticLockingFailureException("Appointment", 1L), request);
+
+        assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+        assertEquals(409, response.getBody().status());
+    }
+
+    @Test
+    void transientDatabaseFailuresAreMappedTo503WithRetryAfter() {
+        List<Exception> transients = List.of(
+                new org.springframework.dao.QueryTimeoutException("timeout"),
+                new org.springframework.dao.TransientDataAccessResourceException("transient"),
+                new org.springframework.dao.CannotAcquireLockException("lock"),
+                new org.springframework.transaction.CannotCreateTransactionException("no connection"),
+                new org.springframework.dao.DataAccessResourceFailureException("down"));
+        for (Exception ex : transients) {
+            ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleDataAccessResourceFailure(ex, request);
+            assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode(), ex.getClass().getSimpleName());
+            assertEquals("1", response.getHeaders().getFirst("Retry-After"));
+            assertEquals(503, response.getBody().status());
+        }
+    }
+
+    /**
+     * The handler is picked by exception type, so the more specific 409 handler for optimistic
+     * locking must win over the 503 handler for the (broader) transient data-access family.
+     */
+    @Test
+    void springPicksTheSpecificHandlerForEachExceptionFamily() throws Exception {
+        org.springframework.web.method.annotation.ExceptionHandlerMethodResolver resolver =
+                new org.springframework.web.method.annotation.ExceptionHandlerMethodResolver(GlobalExceptionHandler.class);
+
+        assertEquals("handleOptimisticLockingFailure", resolver.resolveMethodByThrowable(
+                new org.springframework.orm.ObjectOptimisticLockingFailureException("A", 1L)).getName());
+        assertEquals("handleDataAccessResourceFailure", resolver.resolveMethodByThrowable(
+                new org.springframework.dao.QueryTimeoutException("t")).getName());
+        assertEquals("handleDataAccessResourceFailure", resolver.resolveMethodByThrowable(
+                new org.springframework.transaction.CannotCreateTransactionException("t")).getName());
+        assertEquals("handleConflictException", resolver.resolveMethodByThrowable(
+                new InvalidStatusTransitionException("A", "B")).getName());
+        assertEquals("handleIdempotencyConflictException", resolver.resolveMethodByThrowable(
+                new IdempotencyConflictException("x")).getName());
+    }
 }
