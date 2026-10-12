@@ -146,15 +146,6 @@ describe('AppointmentStore', () => {
     );
   });
 
-  it('should reset auth state via resetAuthState', () => {
-    authState.isLoggedIn.set(true);
-    store.errorMessage.set('Some error');
-    store.resetAuthState();
-
-    expect(authState.isLoggedIn()).toBe(false);
-    expect(store.errorMessage()).toBeNull();
-  });
-
   it('should navigate multiple pages and enforce boundaries using nested metadata', async () => {
     authState.isLoggedIn.set(true);
     fixture.detectChanges();

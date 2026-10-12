@@ -56,11 +56,10 @@ export class BarberStore {
   private readonly destroyRef = inject(DestroyRef);
 
   constructor() {
-    // Drop per-session UI state when the admin signs out / the session expires.
+    // Drop per-session banners when the admin signs out / the session expires.
     inject(SessionEvents)
       .sessionEnded.pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
-        this.selectedBarberId.set(null);
         this.actionErrorMessage.set(null);
         this.actionSuccessMessage.set(null);
         this.isSaving.set(false);

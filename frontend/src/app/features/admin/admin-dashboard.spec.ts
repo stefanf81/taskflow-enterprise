@@ -6,6 +6,7 @@ import { Router, provideRouter } from '@angular/router';
 import { AdminDashboard } from './admin-dashboard';
 import { AppointmentStore } from '../../appointment.store';
 import { AuthState } from '../../auth.state';
+import { AdminEventsService } from '../../admin-events.service';
 import { AppointmentDashboardResponse } from '../../types/api';
 
 describe('AdminDashboard shell', () => {
@@ -125,5 +126,25 @@ describe('AdminDashboard shell', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(el.textContent).toContain('Total Bookings');
+  });
+
+  it('refetches the list on every SSE tick, restarting a load already in flight', () => {
+    const adminEvents = TestBed.inject(AdminEventsService);
+    const store = TestBed.inject(AppointmentStore);
+    const refresh = vi.spyOn(store, 'refresh');
+
+    adminEvents['appointmentChangesSubject'].next();
+    adminEvents['appointmentChangesSubject'].next();
+
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it('closes the live stream when the dashboard is destroyed', () => {
+    const adminEvents = TestBed.inject(AdminEventsService);
+    const close = vi.spyOn(adminEvents, 'close');
+
+    fixture.destroy();
+
+    expect(close).toHaveBeenCalled();
   });
 });

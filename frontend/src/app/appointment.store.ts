@@ -214,11 +214,6 @@ export class AppointmentStore {
     }
   }
 
-  // Reset local auth signals (also invoked when the session is dropped by a 401).
-  resetAuthState(): void {
-    this.authState.clear();
-  }
-
   /**
    * Reports a failed admin action. A 401 is skipped: the session-expiry flow
    * already told the user (and navigated away); a stale "Failed to approve"

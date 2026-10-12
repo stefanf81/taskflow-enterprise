@@ -519,6 +519,7 @@ export class BookingStore {
   submitBooking(): void {
     // Time may have moved on while the form was open (tab left idle past the slot, or
     // past midnight): re-read the clock first so the checks below use a fresh selection.
+    const chosenTime = this.bookingTime();
     this.refreshToday();
     const model = this.bookingModel();
     const name = model.customerName.trim();
@@ -546,7 +547,9 @@ export class BookingStore {
       return;
     }
 
-    if (this.isSlotPast(model.bookingTime)) {
+    if (model.bookingTime !== chosenTime) {
+      // The slot started while the form sat open and refreshToday() moved the selection:
+      // never submit a time the customer did not pick.
       this.errorMessage.set('That time has already passed. Please pick a later slot.');
       this.activeStep.set(3);
       return;

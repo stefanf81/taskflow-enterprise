@@ -179,4 +179,106 @@ describe('AdminAppointmentsTab', () => {
     expect(component.isOverdue({ bookingDate: '2099-01-01' })).toBe(false);
     expect(component.isOverdue({})).toBe(false);
   });
+
+  describe('cancelled bookings and errors', () => {
+    const withStatus = (status: string): AppointmentDashboardResponse => ({
+      ...mockDashboard,
+      page: {
+        ...mockDashboard.page,
+        content: [{ ...mockDashboard.page.content[0]!, status }],
+      },
+    });
+
+    const reloadWith = async (response: AppointmentDashboardResponse) => {
+      component.loadAppointments();
+      fixture.detectChanges();
+      httpMock
+        .expectOne((r) => r.url.includes('/api/v1/appointments') && r.method === 'GET')
+        .flush(response);
+      await fixture.whenStable();
+      fixture.detectChanges();
+    };
+
+    const buttonLabels = () =>
+      Array.from(fixture.nativeElement.querySelectorAll('button')).map(
+        (b) => (b as HTMLElement).textContent?.trim() ?? '',
+      );
+
+    it('filters by CANCELLED', () => {
+      expect(buttonLabels()).toContain('Cancelled');
+
+      component.setFilter('cancelled');
+      fixture.detectChanges();
+
+      httpMock
+        .expectOne(
+          (r) => r.url.includes('/api/v1/appointments') && r.url.includes('status=CANCELLED'),
+        )
+        .flush(mockDashboard);
+    });
+
+    it('shows a Cancelled badge and no approve/deny actions for a cancelled booking', async () => {
+      await reloadWith(withStatus('CANCELLED'));
+
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('.rounded-full')?.textContent).toContain('Cancelled');
+      const labels = buttonLabels();
+      expect(labels).not.toContain('Approve');
+      expect(labels).not.toContain('Deny');
+      // Deleting the record stays possible.
+      expect(el.querySelector('.btn-delete')).toBeTruthy();
+    });
+
+    it('shows the server message when a status change is rejected (409)', () => {
+      component.approveAppointment(1);
+      httpMock
+        .expectOne((r) => r.url.endsWith('/api/v1/appointments/1'))
+        .flush(
+          { message: 'Cannot approve a cancelled appointment' },
+          { status: 409, statusText: 'Conflict' },
+        );
+
+      expect(TestBed.inject(AppointmentStore).errorMessage()).toBe(
+        'Cannot approve a cancelled appointment',
+      );
+    });
+
+    it('leaves no stale banner when the failure was a 401 (session expiry explains it)', () => {
+      component.denyAppointment(2);
+      httpMock
+        .expectOne((r) => r.url.endsWith('/api/v1/appointments/2'))
+        .flush(null, { status: 401, statusText: 'Unauthorized' });
+
+      expect(TestBed.inject(AppointmentStore).errorMessage()).toBeNull();
+    });
+
+    it('shows a retry instead of an empty list when the load fails (FE-1)', async () => {
+      component.loadAppointments();
+      fixture.detectChanges();
+      httpMock
+        .expectOne((r) => r.url.includes('/api/v1/appointments') && r.method === 'GET')
+        .flush(null, { status: 500, statusText: 'Server Error' });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.textContent).toContain('Could not load appointments. Please retry.');
+      expect(buttonLabels()).toContain('Retry');
+    });
+
+    it('offers a way back from an empty page past the end (no pagination dead end)', async () => {
+      TestBed.inject(AppointmentStore).currentPage.set(2);
+      fixture.detectChanges();
+      httpMock
+        .expectOne((r) => r.url.includes('page=2'))
+        .flush({
+          ...mockDashboard,
+          page: { content: [], page: { number: 2, size: 50, totalElements: 100, totalPages: 3 } },
+        } satisfies AppointmentDashboardResponse);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(buttonLabels()).toContain('Back to first page');
+    });
+  });
 });
