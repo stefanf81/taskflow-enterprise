@@ -6,7 +6,7 @@ versions-plugin = "0.65.0"
 spotbugs-plugin = "6.5.12"
 spotbugs-tool = "4.10.4"
 # The companion BOM keeps every OpenTelemetry module at this security-reviewed release.
-opentelemetry = "1.66.0"
+opentelemetry = "1.67.0"
 prometheus = "1.9.0"
 commons-lang3 = "3.21.0"
 # Pin above Spring Boot's vulnerable 1.5.34 release; 1.6.x includes the
