@@ -6,9 +6,10 @@ import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.example.taskflow.core.ConflictException;
+import com.example.taskflow.testsupport.PostgresTestServer;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cache.Cache;
@@ -56,10 +57,10 @@ import static org.mockito.Mockito.reset;
  * 60-minute grid step), which the exact-start unique index cannot see, and a violation (SQLSTATE
  * 23P01) is reported like the unique-index race: 400 on create, 409 on approve.
  *
- * <p>Skipped unless {@code TASKFLOW_TEST_POSTGRES_URL} is set (see {@code DataMigrationsPostgresTest});
- * the application is migrated into a fresh schema of that database.
+ * <p>Tagged {@code testcontainers}: runs against {@link PostgresTestServer} (a container, or the server
+ * named by {@code TASKFLOW_TEST_POSTGRES_URL}); the application is migrated into a fresh schema.
  */
-@EnabledIfEnvironmentVariable(named = "TASKFLOW_TEST_POSTGRES_URL", matches = ".+")
+@Tag("testcontainers")
 @SpringBootTest(properties = {"app.rate-limit.enabled=false", "app.schedulers.enabled=false"})
 class AppointmentOverlapConstraintPostgresTest {
 
@@ -69,9 +70,9 @@ class AppointmentOverlapConstraintPostgresTest {
 
     @DynamicPropertySource
     static void postgres(DynamicPropertyRegistry registry) throws SQLException {
-        String base = System.getenv("TASKFLOW_TEST_POSTGRES_URL");
-        String user = System.getenv().getOrDefault("TASKFLOW_TEST_POSTGRES_USER", "postgres");
-        String password = System.getenv().getOrDefault("TASKFLOW_TEST_POSTGRES_PASSWORD", "");
+        String base = PostgresTestServer.jdbcUrl();
+        String user = PostgresTestServer.user();
+        String password = PostgresTestServer.password();
         String schema = "ov_" + System.nanoTime();
         try (Connection c = DriverManager.getConnection(base, user, password);
              Statement st = c.createStatement()) {

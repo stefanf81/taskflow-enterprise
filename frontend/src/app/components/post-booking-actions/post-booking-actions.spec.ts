@@ -40,7 +40,7 @@ describe('PostBookingActionsComponent', () => {
     req.flush(null);
 
     expect(store.successMessage()).toBe(
-      '🗑️ Reservation successfully cancelled and deleted from our calendar.',
+      '🗑️ Reservation successfully cancelled. Your time slot has been released.',
     );
     expect(component.cancelModel().publicId).toBe('');
   });

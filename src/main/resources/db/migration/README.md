@@ -32,8 +32,9 @@ Consequences:
 
 `DataMigrationsTest` (H2) migrates a fresh database with the production layout and with the dev
 layout, checks the schema validates (`ProductionLayoutContextTest`), and runs the V30 cleanup on a
-database that had the seed rows. The same scenarios run against PostgreSQL when
-`TASKFLOW_TEST_POSTGRES_URL` is set (`DataMigrationsPostgresTest`).
+database that had the seed rows. The same scenarios run against PostgreSQL in
+`DataMigrationsPostgresTest` (`./gradlew testcontainersTest`: a throw-away container, or the server named
+by `TASKFLOW_TEST_POSTGRES_URL`).
 
 ## Numbering conventions
 

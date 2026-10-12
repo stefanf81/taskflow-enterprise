@@ -285,7 +285,7 @@ export class PostBookingActionsComponent {
         next: () => {
           this.appointmentStore.isSubmitting.set(false);
           this.appointmentStore.showSuccess(
-            '🗑️ Reservation successfully cancelled and deleted from our calendar.',
+            '🗑️ Reservation successfully cancelled. Your time slot has been released.',
           );
           this.cancelModel.set({ publicId: '', email: '' });
         },

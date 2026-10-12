@@ -514,6 +514,20 @@ class AppointmentServiceImplTest {
     }
 
     @Test
+    void testUpdateStatus_BackToPendingOrToCancelledIsAConflict() {
+        for (AppointmentStatus from : List.of(AppointmentStatus.APPROVED, AppointmentStatus.DENIED)) {
+            when(appointmentRepository.findById(1L)).thenReturn(Optional.of(appointment(1, from, TOMORROW, "10:00")));
+            for (String target : List.of("PENDING", "CANCELLED")) {
+                assertThrows(InvalidStatusTransitionException.class,
+                        () -> appointmentService.updateAppointmentStatus(1L, new AppointmentUpdateRequest(target)),
+                        from + " -> " + target);
+            }
+        }
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+        assertTrue(events.isEmpty());
+    }
+
+    @Test
     void testUpdateStatus_DeniedToApproved_ReChecksAvailability() {
         Appointment denied = appointment(1, AppointmentStatus.DENIED, TOMORROW, "10:00");
         when(appointmentRepository.findById(1L)).thenReturn(Optional.of(denied));

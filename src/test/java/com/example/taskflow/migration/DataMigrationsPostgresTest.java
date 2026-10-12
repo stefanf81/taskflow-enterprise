@@ -1,6 +1,7 @@
 package com.example.taskflow.migration;
 
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import com.example.taskflow.testsupport.PostgresTestServer;
+import org.junit.jupiter.api.Tag;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -11,19 +12,20 @@ import java.sql.Statement;
  * Runs the very same data-migration scenarios against a real PostgreSQL server, exercising the
  * PostgreSQL branches (V25 partial index, V32 {@code lower(name)} expression index, ...).
  *
- * <p>Skipped unless {@code TASKFLOW_TEST_POSTGRES_URL} is set, so the default {@code test} task stays
- * Docker- and server-free. Point it at any scratch database, e.g.
+ * <p>Tagged {@code testcontainers}, so the default {@code test} task stays Docker- and server-free;
+ * {@code ./gradlew testcontainersTest} runs it against a throw-away container, or against any scratch
+ * database named by {@code TASKFLOW_TEST_POSTGRES_URL} (see {@link PostgresTestServer}), e.g.
  * <pre>
  *   TASKFLOW_TEST_POSTGRES_URL=jdbc:postgresql://127.0.0.1:5432/taskflow \
- *   TASKFLOW_TEST_POSTGRES_USER=postgres ./gradlew test --tests '*DataMigrationsPostgresTest'
+ *   TASKFLOW_TEST_POSTGRES_USER=postgres ./gradlew testcontainersTest --tests '*DataMigrationsPostgresTest'
  * </pre>
  * Every test migrates inside its own freshly created schema, so the database may be reused.
  */
-@EnabledIfEnvironmentVariable(named = "TASKFLOW_TEST_POSTGRES_URL", matches = ".+")
+@Tag("testcontainers")
 class DataMigrationsPostgresTest extends AbstractDataMigrationsTest {
 
     private static String baseUrl() {
-        return System.getenv("TASKFLOW_TEST_POSTGRES_URL");
+        return PostgresTestServer.jdbcUrl();
     }
 
     @Override
@@ -38,14 +40,12 @@ class DataMigrationsPostgresTest extends AbstractDataMigrationsTest {
 
     @Override
     protected String user() {
-        String user = System.getenv("TASKFLOW_TEST_POSTGRES_USER");
-        return user == null ? "postgres" : user;
+        return PostgresTestServer.user();
     }
 
     @Override
     protected String password() {
-        String password = System.getenv("TASKFLOW_TEST_POSTGRES_PASSWORD");
-        return password == null ? "" : password;
+        return PostgresTestServer.password();
     }
 
     @Override

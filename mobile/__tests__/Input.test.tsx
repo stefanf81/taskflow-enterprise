@@ -22,12 +22,10 @@ describe('Input Component', () => {
 
   it('calls onChangeText when text changes', async () => {
     const handleChange = jest.fn();
-    const { getByDisplayValue } = await render(
-      <Input value="" onChangeText={handleChange} placeholder="Enter text" />
-    );
-    const input = await render(<Input value="hello" onChangeText={handleChange} />);
-    // fireEvent.changeText(input.getByDisplayValue('hello'), 'new text');
-    // Actually let me do it differently:
+    const { getByDisplayValue } = await render(<Input value="hello" onChangeText={handleChange} />);
+    await fireEvent.changeText(getByDisplayValue('hello'), 'new text');
+    expect(handleChange).toHaveBeenCalledTimes(1);
+    expect(handleChange).toHaveBeenCalledWith('new text');
   });
 
   it('accepts and displays value', async () => {

@@ -79,7 +79,18 @@ class LoginAttemptLimiterRedisTest {
 
     @Test
     void keysAreTheSameForEquivalentUsernamesAndBoundedForHugeOnes() {
-        assertEquals(RedisLoginFailureCounter.key("a@x.com|"), RedisLoginFailureCounter.key("a@x.com|"));
+        limiter.recordFailure("a@x.com");
+        limiter.recordFailure("  A@X.com ");
+        limiter.recordFailure("b@x.com");
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        ArgumentCaptor<List<String>> keys = (ArgumentCaptor) ArgumentCaptor.forClass(List.class);
+        verify(redis, org.mockito.Mockito.times(3))
+                .execute(ArgumentMatchers.<RedisScript<Long>>any(), keys.capture(), eq("300000"));
+        List<List<String>> captured = keys.getAllValues();
+        assertEquals(captured.get(0), captured.get(1), "case and surrounding whitespace do not split the window");
+        assertFalse(captured.get(0).equals(captured.get(2)), "another account has its own window");
+
         assertEquals(79, RedisLoginFailureCounter.key("u".repeat(100_000) + "|1.2.3.4").length());
     }
 

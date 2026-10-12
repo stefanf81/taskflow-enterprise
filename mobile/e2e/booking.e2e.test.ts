@@ -8,7 +8,7 @@
  *
  * Run:
  *   detox test --configuration ios.sim.debug
- *   detox test --configuration android.emu.debug
+ *   detox test --configuration android.emu.release
  */
 
 import { device, element, by, expect, waitFor } from 'detox';
@@ -159,10 +159,16 @@ describe('Guest Login Flow', () => {
     await expect(element(by.text('Sign In to TaskFlow'))).toBeVisible();
   });
 
-  it('fills login form fields', async () => {
+  it('signs in as admin and lands on the dashboard', async () => {
     await element(by.text('Sign In / Register')).tap();
     await element(by.id('login-email-input')).replaceText('admin');
     await element(by.id('login-password-input')).replaceText('admin-password');
     await element(by.id('login-submit-btn')).tap();
+
+    // The admin tab navigator replaces the guest stack once the backend accepts the login.
+    await waitFor(element(by.label('Logout')))
+      .toBeVisible()
+      .withTimeout(10000);
+    await expect(element(by.text('Sign In to TaskFlow'))).not.toBeVisible();
   });
 });

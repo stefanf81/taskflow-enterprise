@@ -220,6 +220,11 @@ class SecurityAuthorizationIntegrationTest {
                 .andExpect(status().isNotFound());
         mockMvc.perform(head("/api/v1/catalog")).andExpect(status().isOk());
         mockMvc.perform(head("/api/v1/barbers")).andExpect(status().isOk());
+        mockMvc.perform(head("/api/v1/auth/csrf")).andExpect(status().isOk());
+        mockMvc.perform(head("/api/v1/appointments/public/busy-slots")
+                        .param("barberName", "No Preference (First Available)")
+                        .param("bookingDate", "2030-05-16"))
+                .andExpect(status().isOk());
     }
 
     // ------------------------------------------------------------------

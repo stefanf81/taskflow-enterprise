@@ -1,8 +1,9 @@
 package com.example.taskflow.migration;
 
+import com.example.taskflow.testsupport.PostgresTestServer;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.api.Tag;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -24,19 +25,20 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * rows on one slot (V21's {@code CREATE UNIQUE INDEX} then failed) or violate the legacy 4-column
  * index mid-script.
  *
- * <p>Skipped unless {@code TASKFLOW_TEST_POSTGRES_URL} (e.g. {@code jdbc:postgresql://127.0.0.1:5432/postgres})
- * is set; a throw-away database is created and dropped per test. See {@link DataMigrationsPostgresTest}.
+ * <p>Tagged {@code testcontainers}: runs against {@link PostgresTestServer} (a container, or the server
+ * named by {@code TASKFLOW_TEST_POSTGRES_URL}); a throw-away database is created and dropped per test.
+ * The script runs on the host, so {@code psql} must be on the {@code PATH}.
  */
-@EnabledIfEnvironmentVariable(named = "TASKFLOW_TEST_POSTGRES_URL", matches = ".+")
+@Tag("testcontainers")
 class BookingTimePreparationScriptPostgresTest {
 
     private static final String MONDAY = "2031-03-10";
     private static final String TUESDAY = "2031-03-11";
     private static final String WEDNESDAY = "2031-03-12";
 
-    private final URI adminUri = URI.create(System.getenv("TASKFLOW_TEST_POSTGRES_URL").substring("jdbc:".length()));
-    private final String user = System.getenv().getOrDefault("TASKFLOW_TEST_POSTGRES_USER", "postgres");
-    private final String password = System.getenv().getOrDefault("TASKFLOW_TEST_POSTGRES_PASSWORD", "");
+    private final URI adminUri = PostgresTestServer.uri();
+    private final String user = PostgresTestServer.user();
+    private final String password = PostgresTestServer.password();
 
     private String jdbcUrl(String database) {
         return "jdbc:postgresql://" + adminUri.getHost() + ":" + adminUri.getPort() + "/" + database;

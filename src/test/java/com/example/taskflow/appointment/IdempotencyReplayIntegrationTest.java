@@ -198,6 +198,22 @@ class IdempotencyReplayIntegrationTest {
     }
 
     @Test
+    void differentEmail_replayConflictsWithoutLeakingTheBooking() throws Exception {
+        create(request("owner@example.com", BARBER, "10:00"), "email-key");
+
+        // ADR-015: a guessed or leaked key must not hand someone else's booking to the caller
+        mockMvc.perform(post("/api/v1/appointments")
+                        .header("Idempotency-Key", "email-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                request("intruder@example.com", BARBER, "10:00"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.id").doesNotExist())
+                .andExpect(jsonPath("$.publicId").doesNotExist())
+                .andExpect(jsonPath("$.customerEmail").doesNotExist());
+    }
+
+    @Test
     void differentBarber_replayConflicts() throws Exception {
         create(request("barber@example.com", BARBER, "10:00"), "barber-key");
 

@@ -130,7 +130,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await expect(alert).toContainText('Invalid credentials. Please try again.');
   });
 
-  test('should successfully execute a complete booking request, owner approval, public review, and public self-service cancellation', async ({
+  test('should successfully execute a complete booking request, owner approval, rejection of a premature public review, and public self-service cancellation', async ({
     page,
   }) => {
     // ----------------------------------------------------
@@ -288,7 +288,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
 
     // Confirm secure self-service cancellation was processed successfully
     await expect(page.locator('.alert-success')).toContainText(
-      'Reservation successfully cancelled and deleted from our calendar.',
+      'Reservation successfully cancelled. Your time slot has been released.',
     );
   });
 

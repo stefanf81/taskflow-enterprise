@@ -141,14 +141,18 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
     expect(component.formatTime12Hour('')).toBe('');
   });
 
-  it('should log the user out and navigate', () => {
-    vi.spyOn(component['router'], 'navigateByUrl').mockImplementation(() => Promise.resolve(true));
-    component.onLogout();
+  it('should log the user out and navigate', async () => {
+    const navigate = vi
+      .spyOn(component['router'], 'navigateByUrl')
+      .mockImplementation(() => Promise.resolve(true));
+    const done = component.onLogout();
     const req = httpMock.expectOne((r) => r.url.includes('/api/v1/auth/logout'));
     expect(req.request.method).toBe('POST');
     req.flush(null);
-    // On logout the store clears auth state.
+    await done;
+    // On logout the store clears auth state and the portal leaves for the landing page.
     expect(TestBed.inject(AuthState).isLoggedIn()).toBe(false);
+    expect(navigate).toHaveBeenCalledWith('');
   });
 
   describe('cancelled bookings and booking entry (CANCELLED, FE-7)', () => {

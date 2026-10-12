@@ -33,8 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * collision handling against the schema V25 really produces, and V35's end-time backfill and
  * overlap repair (plus, on PostgreSQL, its exclusion constraint).
  *
- * <p>PostgreSQL-specific branches (the expression index in V32, the partial index in V25) are NOT
- * exercised here; see the report.
+ * <p>The PostgreSQL-specific branches (the expression index in V32, the partial index in V25) are
+ * exercised by the {@code DataMigrationsPostgresTest} subclass ({@code testcontainersTest}).
  */
 abstract class AbstractDataMigrationsTest {
 

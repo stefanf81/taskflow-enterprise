@@ -160,4 +160,44 @@ describe('core/api clients', () => {
       expect(extractApiError(offline, 'fallback')).toBe(NETWORK_ERROR_MESSAGE);
     });
   });
+
+  describe('response validation', () => {
+    it('rejects a /me response with a role the backend never issues', () => {
+      let error: unknown;
+      let value: unknown;
+      TestBed.inject(AuthApi)
+        .me()
+        .subscribe({ next: (v) => (value = v), error: (e) => (error = e) });
+
+      httpTesting.expectOne('/api/v1/auth/me').flush({ username: 'admin', role: 'ROLE_ROOT' });
+
+      expect(value).toBeUndefined();
+      expect((error as Error).message).toContain('Invalid response from GET /api/v1/auth/me');
+      expect((error as Error).message).toContain('role');
+    });
+
+    it('rejects busy slots that are not HH:mm strings', () => {
+      let error: unknown;
+      TestBed.inject(AppointmentsApi)
+        .getBusySlots('Alex', '2026-12-01')
+        .subscribe({ error: (e) => (error = e) });
+
+      httpTesting.expectOne((r) => r.url === '/api/v1/appointments/public/busy-slots').flush([900]);
+
+      expect((error as Error).message).toContain(
+        'Invalid response from GET /api/v1/appointments/public/busy-slots',
+      );
+    });
+
+    it('passes a valid response through unchanged', () => {
+      let value: unknown;
+      TestBed.inject(AuthApi)
+        .me()
+        .subscribe((v) => (value = v));
+
+      httpTesting.expectOne('/api/v1/auth/me').flush({ username: 'jane', role: 'ROLE_CUSTOMER' });
+
+      expect(value).toEqual({ username: 'jane', role: 'ROLE_CUSTOMER' });
+    });
+  });
 });
