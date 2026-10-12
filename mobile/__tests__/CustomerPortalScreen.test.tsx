@@ -308,4 +308,39 @@ describe('CustomerPortalScreen', () => {
     expect(screen.queryByText('Appointment cancelled successfully.')).toBeNull();
     alertSpy.mockRestore();
   });
+
+  // ============ MOB-9: LOGOUT FAILURE ============
+  it('shows a message instead of an unhandled rejection when logout cleanup fails', async () => {
+    mockLogout.mockRejectedValueOnce(new Error('Secure credential removal failed. Please try signing out again.'));
+    await render(<CustomerPortalScreen />);
+    await fireEvent.press(screen.getByText('Sign Out'));
+    await waitFor(() => {
+      expect(screen.getByText(/Secure credential removal failed/)).toBeTruthy();
+    });
+  });
+
+  // ============ CANCELLED STATUS ============
+  it('shows CANCELLED and offers no cancel action for a cancelled booking', async () => {
+    mockAppointmentsData = buildData({
+      content: [{ ...defaultAppointment, status: 'CANCELLED' as any }],
+    });
+    await render(<CustomerPortalScreen />);
+    expect(screen.getByText('CANCELLED')).toBeTruthy();
+    expect(screen.queryByText('Cancel Booking')).toBeNull();
+  });
+
+  it('shows the server message when cancelling fails', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => {
+      buttons?.find((b: any) => b.text === 'Yes, Cancel')?.onPress?.();
+    });
+    mockCancelMutate.mockImplementation((_id, { onError }) => {
+      onError({ response: { status: 400, data: { message: 'Too late to cancel' } } });
+    });
+    await render(<CustomerPortalScreen />);
+    await fireEvent.press(screen.getByText('Cancel Booking'));
+    await waitFor(() => {
+      expect(screen.getByText('Too late to cancel')).toBeTruthy();
+    });
+    alertSpy.mockRestore();
+  });
 });

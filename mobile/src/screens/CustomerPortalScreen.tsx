@@ -20,6 +20,13 @@ import { useCustomerAppointments, useCancelCustomerAppointment } from '../hooks/
 import { useAuthStore } from '../store/useAuthStore';
 import { colors } from '../theme/colors';
 import { formatTime12Hour } from '../utils/time-utils';
+import { getApiErrorMessage } from '../utils/errors';
+
+// DENIED and CANCELLED bookings are final: nothing left to cancel.
+const canCancelStatus = (status: string) => {
+  const normalized = status.toUpperCase();
+  return normalized !== 'DENIED' && normalized !== 'CANCELLED';
+};
 
 export const CustomerPortalScreen: React.FC = () => {
   const [page, setPage] = useState(0);
@@ -50,6 +57,14 @@ export const CustomerPortalScreen: React.FC = () => {
     alertTimer.current = setTimeout(() => setErrorMsg(null), 4500);
   };
 
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (err: unknown) {
+      showError(getApiErrorMessage(err, 'Sign-out failed. Please try again.'));
+    }
+  };
+
   const handleCancel = (publicId: string) => {
     Alert.alert(
       'Cancel Appointment',
@@ -65,7 +80,7 @@ export const CustomerPortalScreen: React.FC = () => {
                 showSuccess('Appointment cancelled successfully.');
                 refetch();
               },
-              onError: () => showError('Failed to cancel appointment.'),
+              onError: (err) => showError(getApiErrorMessage(err, 'Failed to cancel appointment.')),
             });
           },
         },
@@ -86,7 +101,7 @@ export const CustomerPortalScreen: React.FC = () => {
             <Text style={styles.username}>{username || 'Valued Customer'}</Text>
           </View>
 
-          <TouchableOpacity style={styles.logoutBtn} onPress={() => logout()}>
+          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={20} color={colors.status.denied} />
             <Text style={styles.logoutText}>Sign Out</Text>
           </TouchableOpacity>
@@ -142,7 +157,7 @@ export const CustomerPortalScreen: React.FC = () => {
                   </Text>
                 </View>
 
-                {item.status !== 'DENIED' && (
+                {canCancelStatus(item.status) && (
                   <Button
                     title="Cancel Booking"
                     variant="outline"

@@ -70,4 +70,21 @@ describe('authApi', () => {
       }),
     ).rejects.toThrow(/Contract violation for POST \/api\/v1\/auth\/register/);
   });
+
+  it('revokes the bearer token via POST /auth/logout', async () => {
+    let called = false;
+    server.use(
+      http.post('*/api/v1/auth/logout', () => {
+        called = true;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    await expect(authApi.logout()).resolves.toBeUndefined();
+    expect(called).toBe(true);
+  });
+
+  it('surfaces a failing logout call so callers can ignore it explicitly', async () => {
+    server.use(http.post('*/api/v1/auth/logout', () => HttpResponse.error()));
+    await expect(authApi.logout()).rejects.toThrow();
+  });
 });
