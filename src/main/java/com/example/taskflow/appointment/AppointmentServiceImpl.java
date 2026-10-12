@@ -231,7 +231,8 @@ public class AppointmentServiceImpl implements AppointmentService {
             // Next steps:
             //   1. Try idempotency-key lookup in a fresh transaction — verified
             //      replay or 409 conflict.
-            //   2. If SQLState = 23505 (unique_violation), treat as slot collision.
+            //   2. If SQLState = 23505 (unique_violation) or 23P01 (exclusion_violation,
+            //      PostgreSQL only), treat as slot collision.
             //   3. Otherwise, surface a generic "data conflict" error.
             if (trimmedKey != null) {
                 Appointment existing = lookupByIdempotencyKey(trimmedKey);
@@ -239,9 +240,11 @@ public class AppointmentServiceImpl implements AppointmentService {
                     return replayOrConflict(existing, request, trimmedKey);
                 }
             }
-            if (isUniqueViolation(ex)) {
+            if (isSlotConstraintViolation(ex)) {
                 // Slot was booked between our busy-slots check and save (TOCTOU).
-                // The partial unique index idx_appointment_slot_active caught it.
+                // The partial unique index idx_appointment_slot_active (same start) or, on
+                // PostgreSQL, the appointments_no_overlap exclusion constraint (overlapping
+                // interval with a different start) caught it.
                 logger.warn("Slot collision for {} at {} on {} — request raced with another booking.",
                         LogSanitizer.stripNewlines(request.barberName()),
                         LogSanitizer.stripNewlines(request.bookingTime()),
@@ -324,8 +327,10 @@ public class AppointmentServiceImpl implements AppointmentService {
             // length vs. closing time, overlap with PENDING/APPROVED bookings). It reads the
             // database rather than the 2-minute busy-slots cache. A truly concurrent insert
             // racing this transaction is caught by the partial unique slot index for the
-            // same start time; overlapping different start times (only possible for services
-            // longer than the grid step) remain a documented residual race.
+            // same start time and, on PostgreSQL, by the appointments_no_overlap exclusion
+            // constraint for overlapping intervals with different start times (services
+            // longer than the grid step). H2 has no exclusion constraints; there this check
+            // is the only guard against such overlaps.
             busySlotsService.findConflict(resolvedBarber, bookingDate, bookingTime, durationMinutes, null)
                     .ifPresent(message -> {
                         throw new IllegalArgumentException(message);
@@ -355,6 +360,8 @@ public class AppointmentServiceImpl implements AppointmentService {
             item.setPriceAtBooking(service.getPrice());
             item.setBookingDate(bookingDate);
             item.setBookingTime(request.bookingTime().trim());
+            // Store exactly the interval the rules above validated; the exclusion constraint keys on it.
+            item.setBookingEndTime(Appointment.endTimeOf(bookingTime, durationMinutes));
             item.setStatus(AppointmentStatus.PENDING);
 
             Appointment savedItem = appointmentRepository.save(item);
@@ -506,6 +513,9 @@ public class AppointmentServiceImpl implements AppointmentService {
 
         item.setStatus(target);
         Appointment savedItem = appointmentRepository.save(item);
+        if (target == AppointmentStatus.APPROVED) {
+            flushApproval();
+        }
         publishAvailabilityChange(
                 AvailabilityChangedEvent.single(savedItem.getBarberName(), savedItem.getBookingDate()));
 
@@ -521,6 +531,23 @@ public class AppointmentServiceImpl implements AppointmentService {
         publishAdminEvent(AppointmentAdminEvent.Type.UPDATED, savedItem.getId());
 
         return AppointmentResponse.fromEntity(savedItem);
+    }
+
+    /**
+     * Writes an approval immediately instead of at commit. DENIED -> APPROVED puts the booking back
+     * on the calendar; a booking that raced into the slot after {@link #requireCanApprove} is caught
+     * by the active-slot unique index (23505) or the PostgreSQL exclusion constraint (23P01), and is
+     * reported as the same 409 the in-transaction check gives instead of a generic data conflict.
+     */
+    private void flushApproval() {
+        try {
+            appointmentRepository.flush();
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            if (isSlotConstraintViolation(ex)) {
+                throw new ConflictException("The selected slot is already booked or unavailable.");
+            }
+            throw ex;
+        }
     }
 
     /** PENDING -> APPROVED|DENIED, APPROVED -> DENIED, DENIED -> APPROVED. */
@@ -688,15 +715,16 @@ public class AppointmentServiceImpl implements AppointmentService {
     /**
      * H1: Walk the exception cause chain looking for a {@link java.sql.SQLException}
      * whose SQLState is {@code "23505"} (the SQL-standard code for unique violation
-     * shared by PostgreSQL and H2). Non-unique integrity violations (FK = 23503,
-     * NOT NULL = 23502, CHECK = 23514) will not match, allowing the caller to
-     * distinguish a genuine slot/idempotency collision from other data issues.
+     * shared by PostgreSQL and H2) or {@code "23P01"} (PostgreSQL exclusion_violation,
+     * raised by the {@code appointments_no_overlap} constraint from V35). Other integrity
+     * violations (FK = 23503, NOT NULL = 23502, CHECK = 23514) will not match, allowing
+     * the caller to distinguish a genuine slot/idempotency collision from other data issues.
      */
-    private static boolean isUniqueViolation(Throwable ex) {
+    static boolean isSlotConstraintViolation(Throwable ex) {
         Throwable cause = ex;
         while (cause != null) {
             if (cause instanceof java.sql.SQLException sqlEx) {
-                if ("23505".equals(sqlEx.getSQLState())) {
+                if ("23505".equals(sqlEx.getSQLState()) || "23P01".equals(sqlEx.getSQLState())) {
                     return true;
                 }
             }

@@ -14,6 +14,9 @@ import java.util.Optional;
 public interface BarberRepository extends JpaRepository<Barber, Long> {
     Optional<Barber> findByName(String name);
 
+    /** Every barber, lowest id first: the deterministic order "No Preference" assigns in. */
+    List<Barber> findAllByOrderByIdAsc();
+
     /**
      * DTO projection query: selects only the columns needed for API responses,
      * bypassing full entity loading and Hibernate's persistence context overhead.

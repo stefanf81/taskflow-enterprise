@@ -257,6 +257,15 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void exclusionViolationMapsTo409() {
+        // PostgreSQL appointments_no_overlap (V35)
+        var ex = new org.springframework.dao.DataIntegrityViolationException("overlap",
+                new java.sql.SQLException("conflicting key value violates exclusion constraint", "23P01"));
+
+        assertEquals(HttpStatus.CONFLICT, globalExceptionHandler.handleDataIntegrityViolation(ex, request).getStatusCode());
+    }
+
+    @Test
     void otherIntegrityViolationsStayServerErrors() {
         var ex = new org.springframework.dao.DataIntegrityViolationException("null value",
                 new java.sql.SQLException("not null", "23502"));
