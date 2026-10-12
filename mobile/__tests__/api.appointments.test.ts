@@ -136,6 +136,14 @@ describe('appointmentsApi', () => {
       });
       expect(result).toEqual(['10:00', '11:00']);
     });
+
+    it('passes the selected service so long services are checked against later bookings', async () => {
+      mockedGet.mockResolvedValueOnce({ data: ['16:00'] });
+      await appointmentsApi.getBusySlots('Alex', '2026-08-01', 'Deluxe Package');
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments/public/busy-slots', {
+        params: { barberName: 'Alex', bookingDate: '2026-08-01', serviceType: 'Deluxe Package' },
+      });
+    });
   });
 
   describe('publicCancelAppointment', () => {

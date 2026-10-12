@@ -24,6 +24,7 @@ const MANAGED_ENV = [
   'TASKFLOW_TLS_POLICY',
   'EXPO_PUBLIC_API_URL',
   'TASKFLOW_API_SPKI_PINS',
+  'TASKFLOW_API_SPKI_CA_PINS',
   'TASKFLOW_API_SPKI_LEAF_PINS',
   'TASKFLOW_API_PIN_EXPIRY',
   'EXPO_PUBLIC_E2E_LOCAL_API',
@@ -52,7 +53,7 @@ afterEach(() => {
 function enableReleasePolicy() {
   process.env.TASKFLOW_TLS_POLICY = 'required';
   process.env.EXPO_PUBLIC_API_URL = API_URL;
-  process.env.TASKFLOW_API_SPKI_PINS = `${PIN_A},${PIN_B}`;
+  process.env.TASKFLOW_API_SPKI_CA_PINS = `${PIN_A},${PIN_B}`;
 }
 
 function baseConfig() {
@@ -84,16 +85,16 @@ test('validation: requires a current pin AND a backup pin (two unique well-forme
 
   assert.throws(() => plugin.getPinningConfig(), /two unique SHA-256 SPKI Base64 pins/);
 
-  process.env.TASKFLOW_API_SPKI_PINS = PIN_A; // no backup
+  process.env.TASKFLOW_API_SPKI_CA_PINS = PIN_A; // no backup
   assert.throws(() => plugin.getPinningConfig(), /two unique SHA-256 SPKI Base64 pins/);
 
-  process.env.TASKFLOW_API_SPKI_PINS = `${PIN_A},${PIN_A}`;
+  process.env.TASKFLOW_API_SPKI_CA_PINS = `${PIN_A},${PIN_A}`;
   assert.throws(() => plugin.getPinningConfig(), /two unique SHA-256 SPKI Base64 pins/);
 
-  process.env.TASKFLOW_API_SPKI_PINS = 'not-a-pin,also-bad';
+  process.env.TASKFLOW_API_SPKI_CA_PINS = 'not-a-pin,also-bad';
   assert.throws(() => plugin.getPinningConfig(), /two unique SHA-256 SPKI Base64 pins/);
 
-  process.env.TASKFLOW_API_SPKI_PINS = `${PIN_A},${PIN_B}`;
+  process.env.TASKFLOW_API_SPKI_CA_PINS = `${PIN_A},${PIN_B}`;
   assert.deepEqual(plugin.getPinningConfig({}, NOW), {
     hostname: HOSTNAME,
     pins: [PIN_A, PIN_B],
@@ -404,4 +405,13 @@ test('enforceAndroidPinning rewrites a foreign networkSecurityConfig and warns',
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }
+});
+
+test('the pre-rename TASKFLOW_API_SPKI_PINS fails the build instead of silently mis-pinning iOS', () => {
+  enableReleasePolicy();
+  process.env.TASKFLOW_API_SPKI_PINS = `${PIN_A},${PIN_B}`; // old name, possibly leaf hashes
+  assert.throws(() => plugin.getPinningConfig({}, NOW), /TASKFLOW_API_SPKI_CA_PINS/);
+
+  delete process.env.TASKFLOW_API_SPKI_PINS;
+  assert.doesNotThrow(() => plugin.getPinningConfig({}, NOW));
 });

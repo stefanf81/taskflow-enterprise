@@ -61,9 +61,15 @@ export const appointmentsApi = {
     );
   },
 
-  getBusySlots: async (barberName: string, bookingDate: string): Promise<string[]> => {
+  getBusySlots: async (
+    barberName: string,
+    bookingDate: string,
+    serviceType?: string
+  ): Promise<string[]> => {
+    // serviceType lets the server also mark slots where a long service would overlap a later
+    // booking or run past closing time (otherwise the booking is rejected with 400 at submit).
     const response = await apiClient.get<string[]>('/api/v1/appointments/public/busy-slots', {
-      params: { barberName, bookingDate },
+      params: serviceType ? { barberName, bookingDate, serviceType } : { barberName, bookingDate },
     });
     return parseContract(
       busySlotsResponseSchema,

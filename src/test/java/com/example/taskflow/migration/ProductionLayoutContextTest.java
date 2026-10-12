@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Boots the whole application on a fresh H2 database migrated with exactly the Flyway layout of
- * {@code application-prod.properties} (no {@code db/seed}, plus {@code db/prod-cleanup}). The
+ * {@code application-prod.properties} ({@code db/seed} plus {@code db/prod-cleanup}, whose V30 deletes the seed rows). The
  * context only starts if Hibernate's {@code ddl-auto=validate} accepts the migrated schema, so this
  * covers "schema validates without V2/V11", and the database must come up with no demo data.
  */
@@ -17,8 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
         "app.rate-limit.enabled=false",
         "app.schedulers.enabled=false",
         "spring.datasource.url=jdbc:h2:mem:prodlayout;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
-        "spring.flyway.locations=classpath:db/migration,classpath:db/prod-cleanup",
-        "spring.flyway.ignore-migration-patterns=*:missing,*:future",
+        "spring.flyway.locations=classpath:db/migration,classpath:db/seed,classpath:db/prod-cleanup",
+        "spring.flyway.ignore-migration-patterns=*:future",
         "spring.jpa.hibernate.ddl-auto=validate"
 })
 class ProductionLayoutContextTest {

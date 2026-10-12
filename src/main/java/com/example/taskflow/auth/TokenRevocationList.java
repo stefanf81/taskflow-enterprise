@@ -1,5 +1,8 @@
 package com.example.taskflow.auth;
 
+import com.example.taskflow.core.TokenRevokedEvent;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -24,6 +27,16 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TokenRevocationList {
 
     private final ConcurrentHashMap<String, Instant> revoked = new ConcurrentHashMap<>();
+    private final ApplicationEventPublisher events;
+
+    @Autowired
+    public TokenRevocationList(ApplicationEventPublisher events) {
+        this.events = events;
+    }
+
+    TokenRevocationList() {
+        this(null);
+    }
 
     public void revoke(String jti, Instant expiresAt) {
         if (jti == null || jti.isBlank()) {
@@ -35,6 +48,10 @@ public class TokenRevocationList {
         }
         revoked.values().removeIf(expiry -> !expiry.isAfter(now));
         revoked.put(jti, expiresAt);
+        // Long-lived streams opened with this token must not outlive the logout.
+        if (events != null) {
+            events.publishEvent(new TokenRevokedEvent(jti));
+        }
     }
 
     public boolean isRevoked(String jti) {

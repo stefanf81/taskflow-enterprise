@@ -23,7 +23,8 @@ const RECONNECT_MAX_MS = 30_000;
  * `EventSource` that failed with a non-200 response (429, 502, 401...) is CLOSED
  * permanently — it never retries. This service then reconnects with exponential
  * backoff (1s, 2s, 4s ... capped at 30s) until it is closed explicitly, the
- * service is destroyed, or the session ends (logout / 401 elsewhere).
+ * service is destroyed, the session ends (logout / 401 elsewhere), or the server
+ * sends `evicted` (this stream was replaced because the admin opened too many tabs).
  *
  * Events can be missed while disconnected, so `appointmentChanges` also emits a
  * "reload everything" tick after EVERY (re)connect, and once per failed attempt
@@ -96,6 +97,12 @@ export class AdminEventsService {
     for (const eventName of ['appointment.created', 'appointment.updated', 'appointment.deleted']) {
       source.addEventListener(eventName, (event) => this.handleAppointmentEvent(event));
     }
+    // The server replaced this stream (another tab of the same admin hit the connection limit).
+    // Stop for good: the browser would otherwise reconnect after the close and evict the other
+    // tab in turn, looping forever.
+    source.addEventListener('evicted', () => {
+      if (this.source === source) this.close();
+    });
   }
 
   private handleClosed(source: EventSource): void {

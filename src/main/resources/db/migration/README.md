@@ -10,21 +10,20 @@ changes. Fix mistakes with a new, higher-numbered migration.
 | Location (classpath) | Loaded by | Contents |
 | --- | --- | --- |
 | `db/migration` (+ `db/migration/*.java` in package `db.migration`) | every environment | schema, reference data production needs (services V5, barbers + schedules V6, users) |
-| `db/seed` | dev/test only (`application.properties`) | **seed-only** demo data: `V2__seed_appointments.sql`, `V11__provision_more_test_data.sql` (fake bookings and reviews) |
+| `db/seed` | every environment (production deletes its rows again in V30) | **seed-only** demo data: `V2__seed_appointments.sql`, `V11__provision_more_test_data.sql` (fake bookings and reviews) |
 | `db/prod-cleanup` | production only (`application-prod.properties`) | prod-only forward migrations, currently `V30__remove_seed_data.sql` |
 
 `spring.flyway.locations` is `classpath:db/migration,classpath:db/seed` by default and
-`classpath:db/migration,classpath:db/prod-cleanup` under the `prod` profile, which also sets
-`spring.flyway.ignore-migration-patterns=*:missing,*:future`.
+`classpath:db/migration,classpath:db/seed,classpath:db/prod-cleanup` under the `prod` profile.
+Only Flyway's default `*:future` is ignored: the missing-migration check stays on everywhere, so a
+deleted or renamed applied migration fails startup instead of passing silently.
 
 Consequences:
 
-* A **fresh production database** never receives the demo appointments/reviews (V2/V11 are not
-  on its classpath). Everything else must therefore work **without** V2/V11 - never make a
-  migration in `db/migration` depend on rows inserted by a seed migration.
-* A **production database that already applied V2/V11** still validates (`*:missing` ignores the
-  now-absent files) and `V30` deletes the demo rows (matched by their known public ids and the exact
-  e-mail/phone/name triples, so real customers are never touched).
+* A **production database** - fresh or one that applied V2/V11 long ago - ends up without the demo
+  appointments/reviews: `V30` deletes them (matched by their known public ids and the exact
+  e-mail/phone/name triples, so real customers are never touched). Migrations in `db/migration`
+  must still work **without** V2/V11 (that is tested), never depend on seed rows.
 * **Dev/test** keep the demo data and never run the prod-cleanup folder.
 * Seed files were moved, not edited: contents, version numbers and checksums are unchanged.
 * New seed data goes into `db/seed` (and must not be needed by any later migration); new

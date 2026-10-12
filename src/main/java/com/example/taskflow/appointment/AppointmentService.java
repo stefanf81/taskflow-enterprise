@@ -14,6 +14,9 @@ public interface AppointmentService {
     AppointmentResponse updateAppointmentStatus(Long id, AppointmentUpdateRequest request);
     void deleteAppointment(Long id);
     java.util.List<String> getBusySlots(String barberName, String bookingDate);
+
+    /** Busy slots for booking {@code serviceType} (null/blank = ignore the service's length). */
+    java.util.List<String> getBusySlots(String barberName, String bookingDate, String serviceType);
     void publicCancelAppointment(String publicId, String email);
     Appointment findByPublicId(String publicId);
 

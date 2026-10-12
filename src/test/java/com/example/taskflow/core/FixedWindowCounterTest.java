@@ -59,18 +59,20 @@ class FixedWindowCounterTest {
     }
 
     @Test
-    void aFloodOfNewKeysCannotEvictOrResetLiveCounters() {
+    void aFullMapStillTracksNewKeysAndEvictsTheLeastActiveEntry() {
         FixedWindowCounter c = counter(60_000, 3);
         c.increment("victim");
         c.increment("victim");
         c.increment("x");
         c.increment("y");
 
-        // Map is full: new keys are not tracked (count 0)...
-        assertEquals(0, c.increment("attacker-1"));
-        assertEquals(0, c.increment("attacker-2"));
+        // Map is full: a new key is still tracked (a flood must not switch limiting off)...
+        assertEquals(1, c.increment("attacker-1"));
+        assertEquals(2, c.increment("attacker-1"));
         assertEquals(3, c.size());
-        // ...and existing keys keep counting from where they were.
+        // ...by evicting a low-count entry, never the heavily hit one.
+        assertEquals(1, c.increment("attacker-2"));
+        assertEquals(3, c.size());
         assertEquals(3, c.increment("victim"));
     }
 

@@ -202,6 +202,11 @@ public class AppointmentServiceImpl implements AppointmentService {
         // winner: on PostgreSQL the losing transaction is aborted at the first
         // error, and re-querying inside it (the previous behaviour) failed with
         // "session flushed after exception" / "current transaction is aborted".
+        // The per-email cap is a read-check-insert: serialise attempts for the same address (until
+        // the attempt's transaction has committed) so concurrent requests cannot all read the same
+        // count and overshoot it. Per JVM, matching the documented single-replica deployment.
+        java.util.concurrent.locks.Lock emailLock = emailLockFor(request.customerEmail());
+        emailLock.lock();
         try {
             return createAppointmentInTransaction(request, trimmedKey);
         } catch (IllegalArgumentException ex) {
@@ -249,7 +254,25 @@ public class AppointmentServiceImpl implements AppointmentService {
                     LogSanitizer.safeMessage(ex), ex);
             throw new IllegalArgumentException(
                     "Unable to process the booking due to a data conflict. Please try again.");
+        } finally {
+            emailLock.unlock();
         }
+    }
+
+    /** Lock stripes for the per-email booking cap (bounded memory, independent addresses rarely share). */
+    private final java.util.concurrent.locks.ReentrantLock[] emailLocks = newEmailLocks(64);
+
+    private static java.util.concurrent.locks.ReentrantLock[] newEmailLocks(int stripes) {
+        java.util.concurrent.locks.ReentrantLock[] locks = new java.util.concurrent.locks.ReentrantLock[stripes];
+        for (int i = 0; i < stripes; i++) {
+            locks[i] = new java.util.concurrent.locks.ReentrantLock();
+        }
+        return locks;
+    }
+
+    private java.util.concurrent.locks.Lock emailLockFor(String email) {
+        String key = email == null ? "" : email.trim().toLowerCase(java.util.Locale.ROOT);
+        return emailLocks[Math.floorMod(key.hashCode(), emailLocks.length)];
     }
 
     /**
@@ -309,7 +332,8 @@ public class AppointmentServiceImpl implements AppointmentService {
                     });
 
             // BKG-2: bound the number of upcoming bookings one e-mail address can hold.
-            long upcoming = appointmentRepository.countActiveFromDate(request.customerEmail().trim(), today);
+            long upcoming = appointmentRepository.countUpcoming(request.customerEmail().trim(), today,
+                    now.toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")));
             if (upcoming >= bookingProperties.maxActivePerEmail()) {
                 throw new IllegalArgumentException("This email address already has "
                         + bookingProperties.maxActivePerEmail() + " upcoming appointments, which is the maximum. "
@@ -586,6 +610,25 @@ public class AppointmentServiceImpl implements AppointmentService {
     @Transactional(readOnly = true)
     public java.util.List<String> getBusySlots(String barberName, String bookingDate) {
         return busySlotsService.getBusySlots(barberName, bookingDate);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<String> getBusySlots(String barberName, String bookingDate, String serviceType) {
+        if (serviceType == null || serviceType.isBlank()) {
+            return busySlotsService.getBusySlots(barberName, bookingDate);
+        }
+        ServiceItem service = catalogService.findServiceByName(serviceType.trim())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Unknown service: '" + LogSanitizer.stripNewlines(serviceType)
+                                + "'. Please select a service from the catalog."));
+        int duration = service.getDurationMinutes() != null && service.getDurationMinutes() > 0
+                ? service.getDurationMinutes() : BusySlotsService.DEFAULT_DURATION_MINUTES;
+        // Services that fit in one grid step get the same answer from the cached path; only
+        // longer ones need the (uncached) length-aware computation.
+        return duration > BusySlotsService.DEFAULT_DURATION_MINUTES
+                ? busySlotsService.getBusySlots(barberName, bookingDate, duration)
+                : busySlotsService.getBusySlots(barberName, bookingDate);
     }
 
     @Override

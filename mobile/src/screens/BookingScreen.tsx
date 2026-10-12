@@ -151,7 +151,7 @@ export const BookingScreen: React.FC = () => {
     isError: busySlotsFailed,
     error: busySlotsError,
     refetch: refetchBusySlots,
-  } = useBusySlots(selectedBarber, selectedDate);
+  } = useBusySlots(selectedBarber, selectedDate, selectedService);
 
   // Filtered services
   const filteredServices = useMemo(() => {

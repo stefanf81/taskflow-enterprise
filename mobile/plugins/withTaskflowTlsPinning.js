@@ -92,10 +92,22 @@ function getPinningConfig(props = {}, now = new Date()) {
   // or root CA whose renewal chain you control (see README): Android accepts
   // the connection when ANY certificate in the validated chain matches, and
   // iOS NSPinnedCAIdentities behaves the same way, so the same pins serve both.
-  const pins = parsePins(process.env.TASKFLOW_API_SPKI_PINS);
+  //
+  // The variable was renamed from TASKFLOW_API_SPKI_PINS because its meaning changed:
+  // older builds applied it on iOS as LEAF identities. Reusing the old name would silently
+  // put existing leaf hashes into NSPinnedCAIdentities, where they never match, and ship an
+  // iOS app that cannot reach the API. Refuse the old name so such configs fail loudly.
+  if (process.env.TASKFLOW_API_SPKI_PINS && process.env.TASKFLOW_API_SPKI_PINS.trim()) {
+    throw new Error(
+      'TASKFLOW_API_SPKI_PINS is no longer read: it used to mean iOS leaf pins. Put the SPKI hashes '
+        + 'of an intermediate/root CA (current + backup) in TASKFLOW_API_SPKI_CA_PINS, move any leaf '
+        + 'hashes you still want on iOS to TASKFLOW_API_SPKI_LEAF_PINS, and unset TASKFLOW_API_SPKI_PINS.',
+    );
+  }
+  const pins = parsePins(process.env.TASKFLOW_API_SPKI_CA_PINS);
   if (pins.length < 2 || new Set(pins).size !== pins.length || pins.some((pin) => !PIN_PATTERN.test(pin))) {
     throw new Error(
-      'TASKFLOW_TLS_POLICY=required requires two unique SHA-256 SPKI Base64 pins in TASKFLOW_API_SPKI_PINS.',
+      'TASKFLOW_TLS_POLICY=required requires two unique SHA-256 SPKI Base64 pins in TASKFLOW_API_SPKI_CA_PINS.',
     );
   }
 

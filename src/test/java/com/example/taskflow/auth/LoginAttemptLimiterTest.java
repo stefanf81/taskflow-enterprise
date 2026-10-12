@@ -58,4 +58,28 @@ class LoginAttemptLimiterTest {
         assertDoesNotThrow(() -> limiter.recordFailure(null));
         assertThrows(TooManyLoginAttemptsException.class, () -> limiter.checkAllowed(null));
     }
+
+    @Test
+    void failuresFromOneAddressDoNotLockTheAccountOutForOtherAddresses() {
+        LoginAttemptLimiter limiter = new LoginAttemptLimiter(2, 300);
+        try {
+            asClient("203.0.113.66");
+            limiter.recordFailure("admin");
+            limiter.recordFailure("admin");
+            assertThrows(TooManyLoginAttemptsException.class, () -> limiter.checkAllowed("admin"));
+
+            // The real admin, from another address, can still sign in.
+            asClient("198.51.100.10");
+            assertDoesNotThrow(() -> limiter.checkAllowed("admin"));
+        } finally {
+            org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes();
+        }
+    }
+
+    private static void asClient(String address) {
+        var request = new org.springframework.mock.web.MockHttpServletRequest();
+        request.setRemoteAddr(address);
+        org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(
+                new org.springframework.web.context.request.ServletRequestAttributes(request));
+    }
 }

@@ -884,6 +884,17 @@
               "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
               "type": "string"
             }
+          },
+          {
+            "description": "Optional service name: slots where that service would overlap a later booking or run past closing time are also reported as busy",
+            "in": "query",
+            "name": "serviceType",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 0,
+              "type": "string"
+            }
           }
         ],
         "responses": {

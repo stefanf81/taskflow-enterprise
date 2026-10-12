@@ -108,12 +108,14 @@ class AppointmentEventStreamServiceTest {
         assertEquals(third, accepted);
         assertEquals(2, service.connectionCount("admin"));
         assertTrue(first.completed, "the oldest connection is completed");
+        assertEquals(2, first.sends.get(),
+                "the evicted stream got its ready event plus the terminal 'evicted' event (so it won't reconnect)");
         assertFalse(second.completed);
         assertFalse(third.completed);
 
         // the survivors are the two newest ones
         service.publish(EVENT);
-        assertEquals(1, first.sends.get(), "evicted stream only saw its ready event");
+        assertEquals(2, first.sends.get(), "evicted stream receives nothing after eviction");
         assertEquals(2, second.sends.get());
         assertEquals(2, third.sends.get());
     }
@@ -328,5 +330,25 @@ class AppointmentEventStreamServiceTest {
         assertFalse(expiring.completed);
         assertEquals(1, service.connectionCount("admin"));
         service.shutdown();
+    }
+
+    @Test
+    void revokingATokenClosesOnlyTheStreamsOpenedWithIt() {
+        TestEmitter revokedStream = new TestEmitter();
+        TestEmitter otherStream = new TestEmitter();
+        AppointmentEventStreamService service = serviceWith(5, Runnable::run,
+                new MutableTestClock(START), List.of(revokedStream, otherStream));
+
+        service.subscribe("admin", START.plusSeconds(3600), "jti-logged-out");
+        service.subscribe("admin", START.plusSeconds(3600), "jti-other-tab");
+
+        service.onTokenRevoked(new com.example.taskflow.core.TokenRevokedEvent("jti-logged-out"));
+
+        assertTrue(revokedStream.completed, "a logged-out token must not keep receiving events");
+        assertFalse(otherStream.completed);
+        assertEquals(1, service.connectionCount("admin"));
+        service.publish(EVENT);
+        assertEquals(1, revokedStream.sends.get());
+        assertEquals(2, otherStream.sends.get());
     }
 }

@@ -67,7 +67,7 @@ has a valid expiration date.
 
 ```bash
 # Current + backup SHA-256 SPKI hashes (Base64, without a sha256/ prefix).
-TASKFLOW_API_SPKI_PINS=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=,BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=
+TASKFLOW_API_SPKI_CA_PINS=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=,BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=
 # Optional: Android pin-set expiration (YYYY-MM-DD, must be in the future).
 # Default: build date + 365 days.
 TASKFLOW_API_PIN_EXPIRY=2027-09-30
@@ -77,7 +77,7 @@ TASKFLOW_API_SPKI_LEAF_PINS=
 
 Configuration:
 - **Development**: Local HTTP remains available for simulators and emulators.
-- **Preview and production (EAS)**: Set `TASKFLOW_TLS_POLICY=required` and configure `TASKFLOW_API_SPKI_PINS` in the selected EAS environment.
+- **Preview and production (EAS)**: Set `TASKFLOW_TLS_POLICY=required` and configure `TASKFLOW_API_SPKI_CA_PINS` in the selected EAS environment.
 - **Enforcement**: the plugin writes the Android `network_security_config` (`<pin-set expiration="...">`) and the iOS `NSPinnedDomains` entry (`NSPinnedCAIdentities`) during prebuild; Axios traffic is pinned by the platform networking stack.
 - **Plugin order does not matter**: a finalized config-plugin step re-checks the final `AndroidManifest.xml` and forces `android:networkSecurityConfig` to the pinned config (so `expo-detox-config-plugin`'s cleartext localhost config can never win in a pinned build). It fails the build if `android:usesCleartextTraffic="true"` is set by another plugin or the pinned XML was altered.
 
@@ -94,14 +94,17 @@ app then refuses to connect until users update. Instead:
 3. Use the **same pins on both platforms**. Android's `<pin-set>` accepts the
    connection when *any* certificate in the validated chain matches a pin; iOS
    `NSPinnedCAIdentities` is also matched against the CA certificates in the chain,
-   so a CA SPKI hash works unchanged in both. Therefore `TASKFLOW_API_SPKI_PINS`
+   so a CA SPKI hash works unchanged in both. Therefore `TASKFLOW_API_SPKI_CA_PINS`
    feeds both Android `<pin>` entries and iOS `NSPinnedCAIdentities`.
 4. `TASKFLOW_API_SPKI_LEAF_PINS` is optional and iOS-only (`NSPinnedLeafIdentities`).
    Do not use it as your only pin.
 
-> **Migration note:** earlier versions applied `TASKFLOW_API_SPKI_PINS` as iOS
-> *leaf* identities. Those values must now be CA/intermediate hashes; a leaf hash
-> placed in `NSPinnedCAIdentities` will not match and iOS will refuse the connection.
+> **Migration note:** earlier versions read `TASKFLOW_API_SPKI_PINS` and applied it
+> as iOS *leaf* identities. That variable is now rejected (the prebuild fails while it
+> is set) so an old leaf value cannot silently land in `NSPinnedCAIdentities`, where it
+> would never match and iOS would refuse every connection. Put CA/intermediate hashes in
+> `TASKFLOW_API_SPKI_CA_PINS`, move leaf hashes you still want to
+> `TASKFLOW_API_SPKI_LEAF_PINS`, and unset `TASKFLOW_API_SPKI_PINS`.
 
 **Expiry is the safe failure mode (Android).** Pins stop being enforced after the
 `expiration` date and Android falls back to ordinary certificate validation instead

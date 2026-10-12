@@ -71,9 +71,12 @@ public class AppointmentController {
         response.setHeader("X-Accel-Buffering", "no");
         // The stream outlives this request: hand over the token expiry so it is closed once the
         // token expires (non-JWT principals, e.g. in tests, simply have no expiry).
+        // Also hand over the token id so the stream is closed when the token is revoked (logout).
         Instant tokenExpiresAt = authentication instanceof JwtAuthenticationToken jwt
                 ? jwt.getToken().getExpiresAt() : null;
-        return eventStreamService.subscribe(authentication.getName(), tokenExpiresAt);
+        String tokenId = authentication instanceof JwtAuthenticationToken jwt
+                ? jwt.getToken().getId() : null;
+        return eventStreamService.subscribe(authentication.getName(), tokenExpiresAt, tokenId);
     }
 
     @GetMapping("/{id}")
@@ -108,9 +111,13 @@ public class AppointmentController {
             @Parameter(description = "Booking date (YYYY-MM-DD)")
             @NotBlank(message = "Booking date is required")
             @Pattern(regexp = "^\\d{4}-\\d{2}-\\d{2}$", message = "Date must be in YYYY-MM-DD format")
-            @RequestParam String bookingDate) {
-        
-        java.util.List<String> busySlots = appointmentService.getBusySlots(barberName, bookingDate);
+            @RequestParam String bookingDate,
+            @Parameter(description = "Optional service name: slots where that service would overlap a later "
+                    + "booking or run past closing time are also reported as busy")
+            @Size(max = 100, message = "Service type must not exceed 100 characters")
+            @RequestParam(required = false) String serviceType) {
+
+        java.util.List<String> busySlots = appointmentService.getBusySlots(barberName, bookingDate, serviceType);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(30, TimeUnit.SECONDS).cachePrivate().mustRevalidate())
                 .body(busySlots);

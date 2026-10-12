@@ -457,6 +457,21 @@ describe('BookingStore', () => {
   });
 
   describe('busy-slot lookups (FE-11)', () => {
+    it('sends the selected service and refreshes when the service changes', async () => {
+      store.selectBookingDate(FUTURE);
+      const first = httpMock.expectOne((r) => r.url.includes('/public/busy-slots'));
+      expect(first.request.params.get('serviceType')).toBe(store.bookingService());
+      first.flush([]);
+      await fixture.whenStable();
+
+      // A longer service may not fit where a shorter one does: availability is re-queried.
+      store.selectService('Royal Hot Towel Shave');
+      const second = httpMock.expectOne((r) => r.url.includes('/public/busy-slots'));
+      expect(second.request.params.get('serviceType')).toBe('Royal Hot Towel Shave');
+      second.flush([]);
+      await fixture.whenStable();
+    });
+
     it('does not validate step 3 against the previous date while a lookup is running', async () => {
       store.selectBookingDate(FUTURE);
       expect(store.isCheckingSlots()).toBe(true);

@@ -25,29 +25,30 @@ class AppointmentControllerEventStreamTest {
     private final AppointmentController controller = new AppointmentController(appointmentService, streams);
 
     @Test
-    void jwtPrincipalPassesItsExpiryToTheStream() {
+    void jwtPrincipalPassesItsExpiryAndIdToTheStream() {
         Instant expiresAt = Instant.parse("2031-03-10T11:00:00Z");
-        Jwt jwt = Jwt.withTokenValue("token").header("alg", "none").subject("admin")
+        Jwt jwt = Jwt.withTokenValue("token").header("alg", "none").subject("admin").jti("jti-1")
                 .issuedAt(expiresAt.minusSeconds(3600)).expiresAt(expiresAt).build();
         SseEmitter emitter = new SseEmitter();
-        when(streams.subscribe("admin", expiresAt)).thenReturn(emitter);
+        when(streams.subscribe("admin", expiresAt, "jti-1")).thenReturn(emitter);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         SseEmitter result = controller.streamAppointmentEvents(new JwtAuthenticationToken(jwt, List.of()), response);
 
         assertEquals(emitter, result);
-        verify(streams).subscribe("admin", expiresAt);
+        // the id lets a logout (token revocation) close this stream immediately
+        verify(streams).subscribe("admin", expiresAt, "jti-1");
         assertEquals("no-cache", response.getHeader("Cache-Control"));
         assertEquals("no", response.getHeader("X-Accel-Buffering"));
     }
 
     @Test
     void nonJwtPrincipalHasNoExpiry() {
-        when(streams.subscribe(any(), any())).thenReturn(new SseEmitter());
+        when(streams.subscribe(any(), any(), any())).thenReturn(new SseEmitter());
 
         assertNotNull(controller.streamAppointmentEvents(
                 new UsernamePasswordAuthenticationToken("admin", "n/a"), new MockHttpServletResponse()));
 
-        verify(streams).subscribe("admin", null);
+        verify(streams).subscribe("admin", null, null);
     }
 }

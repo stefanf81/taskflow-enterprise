@@ -12,9 +12,11 @@ import java.util.function.LongSupplier;
  * deployment.
  *
  * <p>Memory is capped at {@code maxKeys}. When the map is full, expired windows
- * are purged first; if it is still full, <em>new</em> keys are left untracked
- * (their count reads as 0) rather than evicting live counters, so a flood of
- * unique keys cannot reset an existing key's count.
+ * are purged first; if it is still full, the live entry with the <em>lowest</em>
+ * count (oldest window on ties) is evicted to make room. New keys are therefore
+ * always tracked — leaving them untracked would let a flood of throwaway keys
+ * switch the limit off for every key not already in the map — while a key that
+ * is actually being hammered has a high count and is the last to be evicted.
  */
 public final class FixedWindowCounter {
 
@@ -44,7 +46,7 @@ public final class FixedWindowCounter {
         if (windows.size() >= maxKeys && !windows.containsKey(key)) {
             purgeExpired(now);
             if (windows.size() >= maxKeys) {
-                return 0;
+                evictLeastActive();
             }
         }
         return windows.compute(key, (k, w) ->
@@ -78,6 +80,13 @@ public final class FixedWindowCounter {
 
     int size() {
         return windows.size();
+    }
+
+    private void evictLeastActive() {
+        windows.entrySet().stream()
+                .min(java.util.Comparator.comparingLong((java.util.Map.Entry<String, Window> e) -> e.getValue().count())
+                        .thenComparingLong(e -> e.getValue().startMillis()))
+                .ifPresent(e -> windows.remove(e.getKey(), e.getValue()));
     }
 
     private void purgeExpired(long now) {

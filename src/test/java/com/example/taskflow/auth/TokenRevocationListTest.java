@@ -46,4 +46,16 @@ class TokenRevocationListTest {
         list.revoke("next", Instant.now().plusSeconds(60));
         assertTrue(list.isRevoked("next"));
     }
+
+    @Test
+    void revocationIsPublishedSoLongLivedStreamsCanCloseImmediately() {
+        var events = org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class);
+        TokenRevocationList list = new TokenRevocationList(events);
+
+        list.revoke("jti-1", Instant.now().plusSeconds(60));
+        list.revoke("expired", Instant.now().minusSeconds(1));
+
+        org.mockito.Mockito.verify(events).publishEvent(new com.example.taskflow.core.TokenRevokedEvent("jti-1"));
+        org.mockito.Mockito.verifyNoMoreInteractions(events);
+    }
 }

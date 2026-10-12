@@ -708,7 +708,7 @@ class BookingRulesIntegrationTest {
         appointmentRepository.save(new Appointment("Mixed", "MiXeD@Case.com", "555", BARBER, TUE, "10:00", CUT));
         assertEquals(1, appointmentRepository.findByCustomerEmailIgnoreCase("mixed@case.COM",
                 org.springframework.data.domain.PageRequest.of(0, 10)).getTotalElements());
-        assertEquals(1, appointmentRepository.countActiveFromDate("MIXED@CASE.COM", TODAY));
+        assertEquals(1, appointmentRepository.countUpcoming("MIXED@CASE.COM", TODAY, "00:00"));
 
         userRepository.save(new com.example.taskflow.auth.AppUser("user@case.com", "hash", "U", null, "ROLE_CUSTOMER"));
         assertTrue(userRepository.findByEmailIgnoreCase("USER@Case.Com").isPresent());
@@ -728,4 +728,106 @@ class BookingRulesIntegrationTest {
         assertEquals(List.of(approved.getId()),
                 appointmentRepository.findReminderIds(TUE, false, AppointmentStatus.APPROVED));
     }
+
+    // ── busy-slots honours the length of the service being booked (code-review finding 6) ──
+
+    private List<String> busySlots(LocalDate date, String serviceType) throws Exception {
+        var builder = get("/api/v1/appointments/public/busy-slots")
+                .param("barberName", BARBER).param("bookingDate", date.toString());
+        if (serviceType != null) {
+            builder = builder.param("serviceType", serviceType);
+        }
+        String body = mockMvc.perform(builder).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return List.of(objectMapper.readValue(body, String[].class));
+    }
+
+    @Test
+    void busySlotsForALongServiceIncludeSlotsThatWouldOverlapOrRunPastClosing() throws Exception {
+        book("long-check@example.com", TUE, "11:00"); // 30-minute cut at 11:00
+
+        // Start-minute view (no service, or a service within one grid step): only 11:00 is taken.
+        assertEquals(List.of("11:00"), busySlots(TUE, null));
+        assertEquals(List.of("11:00"), busySlots(TUE, CUT));
+
+        // A 120-minute treatment at 10:00 would run into the 11:00 booking, and at 16:00 past the
+        // 17:00 closing time: both must be reported busy so the client never offers them.
+        assertEquals(List.of("10:00", "11:00", "16:00"), busySlots(TUE, LONG));
+
+        // ...and a slot reported free for it really is bookable (15:00 ends exactly at closing).
+        book("long-ok@example.com", BARBER, TUE, "15:00", LONG);
+        postBooking(request("long-rejected@example.com", BARBER, TUE, "10:00", LONG))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void busySlotsWithAnUnknownServiceIsA400() throws Exception {
+        mockMvc.perform(get("/api/v1/appointments/public/busy-slots")
+                        .param("barberName", BARBER).param("bookingDate", TUE.toString())
+                        .param("serviceType", "No Such Service"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ── per-email cap (code-review finding 8) ────────────────────────────────
+
+    @Autowired private AppointmentService appointmentService;
+
+    private void seedActive(String email, LocalDate date, String time) {
+        appointmentRepository.save(new Appointment("Cap Customer", email, "555", BARBER, date, time, CUT));
+    }
+
+    @Test
+    void aBookingThatAlreadyTookPlaceTodayNoLongerCountsAgainstTheCap() throws Exception {
+        String email = "cap-today@example.com";
+        seedActive(email, TODAY, "07:00");   // earlier today (now is 08:00): already happened
+        seedActive(email, WED, "09:00");
+        seedActive(email, WED, "10:00");
+        seedActive(email, THU, "09:00");
+        seedActive(email, THU, "10:00");
+
+        // 4 upcoming + 1 past: the fifth upcoming booking is still allowed
+        book(email, TUE, "13:00");
+        // ...and now the cap (5 upcoming) is reached
+        postBooking(request(email, BARBER, TUE, "14:00", CUT)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void concurrentBookingsForOneEmailCannotOvershootTheCap() throws Exception {
+        String email = "cap-race@example.com";
+        seedActive(email, WED, "09:00");
+        seedActive(email, WED, "10:00");
+        seedActive(email, THU, "09:00");
+        seedActive(email, THU, "10:00");
+
+        List<String> slots = List.of("13:00", "14:00", "15:00", "16:00");
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(slots.size());
+        try {
+            List<java.util.concurrent.Future<Boolean>> results = new java.util.ArrayList<>();
+            for (String slot : slots) {
+                results.add(pool.submit(() -> {
+                    start.await();
+                    try {
+                        appointmentService.createAppointment(new AppointmentCreateRequest(
+                                "Cap Customer", email, "555", BARBER, TUE, slot, CUT), null);
+                        return true;
+                    } catch (IllegalArgumentException rejected) {
+                        return false;
+                    }
+                }));
+            }
+            start.countDown();
+            long created = 0;
+            for (var result : results) {
+                if (result.get(30, java.util.concurrent.TimeUnit.SECONDS)) {
+                    created++;
+                }
+            }
+            assertEquals(1, created, "only one booking fits under the cap of 5");
+        } finally {
+            pool.shutdownNow();
+        }
+        assertEquals(5, appointmentRepository.countUpcoming(email, TODAY, "08:00"));
+    }
 }
+

@@ -5,6 +5,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.EventListener;
+import com.example.taskflow.core.TokenRevokedEvent;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -39,6 +41,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * per administrator. A new subscription at the limit completes and evicts the OLDEST connection
  * instead of being rejected: a page reload or reconnect opens its new stream before the server
  * notices the old one is dead (that only happens at the next heartbeat), and must not be refused.
+ * The evicted stream first receives a named {@code evicted} event: a plain close would make the
+ * browser's {@code EventSource} reconnect on its own, and with more tabs than the limit the tabs
+ * would then evict each other in an endless loop. The client stops reconnecting on that event.
  *
  * <p><b>Publishing.</b> {@link #publish} runs on the thread that committed the appointment
  * transaction, so it must not write to sockets itself. It hands one task per connection to a small
@@ -51,7 +56,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * passes the access token's expiry when subscribing; every heartbeat completes connections whose token
  * has expired (the client reconnects and is re-authenticated). A role removal or account deletion is
  * <em>not</em> observable here without a database lookup per heartbeat; such a connection stays open
- * until its token expires, the 30-minute stream timeout elapses or the client reconnects.
+ * until its token expires, the 30-minute stream timeout elapses or the client reconnects. A
+ * <em>revoked</em> token (logout) is observable: {@link TokenRevokedEvent} closes its streams.
  */
 @Service
 public class AppointmentEventStreamService {
@@ -61,9 +67,15 @@ public class AppointmentEventStreamService {
     private static final int DISPATCH_THREADS = 4;
     private static final int DISPATCH_QUEUE_CAPACITY = 256;
 
-    /** One open dashboard stream; {@code expiresAt} is the access token's expiry ({@code null} = none). */
-    private record Subscription(SseEmitter emitter, Instant expiresAt) {
+    /**
+     * One open dashboard stream; {@code expiresAt} is the access token's expiry and {@code tokenId}
+     * its {@code jti} ({@code null} = unknown).
+     */
+    private record Subscription(SseEmitter emitter, Instant expiresAt, String tokenId) {
     }
+
+    /** Name of the event that tells a client its stream was replaced and it must not reconnect. */
+    static final String EVICTED_EVENT = "evicted";
 
     private final int maxConnectionsPerAdmin;
     private final Clock clock;
@@ -125,7 +137,11 @@ public class AppointmentEventStreamService {
 
     /** Subscribe without token-expiry tracking (tests, non-JWT principals). */
     public SseEmitter subscribe(String adminName) {
-        return subscribe(adminName, null);
+        return subscribe(adminName, null, null);
+    }
+
+    public SseEmitter subscribe(String adminName, Instant tokenExpiresAt) {
+        return subscribe(adminName, tokenExpiresAt, null);
     }
 
     /**
@@ -133,14 +149,15 @@ public class AppointmentEventStreamService {
      *
      * @param tokenExpiresAt expiry of the access token that authenticated the request; the stream is
      *                       closed at the first heartbeat after this instant. {@code null} = never.
+     * @param tokenId        the access token's {@code jti}; the stream is closed when it is revoked
      */
-    public SseEmitter subscribe(String adminName, Instant tokenExpiresAt) {
+    public SseEmitter subscribe(String adminName, Instant tokenExpiresAt, String tokenId) {
         SseEmitter emitter = newEmitter(STREAM_TIMEOUT_MILLIS);
         emitter.onCompletion(() -> remove(adminName, emitter));
         emitter.onTimeout(() -> remove(adminName, emitter));
         emitter.onError(ignored -> remove(adminName, emitter));
 
-        Subscription subscription = new Subscription(emitter, tokenExpiresAt);
+        Subscription subscription = new Subscription(emitter, tokenExpiresAt, tokenId);
         List<Subscription> evicted = new ArrayList<>();
         emittersByAdmin.compute(adminName, (ignored, current) -> {
             evicted.clear();
@@ -153,7 +170,7 @@ public class AppointmentEventStreamService {
         });
         for (Subscription old : evicted) {
             logger.debug("Evicting oldest dashboard event stream of an administrator at the connection limit");
-            old.emitter().complete();
+            evict(old.emitter());
         }
 
         try {
@@ -223,6 +240,45 @@ public class AppointmentEventStreamService {
                 }
             }
         });
+    }
+
+    /** Closes every stream that was opened with a now-revoked access token. */
+    @EventListener
+    void onTokenRevoked(TokenRevokedEvent event) {
+        if (event.tokenId() == null) {
+            return;
+        }
+        emittersByAdmin.forEach((adminName, subscriptions) -> {
+            for (Subscription subscription : subscriptions) {
+                if (event.tokenId().equals(subscription.tokenId())) {
+                    logger.debug("Closing dashboard event stream: access token revoked");
+                    remove(adminName, subscription.emitter());
+                    subscription.emitter().complete();
+                }
+            }
+        });
+    }
+
+    /**
+     * Tells the client it was replaced (so it does not auto-reconnect) and then closes the stream.
+     * The write goes through the dispatcher like any other, so a dead socket cannot stall the
+     * request that opened the replacement stream.
+     */
+    private void evict(SseEmitter emitter) {
+        Runnable task = () -> {
+            try {
+                emitter.send(SseEmitter.event().name(EVICTED_EVENT).data("connection-limit"));
+            } catch (IOException | IllegalStateException ignored) {
+                // already gone; completing below is still correct
+            } finally {
+                emitter.complete();
+            }
+        };
+        try {
+            dispatcher.execute(task);
+        } catch (RejectedExecutionException ex) {
+            emitter.complete();
+        }
     }
 
     int connectionCount(String adminName) {

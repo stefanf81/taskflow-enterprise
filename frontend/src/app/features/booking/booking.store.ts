@@ -294,6 +294,8 @@ export class BookingStore {
 
   selectService(name: string): void {
     this.bookingModel.update((m) => ({ ...m, serviceType: name }));
+    // Availability depends on the service's length: refresh it if a slot grid is showing.
+    if (this.bookingBarber() && this.bookingDate()) this.onBarberOrDateChange();
   }
 
   selectStylist(name: string): void {
@@ -487,7 +489,7 @@ export class BookingStore {
       this.isCheckingSlots.set(true);
       this.slotsError.set(null);
       this.appointmentsApi
-        .getBusySlots(barber, date)
+        .getBusySlots(barber, date, this.bookingService() || undefined)
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({
           next: (busy) => {

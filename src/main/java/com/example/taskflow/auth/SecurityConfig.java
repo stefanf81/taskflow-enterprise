@@ -329,7 +329,9 @@ public class SecurityConfig {
                     JwtValidators.createDefaultWithIssuer(jwtIssuer),
                     audienceValidator,
                     notRevoked));
-            return decoder;
+            // The stale-cookie filter and the bearer-token filter both decode the cookie's token;
+            // within one request the second decode reuses the first (validated) result.
+            return new RequestScopedJwtDecoder(decoder);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to configure RSA Public Key decoder", e);
         }

@@ -32,17 +32,19 @@ public interface AppointmentRepository
     Page<Appointment> findByCustomerEmailIgnoreCase(@Param("email") String email, Pageable pageable);
 
     /**
-     * Number of PENDING/APPROVED bookings an e-mail address holds from {@code today} on
-     * (cancelled and declined bookings do not count against the limit).
+     * Number of PENDING/APPROVED bookings an e-mail address holds that have not started yet:
+     * later dates, or today at/after {@code fromTime} (HH:mm). A booking that already took
+     * place earlier today no longer counts; cancelled and declined bookings never do.
      */
     @Query("""
         SELECT COUNT(a) FROM Appointment a
         WHERE lower(a.customerEmail) = lower(:email)
-          AND a.bookingDate >= :today
+          AND (a.bookingDate > :today OR (a.bookingDate = :today AND a.bookingTime >= :fromTime))
           AND a.status IN (com.example.taskflow.appointment.AppointmentStatus.PENDING,
                            com.example.taskflow.appointment.AppointmentStatus.APPROVED)
     """)
-    long countActiveFromDate(@Param("email") String email, @Param("today") LocalDate today);
+    long countUpcoming(@Param("email") String email, @Param("today") LocalDate today,
+                       @Param("fromTime") String fromTime);
 
     @Query("SELECT a.id FROM Appointment a WHERE a.bookingDate = :date AND a.reminderSent = :reminderSent AND a.status = :status")
     List<Long> findReminderIds(@Param("date") LocalDate date,

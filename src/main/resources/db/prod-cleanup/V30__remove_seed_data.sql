@@ -5,13 +5,14 @@
 --     (David Beckham, Keanu Reeves, ...) and fake reviews. They are SEED-ONLY: their files now
 --     live in classpath:db/seed, which only dev/test load (application.properties). Their
 --     content and version numbers are unchanged, so existing dev/test databases keep validating.
---   * Production loads classpath:db/migration plus THIS folder (classpath:db/prod-cleanup, see
---     application-prod.properties) and sets spring.flyway.ignore-migration-patterns=*:missing,
---     so databases that already applied V2/V11 still validate even though those files are no
---     longer on the classpath. Dev/test never load this folder and therefore keep the demo data.
---   * Fresh production databases never receive the seed rows, so this migration is a no-op
---     there. V3 also hard-codes four public ids for appointments 1-4; for existing databases
---     V23 already re-keyed the seed-uuid-* ids, so the four V3 ids are matched explicitly below.
+--   * Production loads classpath:db/migration, classpath:db/seed AND this folder
+--     (classpath:db/prod-cleanup, see application-prod.properties). Keeping db/seed resolvable
+--     means every applied migration still has its file, so Flyway's missing-migration check stays
+--     on (no blanket *:missing). This migration then removes the demo rows, both on fresh
+--     production databases (which just ran V2/V11) and on ones that received them long ago.
+--     Dev/test never load this folder and therefore keep the demo data.
+--   * V3 also hard-codes four public ids for appointments 1-4; V23 re-keyed the seed-uuid-* ids,
+--     so the four V3 ids are matched explicitly below and the rest by their exact contact triple.
 --
 -- Safety: a row is deleted only if it LOOKS like seed data, i.e. it carries one of the known
 -- seed public ids, or the exact (customer_email, customer_phone, customer_name) triple of a

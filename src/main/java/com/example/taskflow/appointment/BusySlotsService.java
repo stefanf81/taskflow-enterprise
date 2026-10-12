@@ -260,6 +260,30 @@ public class BusySlotsService {
                 .toList();
     }
 
+    /**
+     * Busy grid slots for booking a service of {@code durationMinutes}: a slot is busy when the
+     * booking rules ({@link #findConflict}) would reject that start time for this barber (or, for
+     * the No Preference sentinel, for every barber). Unlike {@link #getBusySlots(String, String)}
+     * this accounts for the service running into a later booking or past closing time.
+     *
+     * <p>Uncached and only used for services longer than the grid step
+     * ({@link #DEFAULT_DURATION_MINUTES}); for those the cached, start-minute-only answer would
+     * offer slots that the booking then rejects with 400. Errors propagate like the cached path.
+     */
+    public List<String> getBusySlots(String barberName, String bookingDate, int durationMinutes) {
+        LocalDate date = parseDate(bookingDate);
+        List<Barber> candidates = AppointmentServiceImpl.NO_PREFERENCE_BARBER.equals(barberName)
+                ? barberRepository.findAll()
+                : List.of(barberRepository.findByName(barberName).orElseThrow(() -> unknownBarber(barberName)));
+        Map<String, List<Appointment>> activeByBarber = appointmentRepository.findActiveOnDate(date).stream()
+                .collect(Collectors.groupingBy(Appointment::getBarberName));
+        return ALL_SLOTS.stream()
+                .filter(slot -> candidates.stream().allMatch(barber -> findConflict(barber, date,
+                        LocalTime.parse(slot), durationMinutes, null,
+                        activeByBarber.getOrDefault(barber.getName(), List.of())).isPresent()))
+                .toList();
+    }
+
     /** A slot is busy when outside the working window or covered by an active appointment. */
     private static boolean isBusy(LocalTime slot, BarberSchedule schedule, List<Appointment> active) {
         if (slot.isBefore(schedule.getStartTime()) || !slot.isBefore(schedule.getEndTime())) {

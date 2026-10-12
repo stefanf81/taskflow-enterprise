@@ -3,6 +3,8 @@ package com.example.taskflow.auth;
 import com.example.taskflow.core.FixedWindowCounter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.Locale;
 
@@ -15,10 +17,13 @@ import java.util.Locale;
  * for one username inside the window, further attempts are rejected with 429
  * until the window ends. A successful login clears the account's count.
  *
- * <p>This is a temporary throttle, not a permanent lockout. It does let someone
- * who knows a username delay that account's owner for up to one window;
- * {@code app.rate-limit.login-max-failures} can be raised, or set to 0 to
- * disable the throttle, if that trade-off is wrong for a deployment.
+ * <p>The counter is keyed on the username <em>and the client address</em>
+ * ({@code getRemoteAddr()}, normalised by the trusted-proxy valve). Keying on the
+ * username alone let anyone who knows an account name (e.g. the default
+ * {@code admin}) keep its real owner locked out with a trickle of bad passwords;
+ * now failures from one address only throttle that address for that account.
+ * A distributed guesser is still limited per address by this and by the per-IP
+ * auth bucket. {@code app.rate-limit.login-max-failures=0} disables the throttle.
  * State is per JVM, which matches the documented single-replica deployment.
  */
 @Component
@@ -58,6 +63,16 @@ public class LoginAttemptLimiter {
     }
 
     private static String key(String username) {
-        return username == null ? "" : username.trim().toLowerCase(Locale.ROOT);
+        String account = username == null ? "" : username.trim().toLowerCase(Locale.ROOT);
+        return account + "|" + clientAddress();
+    }
+
+    /** The current request's client address, or empty outside a request (unit tests). */
+    private static String clientAddress() {
+        if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes) {
+            String address = attributes.getRequest().getRemoteAddr();
+            return address == null ? "" : address;
+        }
+        return "";
     }
 }

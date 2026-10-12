@@ -60,7 +60,7 @@ abstract class AbstractDataMigrationsTest {
 
     /** Exactly what application-prod.properties configures. */
     private FluentConfiguration prodLike(String url) {
-        return flyway(url, DEV_MIGRATION, PROD_CLEANUP).ignoreMigrationPatterns("*:missing", "*:future");
+        return flyway(url, DEV_MIGRATION, SEED, PROD_CLEANUP).ignoreMigrationPatterns("*:future");
     }
 
     private static int count(Connection c, String sql, Object... args) throws SQLException {
@@ -109,8 +109,8 @@ abstract class AbstractDataMigrationsTest {
             assertEquals(5, count(c, "SELECT COUNT(*) FROM services"));
             assertEquals(3, count(c, "SELECT COUNT(*) FROM barbers"));
             assertEquals(18, count(c, "SELECT COUNT(*) FROM barber_schedules"));
-            // seed migrations were never applied; the prod-cleanup one ran as a no-op
-            assertEquals(0, count(c, "SELECT COUNT(*) FROM \"flyway_schema_history\" WHERE \"version\" IN ('2', '11')"));
+            // the seed migrations are resolvable (no blanket *:missing needed) and V30 removed their rows
+            assertEquals(2, count(c, "SELECT COUNT(*) FROM \"flyway_schema_history\" WHERE \"version\" IN ('2', '11')"));
             assertEquals(1, count(c, "SELECT COUNT(*) FROM \"flyway_schema_history\" WHERE \"version\" = '30'"));
         }
         // the history validates against the very same configuration (what Flyway does on startup)
@@ -167,7 +167,7 @@ abstract class AbstractDataMigrationsTest {
                     + "('real@customer.test', 'EMAIL', 'm3', CURRENT_TIMESTAMP, 'PENDING')");
         }
 
-        // 3. deploy the new image: V2/V11 are no longer on the classpath, V30 is
+        // 3. deploy the new image: same V2/V11 files (checksums match), plus V30
         prodLike(url).load().migrate();
         prodLike(url).load().validate();
 
@@ -409,4 +409,20 @@ abstract class AbstractDataMigrationsTest {
             return rs.getString(1);
         }
     }
+
+    @Test
+    void productionLayoutStillFailsFastWhenAnAppliedMigrationDisappears() throws Exception {
+        String url = newUrl();
+        prodLike(url).load().migrate();
+        try (Connection c = open(url)) {
+            // simulate an applied migration whose file was deleted/renamed in a later image
+            exec(c, "INSERT INTO \"flyway_schema_history\" (\"installed_rank\", \"version\", \"description\", \"type\", "
+                    + "\"script\", \"checksum\", \"installed_by\", \"execution_time\", \"success\") VALUES "
+                    + "(999, '29', 'vanished', 'SQL', 'V29__vanished.sql', 1, 'test', 0, TRUE)");
+        }
+        assertThrows(org.flywaydb.core.api.exception.FlywayValidateException.class,
+                () -> prodLike(url).load().validate(),
+                "a missing applied migration must not pass validation silently in production");
+    }
 }
+

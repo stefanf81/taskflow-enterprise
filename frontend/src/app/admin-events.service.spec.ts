@@ -205,6 +205,20 @@ describe('AdminEventsService', () => {
       expect(factory).toHaveBeenCalledTimes(1);
     });
 
+    it('stops for good when the server evicts the stream (too many tabs)', () => {
+      service.connect();
+      source().open();
+
+      source().emit('evicted', 'connection-limit');
+      // the browser would auto-reconnect after the close; the client must not, or tabs loop
+      source().dropTransiently();
+      vi.advanceTimersByTime(60_000);
+
+      expect(source().close).toHaveBeenCalled();
+      expect(factory).toHaveBeenCalledTimes(1);
+      expect(service.connected()).toBe(false);
+    });
+
     it('stops reconnecting when the session ends (logout)', () => {
       service.connect();
       source().failPermanently();

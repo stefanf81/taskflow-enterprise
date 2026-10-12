@@ -372,7 +372,7 @@ class AppointmentServiceImplTest {
 
     @Test
     void testCreateAppointment_PerEmailActiveLimit() {
-        when(appointmentRepository.countActiveFromDate("john@test.com", TODAY)).thenReturn(5L);
+        when(appointmentRepository.countUpcoming(eq("john@test.com"), eq(TODAY), anyString())).thenReturn(5L);
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> appointmentService.createAppointment(request("Alex the Barber", TOMORROW, "10:00"), null));
@@ -380,7 +380,7 @@ class AppointmentServiceImplTest {
         verify(appointmentRepository, never()).save(any(Appointment.class));
 
         // one below the limit is fine
-        when(appointmentRepository.countActiveFromDate("john@test.com", TODAY)).thenReturn(4L);
+        when(appointmentRepository.countUpcoming(eq("john@test.com"), eq(TODAY), anyString())).thenReturn(4L);
         assertEquals("PENDING", appointmentService.createAppointment(
                 request("Alex the Barber", TOMORROW, "10:00"), null).appointment().status());
     }
