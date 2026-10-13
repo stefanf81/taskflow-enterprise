@@ -5,6 +5,7 @@ import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Tag;
 
+import java.io.File;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -86,8 +87,19 @@ class BookingTimePreparationScriptPostgresTest {
         return result;
     }
 
+    private static final String BASH_BINARY = resolveBash();
+
+    private static String resolveBash() {
+        for (String candidate : new String[]{"/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"}) {
+            if (new File(candidate).canExecute()) {
+                return candidate;
+            }
+        }
+        return "/bin/bash";
+    }
+
     private int runScript(String database, String mode) throws Exception {
-        ProcessBuilder pb = new ProcessBuilder("bash", "scripts/prepare-booking-time-migration.sh", mode);
+        ProcessBuilder pb = new ProcessBuilder(BASH_BINARY, "scripts/prepare-booking-time-migration.sh", mode);
         pb.environment().put("PGHOST", adminUri.getHost());
         pb.environment().put("PGPORT", String.valueOf(adminUri.getPort()));
         pb.environment().put("PGDATABASE", database);
