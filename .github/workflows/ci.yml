@@ -814,9 +814,11 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 45
 
+    # Anchored: `docker-backend`'s production-image smoke test runs the same
+    # pinned PostgreSQL and Redis images, so Renovate updates one place.
     services:
       postgres:
-        image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+        image: &postgres-image postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
 
         env:
           POSTGRES_DB: taskflow
@@ -833,7 +835,7 @@ jobs:
           --health-retries 30
 
       redis:
-        image: redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+        image: &redis-image redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
 
         ports:
           - 6379:6379
@@ -1127,6 +1129,29 @@ jobs:
           path: build/libs
 
       ##########################################################
+      # Production-image smoke test, part 1: PostgreSQL and Redis
+      # start before the image build so they are ready when the
+      # image exists. Network aliases `db`/`redis` and the
+      # `postgres` user are the prod profile's defaults.
+      ##########################################################
+      - name: Start smoke-test dependencies
+        env:
+          POSTGRES_IMAGE: *postgres-image
+          REDIS_IMAGE: *redis-image
+        run: |
+          set -euo pipefail
+          docker network create taskflow-smoke > /dev/null
+          docker run --detach --name smoke-db --network taskflow-smoke --network-alias db \
+            -e POSTGRES_DB=taskflow -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=smoke \
+            "$POSTGRES_IMAGE" > /dev/null &
+          db_pid=$!
+          docker run --detach --name smoke-redis --network taskflow-smoke --network-alias redis \
+            "$REDIS_IMAGE" > /dev/null &
+          redis_pid=$!
+          wait "$db_pid"
+          wait "$redis_pid"
+
+      ##########################################################
       # Build with the runner's default `docker` builder: no Buildx
       # container, no GHA layer cache, and the image lands directly
       # in the daemon for Trivy (no OCI tarball round-trip).
@@ -1166,6 +1191,51 @@ jobs:
           # known CVEs.
           build-args: |
             APT_BUST=${{ github.run_id }}-${{ github.run_attempt }}
+
+      ##########################################################
+      # Production-image smoke test, part 2: boot the image just
+      # built under the prod profile with production-like hardening
+      # (read-only root, no capabilities, no privilege escalation,
+      # the 2 GiB memory limit of the deployment). It starts here and
+      # boots while Trivy scans; `Verify production image` checks it
+      # afterwards. The disposable RSA key pair is passed by variable
+      # name, so its value never appears on a command line.
+      ##########################################################
+      - name: Start production image
+        id: smoke
+        env:
+          IMAGE: ${{ steps.images.outputs.image }}:${{ env.IMAGE_TAG }}
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            docker exec smoke-db pg_isready -U postgres -d taskflow > /dev/null 2>&1 && break
+            sleep 1
+          done
+          docker exec smoke-db pg_isready -U postgres -d taskflow
+
+          key_dir="$(mktemp -d)"
+          trap 'rm -rf "$key_dir"' EXIT
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$key_dir/private.pem" 2>/dev/null
+          APP_RSA_PRIVATE_KEY="$(openssl pkcs8 -topk8 -nocrypt -in "$key_dir/private.pem" -outform DER | base64 | tr -d '\n')"
+          APP_RSA_PUBLIC_KEY="$(openssl rsa -in "$key_dir/private.pem" -pubout -outform DER 2>/dev/null | base64 | tr -d '\n')"
+          export APP_RSA_PRIVATE_KEY APP_RSA_PUBLIC_KEY
+
+          # The class-load log measures how many classes come from the CDS
+          # archive; it lives on the tmpfs, not in the image.
+          docker run --detach --name smoke-backend --network taskflow-smoke \
+            --read-only --tmpfs /tmp:uid=10001,gid=10001 \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --memory 2g \
+            --publish 127.0.0.1:8080:8080 \
+            -e SPRING_PROFILES_ACTIVE=prod \
+            -e SPRING_DATASOURCE_PASSWORD=smoke \
+            -e APP_RSA_PRIVATE_KEY -e APP_RSA_PUBLIC_KEY \
+            -e APP_CORS_ALLOWED_ORIGINS=http://localhost:4200 \
+            -e 'APP_TRUSTED_PROXY_REGEX=^127\.0\.0\.1$' \
+            -e APP_REQUIRE_STRONG_ADMIN_PASSWORD=false \
+            -e MALLOC_ARENA_MAX=2 \
+            -e 'JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=50.0 -Xlog:class+load=info:file=/tmp/class-load.log' \
+            "$IMAGE" > /dev/null
 
       ##########################################################
       # Trivy DB caches (restored here; the action's own cache is disabled)
@@ -1249,6 +1319,58 @@ jobs:
           # Trivy's exit-code 1 is the gate; waiting for Code Scanning to
           # process the upload added ~5 s to the push critical path.
           wait-for-processing: "false"
+
+      ##########################################################
+      # Production-image smoke test, part 3. Runs even when the Trivy
+      # gate failed, so one run reports both results. The prod image
+      # has no curl/wget, so the runner probes the published port.
+      ##########################################################
+      - name: Verify production image
+        if: ${{ !cancelled() && steps.smoke.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          base=http://127.0.0.1:8080
+          fail() {
+            echo "::error::Production image smoke test: $1"
+            docker logs smoke-backend 2>&1 | tail -n 200 || true
+            exit 1
+          }
+
+          # Readiness, not liveness: it turns UP only once the application
+          # is ready to serve, after the database and Flyway checks.
+          deadline=$(( SECONDS + 120 ))
+          until curl -fs --connect-timeout 2 --max-time 3 "$base/actuator/health/readiness" > /dev/null; do
+            [[ "$(docker inspect -f '{{.State.Running}}' smoke-backend)" == true ]] \
+              || fail "the backend container exited during startup"
+            (( SECONDS < deadline )) || fail "not ready within 120 s"
+            sleep 1
+          done
+          docker logs smoke-backend 2>&1 | grep -E 'Started TaskflowApplication' | tail -n 1
+
+          for path in /actuator/health/liveness /api/v1/catalog /api/v1/barbers; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$base$path")"
+            [[ "$code" == 200 ]] || fail "GET $path returned $code"
+          done
+
+          ids="$(docker exec smoke-backend id -u):$(docker exec smoke-backend id -g)"
+          [[ "$ids" == "10001:10001" ]] || fail "runs as $ids, expected 10001:10001"
+
+          total="$(docker exec smoke-backend grep -c 'source:' /tmp/class-load.log || true)"
+          shared="$(docker exec smoke-backend grep -c 'source: shared objects file' /tmp/class-load.log || true)"
+          percent=$(( ${total:-0} > 0 ? 100 * ${shared:-0} / total : 0 ))
+          echo "CDS: ${shared:-0} of ${total:-0} loaded classes from the shared archive (${percent}%)"
+          (( percent >= 80 )) || fail "the CDS archive served only ${percent}% of loaded classes"
+
+          if docker logs smoke-backend 2>&1 | grep -E ' ERROR ' > /dev/null; then
+            fail "the application log contains ERROR lines"
+          fi
+
+          # SIGTERM through tini: Spring's graceful shutdown must finish well
+          # inside the 40 s budget (compose stop_grace_period).
+          docker stop --time 40 smoke-backend > /dev/null
+          docker logs smoke-backend 2>&1 | grep -q 'Graceful shutdown complete' \
+            || fail "no graceful shutdown after SIGTERM"
+          echo "Production image smoke test passed"
 
   docker-frontend:
     name: Build Docker (frontend)
