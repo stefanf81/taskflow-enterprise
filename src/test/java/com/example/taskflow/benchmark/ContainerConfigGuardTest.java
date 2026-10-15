@@ -143,7 +143,7 @@ class ContainerConfigGuardTest {
         assertTrue(sharedTraining, "CDS training must happen once, in the shared cds-training stage");
         assertTrue(tiniBeforeLayers, "install tini in the runtime stage before the COPY layers, "
                 + "or every JAR change re-runs apt");
-        assertTrue(localNoApt, "the local target must not run apt (deterministic, cached, offline rebuilds)");
+        assertTrue(localNoApt, "the local target must not run apt (cached, offline rebuilds)");
         assertTrue(localIsDefault, "local must stay the last stage: an untargeted build must work "
                 + "with the compose healthcheck, which needs wget");
         assertTrue(onlyBuildPlatform, "the target platform comes from the builder; only the extractor pins $BUILDPLATFORM");

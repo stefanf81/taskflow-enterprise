@@ -7,7 +7,7 @@
 #                            no HEALTHCHECK (Kubernetes probes own it).
 #   local  (--target local)  docker-compose image: wget kept for the
 #                            HEALTHCHECK, no apt-get upgrade so local rebuilds
-#                            stay deterministic and fast. Last stage, so it is
+#                            stay cache-friendly and fast. Last stage, so it is
 #                            also the default target: an untargeted
 #                            `docker build .` yields an image the compose
 #                            healthcheck (wget) works with.
@@ -52,7 +52,7 @@ FROM ${JAVA_IMAGE} AS java-base
 WORKDIR /app
 RUN groupadd --system --gid 10001 appgroup \
     && useradd --uid 10001 --gid 10001 --no-create-home \
-         --shell /usr/sbin/nologin appuser
+         --home-dir /nonexistent --shell /usr/sbin/nologin appuser
 
 FROM java-base AS cds-training
 
@@ -90,8 +90,11 @@ FROM java-base AS runtime
 # below, so it is installed here, before the application layers: a new JAR
 # then reuses this cached layer instead of re-running apt (and needing network)
 # on every local rebuild. No `apt-get upgrade` here; the prod target refreshes
-# packages on top, local stays deterministic.
-RUN apt-get update \
+# packages on top. tini itself is not version-pinned, so a build without this
+# cached layer can resolve a newer tini from the archive.
+# --error-on=any: by default a transient download failure is only a warning
+# and `apt-get update` still succeeds; fail the build instead.
+RUN apt-get update --error-on=any \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
     && rm -rf /var/lib/apt/lists/*
 
@@ -102,6 +105,12 @@ COPY --link --from=extractor --chown=0:0 /app/extracted/spring-boot-loader/ ./
 COPY --link --from=extractor --chown=0:0 /app/extracted/snapshot-dependencies/ ./
 COPY --link --from=extractor --chown=0:0 /app/extracted/application/ ./
 COPY --link --from=cds-training --chown=0:0 --chmod=0444 /tmp/application.jsa ./application.jsa
+
+# The Ubuntu base sets its own title and description labels, which every image
+# built on it inherits; replace them with this image's identity.
+LABEL org.opencontainers.image.title="TaskFlow Backend" \
+      org.opencontainers.image.description="TaskFlow Spring Boot backend" \
+      org.opencontainers.image.source="https://github.com/stefanf81/taskflow-enterprise"
 
 EXPOSE 8080
 
@@ -141,9 +150,11 @@ FROM runtime AS prod
 # binary can only be fixed by an upstream rebuild, and Go stdlib 1.26.7 tripped
 # the Trivy HIGH gate (CVE-2026-97031/78667/78669, fixed upstream in
 # 1.26.9/1.27.2), so remove both.
+# --error-on=any: without it, a failed index download is only a warning and the
+# upgrade below can succeed without checking every repository.
 ARG APT_BUST=stable
 RUN : "${APT_BUST}" \
-    && apt-get update \
+    && apt-get update --error-on=any \
     && DEBIAN_FRONTEND=noninteractive apt-get purge -y --auto-remove curl wget gnupg \
     && DEBIAN_FRONTEND=noninteractive apt-get -y upgrade \
     && rm -rf /var/lib/apt/lists/* \
@@ -170,9 +181,10 @@ RUN --network=none --mount=type=tmpfs,target=/tmp \
 # -----------------------------------------------------------------------------
 FROM runtime AS local
 
-# Local development: no package layer at all. `apt-get upgrade` is
-# intentionally omitted so local rebuilds stay deterministic and fast, and the
-# base's wget stays installed for the HEALTHCHECK below.
+# Local development: no package layer of its own (tini comes from the shared
+# runtime stage). `apt-get upgrade` is intentionally omitted so local rebuilds
+# stay cache-friendly and fast, and the base's wget stays installed for the
+# HEALTHCHECK below.
 USER 10001:10001
 
 # Validate the archive under the final identity and classpath (same check as

@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -89,6 +91,26 @@ class ContainerImageBenchmarkTest {
         assertTrue(localKeepsWget, "the local target's HEALTHCHECK needs wget (P1-6 §47)");
         assertTrue(pebbleRemoved, "the prod target must remove the unmanaged pebble Go binary — "
                 + "apt cannot patch its Go stdlib (CVE-2026-97031/78667/78669) and the Trivy gate is HIGH/CRITICAL");
+    }
+
+    @Test
+    void apt_index_refresh_fails_on_any_fetch_error() throws Exception {
+        String d = Files.readString(Path.of("Dockerfile"));
+        // Without --error-on=any a failed index download is only a warning: `apt-get update`
+        // exits 0, the runtime stage's lists are already deleted, and the prod upgrade then
+        // succeeds without applying the updates from the repositories it could not reach.
+        for (String target : List.of("prod", "local")) {
+            String run = DockerfileStages.inheritedInstructions(d, target, "RUN");
+            long refreshes = Pattern.compile("apt-get update\\b").matcher(run).results().count();
+            long strict = Pattern.compile("apt-get update --error-on=any\\b").matcher(run).results().count();
+
+            System.out.println("  " + target + ": " + strict + " of " + refreshes
+                    + " apt-get update calls use --error-on=any");
+
+            assertTrue(refreshes > 0, "the " + target + " target must refresh the package index (tini install)");
+            assertEquals(refreshes, strict,
+                    "every apt-get update in the " + target + " target must use --error-on=any");
+        }
     }
 
     private static boolean trainsFullApplication(String dockerfile) {
