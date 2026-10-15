@@ -1222,12 +1222,17 @@ jobs:
 
           # The class-load log measures how many classes come from the CDS
           # archive; it lives on the tmpfs, not in the image.
+          # The prod profile exports sampled spans to http://jaeger:4318, which
+          # this network does not have; the failed export is logged at ERROR
+          # and would trip the log check whenever a span happens to be sampled
+          # (10%). Only the OTLP exporter is disabled; tracing stays active.
           docker run --detach --name smoke-backend --network taskflow-smoke \
             --read-only --tmpfs /tmp:uid=10001,gid=10001 \
             --cap-drop ALL --security-opt no-new-privileges:true \
             --memory 2g \
             --publish 127.0.0.1:8080:8080 \
             -e SPRING_PROFILES_ACTIVE=prod \
+            -e MANAGEMENT_TRACING_EXPORT_OTLP_ENABLED=false \
             -e SPRING_DATASOURCE_PASSWORD=smoke \
             -e APP_RSA_PRIVATE_KEY -e APP_RSA_PUBLIC_KEY \
             -e APP_CORS_ALLOWED_ORIGINS=http://localhost:4200 \
