@@ -60,7 +60,7 @@
       "allowedVersions": "/^3\\./"
     },
     {
-      "description": "Mobile overrides are pinned to toolchain-compatible releases: uuid 14 and nanoid 6 are ESM-only and break the current Expo/Metro/jest pipeline, and the nested js-yaml override guards @istanbuljs/load-nyc-config. Revisit after the Expo SDK upgrade.",
+      "description": "Mobile overrides are pinned to CommonJS-compatible releases of what their consumers require (checked on Expo SDK 58): uuid for xcode (^7), nanoid for @react-navigation/routers and postcss (^3), and the nested js-yaml for @istanbuljs/load-nyc-config (babel-jest 29 via @react-native/jest-preset). uuid 14 and nanoid 6 are ESM-only. Revisit when those consumers move, not with the Expo SDK.",
       "matchManagers": ["npm"],
       "matchPackageNames": ["uuid", "nanoid", "js-yaml"],
       "matchUpdateTypes": ["major"],
@@ -112,7 +112,7 @@
       "allowedVersions": "/^19\\./"
     },
     {
-      "description": "Expo SDK 57's plist parser omits the MIME type required by @xmldom/xmldom 0.9",
+      "description": "Expo's plist parser (@expo/plist 0.10, still on SDK 58) omits the MIME type required by @xmldom/xmldom 0.9",
       "matchManagers": ["npm"],
       "matchFileNames": ["mobile/package.json"],
       "matchPackageNames": ["@xmldom/xmldom"],
@@ -295,7 +295,7 @@
       "groupName": "GitHub Actions"
     },
     {
-      "description": "Blocked on Expo SDK upgrade: @babel/core 8 / babel-plugin-transform-import-meta 3 / jest 30 / @types/jest 30 / @jest/types 30 require babel-preset-expo & jest-expo versions that do not yet support these majors (the import-meta plugin 3 requires Babel 8; jest-expo still pins the @jest/* 29 surface). Fully suppressed: no branch, no PR, dashboard-only until this rule is removed after the SDK upgrade.",
+      "description": "Blocked on Expo: babel-preset-expo (SDK 58 and canary) is built on Babel 7, so @babel/core 8 and babel-plugin-transform-import-meta 3 (requires Babel 8) cannot move. Jest 30 / @types/jest 30 / @jest/types 30 pass the suite on SDK 58 (jest-expo 58 already uses the Jest 30 internals), but `expo install --check` and expo-doctor still expect jest ~29.7, which would fail expo-maintenance.yml; move them in a dedicated PR together with an expo.install.exclude entry, or once Expo accepts Jest 30. Fully suppressed: no branch, no PR, dashboard-only.",
       "matchManagers": ["npm"],
       "matchFileNames": ["mobile/package.json"],
       "matchPackageNames": [

@@ -192,9 +192,9 @@ TaskFlow Mobile enforces a dual-layered testing strategy combining Unit/Componen
 
 ### 3. Runtime Performance Baseline
 
-Expo SDK 57 uses React Native 0.86.3 with the New Architecture and Hermes V1 enabled by default. A production Android Metro export generated a Hermes bytecode bundle (`.hbc`) of 3,399,015 bytes.
+Expo SDK 58 uses React Native 0.88.0 with the New Architecture and Hermes V1 enabled by default. A production Android Metro export generated a Hermes bytecode bundle (`.hbc`) of 3,754,723 bytes (SDK 57 / RN 0.86.3: 3,399,015 bytes). Release builds run R8 (`android.enableMinifyInReleaseBuilds=true`, the SDK 58 template default).
 
-`react-native-reanimated` and `react-native-worklets` are not installed, so Worklets bundle mode is not applicable and its documented memory overhead does not affect this app. React Native 0.86 also defaults `PerformanceObserver` event entries to a 104 ms threshold; the application does not use that API.
+`react-native-reanimated` and `react-native-worklets` are not installed, so Worklets bundle mode is not applicable and its documented memory overhead does not affect this app. The application does not use `PerformanceObserver`.
 
 Android edge-to-edge is handled by the Expo/RN SDK defaults, and the primary screens use `SafeAreaView`. Final inset and frame-time validation remains a device/emulator test requirement for Android 15+.
 

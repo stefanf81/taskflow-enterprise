@@ -29,7 +29,7 @@ Both Android and iOS share the exact same E2E test suite file (`e2e/booking.e2e.
 
 1. **Android Setup:**
    * **JDK 21:** `/opt/homebrew/opt/openjdk@21` (JDK 25 will fail CMake configuration).
-   * **Android SDK:** `$HOME/Library/Android/sdk` with Platform Tools (`adb`) and Build Tools (`36.0.0`).
+   * **Android SDK:** `$HOME/Library/Android/sdk` with Platform Tools (`adb`) and Build Tools (`37.0.0`) and Platform 37.0.
    * **Android Emulator:** AVD `Pixel_6_API_35` (API level 35).
 
 2. **iOS Setup:**
@@ -81,6 +81,16 @@ Both Android and iOS share the exact same E2E test suite file (`e2e/booking.e2e.
    npm run e2e:test
    # Executes: detox test --configuration ios.sim.release
    ```
+
+---
+
+## 🔧 Local E2E build requirements
+
+* `mobile/.env` must contain `EXPO_PUBLIC_API_URL=http://localhost:4200` (the Docker stack's nginx) and `EXPO_PUBLIC_E2E_LOCAL_API=true`, and the app must be prebuilt **without** `TASKFLOW_TLS_POLICY=required` (that policy refuses local HTTP).
+* `EXPO_PUBLIC_E2E_LOCAL_API=true` also freezes the Home promo-dot animation: Detox on iOS waits for the app to go idle and an endless animation keeps it busy forever (every test timed out after 120 s).
+* Android release builds run R8. `plugins/withDetoxProguardRules.js` adds Detox's keep rules only when the Gradle invocation builds an androidTest APK (`npm run e2e:build:android`).
+* The iOS Keychain survives reinstalls, so a stored admin token from a previous run makes the app start signed in. Run `xcrun simctl keychain booted reset` before an iOS run.
+* If D8 runs out of memory, raise `org.gradle.jvmargs` in the generated `android/gradle.properties`.
 
 ---
 

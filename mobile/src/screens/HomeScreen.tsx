@@ -67,6 +67,11 @@ export const HomeScreen: React.FC = () => {
 
   // Animated ping effect for promo dot
   useEffect(() => {
+    // Detox waits for the app to go idle; an endless animation keeps iOS busy forever.
+    // Local E2E builds (the only ones with this flag) therefore keep the dot static.
+    if (process.env.EXPO_PUBLIC_E2E_LOCAL_API === 'true') {
+      return undefined;
+    }
     const animation = Animated.loop(
       Animated.sequence([
         Animated.timing(pingAnim, {

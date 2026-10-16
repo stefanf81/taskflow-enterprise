@@ -161,7 +161,7 @@ export const RegisterScreen: React.FC = () => {
                 variant="primary"
                 size="lg"
                 loading={loading}
-                onPress={handleSubmit(handleRegister)}
+                onPress={() => void handleSubmit(handleRegister)()}
                 style={styles.submitBtn}
               />
             </Card>

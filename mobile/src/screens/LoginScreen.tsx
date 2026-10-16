@@ -119,7 +119,7 @@ export const LoginScreen: React.FC = () => {
               variant="primary"
               size="lg"
               loading={loading}
-              onPress={handleSubmit(handleLogin)}
+              onPress={() => void handleSubmit(handleLogin)()}
               style={styles.submitBtn}
               testID="login-submit-btn"
             />
