@@ -45,6 +45,7 @@
         }
       ],
       "expo-detox-config-plugin",
+      "./plugins/withDetoxProguardRules",
       "expo-font",
       "expo-status-bar"
     ],

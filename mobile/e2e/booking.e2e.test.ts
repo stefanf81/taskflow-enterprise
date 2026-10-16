@@ -13,16 +13,13 @@
 
 import { device, element, by, expect, waitFor } from 'detox';
 
-describe('Guest Booking Flow', () => {
-  beforeAll(async () => {
-    await device.launchApp({
-      newInstance: true,
-    });
-  });
+// Every test starts from a cold launch. On React Native 0.88 an in-place JS reload
+// (device.reloadReactNative) brings the Home ScrollView back scrolled down, so the
+// hero and header assertions fail; a release build never reloads in place.
+const relaunch = () => device.launchApp({ newInstance: true });
 
-  beforeEach(async () => {
-    await device.reloadReactNative();
-  });
+describe('Guest Booking Flow', () => {
+  beforeEach(relaunch);
 
   it('displays the home screen on launch', async () => {
     // The Hero section title should be visible
@@ -136,15 +133,7 @@ describe('Guest Booking Flow', () => {
 });
 
 describe('Guest Login Flow', () => {
-  beforeAll(async () => {
-    await device.launchApp({
-      newInstance: true,
-    });
-  });
-
-  beforeEach(async () => {
-    await device.reloadReactNative();
-  });
+  beforeEach(relaunch);
 
   it('navigates to login via Sign In / Register', async () => {
     await element(by.text('Sign In / Register')).tap();
