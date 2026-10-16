@@ -208,7 +208,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         java.util.concurrent.locks.Lock emailLock = emailLockFor(request.customerEmail());
         emailLock.lock();
         try {
-            return createAppointmentInTransaction(request, trimmedKey);
+            return createAppointmentRetryingDeadlock(request, trimmedKey);
         } catch (IllegalArgumentException ex) {
             // A same-key request can commit between the pre-check above and this
             // attempt's busy-slot read. The after-commit eviction then makes the
@@ -276,6 +276,43 @@ public class AppointmentServiceImpl implements AppointmentService {
     private java.util.concurrent.locks.Lock emailLockFor(String email) {
         String key = email == null ? "" : email.trim().toLowerCase(java.util.Locale.ROOT);
         return emailLocks[Math.floorMod(key.hashCode(), emailLocks.length)];
+    }
+
+    /**
+     * Two concurrent overlapping inserts with different start times can deadlock on PostgreSQL:
+     * each checks the {@code appointments_no_overlap} exclusion constraint, finds the other's
+     * uncommitted row and waits for it, and the server aborts one with 40P01. The victim's
+     * transaction is rolled back, so the attempt is run once more: by then the survivor has
+     * committed (the in-transaction check rejects the slot) or is still running (the insert
+     * waits for it and fails with 23P01). Either way the caller gets the slot-collision 400
+     * instead of a 503. Lock timeouts and other locking failures are not retried.
+     */
+    private AppointmentCreationResult createAppointmentRetryingDeadlock(
+            AppointmentCreateRequest request, String trimmedKey) {
+        try {
+            return createAppointmentInTransaction(request, trimmedKey);
+        } catch (org.springframework.dao.PessimisticLockingFailureException ex) {
+            if (!isDeadlock(ex)) {
+                throw ex;
+            }
+            logger.info("Booking attempt for {} at {} on {} was a deadlock victim; retrying once.",
+                    LogSanitizer.stripNewlines(request.barberName()),
+                    LogSanitizer.stripNewlines(request.bookingTime()),
+                    request.bookingDate());
+            return createAppointmentInTransaction(request, trimmedKey);
+        }
+    }
+
+    /** PostgreSQL {@code deadlock_detected} (SQLSTATE 40P01) anywhere in the cause chain. */
+    static boolean isDeadlock(Throwable ex) {
+        Throwable cause = ex;
+        while (cause != null) {
+            if (cause instanceof java.sql.SQLException sqlEx && "40P01".equals(sqlEx.getSQLState())) {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 
     /**
