@@ -28,70 +28,49 @@ export const Button: React.FC<ButtonProps> = ({
   ...props
 }) => {
   const getButtonStyle = (): ViewStyle => {
-    let base: ViewStyle = {
+    const sizeStyle: ViewStyle =
+      size === 'sm'
+        ? { paddingVertical: 8, paddingHorizontal: 12 }
+        : size === 'lg'
+          ? { paddingVertical: 16, paddingHorizontal: 24 }
+          : { paddingVertical: 12, paddingHorizontal: 16 };
+
+    let variantStyle: ViewStyle = {};
+    if (variant === 'primary') {
+      variantStyle = { backgroundColor: colors.gold.main };
+    } else if (variant === 'secondary') {
+      variantStyle = {
+        backgroundColor: colors.obsidian.surface,
+        borderWidth: 1,
+        borderColor: colors.obsidian.border,
+      };
+    } else if (variant === 'outline') {
+      variantStyle = { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.gold.main };
+    } else if (variant === 'danger') {
+      variantStyle = { backgroundColor: colors.status.denied };
+    }
+
+    return {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: 8,
+      ...sizeStyle,
+      ...variantStyle,
+      ...(disabled || loading ? { opacity: 0.6 } : null),
     };
-
-    // Size
-    if (size === 'sm') {
-      base.paddingVertical = 8;
-      base.paddingHorizontal = 12;
-    } else if (size === 'lg') {
-      base.paddingVertical = 16;
-      base.paddingHorizontal = 24;
-    } else {
-      base.paddingVertical = 12;
-      base.paddingHorizontal = 16;
-    }
-
-    // Variant
-    if (variant === 'primary') {
-      base.backgroundColor = colors.gold.main;
-    } else if (variant === 'secondary') {
-      base.backgroundColor = colors.obsidian.surface;
-      base.borderWidth = 1;
-      base.borderColor = colors.obsidian.border;
-    } else if (variant === 'outline') {
-      base.backgroundColor = 'transparent';
-      base.borderWidth = 1;
-      base.borderColor = colors.gold.main;
-    } else if (variant === 'danger') {
-      base.backgroundColor = colors.status.denied;
-    }
-
-    if (disabled || loading) {
-      base.opacity = 0.6;
-    }
-
-    return base;
   };
 
-  const getTextStyle = (): TextStyle => {
-    let base: TextStyle = {
-      fontWeight: '600',
-    };
-
-    if (size === 'sm') {
-      base.fontSize = 12;
-    } else if (size === 'lg') {
-      base.fontSize = 18;
-    } else {
-      base.fontSize = 14;
-    }
-
-    if (variant === 'primary') {
-      base.color = colors.obsidian.bg;
-    } else if (variant === 'outline') {
-      base.color = colors.gold.main;
-    } else {
-      base.color = colors.text.primary;
-    }
-
-    return base;
-  };
+  const getTextStyle = (): TextStyle => ({
+    fontWeight: '600',
+    fontSize: size === 'sm' ? 12 : size === 'lg' ? 18 : 14,
+    color:
+      variant === 'primary'
+        ? colors.obsidian.bg
+        : variant === 'outline'
+          ? colors.gold.main
+          : colors.text.primary,
+  });
 
   return (
     <TouchableOpacity

@@ -16,7 +16,7 @@ Migrate the mobile application experience into a standalone **React Native + Exp
 
 Key technological choices in `mobile/`:
 
-1. **Expo SDK 57 & React Native 0.86+ with TypeScript:** Built using Expo managed workflow with TypeScript for 100% type safety across mobile screens, navigation params, and API payloads.
+1. **Expo SDK 58 & React Native 0.88+ with TypeScript:** Built using Expo managed workflow with TypeScript for 100% type safety across mobile screens, navigation params, and API payloads.
 2. **React Navigation 7:** Provides native stack navigation (`@react-navigation/native-stack`) and bottom tabs (`@react-navigation/bottom-tabs`) with smooth native transitions and gesture support.
 3. **TanStack Query (`@tanstack/react-query`) for Server State:** All backend server state (appointments, service catalog, barbers, time-off, notifications, reviews) is fetched, cached, and synchronized using TanStack Query.
 4. **Zustand for Client Application State:** Authentication credentials and user session metadata are isolated in `useAuthStore`; transient UI state stays local to screens/components, and server state is handled by TanStack Query.
