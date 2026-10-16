@@ -577,6 +577,49 @@ class AppointmentServiceImplTest {
         assertTrue(ex.getMessage().contains("just booked"), ex.getMessage());
     }
 
+    /** PostgreSQL deadlock between two overlapping inserts: the victim retries once and gets the 400. */
+    @Test
+    void testCreateAppointment_DeadlockVictimIsRetriedAndReportedAsASlotCollision() {
+        when(appointmentRepository.save(any(Appointment.class)))
+                .thenThrow(new org.springframework.dao.CannotAcquireLockException("deadlock",
+                        new java.sql.SQLException("deadlock detected", "40P01")))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("overlap",
+                        new java.sql.SQLException("conflicting key value violates exclusion constraint", "23P01")));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.createAppointment(request("Alex the Barber", TOMORROW, "10:00"), null));
+        assertTrue(ex.getMessage().contains("just booked"), ex.getMessage());
+        verify(appointmentRepository, times(2)).save(any(Appointment.class));
+    }
+
+    @Test
+    void testCreateAppointment_DeadlockRetryCanSucceed() {
+        when(appointmentRepository.save(any(Appointment.class)))
+                .thenThrow(new org.springframework.dao.CannotAcquireLockException("deadlock",
+                        new java.sql.SQLException("deadlock detected", "40P01")))
+                .thenAnswer(inv -> {
+                    Appointment saved = inv.getArgument(0);
+                    saved.setId(101L);
+                    return saved;
+                });
+
+        assertEquals(101L, appointmentService.createAppointment(
+                request("Alex the Barber", TOMORROW, "10:00"), null).appointment().id());
+        verify(appointmentRepository, times(2)).save(any(Appointment.class));
+    }
+
+    @Test
+    void testCreateAppointment_LockTimeoutIsNotRetried() {
+        org.springframework.dao.CannotAcquireLockException timeout =
+                new org.springframework.dao.CannotAcquireLockException("lock timeout",
+                        new java.sql.SQLException("canceling statement due to lock timeout", "55P03"));
+        when(appointmentRepository.save(any(Appointment.class))).thenThrow(timeout);
+
+        assertSame(timeout, assertThrows(org.springframework.dao.CannotAcquireLockException.class,
+                () -> appointmentService.createAppointment(request("Alex the Barber", TOMORROW, "10:00"), null)));
+        verify(appointmentRepository, times(1)).save(any(Appointment.class));
+    }
+
     @Test
     void testCreateAppointment_StoresTheValidatedEndTime() {
         appointmentService.createAppointment(request("Alex the Barber", TOMORROW, "10:00"), null);
