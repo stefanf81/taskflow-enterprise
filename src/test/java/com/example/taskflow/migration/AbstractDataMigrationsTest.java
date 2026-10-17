@@ -344,6 +344,25 @@ abstract class AbstractDataMigrationsTest {
         }
     }
 
+    @Test
+    void v36AddsTrigramSearchIndexesOnPostgresOnly() throws Exception {
+        String url = newUrl();
+        flyway(url, DEV_MIGRATION).load().migrate();
+        try (Connection c = open(url)) {
+            List<String> indexes = new ArrayList<>();
+            try (Statement st = c.createStatement();
+                 ResultSet rs = st.executeQuery(indexNamesSql())) {
+                while (rs.next()) {
+                    indexes.add(rs.getString(1));
+                }
+            }
+            for (String name : List.of("idx_appointments_name_trgm", "idx_appointments_email_trgm",
+                    "idx_appointments_phone_trgm")) {
+                assertEquals(isPostgres(), indexes.contains(name), name);
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ DATA-10: V26 against V25's index
 
     @Test

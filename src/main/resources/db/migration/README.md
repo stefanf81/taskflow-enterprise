@@ -67,3 +67,4 @@ by `TASKFLOW_TEST_POSTGRES_URL`).
 | V33 | PENDING "declined" notices for sentinel bookings V26 denied silently |
 | V34 | drop unused indexes (`idx_reviews_rating_created`, `idx_appointments_service_type`, `idx_appointment_customer_name`) |
 | V35 (Java) | `appointments.booking_end_time` (backfill start + service duration, 60 min default, clamped 23:59:59; NOT NULL + CHECK), deny overlapping active rows (APPROVED first, then lowest id; ids logged, DECLINED notice for upcoming ones); PostgreSQL: `btree_gist` + `appointments_no_overlap` EXCLUDE constraint |
+| V36 (Java) | PostgreSQL only: `pg_trgm` + GIN trigram indexes on `lower()` of customer name, e-mail and phone for the admin `LIKE '%term%'` search (an optimisation: skipped with a warning if the extension cannot be created; H2 has no expression indexes) |
