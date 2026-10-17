@@ -319,13 +319,29 @@ html {
   animation: fadeInUp 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-/* Integrated Faint Background */
+/* Integrated Faint Background.
+   The image sits on a viewport-fixed pseudo-element instead of `background-attachment: fixed`,
+   which repaints the whole background on every scroll frame (and is ignored by iOS Safari).
+   barber-bg.jpg is 1280 px wide at quality 60 (33 kB, was 1920 px / 200 kB): it is dimmed to
+   ~6 % by the overlay, so the extra resolution was never visible. */
 .bg-faint-barber {
+  /* Own stacking context, so the fixed layer below stays behind this container's content. Anything
+     that must show above the layer belongs inside the container (a static sibling placed before it
+     would be painted over, since the container is positioned). */
+  position: relative;
+  isolation: isolate;
   background-color: #000000;
+}
+
+.bg-faint-barber::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background-image:
     linear-gradient(to bottom, rgba(0, 0, 0, 0.9), rgba(9, 13, 22, 0.94)), url('/barber-bg.jpg');
   background-size: cover;
   background-position: center;
-  background-attachment: fixed;
   background-repeat: no-repeat;
 }

@@ -1,13 +1,13 @@
 import { apiClient } from './client';
 import { BarberRating, ReviewRequest } from '../types/api';
 import { parseContract } from './contracts';
-import { barberRatingResponseSchema, reviewSchema } from '@taskflow/schemas';
+import { barberRatingResponseListSchema, reviewSchema } from '@taskflow/schemas';
 
 export const reviewsApi = {
   getBarberRatings: async (): Promise<BarberRating[]> => {
     const response = await apiClient.get<BarberRating[]>('/api/v1/reviews/public/barber-ratings');
     return parseContract(
-      barberRatingResponseSchema.array(),
+      barberRatingResponseListSchema,
       response.data,
       'GET /api/v1/reviews/public/barber-ratings',
     );

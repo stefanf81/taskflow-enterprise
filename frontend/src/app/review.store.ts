@@ -4,7 +4,7 @@ import { BarberRating } from './types/api';
 import { ReviewsApi } from './core/api/reviews-api';
 import { PUBLIC_REQUEST } from './core/http/public-request.token';
 import { safeResourceValue } from './core/resource-utils';
-import { barberRatingResponseSchema } from '@taskflow/schemas';
+import { barberRatingResponseListSchema } from '@taskflow/schemas';
 
 @Injectable({ providedIn: 'root' })
 export class ReviewStore {
@@ -17,7 +17,7 @@ export class ReviewStore {
     }),
     {
       defaultValue: [],
-      parse: (raw) => barberRatingResponseSchema.array().parse(raw),
+      parse: (raw) => barberRatingResponseListSchema.parse(raw),
     },
   );
 

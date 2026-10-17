@@ -51,15 +51,19 @@ export function computeEstimatedEndTime(startTime: string, durationMinutes: numb
  * zones (e.g. US/EU after 8 PM EDT) — appending `T00:00:00` parses as local
  * midnight, so the rendered day always matches the stored date.
  */
+// One shared formatter: toLocaleDateString builds a new Intl.DateTimeFormat on every call, and this
+// runs for every row of the admin, customer and schedule lists on each change detection pass.
+const LOCAL_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+
 export function formatLocalDate(dateStr: string): string {
   if (!dateStr) return '';
   const date = new Date(`${dateStr}T00:00:00`);
   if (Number.isNaN(date.getTime())) return dateStr;
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  return LOCAL_DATE_FORMAT.format(date);
 }
 
 /**

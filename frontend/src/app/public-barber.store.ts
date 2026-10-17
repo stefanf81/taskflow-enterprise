@@ -4,7 +4,7 @@ import { PublicBarber } from './types/api';
 import { BarbersApi } from './core/api/barbers-api';
 import { PUBLIC_REQUEST } from './core/http/public-request.token';
 import { safeResourceValue } from './core/resource-utils';
-import { publicBarberResponseSchema } from '@taskflow/schemas';
+import { publicBarberResponseListSchema } from '@taskflow/schemas';
 
 /**
  * Public barber directory used by the guest booking wizard.
@@ -24,7 +24,7 @@ export class PublicBarberStore {
     }),
     {
       defaultValue: [],
-      parse: (raw) => publicBarberResponseSchema.array().parse(raw),
+      parse: (raw) => publicBarberResponseListSchema.parse(raw),
     },
   );
 

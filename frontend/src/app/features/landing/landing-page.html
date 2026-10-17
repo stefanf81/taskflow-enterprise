@@ -1,9 +1,10 @@
-<!-- PREMIUM SAAS ANNOUNCEMENT BAR -->
-@if (!isLoggedIn()) {
-  <app-announcement-bar />
-}
-
 <div class="min-h-screen bg-faint-barber text-zinc-100 font-sans antialiased pb-24">
+  <!-- PREMIUM SAAS ANNOUNCEMENT BAR (inside the container: it must share its stacking context with
+       the fixed background layer and the modals, see .bg-faint-barber in app.css) -->
+  @if (!isLoggedIn()) {
+    <app-announcement-bar />
+  }
+
   @if (!isLoggedIn()) {
     <div class="w-full px-4 sm:px-8 lg:px-16 pt-12">
       <!-- Sticky Navigation Header -->
@@ -199,8 +200,9 @@
         </p>
       </footer>
 
-      <!-- Login/Register Modal Dialog (deferred — loads when showAdminLoginModal() first turns true) -->
-      @defer (when showAdminLoginModal()) {
+      <!-- Login/Register Modal Dialog (deferred — rendered when showAdminLoginModal() first turns true;
+           the chunk is prefetched once the browser is idle, so the first click does not wait for it) -->
+      @defer (when showAdminLoginModal(); prefetch on idle) {
         @if (showAdminLoginModal()) {
           <app-auth-modal
             (closed)="showAdminLoginModal.set(false)"

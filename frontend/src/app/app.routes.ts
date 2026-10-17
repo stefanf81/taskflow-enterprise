@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { Router, RouterLink, Routes } from '@angular/router';
 import { authGuard } from './auth.guard';
 import { AuthState } from './auth.state';
+import { LandingPage } from './features/landing/landing-page';
 
 /**
  * 404 handler: redirects authenticated users to their dashboard,
@@ -41,7 +42,10 @@ export const routes: Routes = [
   {
     path: '',
     pathMatch: 'full',
-    loadComponent: () => import('./features/landing/landing-page').then((m) => m.LandingPage),
+    // Eager on purpose: the guest landing page is the entry route, and lazy-loading it made the
+    // browser discover its chunk (and the booking/forms chunks it imports) only after main.js ran,
+    // two extra round trips before first paint (-376 ms FCP on slow 4G when eager).
+    component: LandingPage,
     title: 'TaskFlow — Premium Barber Booking',
   },
   {

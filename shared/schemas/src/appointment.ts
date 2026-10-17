@@ -1,26 +1,38 @@
-import { enum as zEnum, number, object, string, type infer as zInfer } from "zod";
+import {
+  array,
+  email,
+  enum as zEnum,
+  maxLength,
+  minLength,
+  number,
+  object,
+  optional,
+  refine,
+  regex,
+  string,
+  trim,
+  type infer as zInfer,
+} from "zod/mini";
+import { omittedAsEmptyString } from "./catalog";
 
-const dateSchema = string().regex(
-  /^\d{4}-\d{2}-\d{2}$/,
-  "Date must use YYYY-MM-DD format",
-);
-const timeSchema = string().regex(
-  /^([01]\d|2[0-3]):[0-5]\d$/,
-  "Booking time must be in 24h HH:mm format",
+const dateSchema = string().check(regex(/^\d{4}-\d{2}-\d{2}$/, "Date must use YYYY-MM-DD format"));
+const timeSchema = string().check(
+  regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Booking time must be in 24h HH:mm format"),
 );
 
 export const appointmentCreateSchema = object({
-  customerName: string().trim().min(1, "Customer name is required").max(100),
-  customerEmail: string()
-    .trim()
-    .min(1, "Customer email is required")
-    .email("Invalid email format")
-    .max(100),
-  customerPhone: string().trim().min(1, "Customer phone is required").max(50),
-  barberName: string().trim().min(1, "Barber name is required").max(100),
+  customerName: string().check(trim(), minLength(1, "Customer name is required"), maxLength(100)),
+  customerEmail: string().check(
+    trim(),
+    minLength(1, "Customer email is required"),
+    email("Invalid email format"),
+    maxLength(100),
+  ),
+  customerPhone: string().check(trim(), minLength(1, "Customer phone is required"), maxLength(50)),
+  barberName: string().check(trim(), minLength(1, "Barber name is required"), maxLength(100)),
   bookingDate: dateSchema,
   bookingTime: timeSchema,
-  serviceType: string().trim().min(1, "Service type is required").max(100),
+  serviceType: string().check(trim(), minLength(1, "Service type is required"), maxLength(100)),
 });
 
 export type AppointmentCreateRequest = zInfer<typeof appointmentCreateSchema>;
@@ -36,11 +48,13 @@ export type AppointmentUpdateRequest = zInfer<typeof appointmentUpdateSchema>;
 export const barberTimeOffSchema = object({
   startDate: dateSchema,
   endDate: dateSchema,
-  reason: string().max(255, "Reason must be at most 255 characters").optional(),
-}).refine(({ startDate, endDate }) => endDate >= startDate, {
-  path: ["endDate"],
-  message: "End date must not be before start date",
-});
+  reason: optional(string().check(maxLength(255, "Reason must be at most 255 characters"))),
+}).check(
+  refine(({ startDate, endDate }) => endDate >= startDate, {
+    path: ["endDate"],
+    message: "End date must not be before start date",
+  }),
+);
 
 export type BarberTimeOffRequest = zInfer<typeof barberTimeOffSchema>;
 
@@ -63,7 +77,7 @@ export const appointmentResponseSchema = object({
 export type AppointmentResponse = zInfer<typeof appointmentResponseSchema>;
 
 /** GET /api/v1/appointments/public/busy-slots response (HH:mm strings). */
-export const busySlotsResponseSchema = string().array();
+export const busySlotsResponseSchema = array(string());
 
 export const pageMetadataSchema = object({
   number: number(),
@@ -73,7 +87,7 @@ export const pageMetadataSchema = object({
 });
 
 export const pagedAppointmentResponseSchema = object({
-  content: appointmentResponseSchema.array(),
+  content: array(appointmentResponseSchema),
   page: pageMetadataSchema,
 });
 
@@ -100,10 +114,13 @@ export const notificationOutboxResponseSchema = object({
   recipient: string(),
   retryCount: number(),
   // Unsent notifications have no timestamp/type yet (omitted, not null).
-  sentAt: string().nullish().transform((value) => value ?? ''),
+  sentAt: omittedAsEmptyString(),
   status: string(),
-  type: string().nullish().transform((value) => value ?? ''),
+  type: omittedAsEmptyString(),
 });
+
+/** GET /api/v1/notifications response. */
+export const notificationOutboxResponseListSchema = array(notificationOutboxResponseSchema);
 
 /** Server-sent appointment event payload. */
 export const appointmentEventSchema = object({
@@ -119,7 +136,10 @@ export const barberTimeOffResponseSchema = object({
   id: number(),
   startDate: string(),
   endDate: string(),
-  reason: string().nullish().transform((value) => value ?? ''),
+  reason: omittedAsEmptyString(),
 });
 
 export type BarberTimeOffResponse = zInfer<typeof barberTimeOffResponseSchema>;
+
+/** GET /api/v1/barbers/{id}/time-off response. */
+export const barberTimeOffResponseListSchema = array(barberTimeOffResponseSchema);

@@ -3,7 +3,7 @@ import { httpResource } from '@angular/common/http';
 import { NotificationItem } from './types/api';
 import { NotificationsApi } from './core/api/notifications-api';
 import { safeResourceValue } from './core/resource-utils';
-import { notificationOutboxResponseSchema } from '@taskflow/schemas';
+import { notificationOutboxResponseListSchema } from '@taskflow/schemas';
 
 @Injectable({ providedIn: 'root' })
 export class NotificationStore {
@@ -13,7 +13,7 @@ export class NotificationStore {
     () => this.notificationsApi.listUrl,
     {
       defaultValue: [],
-      parse: (raw) => notificationOutboxResponseSchema.array().parse(raw),
+      parse: (raw) => notificationOutboxResponseListSchema.parse(raw),
     },
   );
 

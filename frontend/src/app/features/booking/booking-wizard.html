@@ -593,9 +593,10 @@
 </section>
 
 <!-- Squire-Style Interactive Booking Confirmation Receipt Modal (lazy chunk — P1).
-     @defer (when ...) loads the chunk the first time a booking completes; the inner
-     @if still controls show/hide so closing the modal removes it from the DOM. -->
-@defer (when showReceiptModal()) {
+     @defer (when ...) renders it the first time a booking completes (the chunk is prefetched once
+     the browser is idle); the inner @if still controls show/hide so closing the modal removes it
+     from the DOM. -->
+@defer (when showReceiptModal(); prefetch on idle) {
   @if (showReceiptModal()) {
     <app-receipt-modal
       [appointment]="lastBookedAppointment()"

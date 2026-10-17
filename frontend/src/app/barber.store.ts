@@ -6,7 +6,7 @@ import { BarbersApi } from './core/api/barbers-api';
 import { extractApiError } from './core/api/extract-api-error';
 import { refreshResource, safeResourceValue } from './core/resource-utils';
 import { SessionEvents } from './core/session-events';
-import { barberResponseSchema, barberTimeOffResponseSchema } from '@taskflow/schemas';
+import { barberResponseListSchema, barberTimeOffResponseListSchema } from '@taskflow/schemas';
 
 @Injectable({ providedIn: 'root' })
 export class BarberStore {
@@ -14,7 +14,7 @@ export class BarberStore {
 
   private readonly barbersResource = httpResource<Barber[]>(() => this.barbersApi.adminListUrl, {
     defaultValue: [],
-    parse: (raw) => barberResponseSchema.array().parse(raw),
+    parse: (raw) => barberResponseListSchema.parse(raw),
   });
 
   /** Error-safe: an empty roster (never a throw) while loading or after a failed load. */
@@ -31,7 +31,7 @@ export class BarberStore {
     },
     {
       defaultValue: [],
-      parse: (raw) => barberTimeOffResponseSchema.array().parse(raw),
+      parse: (raw) => barberTimeOffResponseListSchema.parse(raw),
     },
   );
 

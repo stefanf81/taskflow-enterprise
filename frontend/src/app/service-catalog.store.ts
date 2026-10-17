@@ -4,7 +4,7 @@ import { ServiceItem } from './types/api';
 import { CatalogApi } from './core/api/catalog-api';
 import { PUBLIC_REQUEST } from './core/http/public-request.token';
 import { safeResourceValue } from './core/resource-utils';
-import { serviceItemResponseSchema } from '@taskflow/schemas';
+import { serviceItemResponseListSchema } from '@taskflow/schemas';
 
 @Injectable({ providedIn: 'root' })
 export class ServiceCatalogStore {
@@ -19,7 +19,7 @@ export class ServiceCatalogStore {
       defaultValue: [],
       // Runtime contract check: a drifted backend response becomes a resource
       // error (visible as the store's error message) instead of undefined UI.
-      parse: (raw) => serviceItemResponseSchema.array().parse(raw),
+      parse: (raw) => serviceItemResponseListSchema.parse(raw),
     },
   );
 

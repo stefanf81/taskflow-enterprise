@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { Router, provideRouter } from '@angular/router';
-import { AdminDashboard } from './admin-dashboard';
+import { AdminDashboard, REFRESH_THROTTLE_MS } from './admin-dashboard';
 import { AppointmentStore } from '../../appointment.store';
 import { AuthState } from '../../auth.state';
 import { AdminEventsService } from '../../admin-events.service';
@@ -128,15 +128,26 @@ describe('AdminDashboard shell', () => {
     expect(el.textContent).toContain('Total Bookings');
   });
 
-  it('refetches the list on every SSE tick, restarting a load already in flight', () => {
-    const adminEvents = TestBed.inject(AdminEventsService);
-    const store = TestBed.inject(AppointmentStore);
-    const refresh = vi.spyOn(store, 'refresh');
+  it('refetches the list on an SSE tick at once and coalesces a burst into one trailing refresh', () => {
+    vi.useFakeTimers();
+    try {
+      const adminEvents = TestBed.inject(AdminEventsService);
+      const store = TestBed.inject(AppointmentStore);
+      const refresh = vi.spyOn(store, 'refresh');
 
-    adminEvents['appointmentChangesSubject'].next();
-    adminEvents['appointmentChangesSubject'].next();
+      adminEvents['appointmentChangesSubject'].next();
+      expect(refresh).toHaveBeenCalledTimes(1);
 
-    expect(refresh).toHaveBeenCalledTimes(2);
+      adminEvents['appointmentChangesSubject'].next();
+      adminEvents['appointmentChangesSubject'].next();
+      adminEvents['appointmentChangesSubject'].next();
+      expect(refresh).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(REFRESH_THROTTLE_MS);
+      expect(refresh).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('closes the live stream when the dashboard is destroyed', () => {
