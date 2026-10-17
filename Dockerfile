@@ -165,11 +165,19 @@ RUN : "${APT_BUST}" \
 USER 10001:10001
 
 # Validate the archive after the package refresh, under the final identity and
-# classpath. Fail the build on incompatibility; production retains CDS fallback.
-# Temporary JVM files from this check do not become part of the runtime image.
+# classpath, by booting the application with it exactly like the training run
+# (-Xshare:on fails instead of silently falling back). A plain `java -version`
+# only maps the JDK classes: an archive that crashes the real startup passed it
+# (reproduced with a fat-JAR archive on Ubuntu's OpenJDK 21.0.12: -version exit 0,
+# application boot SIGSEGV). Fail the build on incompatibility; production
+# retains CDS fallback. Temporary JVM files do not become part of the image.
 RUN --network=none --mount=type=tmpfs,target=/tmp \
-    java -Xshare:on -XX:SharedArchiveFile=application.jsa \
-         -Xlog:cds=info -cp application.jar -version
+    env -i PATH="$PATH" LANG="$LANG" LC_ALL="$LC_ALL" \
+    java -Xshare:on -XX:SharedArchiveFile=application.jsa -Xlog:cds=info \
+         -Dspring.context.exit=onRefresh \
+         -Dspring.cache.type=redis \
+         -Dotel.sdk.disabled=true \
+         -jar application.jar
 
 # Kubernetes owns production probes (homelab/TF/gitops/apps/taskflow/backend.yaml
 # livenessProbe/readinessProbe), so this target deliberately adds no health
@@ -187,11 +195,16 @@ FROM runtime AS local
 # HEALTHCHECK below.
 USER 10001:10001
 
-# Validate the archive under the final identity and classpath (same check as
-# the prod target). Temporary JVM files do not become part of the image.
+# Validate the archive under the final identity and classpath by booting the
+# application with it (same check as the prod target). Temporary JVM files do
+# not become part of the image.
 RUN --network=none --mount=type=tmpfs,target=/tmp \
-    java -Xshare:on -XX:SharedArchiveFile=application.jsa \
-         -Xlog:cds=info -cp application.jar -version
+    env -i PATH="$PATH" LANG="$LANG" LC_ALL="$LC_ALL" \
+    java -Xshare:on -XX:SharedArchiveFile=application.jsa -Xlog:cds=info \
+         -Dspring.context.exit=onRefresh \
+         -Dspring.cache.type=redis \
+         -Dotel.sdk.disabled=true \
+         -jar application.jar
 
 # Health check for standalone docker run and compose service_healthy dependency.
 # Shell form on purpose: `|| exit 1` maps wget's exit codes (4, 8, ...) onto the

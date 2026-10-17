@@ -168,10 +168,11 @@ dependencies {
 	implementation libs.jackson2.core
 	implementation libs.jackson.annotations
 	implementation libs.jackson3.databind
-	// Hibernate 2nd-level cache with Caffeine JCache region factory
-	implementation libs.hibernate.jcache
 	implementation libs.hibernate.core
-	implementation libs.caffeine.jcache
+	// Hibernate 2nd-level cache with the Caffeine JCache region factory: test classpath only. L2 is
+	// off in every profile; HibernateL2CacheBenchmarkTest and HibernateCacheSettingsTest use them.
+	testImplementation libs.hibernate.jcache
+	testImplementation libs.caffeine.jcache
 	// Cache (Redis-backed via spring-boot-starter-data-redis; Caffeine was unused)
 	// Modular monolith — Spring Modulith verifies package-based module boundaries
 	// (repositories live under <module>/internal/ and are inaccessible from other
@@ -232,6 +233,14 @@ spotbugs {
 	reportLevel = com.github.spotbugs.snom.Confidence.valueOf('HIGH')
 	excludeFilter = file("spotbugs-exclude.xml")
 }
+// Build-time and test-only parts of Spring Modulith stay out of the executable JAR: ArchUnit (module
+// verification in ModularityTest) and the annotation processor are never loaded at runtime (0 classes
+// in a full startup and load run). The test classpath still has them.
+configurations.named("runtimeClasspath") {
+	exclude group: "com.tngtech.archunit"
+	exclude group: "org.springframework.modulith", module: "spring-modulith-apt"
+}
+
 tasks.named("test") {
 	useJUnitPlatform {
 		// container-config guards run in containerConfigTest below, so their
