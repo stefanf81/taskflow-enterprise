@@ -56,6 +56,16 @@ function submitBooking(req: AppointmentCreateRequest) {
 }
 ```
 
+## Conventions (`zod/mini`)
+
+The schemas are written with `zod/mini`, the functional API of the same `zod` 4 package (ADR-019). The classic chainable API cannot be tree-shaken and was 112 KiB of the web app's 216 KiB `main` chunk; `zod/mini` keeps only what is used.
+
+- Build schemas with functions and checks: `string().check(trim(), minLength(1, 'Name is required'), maxLength(100))`, `optional(x)`, `nullish(x)`, `array(x)`, `union([...])`, `object({...}).check(refine(fn, { path, message }))`. Classic methods such as `.min()`, `.optional()` or `.array()` do not exist on these schemas (the type checker rejects them).
+- Keep the order of checks: it decides which issue comes first, and both clients show `issues[0]`.
+- Fields the backend omits but the clients treat as text use `omittedAsEmptyString()` (`nullish` piped into `""`).
+- Lists have exported schemas (`serviceItemResponseListSchema`, `publicBarberResponseListSchema`, `barberResponseListSchema`, `barberRatingResponseListSchema`, `notificationOutboxResponseListSchema`, `barberTimeOffResponseListSchema`). Use them instead of building `array(...)` at the call site, so each list schema is created once. Add one next to any new item schema that is returned as a list.
+- `parse`, `safeParse`, `.shape` and Standard Schema (`~standard`) work as before, so Angular `httpResource` parsing and `react-hook-form`'s `zodResolver` need no changes.
+
 ## Quality Gates
 
 To verify that the shared package dependencies are intact and lockfiles are clean:

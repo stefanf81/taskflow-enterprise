@@ -36,3 +36,7 @@ The primary reasons:
 - **Network hop for cache lookups** — each cache lookup requires a round trip to the Redis server, adding latency compared to in-process Caffeine access (sub-microsecond vs ~1 ms).
 - **Redis is another service to manage** — requires monitoring, backup, and capacity planning separate from the application.
 - **Serialization overhead** — cached objects must be serialized to Redis (typically JSON or binary) and deserialized on read, adding CPU overhead that Caffeine (in-heap object references) avoids.
+
+## Update (2026-10-17)
+
+Redis being unavailable no longer takes the cached endpoints down: see ADR-018 (fail-open caches, one probe per back-off interval, 250 ms command timeout).

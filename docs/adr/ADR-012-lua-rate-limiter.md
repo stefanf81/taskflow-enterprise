@@ -49,3 +49,7 @@ Conditional on `app.rate-limit.enabled` (`@ConditionalOnProperty`, disabled by d
 ## Verification
 
 Benchmark: `src/test/java/com/example/taskflow/benchmark/RateLimiterBenchmarkTest.java` (Redis `8.10.2-alpine` at `localhost:6379`, H2 profile, `@Tag("benchmark")`) compares two-step vs Lua path and asserts TTL and burst atomicity, including `RateLimiterConfig.java`'s `EVAL` Lua shape and `HIGHEST_PRECEDENCE+20` ordering.
+
+## Update (2026-10-17)
+
+The inline back-off was replaced by `RedisBackoff.allowRequest()`: when a back-off interval ends, exactly one request probes Redis and the rest keep the per-JVM counter, instead of every in-flight request stalling on Redis at once (ADR-018). CORS preflights (`OPTIONS`) are no longer counted. Measured cost of the limiter: 7–12% of throughput against a local Redis (BENCHMARKS.md §58); kept.

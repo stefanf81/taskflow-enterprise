@@ -171,7 +171,7 @@ mobile/
 ├── App.tsx                  # Application entry point
 ├── app.json                 # Expo configuration
 ├── eas.json                 # EAS Build configuration (Android APK/AAB, iOS IPA)
-├── metro.config.js          # Metro bundler configuration with monorepo resolution
+├── metro.config.js          # Metro config: watches only ../shared, resolves node_modules from mobile/
 └── package.json
 ```
 
@@ -193,6 +193,15 @@ TaskFlow Mobile enforces a dual-layered testing strategy combining Unit/Componen
 ### 3. Runtime Performance Baseline
 
 Expo SDK 58 uses React Native 0.88.0 with the New Architecture and Hermes V1 enabled by default. A production Android Metro export generated a Hermes bytecode bundle (`.hbc`) of 3,754,723 bytes (SDK 57 / RN 0.86.3: 3,399,015 bytes). Release builds run R8 (`android.enableMinifyInReleaseBuilds=true`, the SDK 58 template default).
+
+Performance settings (BENCHMARKS.md §58):
+
+- **React Compiler** is on (`app.json` `experiments.reactCompiler: true`; the Babel plugin ships with `babel-preset-expo`). It memoises components and hooks automatically, so new code should not add `useMemo`/`useCallback` only for render performance. The Jest suite passes with the compiler forced on.
+- **Icons:** import one icon set per file (`import Ionicons from '@expo/vector-icons/Ionicons'`), never the `@expo/vector-icons` barrel: the barrel bundled every set's font (bundled assets 4.08 → 0.40 MB, Hermes bytecode 3.73 → 3.41 MB).
+- **Zustand selectors** that return several fields use `useShallow`, so a store update re-renders only the screens whose fields changed.
+- **Splash screen:** `RootNavigator` calls `SplashScreen.preventAutoHideAsync()` and hides it once `isBootstrapping` is false, so the first frame is the real screen instead of a blank one.
+- **Release builds:** the `expo-build-properties` plugin sets `enableMinifyInReleaseBuilds` and `enableShrinkResourcesInReleaseBuilds` explicitly for Android, so R8 and resource shrinking no longer depend on template defaults.
+- **Token reads:** the request interceptor reads the token and its expiry from secure storage in parallel (`Promise.all`); both cross the native bridge.
 
 `react-native-reanimated` and `react-native-worklets` are not installed, so Worklets bundle mode is not applicable and its documented memory overhead does not affect this app. The application does not use `PerformanceObserver`.
 

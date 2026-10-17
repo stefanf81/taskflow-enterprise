@@ -144,7 +144,8 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Resolved:** Aligned `AGENTS.md`, `README.md`, and `SYSTEM-HARDENING.md` to accurately document that `cap_drop: [ALL]` and `read_only: true` apply specifically to application edge containers (`backend` and `frontend`), while data stores (`db`, `redis`, `jaeger`) run with standard defaults. `docs/adr/ADR-012-lua-rate-limiter.md` and the comment in `RateLimiterConfig.java` were updated to reflect `server.forward-headers-strategy=native` and Tomcat's `RemoteIpValve`.
 - **Location:** `AGENTS.md`, `README.md`, `docs/adr/ADR-012-lua-rate-limiter.md`, `RateLimiterConfig.java`
 
-### 3.5 Inactive Lettuce Connection Pool Configuration
+### 3.5 Inactive Lettuce Connection Pool Configuration (Resolved)
+- **Resolved (2026-10-17, BENCHMARKS.md §58):** the inactive `spring.data.redis.lettuce.pool.*` properties were removed and `application-prod.properties` documents the shared-connection model (Lettuce multiplexes one thread-safe connection; every command is sub-millisecond, so a pool would add nothing). The original finding follows for context.
 - **Location:** `src/main/resources/application-prod.properties:151-154`
 - **Problem:** `spring.data.redis.lettuce.pool.*` properties are defined with comments about preventing connection thrashing, but `commons-pool2` is not on the classpath. Spring Boot silently ignores the pool configuration and falls back to a single shared connection.
 - **Remediation:** Add `implementation 'org.apache.commons:commons-pool2'` to `build.gradle` if pooling is desired, or remove the inactive configuration properties and document the shared-connection model.
@@ -218,4 +219,7 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Mobile:** set the real EAS `projectId` (`eas init`); iOS `NSPinnedCAIdentities` behaviour with intermediates is untested on a device; the Detox E2E suite has not run against these changes.
 - **Retired services** have no admin view (the catalog list is active-only).
 - **`SingleFlightCacheManager`** is covered against a live Redis (`AbstractRedisCacheLoadLockTest`, Redis-gated and Testcontainers), but Micrometer cache metrics for the wrapped Redis manager are still not bound.
-- **Frontend bundle:** the initial bundle (~461 kB) is over the 400 kB warning budget (error at 500 kB).
+- **Frontend bundle (resolved):** with `zod/mini` (ADR-019) and the background image fix the initial bundle is 515 kB raw / 138 kB transfer including the now-eager landing page (was 461 kB plus a 121 kB landing chunk fetched after boot); the budget is 550 kB warning / 600 kB error (BENCHMARKS.md §58).
+- **Redis outage throughput:** the caches fail open (ADR-018), but cached endpoints stay at ~38% of normal throughput while Redis is down because `SingleFlightCacheManager` serialises loads per key per JVM (deliberately, to avoid a database stampede).
+- **V36 trigram indexes** are built inside the migration transaction, which blocks writes to `appointments` for ~2 s per 180k rows. Fine at the current size; a much larger table would need `CREATE INDEX CONCURRENTLY` outside Flyway's transaction.
+- **JDK 25** was measured and not adopted (5–8% lower throughput on this workload, BENCHMARKS.md §58); re-measure on the next Temurin 25 update.

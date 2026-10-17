@@ -72,6 +72,8 @@ All benchmarks were run locally on an **Apple M4 Pro (14-Core, AArch64)** utiliz
   - [§54. Secret Scanning — Direct Gitleaks CLI](#-54-secret-scanning--direct-gitleaks-cli)
   - [§55. React Native CI — Lockfile-PR Caches & ExpoModulesJSI Reuse](#-55-react-native-ci--lockfile-pr-caches-expomodulesjsi-reuse--readable-ios-logs)
   - [§57. CI Composite Actions — E2E Without Buildx & Fast Backend Polling](#-57-ci-composite-actions--e2e-without-buildx-faster-backend-polling--needs-driven-gates)
+- **🔬 Cross-Stack Audits**
+  - [§58. Full-Stack Performance Audit — Redis Fail-Open, Admin Queries, Bundles & Mobile Assets](#-58-full-stack-performance-audit--redis-fail-open-admin-queries-bundles--mobile-assets-2026-10-17)
 
 ---
 
@@ -89,7 +91,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 ### 🍃 2. Spring Boot 4.1.1 Application Layer
 *   **Embedded Apache Tomcat 11**:
     *   **Thread Pre-Warming**: Pre-allocated `server.tomcat.threads.min-spare=20` to entirely bypass OS-level thread spawning overhead during sudden high-concurrency traffic bursts.
-    *   **Keep-Alive Optimizations**: Raised threshold to `max-keep-alive-requests=100` and `timeout=60s` to reuse warm TCP connections directly.
+    *   **Keep-Alive Optimizations**: `max-keep-alive-requests=10000` and `keep-alive-timeout=60s`, so the Nginx upstream pool reuses warm TCP connections (at 100 Tomcat closed every connection after 100 requests: +4–6% throughput when lifted, §58). Nginx retires idle upstream connections first (`keepalive_timeout 50s`).
 *   **Spring Security 7.1 & stateless JWT**:
     *   **Asymmetric Cryptography**: Standardized on RSA-2048 signing/verification using asymmetric key-pairs (`app.rsa.private-key` / `public-key`).
     *   **Zero-Trust Session Isolation**: Enforced stateless token authentication via HttpOnly, SameSite=Strict cookies set by the backend, restoring auth state via `GET /api/v1/auth/me` into an in-memory Signal (`AuthState`). Restricted all routes except public `/api/v1/auth/**`.
@@ -128,7 +130,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   **Stream Loading**: Sized `jdbc.fetch_size=50` to pull large lists in chunked streams.
     *   **Safeguards**: Hardcoded JPA query timeout (`jakarta.persistence.query.timeout=5000` ms) to stop runaway queries, replacing legacy `javax.` parameters.
 *   **HikariCP Connection Pool**:
-    *   Optimal connection boundaries (`maximum-pool-size=25`, `minimum-idle=10`) with zero-overhead leak detection logging (`leak-detection-threshold=2000` ms).
+    *   Optimal connection boundaries (`maximum-pool-size=25`, `minimum-idle=10`). Leak detection (`leak-detection-threshold=2000` ms) is a dev setting; `application-prod.properties` sets `0` explicitly (profiles only override, so prod used to inherit it, §58).
     *   Disabled Open Session in View (OSIV) to release connection resources back to the pool instantly after transactions close.
 *   **Lazy JDBC Connection Fetching (New in SB 4.1)**:
      *   Enforced **`spring.datasource.connection-fetch=lazy`** in dev and prod profiles. Database connections are held lazily by a `LazyConnectionDataSourceProxy` and only requested from HikariCP when a SQL statement is actually prepared and executed, completely eliminating connection borrowing overhead for cache hits or request pre-validation filters.
@@ -147,13 +149,13 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Optimized Control Flow**:
     *   Completely adopted the new declarative block syntax (`@for`, `@if`) combined with strict `track` expressions, bypassing legacy `*ngFor` / `*ngIf` structural directive overhead.
 *   **Code Splitting & Deferred Loading**:
-    *   Granular page and feature chunking through standalone `loadComponent()` routes. No global `PreloadAllModules` strategy is configured; route preloading should be evaluated against bandwidth and navigation requirements before being added.
+    *   Granular page and feature chunking through standalone `loadComponent()` routes for the admin and customer dashboards. The guest landing route `''` is **eager**: lazy, its chunk and the forms/booking chunks it imports were discovered two round trips after `main.js` (eager: FCP −376 ms on slow 4G, §58). No global `PreloadAllModules` strategy is configured; route preloading should be evaluated against bandwidth and navigation requirements before being added.
 *   **Deferrable Views**:
     *   Used `@defer` blocks to dynamically lazy-load heavy in-page elements only when idle.
-*   **`NgOptimizedImage` Directive Integration**:
-    *   Integrated `<img ngSrc>` and the standard `NgOptimizedImage` directive in `app.html` to render our core landing hero image. Configured with required aspect ratio sizing (to prevent layout shifts) and the `priority` tag to speed up **Largest Contentful Paint (LCP)**.
+*   **Landing Background Image**:
+    *   The landing page has no `<img>` hero (`app.html` is only `<router-outlet />`). Its background photo (`public/barber-bg.jpg`, 1280 px / 33 kB, was 1920 px / 200 kB) sits under a ~90% black overlay on a viewport-fixed pseudo-element of `.bg-faint-barber`, not `background-attachment: fixed`, which repaints the whole background on every scroll frame. It is not the LCP element (§58).
 *   **Build Budget Regression Guards & Cache Busting**:
-    *   Enforced rigorous build failure boundaries in `angular.json` for initial total (`400kB` warning, `500kB` error) and individual chunks (`400kB` warning, `500kB` error) to automatically catch bundle bloat in CI.
+    *   Enforced build failure boundaries in `angular.json` for the initial total (`550kB` warning, `600kB` error; was 400/500 kB before the landing route became eager, §58) and individual chunks (`400kB` warning, `500kB` error) to automatically catch bundle bloat in CI. The shared request/response schemas use `zod/mini`: classic zod was 112 KiB of the 216 KiB `main` chunk.
     *   Enforced `outputHashing: "all"` to aggressively bust caches on deployments.
 *   **CSP-Compatible Critical CSS Handling**:
     *   Kept `"inlineCritical": false` in the production workspace. Angular's critical-style inlining can inject dynamic attributes that conflict with the hardened production CSP, so this is intentionally disabled rather than treated as a performance toggle.
@@ -175,13 +177,13 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Jaeger Server & Micrometer**:
      *   Collected traces via a Dockerized Jaeger `2.21.0` backend with trace propagation, mapped to Prometheus/Micrometer metrics.
 *   **Micrometer Histograms & SLAs (P1-5 §46)**:
-     *   `management.metrics.distribution.percentiles.http.server.requests=0.5,0.95,0.99` + `percentiles-histogram.http.server.requests=true` + `sla.http.server.requests=50ms,100ms,200ms` (in `application-prod.properties`) exposes **p50/p95/p99** via `/actuator/prometheus` for Prometheus quantile queries. Overhead ~1–2% cardinality per time-series (§46).
+     *   `percentiles-histogram.http.server.requests=true` + `sla.http.server.requests=50ms,100ms,200ms` (in `application-prod.properties`) expose histogram buckets via `/actuator/prometheus`; **p50/p95/p99** come from `histogram_quantile` (client-side `percentiles` were dropped in §58). `management.observations.enable.spring.security=false`: the per-filter Spring Security observations cost 25–33% of throughput on cached endpoints (§58).
 
 
 
 ### 🐳 7. Proxy, Containers, Build Tools & CI/CD
 *   **Nginx (Alpine-Unprivileged)**:
-     *   **Elite Upstream Connection Pooling**: Enforced permanent persistent connection reuse (`upstream { keepalive 64; }`) to completely bypass the 3-way TCP handshake latency between Nginx and the backend.
+     *   **Elite Upstream Connection Pooling**: Persistent connection reuse (`upstream { keepalive 64; keepalive_timeout 50s; keepalive_requests 10000; }`) bypasses the 3-way TCP handshake between Nginx and the backend; the 50 s idle timeout stays below Tomcat's 60 s so Nginx never reuses a connection the backend is closing. `worker_processes 2` (`auto` counts the host's cores, not the container's CPU limit).
      *   **Proxy Buffering**: Tuned `proxy_buffers 8 16k;` and `proxy_buffer_size 32k;` specifically to handle the high-throughput transmission of large JSON payloads without blocking worker threads.
      *   **Aggressive Static Caching (P1-1 §42)**: Split `location ~* \.(?:js|css)$` with `Cache-Control "public, immutable, max-age=15552000"` (6M immutable, `outputHashing:all` hashed bundles → 0 revalidation) vs `location ~* \.(?:ico|gif|jpe?g|png|svg|woff2?|eot|ttf|otf)$` with `Cache-Control "public, max-age=3600, must-revalidate"` (short-lived, revalidated, no `immutable`). `index.html` served via `location / try_files` (no immutable). See §42.
      *   **Socket Optimization**: Enabled kernel zero-copy transfer (`sendfile on`), aggregated packet transfers (`tcp_nopush on`), and disabled Nagle's algorithm (`tcp_nodelay on`) to deliver JSON payloads instantly.
@@ -392,9 +394,9 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 | Optimization Technique | Benefit | Mechanism |
 | :--- | :--- | :--- |
 | **HTTP/2 Multiplexing** | Eliminates Head-Of-Line Blocking | Multiplexes concurrent requests/responses over a single persistent TCP connection. |
-| **Keep-Alive Pooling** | Eliminates TCP/TLS Handshakes | Increased Tomcat Keep-Alive thresholds (`max-keep-alive-requests=100`) allowing the browser to reuse warm connections. |
+| **Keep-Alive Pooling** | Eliminates TCP/TLS Handshakes | Tomcat `max-keep-alive-requests=10000` (was 100, §58) and Nginx `keepalive_requests 10000` / `keepalive_timeout 50s` keep the upstream pool's connections warm. |
 | **Shallow ETag Caching** | Saves Massive Bandwidth | Computes an MD5 payload hash. The browser sends `If-None-Match`, and the server returns an ultra-fast `304 Not Modified`, bypassing the JSON download. Restricted to GET requests only — POST/PUT/DELETE skip ETag content-buffering entirely to avoid unnecessary overhead on mutations. |
-| **Angular Route Code Splitting** | Smaller Initial Bundle | Uses standalone `loadComponent()` routes. No global `PreloadAllModules` strategy is configured. |
+| **Angular Route Code Splitting** | Smaller Initial Bundle | Dashboards use standalone `loadComponent()` routes; the landing route is eager (§58). No global `PreloadAllModules` strategy is configured. |
 | **View Transitions API** | Perceived Latency Drop | Utilizes `withViewTransitions()` for native browser-accelerated visual cross-fades, creating a fluid, app-like experience. |
 
 **Verdict:** By attacking the latency layer natively at the browser/server network boundary, we bypassed the physical limitations of geographical distance and achieved instant-feeling application responsiveness.
@@ -555,6 +557,8 @@ By setting `spring.jpa.properties.hibernate.query.in_clause_parameter_padding=tr
 | `any` (per chunk) | *none* | **400kB warn / 500kB err** |
 
 **Verdict:** Without an `any` budget, a single bloated chunk can slip through CI unnoticed. The guard fails the production build if any individual chunk exceeds 500kB (warning at 400kB), catching regressions such as a heavy dependency pulled into one route before merge.
+
+**Update (§58):** the `initial` budget is now **550kB warn / 600kB error**. Making the landing route eager moved the landing, forms and booking chunks into the initial set (515 kB raw / 138 kB transfer, after `zod/mini` saved ~67 kB); guests on `/` previously downloaded ~582 kB in three sequential steps. The `any` budget is unchanged.
 
 ---
 
@@ -749,7 +753,7 @@ The earlier GC benchmark (§1) used the CPU-bound `/login` path (BCrypt hashing,
 
 **Verdict: Spring @Cacheable is the correct caching layer for reference data DTO endpoints.** It caches the final payload form (no mapping overhead), operates independently of Hibernate's query infrastructure, and delivers nanosecond-scale access. Hibernate's L2 cache is redundant when application-level caching already covers the hot paths — it adds complexity (region factory configuration, cache synchronization, eviction policies) with no throughput benefit for DTO-projected list endpoints. The one niche where Hibernate L2 cache helps is **cross-request entity identity**: if multiple queries reference the same `Barber` entity by ID across different API calls, the L2 cache prevents redundant SQL loads — but this is marginal when the primary serving path is DTO projections.
 
-The `@Cache(usage=READ_WRITE)` annotations on `Barber`, `ServiceItem`, and `Review` entities, and the `hibernate-jcache` + `caffeine-jcache` dependencies, are retained in the codebase as **opt-in infrastructure** — production continues with `hibernate.cache.use_second_level_cache=false`. Future deployments on PostgreSQL can enable L2 cache for specific entity regions by toggling the property, should entity-by-entity access patterns warrant it.
+The `@Cache(usage=READ_WRITE)` annotations on `Barber`, `ServiceItem`, and `Review` entities are retained in the codebase as **opt-in infrastructure** — production continues with `hibernate.cache.use_second_level_cache=false`. **Update (§58):** `hibernate-jcache` + `caffeine-jcache` are now `testImplementation` only (this benchmark and `HibernateCacheSettingsTest`); enabling L2 in production means adding them back to `implementation`. Future deployments on PostgreSQL can enable L2 cache for specific entity regions by toggling the property, should entity-by-entity access patterns warrant it.
 
 ---
 
@@ -1059,6 +1063,8 @@ proxy_set_header Connection "";
 
 **Verdict:** Bounded executor with `CallerRunsPolicy` is the correct default for any Spring `@EnableAsync` service. It adds zero overhead in steady state and converts catastrophic OOM under burst into graceful caller-side throttling (319 ms avg, 148 tasks/sec). Deployed; no further tuning needed.
 
+**Update (§58):** a user-defined `Executor` bean named `taskExecutor` makes Spring Boot skip its own `applicationTaskExecutor` (virtual threads, since `spring.threads.virtual.enabled=true`); the conditions report shows `found beans of type Executor: taskExecutor`. The codebase still has no `@Async` call site and no MVC async handler, so neither executor runs anything today. Revisit if `@Async` is introduced.
+
 ---
 
 ## ⚡ 39. Reference Data Caching — Barbers & Services (P0-2)
@@ -1094,6 +1100,8 @@ On H2 the in-test speedup is **50–90×** (0.6 µs cached vs 42 µs DB); on Pos
 4. **Eviction verified, not assumed.** `ReferenceDataCacheBenchmarkTest` explicitly primes, mutates (`createBarber` → evicts both `barbers` + `publicBarbers`; `createService` → evicts `services`), and asserts the next read returns `BARBER_COUNT+1` rows from DB.
 
 **Verdict:** Reference data caching with `@Cacheable(sync=true, TTL 10m)` is the correct layer for DTO-projected list endpoints (see §31 recommendation: Spring `@Cacheable` ⭐ Best). It delivers **50–90×** on H2 and **~1200×** on PostgreSQL with zero stampede risk and verified eviction. Hibernate L2 remains `false` for these paths (see §31).
+
+**Update (§58):** the Redis caches now **fail open**. `FailOpenCacheErrorHandler` turns a failed read into a miss (the method runs), `RedisBackoffCacheManager` (beneath `SingleFlightCacheManager`) skips Redis for the back-off interval after a failure, and the prod command timeout is 250 ms. With Redis frozen for 25 s under load the catalog went from 0% served (293 × 5xx after 2–4 s each) to ~38% with 0 errors; loads of one key stay serialised per JVM, which keeps a Redis outage from stampeding PostgreSQL. See ADR-018.
 
 ---
 
@@ -1133,6 +1141,8 @@ Delta **353 µs saved (1.6× faster)** — primarily one fewer network round-tri
 3. **Redis single-threaded `EVAL` is the production pattern.** `spring-boot-best-practice` / `jhipster` both recommend this exact Lua shape; no `WATCH`/`MULTI` needed.
 
 **Verdict:** Lua-atomic `EVAL` is the correct Redis rate-limit pattern. It fixes the TTL-leak race, saves **353 µs (1.6×)** per request (1 RTT vs 2), and sustains **~39k ops/sec** burst with perfect atomicity. Deployed at `HIGHEST_PRECEDENCE+20`.
+
+**Update (§58):** the inline back-off became `RedisBackoff.allowRequest()`: when a back-off interval ends, exactly one request probes Redis and the rest keep using the per-JVM counter (before, every in-flight request tried Redis at once and stalled for a full command timeout). CORS preflights (`OPTIONS`) are no longer counted. Measured cost of the limiter itself: 7–12% of throughput against a local Redis (one `EVALSHA` per request); kept.
 
 ---
 
@@ -1202,6 +1212,8 @@ location / { try_files $uri $uri/ /index.html; }
 
 **Verdict:** Split `immutable` is a pure win with `outputHashing:all`. Hashed bundles finish with **~0 ms revalidate** vs `If-None-Match` round-trip; `index.html` stays fresh so updates propagate instantly. Zero application changes, verifiable by `nginx -T` and `curl -I` headers.
 
+**Update (§58):** `index.html` had no `Cache-Control` at all (only `Last-Modified`), so browsers could reuse it heuristically and request bundles a deploy had removed. It now has its own `location = /index.html` with `Cache-Control: no-cache` (and the security headers repeated); `try_files` and `index` end there, and the ETag makes the revalidation a 304.
+
 ---
 
 ## ⚡ 43. JVM Diagnostics — HeapDump, GC Log & Container Support (P1-2)
@@ -1266,6 +1278,8 @@ BusySlots Cache-Control: private, max-age=30, must-revalidate
 
 **Verdict:** Tiered `Cache-Control` (5m public / 30s private / `must-revalidate` admin) correctly balances CDN efficiency and freshness. With `ShallowEtagHeaderFilter`, clients get `304 Not Modified` after TTL expiry without re-downloading JSON — saves bandwidth with zero server-side complexity.
 
+**Update (§58):** `ShallowEtagHeaderFilter` buffers the whole response to hash it, and it also wrapped the admin SSE stream (`GET /api/v1/appointments/events`): the stream sent nothing, not even headers, until it ended 30 minutes later. The filter now skips that path and `Accept: text/event-stream`; `AppointmentEventStreamHttpIntegrationTest` reads the stream over a real socket.
+
 ---
 
 ## ⚡ 45. Mobile QueryClient & API Timeout Tuning (P1-4)
@@ -1297,6 +1311,8 @@ BusySlots Cache-Control: private, max-age=30, must-revalidate
 
 **Goal:** Expose p50/p95/p99 latency quantiles and SLA bucket counts for `http.server.requests` via `/actuator/prometheus` so Prometheus can compute HONEST latency SLOs (not averages) and alert on `histogram_quantile`.
 
+**Update (§58):** the client-side `percentiles` line was removed; p50/p95/p99 come from `histogram_quantile` over the buckets, which (unlike the pre-computed `quantile` series) aggregate across instances. Dashboards or alerts that read `http_server_requests_seconds{quantile=…}` must switch to `histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket[5m])))`. The original configuration:
+
 **Configuration:** `src/main/resources/application-prod.properties:130`:
 
 ```properties
@@ -1315,7 +1331,7 @@ management.metrics.distribution.sla.http.server.requests=50ms,100ms,200ms
 
 **Overhead:** Pre-computed client-side percentiles and histogram buckets add **~1–2% cardinality** per `http.server.requests` time-series (one series per `[uri, method, status]` tag combination). At 10% OTel sampling (§7) this is negligible.
 
-**Verification:** `P1AndP2BenchmarkTest.p1_5_micrometer_histogram` checks `application-prod.properties` for the three `management.metrics.distribution` keys and that `GET /actuator/health/liveness` still returns 200 (histogram config doesn't break health).
+**Verification:** `P1AndP2BenchmarkTest.p1_5_micrometer_histogram` checks `application-prod.properties` for the histogram and SLA keys (and, since §58, the absence of client-side `percentiles`) and that `GET /actuator/health/liveness` still returns 200 (histogram config doesn't break health).
 
 **Verdict:** Histograms are a zero-feature-cost observability win. They unlock `histogram_quantile(0.95, ...)` and `sla`-bucket burn alerts with ~1–2% overhead — essential for the `p95<500` k6 gate (§48) and production SLO dashboards.
 
@@ -1793,6 +1809,8 @@ An earlier harness run on the same host measured 9.35 s → 8.34 s. The full-app
 
 **Verification:** the production image boots under `prod` with liveness/readiness 200, `/api/v1/catalog` and `/api/v1/barbers` 200, Redis cache and rate-limit keys written, and no `ERROR` log lines. The local image was built for linux/amd64 as well (the host architecture; the Dockerfile pins no platform), and its training run and archive validation pass. The build-time `-Xshare:on` validation passes for both images. hadolint passes on `Dockerfile` with the CI ignore list. `ContainerImageBenchmarkTest` locks the configuration.
 
+**Update (§58):** the build-time validation now boots the application with `-Xshare:on` and the training flags instead of running `java -version`, which maps only JDK classes. On Ubuntu's OpenJDK 21.0.12 a fat-JAR archive passed `-version` and crashed the real startup (SIGSEGV); the image's extracted layout boots fine, and the new check proves it on every build (~10 s per target). ArchUnit and `spring-modulith-apt` are excluded from the runtime classpath and the JCache jars are test-only: the boot JAR shrank 95.6 → 89.1 MB.
+
 ## ⚡ 57. CI Composite Actions — E2E Without Buildx, Faster Backend Polling & `needs`-Driven Gates
 
 **Goal:** review the six composite actions under `.github/actions/` and remove what their callers measurably pay for.
@@ -1839,3 +1857,59 @@ At a 1 s interval the expected detection lag after readiness is ~0.5 s instead o
 * **`upload-sarif`:** a pin-holding wrapper; the processing wait was already removed where the scanner's exit code is the gate (§53).
 
 **Verification:** `actionlint` 1.7.12 passes, including the composite input check of the new `needs`/`required` inputs. shellcheck 0.11.0 passes on every composite `run:` script. The `wait-backend` ready, crash and timeout paths and the `start-backend` 0/1/2-match cases were exercised locally. Run `37315126394` is green with every job, including the three ci.yml gates. The two React Native gates (`android-gate`, `ios-gate`) use the identical call and first run on the next mobile change.
+
+## ⚡ 58. Full-Stack Performance Audit — Redis Fail-Open, Admin Queries, Bundles & Mobile Assets (2026-10-17)
+
+**Goal:** measure, instead of reason about, the open performance questions across backend, database, web and mobile; fix what the numbers support and record what they reject.
+
+**Methodology:** one cloud container (4 vCPU Xeon @ 2.1 GHz, 16 GB). The backend ran the production profile from the boot JAR, pinned to 2 cores (`taskset -c 0-1`, `-XX:ActiveProcessorCount=2`), against local PostgreSQL 16.15 and Redis 7.0.15 (production runs 18 and 8), with the compose `JAVA_TOOL_OPTIONS` sizing. The load generator (autocannon 8, 32 connections) ran on the other two cores. Data: ~179k appointments (8.6k active, the rest CANCELLED/DENIED, two years back and 60 days ahead) and 300k SENT outbox rows. Throughput is the comparison metric: 40 s warm-up, two 15 s samples, A/B variants alternated twice. Latency and outage timelines come from a Node `http.Agent` client (autocannon's latency is wrong while Tomcat closes connections, see below). Web numbers: Chromium (Playwright) with CDP network and 4× CPU throttling, median of 9. Mobile: `expo export --platform android`. Absolute numbers are lower than production hardware; the relative differences are the result.
+
+### Results
+
+| Change | Before | After |
+| :--- | ---: | ---: |
+| `management.observations.enable.spring.security=false` — catalog / `me` / busy-slots | 2,784 / 3,274 / 2,658 rps | **3,491 / 4,366 / 3,312 rps** (+25% / +33% / +25%) |
+| `server.tomcat.max-keep-alive-requests` 100 → unlimited (10000 adopted) | — | +4–6% rps |
+| Admin list, no filter (`COUNT(*)` per request: 65 ms under load, 97% of DB time) | ~270 rps | **700–1,000 rps** |
+| Admin search, selective term (count + page query) | 118 + 88 ms | **4.5 + 18 ms** (V36 trigram indexes, 16 MB) |
+| Admin SSE stream (`ShallowEtagHeaderFilter` buffered it) | 0 bytes, no headers | `ready` event immediately |
+| Redis frozen 25 s (`SIGSTOP`), `GET /auth/me` | 50% served, 12 stall seconds, 2 s max | **~100% served, 325 ms max** |
+| Redis frozen 25 s, `GET /catalog` | **0% served, 293 × 5xx**, 2–4 s each | **~38% served, 0 errors**, p50 ~15 ms |
+| Busy-slots, 200 distinct far-future dates | 991 SQL statements, 204 Redis keys | 0 per-date queries, no keys |
+| Web initial bundle (raw / transfer) | 461 / 123 kB (+121 kB found later on `/`) | 515 / 138 kB, all modulepreloaded |
+| Web FCP / LCP, slow 4G (150 ms, 1.6 Mbps) | 2,272 / 2,504 ms | **1,884 / 2,148 ms** |
+| Web FCP / LCP, fast (40 ms, 10 Mbps) | 1,056 / 1,192 ms | 972 / 1,096 ms |
+| Web page weight | 419 kB | **247 kB** |
+| Mobile bundled assets / Hermes bytecode | 4.08 MB / 3.73 MB | **0.40 MB / 3.41 MB** |
+| Backend boot JAR | 95.6 MB | 89.1 MB |
+
+Where the time went (JFR CPU samples, before): Micrometer observations 22–23%, OpenTelemetry 12%, Jackson 10.6% on the catalog (the Redis cache value and the response). Disabling only the Spring Security observations recovered the 25–33%; turning tracing off entirely on top of that changed nothing measurable (3,429 / 4,222 rps), so 10% sampling stays. Turning the rate limiter off would add another 7–12% (one `EVALSHA` per request against a local Redis); it stays, only `OPTIONS` preflights are no longer counted.
+
+### Adopted
+
+* **SSE (`CacheConfig`):** the ETag filter skips `/api/v1/appointments/events` and `Accept: text/event-stream`. `AppointmentEventStreamHttpIntegrationTest` reads the stream over a real socket (MockMvc never flushes, so it could not see the bug).
+* **Redis fail-open (ADR-018):** `spring.data.redis.timeout` 2 s → 250 ms; `FailOpenCacheErrorHandler` (failed read = miss, rate-limited WARN); `RedisBackoffCacheManager` beneath `SingleFlightCacheManager` skips Redis for the back-off interval; `RedisBackoff.allowRequest()` lets one probe through per interval (before, every in-flight request tried Redis when the interval ended and stalled). The catalog stays at ~38% rather than 100% during an outage because loads of one key are serialised per JVM, which keeps a cache outage from stampeding PostgreSQL.
+* **Admin listing:** a `Slice` query plus the row count cached in `appointmentStats` (`total-count`, evicted with the stats on every booking). **Admin search:** V36 `pg_trgm` GIN indexes on `lower(name|email|phone)`, used with Hibernate's `LIKE ? ESCAPE ?` under both generic and custom plans.
+* **Busy-slots:** dates before today (shop time) or beyond `max-advance-days` answer every slot busy without the per-date queries or a cache entry; past dates used to report every slot free.
+* **nginx:** upstream `keepalive_timeout 50s` (below Tomcat's 60 s) and `keepalive_requests 10000`; `worker_processes 2` (`auto` counts host cores); `index.html` `no-cache` (ETag → 304), verified with nginx 1.24.
+* **Metrics:** client-side `percentiles` for `http.server.requests` dropped (the histogram buckets stay; use `histogram_quantile`). Prod leak detection actually off (`leak-detection-threshold=0`; the profile inherited 2 s). Inert Lettuce pool settings removed.
+* **Web:** eager landing route (the lazy chunk and the forms/booking chunks it imports were discovered two round trips after `main.js`; eager alone: FCP 2,352 → 1,976 ms on slow 4G); shared schemas on `zod/mini` (zod was 112 KiB of the 216 KiB `main` chunk; initial 461 → 394 kB raw before the landing change; same check order and messages, verified side by side); initial budget 400/500 → 550/600 kB; `barber-bg.jpg` 1920 px / 200 kB → 1280 px / 33 kB on a fixed pseudo-element instead of `background-attachment: fixed` (no FCP/LCP change: it is not the LCP element; screenshots differ by ≤ 10/255); modal `@defer` blocks `prefetch on idle`; SSE refreshes throttled (300 ms leading + trailing); one shared `Intl.DateTimeFormat`.
+* **Mobile:** per-set icon import (`@expo/vector-icons/Ionicons`; the barrel bundled all 19 icon fonts); React Compiler on (verified in the exported bundle, and the Jest suite passes with it forced on); native splash held until the session is restored; Zustand `useShallow` selectors; token and expiry read in parallel; `expo-build-properties` R8 + resource shrinking (not built here); Metro watches `mobile/` and `shared/` only.
+* **Image:** both Dockerfile targets verify the CDS archive by booting the application with `-Xshare:on`, not `java -version` (see the correction below); ArchUnit and `spring-modulith-apt` excluded from `runtimeClasspath`, `hibernate-jcache`/`caffeine-jcache` moved to `testImplementation`.
+
+### Not adopted
+
+* **Splitting the stats query:** 41 → 26 ms (−37%); counting by status still reads every row. A short TTL instead of evict-on-write would be the bigger lever, but with live SSE updates the dashboard counters would then lag behind new bookings.
+* **Outbox claim index:** the claim query takes 0.88 ms with 300k SENT rows (bitmap scan on `idx_outbox_claim`).
+* **Dropping the plain `customer_email` index:** redundant (every query uses `lower()`), but `db/migration/README.md` reserves e-mail indexes for the booking migrations.
+* **JDK 25:** with the same build and flags, throughput was 5–8% lower than JDK 21 (catalog 3,195 vs 3,357, `me` 3,947 vs 4,304 rps); compact object headers cut the live heap after a full GC 58.8 → 53.8 MB (−9%) without changing throughput. Startup: no archive 15.4 s (21) / 14.4 s (25); JDK 25 AOT cache 9.5 s, with compact headers 10.0 s. JDK 21 + CDS could not be measured on this host (see below); §56 measured 8.0 s on production-like hardware. Compare there before moving.
+* **Caching the mobile token in memory:** it changes behaviour the storage tests pin and puts logout correctness behind cache invalidation; the two reads now run in parallel instead.
+* **Removing `AsyncConfig`:** it does stop Spring Boot from creating its virtual-thread `applicationTaskExecutor` (conditions report: "found beans of type Executor: taskExecutor"), but nothing uses `@Async` or MVC async processing, so there is no runtime effect either way (§38/ADR-010 own that decision).
+
+### Corrections and measurement notes
+
+* **CDS crash:** Ubuntu's OpenJDK 21.0.12.1 crashes at startup (SIGSEGV in `ConstantPool::klass_at_impl`, from Hibernate's `Class.getNestMembers`) with a dynamic archive trained on the **fat JAR** (`-jar taskflow-*.jar`), while `java -Xshare:on … -version` exits 0 with the same archive. With the image's **extracted layout** both the old check and a full boot pass. The image was never affected, but its `-version` check could not have caught such an archive; the boot check can.
+* **autocannon latency:** while Tomcat closed every connection after 100 requests, autocannon reported p50 ≈ 78 ms at 32 connections and ~3,000 rps (Little's law allows ~11 ms). A Node keep-alive client measured p50 7 ms on the same server; the throughput numbers are unaffected.
+* **Angular dev server:** `ng serve` fails in this environment on the original code too (Vite dependency optimisation cannot resolve the linked `@taskflow/schemas` source); the Playwright suite ran against nginx + backend (`E2E_DOCKER=true`), 11/11 passed.
+
+**Verification:** backend `./gradlew test containerConfigTest spotbugsMain jacocoTestCoverageVerification` (561 tests), the Redis suites against a real Redis (`TASKFLOW_TEST_REDIS_URL`), the PostgreSQL migration suites against a real server (`TASKFLOW_TEST_POSTGRES_URL`), frontend lint + strict `tsc` + 316 unit tests + 11 Playwright tests, mobile `tsc` + 523 Jest tests. V36 applied in 1.8 s on the seeded database and, with a role lacking `CREATE` on the database, logged its warning and let startup continue.

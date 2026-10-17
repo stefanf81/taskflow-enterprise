@@ -46,3 +46,7 @@ Controllers add a complementary HTTP tier (see ADR for Finding 31 / BENCHMARKS.m
 ## Verification
 
 `ReferenceDataCacheBenchmarkTest` (`@Tag("benchmark")`, 200 barbers × 200 services, H2) asserts per-cache TTL, `sync=true` presence, and eviction semantics, including `CacheConfig.java`'s `RedisCacheConfiguration` 10m TTL and `@CacheEvict(allEntries=true)` behavior on mutations.
+
+## Update (2026-10-17)
+
+The caches now fail open (ADR-018): a failed Redis read is a cache miss (`FailOpenCacheErrorHandler`), reads skip Redis for the back-off interval after a failure (`RedisBackoffCacheManager`, beneath `SingleFlightCacheManager`), and the prod command timeout is 250 ms. Before, a hung Redis made the catalog answer only 503 although PostgreSQL was healthy. A write or eviction skipped during an outage can leave an entry until its TTL. See BENCHMARKS.md §58.

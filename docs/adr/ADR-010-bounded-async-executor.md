@@ -46,3 +46,7 @@ awaitTerminationSeconds=30
 ## Verification
 
 Benchmark: `src/test/java/com/example/taskflow/benchmark/AsyncExecutorBenchmarkTest.java` (`@Tag("benchmark")`, synthetic burst with 500 tasks, warm-up 50) exercises `AsyncConfig`'s `maxPoolSize=64`, `queueCapacity=100`, and `CallerRunsPolicy` under load.
+
+## Update (2026-10-17)
+
+Because `AsyncConfig` registers an `Executor` bean (`taskExecutor`), Spring Boot does not create its own `applicationTaskExecutor`, which would use virtual threads (`spring.threads.virtual.enabled=true`); the conditions report shows `found beans of type Executor: taskExecutor`. The codebase still has no `@Async` call site and no MVC async handler, so neither executor runs anything today and the decision stands. If `@Async` or MVC async processing is introduced, decide explicitly which executor each should use (BENCHMARKS.md §58).

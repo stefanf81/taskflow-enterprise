@@ -92,3 +92,7 @@ must also exercise the stream through Nginx, not only directly against port 8080
 ```bash
 ./verify.sh
 ```
+
+## Update (2026-10-17)
+
+The stream never reached a client in a deployed build: `ShallowEtagHeaderFilter` (BENCHMARKS.md §44) wrapped `GET /api/v1/appointments/events` and buffered the whole response to hash it, so not even the headers were sent until the stream ended 30 minutes later. The filter now skips that path and `Accept: text/event-stream`. `AppointmentEventStreamHttpIntegrationTest` reads the `ready` event over a real socket; the controller unit test and MockMvc could not see the buffering. The dashboard coalesces bursts of events (300 ms throttle, leading + trailing) into at most two reloads. See BENCHMARKS.md §58.
