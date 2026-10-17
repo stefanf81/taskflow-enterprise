@@ -123,7 +123,10 @@ public class CacheConfig {
      * through a per-key Redis lease ({@link RedisCacheLoadLock}, taken on misses only; lease
      * {@code app.cache.single-flight.lock-lease-ms}, default 10 s; a caller that lost the lease waits
      * at most {@code app.cache.single-flight.max-wait-ms}, default 5 s, before loading itself). Any
-     * Redis error on the lease falls back to the per-JVM behaviour. The dev/test {@code simple}
+     * Redis error on the lease falls back to the per-JVM behaviour. Beneath it,
+     * {@link RedisBackoffCacheManager} keeps reads off Redis for a few seconds after a cache command
+     * failed (loaders run directly); the lease shares that back-off, so a Redis outage costs one
+     * command timeout per interval rather than one per request. The dev/test {@code simple}
      * manager already serialises and is left untouched.
      *
      * <p>Static so the post-processor is available early without instantiating this configuration;
@@ -132,24 +135,30 @@ public class CacheConfig {
     @Bean
     public static BeanPostProcessor singleFlightCacheManagerPostProcessor(
             Environment environment, ObjectProvider<StringRedisTemplate> redisTemplate) {
+        RedisBackoff backoff = new RedisBackoff("Redis cache");
         SingleFlightCacheManager.DistributedLoadLock lock = null;
         if (SharedStateStore.isRedis(environment)) {
             Duration lease = Duration.ofMillis(environment.getProperty("app.cache.single-flight.lock-lease-ms",
                     Long.class, RedisCacheLoadLock.DEFAULT_LEASE.toMillis()));
-            lock = new RedisCacheLoadLock(redisTemplate::getObject, lease);
+            lock = new RedisCacheLoadLock(redisTemplate::getObject, lease, backoff);
         }
         Duration maxWait = Duration.ofMillis(environment.getProperty("app.cache.single-flight.max-wait-ms",
                 Long.class, SingleFlightCacheManager.DEFAULT_MAX_WAIT.toMillis()));
-        return singleFlightPostProcessor(lock, maxWait);
+        return singleFlightPostProcessor(lock, maxWait, backoff);
     }
 
     static BeanPostProcessor singleFlightPostProcessor(SingleFlightCacheManager.DistributedLoadLock lock,
                                                        Duration maxWait) {
+        return singleFlightPostProcessor(lock, maxWait, new RedisBackoff("Redis cache"));
+    }
+
+    static BeanPostProcessor singleFlightPostProcessor(SingleFlightCacheManager.DistributedLoadLock lock,
+                                                       Duration maxWait, RedisBackoff backoff) {
         return new BeanPostProcessor() {
             @Override
             public Object postProcessAfterInitialization(Object bean, String beanName) {
                 return bean instanceof RedisCacheManager redis
-                        ? new SingleFlightCacheManager(redis, lock, maxWait)
+                        ? new SingleFlightCacheManager(new RedisBackoffCacheManager(redis, backoff), lock, maxWait)
                         : bean;
             }
         };

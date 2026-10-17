@@ -53,7 +53,7 @@ final class RedisLoginFailureCounter {
 
     /** Failures in the current window, or {@link #UNAVAILABLE}. */
     long current(String accountKey) {
-        if (!backoff.isAvailable()) {
+        if (!backoff.allowRequest()) {
             return UNAVAILABLE;
         }
         try {
@@ -70,7 +70,7 @@ final class RedisLoginFailureCounter {
 
     /** Records one failure and returns the window's count, or {@link #UNAVAILABLE}. */
     long increment(String accountKey, long windowMillis) {
-        if (!backoff.isAvailable()) {
+        if (!backoff.allowRequest()) {
             return UNAVAILABLE;
         }
         try {
@@ -86,7 +86,7 @@ final class RedisLoginFailureCounter {
 
     /** Seconds until the window ends (at least 1), or {@link #UNAVAILABLE}. */
     long secondsUntilReset(String accountKey) {
-        if (!backoff.isAvailable()) {
+        if (!backoff.allowRequest()) {
             return UNAVAILABLE;
         }
         try {
@@ -102,7 +102,7 @@ final class RedisLoginFailureCounter {
 
     /** Clears the window; {@code false} if Redis is unavailable. */
     boolean reset(String accountKey) {
-        if (!backoff.isAvailable()) {
+        if (!backoff.allowRequest()) {
             return false;
         }
         try {

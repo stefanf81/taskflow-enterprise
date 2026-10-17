@@ -64,7 +64,7 @@ public final class RedisCacheLoadLock implements SingleFlightCacheManager.Distri
 
     @Override
     public String tryAcquire(String cacheName, Object key) {
-        if (!backoff.isAvailable()) {
+        if (!backoff.allowRequest()) {
             throw new LockUnavailableException();
         }
         String token = UUID.randomUUID().toString();
@@ -80,11 +80,12 @@ public final class RedisCacheLoadLock implements SingleFlightCacheManager.Distri
 
     @Override
     public void release(String cacheName, Object key, String token) {
-        if (!backoff.isAvailable()) {
+        if (!backoff.allowRequest()) {
             return; // the lease expires on its own
         }
         try {
             template().execute(RELEASE_SCRIPT, Collections.singletonList(lockKey(cacheName, key)), token);
+            backoff.recordSuccess();
         } catch (RuntimeException e) {
             backoff.recordFailure(e);
         }

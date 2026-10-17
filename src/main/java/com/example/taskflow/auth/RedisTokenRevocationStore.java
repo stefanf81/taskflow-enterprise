@@ -64,7 +64,7 @@ final class RedisTokenRevocationStore {
 
     /** Writes the denylist entry; {@code false} if Redis is unavailable (the caller keeps it pending). */
     boolean write(String jti, Instant expiresAt, Instant now) {
-        if (!backoff.isAvailable()) {
+        if (!backoff.allowRequest()) {
             return false;
         }
         long ttlMillis = Math.max(MIN_TTL_MILLIS, Duration.between(now, expiresAt).toMillis());
@@ -83,7 +83,7 @@ final class RedisTokenRevocationStore {
      * {@link #REVOKED_WITHOUT_TTL} or {@link #UNAVAILABLE}.
      */
     long remainingMillis(String jti) {
-        if (!backoff.isAvailable()) {
+        if (!backoff.allowRequest()) {
             return UNAVAILABLE;
         }
         try {
@@ -108,7 +108,7 @@ final class RedisTokenRevocationStore {
 
     /** Best effort: tells the other replicas, so they close streams opened with this token. */
     void announce(String jti, Instant expiresAt) {
-        if (!backoff.isAvailable()) {
+        if (!backoff.allowRequest()) {
             return;
         }
         try {

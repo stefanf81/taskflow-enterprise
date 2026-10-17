@@ -43,8 +43,6 @@ public class RateLimiterConfig {
         RATE_LIMIT_SCRIPT.setResultType(Long.class);
     }
 
-    /** How long to skip Redis after it failed, so an outage costs one timeout, not one per request. */
-    private static final long REDIS_BACKOFF_MILLIS = 5_000;
     private static final long WINDOW_MILLIS = 60_000;
 
     private final int maxRequestsPerMinute;
@@ -62,7 +60,8 @@ public class RateLimiterConfig {
      * while Redis answers, the one shared bucket applies to the whole deployment.
      */
     private final FixedWindowCounter localFallback = new FixedWindowCounter(WINDOW_MILLIS, 50_000);
-    private volatile long redisBackoffUntilMillis;
+    /** Skips Redis after it failed, so an outage costs one timeout per interval, not one per request. */
+    private final RedisBackoff redisBackoff = new RedisBackoff("Rate limiter");
 
     public RateLimiterConfig(
             @Value("${app.rate-limit.max-requests-per-minute:100}") int maxRequestsPerMinute,
@@ -88,8 +87,9 @@ public class RateLimiterConfig {
             protected boolean shouldNotFilter(HttpServletRequest request) {
                 String path = requestPath(request);
                 // Skip health/liveness/readiness probes so K8s/deployment checks
-                // don't burn rate-limit budget.
-                return path.startsWith("/actuator/health");
+                // don't burn rate-limit budget, and CORS preflights: answered by the
+                // CORS filter without reaching a handler, they only cost a Redis call.
+                return path.startsWith("/actuator/health") || "OPTIONS".equals(request.getMethod());
             }
 
             @Override
@@ -138,25 +138,24 @@ public class RateLimiterConfig {
 
     /**
      * Counts this request against the shared Redis bucket. If Redis is failing
-     * (or was within the last {@link #REDIS_BACKOFF_MILLIS}), the per-JVM
+     * (or was within the last {@link RedisBackoff#DEFAULT_BACKOFF_MILLIS}), the per-JVM
      * fallback counter is used instead, so limits — in particular the strict
      * auth bucket that protects BCrypt — keep applying during a Redis outage
      * rather than silently disappearing.
      */
     private long countRequest(StringRedisTemplate redisTemplate, String redisKey) {
-        if (System.currentTimeMillis() >= redisBackoffUntilMillis) {
+        if (redisBackoff.allowRequest()) {
             try {
                 Long count = redisTemplate.execute(
                         RATE_LIMIT_SCRIPT,
                         Collections.singletonList(redisKey),
                         String.valueOf(WINDOW_MILLIS));
+                redisBackoff.recordSuccess();
                 if (count != null) {
                     return count;
                 }
-            } catch (Exception e) {
-                redisBackoffUntilMillis = System.currentTimeMillis() + REDIS_BACKOFF_MILLIS;
-                log.warn("Rate limiter Redis error; using in-memory fallback for {} ms: {}",
-                        REDIS_BACKOFF_MILLIS, LogSanitizer.safeMessage(e));
+            } catch (RuntimeException e) {
+                redisBackoff.recordFailure(e);
             }
         }
         return localFallback.increment(redisKey);

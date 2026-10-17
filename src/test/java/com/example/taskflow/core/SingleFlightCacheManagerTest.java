@@ -301,7 +301,9 @@ class SingleFlightCacheManagerTest {
 
         Object wrapped = processor.postProcessAfterInitialization(redis, "cacheManager");
         assertInstanceOf(SingleFlightCacheManager.class, wrapped);
-        assertSame(redis, ((SingleFlightCacheManager) wrapped).getDelegate());
+        CacheManager beneath = ((SingleFlightCacheManager) wrapped).getDelegate();
+        assertInstanceOf(RedisBackoffCacheManager.class, beneath, "reads skip a failing Redis");
+        assertSame(redis, ((RedisBackoffCacheManager) beneath).getDelegate());
         assertEquals(null, ((SingleFlightCacheManager) wrapped).getDistributedLock(),
                 "app.state.store=memory (default): per-JVM single flight only");
 
