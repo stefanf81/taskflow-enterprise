@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card } from '../components/common/Card';
@@ -20,13 +20,16 @@ import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { ErrorMessage } from '../components/common/ErrorMessage';
 import { useAuthStore } from '../store/useAuthStore';
+import { useShallow } from 'zustand/react/shallow';
 import { RootStackParamList } from '../types/navigation';
 import { colors } from '../theme/colors';
 
 export const RegisterScreen: React.FC = () => {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { register, error, clearError } = useAuthStore();
+  const { register, error, clearError } = useAuthStore(
+    useShallow((state) => ({ register: state.register, error: state.error, clearError: state.clearError })),
+  );
 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);

@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
@@ -18,6 +18,7 @@ import { ErrorState } from '../components/common/ErrorState';
 import { ErrorMessage } from '../components/common/ErrorMessage';
 import { useCustomerAppointments, useCancelCustomerAppointment } from '../hooks/useCustomer';
 import { useAuthStore } from '../store/useAuthStore';
+import { useShallow } from 'zustand/react/shallow';
 import { colors } from '../theme/colors';
 import { formatTime12Hour } from '../utils/time-utils';
 import { getApiErrorMessage } from '../utils/errors';
@@ -32,7 +33,9 @@ export const CustomerPortalScreen: React.FC = () => {
   const [page, setPage] = useState(0);
   const { data, isLoading, isError, refetch } = useCustomerAppointments(page, 10);
   const cancelMutation = useCancelCustomerAppointment();
-  const { username, logout } = useAuthStore();
+  const { username, logout } = useAuthStore(
+    useShallow((state) => ({ username: state.username, logout: state.logout })),
+  );
 
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);

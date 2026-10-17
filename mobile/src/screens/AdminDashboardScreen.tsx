@@ -9,7 +9,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
@@ -24,6 +24,7 @@ import {
   useDeleteAppointment,
 } from '../hooks/useAppointments';
 import { useAuthStore } from '../store/useAuthStore';
+import { useShallow } from 'zustand/react/shallow';
 import { colors } from '../theme/colors';
 import { formatTime12Hour, isOverdue } from '../utils/time-utils';
 import { getApiErrorMessage } from '../utils/errors';
@@ -48,7 +49,7 @@ export const AdminDashboardScreen: React.FC = () => {
   const { data, isLoading, isError, refetch } = useAppointments(filter, debouncedSearch, page, 10);
   const updateStatusMutation = useUpdateAppointmentStatus();
   const deleteMutation = useDeleteAppointment();
-  const { logout } = useAuthStore();
+  const { logout } = useAuthStore(useShallow((state) => ({ logout: state.logout })));
 
   // Auto-dismiss success/error messages
   const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

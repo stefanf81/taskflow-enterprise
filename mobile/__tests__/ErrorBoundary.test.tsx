@@ -2,10 +2,8 @@ import React from 'react';
 import { render, screen } from '@testing-library/react-native';
 import { Text } from 'react-native';
 
-// Mock Ionicons
-jest.mock('@expo/vector-icons', () => ({
-  Ionicons: () => null,
-}));
+// Mock Ionicons (imported per icon set, so only its font is bundled)
+jest.mock('@expo/vector-icons/Ionicons', () => () => null);
 
 import { ErrorBoundary } from '../src/components/common/ErrorBoundary';
 

@@ -9,6 +9,9 @@
     "updates": {
       "enabled": false
     },
+    "experiments": {
+      "reactCompiler": true
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.taskflow.mobile",
@@ -47,7 +50,16 @@
       "expo-detox-config-plugin",
       "./plugins/withDetoxProguardRules",
       "expo-font",
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
+        }
+      ]
     ],
     "extra": {
       "eas": {

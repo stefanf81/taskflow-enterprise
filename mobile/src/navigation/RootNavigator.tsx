@@ -14,8 +14,12 @@ import { RegisterScreen } from '../screens/RegisterScreen';
 import { PublicActionsScreen } from '../screens/PublicActionsScreen';
 import { SessionNoticeBanner } from '../components/common/SessionNoticeBanner';
 import { useAuthStore } from '../store/useAuthStore';
+import { useShallow } from 'zustand/react/shallow';
+import * as SplashScreen from 'expo-splash-screen';
 import { RootStackParamList } from '../types/navigation';
 import { colors } from '../theme/colors';
+
+SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -29,7 +33,18 @@ export const RootNavigator: React.FC = () => {
     checkAuth,
     logout,
     clearSessionNotice,
-  } = useAuthStore();
+  } = useAuthStore(
+    useShallow((state) => ({
+      isAuthenticated: state.isAuthenticated,
+      role: state.role,
+      isBootstrapping: state.isBootstrapping,
+      isOffline: state.isOffline,
+      sessionNotice: state.sessionNotice,
+      checkAuth: state.checkAuth,
+      logout: state.logout,
+      clearSessionNotice: state.clearSessionNotice,
+    })),
+  );
   const isCustomer = isAuthenticated && role === 'ROLE_CUSTOMER';
   const isAdmin = isAuthenticated && role === 'ROLE_ADMIN';
   const hasAuthorizedRole = isCustomer || isAdmin;
@@ -42,6 +57,14 @@ export const RootNavigator: React.FC = () => {
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
+
+  // Keep the native splash up until the stored session is restored, instead of letting it
+  // dismiss on the first JS frame and flash a spinner screen in between.
+  useEffect(() => {
+    if (!isBootstrapping) {
+      SplashScreen.hideAsync().catch(() => undefined);
+    }
+  }, [isBootstrapping]);
 
   useEffect(() => {
     if (isAuthenticated && !hasAuthorizedRole) {

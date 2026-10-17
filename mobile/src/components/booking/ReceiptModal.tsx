@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Share } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
 import { AppointmentItem } from '../../types/api';

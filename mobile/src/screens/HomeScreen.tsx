@@ -8,7 +8,7 @@ import {
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -22,6 +22,7 @@ import { useBarberRatings } from '../hooks/useReviews';
 import { usePublicBarbers } from '../hooks/useBarbers';
 import { useCatalog } from '../hooks/useCatalog';
 import { useAuthStore } from '../store/useAuthStore';
+import { useShallow } from 'zustand/react/shallow';
 import { RootStackParamList, GuestTabParamList } from '../types/navigation';
 import { colors } from '../theme/colors';
 
@@ -56,7 +57,9 @@ type NavigationProp = CompositeNavigationProp<
 
 export const HomeScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
-  const { isAuthenticated, role } = useAuthStore();
+  const { isAuthenticated, role } = useAuthStore(
+    useShallow((state) => ({ isAuthenticated: state.isAuthenticated, role: state.role })),
+  );
   const { data: ratings = [] } = useBarberRatings();
   const { data: apiBarbers = [], isError: barbersError, refetch: refetchBarbers } =
     usePublicBarbers();

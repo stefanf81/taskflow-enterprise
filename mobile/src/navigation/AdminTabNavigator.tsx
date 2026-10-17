@@ -1,6 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { AdminDashboardScreen } from '../screens/AdminDashboardScreen';
 import { AdminCatalogScreen } from '../screens/AdminCatalogScreen';
 import { AdminSchedulesScreen } from '../screens/AdminSchedulesScreen';

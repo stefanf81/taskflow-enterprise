@@ -90,14 +90,16 @@ apiClient.interceptors.request.use(
       return config;
     }
 
-    const token = await storage.getToken();
+    // Both keychain/keystore reads cross the native bridge; run them together
+    // instead of one after the other on every protected request.
+    const [token, expiresAt] = await Promise.all([storage.getToken(), storage.getTokenExpiry()]);
     if (!token) {
       return config;
     }
 
     // Drop an expired token BEFORE it is sent. Logout is the exception: there
     // is nothing left to revoke, so it simply goes out unauthenticated.
-    if (isTokenExpired(await storage.getTokenExpiry())) {
+    if (isTokenExpired(expiresAt)) {
       if (url === '/api/v1/auth/logout') {
         return config;
       }
