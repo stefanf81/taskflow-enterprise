@@ -345,7 +345,7 @@ public class BusySlotsService {
         }
     }
 
-    private static IllegalArgumentException unknownBarber(String barberName) {
+    static IllegalArgumentException unknownBarber(String barberName) {
         return new IllegalArgumentException("Unknown barber: '" + LogSanitizer.stripNewlines(barberName)
                 + "'. Please select a barber from the list.");
     }

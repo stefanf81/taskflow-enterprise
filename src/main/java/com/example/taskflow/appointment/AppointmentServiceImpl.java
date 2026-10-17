@@ -677,12 +677,17 @@ public class AppointmentServiceImpl implements AppointmentService {
     @Override
     @Transactional(readOnly = true)
     public java.util.List<String> getBusySlots(String barberName, String bookingDate) {
-        return busySlotsService.getBusySlots(barberName, bookingDate);
+        java.util.List<String> unbookable = busyOutsideBookingWindow(barberName, bookingDate);
+        return unbookable != null ? unbookable : busySlotsService.getBusySlots(barberName, bookingDate);
     }
 
     @Override
     @Transactional(readOnly = true)
     public java.util.List<String> getBusySlots(String barberName, String bookingDate, String serviceType) {
+        java.util.List<String> unbookable = busyOutsideBookingWindow(barberName, bookingDate);
+        if (unbookable != null) {
+            return unbookable;
+        }
         if (serviceType == null || serviceType.isBlank()) {
             return busySlotsService.getBusySlots(barberName, bookingDate);
         }
@@ -697,6 +702,30 @@ public class AppointmentServiceImpl implements AppointmentService {
         return duration > BusySlotsService.DEFAULT_DURATION_MINUTES
                 ? busySlotsService.getBusySlots(barberName, bookingDate, duration)
                 : busySlotsService.getBusySlots(barberName, bookingDate);
+    }
+
+    /**
+     * Every slot of a date nobody can book (before today in shop time, or beyond
+     * {@code max-advance-days}), or {@code null} for a bookable or malformed date (the latter is
+     * reported by {@link BusySlotsService}). Answered without the per-date queries or a cache entry:
+     * any date of the years 0001-9999 used to be computed and cached, and a past date reported every
+     * slot as free. An unknown barber is still a 400.
+     */
+    private java.util.List<String> busyOutsideBookingWindow(String barberName, String bookingDate) {
+        LocalDate date;
+        try {
+            date = LocalDate.parse(bookingDate == null ? "" : bookingDate.trim());
+        } catch (java.time.format.DateTimeParseException e) {
+            return null;
+        }
+        LocalDate today = LocalDate.now(clock);
+        if (!date.isBefore(today) && !date.isAfter(today.plusDays(bookingProperties.maxAdvanceDays()))) {
+            return null;
+        }
+        if (!NO_PREFERENCE_BARBER.equals(barberName) && barberRepository.findByName(barberName).isEmpty()) {
+            throw BusySlotsService.unknownBarber(barberName);
+        }
+        return BusySlotsService.ALL_SLOTS;
     }
 
     @Override

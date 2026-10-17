@@ -89,12 +89,13 @@ class P1AndP2BenchmarkTest {
         Path prod = Path.of("src/main/resources/application-prod.properties");
         String p = Files.readString(prod);
         long t0 = System.nanoTime();
-        boolean hasPerc = p.contains("management.metrics.distribution.percentiles.http.server.requests=0.5,0.95,0.99");
+        // Client-side percentiles were dropped: p50/p95/p99 come from the buckets (histogram_quantile).
+        boolean hasPerc = !p.contains("management.metrics.distribution.percentiles.http.server.requests=");
         boolean hasHist = p.contains("percentiles-histogram.http.server.requests=true");
         boolean hasSla = p.contains("sla.http.server.requests=50ms,100ms,200ms");
         long us = (System.nanoTime() - t0) / 1000;
 
-        System.out.println("  percentiles 0.5,0.95,0.99: " + hasPerc);
+        System.out.println("  no client-side percentiles: " + hasPerc);
         System.out.println("  histogram true: " + hasHist);
         System.out.println("  sla 50/100/200ms: " + hasSla);
         System.out.printf("  Parse latency: %d µs%n", us);

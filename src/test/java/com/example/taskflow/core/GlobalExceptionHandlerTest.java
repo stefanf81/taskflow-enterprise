@@ -363,4 +363,17 @@ class GlobalExceptionHandlerTest {
         assertEquals("handleIdempotencyConflictException", resolver.resolveMethodByThrowable(
                 new IdempotencyConflictException("x")).getName());
     }
+
+    @Test
+    void redisFailuresAreNotReportedAsDatabaseFailures() {
+        assertEquals("Redis", GlobalExceptionHandler.unavailableResource(
+                new org.springframework.dao.QueryTimeoutException("Redis command timed out",
+                        new io.lettuce.core.RedisCommandTimeoutException("timed out after 250 ms"))));
+        assertEquals("Redis", GlobalExceptionHandler.unavailableResource(
+                new org.springframework.data.redis.RedisConnectionFailureException("refused")));
+        assertEquals("Database", GlobalExceptionHandler.unavailableResource(
+                new org.springframework.dao.QueryTimeoutException("statement timeout")));
+        assertEquals("Database", GlobalExceptionHandler.unavailableResource(
+                new org.springframework.dao.DataAccessResourceFailureException("pool exhausted")));
+    }
 }

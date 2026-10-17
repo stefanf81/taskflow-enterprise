@@ -298,6 +298,24 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Which backing service failed, for the log line: Redis errors arrive as the same Spring
+     * data-access exceptions as database errors ({@code QueryTimeoutException} for a Lettuce command
+     * timeout), and logging them as a database problem sent operators to the wrong system.
+     */
+    static String unavailableResource(Throwable ex) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (t instanceof org.springframework.data.redis.RedisConnectionFailureException
+                    || t.getClass().getName().startsWith("io.lettuce.")) {
+                return "Redis";
+            }
+            if (t.getCause() == t) {
+                break;
+            }
+        }
+        return "Database";
+    }
+
+    /**
      * Temporary infrastructure failures: the database is unreachable, the pool is
      * exhausted, a query timed out, or a lock/deadlock was lost. None of these say
      * anything about the request itself, so the client is told to retry shortly
@@ -312,8 +330,8 @@ public class GlobalExceptionHandler {
     })
     public ResponseEntity<ErrorResponse> handleDataAccessResourceFailure(
             Exception ex, HttpServletRequest request) {
-        logger.warn("Database resource unavailable on {}: {}", LogSanitizer.stripNewlines(request.getRequestURI()),
-                LogSanitizer.safeMessage(ex));
+        logger.warn("{} resource unavailable on {}: {}", unavailableResource(ex),
+                LogSanitizer.stripNewlines(request.getRequestURI()), LogSanitizer.safeMessage(ex));
 
         ErrorResponse errorResponse = new ErrorResponse(
                 HttpStatus.SERVICE_UNAVAILABLE.value(),

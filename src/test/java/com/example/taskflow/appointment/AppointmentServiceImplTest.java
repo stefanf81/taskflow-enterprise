@@ -850,6 +850,29 @@ class AppointmentServiceImplTest {
     }
 
     @Test
+    void testGetBusySlots_UnbookableDatesAreFullyBusyWithoutPerDateQueries() {
+        LocalDate lastBookable = TODAY.plusDays(BookingProperties.defaults().maxAdvanceDays());
+        for (String date : List.of(TODAY.minusDays(1).toString(), "0001-01-01", "9999-12-31",
+                lastBookable.plusDays(1).toString())) {
+            assertEquals(BusySlotsService.ALL_SLOTS, appointmentService.getBusySlots("Alex the Barber", date), date);
+            assertEquals(BusySlotsService.ALL_SLOTS,
+                    appointmentService.getBusySlots(AppointmentServiceImpl.NO_PREFERENCE_BARBER, date, "Haircut"), date);
+        }
+        verify(appointmentRepository, never()).findActiveForBarberOnDate(any(), any());
+        verify(appointmentRepository, never()).findActiveOnDate(any());
+
+        when(barberRepository.findByName("Ghost")).thenReturn(Optional.empty());
+        assertThrows(IllegalArgumentException.class,
+                () -> appointmentService.getBusySlots("Ghost", "0001-01-01"), "an unknown barber stays a 400");
+
+        // today and the last bookable day are still computed
+        appointmentService.getBusySlots("Alex the Barber", TODAY.toString());
+        appointmentService.getBusySlots("Alex the Barber", lastBookable.toString());
+        verify(appointmentRepository).findActiveForBarberOnDate("Alex the Barber", TODAY);
+        verify(appointmentRepository).findActiveForBarberOnDate("Alex the Barber", lastBookable);
+    }
+
+    @Test
     void testFindByPublicId() {
         Appointment appt = appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00");
         when(appointmentRepository.findByPublicId("public-1")).thenReturn(appt);
