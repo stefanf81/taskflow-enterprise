@@ -155,6 +155,9 @@ public class CacheConfig {
         };
     }
 
+    /** The admin dashboard's server-sent-event stream (see {@code AppointmentController}). */
+    static final String EVENT_STREAM_PATH = "/api/v1/appointments/events";
+
     @Bean
     public Filter shallowEtagHeaderFilter() {
         return new ShallowEtagHeaderFilter() {
@@ -162,6 +165,18 @@ public class CacheConfig {
             protected boolean isEligibleForEtag(HttpServletRequest request, HttpServletResponse response,
                                                 int responseStatusCode, InputStream inputStream) {
                 return "GET".equals(request.getMethod());
+            }
+
+            /**
+             * The filter buffers the whole body to hash it, so it must never see a stream: wrapped,
+             * the SSE response sent nothing (not even headers) until it ended 30 minutes later, and
+             * every open stream kept its events in memory.
+             */
+            @Override
+            protected boolean shouldNotFilter(HttpServletRequest request) {
+                String accept = request.getHeader("Accept");
+                return request.getRequestURI().endsWith(EVENT_STREAM_PATH)
+                        || (accept != null && accept.contains("text/event-stream"));
             }
         };
     }
