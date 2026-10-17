@@ -4,6 +4,7 @@ import com.example.taskflow.appointment.Appointment;
 import com.example.taskflow.appointment.AppointmentStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -16,6 +17,14 @@ import java.util.List;
 @Repository
 public interface AppointmentRepository
         extends JpaRepository<Appointment, Long>, JpaSpecificationExecutor<Appointment> {
+
+    /**
+     * One page of every appointment without the {@code COUNT(*)} that {@code findAll(Pageable)} runs
+     * on each call (a full scan that was nearly all of the dashboard's database time). The caller
+     * supplies the total from the cached count.
+     */
+    @Query("SELECT a FROM Appointment a")
+    Slice<Appointment> findPageWithoutCount(Pageable pageable);
 
     Appointment findByPublicId(String publicId);
 

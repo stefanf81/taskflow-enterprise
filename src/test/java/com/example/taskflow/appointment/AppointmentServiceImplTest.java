@@ -18,6 +18,7 @@ import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -138,20 +139,24 @@ class AppointmentServiceImplTest {
 
     @Test
     void testGetAllAppointments_NoFilters() {
-        Page<Appointment> page = new PageImpl<>(List.of(appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00")));
-        when(appointmentRepository.findAll(any(Pageable.class))).thenReturn(page);
+        when(appointmentRepository.findPageWithoutCount(any(Pageable.class))).thenReturn(
+                new SliceImpl<>(List.of(appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00"))));
+        when(statsService.getTotalCountCached(appointmentRepository)).thenReturn(31L);
         when(statsService.getStatsCached(appointmentRepository)).thenReturn(new AppointmentStats(1L, 1L, 0L, 0L, 0L, 0, 0.0));
 
         AppointmentDashboardResponse response = appointmentService.getAllAppointments(null, null, 0, 10);
 
-        assertEquals(1, response.page().getTotalElements());
+        // the total comes from the cached count, not from a COUNT(*) per request
+        assertEquals(31, response.page().getTotalElements());
+        assertEquals(4, response.page().getTotalPages());
+        verify(appointmentRepository, never()).findAll(any(Pageable.class));
         assertEquals("John Doe", response.page().getContent().get(0).customerName());
         assertEquals(1L, response.stats().total());
     }
 
     @Test
     void testGetAllAppointments_BlankFiltersMeanNoFilter() {
-        when(appointmentRepository.findAll(any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+        when(appointmentRepository.findPageWithoutCount(any(Pageable.class))).thenReturn(new SliceImpl<>(List.of()));
         when(statsService.getStatsCached(appointmentRepository)).thenReturn(new AppointmentStats(4L, 2L, 1L, 1L, 0L, 0, 25.0));
 
         AppointmentDashboardResponse response = appointmentService.getAllAppointments("", "  ", 0, 10);
@@ -172,7 +177,7 @@ class AppointmentServiceImplTest {
         appointmentService.getAllAppointments("OVERDUE", "john", 0, 10);
 
         verify(appointmentRepository, times(4)).findAll(any(Specification.class), any(Pageable.class));
-        verify(appointmentRepository, never()).findAll(any(Pageable.class));
+        verify(appointmentRepository, never()).findPageWithoutCount(any(Pageable.class));
     }
 
     @Test

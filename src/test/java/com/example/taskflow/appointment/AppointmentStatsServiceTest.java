@@ -1,5 +1,6 @@
 package com.example.taskflow.appointment;
 
+import com.example.taskflow.appointment.internal.AppointmentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -7,10 +8,16 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
+import org.springframework.data.redis.RedisConnectionFailureException;
 
 import java.time.LocalDate;
+import java.util.concurrent.Callable;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -30,6 +37,9 @@ class AppointmentStatsServiceTest {
 
     @Mock
     private Cache statsCache;
+
+    @Mock
+    private AppointmentRepository appointmentRepository;
 
     /** Late evening UTC = already the next day in Tokyo: "today" must follow the shop clock. */
     private static final java.time.Clock CLOCK = java.time.Clock.fixed(
@@ -71,7 +81,42 @@ class AppointmentStatsServiceTest {
         service.clearStatsCache();
 
         verify(statsCache).evictIfPresent(LocalDate.of(2026, 10, 12));
+        verify(statsCache).evictIfPresent(AppointmentStatsService.TOTAL_COUNT_KEY);
         verify(statsCache, never()).evict(any());
+    }
+
+    @Test
+    void totalCount_isReadThroughTheStatsCache() {
+        when(cacheManager.getCache(AppointmentStatsService.STATS_CACHE)).thenReturn(statsCache);
+        when(statsCache.get(eq(AppointmentStatsService.TOTAL_COUNT_KEY), any(Callable.class))).thenReturn(42L);
+
+        assertEquals(42L, service.getTotalCountCached(appointmentRepository));
+        verify(appointmentRepository, never()).count();
+    }
+
+    @Test
+    void failingCacheStore_isBypassedInsteadOfFailingTheDashboard() {
+        when(cacheManager.getCache(AppointmentStatsService.STATS_CACHE)).thenReturn(statsCache);
+        when(statsCache.get(any(), any(Callable.class)))
+                .thenThrow(new RedisConnectionFailureException("Redis command timed out"));
+        AppointmentStats stats = new AppointmentStats(3L, 1L, 2L, 0L, 0L, 0, 50.0);
+        when(appointmentRepository.getAppointmentStats(LocalDate.of(2026, 10, 12))).thenReturn(stats);
+        when(appointmentRepository.count()).thenReturn(7L);
+
+        assertSame(stats, service.getStatsCached(appointmentRepository));
+        assertEquals(7L, service.getTotalCountCached(appointmentRepository));
+    }
+
+    @Test
+    void failingQuery_stillPropagates() {
+        when(cacheManager.getCache(AppointmentStatsService.STATS_CACHE)).thenReturn(statsCache);
+        Cache.ValueRetrievalException failure =
+                new Cache.ValueRetrievalException(LocalDate.of(2026, 10, 12), () -> null, new IllegalStateException("db"));
+        when(statsCache.get(any(), any(Callable.class))).thenThrow(failure);
+
+        assertSame(failure, assertThrows(Cache.ValueRetrievalException.class,
+                () -> service.getStatsCached(appointmentRepository)));
+        verify(appointmentRepository, never()).getAppointmentStats(any());
     }
 
     @Test

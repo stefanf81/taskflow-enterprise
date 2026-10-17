@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -125,8 +126,11 @@ public class AppointmentServiceImpl implements AppointmentService {
             filters.add(matchesSearchTerm(term));
         }
 
+        // The unfiltered default view takes its total from the cached row count (evicted with the
+        // stats on every booking) instead of counting the whole table on each request.
         Page<Appointment> itemPage = filters.isEmpty()
-                ? appointmentRepository.findAll(pageable)
+                ? new PageImpl<>(appointmentRepository.findPageWithoutCount(pageable).getContent(), pageable,
+                        statsService.getTotalCountCached(appointmentRepository))
                 : appointmentRepository.findAll(
                         (root, query, cb) -> cb.and(filters.stream()
                                 .map(f -> f.toPredicate(root, query, cb))
