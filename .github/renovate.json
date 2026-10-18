@@ -60,9 +60,9 @@
       "allowedVersions": "/^3\\./"
     },
     {
-      "description": "Mobile overrides are pinned to CommonJS-compatible releases of what their consumers require (checked on Expo SDK 58): uuid for xcode (^7), nanoid for @react-navigation/routers and postcss (^3), and the nested js-yaml for @istanbuljs/load-nyc-config (babel-jest 29 via @react-native/jest-preset, even with Jest 30). uuid 14 and nanoid 6 are ESM-only. Revisit when those consumers move, not with the Expo SDK.",
+      "description": "Mobile overrides are pinned to CommonJS-compatible releases of what their consumers require (checked on Expo SDK 58): uuid for xcode (^7) and nanoid for @react-navigation/routers and postcss (^3). uuid 14 and nanoid 6 are ESM-only (nanoid 6 breaks the navigator Jest suites). Revisit when those consumers move, not with the Expo SDK. The nested js-yaml override for @istanbuljs/load-nyc-config is not listed: js-yaml 5 ships a CommonJS build and that consumer only calls load().",
       "matchManagers": ["npm"],
-      "matchPackageNames": ["uuid", "nanoid", "js-yaml"],
+      "matchPackageNames": ["uuid", "nanoid"],
       "matchUpdateTypes": ["major"],
       "enabled": false
     },
