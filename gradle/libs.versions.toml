@@ -13,7 +13,7 @@ commons-lang3 = "3.21.0"
 # hardening for disallowed conditional configuration references.
 logback = "1.6.5"
 # Jackson 2.x and 3.x remain separate families and must stay internally aligned.
-jackson2 = "2.22.3"
+jackson2 = "2.22.4"
 jackson-annotations = "2.22"
 jackson3 = "3.2.3"
 netty = "4.2.19.Final"
