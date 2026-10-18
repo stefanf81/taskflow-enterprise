@@ -27,7 +27,7 @@
 # Explicit -resolute (Ubuntu 26.04 LTS, glibc) because the floating 21-jre tag
 # tracks the current Ubuntu release and would drift silently. Renovate updates
 # the digest while the project's Java 21 policy keeps the major.
-ARG JAVA_IMAGE=eclipse-temurin:21-jre-resolute@sha256:e9a838377dc3719c0a0e7d1ac2e13d6f49c5cacd643f9a22024845736bb00ad9
+ARG JAVA_IMAGE=eclipse-temurin:21-jre-resolute@sha256:e7b42d0fad9b3dd6d61d6816ce3984df079a5da7d8e9af81c464243d15c04e3e
 
 # JAR extraction is architecture-independent: run it natively on the build host
 # (Apple Silicon as well as amd64 CI). Compilation is performed by Gradle before
