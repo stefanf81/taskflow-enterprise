@@ -422,9 +422,15 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      # `backend` owns Gradle cache writes in this workflow.
+      # `backend` owns Gradle cache writes in this workflow. Restore its entry
+      # (see `package`): with its own key this job fell through to the newest
+      # Linux entry of any job, the Android build's 1.8 GB Gradle User Home
+      # (Set up Gradle 15-22 s), then downloaded the backend's dependencies
+      # and compiled without a build cache (runs 39134179024, 39180950242).
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+        env:
+          GRADLE_BUILD_ACTION_CACHE_KEY_JOB: backend
         with:
           cache-read-only: true
 
@@ -520,8 +526,20 @@ jobs:
       # Within this workflow, `backend` owns Gradle cache writes. The Android
       # and dependency-audit workflows retain their own writable caching.
       # Read-only packaging avoids competing saves of shared cache entries.
+      #
+      # GRADLE_BUILD_ACTION_CACHE_KEY_JOB restores the newest `backend` entry
+      # (wrapper, dependencies, build cache). setup-gradle keys Gradle User
+      # Home by job id, and a read-only job never writes its own, so this job
+      # kept restoring a frozen `package` entry: a Gradle 9.8.0 wrapper (the
+      # 9.8.1 distribution was downloaded every run), stale dependencies and
+      # an empty build cache, so `compileJava` ran (Build JAR 45-49 s vs 18 s
+      # for the same `assemble` in `backend`, run 39180950242). Gradle's own
+      # integration tests use this variable the same way
+      # (gradle/actions .github/workflows/integ-test-restore-gradle-home.yml).
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+        env:
+          GRADLE_BUILD_ACTION_CACHE_KEY_JOB: backend
         with:
           cache-read-only: true
 
@@ -644,9 +662,12 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
 
       # This action already manages Gradle caching; configure it directly
-      # rather than adding setup-gradle. `backend` owns writes in this workflow.
+      # rather than adding setup-gradle. `backend` owns writes in this workflow;
+      # restore its entry (see `package`).
       - name: Submit Dependency Graph
         uses: gradle/actions/dependency-submission@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+        env:
+          GRADLE_BUILD_ACTION_CACHE_KEY_JOB: backend
         with:
           cache-read-only: true
 
@@ -734,14 +755,17 @@ jobs:
         run: npx ng build
 
       # Nginx serves the bundle with `script-src 'self'` (frontend/nginx.conf).
-      # Angular's inlineCritical optimization defers the full stylesheet via an
-      # inline `onload="this.media='all'"` handler, which that CSP blocks —
-      # leaving only a `media="print"` stylesheet and an unstyled production
-      # page. Keep optimization.styles.inlineCritical=false (frontend/README.md §1.3).
+      # Angular's inlineCritical optimization defers the full stylesheet behind
+      # inline script, which that CSP blocks — leaving only a `media="print"`
+      # stylesheet and an unstyled production page. Before Angular 22 it was an
+      # `onload="this.media='all'"` attribute; Angular 22 (Beasties) emits
+      # `data-beasties-media="all"` plus an inline <script> at the end of
+      # <body>. Match both. Keep optimization.styles.inlineCritical=false
+      # (frontend/README.md §1.3).
       - name: Verify Built index.html is CSP-Safe
         run: |
-          if grep -Eq 'media="print"[^>]*onload=' dist/frontend/browser/index.html; then
-            echo "::error::index.html contains Angular's inlineCritical async-CSS inline onload handler, which the Nginx CSP blocks. Set optimization.styles.inlineCritical=false."
+          if grep -Eq 'data-beasties-media|media="print"[^>]*onload=' dist/frontend/browser/index.html; then
+            echo "::error::index.html contains Angular's inlineCritical async-CSS loader (an onload handler before Angular 22, data-beasties-media plus an inline script from 22), which the Nginx CSP blocks. Set optimization.styles.inlineCritical=false."
             exit 1
           fi
 
@@ -1115,12 +1139,6 @@ jobs:
         run: |
           owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           echo "image=ghcr.io/${owner}/taskflow-backend" >> "$GITHUB_OUTPUT"
-          # Trivy DB cache keys. `trivy_db_date` mirrors trivy-action's own
-          # vulnerability-DB key (`cache-trivy-<date>`); the Java index DB is
-          # refreshed on a 3-day window (trivy-java-db `updateInterval`), so
-          # bucket its key the same way.
-          echo "trivy_db_date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
-          echo "trivy_java_db_bucket=$(( $(date -u +%s) / 259200 ))" >> "$GITHUB_OUTPUT"
 
       - name: Download Backend JAR
         uses: actions/download-artifact@v8
@@ -1243,38 +1261,37 @@ jobs:
             "$IMAGE" > /dev/null
 
       ##########################################################
-      # Trivy DB caches (restored here; the action's own cache is disabled)
+      # Trivy Java DB cache (the action's own cache is disabled)
       #
       # trivy-action caches the whole `.cache/trivy` tree under
       # `cache-trivy-<date>`. That archive can carry a stale `java-db/`, and
       # because the action restores it *after* any restore we do, it would
-      # overwrite a fresh Java DB and force a ~930 MiB re-download. So the
-      # action runs with `cache: false` and we restore in a controlled order:
+      # overwrite a fresh Java DB and force a ~940 MiB re-download. So the
+      # action runs with `cache: false` and only the Java index DB is cached.
       #
-      #   1. the vulnerability DB from trivy-action's key (shared with the FS
-      #      scans in security.yml), then
-      #   2. the Java index DB on top of it.
+      # Trivy re-downloads the Java DB once its NextUpdate has passed and it
+      # was downloaded more than 24 h ago (pkg/javadb/client.go `isNewDB`).
+      # Each download is saved under a key carrying its DownloadedAt and the
+      # newest one is restored by prefix, so a fresh copy is always saved
+      # and a restored one never is. The former 3-day bucket was saved only
+      # by its first run; for the rest of the bucket every run restored a
+      # stale copy (~11 s) and downloaded 940 MiB again (~15 s): runs
+      # 39133236130, 39134179024, 39178129916.
       #
-      # The Java DB carries its own metadata (`NextUpdate`, 3 days), so Trivy
-      # skips the download while it is fresh. The vulnerability DB is not
-      # written back from this job — the FS scans own that cache key.
+      # The vulnerability DB (`cache-trivy-<date>`, written by the nightly FS
+      # scans) is no longer restored here: a trivy-db goes stale 6 h after it
+      # was built (NextUpdate), and Trivy logged "Need to update DB" after
+      # that restore in every sampled run, so it cost 4-7 s before the same
+      # ~5 s download.
       ##########################################################
-
-      - name: Restore Trivy vulnerability DB cache
-        id: trivy-vuln-db-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ github.workspace }}/.cache/trivy
-          key: cache-trivy-${{ steps.images.outputs.trivy_db_date }}
-          restore-keys: |
-            cache-trivy-
 
       - name: Restore Trivy Java DB cache
         id: trivy-java-db-cache
         uses: actions/cache/restore@v6
         with:
           path: ${{ github.workspace }}/.cache/trivy/java-db
-          key: trivy-java-db-${{ env.TRIVY_VERSION }}-${{ steps.images.outputs.trivy_java_db_bucket }}
+          # Never an exact hit: the prefix restores the newest download.
+          key: trivy-java-db-${{ env.TRIVY_VERSION }}-${{ github.run_id }}
           restore-keys: |
             trivy-java-db-${{ env.TRIVY_VERSION }}-
 
@@ -1294,8 +1311,8 @@ jobs:
 
           scan-type: image
 
-          # DB caches are restored above; the action's own cache would clobber
-          # the fresh Java DB — see the cache section note.
+          # The Java DB is restored above; the action's own cache would clobber
+          # it — see the cache section note.
           cache: false
 
           format: sarif
@@ -1306,14 +1323,32 @@ jobs:
 
           exit-code: 1
 
+      - name: Key Trivy Java DB cache
+        id: trivy-java-db-key
+        if: always()
+        env:
+          META: ${{ github.workspace }}/.cache/trivy/java-db/metadata.json
+        run: |
+          downloaded="$(jq -r '.DownloadedAt // empty' "$META" 2>/dev/null | tr -dc '0-9' || true)"
+          if [[ -n "$downloaded" ]]; then
+            echo "key=trivy-java-db-${TRIVY_VERSION}-${downloaded}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only when Trivy downloaded a new Java DB (the key differs from the
+      # restored one), and not from pull requests: a PR-scoped entry is
+      # readable only by that PR. The nightly refreshes the `main` entry.
       - name: Save Trivy Java DB cache
-        # Best effort: a concurrent job may have seeded the same bucket.
+        # Best effort: a concurrent job may have saved the same download.
         continue-on-error: true
-        if: always() && steps.trivy-java-db-cache.outputs.cache-hit != 'true'
+        if: >-
+          always() &&
+          github.event_name != 'pull_request' &&
+          steps.trivy-java-db-key.outputs.key != '' &&
+          steps.trivy-java-db-key.outputs.key != steps.trivy-java-db-cache.outputs.cache-matched-key
         uses: actions/cache/save@v6
         with:
           path: ${{ github.workspace }}/.cache/trivy/java-db
-          key: trivy-java-db-${{ env.TRIVY_VERSION }}-${{ steps.images.outputs.trivy_java_db_bucket }}
+          key: ${{ steps.trivy-java-db-key.outputs.key }}
 
       - name: Upload SARIF
         if: always() && hashFiles('trivy-results.sarif') != ''
@@ -1413,7 +1448,6 @@ jobs:
         run: |
           owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           echo "image=ghcr.io/${owner}/taskflow-frontend" >> "$GITHUB_OUTPUT"
-          echo "trivy_db_date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
 
       - name: Download Frontend Bundle
         uses: actions/download-artifact@v8
@@ -1458,17 +1492,9 @@ jobs:
           build-args: |
             APK_BUST=${{ github.run_id }}-${{ github.run_attempt }}
 
-      # Vulnerability DB only (no Java DB for the nginx image); see the cache
-      # section note in `docker-backend`.
-      - name: Restore Trivy vulnerability DB cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ github.workspace }}/.cache/trivy
-          key: cache-trivy-${{ steps.images.outputs.trivy_db_date }}
-          restore-keys: |
-            cache-trivy-
-
-      # HARD GATE — see the severity-gating note in `docker-backend`.
+      # HARD GATE — see the severity-gating note in `docker-backend`. No DB
+      # cache: the nginx image needs no Java DB, and a restored vulnerability
+      # DB is stale on almost every run (see the cache note in `docker-backend`).
       - name: Scan Docker Image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

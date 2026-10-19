@@ -262,6 +262,14 @@ tasks.named("test") {
 	// one Spring context leak into another context in the same fork, so a
 	// change in fork assignment made AppointmentControllerIntegrationTest fail.
 	systemProperty "spring.datasource.url", 'jdbc:h2:mem:${random.uuid};MODE=PostgreSQL;DB_CLOSE_DELAY=-1'
+	// Without includes the JaCoCo agent instruments every class the fork
+	// loads, i.e. all of Spring, Hibernate, Tomcat, H2..., while the report
+	// covers only this project's classes. One cold Spring context, 2 paired
+	// samples each: start 23.3/24.0 s -> 12.0/13.3 s, fork CPU 36.1/37.4 s ->
+	// 25.2/27.8 s. Coverage figures are unchanged (same classes, same probes).
+	jacoco {
+		includes = ['com.example.*', 'db.migration.*']
+	}
 	finalizedBy(tasks.jacocoTestReport)
 }
 
@@ -280,6 +288,10 @@ tasks.register("containerConfigTest", Test) {
 	}
 	testClassesDirs = sourceSets.test.output.classesDirs
 	classpath = sourceSets.test.runtimeClasspath
+	// Coverage comes from `test` only; this task's execution data fed no report.
+	jacoco {
+		enabled = false
+	}
 	inputs.files("Dockerfile", "Dockerfile.x64", "docker-compose.yml", "frontend/nginx.conf",
 			".github/workflows/ci.yml", ".github/workflows/pushdockerimage.yml", "BENCHMARKS.md",
 			"scripts/benchmark-cds-startup.sh", "scripts/benchmark-glibc-tuning.sh")
@@ -305,6 +317,11 @@ tasks.register("testcontainersTest", Test) {
 	testClassesDirs = sourceSets.test.output.classesDirs
 	classpath = sourceSets.test.runtimeClasspath
 	maxParallelForks = 1
+	// jacocoTestReport/-Verification read `test` only, so the agent here only
+	// slowed every Spring context start (see the `test` task).
+	jacoco {
+		enabled = false
+	}
 	environment "SPRING_SECURITY_PASSWORD", "admin-password"
 	systemProperty "spring.cache.type", "simple"
 	testLogging {
@@ -324,6 +341,10 @@ tasks.register("benchmarkTest", Test) {
 	testClassesDirs = sourceSets.test.output
 	classpath = sourceSets.test.runtimeClasspath
 	maxParallelForks = 1
+	// No coverage for benchmarks: the agent would distort their timings.
+	jacoco {
+		enabled = false
+	}
 	environment "SPRING_SECURITY_PASSWORD", "admin-password"
 	systemProperty "spring.cache.type", "simple"
 	testLogging {

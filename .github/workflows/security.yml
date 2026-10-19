@@ -82,7 +82,10 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
 
       # Read-only: CI's `backend` job owns the Gradle cache writes. CodeQL's
-      # autobuild only needs the restored dependency state.
+      # autobuild only needs the restored dependency state. Unlike ci.yml's
+      # read-only jobs, do not point GRADLE_BUILD_ACTION_CACHE_KEY_JOB at
+      # `backend`: that entry carries a build cache, and a FROM-CACHE
+      # compileJava never runs javac, so CodeQL's tracer would see no sources.
       - name: Set up Gradle
         if: matrix.language == 'java-kotlin'
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
@@ -183,11 +186,12 @@ jobs:
       # blocking every PR on unshipped source CVEs, or stop blocking on
       # vulnerable images entirely. Keep them different on purpose.
       #
-      # Cache ownership: this job owns `cache-trivy-<date>` — image scans
-      # restore it with `cache: false` so they cannot write a stale `java-db/`
-      # back into it. The Java index DB is cached separately
-      # (`trivy-java-db-*`, see ci.yml). `trivy-cache-retention` below keeps
-      # the newest default-branch entry per cache family and version.
+      # Cache ownership: this job owns `cache-trivy-<date>`. The image scans
+      # no longer restore it (a vulnerability DB is stale 6 h after its build,
+      # so they download it) and run with `cache: false`, so they cannot write
+      # a stale `java-db/` back into it. The Java index DB is cached
+      # separately (`trivy-java-db-*`, see ci.yml). `trivy-cache-retention`
+      # below keeps the newest default-branch entry per family and version.
       #####################################################
 
       - name: Trivy FS (Backend)
@@ -315,7 +319,7 @@ jobs:
 
   # Two Trivy DB caches rotate on a schedule: trivy-action's vulnerability DB
   # (`cache-trivy-<date>`, daily) and the Java index DB the backend image scan
-  # caches separately (`trivy-java-db-<version>-<3-day bucket>`, ci.yml). Keep
+  # caches separately (`trivy-java-db-<version>-<DownloadedAt>`, ci.yml). Keep
   # the newest existing default-branch entry per family and cache version.
   # Selecting from the API snapshot preserves a fallback when scans fail to
   # save or a run crosses midnight. Trivy still checks database freshness on

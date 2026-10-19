@@ -145,9 +145,12 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
 
       # Read-only: CI's `backend` job owns the Gradle cache writes; this manual
-      # workflow only needs to consume the restored state.
+      # workflow only needs to consume the restored state, so it restores that
+      # job's newest entry (see the `package` job in ci.yml).
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+        env:
+          GRADLE_BUILD_ACTION_CACHE_KEY_JOB: backend
         with:
           cache-read-only: true
 
@@ -281,12 +284,6 @@ jobs:
             echo "image=ghcr.io/${owner}/taskflow-${COMPONENT}"
             echo "description=$description"
             echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            # Trivy DB cache keys. `trivy_db_date` mirrors trivy-action's own
-            # vulnerability-DB key (`cache-trivy-<date>`); the Java index DB is
-            # refreshed on a 3-day window (trivy-java-db `updateInterval`), so
-            # bucket its key the same way.
-            echo "trivy_db_date=$(date -u +'%Y-%m-%d')"
-            echo "trivy_java_db_bucket=$(( $(date -u +%s) / 259200 ))"
           } >> "$GITHUB_OUTPUT"
 
       ##########################################################
@@ -378,26 +375,17 @@ jobs:
             APT_BUST=${{ github.run_id }}-${{ github.run_attempt }}
 
       ##########################################################
-      # Trivy DB caches (restored here; the action's own cache is disabled)
+      # Trivy Java DB cache (backend only; the action's own cache is disabled)
       #
       # trivy-action caches the whole `.cache/trivy` tree under
       # `cache-trivy-<date>`. That archive can carry a stale `java-db/`, and
       # because the action restores it *after* any restore we do, it would
-      # overwrite a fresh Java DB and force a ~930 MiB re-download. So the
-      # action runs with `cache: false` and we restore in a controlled order:
-      # the vulnerability DB first, then the Java index DB (backend only) on
-      # top of it. See ci.yml for the full explanation.
+      # overwrite a fresh Java DB and force a ~940 MiB re-download. So the
+      # action runs with `cache: false`, only the Java index DB is cached,
+      # one entry per download (keyed by its DownloadedAt), and the
+      # vulnerability DB (stale 6 h after its build, so stale after a
+      # restore) is downloaded by Trivy. See `docker-backend` in ci.yml.
       ##########################################################
-
-      - name: Restore Trivy vulnerability DB cache
-        if: ${{ !inputs.skip_scan }}
-        id: trivy-vuln-db-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ github.workspace }}/.cache/trivy
-          key: cache-trivy-${{ steps.images.outputs.trivy_db_date }}
-          restore-keys: |
-            cache-trivy-
 
       - name: Restore Trivy Java DB cache
         if: matrix.component == 'backend' && !inputs.skip_scan
@@ -405,7 +393,8 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ github.workspace }}/.cache/trivy/java-db
-          key: trivy-java-db-${{ env.TRIVY_VERSION }}-${{ steps.images.outputs.trivy_java_db_bucket }}
+          # Never an exact hit: the prefix restores the newest download.
+          key: trivy-java-db-${{ env.TRIVY_VERSION }}-${{ github.run_id }}
           restore-keys: |
             trivy-java-db-${{ env.TRIVY_VERSION }}-
 
@@ -426,8 +415,8 @@ jobs:
           image-ref: ${{ steps.images.outputs.image }}@${{ steps.build.outputs.digest }}
           scan-type: image
 
-          # DB caches are restored above; the action's own cache would clobber
-          # the fresh Java DB — see the cache section note.
+          # The Java DB is restored above; the action's own cache would
+          # clobber it — see the cache section note.
           cache: false
 
           format: sarif
@@ -436,14 +425,30 @@ jobs:
           ignore-unfixed: true
           exit-code: 1
 
+      - name: Key Trivy Java DB cache
+        id: trivy-java-db-key
+        if: always() && matrix.component == 'backend' && !inputs.skip_scan
+        env:
+          META: ${{ github.workspace }}/.cache/trivy/java-db/metadata.json
+        run: |
+          downloaded="$(jq -r '.DownloadedAt // empty' "$META" 2>/dev/null | tr -dc '0-9' || true)"
+          if [[ -n "$downloaded" ]]; then
+            echo "key=trivy-java-db-${TRIVY_VERSION}-${downloaded}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only when Trivy downloaded a new Java DB (the key differs from the
+      # restored one).
       - name: Save Trivy Java DB cache
-        # Best effort: a concurrent job may have seeded the same bucket.
+        # Best effort: a concurrent job may have saved the same download.
         continue-on-error: true
-        if: always() && matrix.component == 'backend' && !inputs.skip_scan && steps.trivy-java-db-cache.outputs.cache-hit != 'true'
+        if: >-
+          always() &&
+          steps.trivy-java-db-key.outputs.key != '' &&
+          steps.trivy-java-db-key.outputs.key != steps.trivy-java-db-cache.outputs.cache-matched-key
         uses: actions/cache/save@v6
         with:
           path: ${{ github.workspace }}/.cache/trivy/java-db
-          key: trivy-java-db-${{ env.TRIVY_VERSION }}-${{ steps.images.outputs.trivy_java_db_bucket }}
+          key: ${{ steps.trivy-java-db-key.outputs.key }}
 
       ##########################################################
       # Promote (only runs if all previous steps succeeded — meaning
