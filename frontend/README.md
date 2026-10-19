@@ -40,7 +40,7 @@ This project uses **Tailwind CSS v4** (`^4.3.3`) natively within Angular 22's mo
     }
     ```
 
-3.  **Strict Content Security Policy (CSP) Inlining Optimization (`angular.json`):** Our hardened unprivileged production Nginx container implements a strict Content Security Policy (`style-src 'self' 'unsafe-inline'`). To prevent Angular's default critical CSS extraction tool from injecting dynamic `onload` script attributes (which are blocked by strict CSP, rendering the page unstyled), we explicitly disabled style inlining in `angular.json`:
+3.  **Strict Content Security Policy (CSP) Inlining Optimization (`angular.json`):** Our hardened unprivileged production Nginx container implements a strict Content Security Policy (`script-src 'self'` plus the import-map hash). Angular's critical CSS inlining loads the full stylesheet as `media="print"` and switches it on with inline script: an `onload` attribute before Angular 22, and in Angular 22 (Beasties `media-script`) an inline `<script>` appended to `<body>` plus a `data-beasties-media` attribute. The CSP blocks both, which leaves the page unstyled. It would not help either: this is a client-rendered app whose `index.html` body is only `<app-root>`, so the "critical" CSS is 10 kB of theme variables and preflight, and nothing paints before the JavaScript runs. Style inlining therefore stays disabled in `angular.json`:
     ```json
     "optimization": {
       "styles": {
@@ -94,6 +94,10 @@ The shared package is referenced through `file:../shared/schemas`; installing
 it first matches the CI setup and ensures its lockfile is honored. The Angular
 application proxies API requests to `http://localhost:8080`, so start the
 backend separately with `./gradlew bootRun` or start the full Docker stack.
+The dev server bundles `@taskflow/schemas` with the app instead of prebundling it
+(`prebundle.exclude` in `angular.json`): the package ships TypeScript sources, and
+Vite's dependency optimizer could not resolve their extensionless imports, which
+crashed `ng serve` on the first page load.
 
 Install the browser required for frontend E2E tests once per machine:
 
@@ -121,6 +125,12 @@ Our code formatter is configured with strict rules (100-character line width, si
   ```bash
   npx prettier --write 'src/**/*.ts' 'src/**/*.html'
   ```
+
+`npm run lint`, `npm run format` and `npm run format:check` keep their caches in
+`node_modules/.cache/` (ESLint and Prettier results by file content, `tsc` incremental
+build info), so a repeated run only re-checks what changed (lint ~10 s → ~5 s, format
+check ~5 s → ~0.7 s). No rule needs type information, so a cached ESLint result cannot go
+stale through another file; delete the directory to start cold.
 
 ### B. Unit Tests (Vitest)
 
@@ -161,7 +171,7 @@ npm run build
 
 The resulting assets are generated in the `dist/` directory. These assets are then copied into our lightweight, unprivileged **Nginx web server container** (running on port `8080` to adhere to unprivileged port binding rules).
 
-The Angular 22 production chunk optimizer is enabled by default. The current measured baseline is **281.80 kB raw / 66.36 kB estimated transfer** for the initial bundle. Disabling chunk optimization increases the initial output to **467.36 kB raw / 126.49 kB estimated transfer** and triggers the initial bundle budget warning. Keep `NG_BUILD_OPTIMIZE_CHUNKS` unset or enabled unless investigating a build issue.
+The Angular 22 production chunk optimizer is enabled by default. The current measured baseline is **514.40 kB raw / 138.00 kB estimated transfer in 7 initial files** (the landing route is eager, BENCHMARKS.md §58). With `NG_BUILD_OPTIMIZE_CHUNKS=0` the same code ships as 13 initial files and 140.34 kB estimated transfer (before the landing route became eager the difference was 66 vs 126 kB). Keep `NG_BUILD_OPTIMIZE_CHUNKS` unset or enabled unless investigating a build issue.
 
 ---
 
