@@ -42,6 +42,12 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql
+    # Parallel queries allocate their dynamic shared memory in /dev/shm, which Docker
+    # caps at 64 MB. One parallel hash join may use work_mem x hash_mem_multiplier x
+    # (2 workers + leader) = 16 MB x 2 x 3 = 96 MB; on PostgreSQL 18.6 with these
+    # settings it failed with "could not resize shared memory segment ... No space
+    # left on device" at 64m and succeeded at 256m. Pages are charged only when used.
+    shm_size: 256mb
     networks:
       - backend-tier
     deploy:
@@ -51,11 +57,18 @@ services:
           memory: 1024M
         reservations:
           memory: 512M
+    # TCP, not the default Unix socket: on a fresh volume the entrypoint's temporary
+    # init server listens on the socket only, so a socket probe could report healthy
+    # (and start the backend) before the real server accepts TCP connections. The
+    # start interval probes every second while the database boots instead of waiting
+    # a full interval for the first probe.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+      start_interval: 1s
     restart: "no"
     logging:
       driver: "json-file"
@@ -127,12 +140,17 @@ services:
           memory: 2560M
         reservations:
           memory: 1536M
+    # Docker runs the first probe one interval after start, so with 30 s the frontend
+    # (service_healthy) waited ~30 s for a backend that boots in ~8 s. During the start
+    # period the probe runs every 2 s and failures do not count; 60 s also covers slow
+    # (no-CDS, emulated) boots, after which the 30 s interval applies again.
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/actuator/health/liveness"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 60s
+      start_interval: 2s
     depends_on:
       db:
         condition: service_healthy
@@ -156,10 +174,12 @@ services:
     container_name: taskflow-redis
     command:
       - "redis-server"
-      - "--io-threads"          # Redis 8.0: multi-threaded network I/O
-      - "2"                     # 1 CPU allocated → 2 threads (main + 1 I/O)
-      - "--io-threads-do-reads" # Extend threading to read operations too
-      - "yes"
+      # No --io-threads: redis.conf asks for at least 4 cores with one spare, and the
+      # backend talks to Redis over one shared Lettuce connection. Measured on Redis
+      # 8.10.2 under a 1-CPU quota (cpus: '1.0'), io-threads 2 raised the single-
+      # connection p50 from 0.039 to 0.063-0.071 ms, cut throughput by up to 45%
+      # and got the container CPU-throttled; io-threads 1 never was.
+      # (io-threads-do-reads is a deprecated no-op since Redis 8.0.)
       - "--lazyfree-lazy-expire" # Redis 8.0: async deletion of expired keys
       - "yes"                    # Prevents latency spikes from rate-limit key churn
       - "--maxmemory"           # Cap memory at 50% of container limit (512M)
@@ -186,6 +206,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+      start_interval: 1s
     restart: "no"
     logging:
       driver: "json-file"
@@ -222,6 +244,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+      start_interval: 1s
     restart: "no"
     logging:
       driver: "json-file"
@@ -260,6 +284,8 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 10s
+      start_interval: 1s
     depends_on:
       backend:
         condition: service_healthy

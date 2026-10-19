@@ -56,8 +56,11 @@ RUN IMPORT_MAP_COUNT="$(grep -o '<script type="importmap">[^<]*</script>' index.
 #
 # Brotli quality 11 produces the smallest files. Compression runs in parallel bounded
 # to available CPU cores via xargs -P to maximize throughput without unbounded memory usage.
+# favicon.ico is bitmap data (image/x-icon, not in brotli_types/gzip_types), so without
+# a sidecar every first visit downloaded it raw: 15.1 kB -> 3.7 kB as Brotli.
 RUN find . -type f \
         \( \
+            -name '*.ico' -o \
             -name '*.js' -o \
             -name '*.mjs' -o \
             -name '*.css' -o \
