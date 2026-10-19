@@ -51,8 +51,8 @@ dependencyAnalysis {
 				exclude(libs.micrometer.prometheus)
 				exclude(libs.micrometer.tracing.otel)
 				exclude(libs.netty.codec.dns)
-				exclude(libs.okio)
 				exclude(libs.opentelemetry.semconv)
+				exclude(libs.opentelemetry.sender.jdk)
 				exclude(libs.spring.boot.starter.actuator)
 				exclude(libs.spring.boot.starter.cache)
 				exclude(libs.spring.boot.starter.data.jpa)
@@ -184,7 +184,13 @@ dependencies {
 	implementation libs.spring.boot.micrometer.tracing.opentelemetry
 	implementation libs.micrometer.prometheus
 	implementation libs.micrometer.tracing.otel
-	implementation libs.opentelemetry.otlp
+	// OTLP over the JDK's HttpClient instead of the default OkHttp sender, which was the only
+	// path to okhttp, okio, kotlin-stdlib and jetbrains annotations (3.2 MB of jars and their CVE
+	// feed). Both plug into the exporter's HttpSenderProvider SPI; Spring Boot references neither.
+	implementation(libs.opentelemetry.otlp) {
+		exclude group: 'io.opentelemetry', module: 'opentelemetry-exporter-sender-okhttp'
+	}
+	runtimeOnly libs.opentelemetry.sender.jdk
 	// OpenAPI
 	implementation libs.springdoc.webmvc.ui
 	// Database migration
@@ -203,13 +209,11 @@ dependencies {
 	//   - nimbus-jose-jwt:    transitive via spring-security-oauth2-resource-server; 10.9.1
 	//                         is a security patch (BOM ships 10.9).
 	//   - error_prone_*:      transitive annotation lib (BOM ships 2.49.0).
-	//   - okio:               transitive (BOM ships 3.17.0).
 	implementation libs.hikari
 	implementation libs.lettuce
 	implementation libs.opentelemetry.semconv
 	implementation libs.nimbus.jose.jwt
 	implementation libs.error.prone.annotations
-	implementation libs.okio
 	// Testing
 	testImplementation libs.spring.boot.starter.test
 	testImplementation libs.spring.boot.starter.webmvc.test
