@@ -80,6 +80,32 @@ class RateLimiterConfigTest {
     }
 
     @Test
+    void logsTheRejectionOnlyWhenTheCounterFirstPassesTheLimit() throws Exception {
+        ch.qos.logback.classic.Logger logger =
+                (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(RateLimiterConfig.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
+                new ch.qos.logback.core.read.ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            for (long count : new long[] {101L, 102L, 5000L}) {
+                MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/catalog");
+                request.setRemoteAddr("203.0.113.9");
+                MockHttpServletResponse response = new MockHttpServletResponse();
+                mockExecute(count);
+
+                filter.doFilter(request, response, mock(FilterChain.class));
+
+                assertEquals(429, response.getStatus());
+            }
+            assertEquals(1, appender.list.size(), "one WARN per client, bucket and window");
+            assertTrue(appender.list.get(0).getFormattedMessage().contains("203.0.113.9"));
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
+    @Test
     void shouldBlockRequestsExceedingLimitForApi() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRequestURI("/api/v1/appointments");

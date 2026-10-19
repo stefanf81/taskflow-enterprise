@@ -1319,14 +1319,14 @@ BusySlots Cache-Control: private, max-age=30, must-revalidate
 management.metrics.tags.application=taskflow-backend
 management.metrics.distribution.percentiles.http.server.requests=0.5,0.95,0.99
 management.metrics.distribution.percentiles-histogram.http.server.requests=true
-management.metrics.distribution.sla.http.server.requests=50ms,100ms,200ms
+management.metrics.distribution.slo.http.server.requests=50ms,100ms,200ms
 ```
 
 | Setting | Effect |
 | :--- | :--- |
 | `percentiles=0.5,0.95,0.99` | Micrometer pre-computes **p50/p95/p99** at scrape time and exposes them as `http_server_requests_seconds{quantile="0.95"}` etc. Grafana can plot `p95` without `histogram_quantile`. |
 | `percentiles-histogram=true` | Publishes the full **Prometheus histogram** (`_bucket{le="0.1"}`, `_bucket{le="0.2"}`, ...) for arbitrary quantile queries and `rate()`-based burn-rate alerts. |
-| `sla=50ms,100ms,200ms` | Adds explicit SLO bucket boundaries at 50/100/200 ms so the histogram has meaningful buckets for this API's latency range (aligned with §32 p50=7 ms, p99=29 ms at 50-pool VT). |
+| `slo=50ms,100ms,200ms` | (Written `sla` until 2026-10-19: that key was renamed in Spring Boot 2.3 and silently ignored, so these buckets were missing — §59.) Adds explicit SLO bucket boundaries at 50/100/200 ms so the histogram has meaningful buckets for this API's latency range (aligned with §32 p50=7 ms, p99=29 ms at 50-pool VT). |
 | `exposure.include=health,info,prometheus` | `/actuator/prometheus` remains the only metrics endpoint (no `env`/`beans` leakage) |
 
 **Overhead:** Pre-computed client-side percentiles and histogram buckets add **~1–2% cardinality** per `http.server.requests` time-series (one series per `[uri, method, status]` tag combination). At 10% OTel sampling (§7) this is negligible.
