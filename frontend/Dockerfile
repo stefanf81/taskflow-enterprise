@@ -61,7 +61,8 @@ RUN awk -v dir=/tmp/inline-scripts ' \
         echo "  expected: ${EXPECTED}" >&2; \
         exit 1; \
     fi \
-    && SCRIPT_HASHES="$(for f in $(awk '$3 != "-" { print $3 }' /tmp/inline-scripts.txt); do \
+    && SCRIPT_HASHES="$(awk '$3 != "-" { print $3 }' /tmp/inline-scripts.txt \
+        | while read -r f; do \
             printf "'sha384-%s'\n" "$(openssl dgst -sha384 -binary < "$f" | openssl base64 -A)"; \
         done | sort -u | tr '\n' ' ')" \
     && printf 'add_header Content-Security-Policy "default-src %s; base-uri %s; form-action %s; frame-ancestors %s; object-src %s; script-src %s %s; style-src %s %s; font-src %s data:; img-src %s data:; connect-src %s;" always;\n' \
