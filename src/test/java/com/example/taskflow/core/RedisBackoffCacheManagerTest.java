@@ -27,6 +27,17 @@ class RedisBackoffCacheManagerTest {
     private final Callable<String> loader = () -> "value-" + loads.incrementAndGet();
 
     @Test
+    void anUnreadableStoredValueIsLoadedAndOverwrittenInsteadOfServedAsNull() {
+        StaleFormatCache stale = new StaleFormatCache("things");
+        stale.put("k", StaleFormatCache.UNREADABLE);
+        Cache wrapped = new RedisBackoffCacheManager(new SingleCacheManager(stale), backoff).getCache("things");
+
+        assertEquals("value-1", wrapped.get("k", loader));
+        assertEquals("value-1", wrapped.get("k", loader), "overwritten: the second read is a hit");
+        assertEquals(1, loads.get());
+    }
+
+    @Test
     void healthyStoreCaches() {
         assertEquals("value-1", cache.get("k", loader));
         assertEquals("value-1", cache.get("k", loader));
@@ -84,6 +95,29 @@ class RedisBackoffCacheManagerTest {
         @Override
         public Cache getCache(String name) {
             return cache;
+        }
+    }
+
+    /**
+     * Like a {@code RedisCache} holding an entry its serializer cannot read (an older format):
+     * {@code get(key)} misses and {@code get(key, loader)} returns null without calling the loader.
+     */
+    private static final class StaleFormatCache extends ConcurrentMapCache {
+        static final Object UNREADABLE = new Object();
+
+        StaleFormatCache(String name) {
+            super(name, false);
+        }
+
+        @Override
+        protected Object lookup(Object key) {
+            Object value = super.lookup(key);
+            return value == UNREADABLE ? null : value;
+        }
+
+        @Override
+        public <T> T get(Object key, Callable<T> valueLoader) {
+            return super.lookup(key) == UNREADABLE ? null : super.get(key, valueLoader);
         }
     }
 
