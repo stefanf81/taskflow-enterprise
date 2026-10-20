@@ -75,6 +75,7 @@ All benchmarks were run locally on an **Apple M4 Pro (14-Core, AArch64)** utiliz
 - **🔬 Cross-Stack Audits**
   - [§58. Full-Stack Performance Audit — Redis Fail-Open, Admin Queries, Bundles & Mobile Assets](#-58-full-stack-performance-audit--redis-fail-open-admin-queries-bundles--mobile-assets-2026-10-17)
   - [§59. Configuration Audit Against Current Versions — Ignored Keys, Observation Cost, Bundle Trimming & CI Caches](#-59-configuration-audit-against-current-versions--ignored-keys-observation-cost-bundle-trimming--ci-caches-2026-10-19)
+  - [§60. Implementing the §59 Recommendations — Prerendered Landing, Typed Cache Values, Fixed Pool, Diagnostics Volume & CI Caches](#-60-implementing-the-59-recommendations--prerendered-landing-typed-cache-values-fixed-pool-diagnostics-volume--ci-caches-2026-10-20)
 
 ---
 
@@ -131,7 +132,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
     *   **Stream Loading**: Sized `jdbc.fetch_size=50` to pull large lists in chunked streams.
     *   **Safeguards**: Hardcoded JPA query timeout (`jakarta.persistence.query.timeout=5000` ms) to stop runaway queries, replacing legacy `javax.` parameters.
 *   **HikariCP Connection Pool**:
-    *   Optimal connection boundaries (`maximum-pool-size=25`, `minimum-idle=10`). Leak detection (`leak-detection-threshold=2000` ms) is a dev setting; `application-prod.properties` sets `0` explicitly (profiles only override, so prod used to inherit it, §58).
+    *   Optimal connection boundaries (`maximum-pool-size=25`, fixed-size since §60: `minimum-idle=25`). Leak detection (`leak-detection-threshold=2000` ms) is a dev setting; `application-prod.properties` sets `0` explicitly (profiles only override, so prod used to inherit it, §58).
     *   Disabled Open Session in View (OSIV) to release connection resources back to the pool instantly after transactions close.
 *   **Lazy JDBC Connection Fetching (New in SB 4.1)**:
      *   Enforced **`spring.datasource.connection-fetch=lazy`** in dev and prod profiles. Database connections are held lazily by a `LazyConnectionDataSourceProxy` and only requested from HikariCP when a SQL statement is actually prepared and executed, completely eliminating connection borrowing overhead for cache hits or request pre-validation filters.
@@ -156,15 +157,15 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Landing Background Image**:
     *   The landing page has no `<img>` hero (`app.html` is only `<router-outlet />`). Its background photo (`public/barber-bg.jpg`, 1280 px / 33 kB, was 1920 px / 200 kB) sits under a ~90% black overlay on a viewport-fixed pseudo-element of `.bg-faint-barber`, not `background-attachment: fixed`, which repaints the whole background on every scroll frame. It is not the LCP element (§58).
 *   **Build Budget Regression Guards & Cache Busting**:
-    *   Enforced build failure boundaries in `angular.json` for the initial total (`550kB` warning, `600kB` error; was 400/500 kB before the landing route became eager, §58) and individual chunks (`400kB` warning, `500kB` error) to automatically catch bundle bloat in CI. The shared request/response schemas use `zod/mini`: classic zod was 112 KiB of the 216 KiB `main` chunk.
+    *   Enforced build failure boundaries in `angular.json` for the initial total (`550kB` warning, `600kB` error; was 400/500 kB before the landing route became eager, §58) and individual chunks (`250kB` warning, `300kB` error since §60; was 400/500 kB) to automatically catch bundle bloat in CI. The shared request/response schemas use `zod/mini`: classic zod was 112 KiB of the 216 KiB `main` chunk.
     *   Enforced `outputHashing: "all"` to aggressively bust caches on deployments.
 *   **CSP-Compatible Critical CSS Handling**:
-    *   Kept `"inlineCritical": false` in the production workspace. Angular's critical-style inlining can inject dynamic attributes that conflict with the hardened production CSP, so this is intentionally disabled rather than treated as a performance toggle.
+    *   Kept `"inlineCritical": false` in the production workspace. Angular's critical-style inlining defers the full stylesheet behind inline script (an `onload` attribute before Angular 22; since 22, Beasties' `data-beasties-media` plus an inline `<script>`), which the hardened production CSP blocks, so this is intentionally disabled rather than treated as a performance toggle.
 *   **Subresource Integrity (SRI) & Bundle Analysis**:
     *   Enabled `subresourceIntegrity: true` in production builds to generate SHA-512 hashes for all output assets, preventing CDN/subresource tampering.
-    *   Enabled `statsJson: true` to produce `dist/stats.json` for esbuild bundle visualization in CI.
+    *   ~~Enabled `statsJson: true`~~ — removed in §60: nothing consumed the file (CI uploads only `browser/`).
 *   **Explicit Modern Browser Targets (`.browserslistrc`)**:
-    *   Created an explicit `.browserslistrc` scoped to `last 2 versions` of Chrome, Edge, Firefox, Safari, and iOS Safari. This prevents the Angular/esbuild pipeline from emitting unnecessary downlevel polyfills and transpilation for obsolete browsers.
+    *   Created an explicit `.browserslistrc` scoped to `last 2 versions` of Chrome, Edge, Firefox, Safari, and iOS Safari. *(Removed in §60: measured against Angular 22's default `baseline widely available` targets the JavaScript was byte-identical; the list only kept CSS nesting (−0.6 kB) while excluding iOS/Safari 17/18.)*
 *   **Preconnect & DNS-Prefetch Hints**:
     *   Added `<link rel="dns-prefetch">` and `<link rel="preconnect">` to `index.html` for the Nginx/API origin, Google Fonts CDN, and Unsplash Image CDN, shaving DNS resolution and TLS negotiation latency on first load.
 *   **Tailwind CSS (with PostCSS & Autoprefixer)**:
@@ -449,7 +450,7 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 | **Tuned PreparedStatement Cache (Winner)** | **7,584.74 RPS** | **6.59 ms** | **🚀 5.0% higher RPS, 4.8% lower latency** |
 | Standard JDBC URL | 7,222.30 RPS | 6.92 ms | *Baseline* |
 
-**Verdict:** By default, the PostgreSQL JDBC driver re-sends and re-compiles raw SQL queries on every single request. By appending `prepareThreshold=5&preparedStatementCacheQueries=256&preparedStatementCacheSizeMiB=64` to the JDBC URL in `application-prod.properties`, we instructed the driver to promote queries to server-side prepared plans on their 5th execution. Bypassing SQL compilation and planner evaluations on the server dropped DB latency and generated an instant **5.0% throughput increase (reaching 7,584.74 RPS)** under heavy load.
+**Verdict:** By default, the PostgreSQL JDBC driver re-sends and re-compiles raw SQL queries on every single request. By appending `prepareThreshold=5&preparedStatementCacheQueries=256&preparedStatementCacheSizeMiB=64` to the JDBC URL in `application-prod.properties` (§60 removed them again: the first two are PgJDBC's defaults, so the gain measured here is the driver's default behaviour, and 64 MiB per connection was 1.6 GiB over 25 connections), we instructed the driver to promote queries to server-side prepared plans on their 5th execution. Bypassing SQL compilation and planner evaluations on the server dropped DB latency and generated an instant **5.0% throughput increase (reaching 7,584.74 RPS)** under heavy load.
 
 ---
 
@@ -557,7 +558,7 @@ By setting `spring.jpa.properties.hibernate.query.in_clause_parameter_padding=tr
 | :--- | :--- | :--- |
 | `initial` | 400kB warn / 500kB err | unchanged |
 | `anyComponentStyle` | 20kB / 50kB | unchanged |
-| `any` (per chunk) | *none* | **400kB warn / 500kB err** |
+| `any` (per chunk) | *none* | **400kB warn / 500kB err** (250/300 kB since §60) |
 
 **Verdict:** Without an `any` budget, a single bloated chunk can slip through CI unnoticed. The guard fails the production build if any individual chunk exceeds 500kB (warning at 400kB), catching regressions such as a heavy dependency pulled into one route before merge.
 
@@ -1964,6 +1965,8 @@ Where the time went (JFR CPU samples, before): Micrometer observations 22–23%,
 
 ### Not adopted (recommendations with their evidence)
 
+> Most of these were implemented the next day — see §60 for what was adopted, measured and left open.
+
 * **Redis cache values:** 9.0% of catalog CPU is `GenericJackson2JsonRedisSerializer.deserialize` (Jackson 2 with default typing) vs 5.6% for the Jackson 3 response write. Spring Data Redis 4's Jackson 3 serializer or typed per-cache serializers are the lever; old entries would simply miss through the fail-open handler. Needs its own A/B.
 * **Fixed-size Hikari pool** (`minimum-idle` = `maximum-pool-size`, HikariCP 7.1 README): a burst from idle opens 15 connections one by one against the 4 s `connection-timeout`. §50 chose 10 idle; revisit with a burst benchmark.
 * **`spring.data.jpa.repositories.bootstrap-mode=deferred`** (JHipster default): 14.3 vs 13.5 s mean boot over 4 alternated runs, inside the noise; re-measure with `scripts/benchmark-cds-startup.sh`.
@@ -1976,3 +1979,49 @@ Where the time went (JFR CPU samples, before): Micrometer observations 22–23%,
 * **CI:** letting `backend-integration` save its own cache on `main` pushes (Renovate PRs could serve `testcontainersTest`/`spotbugsMain` from cache, 158 s → ~30 s) breaks the "backend owns writes" rule; a 1 GiB unit-test heap halved GC pauses but saved only 2% CPU; the configuration cache is never restored by setup-gradle v6 without a Develocity licence (explains §53).
 
 **Verification:** backend `./gradlew test jacocoTestCoverageVerification spotbugsMain` (567 tests, 0 failures, 11 skipped) and `containerConfigTest`; frontend `npm run lint`, `format:check`, 316 unit tests (coverage 87.73/88.21/76.47/90.1), production build within budgets (initial 514.40 kB); mobile `tsc` + 536 Jest tests (coverage 90.76/80.99/89.34/91.86), `expo config`, `expo export` for Android and iOS; workflows `actionlint` 1.7.12 + `shellcheck`; nginx `nginx -t` and the A/B above on nginx 1.30.4 built from the release tag. Not run here: Docker image builds and the compose stack (no Docker daemon), the Playwright and Detox suites, EAS/native builds, and the CI changes on GitHub — their savings above are estimates from earlier run logs.
+
+## ⚡ 60. Implementing the §59 Recommendations — Prerendered Landing, Typed Cache Values, Fixed Pool, Diagnostics Volume & CI Caches (2026-10-20)
+
+**Goal:** implement the §59 recommendations, each only where it could be verified, and record what was measured, what live testing caught and what stays open.
+
+**Methodology:** same container and caveats as §59 (parallel work, alternated A/B runs, CPU/JFR shares where wall-clock was noisy). Backend: boot JAR under the `prod` profile against local PostgreSQL 16 and Redis, three alternated runs. Web: production build served by nginx 1.30.4 (built from the release tag) proxying to the boot JAR, Chromium with CDP throttling and 4× CPU, median of 9, alternated order. Mobile: `expo export` for both platforms. Jaeger: the 2.22.0 binary built from its tag.
+
+### Results
+
+| Change | Before | After |
+| :--- | ---: | ---: |
+| Prerendered guest landing — FCP / LCP, slow 4G (150 ms, 1.6 Mbps) | 2,126 / 2,440 ms | **995 / 1,644 ms** (−53% / −33%) |
+| Same, fast (40 ms, 10 Mbps) | 1,095 / 1,340 ms | **580 / 580 ms** (−47% / −57%) |
+| Initial JS (raw / transfer) and landing HTML (brotli) | 514.90 kB / 1.5 kB | 544.18 kB (+8.7 kB transfer) / 4.5 kB |
+| Redis cache value read — catalog (5 services) / busy slots | 6.3–8.2 / ~1.0 µs | **2.6–3.0 / ~0.3 µs**, values 35–55% smaller |
+| Same, deserialize share of catalog CPU (JFR, two pairs) | 10.2% / 11.4% | 4.5% / 6.6% (throughput within noise: −1.6% ± 5%) |
+| `http.server.requests` histogram series per URI/status | 72 | 64 (buckets end at 10 s) |
+| Mobile Hermes bytecode with staged tree shaking (preview/Detox only) | 3,148,226 B | 3,033,110 B (−3.7%, Android and iOS) |
+| Mobile `tsc` (lint), warm | 4.5 s | 1.4 s (incremental) |
+| Unit-test fork GC pauses (1 GiB heap) | 5.0 s | 2.7–3.2 s (CPU −2%) |
+| Playwright cache in CI (headless shell only) | full Chromium (~600 MB unpacked) | ~320 MB |
+| `backend-integration` on PRs that do not touch the backend (estimated, run 39180950242) | 158 s | ~30 s (outputs from the build cache) |
+
+### Adopted
+
+* **Web:** build-time prerender of `''` (`@angular/ssr`/`platform-server` 22.2, `outputMode: "static"`, `app.routes.server.ts`: `''` Prerender, `**` Client) with incremental hydration (event replay included); the lookbook/FAQ/post-booking `@defer` blocks hydrate on idle, so the LCP paragraph is server-rendered. Nothing calls the backend at build time: the stores and the session/CSRF bootstrap stay idle on the server and `PrerenderBackend` fails any stray request without a connection. nginx serves the prerendered `index.html` for `/` to guests and `index.csr.html` when an `access_token` cookie is present (no guest flash for signed-in users) and for every other route. The image's CSP now hashes every inline script of both shells against a pinned per-page inventory (import maps, event-dispatch contract and bootstrap) and fails on drift; `e2e/csp.spec.ts` re-hashes the served pages. `add_header_inherit merge` replaces three copies of the security headers; the dead `error_page 50x → /50x.html` (no such file) had turned backend 502/504s into 404s. The login modal prefetches the dashboard chunks. Removed: `.browserslistrc`, `provideZonelessChangeDetection()`, explicit `OnPush`, `statsJson`; `any` budget 250/300 kB; Playwright traces `retain-on-failure`.
+* **Backend:** typed Jackson 3 value serializers per module (no type ids: stricter than the allow-list; Spring Data Redis' generic Jackson 3 serializer was rejected because it cannot read back a `List.of(...)` value); fixed-size Hikari pool (25/25); histogram buckets end at 10 s; JDBC URL reduced to `reWriteBatchedInserts` + `ApplicationName=taskflow-backend`; dead `/h2-console` security rules and the redundant LOB setting removed.
+* **Infrastructure:** heap dump and GC log on the `backend-diagnostics` volume (`/var/log/taskflow`, created by the image for UID 10001); `wal_compression=lz4`; Jaeger `max_traces: 20000` + `GOMEMLIMIT=200MiB`; local `HEALTHCHECK --start-period=60s --start-interval=2s`; GitOps notes in `docs/deployment/README.md`.
+* **Mobile:** `onlineManager` on `expo-network` with `networkMode: 'always'` + `refetchOnReconnect` (offline requests fail fast; nothing is queued); the polling notifications query passes focus as `subscribed`; Expo tree shaking on the EAS `preview` profile and the Detox release builds; EAS compile cache and `node` pinned to `.nvmrc`; single-ABI Detox Android build; incremental `tsc`.
+* **CI:** `backend-integration` writes its own Gradle entry from `main` pushes; `~/.npm` restored only on a `node_modules` miss; headless-shell Playwright; CodeQL restores the `backend` entry and builds with `--no-build-cache`; C1-only JIT for the contract job's backend; 1 GiB unit-test heap.
+
+### Found during live testing
+
+* **Jaeger config:** the committed config could not start on 2.22.0 at all (`'app.AIConfig' has invalid keys: enable_mcp`): 2.22 replaced `enable_mcp: true` with an `mcp` block. Fixed and validated with the 2.22.0 binary (UI, OTLP and `/api/ai/mcp/` answer).
+* **Old-format cache entries:** Spring Data Redis 4 returns the stored bytes from `get(key, loader)` without calling the loader, so after the serializer switch an old entry was served as an empty 200 body until its TTL. Unreadable values now read as a miss and `RedisBackoffCacheManager` reloads and overwrites them (tested against a real Redis with planted old entries).
+* **Histogram ceiling:** `maximum-expected-value.http.server.requests` is a prefix and also capped the `http.server.requests.active` long-task timer below its 2 min minimum, which failed every request; that timer keeps its own `2h` (`ProdHttpServerRequestsHistogramTest` reproduces it).
+
+### Not done
+
+* **Trivy image scans keep secret scanning** (`scanners: vuln` would save 4–5 s per scan but weakens a security check).
+* **Expo tree shaking in `production`:** follows after a green Detox release run on both platforms (it is experimental in SDK 58 and could not run on a device here).
+* **EAS npm cache:** Expo's docs name different cache hosts on two pages and do not state that a project `.npmrc` overrides them; an `eas-build-pre-install` hook that drops the `registry=` line only under `EAS_BUILD` is the safe route if wanted.
+* **`spring.data.jpa.repositories.bootstrap-mode=deferred`:** no measurable startup gain (§59).
+* **Outside this repository:** mirror the diagnostics volume, `/dev/shm` and `wal_compression=lz4` in `homelab/TF/gitops/apps/taskflow/` (`docs/deployment/README.md`); nginx 1.30.6 (CVE-2026-93479/15176) arrives with Alpine's package through `APK_BUST`.
+
+**Verification:** backend `./gradlew test containerConfigTest jacocoTestCoverageVerification spotbugsMain bootJar` (578 tests; the 12 real-Redis tests passed separately against a local Redis), the boot JAR booted with the image's CDS-training flags (`spring.context.exit=onRefresh`, `spring.cache.type=redis`, no Redis reachable); frontend lint, format, 324 unit tests, production build within budgets, 12/12 Playwright tests (incl. axe and the CSP test) through nginx 1.30.4; mobile `tsc` + 544 Jest tests + 59 security tests, `expo config`, `@expo/eas-json` validation; workflows actionlint 1.7.12 + shellcheck; compose validated against the compose-spec schema; Jaeger config validated with its 2.22.0 binary. Not run here: Docker image builds and the compose stack, Detox, EAS builds and the workflows on GitHub.
