@@ -478,6 +478,8 @@ Current local tuning is limited to what the JVM does automatically plus the heap
 ---
 
 ## 📝 21. Jackson JSON Library (Serialization Format & Formatting Traps)
+> **Correction (2026-10-19, §59):** the shipped application uses neither Blackbird (it is not on the classpath) nor numeric timestamps: Jackson 3 writes ISO-8601 dates by default. The table below is the historical measurement; Blackbird was re-evaluated in §59 and rejected (Jackson write is ~5% of catalog CPU).
+
 **Goal:** Measure the impact of common JSON date-formatting options on peak JVM serialization throughput.
 
 | Configuration Profile | Peak JSON Throughput | Average Latency | p99 Tail Latency | Performance Impact |
@@ -543,8 +545,8 @@ By setting `spring.jpa.properties.hibernate.query.in_clause_parameter_padding=tr
 
 - `hibernate.jdbc.fetch_size=50` — streams large result sets from Postgres in batches instead of row-by-row.
 - `jakarta.persistence.query.timeout=5000` — global 5s safety net so a runaway query cannot pin a HikariCP connection indefinitely.
-- `hibernate.jdbc.lob.non_contextual_creation=true` — removes per-Lob contextual proxy overhead.
-- `server.error.include-stacktrace=never` / `server.error.include-message=never` — production hardening so error responses never leak internals.
+- `hibernate.jdbc.lob.non_contextual_creation=true` — removes per-Lob contextual proxy overhead. *(Removed in §60: Hibernate 7.4's `PostgreSQLDialect` already defaults to it and the model has no `@Lob`.)*
+- `server.error.include-stacktrace=never` / `server.error.include-message=never` — production hardening so error responses never leak internals. *(Spring Boot 4 names them `spring.web.error.include-*`; the old keys were ignored until §59.)*
 
 ---
 
