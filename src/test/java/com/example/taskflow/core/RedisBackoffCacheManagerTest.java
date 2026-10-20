@@ -38,6 +38,18 @@ class RedisBackoffCacheManagerTest {
     }
 
     @Test
+    void aFailedOverwriteOfAnUnreadableValueDoesNotLoadTwice() {
+        StaleFormatCache stale = new StaleFormatCache("things");
+        stale.put("k", StaleFormatCache.UNREADABLE);
+        stale.failPuts.set(true);
+        Cache wrapped = new RedisBackoffCacheManager(new SingleCacheManager(stale), backoff).getCache("things");
+
+        assertEquals("value-1", wrapped.get("k", loader));
+        assertEquals(1, loads.get(), "the write failed, the loaded value is still returned once");
+        assertEquals("value-2", wrapped.get("k", loader), "backing off: loaded directly");
+    }
+
+    @Test
     void healthyStoreCaches() {
         assertEquals("value-1", cache.get("k", loader));
         assertEquals("value-1", cache.get("k", loader));
@@ -104,9 +116,18 @@ class RedisBackoffCacheManagerTest {
      */
     private static final class StaleFormatCache extends ConcurrentMapCache {
         static final Object UNREADABLE = new Object();
+        final AtomicBoolean failPuts = new AtomicBoolean();
 
         StaleFormatCache(String name) {
             super(name, false);
+        }
+
+        @Override
+        public void put(Object key, Object value) {
+            if (failPuts.get()) {
+                throw new RedisConnectionFailureException("Redis command timed out");
+            }
+            super.put(key, value);
         }
 
         @Override

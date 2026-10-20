@@ -90,6 +90,10 @@ class ContainerConfigGuardTest {
                         && content.contains("rewrite ^ /index.csr.html last;")
                         && content.contains("rewrite ^ /index.html last;"),
                 "`/` must serve the client shell to a browser with a session cookie");
+        assertTrue(content.contains("set $shell_vary \"\";")
+                        && content.contains("set $shell_vary Cookie;")
+                        && content.contains("add_header Vary $shell_vary always;"),
+                "`/` depends on the Cookie header and must say so (Vary: Cookie), the other routes must not");
         assertTrue(content.contains("location ~ ^/index(?:\\.csr)?\\.html$ {")
                         && content.contains("add_header Cache-Control \"no-cache\" always;"),
                 "both HTML shells must be revalidated on every load");

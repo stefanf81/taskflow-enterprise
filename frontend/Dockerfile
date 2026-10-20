@@ -59,6 +59,7 @@ RUN awk -v dir=/tmp/inline-scripts ' \
         echo "Unexpected inline <script> inventory (page kind, in document order):" >&2; \
         echo "  found:    ${INVENTORY}" >&2; \
         echo "  expected: ${EXPECTED}" >&2; \
+        echo "Review the new inline scripts, then update EXPECTED in frontend/Dockerfile and the hash count in e2e/csp.spec.ts." >&2; \
         exit 1; \
     fi \
     && SCRIPT_HASHES="$(awk '$3 != "-" { print $3 }' /tmp/inline-scripts.txt \

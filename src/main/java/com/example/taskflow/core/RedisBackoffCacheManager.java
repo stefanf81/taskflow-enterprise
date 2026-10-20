@@ -111,27 +111,31 @@ final class RedisBackoffCacheManager implements CacheManager {
 
         @Override
         public <T> T get(Object key, Callable<T> valueLoader) {
-            if (backoff.allowRequest()) {
-                try {
-                    T value = delegate.get(key, valueLoader);
-                    backoff.recordSuccess();
-                    if (value == null && nullValuesNotCached) {
-                        // Only a stored value the serializer could not read (an older format) comes back
-                        // as null: the Redis writer returns the existing bytes without calling the loader,
-                        // so load it here and overwrite the entry instead of serving null until it expires.
-                        value = load(key, valueLoader);
-                        if (value != null) {
-                            delegate.put(key, value);
-                        }
-                    }
-                    return value;
-                } catch (ValueRetrievalException e) {
-                    throw e; // the loader failed, not the store
-                } catch (RuntimeException e) {
-                    backoff.recordFailure(e);
+            if (!backoff.allowRequest()) {
+                return load(key, valueLoader);
+            }
+            T value;
+            try {
+                value = delegate.get(key, valueLoader);
+                backoff.recordSuccess();
+            } catch (ValueRetrievalException e) {
+                throw e; // the loader failed, not the store
+            } catch (RuntimeException e) {
+                backoff.recordFailure(e);
+                return load(key, valueLoader);
+            }
+            if (value == null && nullValuesNotCached) {
+                // Only a stored value the serializer could not read (an older format) comes back
+                // as null: the Redis writer returns the existing bytes without calling the loader,
+                // so load it here and overwrite the entry instead of serving null until it expires.
+                // The overwrite goes through put(): a failed write is a store failure, it must not
+                // run the loader a second time.
+                value = load(key, valueLoader);
+                if (value != null) {
+                    put(key, value);
                 }
             }
-            return load(key, valueLoader);
+            return value;
         }
 
         private static <T> T load(Object key, Callable<T> valueLoader) {
