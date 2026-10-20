@@ -81,14 +81,17 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      # Read-only: CI's `backend` job owns the Gradle cache writes. CodeQL's
-      # autobuild only needs the restored dependency state. Unlike ci.yml's
-      # read-only jobs, do not point GRADLE_BUILD_ACTION_CACHE_KEY_JOB at
-      # `backend`: that entry carries a build cache, and a FROM-CACHE
-      # compileJava never runs javac, so CodeQL's tracer would see no sources.
+      # Read-only: CI's `backend` job owns the Gradle cache writes. Restore
+      # that job's newest entry (wrapper, dependencies) like ci.yml's
+      # read-only jobs; with its own key this job restored a frozen entry with
+      # a Gradle 9.8.0 wrapper and downloaded 9.8.1 every night (run
+      # 39179551090). The entry also carries a build cache, so the build below
+      # runs with --no-build-cache.
       - name: Set up Gradle
         if: matrix.language == 'java-kotlin'
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+        env:
+          GRADLE_BUILD_ACTION_CACHE_KEY_JOB: backend
         with:
           cache-read-only: true
 
@@ -119,9 +122,11 @@ jobs:
       # full extra `--no-daemon` JVM + configuration phase (~13 s) on a
       # separate `clean` that is a no-op on a fresh runner. Same javac
       # invocations -> same CodeQL traps -> same analysis results.
+      # --no-build-cache: a FROM-CACHE compileJava/compileTestJava never runs
+      # javac, so CodeQL's tracer would see no Java sources at all.
       - name: Build (manual)
         if: matrix.build-mode == 'manual'
-        run: ./gradlew --no-daemon testClasses
+        run: ./gradlew --no-daemon --no-build-cache testClasses
 
       - name: Analyze
         uses: github/codeql-action/analyze@v4

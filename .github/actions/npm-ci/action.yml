@@ -23,7 +23,10 @@ inputs:
       versions, install flags, both lockfiles and package.json files (npm 12
       allowScripts), the .npmrc files and this action itself. On a hit, skip the npm upgrade
       and `npm ci`. On a miss, install as usual and save. There are no restore
-      keys, so a partial or stale tree is never reused.
+      keys, so a partial or stale tree is never reused. This mode also owns the
+      npm download cache (~/.npm): it is restored only on a node_modules miss,
+      so callers set `package-manager-cache: false` on setup-node and omit
+      `cache: npm` (setup-node restored ~/.npm before the hit was known).
     required: false
     default: "false"
 runs:
@@ -58,6 +61,18 @@ runs:
           ${{ inputs.package-path }}/node_modules
           shared/schemas/node_modules
         key: ${{ steps.nm-key.outputs.key }}
+
+    # Only on a node_modules miss: on a hit nothing is downloaded, so the
+    # restore setup-node's `cache: npm` used to do here was wasted time.
+    # Exact key, the same scheme as setup-node's (OS, architecture, lockfiles);
+    # saved after the installs below when it missed.
+    - name: Restore npm download cache
+      id: npm-cache
+      if: inputs.cache-node-modules == 'true' && steps.nm-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/.npm
+        key: npm-cache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/package-lock.json', inputs.package-path), 'shared/schemas/package-lock.json') }}
 
     # setup-node only reads `packageManager` to enable npm caching; it never
     # installs that npm version, and Node 24 bundles npm 11. Corepack is
@@ -138,3 +153,10 @@ runs:
           ${{ inputs.package-path }}/node_modules
           shared/schemas/node_modules
         key: ${{ steps.nm-key.outputs.key }}
+
+    - name: Save npm download cache
+      if: inputs.cache-node-modules == 'true' && steps.nm-cache.outputs.cache-hit != 'true' && steps.npm-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ~/.npm
+        key: ${{ steps.npm-cache.outputs.cache-primary-key }}

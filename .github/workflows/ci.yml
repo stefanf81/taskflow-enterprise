@@ -422,17 +422,21 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      # `backend` owns Gradle cache writes in this workflow. Restore its entry
-      # (see `package`): with its own key this job fell through to the newest
-      # Linux entry of any job, the Android build's 1.8 GB Gradle User Home
-      # (Set up Gradle 15-22 s), then downloaded the backend's dependencies
-      # and compiled without a build cache (runs 39134179024, 39180950242).
+      # Unlike the other read-only jobs, this one keeps its own Gradle User
+      # Home entry and writes it from `main` pushes only. Those runs use
+      # --build-cache, so the entry carries `testcontainersTest` and
+      # `spotbugsMain` outputs, and a pull request that does not change their
+      # inputs (e.g. a Renovate npm PR) gets both FROM-CACHE instead of
+      # running them (135 s of the 158 s job in run 39180950242, the PR's
+      # longest job). The nightly and dispatches run with --no-build-cache and
+      # stay read-only: cache cleanup would drop the unused build-cache
+      # entries, and PRs would restore that entry without the outputs.
+      # Before an entry exists (or after eviction) the restore falls through
+      # to the newest Linux entry of any job, e.g. the Android build's.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
-        env:
-          GRADLE_BUILD_ACTION_CACHE_KEY_JOB: backend
         with:
-          cache-read-only: true
+          cache-read-only: ${{ github.event_name != 'push' }}
 
       - name: Testcontainers and SpotBugs
         env:
@@ -523,9 +527,10 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      # Within this workflow, `backend` owns Gradle cache writes. The Android
-      # and dependency-audit workflows retain their own writable caching.
-      # Read-only packaging avoids competing saves of shared cache entries.
+      # Within this workflow, `backend` owns the shared Gradle cache writes
+      # (`backend-integration` writes only its own entry, from `main` pushes).
+      # The Android and dependency-audit workflows retain their own writable
+      # caching. Read-only packaging avoids competing saves of shared entries.
       #
       # GRADLE_BUILD_ACTION_CACHE_KEY_JOB restores the newest `backend` entry
       # (wrapper, dependencies, build cache). setup-gradle keys Gradle User
@@ -601,12 +606,16 @@ jobs:
           name: backend-jar
           path: backend-jar-dir
 
+      # C1-only JIT: this JVM boots, serves /v3/api-docs once and exits, so
+      # C2 compilation is pure startup overhead (the `test` task uses the same
+      # flag for its short-lived forks; BENCHMARKS.md §53).
       - name: Start backend for contract verification
         id: contract_backend
         uses: ./.github/actions/start-backend
         with:
           jar-path: backend-jar-dir/*.jar
           log-file: openapi-contract.log
+          java-options: -XX:TieredStopAtLevel=1
 
       - name: Verify OpenAPI Contract
         run: |
@@ -712,14 +721,13 @@ jobs:
         with:
           persist-credentials: false
 
+      # No setup-node cache: the npm-ci action below restores ~/.npm itself,
+      # and only when its node_modules cache misses (a hit downloads nothing).
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: |
-            frontend/package-lock.json
-            shared/schemas/package-lock.json
+          package-manager-cache: false
 
       # Same inputs as the E2E install, so both jobs share one exact-match
       # node_modules cache key; a hit skips the npm upgrade and `npm ci`.
@@ -925,14 +933,13 @@ jobs:
       # Frontend image
       ##########################################################
 
+      # No setup-node cache: the npm-ci action below restores ~/.npm itself,
+      # and only when its node_modules cache misses (a hit downloads nothing).
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: |
-            frontend/package-lock.json
-            shared/schemas/package-lock.json
+          package-manager-cache: false
 
       # The E2E job only needs Playwright from these deps; an exact-match
       # node_modules cache skips the npm upgrade + `npm ci` (~11 s) on a hit.
@@ -975,18 +982,21 @@ jobs:
           path: ~/.cache/ms-playwright
           # Key on the pinned image, not runner.os: the browser bundles are
           # built against the image's glibc/OS packages, so caches must not be
-          # shared across Ubuntu releases.
-          key: playwright-ubuntu-26.04-${{ steps.playwright-version.outputs.version }}
-          restore-keys: |
-            playwright-ubuntu-26.04-${{ steps.playwright-version.outputs.version }}
+          # shared across Ubuntu releases. `shell`: only the headless shell is
+          # installed (see below), so a full-Chromium entry must not match.
+          key: playwright-shell-ubuntu-26.04-${{ steps.playwright-version.outputs.version }}
 
       # Browsers are restored from the cache above; --with-deps otherwise
       # re-runs apt-get on every build. Install only on a cache miss.
+      # --only-shell: the suite runs only the `chromium` project, headless and
+      # without a channel, which Playwright launches with
+      # chromium-headless-shell (playwright-core 1.64 `getExecutableName`); the
+      # full Chrome for Testing build was downloaded and cached but never run.
       - name: Install Playwright Browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         working-directory: frontend
         run: |
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps --only-shell chromium
 
       ##########################################################
       # Production frontend ingress

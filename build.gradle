@@ -256,6 +256,11 @@ tasks.named("test") {
 	// more forks: measured unit suite 92s (3 forks) -> 64s (2 forks + C1).
 	maxParallelForks = Math.min(2, Runtime.runtime.availableProcessors())
 	jvmArgs "-XX:TieredStopAtLevel=1"
+	// Each fork keeps its ~8 cached Spring contexts alive: 285-370 MB still
+	// live after GC in Gradle's default 512 MB worker heap, so G1 ran ~30
+	// concurrent cycles per fork. With 1 GiB, GC pauses fell 5.0 -> 2.7-3.2 s
+	// per fork (fork CPU -2%); the point is headroom as contexts are added.
+	maxHeapSize = "1g"
 	environment "SPRING_SECURITY_PASSWORD", "admin-password"
 	systemProperty "spring.cache.type", "simple"
 	// Live @Scheduled jobs (outbox relay, reminders, retention, SSE heartbeat) would race with
