@@ -20,21 +20,50 @@ WORKDIR /assets
 
 COPY dist/frontend/browser/ ./
 
-# Angular's production build emits an inline SRI import map
-# (<script type="importmap">{"integrity":{...}}</script>). A `script-src 'self'`
-# policy blocks that inline element and silently discards the SRI hashes it
-# carries for lazy chunks. The HTML spec forbids a `src` attribute on import
-# maps and static files cannot carry a nonce, so the exact element text is
-# hashed here at image build time and authorized via a sha384 source
-# expression. The build fails loudly if the import map is missing or
-# duplicated so the served hash can never silently drift from the assets.
-RUN IMPORT_MAP_COUNT="$(grep -o '<script type="importmap">[^<]*</script>' index.html | wc -l)" \
-    && if [ "${IMPORT_MAP_COUNT}" -ne 1 ]; then \
-        echo "Expected exactly one inline import map in index.html, found ${IMPORT_MAP_COUNT}" >&2; \
+# A `script-src 'self'` policy blocks inline scripts, and static files cannot carry a nonce,
+# so the exact text of every inline script the build emits is hashed here and authorized as
+# a sha384 source expression:
+#   - the SRI import map (<script type="importmap">{"integrity":{...}}</script>) on both pages;
+#     blocked, it silently discards the integrity hashes of the lazy chunks (the HTML spec
+#     forbids `src` on import maps);
+#   - on the prerendered landing page (index.html), event replay's dispatch contract
+#     (id="ng-event-dispatch-contract") and its `window.__jsaction_bootstrap(...)` call.
+# `<script id="ng-state" type="application/json">` is data, not script: CSP does not apply.
+# index.csr.html is the client-rendered shell for every other route. The inline JavaScript
+# contains `<` and newlines, so awk reads each page whole (RS is \x01, which never occurs)
+# and splits it at `<script`/`</script>`. The inventory is pinned per page, in document
+# order: the build fails if a script appears, disappears or changes kind, so the served
+# hashes cannot drift from the assets and nothing unreviewed is authorized. Update EXPECTED
+# (and e2e/csp.spec.ts, which re-hashes the served pages) when Angular changes what it inlines.
+RUN awk -v dir=/tmp/inline-scripts ' \
+        BEGIN { RS = sprintf("%c", 1); system("mkdir -p " dir); } \
+        { \
+            rest = $0; n = 0; \
+            while ((i = index(rest, "<script")) > 0) { \
+                rest = substr(rest, i); j = index(rest, ">"); tag = substr(rest, 1, j); \
+                rest = substr(rest, j + 1); k = index(rest, "</script>"); \
+                body = substr(rest, 1, k - 1); rest = substr(rest, k + 9); \
+                if (index(tag, " src=") > 0) continue; \
+                if (index(tag, "type=\"application/json\"") > 0) { print FILENAME, "json", "-"; continue; } \
+                if (index(tag, "type=\"importmap\"") > 0) kind = "importmap"; \
+                else if (index(tag, "id=\"ng-event-dispatch-contract\"") > 0) kind = "event-contract"; \
+                else if (index(body, "window.__jsaction_bootstrap(") == 1) kind = "event-bootstrap"; \
+                else kind = "unknown"; \
+                f = dir "/" FILENAME "." (++n); printf "%s", body > f; close(f); \
+                print FILENAME, kind, f; \
+            } \
+        }' index.html index.csr.html > /tmp/inline-scripts.txt \
+    && INVENTORY="$(cut -d' ' -f1,2 /tmp/inline-scripts.txt | tr '\n' ',')" \
+    && EXPECTED='index.html importmap,index.html event-contract,index.html event-bootstrap,index.html json,index.csr.html importmap,' \
+    && if [ "${INVENTORY}" != "${EXPECTED}" ]; then \
+        echo "Unexpected inline <script> inventory (page kind, in document order):" >&2; \
+        echo "  found:    ${INVENTORY}" >&2; \
+        echo "  expected: ${EXPECTED}" >&2; \
         exit 1; \
     fi \
-    && IMPORT_MAP_JSON="$(grep -o '<script type="importmap">[^<]*</script>' index.html | sed -e 's#^<script type="importmap">##' -e 's#</script>$##')" \
-    && HASH="$(printf '%s' "${IMPORT_MAP_JSON}" | openssl dgst -sha384 -binary | openssl base64 -A)" \
+    && SCRIPT_HASHES="$(for f in $(awk '$3 != "-" { print $3 }' /tmp/inline-scripts.txt); do \
+            printf "'sha384-%s'\n" "$(openssl dgst -sha384 -binary < "$f" | openssl base64 -A)"; \
+        done | sort -u | tr '\n' ' ')" \
     && printf 'add_header Content-Security-Policy "default-src %s; base-uri %s; form-action %s; frame-ancestors %s; object-src %s; script-src %s %s; style-src %s %s; font-src %s data:; img-src %s data:; connect-src %s;" always;\n' \
         "'self'" \
         "'self'" \
@@ -42,14 +71,14 @@ RUN IMPORT_MAP_COUNT="$(grep -o '<script type="importmap">[^<]*</script>' index.
         "'self'" \
         "'none'" \
         "'self'" \
-        "'sha384-${HASH}'" \
+        "${SCRIPT_HASHES% }" \
         "'self'" \
         "'unsafe-inline'" \
         "'self'" \
         "'self'" \
         "'self'" \
-        > /csp-importmap.conf \
-    && cat /csp-importmap.conf
+        > /csp.conf \
+    && cat /csp.conf
 
 # Generate precompressed Brotli and gzip sidecars. nginx.conf serves them with
 # brotli_static / gzip_static, so neither is compressed on the fly at runtime.
@@ -154,11 +183,11 @@ COPY nginx-main.conf /etc/nginx/nginx.conf
 # Your existing HTTP server block
 COPY nginx.conf /etc/nginx/http.d/default.conf
 
-# CSP snippet generated in the compression stage. It carries the sha384 hash of
-# the exact inline import-map text baked into this image; nginx.conf includes it
-# wherever the policy header is emitted. `RUN nginx -t` below fails the build if
+# CSP snippet generated in the compression stage. It carries the sha384 hashes of
+# the exact inline scripts baked into this image; nginx.conf includes it once, at
+# server level (add_header_inherit merge reaches every location). `RUN nginx -t` below fails the build if
 # this include is missing or the snippet is malformed.
-COPY --from=compression /csp-importmap.conf /etc/nginx/csp-importmap.conf
+COPY --from=compression /csp.conf /etc/nginx/csp.conf
 
 # Default upstream uses Docker's embedded DNS. CI mounts a static alternative
 # over this file when the backend runs directly on the runner host.

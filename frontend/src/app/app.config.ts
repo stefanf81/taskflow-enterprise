@@ -3,8 +3,8 @@ import {
   inject,
   provideAppInitializer,
   provideBrowserGlobalErrorListeners,
-  provideZonelessChangeDetection,
 } from '@angular/core';
+import { provideClientHydration, withIncrementalHydration } from '@angular/platform-browser';
 import {
   provideHttpClient,
   withFetch,
@@ -16,13 +16,22 @@ import { catchError, of, retry, timeout } from 'rxjs';
 
 import { authInterceptor } from './auth.interceptor';
 import { AuthApi } from './core/api/auth-api';
+import { isServerRender } from './core/platform';
 import { routes } from './app.routes';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     // Surface uncaught errors (including from effects) to the browser console.
     provideBrowserGlobalErrorListeners(),
-    provideZonelessChangeDetection(),
+    // No change-detection provider: Angular 22 bootstraps zoneless and components default to
+    // OnPush (`ChangeDetectionStrategy.Eager` would opt one out).
+
+    // The guest landing is prerendered (app.routes.server.ts): reuse its DOM instead of rendering
+    // it again. Incremental hydration also renders the `@defer (… hydrate on idle)` blocks on the
+    // server and hydrates them when their trigger fires; it includes event replay, which replays
+    // clicks made before the code that handles them has loaded. Pages rendered in the browser
+    // (index.csr.html carries `ngcm`) skip hydration.
+    provideClientHydration(withIncrementalHydration()),
 
     provideRouter(
       routes,
@@ -48,7 +57,9 @@ export const appConfig: ApplicationConfig = {
     // Failures are retried (twice, with a short pause) so one slow/failed boot request
     // does not leave the session without a CSRF cookie; AuthState.logout() additionally
     // refetches the token itself when the server answers 403.
+    // Not while prerendering: there is no backend at build time.
     provideAppInitializer(() => {
+      if (isServerRender()) return;
       inject(AuthApi)
         .fetchCsrfToken()
         .pipe(

@@ -57,6 +57,44 @@ class ContainerConfigGuardTest {
         System.out.println("=".repeat(80));
     }
 
+    /**
+     * The security headers are declared once, at server level, and reach the caching locations
+     * only through {@code add_header_inherit merge} (nginx 1.29.3+): without it, the
+     * Cache-Control {@code add_header} of such a location drops every inherited header.
+     */
+    @Test
+    void nginx_security_headers_are_declared_once_and_merged() throws Exception {
+        String content = Files.readString(Path.of("frontend/nginx.conf"));
+        assertTrue(content.contains("add_header_inherit merge;"),
+                "nginx.conf must merge the server-level security headers into locations with their own add_header");
+        for (String header : List.of("X-Frame-Options", "X-Content-Type-Options", "Strict-Transport-Security",
+                "Permissions-Policy", "Cross-Origin-Opener-Policy")) {
+            assertEquals(1, content.split("add_header " + header + " ", -1).length - 1,
+                    header + " must be declared once (server level), not repeated per location");
+        }
+        assertEquals(1, content.split("include /etc/nginx/csp.conf;", -1).length - 1,
+                "the CSP snippet must be included once (server level)");
+    }
+
+    /**
+     * The guest landing is prerendered into index.html; every other route needs the
+     * client-rendered index.csr.html, and so does `/` for a browser that has a session (it would
+     * otherwise paint the guest page before redirecting). Both shells must stay revalidated.
+     */
+    @Test
+    void nginx_serves_prerendered_landing_only_to_guests_on_root() throws Exception {
+        String content = Files.readString(Path.of("frontend/nginx.conf"));
+        assertTrue(content.contains("try_files $uri $uri/ /index.csr.html;"),
+                "client routes must fall back to the client-rendered shell, not the prerendered landing");
+        assertTrue(content.contains("if ($cookie_access_token) {")
+                        && content.contains("rewrite ^ /index.csr.html last;")
+                        && content.contains("rewrite ^ /index.html last;"),
+                "`/` must serve the client shell to a browser with a session cookie");
+        assertTrue(content.contains("location ~ ^/index(?:\\.csr)?\\.html$ {")
+                        && content.contains("add_header Cache-Control \"no-cache\" always;"),
+                "both HTML shells must be revalidated on every load");
+    }
+
     @Test
     void p1_2_jvm_diagnostics_flags() throws Exception {
         System.out.println("\n" + "=".repeat(80));

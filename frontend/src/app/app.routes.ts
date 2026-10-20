@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { Router, RouterLink, Routes } from '@angular/router';
 import { authGuard } from './auth.guard';
 import { AuthState } from './auth.state';
+import { loadAdminDashboard, loadCustomerPortal } from './dashboard-loaders';
 import { LandingPage } from './features/landing/landing-page';
 
 /**
@@ -51,14 +52,13 @@ export const routes: Routes = [
   {
     path: 'admin',
     canActivate: [authGuard],
-    loadComponent: () => import('./features/admin/admin-dashboard').then((m) => m.AdminDashboard),
+    loadComponent: loadAdminDashboard,
     title: 'Owner Dashboard — TaskFlow',
   },
   {
     path: 'customer',
     canActivate: [authGuard],
-    loadComponent: () =>
-      import('./features/customer/customer-portal').then((m) => m.CustomerPortal),
+    loadComponent: loadCustomerPortal,
     title: 'My Appointments — TaskFlow',
   },
   {

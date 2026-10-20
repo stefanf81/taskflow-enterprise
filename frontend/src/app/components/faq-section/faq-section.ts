@@ -1,11 +1,10 @@
-import { Component, ChangeDetectionStrategy, signal } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
   selector: 'app-faq-section',
   standalone: true,
   imports: [CommonModule],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="card bg-zinc-950 border border-white/10 rounded-3xl p-8 mt-16">
       <h2 class="text-center text-lg font-extrabold text-zinc-100 uppercase tracking-tight mb-6">

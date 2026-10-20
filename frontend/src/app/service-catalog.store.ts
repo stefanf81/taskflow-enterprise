@@ -4,17 +4,24 @@ import { ServiceItem } from './types/api';
 import { CatalogApi } from './core/api/catalog-api';
 import { PUBLIC_REQUEST } from './core/http/public-request.token';
 import { safeResourceValue } from './core/resource-utils';
+import { isServerRender } from './core/platform';
 import { serviceItemResponseListSchema } from '@taskflow/schemas';
 
 @Injectable({ providedIn: 'root' })
 export class ServiceCatalogStore {
   private readonly catalogApi = inject(CatalogApi);
 
+  // Build-time prerendering has no backend. Idle on the server renders the same empty list the
+  // browser shows while the request is in flight, so hydration starts from identical markup.
+  private readonly prerendering = isServerRender();
   private readonly servicesResource = httpResource<ServiceItem[]>(
-    () => ({
-      url: this.catalogApi.servicesUrl,
-      context: new HttpContext().set(PUBLIC_REQUEST, true),
-    }),
+    () =>
+      this.prerendering
+        ? undefined
+        : {
+            url: this.catalogApi.servicesUrl,
+            context: new HttpContext().set(PUBLIC_REQUEST, true),
+          },
     {
       defaultValue: [],
       // Runtime contract check: a drifted backend response becomes a resource

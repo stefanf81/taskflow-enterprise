@@ -4,6 +4,7 @@ import { PublicBarber } from './types/api';
 import { BarbersApi } from './core/api/barbers-api';
 import { PUBLIC_REQUEST } from './core/http/public-request.token';
 import { safeResourceValue } from './core/resource-utils';
+import { isServerRender } from './core/platform';
 import { publicBarberResponseListSchema } from '@taskflow/schemas';
 
 /**
@@ -17,11 +18,17 @@ import { publicBarberResponseListSchema } from '@taskflow/schemas';
 export class PublicBarberStore {
   private readonly barbersApi = inject(BarbersApi);
 
+  // Build-time prerendering has no backend. Idle on the server renders the same empty list the
+  // browser shows while the request is in flight, so hydration starts from identical markup.
+  private readonly prerendering = isServerRender();
   private readonly barbersResource = httpResource<PublicBarber[]>(
-    () => ({
-      url: this.barbersApi.publicListUrl,
-      context: new HttpContext().set(PUBLIC_REQUEST, true),
-    }),
+    () =>
+      this.prerendering
+        ? undefined
+        : {
+            url: this.barbersApi.publicListUrl,
+            context: new HttpContext().set(PUBLIC_REQUEST, true),
+          },
     {
       defaultValue: [],
       parse: (raw) => publicBarberResponseListSchema.parse(raw),

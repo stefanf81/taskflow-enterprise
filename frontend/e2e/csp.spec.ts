@@ -4,11 +4,12 @@ import { expect, test } from '@playwright/test';
 /**
  * CSP + SRI regression guard for the static nginx image.
  *
- * Angular emits an inline `<script type="importmap">` that carries the sha384
- * integrity hashes for lazily loaded chunks. A `script-src 'self'` policy
- * blocks that inline element, silently discarding the SRI metadata. The
- * frontend Dockerfile therefore hashes the exact element text at image build
- * time and nginx serves `script-src 'self' 'sha384-…'`.
+ * Angular emits inline scripts: the `<script type="importmap">` that carries the
+ * sha384 integrity hashes for lazily loaded chunks (both pages) and, on the
+ * prerendered landing page, event replay's dispatch contract and bootstrap call.
+ * A `script-src 'self'` policy blocks them; a blocked import map silently drops
+ * the SRI metadata. The frontend Dockerfile therefore hashes the exact text of
+ * each one at image build time and nginx serves `script-src 'self' 'sha384-…'`.
  *
  * The global `bypassCSP: true` (needed so Playwright/axe can inject scripts
  * behind the production policy) hides exactly this class of regression, so
@@ -19,6 +20,19 @@ import { expect, test } from '@playwright/test';
 test.use({ bypassCSP: false });
 
 const IMPORT_MAP_PATTERN = /<script type="importmap">([^<]*)<\/script>/;
+// Inline (no `src`) script elements; `application/json` blocks (ng-state) are data, not script.
+const INLINE_SCRIPT_PATTERN = /<script((?:(?!\bsrc=)[^>])*)>([\s\S]*?)<\/script>/g;
+
+function inlineScriptHashes(html: string): string[] {
+  return [...html.matchAll(INLINE_SCRIPT_PATTERN)]
+    .filter(([, attributes]) => !attributes?.includes('application/json'))
+    .map(
+      ([, , text]) =>
+        `sha384-${createHash('sha384')
+          .update(text ?? '')
+          .digest('base64')}`,
+    );
+}
 
 test.describe('Content-Security-Policy (nginx image)', () => {
   test.skip(!process.env['E2E_DOCKER'], 'CSP only exists behind the nginx image');
@@ -47,5 +61,27 @@ test.describe('Content-Security-Policy (nginx image)', () => {
       /Refused to (execute|apply).*inline/i.test(message),
     );
     expect(inlineRefusals).toEqual([]);
+  });
+
+  test('authorizes every inline script of the prerendered landing and the client shell', async ({
+    page,
+  }) => {
+    // `/` is the prerendered landing (index.html, event replay); any other route gets the
+    // client-rendered shell (index.csr.html, `ngcm`, import map only).
+    const landing = await page.request.get('/');
+    const landingHtml = await landing.text();
+    expect(landingHtml).toContain('id="ng-event-dispatch-contract"');
+    expect(landingHtml).not.toContain('ngcm');
+    const shell = await page.request.get('/admin');
+    const shellHtml = await shell.text();
+    expect(shellHtml).toContain('<body ngcm');
+
+    const csp = landing.headers()['content-security-policy'] ?? '';
+    expect(shell.headers()['content-security-policy']).toBe(csp);
+    const landingHashes = inlineScriptHashes(landingHtml);
+    expect(landingHashes).toHaveLength(3);
+    for (const hash of [...landingHashes, ...inlineScriptHashes(shellHtml)]) {
+      expect(csp).toContain(`'${hash}'`);
+    }
   });
 });

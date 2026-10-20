@@ -1,6 +1,7 @@
 import { Component, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthState } from '../../auth.state';
+import { DashboardPrefetch } from '../../dashboard-loaders';
 import { AppointmentStore } from '../../appointment.store';
 import { ServiceCatalogStore } from '../../service-catalog.store';
 import { AnnouncementBarComponent } from '../../components/announcement-bar/announcement-bar';
@@ -36,6 +37,7 @@ export class LandingPage {
   private readonly appointmentStore = inject(AppointmentStore);
   private readonly catalogStore = inject(ServiceCatalogStore);
   private readonly router = inject(Router);
+  private readonly dashboardPrefetch = inject(DashboardPrefetch);
 
   readonly isLoggedIn = this.authState.isLoggedIn;
   readonly showAdminLoginModal = signal(false);
@@ -51,6 +53,12 @@ export class LandingPage {
         this.showAdminLoginModal.set(true);
         this.authState.loginPromptRequested.set(false);
       }
+    });
+
+    // Opening the login modal is the signal that a dashboard comes next: fetch its chunk while
+    // the user types, not after the login response.
+    effect(() => {
+      if (this.showAdminLoginModal()) this.dashboardPrefetch.prefetch();
     });
 
     // A signed-in user landing on `/` goes straight to their dashboard.
