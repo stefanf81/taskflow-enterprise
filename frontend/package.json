@@ -19,7 +19,7 @@
   "packageManager": "npm@12.2.0",
   "overrides": {
     "esbuild": "0.28.2",
-    "fast-uri": "3.1.8"
+    "fast-uri": "3.1.9"
   },
   "dependencies": {
     "@angular/cdk": "^22.2.2",
