@@ -172,6 +172,7 @@ mobile/
 ├── app.json                 # Expo configuration
 ├── eas.json                 # EAS Build configuration (Android APK/AAB, iOS IPA)
 ├── metro.config.js          # Metro config: watches only ../shared, resolves node_modules from mobile/
+├── metro/                   # Metro resolver rule that keeps zod's unused locales out of the bundle
 └── package.json
 ```
 
@@ -192,16 +193,20 @@ TaskFlow Mobile enforces a dual-layered testing strategy combining Unit/Componen
 
 ### 3. Runtime Performance Baseline
 
-Expo SDK 58 uses React Native 0.88.0 with the New Architecture and Hermes V1 enabled by default. A production Android Metro export generated a Hermes bytecode bundle (`.hbc`) of 3,754,723 bytes (SDK 57 / RN 0.86.3: 3,399,015 bytes). Release builds run R8 (`android.enableMinifyInReleaseBuilds=true`, the SDK 58 template default).
+Expo SDK 58 uses React Native 0.88.0 with the New Architecture and Hermes V1 enabled by default. A production Android Metro export (`npx expo export --platform android`) generates a Hermes bytecode bundle (`.hbc`) of 3,148,226 bytes from 1,063 modules (2026-10-20, with `expo-network`; 3,413,899 bytes / 1,123 modules before zod's locales were dropped), or 3,033,110 bytes with tree shaking (see below). Release builds run R8 (`android.enableMinifyInReleaseBuilds=true`, the SDK 58 template default).
 
 Performance settings (BENCHMARKS.md §58):
 
 - **React Compiler** is on (`app.json` `experiments.reactCompiler: true`; the Babel plugin ships with `babel-preset-expo`). It memoises components and hooks automatically, so new code should not add `useMemo`/`useCallback` only for render performance. The Jest suite passes with the compiler forced on.
 - **Icons:** import one icon set per file (`import Ionicons from '@expo/vector-icons/Ionicons'`), never the `@expo/vector-icons` barrel: the barrel bundled every set's font (bundled assets 4.08 → 0.40 MB, Hermes bytecode 3.73 → 3.41 MB).
 - **Zustand selectors** that return several fields use `useShallow`, so a store update re-renders only the screens whose fields changed.
-- **Splash screen:** `RootNavigator` calls `SplashScreen.preventAutoHideAsync()` and hides it once `isBootstrapping` is false, so the first frame is the real screen instead of a blank one.
-- **Release builds:** the `expo-build-properties` plugin sets `enableMinifyInReleaseBuilds` and `enableShrinkResourcesInReleaseBuilds` explicitly for Android, so R8 and resource shrinking no longer depend on template defaults.
+- **Splash screen:** `RootNavigator` calls `SplashScreen.preventAutoHideAsync()` and hides it once `isBootstrapping` is false and the Ionicons font has loaded (or failed to), so the first frame is the real screen with its tab icons instead of a blank one.
+- **zod locales:** zod's CommonJS barrels require all ~60 error-message locales for the unused `locales` export; Metro cannot tree-shake them, so they were 14% of the minified bundle. `metro/zodLocales.js` gives those barrels an empty namespace (Hermes bytecode −7.9%, 63 fewer modules evaluated at startup), and `jest.config.js` maps the same module so the tests run the shipped graph. Do not select a locale through `z.locales`/`config()`; import it from `zod/locales` if one is ever needed.
+- **Release builds:** the `expo-build-properties` plugin sets `enableMinifyInReleaseBuilds` and `enableShrinkResourcesInReleaseBuilds` explicitly for Android, so R8 and resource shrinking no longer depend on template defaults. `gifEnabled`/`webpEnabled` are `false`: the app renders no GIF or WebP through React Native's `<Image>`, so Fresco's `animated-gif` and `webpsupport` native libraries (≈0.8 MB per ABI) are not packaged. Re-enable them (or use `expo-image`) before rendering such images.
 - **Token reads:** the request interceptor reads the token and its expiry from secure storage in parallel (`Promise.all`); both cross the native bridge.
+- **Connectivity:** `query/queryClient.ts` feeds `expo-network` into TanStack's `onlineManager` (React Native has no `online`/`offline` events), so coming back online refetches the stale and failed queries on screen (`refetchOnReconnect`). `networkMode: 'always'` keeps offline requests failing fast into the screens' error + retry state and never holds a mutation (a booking) until the network returns.
+- **Hidden tabs:** `useNotifications` passes the tab's focus as `subscribed` as well as the polling switch, so the hidden outbox tab neither polls nor re-renders on cache updates; on refocus a list older than the 60 s `staleTime` is refetched.
+- **Tree shaking (staged):** Expo's Metro tree shaking (`EXPO_UNSTABLE_METRO_OPTIMIZE_GRAPH=1` + `EXPO_UNSTABLE_TREE_SHAKING=1`, experimental in SDK 58) removes another 115 KB (−3.7%) of Hermes bytecode on Android and 117 KB on iOS. It is on for the Detox release builds (`.detoxrc.js`) and the EAS `preview` profile only; add the same two variables to the `production` profile in `eas.json` after a green Detox run on both platforms with a tree-shaken build. Debug builds and the CI native builds (Debug) do not bundle JavaScript, so they never exercise it.
 
 `react-native-reanimated` and `react-native-worklets` are not installed, so Worklets bundle mode is not applicable and its documented memory overhead does not affect this app. The application does not use `PerformanceObserver`.
 
@@ -260,7 +265,7 @@ npm run ios
 # Run Jest unit & component tests (with coverage enforce)
 npm test
 
-# Typecheck TypeScript (0 errors)
+# Typecheck TypeScript (0 errors; incremental, warm runs ~1.4 s instead of ~4.5 s)
 npm run lint
 
 # --- End-to-End (E2E) Testing with Detox ---

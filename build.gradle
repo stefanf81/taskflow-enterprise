@@ -51,8 +51,8 @@ dependencyAnalysis {
 				exclude(libs.micrometer.prometheus)
 				exclude(libs.micrometer.tracing.otel)
 				exclude(libs.netty.codec.dns)
-				exclude(libs.okio)
 				exclude(libs.opentelemetry.semconv)
+				exclude(libs.opentelemetry.sender.jdk)
 				exclude(libs.spring.boot.starter.actuator)
 				exclude(libs.spring.boot.starter.cache)
 				exclude(libs.spring.boot.starter.data.jpa)
@@ -184,7 +184,13 @@ dependencies {
 	implementation libs.spring.boot.micrometer.tracing.opentelemetry
 	implementation libs.micrometer.prometheus
 	implementation libs.micrometer.tracing.otel
-	implementation libs.opentelemetry.otlp
+	// OTLP over the JDK's HttpClient instead of the default OkHttp sender, which was the only
+	// path to okhttp, okio, kotlin-stdlib and jetbrains annotations (3.2 MB of jars and their CVE
+	// feed). Both plug into the exporter's HttpSenderProvider SPI; Spring Boot references neither.
+	implementation(libs.opentelemetry.otlp) {
+		exclude group: 'io.opentelemetry', module: 'opentelemetry-exporter-sender-okhttp'
+	}
+	runtimeOnly libs.opentelemetry.sender.jdk
 	// OpenAPI
 	implementation libs.springdoc.webmvc.ui
 	// Database migration
@@ -203,13 +209,11 @@ dependencies {
 	//   - nimbus-jose-jwt:    transitive via spring-security-oauth2-resource-server; 10.9.1
 	//                         is a security patch (BOM ships 10.9).
 	//   - error_prone_*:      transitive annotation lib (BOM ships 2.49.0).
-	//   - okio:               transitive (BOM ships 3.17.0).
 	implementation libs.hikari
 	implementation libs.lettuce
 	implementation libs.opentelemetry.semconv
 	implementation libs.nimbus.jose.jwt
 	implementation libs.error.prone.annotations
-	implementation libs.okio
 	// Testing
 	testImplementation libs.spring.boot.starter.test
 	testImplementation libs.spring.boot.starter.webmvc.test
@@ -252,6 +256,11 @@ tasks.named("test") {
 	// more forks: measured unit suite 92s (3 forks) -> 64s (2 forks + C1).
 	maxParallelForks = Math.min(2, Runtime.runtime.availableProcessors())
 	jvmArgs "-XX:TieredStopAtLevel=1"
+	// Each fork keeps its ~8 cached Spring contexts alive: 285-370 MB still
+	// live after GC in Gradle's default 512 MB worker heap, so G1 ran ~30
+	// concurrent cycles per fork. With 1 GiB, GC pauses fell 5.0 -> 2.7-3.2 s
+	// per fork (fork CPU -2%); the point is headroom as contexts are added.
+	maxHeapSize = "1g"
 	environment "SPRING_SECURITY_PASSWORD", "admin-password"
 	systemProperty "spring.cache.type", "simple"
 	// Live @Scheduled jobs (outbox relay, reminders, retention, SSE heartbeat) would race with
@@ -262,6 +271,14 @@ tasks.named("test") {
 	// one Spring context leak into another context in the same fork, so a
 	// change in fork assignment made AppointmentControllerIntegrationTest fail.
 	systemProperty "spring.datasource.url", 'jdbc:h2:mem:${random.uuid};MODE=PostgreSQL;DB_CLOSE_DELAY=-1'
+	// Without includes the JaCoCo agent instruments every class the fork
+	// loads, i.e. all of Spring, Hibernate, Tomcat, H2..., while the report
+	// covers only this project's classes. One cold Spring context, 2 paired
+	// samples each: start 23.3/24.0 s -> 12.0/13.3 s, fork CPU 36.1/37.4 s ->
+	// 25.2/27.8 s. Coverage figures are unchanged (same classes, same probes).
+	jacoco {
+		includes = ['com.example.*', 'db.migration.*']
+	}
 	finalizedBy(tasks.jacocoTestReport)
 }
 
@@ -280,6 +297,10 @@ tasks.register("containerConfigTest", Test) {
 	}
 	testClassesDirs = sourceSets.test.output.classesDirs
 	classpath = sourceSets.test.runtimeClasspath
+	// Coverage comes from `test` only; this task's execution data fed no report.
+	jacoco {
+		enabled = false
+	}
 	inputs.files("Dockerfile", "Dockerfile.x64", "docker-compose.yml", "frontend/nginx.conf",
 			".github/workflows/ci.yml", ".github/workflows/pushdockerimage.yml", "BENCHMARKS.md",
 			"scripts/benchmark-cds-startup.sh", "scripts/benchmark-glibc-tuning.sh")
@@ -305,6 +326,11 @@ tasks.register("testcontainersTest", Test) {
 	testClassesDirs = sourceSets.test.output.classesDirs
 	classpath = sourceSets.test.runtimeClasspath
 	maxParallelForks = 1
+	// jacocoTestReport/-Verification read `test` only, so the agent here only
+	// slowed every Spring context start (see the `test` task).
+	jacoco {
+		enabled = false
+	}
 	environment "SPRING_SECURITY_PASSWORD", "admin-password"
 	systemProperty "spring.cache.type", "simple"
 	testLogging {
@@ -324,6 +350,10 @@ tasks.register("benchmarkTest", Test) {
 	testClassesDirs = sourceSets.test.output
 	classpath = sourceSets.test.runtimeClasspath
 	maxParallelForks = 1
+	// No coverage for benchmarks: the agent would distort their timings.
+	jacoco {
+		enabled = false
+	}
 	environment "SPRING_SECURITY_PASSWORD", "admin-password"
 	systemProperty "spring.cache.type", "simple"
 	testLogging {

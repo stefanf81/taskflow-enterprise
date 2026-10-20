@@ -16,6 +16,8 @@ import { SessionNoticeBanner } from '../components/common/SessionNoticeBanner';
 import { useAuthStore } from '../store/useAuthStore';
 import { useShallow } from 'zustand/react/shallow';
 import * as SplashScreen from 'expo-splash-screen';
+import { useFonts } from 'expo-font';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { RootStackParamList } from '../types/navigation';
 import { colors } from '../theme/colors';
 
@@ -58,13 +60,20 @@ export const RootNavigator: React.FC = () => {
     checkAuth();
   }, [checkAuth]);
 
+  // Every Ionicons instance renders an empty <Text /> until the icon font is registered, so
+  // load it alongside the session restore instead of letting the tab bar icons pop in after
+  // the splash (Expo fonts guide, "Handle @expo/vector-icons initial load"). A load error
+  // only costs the icons, never the app.
+  const [iconFontLoaded, iconFontError] = useFonts(Ionicons.font);
+  const iconFontSettled = iconFontLoaded || iconFontError != null;
+
   // Keep the native splash up until the stored session is restored, instead of letting it
   // dismiss on the first JS frame and flash a spinner screen in between.
   useEffect(() => {
-    if (!isBootstrapping) {
+    if (!isBootstrapping && iconFontSettled) {
       SplashScreen.hideAsync().catch(() => undefined);
     }
-  }, [isBootstrapping]);
+  }, [isBootstrapping, iconFontSettled]);
 
   useEffect(() => {
     if (isAuthenticated && !hasAuthorizedRole) {

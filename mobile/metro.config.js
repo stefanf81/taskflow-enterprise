@@ -14,4 +14,7 @@ config.watchFolders = [path.resolve(workspaceRoot, 'shared')];
 // app uses, and Metro cannot serve files outside the watched folders).
 config.resolver.nodeModulesPaths = [path.resolve(projectRoot, 'node_modules')];
 
+// Keep zod's unused error-message locales out of the bundle (see metro/zodLocales.js).
+config.resolver.resolveRequest = require('./metro/zodLocales').resolveRequest;
+
 module.exports = config;

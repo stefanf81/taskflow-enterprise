@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, input, output } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { A11yModule } from '@angular/cdk/a11y';
 import { AppointmentItem } from '../../types/api';
@@ -8,7 +8,6 @@ import { formatTime12Hour, formatLocalDate } from '../../time-utils';
   selector: 'app-receipt-modal',
   standalone: true,
   imports: [CommonModule, A11yModule],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div
       class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn"

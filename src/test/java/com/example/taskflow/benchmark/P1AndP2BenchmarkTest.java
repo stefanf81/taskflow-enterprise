@@ -84,7 +84,7 @@ class P1AndP2BenchmarkTest {
     @Test
     void p1_5_micrometer_histogram() throws Exception {
         System.out.println("\n" + "=".repeat(80));
-        System.out.println("  ▸ P1-5 MICROMETER HISTOGRAM (p50/p95/p99 + sla 50/100/200ms)");
+        System.out.println("  ▸ P1-5 MICROMETER HISTOGRAM (p50/p95/p99 + slo 50/100/200ms)");
         System.out.println("=".repeat(80));
         Path prod = Path.of("src/main/resources/application-prod.properties");
         String p = Files.readString(prod);
@@ -92,12 +92,12 @@ class P1AndP2BenchmarkTest {
         // Client-side percentiles were dropped: p50/p95/p99 come from the buckets (histogram_quantile).
         boolean hasPerc = !p.contains("management.metrics.distribution.percentiles.http.server.requests=");
         boolean hasHist = p.contains("percentiles-histogram.http.server.requests=true");
-        boolean hasSla = p.contains("sla.http.server.requests=50ms,100ms,200ms");
+        boolean hasSla = p.contains("slo.http.server.requests=50ms,100ms,200ms");
         long us = (System.nanoTime() - t0) / 1000;
 
         System.out.println("  no client-side percentiles: " + hasPerc);
         System.out.println("  histogram true: " + hasHist);
-        System.out.println("  sla 50/100/200ms: " + hasSla);
+        System.out.println("  slo 50/100/200ms: " + hasSla);
         System.out.printf("  Parse latency: %d µs%n", us);
 
         assertTrue(hasPerc && hasHist && hasSla, "prod histogram config must be present");

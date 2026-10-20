@@ -2,6 +2,7 @@ package com.example.taskflow.core;
 
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
+import org.springframework.cache.support.AbstractValueAdaptingCache;
 
 import java.util.Collection;
 import java.util.concurrent.Callable;
@@ -56,10 +57,14 @@ final class RedisBackoffCacheManager implements CacheManager {
 
         private final Cache delegate;
         private final RedisBackoff backoff;
+        /** Every Redis cache here disables null values, so a null from get(key, loader) means unreadable. */
+        private final boolean nullValuesNotCached;
 
         BackoffCache(Cache delegate, RedisBackoff backoff) {
             this.delegate = delegate;
             this.backoff = backoff;
+            this.nullValuesNotCached = delegate instanceof AbstractValueAdaptingCache adapting
+                    && !adapting.isAllowNullValues();
         }
 
         @Override
@@ -106,17 +111,34 @@ final class RedisBackoffCacheManager implements CacheManager {
 
         @Override
         public <T> T get(Object key, Callable<T> valueLoader) {
-            if (backoff.allowRequest()) {
-                try {
-                    T value = delegate.get(key, valueLoader);
-                    backoff.recordSuccess();
-                    return value;
-                } catch (ValueRetrievalException e) {
-                    throw e; // the loader failed, not the store
-                } catch (RuntimeException e) {
-                    backoff.recordFailure(e);
+            if (!backoff.allowRequest()) {
+                return load(key, valueLoader);
+            }
+            T value;
+            try {
+                value = delegate.get(key, valueLoader);
+                backoff.recordSuccess();
+            } catch (ValueRetrievalException e) {
+                throw e; // the loader failed, not the store
+            } catch (RuntimeException e) {
+                backoff.recordFailure(e);
+                return load(key, valueLoader);
+            }
+            if (value == null && nullValuesNotCached) {
+                // Only a stored value the serializer could not read (an older format) comes back
+                // as null: the Redis writer returns the existing bytes without calling the loader,
+                // so load it here and overwrite the entry instead of serving null until it expires.
+                // The overwrite goes through put(): a failed write is a store failure, it must not
+                // run the loader a second time.
+                value = load(key, valueLoader);
+                if (value != null) {
+                    put(key, value);
                 }
             }
+            return value;
+        }
+
+        private static <T> T load(Object key, Callable<T> valueLoader) {
             try {
                 return valueLoader.call();
             } catch (Exception e) {

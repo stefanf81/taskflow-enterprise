@@ -127,7 +127,9 @@ if [ -n "$JAVA_PID" ]; then
     "awk '/AnonHugePages/ {s+=\$2} END {print s+0}' /proc/${JAVA_PID}/smaps" 2>/dev/null || echo n/a)"
 fi
 
-docker exec taskflow-backend sh -c 'cat /tmp/gc.log' > "$OUT_DIR/${LABEL}-gc.log" 2>/dev/null || true
+# Current run only: the JVM rotates the previous run's log on the persistent
+# backend-diagnostics volume to gc.log.0 when it starts.
+docker exec taskflow-backend sh -c 'cat /var/log/taskflow/gc.log' > "$OUT_DIR/${LABEL}-gc.log" 2>/dev/null || true
 GC_STATS="$(awk '/Pause/ {gsub(/ms$/, "", $NF); print $NF}' "$OUT_DIR/${LABEL}-gc.log" \
   | sort -n | awk '{a[NR]=$1} END {
       if (NR == 0) { print "n/a n/a"; exit }

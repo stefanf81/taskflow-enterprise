@@ -6,15 +6,23 @@ import { Router, provideRouter } from '@angular/router';
 import { LandingPage } from './landing-page';
 import { AuthState, SESSION_EXPIRED_MESSAGE } from '../../auth.state';
 import { ServiceCatalogStore } from '../../service-catalog.store';
+import { DashboardPrefetch } from '../../dashboard-loaders';
 
 describe('LandingPage', () => {
   let fixture: ComponentFixture<LandingPage>;
   let httpMock: HttpTestingController;
+  let dashboardPrefetch: { prefetch: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
+    dashboardPrefetch = { prefetch: vi.fn() };
     TestBed.configureTestingModule({
       imports: [LandingPage],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: DashboardPrefetch, useValue: dashboardPrefetch },
+      ],
     });
     fixture = TestBed.createComponent(LandingPage);
     fixture.detectChanges();
@@ -46,6 +54,15 @@ describe('LandingPage', () => {
     button.click();
 
     expect(page.showAdminLoginModal()).toBe(true);
+  });
+
+  it('prefetches the dashboard chunks when the login modal opens, not before', () => {
+    expect(dashboardPrefetch.prefetch).not.toHaveBeenCalled();
+
+    fixture.componentInstance.showAdminLoginModal.set(true);
+    fixture.detectChanges();
+
+    expect(dashboardPrefetch.prefetch).toHaveBeenCalled();
   });
 
   describe('session expiry hand-off (FE-4)', () => {

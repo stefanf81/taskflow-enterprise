@@ -1,11 +1,22 @@
 import React from 'react';
 import { render, waitFor } from '@testing-library/react-native';
+import * as SplashScreen from 'expo-splash-screen';
 import { RootNavigator } from '../src/navigation/RootNavigator';
 
 // Mock the auth store
 const mockCheckAuth = jest.fn();
 const mockLogout = jest.fn();
 const mockUseAuthStore = jest.fn();
+const mockUseFonts = jest.fn();
+
+jest.mock('expo-font', () => ({
+  ...jest.requireActual('expo-font'),
+  useFonts: (...args: unknown[]) => mockUseFonts(...args),
+}));
+jest.mock('expo-splash-screen', () => ({
+  preventAutoHideAsync: jest.fn(() => Promise.resolve()),
+  hideAsync: jest.fn(() => Promise.resolve()),
+}));
 
 jest.mock('../src/store/useAuthStore', () => ({
   useAuthStore: () => mockUseAuthStore(),
@@ -35,6 +46,55 @@ describe('RootNavigator', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockLogout.mockResolvedValue(undefined);
+    mockUseFonts.mockReturnValue([true, null]);
+  });
+
+  describe('native splash', () => {
+    const restoredGuest = {
+      isAuthenticated: false,
+      role: null,
+      isBootstrapping: false,
+      isOffline: false,
+      checkAuth: mockCheckAuth,
+      logout: mockLogout,
+    };
+
+    it('stays up while the icon font is still loading', async () => {
+      mockUseAuthStore.mockReturnValue(restoredGuest);
+      mockUseFonts.mockReturnValue([false, null]);
+
+      await render(<RootNavigator />);
+
+      expect(SplashScreen.hideAsync).not.toHaveBeenCalled();
+    });
+
+    it('stays up while the session is still being restored', async () => {
+      mockUseAuthStore.mockReturnValue({ ...restoredGuest, isBootstrapping: true });
+
+      await render(<RootNavigator />);
+
+      expect(SplashScreen.hideAsync).not.toHaveBeenCalled();
+    });
+
+    it('hides once the session is restored and the icon font is loaded', async () => {
+      mockUseAuthStore.mockReturnValue(restoredGuest);
+
+      await render(<RootNavigator />);
+
+      expect(mockUseFonts).toHaveBeenCalledWith(
+        expect.objectContaining({ ionicons: expect.anything() }),
+      );
+      expect(SplashScreen.hideAsync).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not wait forever when the icon font fails to load', async () => {
+      mockUseAuthStore.mockReturnValue(restoredGuest);
+      mockUseFonts.mockReturnValue([false, new Error('font missing')]);
+
+      await render(<RootNavigator />);
+
+      expect(SplashScreen.hideAsync).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('shows the splash while bootstrapping', async () => {

@@ -31,10 +31,11 @@ export default defineConfig({
     // `localhost` keeps the browser Origin aligned with the prod default
     // `http://localhost:4200`. docker-compose also whitelists 127.0.0.1.
     baseURL: 'http://localhost:4200',
-    // CI uploads the HTML report on every run. Recording a trace for passing
-    // tests put ~48 MB in each report (run 37227733839); keep traces only for
-    // failed attempts there, and everything locally where the report is free.
-    trace: process.env['CI'] ? 'retain-on-failure' : 'on',
+    // Traces are recorded for every attempt but kept only for failed ones. Keeping
+    // them for passing tests put ~48 MB in each CI report (run 37227733839) and
+    // cost local runs the same writes; a failure (including CI retries) still
+    // leaves its full trace.
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     // Playwright injects inline automation scripts into the page context.
     // When the frontend is served through the Docker nginx reverse proxy

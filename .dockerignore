@@ -44,3 +44,13 @@ docs/
 k6/
 scripts/
 jaeger/
+# The image needs only the boot JAR. `node_modules/` above matches the root only;
+# shared/ (the zod schemas, 6 MB with their node_modules) and the rest were sent to
+# the builder on every backend build.
+**/node_modules/
+shared/
+api/
+.claude/
+.opencode/
+.zap/
+*.md

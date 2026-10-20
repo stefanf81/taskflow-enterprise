@@ -1,4 +1,4 @@
-import { Component, output, ChangeDetectionStrategy } from '@angular/core';
+import { Component, output } from '@angular/core';
 
 /**
  * Standalone Lookbook Showcase component.
@@ -108,7 +108,6 @@ import { Component, output, ChangeDetectionStrategy } from '@angular/core';
       </div>
     </section>
   `,
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class LookbookComponent {
   /** Emitted when a user clicks a lookbook style card. */

@@ -107,9 +107,14 @@ public class RateLimiterConfig {
 
                 long currentCount = countRequest(redisTemplate, redisKey);
                 if (currentCount > maxRequests) {
-                    String safePath = LogSanitizer.stripNewlines(path);
-                    String safeIp = LogSanitizer.stripNewlines(clientIp);
-                    log.warn("Rate limit exceeded for IP {} on path {}", safeIp, safePath);
+                    // Logged once per client, bucket and window: the counter passes the limit exactly
+                    // once, and a line per rejected request let one client write ~1 MB/s of log.
+                    if (currentCount == maxRequests + 1L) {
+                        String safePath = LogSanitizer.stripNewlines(path);
+                        String safeIp = LogSanitizer.stripNewlines(clientIp);
+                        log.warn("Rate limit exceeded for IP {} on path {}; further requests in this window "
+                                + "are rejected without logging", safeIp, safePath);
+                    }
                     response.setStatus(429);
                     response.setHeader("Retry-After", "60");
                     response.setContentType("application/json;charset=UTF-8");

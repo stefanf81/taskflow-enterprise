@@ -4,20 +4,88 @@ import com.example.taskflow.appointment.BarberResponse;
 import com.example.taskflow.appointment.PublicBarberResponse;
 import com.example.taskflow.catalog.ServiceItemResponse;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.serializer.RedisSerializer;
 
 import java.math.BigDecimal;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * Round-trips the cached DTOs through {@link CacheConfig#cacheValueSerializer()} — the exact
- * serializer wired into every cache — so the explicit polymorphic-type allow-list is tested
- * where it lives instead of a duplicated copy that could drift.
+ * Round-trips the cached DTOs through the typed serializers every feature cache uses
+ * ({@link CacheConfig#listCache}) and through {@link CacheConfig#cacheValueSerializer()}, the generic
+ * default of a cache without its own configuration, so the allow-list is tested where it lives.
  */
 class CacheRedisSerializationTest {
+
+    @SuppressWarnings("unchecked")
+    private static <T> T read(RedisCacheConfiguration config, byte[] bytes) {
+        return (T) config.getValueSerializationPair().read(ByteBuffer.wrap(bytes));
+    }
+
+    private static byte[] write(RedisCacheConfiguration config, Object value) {
+        ByteBuffer buffer = config.getValueSerializationPair().write(value);
+        byte[] bytes = new byte[buffer.remaining()];
+        buffer.get(bytes);
+        return bytes;
+    }
+
+    @Test
+    void typedListCacheRoundTripsWithoutTypeIds() {
+        RedisCacheConfiguration services = CacheConfig.listCache(Duration.ofMinutes(10), ServiceItemResponse.class);
+        List<ServiceItemResponse> original = List.of(
+                new ServiceItemResponse(1L, "Cut", new BigDecimal("25.00"), 30, "hair", "desc"));
+
+        byte[] bytes = write(services, original);
+        String json = new String(bytes, StandardCharsets.UTF_8);
+
+        assertFalse(json.contains("@class") || json.contains("java."), json);
+        List<ServiceItemResponse> back = read(services, bytes);
+        assertEquals(original, back);
+        assertEquals("25.00", back.get(0).price().toPlainString(), "scale kept");
+        assertEquals(Duration.ofMinutes(10), services.getTtlFunction().getTimeToLive("k", original));
+        assertFalse(services.getAllowCacheNullValues());
+    }
+
+    @Test
+    void typedStringListRoundTrips() {
+        RedisCacheConfiguration slots = CacheConfig.listCache(Duration.ofMinutes(2), String.class);
+        assertEquals(List.of("09:00", "10:00"), read(slots, write(slots, List.of("09:00", "10:00"))));
+        assertEquals(List.of(), read(slots, write(slots, List.of())));
+    }
+
+    /** Entries written by the former generic serializer are misses (reloaded and overwritten), not errors. */
+    @Test
+    void entriesInTheFormerGenericFormatReadAsMisses() {
+        RedisSerializer<Object> former = CacheConfig.cacheValueSerializer();
+        RedisCacheConfiguration services = CacheConfig.listCache(Duration.ofMinutes(10), ServiceItemResponse.class);
+        RedisCacheConfiguration barbers = CacheConfig.listCache(Duration.ofMinutes(10), BarberResponse.class);
+        RedisCacheConfiguration slots = CacheConfig.listCache(Duration.ofMinutes(2), String.class);
+
+        assertNull(read(services, former.serialize(List.of(
+                new ServiceItemResponse(1L, "Cut", BigDecimal.TEN, 30, "hair", "d")))));
+        assertNull(read(barbers, former.serialize(new ArrayList<>(List.of(
+                new BarberResponse(1L, "A", "a@example.com", "555"))))));
+        assertNull(read(slots, former.serialize(List.of("09:00", "10:00"))));
+        assertNull(read(slots, former.serialize(List.of())));
+        assertNull(read(slots, "not json".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    /** A type id in the stored JSON cannot make the typed reader instantiate another class. */
+    @Test
+    void storedTypeIdsCannotSelectTheClass() {
+        RedisCacheConfiguration services = CacheConfig.listCache(Duration.ofMinutes(10), ServiceItemResponse.class);
+        Object back = read(services, "[[\"java.util.HashMap\",{}]]".getBytes(StandardCharsets.UTF_8));
+        assertNull(back);
+    }
 
     @Test
     void barberResponseList_roundTrip() {

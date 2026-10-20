@@ -1,3 +1,7 @@
+// Expo's (experimental) Metro tree shaking for the release bundle. E2E release builds and the EAS
+// `preview` profile run it so it gets device coverage; `production` follows after a green run.
+const RELEASE_BUNDLE_ENV = 'EXPO_UNSTABLE_METRO_OPTIMIZE_GRAPH=1 EXPO_UNSTABLE_TREE_SHAKING=1';
+
 /** @type {Detox.DetoxConfig} */
 module.exports = {
   testRunner: {
@@ -13,7 +17,7 @@ module.exports = {
     'ios.release': {
       type: 'ios.app',
       binaryPath: 'ios/build/Build/Products/Release-iphonesimulator/TaskFlowMobile.app',
-      build: 'xcodebuild -workspace ios/TaskFlowMobile.xcworkspace -scheme TaskFlowMobile -configuration Release -sdk iphonesimulator -derivedDataPath ios/build ONLY_ACTIVE_ARCH=YES ARCHS=arm64',
+      build: `${RELEASE_BUNDLE_ENV} xcodebuild -workspace ios/TaskFlowMobile.xcworkspace -scheme TaskFlowMobile -configuration Release -sdk iphonesimulator -derivedDataPath ios/build ONLY_ACTIVE_ARCH=YES ARCHS=arm64`,
     },
     'ios.debug': {
       type: 'ios.app',
@@ -23,7 +27,9 @@ module.exports = {
     'android.release': {
       type: 'android.apk',
       binaryPath: 'android/app/build/outputs/apk/release/app-release.apk',
-      build: 'JAVA_HOME="/opt/homebrew/opt/openjdk@21" ANDROID_HOME="$HOME/Library/Android/sdk" ./android/gradlew -p android assembleRelease assembleAndroidTest -DtestBuildType=release',
+      // One ABI: the Apple Silicon emulator is arm64-v8a, and every extra ABI repeats the native
+      // C++ build. An x86_64 emulator needs DETOX_ANDROID_ABIS=x86_64 (comma-separated list).
+      build: `${RELEASE_BUNDLE_ENV} JAVA_HOME="/opt/homebrew/opt/openjdk@21" ANDROID_HOME="$HOME/Library/Android/sdk" ./android/gradlew -p android assembleRelease assembleAndroidTest -DtestBuildType=release -PreactNativeArchitectures="\${DETOX_ANDROID_ABIS:-arm64-v8a}"`,
     },
   },
   devices: {

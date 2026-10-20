@@ -88,6 +88,14 @@ class SecurityAuthorizationIntegrationTest {
         mockMvc.perform(get("/actuator/info")).andExpect(status().isUnauthorized());
     }
 
+    /** The former permitAll + CSRF exemption for the (never served) H2 console are gone: deny-by-default applies. */
+    @Test
+    void anonymous_h2ConsolePathIsNeitherPermittedNorCsrfExempt() throws Exception {
+        mockMvc.perform(get("/h2-console/")).andExpect(status().isUnauthorized());
+        mockMvc.perform(head("/h2-console/")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/h2-console/login.do")).andExpect(status().isForbidden());
+    }
+
     @Test
     void anonymousStateChanging_withValidCsrf_shouldStillBeUnauthorized() throws Exception {
         // CSRF is satisfied so the assertion isolates authorization, not CSRF.

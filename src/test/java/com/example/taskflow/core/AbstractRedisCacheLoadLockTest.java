@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.cache.Cache;
+import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -64,8 +65,13 @@ abstract class AbstractRedisCacheLoadLockTest {
 
     /** One replica: the production cache configuration, wrapped exactly as CacheConfig does. */
     private Cache replica(LettuceConnectionFactory factory, Duration lease, Duration maxWait) {
+        return replica(factory, lease, maxWait, new CacheConfig().cacheConfiguration());
+    }
+
+    private Cache replica(LettuceConnectionFactory factory, Duration lease, Duration maxWait,
+                          RedisCacheConfiguration configuration) {
         RedisCacheManager manager = RedisCacheManager.builder(factory)
-                .cacheDefaults(new CacheConfig().cacheConfiguration())
+                .cacheDefaults(configuration)
                 .build();
         manager.afterPropertiesSet();
         StringRedisTemplate template = new StringRedisTemplate(factory);
@@ -106,6 +112,24 @@ abstract class AbstractRedisCacheLoadLockTest {
         assertNotNull(ttl);
         assertTrue(ttl > 0 && ttl <= Duration.ofMinutes(10).toMillis(), "cached with the cache TTL: " + ttl);
         assertEquals("catalog", b.get(key, () -> "unused"), "served from Redis afterwards");
+    }
+
+    /** A typed cache meets a value the former generic serializer wrote: reloaded and overwritten, never served as null. */
+    @Test
+    void anEntryInTheFormerFormatIsReloadedAndOverwritten() {
+        String entry = CACHE + "::" + key;
+        redis.opsForValue().set(entry, "[\"java.util.ImmutableCollections$List12\",[\"09:00\"]]", Duration.ofMinutes(1));
+        Cache typed = replica(factoryA, Duration.ofSeconds(10), Duration.ofSeconds(5),
+                CacheConfig.listCache(Duration.ofMinutes(2), String.class));
+        AtomicInteger loads = new AtomicInteger();
+
+        assertEquals(List.of("10:00"), typed.get(key, () -> {
+            loads.incrementAndGet();
+            return List.of("10:00");
+        }));
+        assertEquals("[\"10:00\"]", redis.opsForValue().get(entry), "overwritten in the typed format");
+        assertEquals(List.of("10:00"), typed.get(key, () -> List.of("unused")));
+        assertEquals(1, loads.get());
     }
 
     @Test

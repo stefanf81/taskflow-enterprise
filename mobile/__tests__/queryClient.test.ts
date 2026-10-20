@@ -13,6 +13,12 @@ describe('queryClient defaults', () => {
     expect(queries.refetchOnWindowFocus).toBe(false);
   });
 
+  it('fails fast offline but refetches once the device reconnects', () => {
+    expect(queries.networkMode).toBe('always');
+    expect(queries.refetchOnReconnect).toBe(true);
+    expect(queryClient.getDefaultOptions().mutations?.networkMode).toBe('always');
+  });
+
   it('backs off exponentially up to 30 seconds', () => {
     const retryDelay = queries.retryDelay as (attemptIndex: number, error: Error) => number;
     const error = new Error('boom');

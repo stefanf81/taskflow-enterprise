@@ -21,7 +21,10 @@ services:
       - "-c"
       - "checkpoint_timeout=15min"
       - "-c"
-      - "wal_compression=on"
+      # lz4 instead of on (= pglz); the image is built --with-lz4. pgbench on 18.6 with
+      # checkpoints every 30 s (full-page-image heavy), per transaction: pglz 216-266 us
+      # CPU / 922-1045 B WAL, lz4 205-224 us / 1043-1147 B, off 201-210 us / 3850 B.
+      - "wal_compression=lz4"
       - "-c"
       - "max_wal_size=1GB"
       - "-c"
@@ -42,6 +45,12 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql
+    # Parallel queries allocate their dynamic shared memory in /dev/shm, which Docker
+    # caps at 64 MB. One parallel hash join may use work_mem x hash_mem_multiplier x
+    # (2 workers + leader) = 16 MB x 2 x 3 = 96 MB; on PostgreSQL 18.6 with these
+    # settings it failed with "could not resize shared memory segment ... No space
+    # left on device" at 64m and succeeded at 256m. Pages are charged only when used.
+    shm_size: 256mb
     networks:
       - backend-tier
     deploy:
@@ -51,11 +60,18 @@ services:
           memory: 1024M
         reservations:
           memory: 512M
+    # TCP, not the default Unix socket: on a fresh volume the entrypoint's temporary
+    # init server listens on the socket only, so a socket probe could report healthy
+    # (and start the backend) before the real server accepts TCP connections. The
+    # start interval probes every second while the database boots instead of waiting
+    # a full interval for the first probe.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+      start_interval: 1s
     restart: "no"
     logging:
       driver: "json-file"
@@ -99,10 +115,15 @@ services:
       - APP_REQUIRE_STRONG_ADMIN_PASSWORD=${APP_REQUIRE_STRONG_ADMIN_PASSWORD:-false}
       # JVM sizing is owned by the deployment (JAVA_TOOL_OPTIONS), not the image
       # CMD — see the Dockerfile's shared runtime stage for the sizing-agnostic rationale.
-      # This block mirrors the prod homelab/TF backend.yaml intent (modulo
-      # prod-only GC logging + heap-dump paths that would clutter a laptop).
+      # This block mirrors the prod homelab/TF backend.yaml intent.
       # At 2560M limit × MaxRAMPercentage=50.0 → ~1.25 GiB heap, ~1.3 GiB off-heap.
-      - JAVA_TOOL_OPTIONS=-XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=50.0 -XX:MaxGCPauseMillis=100 -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof -Xlog:gc*:file=/tmp/gc.log:time,uptime:filecount=3,filesize=10m -XX:+UseStringDeduplication -XX:+AlwaysPreTouch -XX:+ParallelRefProcEnabled -XX:+DisableExplicitGC -XX:MaxDirectMemorySize=256m -XX:MaxMetaspaceSize=256m
+      # GC log and OOM heap dump go to the backend-diagnostics volume, not the /tmp
+      # tmpfs: tmpfs pages count against the 2560M limit (a heap-sized dump on top
+      # of the running JVM invites the OOM killer) and vanish when the container
+      # stops, which ExitOnOutOfMemoryError makes it do. The dump is named
+      # java_pid<pid>.hprof and an existing file is never overwritten: delete it
+      # after analysis. The GC log rotates the previous run's file on start.
+      - JAVA_TOOL_OPTIONS=-XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=50.0 -XX:MaxGCPauseMillis=100 -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/var/log/taskflow -Xlog:gc*:file=/var/log/taskflow/gc.log:time,uptime:filecount=3,filesize=10m -XX:+UseStringDeduplication -XX:+AlwaysPreTouch -XX:+ParallelRefProcEnabled -XX:+DisableExplicitGC -XX:MaxDirectMemorySize=256m -XX:MaxMetaspaceSize=256m
       # glibc-only knob (no musl equivalent): arenas scale to 8 x cores by
       # default and the JVM's carrier/worker threads spread native allocations
       # across them, padding RSS. 2 recovered ~72 MiB (median) with no
@@ -116,6 +137,10 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+    # Writable JVM diagnostics (see JAVA_TOOL_OPTIONS). The image creates the
+    # directory owned by 10001, and a new named volume inherits that ownership.
+    volumes:
+      - backend-diagnostics:/var/log/taskflow
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -127,12 +152,17 @@ services:
           memory: 2560M
         reservations:
           memory: 1536M
+    # Docker runs the first probe one interval after start, so with 30 s the frontend
+    # (service_healthy) waited ~30 s for a backend that boots in ~8 s. During the start
+    # period the probe runs every 2 s and failures do not count; 60 s also covers slow
+    # (no-CDS, emulated) boots, after which the 30 s interval applies again.
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/actuator/health/liveness"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 60s
+      start_interval: 2s
     depends_on:
       db:
         condition: service_healthy
@@ -156,10 +186,12 @@ services:
     container_name: taskflow-redis
     command:
       - "redis-server"
-      - "--io-threads"          # Redis 8.0: multi-threaded network I/O
-      - "2"                     # 1 CPU allocated → 2 threads (main + 1 I/O)
-      - "--io-threads-do-reads" # Extend threading to read operations too
-      - "yes"
+      # No --io-threads: redis.conf asks for at least 4 cores with one spare, and the
+      # backend talks to Redis over one shared Lettuce connection. Measured on Redis
+      # 8.10.2 under a 1-CPU quota (cpus: '1.0'), io-threads 2 raised the single-
+      # connection p50 from 0.039 to 0.063-0.071 ms, cut throughput by up to 45%
+      # and got the container CPU-throttled; io-threads 1 never was.
+      # (io-threads-do-reads is a deprecated no-op since Redis 8.0.)
       - "--lazyfree-lazy-expire" # Redis 8.0: async deletion of expired keys
       - "yes"                    # Prevents latency spikes from rate-limit key churn
       - "--maxmemory"           # Cap memory at 50% of container limit (512M)
@@ -186,6 +218,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+      start_interval: 1s
     restart: "no"
     logging:
       driver: "json-file"
@@ -205,6 +239,10 @@ services:
     environment:
       - JAEGER_LISTEN_HOST=0.0.0.0
       - LOG_LEVEL=info
+      # Soft limit for the Go runtime below the 256M container limit: the GC works
+      # harder as the heap approaches it instead of letting the cgroup OOM-kill
+      # Jaeger. The in-memory store itself is capped by max_traces in the config.
+      - GOMEMLIMIT=200MiB
     volumes:
       - ./jaeger/jaeger-config.yaml:/etc/jaeger/jaeger-config.yaml:ro
     command: ["--config", "/etc/jaeger/jaeger-config.yaml"]
@@ -222,6 +260,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+      start_interval: 1s
     restart: "no"
     logging:
       driver: "json-file"
@@ -260,6 +300,8 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 10s
+      start_interval: 1s
     depends_on:
       backend:
         condition: service_healthy
@@ -273,6 +315,7 @@ services:
 volumes:
   pgdata:
   redisdata:
+  backend-diagnostics:
 
 networks:
   frontend-tier:

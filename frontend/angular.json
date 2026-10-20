@@ -36,6 +36,8 @@
               "autoCsp": false
             },
             "browser": "src/main.ts",
+            "server": "src/main.server.ts",
+            "outputMode": "static",
             "tsConfig": "tsconfig.app.json",
             "assets": [
               {
@@ -60,13 +62,12 @@
                 },
                 {
                   "type": "any",
-                  "maximumWarning": "400kB",
-                  "maximumError": "500kB"
+                  "maximumWarning": "250kB",
+                  "maximumError": "300kB"
                 }
               ],
               "outputHashing": "all",
-              "subresourceIntegrity": true,
-              "statsJson": true
+              "subresourceIntegrity": true
             },
             "development": {
               "optimization": false,
@@ -79,7 +80,10 @@
         "serve": {
           "builder": "@angular/build:dev-server",
           "options": {
-            "proxyConfig": "proxy.conf.json"
+            "proxyConfig": "proxy.conf.json",
+            "prebundle": {
+              "exclude": ["@taskflow/schemas"]
+            }
           },
           "configurations": {
             "production": {

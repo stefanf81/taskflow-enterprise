@@ -7,6 +7,11 @@ module.exports = {
   transform: {
     '^.+\\.mjs$': 'babel-jest',
   },
+  // Mirror the Metro rule in metro/zodLocales.js, so tests run without zod's locale namespace
+  // exactly like the app bundle does (only zod requests '../locales/index').
+  moduleNameMapper: {
+    '^\\.\\./locales/index\\.c?js$': '<rootDir>/metro/empty-zod-locales.js',
+  },
   // test/security holds node:test suites (npm run test:security); Jest 30's default
   // testMatch now includes .cjs files.
   testPathIgnorePatterns: ['/node_modules/', '/e2e/', '/test/security/'],
@@ -16,7 +21,11 @@ module.exports = {
   // intermittently (AdminDashboardScreen, 1 in 15 cold runs). Slow tests are not
   // slower; only the failure threshold moves.
   testTimeout: 15000,
-  setupFiles: ['<rootDir>/test/polyfills.ts', '<rootDir>/test/asset-registry.ts'],
+  setupFiles: [
+    '<rootDir>/test/polyfills.ts',
+    '<rootDir>/test/asset-registry.ts',
+    '<rootDir>/test/expo-network.ts',
+  ],
   setupFilesAfterEnv: [
     '@testing-library/react-native/matchers',
     '<rootDir>/test/setup.ts',

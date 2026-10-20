@@ -40,7 +40,7 @@ This project uses **Tailwind CSS v4** (`^4.3.3`) natively within Angular 22's mo
     }
     ```
 
-3.  **Strict Content Security Policy (CSP) Inlining Optimization (`angular.json`):** Our hardened unprivileged production Nginx container implements a strict Content Security Policy (`style-src 'self' 'unsafe-inline'`). To prevent Angular's default critical CSS extraction tool from injecting dynamic `onload` script attributes (which are blocked by strict CSP, rendering the page unstyled), we explicitly disabled style inlining in `angular.json`:
+3.  **Strict Content Security Policy (CSP) Inlining Optimization (`angular.json`):** Our hardened unprivileged production Nginx container implements a strict Content Security Policy (`script-src 'self'` plus the sha384 hashes of the inline scripts the `frontend/Dockerfile` inventory pins). Angular's critical CSS inlining loads the full stylesheet as `media="print"` and switches it on with inline script: an `onload` attribute before Angular 22, and in Angular 22 (Beasties `media-script`) an inline `<script>` appended to `<body>` plus a `data-beasties-media` attribute. The CSP blocks both, which leaves the page unstyled. On the client-rendered shell (`index.csr.html`, body only `<app-root>`) it would not help either: the "critical" CSS is 10 kB of theme variables and preflight, and nothing paints before the JavaScript runs. The prerendered guest landing (`index.html`) does paint before the JavaScript, so inlining could shorten its first paint, but only after the Beasties script is added to the hashed inline-script inventory and the gain is measured. Style inlining therefore stays disabled in `angular.json`, and CI checks both shells for the loader:
     ```json
     "optimization": {
       "styles": {
@@ -94,6 +94,10 @@ The shared package is referenced through `file:../shared/schemas`; installing
 it first matches the CI setup and ensures its lockfile is honored. The Angular
 application proxies API requests to `http://localhost:8080`, so start the
 backend separately with `./gradlew bootRun` or start the full Docker stack.
+The dev server bundles `@taskflow/schemas` with the app instead of prebundling it
+(`prebundle.exclude` in `angular.json`): the package ships TypeScript sources, and
+Vite's dependency optimizer could not resolve their extensionless imports, which
+crashed `ng serve` on the first page load.
 
 Install the browser required for frontend E2E tests once per machine:
 
@@ -121,6 +125,12 @@ Our code formatter is configured with strict rules (100-character line width, si
   ```bash
   npx prettier --write 'src/**/*.ts' 'src/**/*.html'
   ```
+
+`npm run lint`, `npm run format` and `npm run format:check` keep their caches in
+`node_modules/.cache/` (ESLint and Prettier results by file content, `tsc` incremental
+build info), so a repeated run only re-checks what changed (lint ~10 s → ~5 s, format
+check ~5 s → ~0.7 s). No rule needs type information, so a cached ESLint result cannot go
+stale through another file; delete the directory to start cold.
 
 ### B. Unit Tests (Vitest)
 
@@ -161,7 +171,9 @@ npm run build
 
 The resulting assets are generated in the `dist/` directory. These assets are then copied into our lightweight, unprivileged **Nginx web server container** (running on port `8080` to adhere to unprivileged port binding rules).
 
-The Angular 22 production chunk optimizer is enabled by default. The current measured baseline is **281.80 kB raw / 66.36 kB estimated transfer** for the initial bundle. Disabling chunk optimization increases the initial output to **467.36 kB raw / 126.49 kB estimated transfer** and triggers the initial bundle budget warning. Keep `NG_BUILD_OPTIMIZE_CHUNKS` unset or enabled unless investigating a build issue.
+The build also **prerenders the guest landing** (`outputMode: "static"`, `src/main.server.ts`, `app.routes.server.ts`): `index.html` is the landing page's HTML, hydrated by the bundle, and `index.csr.html` is the client-rendered shell for every other route. Nothing calls the backend at build time: the public stores stay idle on the server (the empty lists the browser also shows while loading), the session bootstrap and CSRF fetch run only in the browser, and `PrerenderBackend` fails anything that slips through without a connection. The lookbook, FAQ and post-booking blocks use `@defer (… hydrate on idle)` (incremental hydration, which includes event replay), so they are part of the prerendered HTML; the lookbook's intro text is the LCP element. nginx serves `index.html` for `/` only to browsers without an `access_token` cookie (a signed-in user would otherwise see the guest page until the redirect) and `index.csr.html` for everything else, both `no-cache`. The frontend Dockerfile hashes every inline script of both pages (import map, event-replay contract and bootstrap) into the CSP and fails the image build if that inventory changes; `e2e/csp.spec.ts` re-hashes the served pages. Measured on slow 4G with 4× CPU throttling (median of 9, nginx 1.30.4): FCP 2,126 → 995 ms, LCP 2,440 → 1,644 ms (the hero text swapping to Inter), CLS 0; on a fast connection FCP 1,095 → 580 ms, LCP 1,340 → 580 ms. The hydration runtime costs +29 kB raw / +8.7 kB transfer of initial JavaScript.
+
+The Angular 22 production chunk optimizer is enabled by default. The current measured baseline is **544.18 kB raw / 146.73 kB estimated transfer in 8 initial files** (the landing route is eager, BENCHMARKS.md §58, plus the hydration runtime); the `any` budget (one chunk) is 250/300 kB against a largest chunk of ~195 kB. With `NG_BUILD_OPTIMIZE_CHUNKS=0` the same code ships as 14 initial files and 149.55 kB estimated transfer (before the landing route became eager the difference was 66 vs 126 kB). Keep `NG_BUILD_OPTIMIZE_CHUNKS` unset or enabled unless investigating a build issue.
 
 ---
 
@@ -169,4 +181,4 @@ The Angular 22 production chunk optimizer is enabled by default. The current mea
 
 - **Signals-Only State:** Component state, inputs, and outputs use native Angular Signals (`signal()`, `computed()`, `input()`, `model()`) instead of raw RxJS streams where applicable, eliminating Zone.js change-detection overhead.
 - **Stateless JWT Cookie Authentication:** Auth state is managed via HttpOnly JWT cookies set by the backend. Role identity is restored into an in-memory Signal (`AuthState`) via `GET /api/v1/auth/me`.
-- **Lazy-loaded Routes:** Feature dashboards (`/admin`, `/customer`) and the booking wizard use lazy-loaded standalone components via `loadComponent()`, keeping the initial bundle small. The guest landing page (`''`) is eager (it is what every first visit renders, so lazy-loading it only added a round trip); its login/register modals and the booking receipt use `@defer (… prefetch on idle)`. No global route preloading strategy is configured. The initial budget is 550 kB (warning) / 600 kB (error) in `angular.json`; the shared schemas use `zod/mini` to stay inside it (ADR-019). View transitions and in-memory scroll restoration are enabled via Angular's `withViewTransitions()` and `withInMemoryScrolling()`.
+- **Lazy-loaded Routes:** Feature dashboards (`/admin`, `/customer`) and the booking wizard use lazy-loaded standalone components via `loadComponent()`, keeping the initial bundle small. The guest landing page (`''`) is eager (it is what every first visit renders, so lazy-loading it only added a round trip); its login/register modals and the booking receipt use `@defer (… prefetch on idle)`. No global route preloading strategy is configured: opening the login modal prefetches the two dashboard chunks (`DashboardPrefetch`, `dashboard-loaders.ts`, shared with the routes), so the navigation after a login does not wait for its chunk. Change detection needs no provider: Angular 22 bootstraps zoneless and components default to OnPush. Browser targets are Angular's default (Baseline widely available, including iOS/Safari 17 and 18): a narrower `.browserslistrc` produced byte-identical JavaScript. The initial budget is 550 kB (warning) / 600 kB (error) in `angular.json`; the shared schemas use `zod/mini` to stay inside it (ADR-019). View transitions and in-memory scroll restoration are enabled via Angular's `withViewTransitions()` and `withInMemoryScrolling()`.

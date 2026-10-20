@@ -1,4 +1,4 @@
-import { Component, signal, inject, ChangeDetectionStrategy, DestroyRef } from '@angular/core';
+import { Component, signal, inject, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { email, form, max, min, required, FormField } from '@angular/forms/signals';
@@ -235,7 +235,6 @@ interface ReviewFormModel {
       </section>
     </div>
   `,
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PostBookingActionsComponent {
   private readonly appointmentsApi = inject(AppointmentsApi);

@@ -1,12 +1,4 @@
-import {
-  Component,
-  output,
-  signal,
-  inject,
-  DestroyRef,
-  ChangeDetectionStrategy,
-  isDevMode,
-} from '@angular/core';
+import { Component, output, signal, inject, DestroyRef, isDevMode } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { A11yModule } from '@angular/cdk/a11y';
@@ -215,7 +207,6 @@ interface AuthFormModel {
       </div>
     </div>
   `,
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AuthModalComponent {
   private readonly authApi = inject(AuthApi);

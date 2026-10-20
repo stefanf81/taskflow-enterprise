@@ -61,8 +61,11 @@
         </p>
       </header>
 
-      <!-- INTERACTIVE LOOKBOOK SHOWCASE (lazy: below hero, non-critical for FCP — P1) -->
-      @defer (on idle; on viewport) {
+      <!-- INTERACTIVE LOOKBOOK SHOWCASE (lazy: below hero, non-critical for FCP — P1). The
+           `hydrate` trigger makes the prerendered page contain it (its intro text is the LCP
+           element); the chunk then loads and hydrates on idle. The other triggers apply when the
+           page is rendered in the browser (client-side navigation to `/`). -->
+      @defer (on idle; on viewport; hydrate on idle) {
         <app-lookbook (styleSelected)="selectLookbookStyle($event.serviceName, $event.category)" />
       } @placeholder {
         <div class="h-64 mb-16"></div>
@@ -175,8 +178,9 @@
         </div>
       </div>
 
-      <!-- Defer loading of non-critical FAQ sections to maximize First Contentful Paint speed -->
-      @defer (on idle) {
+      <!-- Defer loading of non-critical FAQ sections to maximize First Contentful Paint speed
+           (prerendered, hydrated on idle, like the lookbook) -->
+      @defer (on idle; hydrate on idle) {
         <app-faq-section />
       } @placeholder {
         <div
@@ -186,8 +190,9 @@
         </div>
       }
 
-      <!-- POST-BOOKING ACTIONS: Cancel & Review (lazy — below the fold, P1) -->
-      @defer (on idle; on viewport) {
+      <!-- POST-BOOKING ACTIONS: Cancel & Review (lazy — below the fold, P1; prerendered,
+           hydrated on idle) -->
+      @defer (on idle; on viewport; hydrate on idle) {
         <app-post-booking-actions />
       } @placeholder {
         <div class="h-24"></div>

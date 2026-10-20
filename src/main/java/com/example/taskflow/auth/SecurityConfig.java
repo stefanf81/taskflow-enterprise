@@ -111,7 +111,6 @@ public class SecurityConfig {
                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/appointments"),
                     PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*"),
                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/reviews/public/**"),
-                    PathPatternRequestMatcher.pathPattern("/h2-console/**"),
                     bearerOnlyRequestMatcher()
                 )
                 .csrfTokenRepository(csrfTokenRepository())
@@ -131,7 +130,8 @@ public class SecurityConfig {
                 // additionally disables springdoc outright via
                 // application-prod.properties.
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").hasRole("ADMIN")
-                .requestMatchers("/h2-console/**").permitAll()
+                // No /h2-console rule: Spring Boot 4 serves the console only with the
+                // spring-boot-h2console module, which is not a dependency.
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/mobile/login", "/api/v1/auth/register").permitAll()
                 // Logout must work for everyone: with an expired session it is the
                 // request that clears the cookie, so it cannot require authentication.

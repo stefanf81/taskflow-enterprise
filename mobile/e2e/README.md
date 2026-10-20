@@ -52,8 +52,9 @@ Both Android and iOS share the exact same E2E test suite file (`e2e/booking.e2e.
 2. **Build Release APK & Test APK (One-Time or After Native Code Changes):**
    ```bash
    npm run e2e:build:android
-   # Executes: JAVA_HOME="/opt/homebrew/opt/openjdk@21" ANDROID_HOME="$HOME/Library/Android/sdk" ./android/gradlew -p android assembleRelease assembleAndroidTest -DtestBuildType=release
+   # Executes: EXPO_UNSTABLE_METRO_OPTIMIZE_GRAPH=1 EXPO_UNSTABLE_TREE_SHAKING=1 JAVA_HOME="/opt/homebrew/opt/openjdk@21" ANDROID_HOME="$HOME/Library/Android/sdk" ./android/gradlew -p android assembleRelease assembleAndroidTest -DtestBuildType=release -PreactNativeArchitectures="${DETOX_ANDROID_ABIS:-arm64-v8a}"
    ```
+   The release build compiles native code for the Apple Silicon emulator's ABI only (`arm64-v8a`). On an x86_64 emulator run `DETOX_ANDROID_ABIS=x86_64 npm run e2e:build:android` (a comma-separated list builds several).
 
 3. **Run Detox E2E Test Suite:**
    ```bash
@@ -68,7 +69,7 @@ Both Android and iOS share the exact same E2E test suite file (`e2e/booking.e2e.
 1. **Build iOS Simulator Release App Bundle:**
    ```bash
    npm run e2e:build
-   # Executes: xcodebuild -workspace ios/TaskFlowMobile.xcworkspace -scheme TaskFlowMobile -configuration Release -sdk iphonesimulator -derivedDataPath ios/build ONLY_ACTIVE_ARCH=YES ARCHS=arm64
+   # Executes: EXPO_UNSTABLE_METRO_OPTIMIZE_GRAPH=1 EXPO_UNSTABLE_TREE_SHAKING=1 xcodebuild -workspace ios/TaskFlowMobile.xcworkspace -scheme TaskFlowMobile -configuration Release -sdk iphonesimulator -derivedDataPath ios/build ONLY_ACTIVE_ARCH=YES ARCHS=arm64
    ```
 
 2. **Build Detox Framework Cache (First-Time Only):**
@@ -88,6 +89,7 @@ Both Android and iOS share the exact same E2E test suite file (`e2e/booking.e2e.
 
 * `mobile/.env` must contain `EXPO_PUBLIC_API_URL=http://localhost:4200` (the Docker stack's nginx) and `EXPO_PUBLIC_E2E_LOCAL_API=true`, and the app must be prebuilt **without** `TASKFLOW_TLS_POLICY=required` (that policy refuses local HTTP).
 * `EXPO_PUBLIC_E2E_LOCAL_API=true` also freezes the Home promo-dot animation: Detox on iOS waits for the app to go idle and an endless animation keeps it busy forever (every test timed out after 120 s).
+* Both release builds bundle with Expo's experimental Metro tree shaking (the two `EXPO_UNSTABLE_*` variables above), the same as the EAS `preview` profile; these runs are its device validation before `production` gets it (see the mobile README, "Tree shaking (staged)"). The variables are not Gradle task inputs: after toggling them, rebuild with `--rerun-tasks` or delete `android/app/build`.
 * Android release builds run R8. `plugins/withDetoxProguardRules.js` adds Detox's keep rules only when the Gradle invocation builds an androidTest APK (`npm run e2e:build:android`).
 * The iOS Keychain survives reinstalls, so a stored admin token from a previous run makes the app start signed in. Run `xcrun simctl keychain booted reset` before an iOS run.
 * If D8 runs out of memory, raise `org.gradle.jvmargs` in the generated `android/gradle.properties`.

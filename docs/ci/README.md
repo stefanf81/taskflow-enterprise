@@ -58,7 +58,7 @@ The `Protect main and require CI` branch protection ruleset requires the followi
 
 Reusable workflow step logic is encapsulated in local composite actions to prevent duplicate code and workflow drift:
 
-- **[`npm-ci`](../../.github/actions/npm-ci/action.yml):** Installs `shared/schemas` then the target client package (`frontend` or `mobile`) with `npm ci`. Supports opt-in `cache-node-modules` for exact lockfile hits.
+- **[`npm-ci`](../../.github/actions/npm-ci/action.yml):** Installs `shared/schemas` then the target client package (`frontend` or `mobile`) with `npm ci`. Supports opt-in `cache-node-modules` for exact lockfile hits; in that mode it also restores the npm download cache (`~/.npm`), only on a `node_modules` miss, so callers turn setup-node's cache off.
 - **[`start-backend`](../../.github/actions/start-backend/action.yml):** Generates ephemeral RSA key pairs, launches `backend-jar`, and polls `/actuator/health/liveness`. Supports non-blocking launch (`wait: "false"`) to overlap JVM startup with Node setup.
 - **[`wait-backend`](../../.github/actions/wait-backend/action.yml):** High-speed readiness poller checking `/actuator/health/liveness` every 1 second, failing fast with application log output if the process crashes.
 - **[`prepull-buildkit`](../../.github/actions/prepull-buildkit/action.yml):** Configures Docker Buildx with a pre-pulled BuildKit daemon for jobs requiring GitHub Actions cache export (`type=gha`) or multi-platform builds.

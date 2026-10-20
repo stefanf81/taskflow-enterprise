@@ -422,11 +422,21 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      # `backend` owns Gradle cache writes in this workflow.
+      # Unlike the other read-only jobs, this one keeps its own Gradle User
+      # Home entry and writes it from `main` pushes only. Those runs use
+      # --build-cache, so the entry carries `testcontainersTest` and
+      # `spotbugsMain` outputs, and a pull request that does not change their
+      # inputs (e.g. a Renovate npm PR) gets both FROM-CACHE instead of
+      # running them (135 s of the 158 s job in run 39180950242, the PR's
+      # longest job). The nightly and dispatches run with --no-build-cache and
+      # stay read-only: cache cleanup would drop the unused build-cache
+      # entries, and PRs would restore that entry without the outputs.
+      # Before an entry exists (or after eviction) the restore falls through
+      # to the newest Linux entry of any job, e.g. the Android build's.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
         with:
-          cache-read-only: true
+          cache-read-only: ${{ github.event_name != 'push' }}
 
       - name: Testcontainers and SpotBugs
         env:
@@ -517,11 +527,24 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      # Within this workflow, `backend` owns Gradle cache writes. The Android
-      # and dependency-audit workflows retain their own writable caching.
-      # Read-only packaging avoids competing saves of shared cache entries.
+      # Within this workflow, `backend` owns the shared Gradle cache writes
+      # (`backend-integration` writes only its own entry, from `main` pushes).
+      # The Android and dependency-audit workflows retain their own writable
+      # caching. Read-only packaging avoids competing saves of shared entries.
+      #
+      # GRADLE_BUILD_ACTION_CACHE_KEY_JOB restores the newest `backend` entry
+      # (wrapper, dependencies, build cache). setup-gradle keys Gradle User
+      # Home by job id, and a read-only job never writes its own, so this job
+      # kept restoring a frozen `package` entry: a Gradle 9.8.0 wrapper (the
+      # 9.8.1 distribution was downloaded every run), stale dependencies and
+      # an empty build cache, so `compileJava` ran (Build JAR 45-49 s vs 18 s
+      # for the same `assemble` in `backend`, run 39180950242). Gradle's own
+      # integration tests use this variable the same way
+      # (gradle/actions .github/workflows/integ-test-restore-gradle-home.yml).
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+        env:
+          GRADLE_BUILD_ACTION_CACHE_KEY_JOB: backend
         with:
           cache-read-only: true
 
@@ -583,12 +606,16 @@ jobs:
           name: backend-jar
           path: backend-jar-dir
 
+      # C1-only JIT: this JVM boots, serves /v3/api-docs once and exits, so
+      # C2 compilation is pure startup overhead (the `test` task uses the same
+      # flag for its short-lived forks; BENCHMARKS.md §53).
       - name: Start backend for contract verification
         id: contract_backend
         uses: ./.github/actions/start-backend
         with:
           jar-path: backend-jar-dir/*.jar
           log-file: openapi-contract.log
+          java-options: -XX:TieredStopAtLevel=1
 
       - name: Verify OpenAPI Contract
         run: |
@@ -644,9 +671,12 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
 
       # This action already manages Gradle caching; configure it directly
-      # rather than adding setup-gradle. `backend` owns writes in this workflow.
+      # rather than adding setup-gradle. `backend` owns writes in this workflow;
+      # restore its entry (see `package`).
       - name: Submit Dependency Graph
         uses: gradle/actions/dependency-submission@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+        env:
+          GRADLE_BUILD_ACTION_CACHE_KEY_JOB: backend
         with:
           cache-read-only: true
 
@@ -691,14 +721,13 @@ jobs:
         with:
           persist-credentials: false
 
+      # No setup-node cache: the npm-ci action below restores ~/.npm itself,
+      # and only when its node_modules cache misses (a hit downloads nothing).
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: |
-            frontend/package-lock.json
-            shared/schemas/package-lock.json
+          package-manager-cache: false
 
       # Same inputs as the E2E install, so both jobs share one exact-match
       # node_modules cache key; a hit skips the npm upgrade and `npm ci`.
@@ -734,14 +763,18 @@ jobs:
         run: npx ng build
 
       # Nginx serves the bundle with `script-src 'self'` (frontend/nginx.conf).
-      # Angular's inlineCritical optimization defers the full stylesheet via an
-      # inline `onload="this.media='all'"` handler, which that CSP blocks —
-      # leaving only a `media="print"` stylesheet and an unstyled production
-      # page. Keep optimization.styles.inlineCritical=false (frontend/README.md §1.3).
-      - name: Verify Built index.html is CSP-Safe
+      # Angular's inlineCritical optimization defers the full stylesheet behind
+      # inline script, which that CSP blocks — leaving only a `media="print"`
+      # stylesheet and an unstyled production page. Before Angular 22 it was an
+      # `onload="this.media='all'"` attribute; Angular 22 (Beasties) emits
+      # `data-beasties-media="all"` plus an inline <script> at the end of
+      # <body>. Match both. Keep optimization.styles.inlineCritical=false
+      # (frontend/README.md §1.3). Both HTML shells: the prerendered landing (index.html) and the
+      # client-rendered shell every other route gets (index.csr.html).
+      - name: Verify Built HTML Shells are CSP-Safe
         run: |
-          if grep -Eq 'media="print"[^>]*onload=' dist/frontend/browser/index.html; then
-            echo "::error::index.html contains Angular's inlineCritical async-CSS inline onload handler, which the Nginx CSP blocks. Set optimization.styles.inlineCritical=false."
+          if grep -Eq 'data-beasties-media|media="print"[^>]*onload=' dist/frontend/browser/index.html dist/frontend/browser/index.csr.html; then
+            echo "::error::An HTML shell contains Angular's inlineCritical async-CSS loader (an onload handler before Angular 22, data-beasties-media plus an inline script from 22), which the Nginx CSP blocks. Set optimization.styles.inlineCritical=false."
             exit 1
           fi
 
@@ -901,14 +934,13 @@ jobs:
       # Frontend image
       ##########################################################
 
+      # No setup-node cache: the npm-ci action below restores ~/.npm itself,
+      # and only when its node_modules cache misses (a hit downloads nothing).
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: |
-            frontend/package-lock.json
-            shared/schemas/package-lock.json
+          package-manager-cache: false
 
       # The E2E job only needs Playwright from these deps; an exact-match
       # node_modules cache skips the npm upgrade + `npm ci` (~11 s) on a hit.
@@ -951,18 +983,21 @@ jobs:
           path: ~/.cache/ms-playwright
           # Key on the pinned image, not runner.os: the browser bundles are
           # built against the image's glibc/OS packages, so caches must not be
-          # shared across Ubuntu releases.
-          key: playwright-ubuntu-26.04-${{ steps.playwright-version.outputs.version }}
-          restore-keys: |
-            playwright-ubuntu-26.04-${{ steps.playwright-version.outputs.version }}
+          # shared across Ubuntu releases. `shell`: only the headless shell is
+          # installed (see below), so a full-Chromium entry must not match.
+          key: playwright-shell-ubuntu-26.04-${{ steps.playwright-version.outputs.version }}
 
       # Browsers are restored from the cache above; --with-deps otherwise
       # re-runs apt-get on every build. Install only on a cache miss.
+      # --only-shell: the suite runs only the `chromium` project, headless and
+      # without a channel, which Playwright launches with
+      # chromium-headless-shell (playwright-core 1.64 `getExecutableName`); the
+      # full Chrome for Testing build was downloaded and cached but never run.
       - name: Install Playwright Browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         working-directory: frontend
         run: |
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps --only-shell chromium
 
       ##########################################################
       # Production frontend ingress
@@ -1115,12 +1150,6 @@ jobs:
         run: |
           owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           echo "image=ghcr.io/${owner}/taskflow-backend" >> "$GITHUB_OUTPUT"
-          # Trivy DB cache keys. `trivy_db_date` mirrors trivy-action's own
-          # vulnerability-DB key (`cache-trivy-<date>`); the Java index DB is
-          # refreshed on a 3-day window (trivy-java-db `updateInterval`), so
-          # bucket its key the same way.
-          echo "trivy_db_date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
-          echo "trivy_java_db_bucket=$(( $(date -u +%s) / 259200 ))" >> "$GITHUB_OUTPUT"
 
       - name: Download Backend JAR
         uses: actions/download-artifact@v8
@@ -1243,38 +1272,37 @@ jobs:
             "$IMAGE" > /dev/null
 
       ##########################################################
-      # Trivy DB caches (restored here; the action's own cache is disabled)
+      # Trivy Java DB cache (the action's own cache is disabled)
       #
       # trivy-action caches the whole `.cache/trivy` tree under
       # `cache-trivy-<date>`. That archive can carry a stale `java-db/`, and
       # because the action restores it *after* any restore we do, it would
-      # overwrite a fresh Java DB and force a ~930 MiB re-download. So the
-      # action runs with `cache: false` and we restore in a controlled order:
+      # overwrite a fresh Java DB and force a ~940 MiB re-download. So the
+      # action runs with `cache: false` and only the Java index DB is cached.
       #
-      #   1. the vulnerability DB from trivy-action's key (shared with the FS
-      #      scans in security.yml), then
-      #   2. the Java index DB on top of it.
+      # Trivy re-downloads the Java DB once its NextUpdate has passed and it
+      # was downloaded more than 24 h ago (pkg/javadb/client.go `isNewDB`).
+      # Each download is saved under a key carrying its DownloadedAt and the
+      # newest one is restored by prefix, so a fresh copy is always saved
+      # and a restored one never is. The former 3-day bucket was saved only
+      # by its first run; for the rest of the bucket every run restored a
+      # stale copy (~11 s) and downloaded 940 MiB again (~15 s): runs
+      # 39133236130, 39134179024, 39178129916.
       #
-      # The Java DB carries its own metadata (`NextUpdate`, 3 days), so Trivy
-      # skips the download while it is fresh. The vulnerability DB is not
-      # written back from this job — the FS scans own that cache key.
+      # The vulnerability DB (`cache-trivy-<date>`, written by the nightly FS
+      # scans) is no longer restored here: a trivy-db goes stale 6 h after it
+      # was built (NextUpdate), and Trivy logged "Need to update DB" after
+      # that restore in every sampled run, so it cost 4-7 s before the same
+      # ~5 s download.
       ##########################################################
-
-      - name: Restore Trivy vulnerability DB cache
-        id: trivy-vuln-db-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ github.workspace }}/.cache/trivy
-          key: cache-trivy-${{ steps.images.outputs.trivy_db_date }}
-          restore-keys: |
-            cache-trivy-
 
       - name: Restore Trivy Java DB cache
         id: trivy-java-db-cache
         uses: actions/cache/restore@v6
         with:
           path: ${{ github.workspace }}/.cache/trivy/java-db
-          key: trivy-java-db-${{ env.TRIVY_VERSION }}-${{ steps.images.outputs.trivy_java_db_bucket }}
+          # Never an exact hit: the prefix restores the newest download.
+          key: trivy-java-db-${{ env.TRIVY_VERSION }}-${{ github.run_id }}
           restore-keys: |
             trivy-java-db-${{ env.TRIVY_VERSION }}-
 
@@ -1294,8 +1322,8 @@ jobs:
 
           scan-type: image
 
-          # DB caches are restored above; the action's own cache would clobber
-          # the fresh Java DB — see the cache section note.
+          # The Java DB is restored above; the action's own cache would clobber
+          # it — see the cache section note.
           cache: false
 
           format: sarif
@@ -1306,14 +1334,32 @@ jobs:
 
           exit-code: 1
 
+      - name: Key Trivy Java DB cache
+        id: trivy-java-db-key
+        if: always()
+        env:
+          META: ${{ github.workspace }}/.cache/trivy/java-db/metadata.json
+        run: |
+          downloaded="$(jq -r '.DownloadedAt // empty' "$META" 2>/dev/null | tr -dc '0-9' || true)"
+          if [[ -n "$downloaded" ]]; then
+            echo "key=trivy-java-db-${TRIVY_VERSION}-${downloaded}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only when Trivy downloaded a new Java DB (the key differs from the
+      # restored one), and not from pull requests: a PR-scoped entry is
+      # readable only by that PR. The nightly refreshes the `main` entry.
       - name: Save Trivy Java DB cache
-        # Best effort: a concurrent job may have seeded the same bucket.
+        # Best effort: a concurrent job may have saved the same download.
         continue-on-error: true
-        if: always() && steps.trivy-java-db-cache.outputs.cache-hit != 'true'
+        if: >-
+          always() &&
+          github.event_name != 'pull_request' &&
+          steps.trivy-java-db-key.outputs.key != '' &&
+          steps.trivy-java-db-key.outputs.key != steps.trivy-java-db-cache.outputs.cache-matched-key
         uses: actions/cache/save@v6
         with:
           path: ${{ github.workspace }}/.cache/trivy/java-db
-          key: trivy-java-db-${{ env.TRIVY_VERSION }}-${{ steps.images.outputs.trivy_java_db_bucket }}
+          key: ${{ steps.trivy-java-db-key.outputs.key }}
 
       - name: Upload SARIF
         if: always() && hashFiles('trivy-results.sarif') != ''
@@ -1413,7 +1459,6 @@ jobs:
         run: |
           owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           echo "image=ghcr.io/${owner}/taskflow-frontend" >> "$GITHUB_OUTPUT"
-          echo "trivy_db_date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
 
       - name: Download Frontend Bundle
         uses: actions/download-artifact@v8
@@ -1458,17 +1503,9 @@ jobs:
           build-args: |
             APK_BUST=${{ github.run_id }}-${{ github.run_attempt }}
 
-      # Vulnerability DB only (no Java DB for the nginx image); see the cache
-      # section note in `docker-backend`.
-      - name: Restore Trivy vulnerability DB cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ github.workspace }}/.cache/trivy
-          key: cache-trivy-${{ steps.images.outputs.trivy_db_date }}
-          restore-keys: |
-            cache-trivy-
-
-      # HARD GATE — see the severity-gating note in `docker-backend`.
+      # HARD GATE — see the severity-gating note in `docker-backend`. No DB
+      # cache: the nginx image needs no Java DB, and a restored vulnerability
+      # DB is stale on almost every run (see the cache note in `docker-backend`).
       - name: Scan Docker Image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

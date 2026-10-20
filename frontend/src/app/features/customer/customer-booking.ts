@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, inject } from '@angular/core';
+import { Component, effect, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { BookingWizard } from '../booking/booking-wizard';
 import { BookingStore } from '../booking/booking.store';
@@ -14,7 +14,6 @@ import { BookingStore } from '../booking/booking.store';
 @Component({
   selector: 'app-customer-booking',
   imports: [BookingWizard, RouterLink],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="w-full px-4 sm:px-8 lg:px-16 pt-12 pb-24 animate-fadeIn">
       <header class="flex justify-between items-center mb-10 pb-6 border-b border-white/10">

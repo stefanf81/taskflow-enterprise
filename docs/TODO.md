@@ -162,7 +162,7 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Remediation:** Confirm the production NetworkPolicy restricts the actuator port to the monitoring namespace (the intended control) or require authentication / a separate management port. Document the dependency so a future Service or port mapping cannot expose it silently.
 
 ### 3.8 CSP `style-src 'unsafe-inline'`
-- **Location:** `frontend/Dockerfile:38-51` (build-generated `csp-importmap.conf`)
+- **Location:** `frontend/Dockerfile` compression stage (build-generated `csp.conf`, which hashes every inline script of `index.html` and `index.csr.html`)
 - **Problem:** The enforced CSP permits inline styles. This is not equivalent to allowing inline script and no CSS-injection path has been demonstrated, but it prevents full style integrity and is a stepping stone if a script vector ever appears.
 - **Remediation:** Audit Angular's inline-style usage (e.g. `[style.*]` bindings, `ngStyle`) and migrate to `style-src-attr` hashes or nonces; keep `style-src` hashed where possible.
 

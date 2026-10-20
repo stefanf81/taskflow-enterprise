@@ -1,4 +1,7 @@
-@import 'tailwindcss';
+/* Scan src/ only, without specs: automatic detection starts at frontend/ and turned words in
+   specs, e2e and the README into unused utilities (`new Event('blur')` -> `.blur`). */
+@import 'tailwindcss' source('./');
+@source not './**/*.spec.ts';
 @import './app/app.css';
 
 /* Self-hosted Inter (variable, latin subset — 48 kB woff2).

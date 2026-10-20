@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, DestroyRef, signal } from '@angular/core';
+import { Component, inject, DestroyRef, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { asyncScheduler, throttleTime } from 'rxjs';
@@ -30,7 +30,6 @@ export const REFRESH_THROTTLE_MS = 300;
     AdminNotificationsTab,
   ],
   templateUrl: './admin-dashboard.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AdminDashboard {
   private readonly store = inject(AppointmentStore);
