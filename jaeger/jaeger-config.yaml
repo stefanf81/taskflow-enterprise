@@ -1,5 +1,5 @@
 # Jaeger v2 all-in-one configuration
-# Based on https://github.com/jaegertracing/jaeger/blob/v2.20.0/cmd/jaeger/internal/all-in-one.yaml
+# Based on https://github.com/jaegertracing/jaeger/blob/v2.22.0/cmd/jaeger/internal/all-in-one.yaml
 #
 # JAEGER_LISTEN_HOST env var controls which interface to bind to.
 # In Docker, set JAEGER_LISTEN_HOST=0.0.0.0 so the container listens on all interfaces.
@@ -30,8 +30,11 @@ extensions:
   jaeger_query:
     storage:
       traces: some_storage
+    # Jaeger 2.22 replaced `enable_mcp: true` with a presence-enabled `mcp` block
+    # (MCP tools at /api/ai/mcp/ on the query port); the old key fails config
+    # validation ("'app.AIConfig' has invalid keys: enable_mcp") and Jaeger exits.
     ai:
-      enable_mcp: true
+      mcp: {}
     http:
       endpoint: "${env:JAEGER_LISTEN_HOST:-localhost}:16686"
 
@@ -39,7 +42,12 @@ extensions:
     backends:
       some_storage:
         memory:
-          max_traces: 100000
+          # The store is a ring buffer of whole traces with no byte limit, and the
+          # container has 256M (compose also sets GOMEMLIMIT=200MiB). 100000, the
+          # upstream all-in-one value, assumes an unlimited container: at ~10 KB per
+          # Spring request trace that is ~1 GB. 20000 keeps the oldest traces out
+          # instead of getting Jaeger OOM-killed during a k6 run.
+          max_traces: 20000
 
   remote_sampling:
     file:

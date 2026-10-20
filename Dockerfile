@@ -98,6 +98,14 @@ RUN apt-get update --error-on=any \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
     && rm -rf /var/lib/apt/lists/*
 
+# Mount point for JVM diagnostics (GC log, OOM heap dump), owned by the runtime
+# user: with a read-only root they need a volume, and a new named volume copies
+# this directory's ownership, so the non-root JVM can write to it. tmpfs would
+# charge a heap-sized dump to the memory limit and lose it when the container
+# stops. A layer of its own, before the application layers, so neither apt nor
+# a JAR change re-runs it.
+RUN install -d -o 10001 -g 10001 -m 0750 /var/log/taskflow
+
 # Stable dependencies first; root-owned application files are readable but not
 # writable by the runtime user, including outside a read-only deployment.
 COPY --link --from=extractor --chown=0:0 /app/extracted/dependencies/ ./
@@ -210,5 +218,8 @@ RUN --network=none --mount=type=tmpfs,target=/tmp \
 # Shell form on purpose: `|| exit 1` maps wget's exit codes (4, 8, ...) onto the
 # 0/1 contract Docker defines for health checks. hadolint 2.15 reports DL3025
 # (meant for CMD/ENTRYPOINT) on HEALTHCHECK's CMD too.
+# --start-interval (Docker Engine 25+; older engines ignore it) probes every 2 s
+# during the start period instead of waiting a full 30 s interval for the first
+# probe; 60 s covers slow boots without CDS. Same timing as docker-compose.yml.
 # hadolint ignore=DL3025
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=60s --start-interval=2s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness || exit 1

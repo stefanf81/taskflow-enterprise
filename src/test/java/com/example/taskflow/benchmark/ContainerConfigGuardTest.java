@@ -65,20 +65,29 @@ class ContainerConfigGuardTest {
         Path compose = Path.of("docker-compose.yml");
         String yml = Files.readString(compose);
         long t0 = System.nanoTime();
-        boolean hasHeapDump = yml.contains("HeapDumpOnOutOfMemoryError") && yml.contains("HeapDumpPath=/tmp/heapdump.hprof");
-        boolean hasGcLog = yml.contains("Xlog:gc") && yml.contains("/tmp/gc.log");
+        // Diagnostics go to the backend-diagnostics volume, not the /tmp tmpfs: tmpfs pages count
+        // against the memory limit, and they are gone once ExitOnOutOfMemoryError stops the container.
+        boolean hasHeapDump = yml.contains("HeapDumpOnOutOfMemoryError") && yml.contains("HeapDumpPath=/var/log/taskflow ");
+        boolean hasGcLog = yml.contains("Xlog:gc*:file=/var/log/taskflow/gc.log:");
+        boolean diagnosticsVolume = yml.contains("- backend-diagnostics:/var/log/taskflow")
+                && yml.contains("\n  backend-diagnostics:");
+        boolean noTmpDiagnostics = !yml.contains("HeapDumpPath=/tmp") && !yml.contains("file=/tmp/gc.log");
         boolean hasContainer = yml.contains("UseContainerSupport");
         boolean hasUseG1GC = yml.contains("UseG1GC");
         long us = (System.nanoTime() - t0) / 1000;
 
         System.out.println("  HeapDump flag: " + hasHeapDump);
         System.out.println("  GC log flag: " + hasGcLog);
+        System.out.println("  Diagnostics on the backend-diagnostics volume, none on tmpfs: "
+                + (diagnosticsVolume && noTmpDiagnostics));
         System.out.println("  UseContainerSupport: " + hasContainer);
         System.out.println("  UseG1GC preserved: " + hasUseG1GC);
         System.out.printf("  Parse latency: %d µs%n", us);
 
-        assertTrue(hasHeapDump, "docker-compose must have HeapDumpOnOutOfMemoryError");
-        assertTrue(hasGcLog, "must have Xlog:gc*:file=/tmp/gc.log");
+        assertTrue(hasHeapDump, "docker-compose must dump the heap on OOM into /var/log/taskflow");
+        assertTrue(hasGcLog, "must have Xlog:gc*:file=/var/log/taskflow/gc.log");
+        assertTrue(diagnosticsVolume, "/var/log/taskflow must be the backend-diagnostics named volume");
+        assertTrue(noTmpDiagnostics, "no heap dump or GC log on the /tmp tmpfs (memory-charged, lost on stop)");
         assertTrue(hasContainer, "UseContainerSupport explicit");
         assertTrue(hasUseG1GC, "G1GC must remain");
 
@@ -89,8 +98,17 @@ class ContainerConfigGuardTest {
         boolean prodHealthcheck = !DockerfileStages.inheritedInstructions(d, "prod", "HEALTHCHECK").isEmpty();
         assertTrue(localHealthcheck, "the local target needs a HEALTHCHECK (P1-6 local)");
         assertFalse(prodHealthcheck, "the prod target must not have a HEALTHCHECK — k8s uses livenessProbe via yaml");
+        // Probe every 2 s during the start period instead of waiting a full interval (Engine 25+).
+        String localCheck = DockerfileStages.inheritedInstructions(d, "local", "HEALTHCHECK");
+        assertTrue(localCheck.contains("--start-period=60s") && localCheck.contains("--start-interval=2s"),
+                "the local HEALTHCHECK must probe every 2 s during a 60 s start period, like docker-compose.yml");
+        // A fresh named volume copies the mount point's ownership: the non-root JVM can only
+        // write its diagnostics if the image creates the directory owned by the runtime user.
+        String runtimeRun = DockerfileStages.instructions(d, "runtime", "RUN");
+        assertTrue(runtimeRun.contains("install -d -o 10001 -g 10001 -m 0750 /var/log/taskflow"),
+                "the shared runtime stage must create /var/log/taskflow owned by 10001");
 
-        System.out.println("  Overhead: GC log ~0.7% at 10% sampling per §7, heap dump 0% until OOM, tmpfs /tmp already");
+        System.out.println("  Overhead: GC log ~0.7% at 10% sampling per §7, heap dump 0% until OOM");
         System.out.println("  local target has HEALTHCHECK, prod target correctly omits (k8s)");
         System.out.println("  ✓ P1-2 JVM diagnostics verified");
         System.out.println("=".repeat(80));
