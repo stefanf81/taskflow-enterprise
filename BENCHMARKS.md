@@ -87,7 +87,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
      *   **GC Model (G1GC — verified against ZGC on allocation-heavy paths)**: The collector is left unpinned so the JVM uses **G1GC** (the JDK 21 default). Earlier benchmarks (§1) showed G1GC and ParallelGC are **statistically identical** (~189 RPS on the CPU-bound `/login` path). A deeper **G1GC vs Generational ZGC** comparison on allocation-heavy endpoints (§30) confirms G1GC wins by **2–104% throughput** depending on allocation intensity, while ZGC's sub-millisecond pauses offer no practical advantage at this scale. G1GC remains the default.
      *   **Deterministic Heap Allocation (local benchmark)**: Sized to a static `1GB` (`-Xms1g -Xmx1g`) for local benchmarking to eliminate heap-expansion noise. Runtime images do not embed heap sizing; Docker Compose and production deployment manifests use `-XX:MaxRAMPercentage=50.0`, with the local 2560M limit yielding approximately 1.25 GiB of heap.
      *   **Project Loom / Virtual Threads**: Explicitly enabled with `spring.threads.virtual.enabled=true` and kept alive with `spring.main.keep-alive=true`. §32 benchmarks the full I/O-bound mixed workload — VT delivers marginal gains on H2 in-memory (+0.4% throughput) but significantly higher throughput on PostgreSQL when combined with larger HikariCP pool sizes (§33). The earlier §3 finding that VT hurts the CPU-bound `/login` (BCrypt/RSA) path is absorbed by the read-heavy workload mix in production.
-     *   **Container Support & Crash Diagnostics (P1-2 §43)**: Explicit `-XX:+UseContainerSupport` for cgroup-aware heap sizing (self-documenting), `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof` for post-mortem dumps, and `-Xlog:gc*:file=/tmp/gc.log:time,uptime:filecount=3,filesize=10m` for GC analysis. Deployed via `JAVA_TOOL_OPTIONS` in `docker-compose.yml` (local) and `homelab/TF/gitops/apps/taskflow/backend.yaml` (prod); `/tmp` is `tmpfs`. Zero overhead until OOM; GC log ~0.7% at 10% tracing (see §7).
+     *   **Container Support & Crash Diagnostics (P1-2 §43)**: Explicit `-XX:+UseContainerSupport` for cgroup-aware heap sizing (self-documenting), `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/var/log/taskflow` for post-mortem dumps, and `-Xlog:gc*:file=/var/log/taskflow/gc.log:time,uptime:filecount=3,filesize=10m` for GC analysis. Deployed via `JAVA_TOOL_OPTIONS` in `docker-compose.yml` (local) and `homelab/TF/gitops/apps/taskflow/backend.yaml` (prod); `/tmp` is `tmpfs`. Zero overhead until OOM; GC log ~0.7% at 10% tracing (see §7).
 
 ### 🍃 2. Spring Boot 4.1.1 Application Layer
 *   **Embedded Apache Tomcat 11**:
@@ -211,7 +211,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Trivy & Hadolint Container Security**: Automated CI/CD pipelines run **Hadolint** for Dockerfile best-practice enforcement and **Trivy** for deep filesystem and container image vulnerability scanning.
 *   **Prettier**: Enforced strict, automated formatting rules across the frontend codebase to prevent style regressions.
 *   **CI/CD Pipeline Caching**: Maximized CI/CD velocity across GitHub Actions by explicitly caching `npm`, `gradle`, and `trivy` databases, and utilizing **Docker BuildKit** multi-arch layer caching.
-*   **Docker HEALTHCHECK (P1-6 §47)**: `HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness` in the Dockerfile's `local` target (standalone `docker run` parity with compose). The `prod` target intentionally omits it — K8s uses `livenessProbe` via `homelab/TF` manifests.
+*   **Docker HEALTHCHECK (P1-6 §47)**: `HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=60s --start-interval=2s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness` in the Dockerfile's `local` target (standalone `docker run` parity with compose). The `prod` target intentionally omits it — K8s uses `livenessProbe` via `homelab/TF` manifests.
 
 ### 📱 8. Mobile & Client Layer
 *   **React Native (Expo 57) QueryClient Caching (P1-4 §45)**:
@@ -528,7 +528,7 @@ By setting `spring.jpa.properties.hibernate.query.in_clause_parameter_padding=tr
 | `wal_buffers` | default | `16MB` | Lower WAL write latency |
 | `checkpoint_completion_target` | `0.5` | `0.9` | Spreads checkpoint I/O, eliminates spikes |
 | `checkpoint_timeout` | `5min` | `15min` | Fewer checkpoints under load |
-| `wal_compression` | off | `on` | Smaller WAL, less disk I/O |
+| `wal_compression` | off | `lz4` (was `on` = pglz until §60) | Smaller WAL, less disk I/O; lz4 is the cheapest compression (§59) |
 | `max_wal_size` | `1GB` | `1GB` (made explicit) | Raised under heavy write load |
 | `random_page_cost` | `4.0` | `1.1` | NVMe/SSD → index scans competitive with seq scans |
 | `effective_io_concurrency` | `1` | `200` | Parallelise buffered I/O on fast storage |
@@ -1247,7 +1247,9 @@ location / { try_files $uri $uri/ /index.html; }
 | `G1GC` / `MaxGCPauseMillis=100` | `JAVA_TOOL_OPTIONS` | — | Consistent with §1 winner (G1GC default) |
 | `SharedArchiveFile` / `Xshare:auto` | Image `CMD` | −19.8% start (§36) | CDS archive |
 
-**Verification:** `ContainerConfigGuardTest.p1_2_jvm_diagnostics_flags` checks `docker-compose.yml` for `HeapDumpOnOutOfMemoryError` + `HeapDumpPath=/tmp/heapdump.hprof`, `Xlog:gc` + `/tmp/gc.log`, `UseContainerSupport`, and `UseG1GC` retention.
+> **Update (§60):** the dump and GC log moved to `/var/log/taskflow` on the `backend-diagnostics` named volume (`-XX:HeapDumpPath=/var/log/taskflow`, `-Xlog:gc*:file=/var/log/taskflow/gc.log:…`). On the `/tmp` tmpfs a heap-sized dump was charged to the container's memory limit and was lost when `ExitOnOutOfMemoryError` stopped the container.
+
+**Verification:** `ContainerConfigGuardTest.p1_2_jvm_diagnostics_flags` checks `docker-compose.yml` for `HeapDumpOnOutOfMemoryError` + `HeapDumpPath=/var/log/taskflow`, `Xlog:gc` + `/var/log/taskflow/gc.log` on the named volume, `UseContainerSupport`, and `UseG1GC` retention.
 
 **Verdict:** Diagnostics are a zero-cost hardening layer (0% heap-dump overhead, ~0.7% GC log) with explicit `UseContainerSupport` for container-aware sizing. Deployment owns sizing; image stays agnostic — the precedence bug is not reintroduced.
 
@@ -1346,7 +1348,7 @@ management.metrics.distribution.slo.http.server.requests=50ms,100ms,200ms
 
 **Configuration:**
 
-*   **Local (`Dockerfile`, `local` target):** `HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness || exit 1` — uses `wget` (shipped in the `eclipse-temurin:21-jre-resolute` base image) against the Spring Boot `liveness` probe (`management.endpoint.health.probes.enabled=true`). `start_period 15s` matches the CDS-warmed startup (3.0s §36) plus Hikari init.
+*   **Local (`Dockerfile`, `local` target):** `HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=60s --start-interval=2s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness || exit 1` — uses `wget` (shipped in the `eclipse-temurin:21-jre-resolute` base image) against the Spring Boot `liveness` probe (`management.endpoint.health.probes.enabled=true`). `start_period 15s` matches the CDS-warmed startup (3.0s §36) plus Hikari init.
 *   **Production (`Dockerfile`, `prod` target):** Intentionally **omits** `HEALTHCHECK` — K8s `livenessProbe`/`readinessProbe` are set in `homelab/TF/gitops/apps/taskflow/backend.yaml` (with `initialDelaySeconds` tuned to pod resources). A baked `HEALTHCHECK` would duplicate and potentially conflict with the kubelet probe, and `homelab/TF` is the single source of truth for prod health semantics.
 *   **Compose parity:** `docker-compose.yml:113` mirrors the same `wget` liveness check for `backend` (and `frontend` `http://127.0.0.1:8080/`), so `depends_on: condition: service_healthy` works locally.
 
@@ -1498,7 +1500,7 @@ And `ARCHITECTURE.md` / `BENCHMARKS.md` inventories (§9) amplify: **>2 replicas
 
 **Goal:** After migrating the backend from `eclipse-temurin:21-jre-alpine` (`musl`) to `eclipse-temurin:21-jre-resolute` (`glibc`, Ubuntu 26.04 LTS), re-baseline the migration and evaluate the glibc-only tuning knobs: `MALLOC_ARENA_MAX`, jemalloc preload, and transparent huge pages.
 
-**Methodology (reproducible):** `scripts/benchmark-glibc-tuning.sh` boots the production-like compose stack (db, redis, backend, frontend) with one tuning variant, warms JIT for 5 s, then drives **30 s of `hey -c 50`** through the Nginx ingress at `/api/v1/barbers` (cached JSON + ETag = allocation-heavy JVM path). It records RPS/p50/p95/p99, container RSS, G1 pause stats from `/tmp/gc.log`, cold start, and **verifies the knob reached the JVM process** (`/proc/<pid>/environ`, `/proc/<pid>/maps`, `smaps`). Three runs per variant, medians reported; host is an Apple M4 Pro (Rancher Desktop VM, cgroup `cpus=4`, `memory=2560M`, 1.25 GiB heap via `MaxRAMPercentage=50`).
+**Methodology (reproducible):** `scripts/benchmark-glibc-tuning.sh` boots the production-like compose stack (db, redis, backend, frontend) with one tuning variant, warms JIT for 5 s, then drives **30 s of `hey -c 50`** through the Nginx ingress at `/api/v1/barbers` (cached JSON + ETag = allocation-heavy JVM path). It records RPS/p50/p95/p99, container RSS, G1 pause stats from the GC log (`/var/log/taskflow/gc.log` since §60), cold start, and **verifies the knob reached the JVM process** (`/proc/<pid>/environ`, `/proc/<pid>/maps`, `smaps`). Three runs per variant, medians reported; host is an Apple M4 Pro (Rancher Desktop VM, cgroup `cpus=4`, `memory=2560M`, 1.25 GiB heap via `MaxRAMPercentage=50`).
 
 > **Methodology trap (fixed):** the public rate-limit bucket (100/min) 429s the entire run — the first sweep measured 541k rejections at ~18k RPS and was discarded. The harness now sets `APP_RATE_LIMIT_MAX_REQUESTS_PER_MINUTE=100000000` (limiter still runs, stays non-blocking) and **fails the run if zero 2xx responses** are recorded.
 
