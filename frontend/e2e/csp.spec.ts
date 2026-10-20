@@ -84,4 +84,20 @@ test.describe('Content-Security-Policy (nginx image)', () => {
       expect(csp).toContain(`'${hash}'`);
     }
   });
+
+  test('serves the client shell on `/` to a browser with a session cookie, varying on Cookie', async ({
+    page,
+  }) => {
+    // nginx routes on the cookie's presence only; the backend never sees this request.
+    const signedIn = await page.request.get('/', { headers: { cookie: 'access_token=e2e' } });
+    expect(await signedIn.text()).toContain('<body ngcm');
+    expect(signedIn.headers()['vary'] ?? '').toMatch(/\bCookie\b/i);
+
+    const guest = await page.request.get('/');
+    expect(await guest.text()).toContain('id="ng-event-dispatch-contract"');
+    expect(guest.headers()['vary'] ?? '').toMatch(/\bCookie\b/i);
+
+    const shell = await page.request.get('/admin');
+    expect(shell.headers()['vary'] ?? '').not.toMatch(/\bCookie\b/i);
+  });
 });
