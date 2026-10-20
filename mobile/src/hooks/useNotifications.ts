@@ -19,5 +19,9 @@ export const useNotifications = ({ poll = true }: UseNotificationsOptions = {}) 
     queryFn: () => notificationsApi.getNotifications(),
     refetchInterval: poll ? NOTIFICATIONS_POLL_MS : false,
     refetchIntervalInBackground: false,
+    // A hidden tab also stops observing the cache (TanStack's React Native
+    // guide): no re-render when another screen refreshes the outbox, and on
+    // refocus a stale (>60 s) list is refetched as on mount.
+    subscribed: poll,
   });
 };

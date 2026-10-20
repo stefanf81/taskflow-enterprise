@@ -6,6 +6,10 @@
   "build": {
     "development": {
       "environment": "development",
+      "node": "24.22.0",
+      "env": {
+        "EAS_USE_CACHE": "1"
+      },
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
@@ -17,8 +21,12 @@
     },
     "preview": {
       "environment": "preview",
+      "node": "24.22.0",
       "env": {
-        "TASKFLOW_TLS_POLICY": "required"
+        "TASKFLOW_TLS_POLICY": "required",
+        "EAS_USE_CACHE": "1",
+        "EXPO_UNSTABLE_METRO_OPTIMIZE_GRAPH": "1",
+        "EXPO_UNSTABLE_TREE_SHAKING": "1"
       },
       "distribution": "internal",
       "android": {
@@ -30,8 +38,11 @@
     },
     "production": {
       "environment": "production",
+      "node": "24.22.0",
       "env": {
-        "TASKFLOW_TLS_POLICY": "required"
+        "TASKFLOW_TLS_POLICY": "required",
+        "EAS_RESTORE_CACHE": "0",
+        "EAS_SAVE_CACHE": "1"
       },
       "distribution": "store",
       "autoIncrement": true,

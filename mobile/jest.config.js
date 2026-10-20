@@ -21,7 +21,11 @@ module.exports = {
   // intermittently (AdminDashboardScreen, 1 in 15 cold runs). Slow tests are not
   // slower; only the failure threshold moves.
   testTimeout: 15000,
-  setupFiles: ['<rootDir>/test/polyfills.ts', '<rootDir>/test/asset-registry.ts'],
+  setupFiles: [
+    '<rootDir>/test/polyfills.ts',
+    '<rootDir>/test/asset-registry.ts',
+    '<rootDir>/test/expo-network.ts',
+  ],
   setupFilesAfterEnv: [
     '@testing-library/react-native/matchers',
     '<rootDir>/test/setup.ts',

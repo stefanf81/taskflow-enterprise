@@ -200,24 +200,33 @@ EXPO_PUBLIC_API_URL=https://api.taskflow.example.com npx expo start -c
 ```
 
 #### Method C: EAS Build Profiles (`eas.json`)
-For standalone production builds or preview binaries shared with testers, `mobile/eas.json`'s `preview`/`production` profiles each set an `"environment"` field (`preview` / `production`) that pulls EAS-hosted environment variables configured on the EAS servers — `EXPO_PUBLIC_API_URL` is not a literal inline value in the checked-in file. The file itself currently only sets a build-time literal for TLS pinning:
+For standalone production builds or preview binaries shared with testers, `mobile/eas.json`'s `preview`/`production` profiles each set an `"environment"` field (`preview` / `production`) that pulls EAS-hosted environment variables configured on the EAS servers — `EXPO_PUBLIC_API_URL` is not a literal inline value in the checked-in file. The file itself sets only build-time literals: the TLS pinning policy, EAS's ccache switches, Expo's Metro tree shaking for `preview`, and the Node version of `mobile/.nvmrc` (the SDK 58 build images ship Node 22):
 
 ```json
 "preview": {
   "environment": "preview",
+  "node": "24.22.0",
   "env": {
-    "TASKFLOW_TLS_POLICY": "required"
+    "TASKFLOW_TLS_POLICY": "required",
+    "EAS_USE_CACHE": "1",
+    "EXPO_UNSTABLE_METRO_OPTIMIZE_GRAPH": "1",
+    "EXPO_UNSTABLE_TREE_SHAKING": "1"
   },
   "distribution": "internal"
 },
 "production": {
   "environment": "production",
+  "node": "24.22.0",
   "env": {
-    "TASKFLOW_TLS_POLICY": "required"
+    "TASKFLOW_TLS_POLICY": "required",
+    "EAS_RESTORE_CACHE": "0",
+    "EAS_SAVE_CACHE": "1"
   },
   "distribution": "store"
 }
 ```
+
+`development`/`preview` restore and save the ccache (`EAS_USE_CACHE`); `production` only saves a fresh one and never restores (Expo's caching guide: builds under a shared user should not restore into store binaries). Keep the `node` values in step with `.nvmrc`.
 
 Trigger the build:
 ```bash
@@ -333,7 +342,7 @@ docker compose down
 ```bash
 npm test                 # run once with coverage check (49 test suites)
 npm run test:watch       # watch mode
-npm run lint             # TypeScript type-check (tsc --noEmit)
+npm run lint             # TypeScript type-check (tsc --noEmit, incremental: node_modules/.cache/tsconfig.tsbuildinfo)
 ```
 
 Enforces **>70% coverage** across branches, functions, lines, and statements in `jest.config.js`.

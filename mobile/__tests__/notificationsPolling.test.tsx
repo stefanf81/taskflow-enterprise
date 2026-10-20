@@ -52,10 +52,38 @@ describe('notification polling lifecycle (MOB-10)', () => {
   it('does not poll when the screen is not focused', async () => {
     await renderHook(() => useNotifications({ poll: false }), { wrapper });
     await tick(0);
-    expect(mockGetNotifications).toHaveBeenCalledTimes(1);
+    expect(mockGetNotifications).not.toHaveBeenCalled();
 
     await tick(NOTIFICATIONS_POLL_MS * 4);
+    expect(mockGetNotifications).not.toHaveBeenCalled();
+  });
+
+  it('stops observing the outbox while hidden and refreshes a stale list on refocus', async () => {
+    const { result, rerender } = await renderHook(
+      ({ poll }: { poll: boolean }) => useNotifications({ poll }),
+      { wrapper, initialProps: { poll: true } },
+    );
+    await tick(0);
     expect(mockGetNotifications).toHaveBeenCalledTimes(1);
+
+    // Blurred: no polling, and a cache update made elsewhere does not reach this screen.
+    await rerender({ poll: false });
+    mockGetNotifications.mockResolvedValue([{ id: 1 }]);
+    await act(async () => {
+      queryClient.setQueryData(['notifications'], [{ id: 99 }]);
+    });
+    await tick(NOTIFICATIONS_POLL_MS * 4);
+    expect(mockGetNotifications).toHaveBeenCalledTimes(1);
+    expect(result.current.data).toEqual([]);
+
+    // Refocused after the 60 s staleTime: one refetch, then polling resumes.
+    await tick(60_000);
+    await rerender({ poll: true });
+    await tick(0);
+    expect(mockGetNotifications).toHaveBeenCalledTimes(2);
+    expect(result.current.data).toEqual([{ id: 1 }]);
+    await tick(NOTIFICATIONS_POLL_MS);
+    expect(mockGetNotifications).toHaveBeenCalledTimes(3);
   });
 
   it('stops polling while the app is backgrounded and resumes when it returns', async () => {
