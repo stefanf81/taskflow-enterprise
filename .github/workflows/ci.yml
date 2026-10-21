@@ -1422,7 +1422,9 @@ jobs:
           # SIGTERM through tini: Spring's graceful shutdown must finish well
           # inside the 40 s budget (compose stop_grace_period).
           docker stop --time 40 smoke-backend > /dev/null
-          docker logs smoke-backend 2>&1 | grep -q 'Graceful shutdown complete' \
+          # Drain the whole stream: grep -q closes its pipe on a match, which can
+          # SIGPIPE docker logs and falsely fail this check under pipefail.
+          docker logs smoke-backend 2>&1 | grep -F 'Graceful shutdown complete' > /dev/null \
             || fail "no graceful shutdown after SIGTERM"
           echo "Production image smoke test passed"
 
