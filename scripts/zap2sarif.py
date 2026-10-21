@@ -26,6 +26,21 @@ def ignored_rule_ids(rules_file):
     return ignored
 
 
+def scoped_rule_exclusions(rules_file):
+    """Mirror packaged scans' per-rule OUTOFSCOPE regexes, not a global rule ignore."""
+    exclusions = {}
+    if rules_file:
+        with open(rules_file, 'r', encoding='utf-8') as file:
+            for line in file:
+                columns = line.strip().split('\t', 2)
+                if len(columns) == 3 and not columns[0].startswith('#') and columns[1] == 'OUTOFSCOPE':
+                    pattern = re.compile(columns[2])
+                    for rule in columns[0].split(','):
+                        key = '*' if rule == '*' else f'ZAP-{rule}'
+                        exclusions.setdefault(key, []).append(pattern)
+    return exclusions
+
+
 def main(file_in, file_out, rules_file=None, target=None):
     try:
         with open(file_in, 'r', encoding='utf-8') as file:
@@ -34,6 +49,7 @@ def main(file_in, file_out, rules_file=None, target=None):
         raise SystemExit(f"Error loading ZAP report: {e}") from e
 
     ignored_rules = ignored_rule_ids(rules_file)
+    scoped_exclusions = scoped_rule_exclusions(rules_file)
 
     target_hosts = set()
     if target:
@@ -74,6 +90,13 @@ def main(file_in, file_out, rules_file=None, target=None):
             rule_id = f"ZAP-{alert.get('pluginid', alert.get('alertRef', 'unknown'))}"
             if rule_id in ignored_rules:
                 continue
+            patterns = scoped_exclusions.get('*', []) + scoped_exclusions.get(rule_id, [])
+            instances = [
+                instance for instance in alert.get('instances', [])
+                if not any(pattern.match(instance.get('uri', '')) for pattern in patterns)
+            ]
+            if not instances:
+                continue
             
             # Map riskcode to GHA severity level (error, warning, note)
             riskcode = alert.get("riskcode", "0")
@@ -105,7 +128,7 @@ def main(file_in, file_out, rules_file=None, target=None):
                 })
                 rule_ids[rule_id] = True
 
-            for instance in alert.get("instances", []):
+            for instance in instances:
                 uri = instance.get("uri", "")
                 cleaned_uri = clean_uri(uri)
                 
@@ -170,7 +193,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert ZAP JSON report to SARIF format.")
     parser.add_argument("file_in", help="Input ZAP JSON file")
     parser.add_argument("file_out", help="Output SARIF JSON file")
-    parser.add_argument("--rules-file", help="ZAP rules file whose IGNORE entries are omitted from SARIF")
+    parser.add_argument("--rules-file", help="ZAP rules file whose IGNORE and URL-scoped OUTOFSCOPE entries are omitted from SARIF")
     parser.add_argument("--target", help="Target URL or host to restrict reported findings to in-scope targets")
     args = parser.parse_args()
     main(args.file_in, args.file_out, args.rules_file, args.target)

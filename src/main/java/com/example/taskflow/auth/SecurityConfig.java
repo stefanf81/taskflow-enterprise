@@ -10,6 +10,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -20,7 +21,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfFilter;
-import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.util.matcher.AndRequestMatcher;
+import org.springframework.security.web.util.matcher.NegatedRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.oauth2.core.OAuth2Error;
@@ -99,12 +102,11 @@ public class SecurityConfig {
         JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
         jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);
 
-        http
-            .csrf(csrf -> csrf
-                // Only exempt truly public state-changing endpoints from CSRF.
-                // Authenticated endpoints (including POST /api/v1/auth/logout and
-                // admin POST/PUT/DELETE) retain CSRF protection.
-                .ignoringRequestMatchers(
+        // Resource Server automatically adds a CSRF exemption for every request whose
+        // token its resolver can read. Our resolver also reads ambient cookies, so that
+        // default would silently exempt every signed-in browser, not just native clients.
+        RequestMatcher csrfProtection = new AndRequestMatcher(CsrfFilter.DEFAULT_CSRF_MATCHER,
+                new NegatedRequestMatcher(new OrRequestMatcher(
                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/login"),
                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/mobile/login"),
                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/register"),
@@ -112,9 +114,26 @@ public class SecurityConfig {
                     PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*"),
                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/reviews/public/**"),
                     bearerOnlyRequestMatcher()
-                )
+                )));
+
+        http
+            .csrf(csrf -> csrf
                 .csrfTokenRepository(csrfTokenRepository())
-                .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+                .csrfTokenRequestHandler(new CookieCsrfTokenRequestHandler())
+                // Apply our complete matcher after all configurers' init hooks, including
+                // Resource Server's registerDefaultCsrfOverride. DSL ordering alone cannot
+                // override the automatic exemption; this runs on the final CsrfFilter.
+                .withObjectPostProcessor(new ObjectPostProcessor<CsrfFilter>() {
+                    @Override
+                    public <O extends CsrfFilter> O postProcess(O filter) {
+                        filter.setRequireCsrfProtectionMatcher(csrfProtection);
+                        // sendError dispatches to the deny-by-default /error route before
+                        // authentication and turns the 403 into a misleading 401 on Tomcat.
+                        filter.setAccessDeniedHandler((request, response, denied) ->
+                                response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN));
+                        return filter;
+                    }
+                })
             )
             .cors(cors -> {})  // CorsConfigurationSource is provided by CorsConfig @Bean auto-detection
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

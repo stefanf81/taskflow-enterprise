@@ -37,6 +37,35 @@ function inlineScriptHashes(html: string): string[] {
 test.describe('Content-Security-Policy (nginx image)', () => {
   test.skip(!process.env['E2E_DOCKER'], 'CSP only exists behind the nginx image');
 
+  test('requires a matching CSRF header for cookie-authenticated mutations', async ({
+    request,
+  }) => {
+    const login = await request.post('/api/v1/auth/login', {
+      data: { username: 'admin', password: 'admin-password' },
+    });
+    expect(login.ok()).toBe(true);
+    const csrf = await request.get('/api/v1/auth/csrf');
+    expect(csrf.ok()).toBe(true);
+    expect(await csrf.json()).toHaveProperty('token');
+
+    expect((await request.post('/api/v1/auth/logout')).status()).toBe(403);
+    expect(
+      (
+        await request.post('/api/v1/auth/logout', { headers: { 'X-XSRF-TOKEN': 'wrong-token' } })
+      ).status(),
+    ).toBe(403);
+    expect((await request.get('/api/v1/auth/me')).status()).toBe(200);
+    // Authentication can rotate the cookie. Like Angular, read its current value
+    // when issuing the mutation rather than reusing the earlier /csrf response.
+    const token =
+      (await request.storageState()).cookies.find((cookie) => cookie.name === 'XSRF-TOKEN')
+        ?.value ?? '';
+    expect(token).toBeTruthy();
+    expect(
+      (await request.post('/api/v1/auth/logout', { headers: { 'X-XSRF-TOKEN': token } })).status(),
+    ).toBe(204);
+  });
+
   test('enforces Trusted Types while allowing hydration, deferred forms and lazy dashboards', async ({
     page,
   }) => {

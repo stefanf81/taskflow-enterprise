@@ -125,6 +125,9 @@ jobs:
               - '.github/renovate.json'
               - 'scripts/prepare-nuclei-sarif.py'
               - 'scripts/test_nuclei_sarif.py'
+              - 'scripts/zap2sarif.py'
+              - 'scripts/test_zap_sarif.py'
+              - '.zap/**'
 
             docker:
               - Dockerfile*
@@ -257,8 +260,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Test Nuclei SARIF preparation
-        run: python3 -m unittest discover -s scripts -p 'test_nuclei_sarif.py' -v
+      - name: Test SARIF converters
+        run: python3 -m unittest discover -s scripts -p 'test_*sarif.py' -v
 
       - name: Lint workflows
         run: |

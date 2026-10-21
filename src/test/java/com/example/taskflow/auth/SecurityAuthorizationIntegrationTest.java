@@ -310,6 +310,50 @@ class SecurityAuthorizationIntegrationTest {
     // ------------------------------------------------------------------
 
     @Test
+    void cachedPublicReads_doNotMintXsrfCookiesForGuestOrNativeClients() throws Exception {
+        mockMvc.perform(get("/api/v1/catalog"))
+                .andExpect(status().isOk()).andExpect(header().doesNotExist("Set-Cookie"));
+        mockMvc.perform(get("/api/v1/catalog").header("Authorization", customerToken))
+                .andExpect(status().isOk()).andExpect(header().doesNotExist("Set-Cookie"));
+    }
+
+    @Test
+    void cookieLogout_requiresTheActualDoubleSubmitHeader() throws Exception {
+        Cookie access = new Cookie("access_token", customerToken.substring("Bearer ".length()));
+        var csrfResponse = mockMvc.perform(get("/api/v1/auth/csrf").cookie(access))
+                .andExpect(status().isOk()).andReturn().getResponse();
+        Cookie xsrf = csrfResponse.getCookie("XSRF-TOKEN");
+        String token = objectMapper.readTree(csrfResponse.getContentAsString()).get("token").asText();
+
+        mockMvc.perform(post("/api/v1/auth/logout").cookie(access, xsrf))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/auth/logout").cookie(access, xsrf)
+                        .header("X-XSRF-TOKEN", "wrong-token"))
+                .andExpect(status().isForbidden());
+        // A failed CSRF check must not revoke the session.
+        mockMvc.perform(get("/api/v1/auth/me").cookie(access)).andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/auth/logout").cookie(access, xsrf)
+                        .header("X-XSRF-TOKEN", token))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void cookieAdminMutation_remainsCsrfProtectedEvenWithABearerHeader() throws Exception {
+        Cookie access = new Cookie("access_token", adminToken.substring("Bearer ".length()));
+        for (String authorization : new String[] {"", adminToken}) {
+            mockMvc.perform(post("/api/v1/catalog").cookie(access)
+                            .header("Authorization", authorization)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isForbidden());
+        }
+        // Header-only native clients still reach validation without a CSRF token.
+        mockMvc.perform(post("/api/v1/catalog").header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void logout_shouldRevokeTheTokenForItsRemainingLifetime() throws Exception {
         mockMvc.perform(get("/api/v1/customer/appointments").header("Authorization", customerToken))
                 .andExpect(status().isOk());

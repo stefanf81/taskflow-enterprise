@@ -4,6 +4,12 @@
 10096	IGNORE	(Static bundle timestamp false positive)
 # Angular reads the double-submit XSRF-TOKEN cookie, so it intentionally cannot be HttpOnly.
 10010	IGNORE	(XSRF-TOKEN is intentionally readable by Angular's XSRF interceptor)
+# Only the guest landing's prerendered cancellation/review forms: they use public JSON APIs
+# with booking-code + email verification, not cookie authority. Native submission is blocked
+# by form-action 'none'; protected API mutations use Angular's X-XSRF-TOKEN header instead
+# of hidden HTML tokens (e2e/csp.spec.ts verifies rejection without a matching token).
+# Keep this rule enabled everywhere else, including API URLs and other client routes.
+10202	OUTOFSCOPE	^http://localhost:4200/?$
 # API error responses deliberately use problem-detail JSON rather than the HTML ZAP expects for malformed root queries.
 100001	IGNORE	(Problem-detail JSON returned for malformed API requests)
 # Expected validation, authentication, authorization, and rate-limit responses are not security findings.
