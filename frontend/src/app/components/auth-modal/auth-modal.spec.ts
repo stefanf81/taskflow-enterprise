@@ -29,6 +29,15 @@ describe('AuthModalComponent', () => {
 
   afterEach(() => httpMock.verify());
 
+  it('never defaults credentials to a GET form and prevents native submission', () => {
+    const form = (fixture.nativeElement as HTMLElement).querySelector('form')!;
+    expect(form.method).toBe('post');
+    const event = new Event('submit', { bubbles: true, cancelable: true });
+    form.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    httpMock.expectNone('/api/v1/auth/login');
+  });
+
   it('starts in login mode with invalid empty fields', () => {
     expect(component.isRegisterMode()).toBe(false);
     expect(component.authForm.username().invalid()).toBe(true);

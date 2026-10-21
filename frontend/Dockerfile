@@ -35,6 +35,8 @@ COPY dist/frontend/browser/ ./
 # order: the build fails if a script appears, disappears or changes kind, so the served
 # hashes cannot drift from the assets and nothing unreviewed is authorized. Update EXPECTED
 # (and e2e/csp.spec.ts, which re-hashes the served pages) when Angular changes what it inlines.
+# All forms use HttpClient, never native navigation: form-action 'none' also protects the
+# prerendered forms before hydration. Enforce Trusted Types with only the AOT/lazy-load policies.
 RUN awk -v dir=/tmp/inline-scripts ' \
         BEGIN { RS = sprintf("%c", 1); system("mkdir -p " dir); } \
         { \
@@ -66,10 +68,10 @@ RUN awk -v dir=/tmp/inline-scripts ' \
         | while read -r f; do \
             printf "'sha384-%s'\n" "$(openssl dgst -sha384 -binary < "$f" | openssl base64 -A)"; \
         done | sort -u | tr '\n' ' ')" \
-    && printf 'add_header Content-Security-Policy "default-src %s; base-uri %s; form-action %s; frame-ancestors %s; object-src %s; script-src %s %s; style-src %s %s; font-src %s data:; img-src %s data:; connect-src %s;" always;\n' \
+    && printf 'add_header Content-Security-Policy "default-src %s; base-uri %s; form-action %s; frame-ancestors %s; object-src %s; script-src %s %s; style-src %s %s; font-src %s data:; img-src %s data:; connect-src %s; require-trusted-types-for %s; trusted-types angular angular#bundler;" always;\n' \
         "'self'" \
         "'self'" \
-        "'self'" \
+        "'none'" \
         "'self'" \
         "'none'" \
         "'self'" \
@@ -79,6 +81,7 @@ RUN awk -v dir=/tmp/inline-scripts ' \
         "'self'" \
         "'self'" \
         "'self'" \
+        "'script'" \
         > /csp.conf \
     && cat /csp.conf
 

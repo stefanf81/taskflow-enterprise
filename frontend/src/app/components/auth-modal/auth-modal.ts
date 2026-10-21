@@ -95,7 +95,7 @@ interface AuthFormModel {
           </div>
         }
 
-        <form (submit)="$event.preventDefault(); onLogin()" class="space-y-4">
+        <form method="post" (submit)="$event.preventDefault(); onLogin()" class="space-y-4">
           @if (isRegisterMode()) {
             <div class="form-group flex flex-col gap-1.5">
               <label for="regName" class="text-xs font-bold text-zinc-500 uppercase tracking-wider"

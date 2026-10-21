@@ -31,6 +31,19 @@ describe('PostBookingActionsComponent', () => {
 
   afterEach(() => httpMock.verify());
 
+  it('never defaults sensitive native forms to GET and prevents native submission', () => {
+    const forms = (fixture.nativeElement as HTMLElement).querySelectorAll('form');
+    expect(forms).toHaveLength(2);
+    for (const form of forms) {
+      expect(form.method).toBe('post');
+      const event = new Event('submit', { bubbles: true, cancelable: true });
+      form.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+    }
+    httpMock.expectNone((req) => req.url.includes('/appointments/public/cancel/'));
+    httpMock.expectNone((req) => req.url.includes('/reviews/public/'));
+  });
+
   it('cancels a reservation after verifying the booking code and email', () => {
     component.cancelModel.set({ publicId: 'test-id', email: 'test@example.com' });
     component.onCancel();

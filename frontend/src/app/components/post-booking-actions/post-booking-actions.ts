@@ -53,7 +53,8 @@ interface ReviewFormModel {
           scheduled slot instantly from our calendar:
         </p>
 
-        <form (submit)="$event.preventDefault(); onCancel()" class="space-y-4">
+        <!-- Never put verification data in the URL, even before hydration. -->
+        <form method="post" (submit)="$event.preventDefault(); onCancel()" class="space-y-4">
           <div class="flex flex-col gap-4">
             <div class="form-group flex flex-col gap-1.5">
               <label
@@ -130,7 +131,7 @@ interface ReviewFormModel {
           for your barber!
         </p>
 
-        <form (submit)="$event.preventDefault(); onReview()" class="space-y-4">
+        <form method="post" (submit)="$event.preventDefault(); onReview()" class="space-y-4">
           <div class="flex flex-col gap-4">
             <div class="form-group flex flex-col gap-1.5">
               <label

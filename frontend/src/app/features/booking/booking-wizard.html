@@ -438,6 +438,7 @@
       class="space-y-4 animate-fadeIn"
     >
       <form
+        method="post"
         [formRoot]="bookingForm"
         (submit)="$event.preventDefault(); submitBooking()"
         class="appointment-form"

@@ -37,6 +37,86 @@ function inlineScriptHashes(html: string): string[] {
 test.describe('Content-Security-Policy (nginx image)', () => {
   test.skip(!process.env['E2E_DOCKER'], 'CSP only exists behind the nginx image');
 
+  test('enforces Trusted Types while allowing hydration, deferred forms and lazy dashboards', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') errors.push(message.text());
+    });
+    page.on('pageerror', (error) => errors.push(error.message));
+
+    const response = await page.goto('/');
+    const csp = response?.headers()['content-security-policy'] ?? '';
+    expect(csp).toContain("require-trusted-types-for 'script'");
+    expect(csp).toContain('trusted-types angular angular#bundler;');
+    expect(csp).toContain("form-action 'none'");
+    expect(response?.headers()['content-security-policy-report-only']).toBeUndefined();
+
+    await expect(page.locator('#cancelEmail')).toBeAttached();
+    await expect(page.locator('#reviewEmail')).toBeAttached();
+    await page.getByRole('button', { name: 'Owner Portal' }).click();
+    await page.locator('#username').fill('admin');
+    await page.locator('#password').fill('admin-password');
+    await page.locator('.modal-card button[type="submit"]').click();
+    await expect(page.locator('h1')).toContainText('TaskFlow Owner Panel');
+    await page.getByRole('button', { name: 'Schedules & Time-Off' }).click();
+    await expect(page.getByRole('heading', { name: 'Barber Schedules & Time-Off' })).toBeVisible();
+
+    expect(
+      errors.filter((message) => /trusted|content.security.policy|refused to/i.test(message)),
+    ).toEqual([]);
+
+    // Verify actual browser enforcement, not just the presence of a header.
+    expect(
+      await page.evaluate(() => {
+        try {
+          document.createElement('script').setAttribute('src', '/untrusted.js');
+          return false;
+        } catch (error) {
+          return error instanceof TypeError;
+        }
+      }),
+    ).toBe(true);
+  });
+
+  test('never leaks verification emails through native forms, even without JavaScript', async ({
+    browser,
+    baseURL,
+  }) => {
+    const context = await browser.newContext({
+      baseURL,
+      javaScriptEnabled: false,
+      bypassCSP: false,
+    });
+    try {
+      for (const id of ['cancelEmail', 'reviewEmail']) {
+        // Use a fresh page after each blocked navigation (Chromium leaves it pending).
+        const page = await context.newPage();
+        await page.goto('/');
+        await expect(page.locator('form')).toHaveCount(2);
+        await page.locator(`#${id}`).fill('private@example.com');
+        await expect(page.locator(`form:has(#${id})`)).toHaveAttribute('method', 'post');
+        // Call native submit directly: no Angular handler or hydration can protect this path.
+        // With JavaScript disabled, DOM event callbacks do not run; observe Chromium's
+        // own CSP enforcement message rather than installing a securitypolicyviolation handler.
+        await Promise.all([
+          page.waitForEvent('console', {
+            predicate: (message) =>
+              message.text().includes("form-action 'none'") &&
+              message.text().includes('request has been blocked'),
+          }),
+          page.locator(`form:has(#${id})`).evaluate((form: HTMLFormElement) => form.submit()),
+        ]);
+        expect(new URL(page.url()).search).toBe('');
+        expect(new URL(page.url()).pathname).toBe('/');
+        await page.close();
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
   test('allows the inline import map without blocking SRI-bearing scripts', async ({ page }) => {
     const consoleMessages: string[] = [];
     page.on('console', (message) => consoleMessages.push(message.text()));

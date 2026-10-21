@@ -205,6 +205,15 @@ describe('BookingWizard accessibility (TODO 4.2, 4.3)', () => {
       await render();
     });
 
+    it('never defaults contact details to a GET form and prevents native submission', () => {
+      const form = el().querySelector('form')!;
+      expect(form.method).toBe('post');
+      const event = new Event('submit', { bubbles: true, cancelable: true });
+      form.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+      httpMock.expectNone('/api/v1/appointments');
+    });
+
     it('announces nothing and marks nothing invalid when step 4 opens', () => {
       expect(el().querySelectorAll('[role="alert"]')).toHaveLength(0);
       for (const id of ['customerName', 'customerEmail', 'customerPhone']) {
