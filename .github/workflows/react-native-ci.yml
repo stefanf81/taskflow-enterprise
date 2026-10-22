@@ -53,6 +53,7 @@ concurrency:
 env:
   CI: "true"
   JAVA_VERSION: "17"
+  # renovate: datasource=rubygems depName=cocoapods
   COCOAPODS_VERSION: "1.17.0"
   # CocoaPods is installed into a cached, workspace-local GEM_HOME so the
   # macOS job does not recompile gems from RubyGems on every run.

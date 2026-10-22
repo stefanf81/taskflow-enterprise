@@ -304,6 +304,14 @@ and digest updates enable platform automerge after required CI checks pass and
 a 3-day release quarantine soak expires to protect against supply-chain attacks.
 Minor updates require manual review (also holding for 3 days to catch immediate
 regressions). Major updates are held for 30 days and require manual review.
+
+Tool versions pinned in workflow `env` blocks are tracked through the
+`customManagers:githubActionsVersions` preset: put a
+`# renovate: datasource=… depName=…` comment directly above a `*_VERSION`
+variable (Trivy, Nuclei, CocoaPods and the k6 image in `k6.yml` do this).
+`GITLEAKS_VERSION` is intentionally not annotated, because its release
+checksum (`GITLEAKS_SHA256`) must change in the same commit. The Node version in
+`mobile/eas.json` is not tracked either; bump it together with `mobile/.nvmrc`.
 Security vulnerability alerts bypass the release quarantine so CVE patches open
 immediately with a `security` label. Routine updates and lock-file maintenance
 run weekly in an `on monday` (UTC) window, deduplicating npm workspaces via

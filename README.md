@@ -128,9 +128,9 @@ following setup is the shortest supported path after cloning the repository.
 ### Install prerequisites
 
 - Git
-- OpenJDK 21. Gradle is supplied by the checked-in Gradle 9.8.1 wrapper, so a
+- OpenJDK 21. Gradle is supplied by the checked-in Gradle 9.8.2 wrapper, so a
   separate Gradle installation is not needed.
-- Node.js 24.22.0 and npm 12.2.0. Mobile pins Node in `mobile/.nvmrc`; the
+- Node.js 24.22.1 and npm 12.2.0. Mobile pins Node in `mobile/.nvmrc`; the
   frontend declares its npm version in `frontend/package.json`.
 - Docker Desktop with a running daemon and at least 5 GB available to Docker
   for the full Compose stack. Docker Engine 25 or later (Compose 2.20.2 or later):

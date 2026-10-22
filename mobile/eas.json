@@ -6,7 +6,7 @@
   "build": {
     "development": {
       "environment": "development",
-      "node": "24.22.0",
+      "node": "24.22.1",
       "env": {
         "EAS_USE_CACHE": "1"
       },
@@ -21,7 +21,7 @@
     },
     "preview": {
       "environment": "preview",
-      "node": "24.22.0",
+      "node": "24.22.1",
       "env": {
         "TASKFLOW_TLS_POLICY": "required",
         "EAS_USE_CACHE": "1",
@@ -38,7 +38,7 @@
     },
     "production": {
       "environment": "production",
-      "node": "24.22.0",
+      "node": "24.22.1",
       "env": {
         "TASKFLOW_TLS_POLICY": "required",
         "EAS_RESTORE_CACHE": "0",

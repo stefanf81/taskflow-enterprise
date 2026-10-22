@@ -3,6 +3,7 @@
   "extends": [
     "config:recommended",
     ":configMigration",
+    "customManagers:githubActionsVersions",
     "abandonments:recommended",
     ":maintainLockFilesWeekly"
   ],

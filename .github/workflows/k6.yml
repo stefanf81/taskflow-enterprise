@@ -24,6 +24,8 @@ jobs:
 
     env:
       BASE_URL: ${{ vars.BASE_URL }}
+      # renovate: datasource=docker depName=grafana/k6 versioning=docker
+      K6_VERSION: "2.3.0-with-browser"
 
     steps:
       - uses: actions/checkout@v7
@@ -46,7 +48,7 @@ jobs:
             -e ENFORCE_CWV=false \
             -v ${{ github.workspace }}:/work \
             -w /work \
-            grafana/k6:2.2.0-with-browser \
+            grafana/k6:${K6_VERSION} \
             run k6/browser.js
 
       - name: Run k6 production API probe
@@ -56,5 +58,5 @@ jobs:
             -e BASE_URL="$BASE_URL" \
             -v ${{ github.workspace }}:/work \
             -w /work \
-            grafana/k6:2.2.0-with-browser \
+            grafana/k6:${K6_VERSION} \
             run k6/probe.js

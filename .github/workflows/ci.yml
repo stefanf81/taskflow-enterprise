@@ -49,7 +49,8 @@ env:
   REGISTRY: ghcr.io
   IMAGE_TAG: ${{ github.sha }}
 
-  TRIVY_VERSION: v0.75.0
+  # renovate: datasource=github-releases depName=aquasecurity/trivy
+  TRIVY_VERSION: v0.76.1
 
 defaults:
   run:

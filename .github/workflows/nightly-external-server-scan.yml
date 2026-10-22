@@ -50,6 +50,7 @@ env:
   TARGET_HOST: ${{ inputs.target_host || vars.PUBLIC_SERVER_DOMAIN || inputs.target_ip || vars.TARGET_IP || '84.194.170.2' }}
   EXPECTED_PUBLIC_TCP_PORTS: "80,443"
 
+  # renovate: datasource=github-releases depName=projectdiscovery/nuclei
   NUCLEI_VERSION: "v3.11.1"
   NUCLEI_RATE_LIMIT: "20"
   NUCLEI_CONCURRENCY: "10"

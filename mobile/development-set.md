@@ -205,7 +205,7 @@ For standalone production builds or preview binaries shared with testers, `mobil
 ```json
 "preview": {
   "environment": "preview",
-  "node": "24.22.0",
+  "node": "24.22.1",
   "env": {
     "TASKFLOW_TLS_POLICY": "required",
     "EAS_USE_CACHE": "1",
@@ -216,7 +216,7 @@ For standalone production builds or preview binaries shared with testers, `mobil
 },
 "production": {
   "environment": "production",
-  "node": "24.22.0",
+  "node": "24.22.1",
   "env": {
     "TASKFLOW_TLS_POLICY": "required",
     "EAS_RESTORE_CACHE": "0",

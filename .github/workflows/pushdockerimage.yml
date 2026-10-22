@@ -63,7 +63,8 @@ env:
   JAVA_VERSION: "21"
   NODE_VERSION: "24"
   REGISTRY: ghcr.io
-  TRIVY_VERSION: v0.75.0
+  # renovate: datasource=github-releases depName=aquasecurity/trivy
+  TRIVY_VERSION: v0.76.1
 
 defaults:
   run:
