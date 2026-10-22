@@ -3,6 +3,7 @@ package com.example.taskflow.benchmark;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
@@ -13,6 +14,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Execute the workflow's actual shutdown assertion against deterministic docker-log streams. */
 @Tag("container-config")
 class ProductionImageSmokeTest {
+
+    private static final String BASH_BINARY = resolveBash();
+
+    private static String resolveBash() {
+        for (String candidate : new String[]{"/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"}) {
+            if (new File(candidate).canExecute()) {
+                return candidate;
+            }
+        }
+        return "/bin/bash";
+    }
 
     @Test
     void gracefulShutdownWithLongLogs_doesNotFailFromSigpipe() throws Exception {
@@ -50,7 +62,7 @@ class ProductionImageSmokeTest {
         if (check.endsWith("\\")) {
             check = check.substring(0, check.length() - 1);
         }
-        Process process = new ProcessBuilder("bash", "-c", "set -euo pipefail\n" + dockerStub + "\n" + check)
+        Process process = new ProcessBuilder(BASH_BINARY, "-c", "set -euo pipefail\n" + dockerStub + "\n" + check)
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 .redirectError(ProcessBuilder.Redirect.DISCARD)
                 .start();
