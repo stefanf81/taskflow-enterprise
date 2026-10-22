@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ScrollView,
   View,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
+  useAnimatedValue,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -66,7 +67,9 @@ export const HomeScreen: React.FC = () => {
   const { data: services = [], isError: servicesError, refetch: refetchServices } = useCatalog();
 
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
-  const pingAnim = useRef(new Animated.Value(1)).current;
+  // useAnimatedValue, not useRef(...).current: reading a ref during render makes React Compiler
+  // skip the whole screen.
+  const pingAnim = useAnimatedValue(1);
 
   // Animated ping effect for promo dot
   useEffect(() => {

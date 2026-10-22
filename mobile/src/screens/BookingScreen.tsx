@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useEffectEvent, useMemo, useRef } from 'react';
 import {
   ScrollView,
   View,
@@ -87,8 +87,13 @@ export const BookingScreen: React.FC = () => {
   // rollover re-bases the day list without a dedicated timer.
   const now = useNow();
   const todayKey = toLocalDateString(now);
-  // The day list only depends on the calendar date, not on the minute.
-  const upcomingDays = useMemo(() => getUpcomingDays(now), [todayKey]);
+  // The day list only depends on the calendar date, not on the minute, so it is rebuilt from
+  // todayKey (noon: clear of DST shifts). Reading `now` here while depending on todayKey made
+  // React Compiler give up on the whole screen.
+  const upcomingDays = useMemo(() => {
+    const [year = 0, month = 1, day = 1] = todayKey.split('-').map(Number);
+    return getUpcomingDays(new Date(year, month - 1, day, 12));
+  }, [todayKey]);
   const upcomingDates = useMemo(() => upcomingDays.map((d) => d.dateStr), [upcomingDays]);
 
   // Destination for the receipt close button (guest vs customer tab navigator)
@@ -238,10 +243,11 @@ export const BookingScreen: React.FC = () => {
 
   // The tab stays mounted while another tab/screen is shown, so leaving the
   // wizard (blur) must discard in-progress state or it would reappear stale.
-  const resetWizardRef = useRef(resetWizard);
-  resetWizardRef.current = resetWizard;
+  // An effect event always sees the latest resetWizard without re-subscribing (writing it to a
+  // ref during render made React Compiler skip the screen).
+  const onBlur = useEffectEvent(() => resetWizard());
   useEffect(() => {
-    const unsubscribe = navigation.addListener('blur', () => resetWizardRef.current());
+    const unsubscribe = navigation.addListener('blur', () => onBlur());
     return unsubscribe;
   }, [navigation]);
 

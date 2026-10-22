@@ -47,7 +47,12 @@
           "faceIDPermission": "Allow TaskFlow to use Face ID for fast authentication."
         }
       ],
-      "expo-detox-config-plugin",
+      [
+        "expo-detox-config-plugin",
+        {
+          "skipProguard": true
+        }
+      ],
       "./plugins/withDetoxProguardRules",
       "expo-font",
       "expo-status-bar",

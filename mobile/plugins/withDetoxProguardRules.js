@@ -9,12 +9,16 @@ const PROGUARD_FILES_LINE =
  * (android.enableMinifyInReleaseBuilds=true). The Detox test APK relies on
  * classes the app already ships (androidx.tracing, Kotlin coroutines), so R8
  * must keep them, or instrumentation crashes on start. expo-detox-config-plugin
- * 13 only patches the old `proguard-android.txt` line, and Detox's own rules
+ * 13.0 only patched the old `proguard-android.txt` line, and Detox's own rules
  * miss the coroutine intrinsics.
  *
  * The rules are applied only when the Gradle invocation builds an androidTest
  * APK (`npm run e2e:build:android`), so store/EAS release builds keep R8's
- * full shrinking.
+ * full shrinking. app.json passes `skipProguard: true` to
+ * expo-detox-config-plugin: from 13.1 it also matches the SDK 58
+ * `proguard-android-optimize.txt` line and would add its keep rules
+ * (kotlin.**, kotlinx.coroutines.**, com.facebook.react.modules.**, …) to
+ * every release build.
  */
 function addDetoxProguardRules(buildGradle) {
   if (buildGradle.includes(MARKER)) {
