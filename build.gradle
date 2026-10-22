@@ -18,7 +18,7 @@ buildscript {
 	configurations.classpath {
 		resolutionStrategy.eachDependency { details ->
 			if (details.requested.group == 'tools.jackson.core' || details.requested.group == 'tools.jackson') {
-				details.useVersion '3.2.3'
+				details.useVersion '3.2.4'
 			} else if (details.requested.group.startsWith('com.fasterxml.jackson')
 					&& details.requested.name != 'jackson-annotations') {
 				details.useVersion '2.22.4'
@@ -61,8 +61,7 @@ dependencyAnalysis {
 				exclude(libs.spring.boot.starter.oauth2.resource.server)
 				exclude(libs.spring.boot.starter.security)
 				exclude(libs.spring.boot.starter.validation)
-				exclude(libs.spring.boot.starter.web)
-				exclude(libs.spring.modulith.core)
+				exclude(libs.spring.boot.starter.webmvc)
 				exclude(libs.springdoc.webmvc.ui)
 				exclude(libs.archunit.junit5)
 				exclude(libs.spring.boot.starter.test)
@@ -134,7 +133,7 @@ dependencies {
 	// Spring Boot
 	implementation libs.spring.boot.starter.data.jpa
 	implementation libs.spring.boot.starter.validation
-	implementation libs.spring.boot.starter.web
+	implementation libs.spring.boot.starter.webmvc
 	implementation libs.spring.boot.starter.security
 	implementation libs.spring.boot.starter.oauth2.resource.server
 	implementation libs.spring.boot.starter.actuator
@@ -152,8 +151,8 @@ dependencies {
 	// Tomcat embed — explicit pins so dependency tooling and container scanners
 	// resolve the patched version directly. Spring Boot 4.1.1 ships the vulnerable
 	// 11.0.24; 11.0.25 fixed CVE-2026-68525, CVE-2026-65905, CVE-2026-65182
-	// (all CRITICAL); 11.0.26 is the latest patch. Keep core/el/websocket aligned;
-	// drop once Spring Boot BOM ships >= the pinned version.
+	// (all CRITICAL); the pin tracks the latest patch. Keep core/el/websocket aligned;
+	// drop once Spring Boot BOM ships >= the pinned version (4.1.2 ships 11.0.27).
 	implementation libs.tomcat.embed.core
 	implementation libs.tomcat.embed.el
 	implementation libs.tomcat.embed.websocket
@@ -177,9 +176,12 @@ dependencies {
 	// Modular monolith — Spring Modulith verifies package-based module boundaries
 	// (repositories live under <module>/internal/ and are inaccessible from other
 	// modules; cross-module communication goes through each module's public
-	// service API or domain events). Verified by ModularityTest.java and
-	// documented via auto-generated PlantUML/C4 diagrams.
-	implementation libs.spring.modulith.core
+	// service API or domain events). Verified by ModularityTest.java (test classpath,
+	// spring-modulith-starter-test below) and documented via auto-generated
+	// PlantUML/C4 diagrams. No runtime starter: the application uses no Modulith API,
+	// and spring-modulith-starter-core only added Moments (an @hourly and a @daily
+	// job publishing events nothing consumes), a module-verification post-processor,
+	// ArchUnit and the annotation processor to the boot JAR.
 	// Observability
 	implementation libs.spring.boot.micrometer.tracing.opentelemetry
 	implementation libs.micrometer.prometheus
@@ -203,12 +205,13 @@ dependencies {
 	runtimeOnly libs.h2
 	// Transitive dependency pins — override versions brought in by the Spring Boot BOM or
 	// other transitive paths. Explicit declarations keep dependency tooling accurate.
-	//   - HikariCP:           BOM ships 7.0.2; bump to 7.1.0.
-	//   - Lettuce:            BOM ships 7.5.2.RELEASE; bump to 7.7.0.RELEASE.
+	//   - HikariCP:           BOM ships 7.0.2; pinned to 7.1.0.
+	//   - Lettuce:            BOM ships 7.5.2.RELEASE; pinned to the version catalog's release.
 	//   - semconv:            transitive via opentelemetry-exporter-otlp (BOM ships 1.41.1).
-	//   - nimbus-jose-jwt:    transitive via spring-security-oauth2-resource-server; 10.9.1
-	//                         is a security patch (BOM ships 10.9).
-	//   - error_prone_*:      transitive annotation lib (BOM ships 2.49.0).
+	//   - nimbus-jose-jwt:    transitive via spring-security-oauth2-resource-server; pinned at
+	//                         or above the 10.9.1 security patch (BOM ships 10.9).
+	//   - error_prone_*:      transitive annotation lib (not managed by the Boot BOM); pinned
+	//                         so every path resolves the same release.
 	implementation libs.hikari
 	implementation libs.lettuce
 	implementation libs.opentelemetry.semconv
@@ -237,14 +240,6 @@ spotbugs {
 	reportLevel = com.github.spotbugs.snom.Confidence.valueOf('HIGH')
 	excludeFilter = file("spotbugs-exclude.xml")
 }
-// Build-time and test-only parts of Spring Modulith stay out of the executable JAR: ArchUnit (module
-// verification in ModularityTest) and the annotation processor are never loaded at runtime (0 classes
-// in a full startup and load run). The test classpath still has them.
-configurations.named("runtimeClasspath") {
-	exclude group: "com.tngtech.archunit"
-	exclude group: "org.springframework.modulith", module: "spring-modulith-apt"
-}
-
 tasks.named("test") {
 	useJUnitPlatform {
 		// container-config guards run in containerConfigTest below, so their
@@ -347,7 +342,7 @@ tasks.register("benchmarkTest", Test) {
 	useJUnitPlatform {
 		includeTags 'benchmark'
 	}
-	testClassesDirs = sourceSets.test.output
+	testClassesDirs = sourceSets.test.output.classesDirs
 	classpath = sourceSets.test.runtimeClasspath
 	maxParallelForks = 1
 	// No coverage for benchmarks: the agent would distort their timings.

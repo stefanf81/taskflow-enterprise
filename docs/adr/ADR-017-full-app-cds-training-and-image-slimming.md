@@ -57,4 +57,4 @@ Additionally, the upstream `eclipse-temurin:21-jre-resolute` base image bundled 
 ## Update (2026-10-17)
 
 - The build-time archive check boots the application with `-Xshare:on` and the training flags instead of running `java -version`, which maps only JDK classes. On Ubuntu's OpenJDK 21.0.12 a fat-JAR archive passed `-version` and crashed the real startup; the image's extracted layout boots fine, and the check now proves it on every build (~10 s per target).
-- ArchUnit and `spring-modulith-apt` are excluded from `runtimeClasspath` (0 classes loaded at runtime), and `hibernate-jcache`/`caffeine-jcache` are test-only. Boot JAR 95.6 → 89.1 MB. See BENCHMARKS.md §58.
+- ArchUnit and `spring-modulith-apt` are excluded from `runtimeClasspath` (0 classes loaded at runtime), and `hibernate-jcache`/`caffeine-jcache` are test-only. Boot JAR 95.6 → 89.1 MB. See BENCHMARKS.md §58. *(§61: the Spring Modulith runtime starter is gone altogether — Modulith is test-only — so the exclusions were removed with it.)*

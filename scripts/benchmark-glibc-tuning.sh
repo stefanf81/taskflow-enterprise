@@ -130,7 +130,9 @@ fi
 # Current run only: the JVM rotates the previous run's log on the persistent
 # backend-diagnostics volume to gc.log.0 when it starts.
 docker exec taskflow-backend sh -c 'cat /var/log/taskflow/gc.log' > "$OUT_DIR/${LABEL}-gc.log" 2>/dev/null || true
-GC_STATS="$(awk '/Pause/ {gsub(/ms$/, "", $NF); print $NF}' "$OUT_DIR/${LABEL}-gc.log" \
+# Each pause logs a start line (ending in "Pause)") and an end line ending in the duration ("1.2ms");
+# only end lines count, or every pause is counted twice and averaged with a 0.
+GC_STATS="$(awk '/Pause/ && $NF ~ /ms$/ {sub(/ms$/, "", $NF); print $NF}' "$OUT_DIR/${LABEL}-gc.log" \
   | sort -n | awk '{a[NR]=$1} END {
       if (NR == 0) { print "n/a n/a"; exit }
       s=0; for (i=1;i<=NR;i++) s+=a[i];

@@ -70,6 +70,7 @@ boot() {
   docker rm -f cds-bench-app >/dev/null 2>&1 || true
   docker run -d --name cds-bench-app --network "$NET" --cpus "$CPUS" --memory "$MEMORY" \
     --read-only --tmpfs /tmp:uid=10001,gid=10001 \
+    --tmpfs /var/log/taskflow:uid=10001,gid=10001,mode=0750 \
     --cap-drop ALL --security-opt no-new-privileges:true \
     -e SPRING_PROFILES_ACTIVE=prod \
     -e SPRING_DATASOURCE_PASSWORD=cds-bench \

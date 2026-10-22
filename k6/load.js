@@ -28,9 +28,12 @@ export const options = {
 const catalogTrend = new Trend('catalog_duration');
 const barbersTrend = new Trend('barbers_duration');
 const busySlotsTrend = new Trend('busySlots_duration');
+const ratingsTrend = new Trend('barberRatings_duration');
 
 export default function () {
-  // 70% catalog/barbers (cached), 20% busySlots, 10% health
+  // 70% catalog/barbers (cached), 20% busySlots, 10% barber ratings (cached). Every branch must be
+  // a backend route that nginx proxies: /actuator is not proxied, so a health probe here was
+  // answered by the SPA fallback (index.csr.html, 200 + Cache-Control) and passed both checks.
   const r = Math.random();
   let url, trend;
   if (r < 0.35) {
@@ -47,7 +50,8 @@ export default function () {
     url = `${BASE_URL}/api/v1/appointments/public/busy-slots?barberName=${encodeURIComponent('Alex the Barber')}&bookingDate=${iso}`;
     trend = busySlotsTrend;
   } else {
-    url = `${BASE_URL}/actuator/health/liveness`;
+    url = `${BASE_URL}/api/v1/reviews/public/barber-ratings`;
+    trend = ratingsTrend;
   }
 
   const res = http.get(url, { headers: { Accept: 'application/json' } });
