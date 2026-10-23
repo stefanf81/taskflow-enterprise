@@ -23,6 +23,10 @@ Both Android and iOS share the exact same E2E test suite file (`e2e/booking.e2e.
 | **Android** | `android.emu.release` | Android Emulator (`Pixel_6_API_35`) | `android/app/build/outputs/apk/release/app-release.apk` |
 | **iOS** | `ios.sim.release` | iOS Simulator (`iPhone 17 Pro`) | `ios/build/Build/Products/Release-iphonesimulator/TaskFlowMobile.app` |
 
+### Nightly CI
+
+`react-native-ci.yml` runs this suite every night (`schedule` only) in the `android-e2e` and `ios-e2e` jobs. There is no Docker on GitHub's macOS runners, so instead of the compose stack both jobs start the packaged backend JAR on `localhost:8080` with the default profile (in-memory H2 with the demo seed data) and build the apps with `EXPO_PUBLIC_API_URL=http://localhost:8080`. The Android job builds `x86_64` (`DETOX_ANDROID_ABIS`) for the runner's emulator. The jobs do not block pull requests; failed-test screenshots and logs are in the `android-e2e-artifacts`/`ios-e2e-artifacts` run artifacts. To rehearse a CI run locally, run the JAR the same way (`./gradlew bootJar`, then `java -jar build/libs/*.jar` without a profile) and build with that API URL.
+
 ---
 
 ## 🛠️ Prerequisites

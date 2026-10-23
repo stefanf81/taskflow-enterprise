@@ -338,6 +338,21 @@ nightly native build. Its npm, CocoaPods and ExpoModulesJSI caches are saved
 only from non-PR runs. Lockfile pull requests restore the newest `main`
 snapshots instead (`BENCHMARKS.md` §55).
 
+The nightly `schedule` run also runs the Detox suite (`mobile/e2e/booking.e2e.test.ts`)
+on both platforms: `android-e2e` (an x86_64 `Pixel_6_API_35` emulator on
+`ubuntu-26.04` via `reactivecircus/android-emulator-runner`, fresh AVD without a
+snapshot) and `ios-e2e` (an `iPhone 17 Pro` simulator on `macos-26`), each
+against the release app built like `npm run e2e:build[:android]`. The backend is
+the packaged JAR from `e2e-backend-jar`, launched with `start-backend` on
+`localhost:8080` with the default profile (in-memory H2 with the demo seed, no
+Redis, dev admin password), because macOS runners have no Docker; the apps are
+built with `EXPO_PUBLIC_API_URL=http://localhost:8080` and
+`EXPO_PUBLIC_E2E_LOCAL_API=true`. They run only on `schedule` (not dispatch, not
+pull requests) and are not part of `android-gate`/`ios-gate`, so a failure turns
+the nightly red without blocking merges. Screenshots and logs of failed tests,
+the backend log and (iOS) the raw xcodebuild log are uploaded as
+`android-e2e-artifacts`/`ios-e2e-artifacts`.
+
 The following version-coupled ecosystems are grouped into cohesive Renovate
 PRs: Angular and its toolchain, Tailwind CSS, Zod across monorepo packages,
 Spring Boot plugin/BOM, Flyway, Hibernate, Netty, Log4j, Jackson (including BOMs),
