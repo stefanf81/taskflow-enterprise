@@ -27,7 +27,7 @@ interface ReviewFormModel {
  *
  * Contains the "Secure Booking Cancellation" and "Submit a Review" forms
  * that appear well below the fold on the guest landing page. Designed for
- * @defer (on viewport) to keep initial bundle size small.
+ * @defer (on idle; on viewport; hydrate on idle) to keep initial bundle size small.
  *
  * Migrated to Angular 22 Signal Forms (`@angular/forms/signals`) to match
  * the booking wizard in `app.ts`: each form is a single signal-backed model

@@ -37,6 +37,9 @@ build/reports/
 build/resources/
 build/tmp/
 build/test-results/
+# JaCoCo execution data (`test.exec`) and the versions plugin's report.
+build/jacoco/
+build/dependencyUpdates/
 
 frontend/
 mobile/

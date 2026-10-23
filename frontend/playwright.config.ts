@@ -41,9 +41,10 @@ export default defineConfig({
     // When the frontend is served through the Docker nginx reverse proxy
     // (which sets a strict Content-Security-Policy: script-src 'self'),
     // those scripts are blocked and all page-interaction tests fail.
-    // bypassCSP tells Chromium to ignore CSP headers during testing —
-    // the CSP itself is validated by the project's DAST security scanner
-    // (`.github/workflows/dast.yml`), not by E2E tests.
+    // bypassCSP tells Chromium to ignore CSP headers during testing;
+    // e2e/csp.spec.ts opts back in (`bypassCSP: false`) and verifies the
+    // served policy and its script hashes, and DAST (`.github/workflows/dast.yml`)
+    // scans the running stack.
     bypassCSP: true,
   },
 

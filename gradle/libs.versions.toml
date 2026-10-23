@@ -9,7 +9,7 @@ spotbugs-tool = "4.10.5"
 opentelemetry = "1.67.0"
 prometheus = "1.10.0"
 commons-lang3 = "3.21.0"
-# Pin above Spring Boot's vulnerable 1.5.34 release; 1.6.x includes the
+# Pinned to the 1.6 line (Spring Boot 4.1 ships 1.5.38); 1.6.x includes the
 # hardening for disallowed conditional configuration references.
 logback = "1.6.5"
 # Jackson 2.x and 3.x remain separate families and must stay internally aligned.
@@ -20,14 +20,14 @@ netty = "4.2.19.Final"
 log4j2 = "2.26.1"
 # Tomcat embed — pinned above Spring Boot 4.1.1's vulnerable 11.0.24 release;
 # 11.0.25 fixed CVE-2026-68525, CVE-2026-65905, CVE-2026-65182 (all CRITICAL);
-# bumped to 11.0.26 for the latest patch release.
+# the pin tracks the latest patch release (Spring Boot 4.1.2's BOM ships 11.0.27).
 tomcat = "11.0.27"
 hibernate = "7.4.13.Final"
 caffeine = "3.3.1"
 spring-modulith = "2.1.1"
 springdoc = "3.1.1"
 flyway = "13.11.1"
-byte-buddy = "1.18.15-jdk5"
+byte-buddy = "1.18.15"
 postgresql = "42.7.14"
 h2 = "2.5.252"
 hikari = "7.1.0"
@@ -52,7 +52,7 @@ log4j2-bom = { module = "org.apache.logging.log4j:log4j-bom", version.ref = "log
 
 spring-boot-starter-data-jpa = { module = "org.springframework.boot:spring-boot-starter-data-jpa" }
 spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
-spring-boot-starter-web = { module = "org.springframework.boot:spring-boot-starter-web" }
+spring-boot-starter-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
 spring-boot-starter-security = { module = "org.springframework.boot:spring-boot-starter-security" }
 spring-boot-starter-oauth2-resource-server = { module = "org.springframework.boot:spring-boot-starter-oauth2-resource-server" }
 spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
@@ -77,7 +77,6 @@ jackson3-databind = { module = "tools.jackson.core:jackson-databind", version.re
 hibernate-jcache = { module = "org.hibernate.orm:hibernate-jcache", version.ref = "hibernate" }
 hibernate-core = { module = "org.hibernate.orm:hibernate-core", version.ref = "hibernate" }
 caffeine-jcache = { module = "com.github.ben-manes.caffeine:jcache", version.ref = "caffeine" }
-spring-modulith-core = { module = "org.springframework.modulith:spring-modulith-starter-core", version.ref = "spring-modulith" }
 spring-modulith-test = { module = "org.springframework.modulith:spring-modulith-starter-test", version.ref = "spring-modulith" }
 micrometer-prometheus = { module = "io.micrometer:micrometer-registry-prometheus" }
 micrometer-tracing-otel = { module = "io.micrometer:micrometer-tracing-bridge-otel" }

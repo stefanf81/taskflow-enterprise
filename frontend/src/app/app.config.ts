@@ -4,13 +4,8 @@ import {
   provideAppInitializer,
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
-import { provideClientHydration, withIncrementalHydration } from '@angular/platform-browser';
-import {
-  provideHttpClient,
-  withFetch,
-  withInterceptors,
-  withXsrfConfiguration,
-} from '@angular/common/http';
+import { provideClientHydration } from '@angular/platform-browser';
+import { provideHttpClient, withInterceptors, withXsrfConfiguration } from '@angular/common/http';
 import { provideRouter, withInMemoryScrolling, withViewTransitions } from '@angular/router';
 import { catchError, of, retry, timeout } from 'rxjs';
 
@@ -27,23 +22,26 @@ export const appConfig: ApplicationConfig = {
     // OnPush (`ChangeDetectionStrategy.Eager` would opt one out).
 
     // The guest landing is prerendered (app.routes.server.ts): reuse its DOM instead of rendering
-    // it again. Incremental hydration also renders the `@defer (… hydrate on idle)` blocks on the
-    // server and hydrates them when their trigger fires; it includes event replay, which replays
-    // clicks made before the code that handles them has loaded. Pages rendered in the browser
-    // (index.csr.html carries `ngcm`) skip hydration.
-    provideClientHydration(withIncrementalHydration()),
+    // it again. Incremental hydration (on by default since Angular 22; `withIncrementalHydration()`
+    // is deprecated) also renders the `@defer (… hydrate on idle)` blocks on the server and
+    // hydrates them when their trigger fires; it includes event replay, which replays clicks made
+    // before the code that handles them has loaded. Pages rendered in the browser (index.csr.html
+    // carries `ngcm`) skip hydration.
+    provideClientHydration(),
 
     provideRouter(
       routes,
-      withViewTransitions(),
+      // No transition for the initial navigation: it would snapshot the freshly loaded (or
+      // prerendered) page and cross-fade it into an identical state while hydration waits.
+      withViewTransitions({ skipInitialTransition: true }),
       withInMemoryScrolling({
         scrollPositionRestoration: 'enabled',
         anchorScrolling: 'enabled',
       }),
     ),
 
+    // FetchBackend is the default HttpBackend in Angular 22 (`withFetch()` is deprecated).
     provideHttpClient(
-      withFetch(),
       withInterceptors([authInterceptor]),
       withXsrfConfiguration({
         cookieName: 'XSRF-TOKEN',

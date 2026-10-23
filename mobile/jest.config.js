@@ -1,11 +1,16 @@
+// jest-expo's own JavaScript transformer: its babel-jest (Jest 30) with the Metro caller options.
+const presetJsTransform = require('jest-expo/jest-preset').transform['\\.[jt]sx?$'];
+
 module.exports = {
   preset: 'jest-expo',
   // MSW 3's ESM-only URL matcher and cookie parser need transformation under Jest.
   transformIgnorePatterns: [
     'node_modules/(?!(jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|msw|@msw/url|@mswjs|@open-draft|cookie|rettime|strict-event-emitter|until-async)',
   ],
+  // .mjs through the preset's transformer as well: a bare 'babel-jest' resolved the hoisted
+  // babel-jest 29 (from @react-native/jest-preset) without jest-expo's caller options.
   transform: {
-    '^.+\\.mjs$': 'babel-jest',
+    '^.+\\.mjs$': presetJsTransform,
   },
   // Mirror the Metro rule in metro/zodLocales.js, so tests run without zod's locale namespace
   // exactly like the app bundle does (only zod requests '../locales/index').

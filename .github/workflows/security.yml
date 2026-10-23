@@ -184,9 +184,9 @@ jobs:
       # (via the SARIF upload -> Code Scanning tab) without blocking PRs on
       # every transitive CVE in source manifests, many of which never ship.
       #
-      # The Docker image scan in the CI `docker-build` job is the hard
-      # gate (exit-code: 1, severity: HIGH,CRITICAL) — it blocks the build
-      # because that's the artifact that actually gets deployed.
+      # The Docker image scans in the CI `docker-backend`/`docker-frontend`
+      # jobs are the hard gate (exit-code: 1, severity: HIGH,CRITICAL) — they
+      # block the build because that's the artifact that actually gets deployed.
       #
       # If you "fix" one of these to match the other, you will either start
       # blocking every PR on unshipped source CVEs, or stop blocking on
