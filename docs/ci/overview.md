@@ -241,22 +241,23 @@ Our Docker build configurations (the backend `Dockerfile` with its shared stages
 
 - **Architecture-Independent Layer Extraction:** JAR extraction runs natively on `$BUILDPLATFORM` without emulation via Spring Boot tools (`RUN --network=none java -Djarmode=tools -jar application.jar extract --layers --destination extracted`), producing an optimized `application.jar` + `lib/` layout.
 - **COPY --link:** Copies multi-stage compiled artifacts using independent image layers, bypassing full filesystem rewrites and facilitating immediate image layer linking.
-- **Isolated JVM Class Data Sharing (CDS / AppCDS):**
+- **Isolated Java 25 AOT Cache (built on CDS, BENCHMARKS.md §62):**
   - Executes a network-isolated headless training run of the full application (default profile, in-memory H2) in a dedicated `cds-training` stage under non-root UID `10001`. `env -i` drops build-injected variables such as BuildKit's `OTEL_*` tracing-socket endpoint, which Spring Boot's OTLP exporters reject:
     ```dockerfile
     RUN --network=none env -i PATH="$PATH" LANG="$LANG" LC_ALL="$LC_ALL" \
-             java -XX:ArchiveClassesAtExit=/tmp/application.jsa \
+             java -XX:+UseG1GC -XX:AOTCacheOutput=/tmp/application.aot \
              -Dspring.context.exit=onRefresh \
              -Dspring.cache.type=redis \
              -Dotel.sdk.disabled=true \
              -jar application.jar \
-        && test -s /tmp/application.jsa
+        && test -s /tmp/application.aot
     ```
-  - Copies only the generated archive into runtime (`COPY --link --from=cds-training --chown=0:0 --chmod=0444 /tmp/application.jsa ./application.jsa`), preventing training artifacts or caches from bloating the production image.
-  - Separates CDS training from the final stage's package-refresh layer (`APT_BUST` → `apt-get upgrade` on the backend's Ubuntu-based Temurin image, `APK_BUST` → `apk upgrade` on the frontend's Alpine image): routine OS security package refreshes reuse the cached CDS archive instead of retraining on every build.
-  - Validates the archive at image build time by booting the application with it under the final user, classpath and package set (`-Xshare:on`, `-Dspring.context.exit=onRefresh`, `--network=none`, `--mount=type=tmpfs,target=/tmp`), in both the `prod` and `local` targets. A plain `java -version` only maps JDK classes and passed with an archive that crashed the real startup (BENCHMARKS.md §58).
-  - Mounts the shared archive at runtime via sizing-agnostic `CMD` arguments `"-XX:SharedArchiveFile=application.jsa"` and `"-Xshare:auto"`, launching the extracted JAR directly with `"-jar", "application.jar"`.
-  - **Results:** ~90% of `prod` startup classes (21,322 of 23,611) are mapped directly from the archive: 8.0 s median cold start vs 12.9 s without CDS and 9.35 s with the previous trimmed training context (BENCHMARKS.md §56).
+  - Copies only the generated cache into runtime (`COPY --link --from=cds-training --chown=0:0 --chmod=0444 /tmp/application.aot ./application.aot`), keeping intermediate training artifacts out of the runtime image.
+  - Separates AOT cache training from the final stage's package-refresh layer (`APT_BUST` → `apt-get upgrade` on the backend's Ubuntu-based Temurin image, `APK_BUST` → `apk upgrade` on the frontend's Alpine image): routine OS security package refreshes reuse the cache instead of retraining on every build.
+  - Validates the cache at image build time by booting the application with it under the final user, classpath and package set (`-XX:+UseG1GC -XX:AOTMode=on -XX:AOTCache=application.aot`, `-Dspring.context.exit=onRefresh`, `--network=none`, `--mount=type=tmpfs,target=/tmp`), in both the `prod` and `local` targets. A plain `java -version` only maps JDK classes and passed with an archive that crashed the real startup (BENCHMARKS.md §58).
+  - Loads the cache at runtime via sizing-agnostic `CMD` argument `"-XX:AOTCache=application.aot"`, launching the extracted JAR directly with `"-jar", "application.jar"`. Default `AOTMode=auto` permits fallback with JVM diagnostics (which can be `[error][aot]`); explicit `-Xshare:*` options are incompatible with `AOTCache`, regardless of argument order.
+  - **Results:** on arm64, ~89% of `prod` startup classes come from the cache: 2.67 s median cold start vs 3.19 s for the former Java 21 CDS image (BENCHMARKS.md §62). The 8.0 s vs 12.9 s results in §56 describe the earlier Java 21 measurement on a different host.
+  - **Production approval:** operator-controlled, not a workflow interlock. Keep the latest available official image digest-pinned; the [image security assessment](../deployment/java25-image-security.md) covers the scans and known JRE risks outside the scanner inventory. The publication workflow can still publish a candidate. Follow the risk-approval, native-amd64 and rollback checklist in BENCHMARKS.md §62 before promotion in the separate GitOps repository.
 - **Slim production runtime (`prod` target):** purges `curl`, `wget`, `gnupg` and their 30 dependencies before the package refresh, and strips setuid/setgid bits. Kubernetes probes must therefore be `httpGet`. The `local` target keeps `wget` for its `HEALTHCHECK`. The same layer also removes the base's unused Pebble service manager (`/usr/bin/pebble` — a static Go binary apt cannot patch — plus `/var/lib/pebble`), eliminating the 3 HIGH Go-stdlib findings that failed the 2026-10-10 scheduled image scan; the locally rebuilt image reports 0 fixable HIGH/CRITICAL (BENCHMARKS.md §56).
 
 ---

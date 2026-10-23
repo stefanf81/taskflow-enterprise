@@ -28,6 +28,12 @@ inputs:
     description: Additional JVM options (space-separated).
     required: false
     default: ""
+  java-home:
+    description: >-
+      JDK to run the JAR with. Empty uses `java` from PATH. Set it when the job's
+      default JDK is not the backend toolchain (e.g. a mobile job that builds on 21).
+    required: false
+    default: ""
   wait:
     description: >-
       Wait for the liveness endpoint before returning. Set to "false" to
@@ -52,6 +58,7 @@ runs:
         LOG_FILE: ${{ inputs.log-file }}
         PID_FILE: ${{ inputs.pid-file }}
         JAVA_OPTIONS: ${{ inputs.java-options }}
+        BACKEND_JAVA_HOME: ${{ inputs.java-home }}
       run: |
         set -euo pipefail
 
@@ -94,10 +101,16 @@ runs:
           launch_env+=(SPRING_PROFILES_ACTIVE="$PROFILE")
         fi
 
+        java_bin=java
+        if [[ -n "$BACKEND_JAVA_HOME" ]]; then
+          java_bin="$BACKEND_JAVA_HOME/bin/java"
+          [[ -x "$java_bin" ]] || { echo "::error::java-home '$BACKEND_JAVA_HOME' has no bin/java"; exit 1; }
+        fi
+
         # JAVA_OPTIONS is intentionally word-split so space-separated options
         # expand correctly.
         # shellcheck disable=SC2086
-        env "${launch_env[@]}" nohup java $JAVA_OPTIONS -jar "${jars[0]}" \
+        env "${launch_env[@]}" nohup "$java_bin" $JAVA_OPTIONS -jar "${jars[0]}" \
           > "$LOG_FILE" 2>&1 < /dev/null &
 
         pid=$!

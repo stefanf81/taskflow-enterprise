@@ -11,7 +11,7 @@ This directory contains utility, benchmarking, and CI/CD security automation scr
 | `prepare-nuclei-sarif.py` | Python 3 | Ingests raw Nuclei scanner output and formats it into strict GitHub Code Scanning SARIF format with deterministic run metadata and error handling. |
 | `test_nuclei_sarif.py` | Python 3 | Unit tests covering `prepare-nuclei-sarif.py` SARIF translation logic. |
 | `zap2sarif.py` | Python 3 | Parses OWASP ZAP DAST API and Web JSON reports and converts them to SARIF format for GitHub Advanced Security ingestion. |
-| `benchmark-cds-startup.sh` | Bash | Measures Spring Boot cold-start latency with and without JVM Class Data Sharing (`application.jsa`). |
+| `benchmark-cds-startup.sh` | Bash | Measures Spring Boot cold-start latency with and without the Java 25 AOT cache (`application.aot`); also supports older CDS images. |
 | `benchmark-glibc-tuning.sh` | Bash | Generates load sweeps via `hey` and measures container RSS memory across glibc allocator configurations (`MALLOC_ARENA_MAX=2` vs defaults). |
 | `prepare-booking-time-migration.sh` | Bash | K8s PreSync job script used by GitOps to backfill and zero-pad 4-character appointment times (`H:mm` → `HH:mm`) prior to SQL `TIME` column conversion. |
 

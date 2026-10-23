@@ -4,7 +4,7 @@
 
 The suite comprises three core components with platform-local contracts and design tokens:
 
-1. **Spring Boot 4.1 Backend (Java 21):** REST API and admin SSE server providing business logic, OpenAPI specs, authentication, PostgreSQL persistence, Flyway migrations, and Redis caching.
+1. **Spring Boot 4.1 Backend (Java 25):** REST API and admin SSE server providing business logic, OpenAPI specs, authentication, PostgreSQL persistence, Flyway migrations, and Redis caching.
 2. **Angular 22 Web Frontend (`frontend/`):** Modern Angular Signals web application with Tailwind CSS gold & obsidian design system.
 3. **React Native + Expo Mobile Application (`mobile/`):** Cross-platform native mobile application for Android (phones & tablets) and iOS (iPhone & iPad).
 4. **Platform-local contracts:** The web and mobile clients each own their TypeScript API types, theme tokens, time utilities, and feature mapping metadata.
@@ -22,7 +22,7 @@ shared event fanout before relying on real-time updates across replicas.
 ```text
                                ┌──────────────────────────────────┐
                                │  Spring Boot 4.1 Backend REST    │
-                               │        (Java 21 - Port 8080)     │
+                               │        (Java 25 - Port 8080)     │
                                 │      internal-only in Compose    │
                                └────────────────┬─────────────────┘
                                                 │
@@ -53,7 +53,7 @@ shared event fanout before relying on real-time updates across replicas.
 
 ```text
 .
-├── src/                          # Spring Boot 4.1 Backend (Java 21 / Gradle)
+├── src/                          # Spring Boot 4.1 Backend (Java 25 / Gradle)
 │   ├── main/java/com/example/taskflow/
 │   │   ├── appointment/          # Appointment domain, controllers, services
 │   │   ├── auth/                 # RSA-2048 JWT authentication & security config
@@ -128,8 +128,10 @@ following setup is the shortest supported path after cloning the repository.
 ### Install prerequisites
 
 - Git
-- OpenJDK 21. Gradle is supplied by the checked-in Gradle 9.8.2 wrapper, so a
-  separate Gradle installation is not needed.
+- OpenJDK 25 (LTS). Gradle is supplied by the checked-in Gradle 9.8.2 wrapper, so a
+  separate Gradle installation is not needed; if no JDK 25 is installed, the
+  foojay toolchain resolver downloads one. Local Android Detox builds still use
+  JDK 21 (`mobile/e2e/README.md`).
 - Node.js 24.22.1 and npm 12.2.0. Mobile pins Node in `mobile/.nvmrc`; the
   frontend declares its npm version in `frontend/package.json`.
 - Docker Desktop with a running daemon and at least 5 GB available to Docker
@@ -401,3 +403,4 @@ Renovate authentication details.
   - `ADR-015` — Bind Idempotency-Key Replays to the Original Request
   - `ADR-016` — glibc Allocator Tuning on Ubuntu Base (MALLOC_ARENA_MAX)
   - `ADR-017` — Full-App CDS Training and Production Image Slimming
+  - `ADR-020` — Java 25 LTS with an AOT Cache Instead of the CDS Archive

@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  JAVA_VERSION: "21"
+  JAVA_VERSION: "25"
   # renovate: datasource=github-releases depName=aquasecurity/trivy
   TRIVY_VERSION: v0.76.1
 

@@ -25,3 +25,4 @@ This directory records architectural decisions made during the development of Ta
 | [ADR-017](ADR-017-full-app-cds-training-and-image-slimming.md) | Full-App CDS Training and Production Image Slimming | Accepted |
 | [ADR-018](ADR-018-redis-fail-open.md) | Fail Open When Redis Is Slow or Down | Accepted |
 | [ADR-019](ADR-019-zod-mini-shared-schemas.md) | `zod/mini` for the Shared Schemas | Accepted |
+| [ADR-020](ADR-020-java-25-and-aot-cache.md) | Java 25 LTS with an AOT Cache Instead of the CDS Archive | Candidate accepted; production risk approval pending |

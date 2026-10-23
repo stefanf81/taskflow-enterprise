@@ -741,7 +741,7 @@ jobs:
         with:
           distribution: temurin
           # The backend toolchain (build.gradle), not this workflow's JAVA_VERSION.
-          java-version: "21"
+          java-version: "25"
 
       # Restores ci.yml's `backend` entry read-only, like its `package` job.
       - name: Set up Gradle
@@ -787,12 +787,16 @@ jobs:
       - *setup-node
       - *restore-npm-cache
 
+      # 25 runs the backend JAR (Java 25 bytecode); 21, listed last, is the
+      # default JAVA_HOME for the app build: the local Detox builds use 21 and
+      # JDK 25 fails React Native's CMake configuration (mobile/e2e/README.md).
       - name: Set up Java
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          # Runs the backend JAR and builds the app (the local Detox builds use 21 as well).
-          java-version: "21"
+          java-version: |
+            25
+            21
 
       # The `android` job owns the writable Gradle cache; restore its entry.
       - name: Set up Gradle
@@ -819,6 +823,7 @@ jobs:
         with:
           jar-path: e2e-backend-jar/*.jar
           log-file: e2e-backend.log
+          java-home: ${{ env.JAVA_HOME_25_X64 }}
           java-options: -XX:TieredStopAtLevel=1
           wait: "false"
 
@@ -898,7 +903,8 @@ jobs:
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: "21"
+          # Only runs the backend JAR (build.gradle toolchain).
+          java-version: "25"
 
       - name: Download backend JAR
         uses: actions/download-artifact@v8

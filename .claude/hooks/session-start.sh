@@ -7,7 +7,8 @@
 #   (older npm strips the "libc" markers from the lockfiles). Both follow
 #   Renovate's bumps of those files.
 # - shared/schemas needs its own install: mobile Jest and tsc resolve zod from it.
-# - Java 21 and the Gradle wrapper already work in the base image.
+# - The Gradle wrapper works in the base image; the backend toolchain is Java 25,
+#   which Gradle's foojay resolver downloads when the image lacks it.
 set -euo pipefail
 
 # stdout of a SessionStart hook becomes session context; keep the install logs out of it.

@@ -31,3 +31,7 @@ Under glibc, memory allocation arenas scale dynamically to `8 × CPU_CORES`. In 
 
 - Automated test: `src/test/java/com/example/taskflow/benchmark/GlibcTuningBenchmarkTest.java` asserts `MALLOC_ARENA_MAX=2` in compose, the pinned base digest, and absence of `libjemalloc2`.
 - Benchmark harness: `scripts/benchmark-glibc-tuning.sh` records RPS, p95/p99, RSS, and GC pause stats (BENCHMARKS.md §51).
+
+## Update (2026-10-23)
+
+- The base moved to `eclipse-temurin:25-jre-resolute` (Java 25, ADR-020, BENCHMARKS.md §62). It is the same Ubuntu 26.04 glibc base with fewer packages (106 vs 140: no curl, wget or gnupg); `MALLOC_ARENA_MAX=2` and the rejection of jemalloc and THP are unchanged.

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Cold-start benchmark for the backend CDS archive (BENCHMARKS.md §56).
+# Cold-start benchmark for the backend's startup archive: the CDS archive of
+# BENCHMARKS.md §56, since §62 the Java 25 AOT cache (itself a CDS archive, so
+# its classes are counted the same way).
 #
 # Boots each image RUNS times with the prod profile against throwaway
 # PostgreSQL and Redis containers (the docker-compose.yml images), interleaving
@@ -15,9 +17,10 @@
 #     scripts/benchmark-cds-startup.sh
 #
 # NOCDS=1 adds the first image with -Xshare:off as the no-archive reference.
-# That flag must replace the image CMD: JAVA_TOOL_OPTIONS is prepended, so the
-# CMD's -Xshare:auto would win. JAVA_TOOL_OPTIONS is taken verbatim from the
-# docker-compose.yml backend.
+# That flag must replace the image CMD: -Xshare:off and -XX:AOTCache cannot be
+# combined (in either argument order). For the former CDS image, the CMD's
+# later -Xshare:auto overrode -Xshare:off in JAVA_TOOL_OPTIONS. JAVA_TOOL_OPTIONS
+# is taken verbatim from the docker-compose.yml backend.
 #
 # Env: IMAGES (required); RUNS, NOCDS, CPUS, MEMORY (optional).
 set -euo pipefail

@@ -70,7 +70,10 @@ class ContainerImageBenchmarkTest {
         boolean setuidStripped = prodRun.contains("-perm /6000 -exec chmod a-s");
         boolean purgeBeforeUpgrade = purged
                 && prodRun.indexOf("apt-get purge") < prodRun.indexOf("apt-get -y upgrade");
+        // The Java 25 base ships no wget (§62): the local image must install it, not just
+        // avoid purging it, or every compose health check fails.
         boolean localKeepsWget = !localRun.contains("apt-get purge")
+                && Pattern.compile("apt-get install[^&]*\\bwget\\b").matcher(localRun).find()
                 && DockerfileStages.inheritedInstructions(d, "local", "HEALTHCHECK").contains("CMD wget");
         boolean pebbleRemoved = prodRun.contains("rm -f /usr/bin/pebble")
                 && prodRun.contains("rm -rf /var/lib/pebble");
@@ -78,7 +81,7 @@ class ContainerImageBenchmarkTest {
         System.out.println("  prod target purges curl/wget/gnupg: " + purged);
         System.out.println("  Purge runs before the package refresh: " + purgeBeforeUpgrade);
         System.out.println("  setuid/setgid bits stripped: " + setuidStripped);
-        System.out.println("  local target keeps wget for HEALTHCHECK: " + localKeepsWget);
+        System.out.println("  local target installs and keeps wget for HEALTHCHECK: " + localKeepsWget);
         System.out.println("  Unmanaged pebble Go binary + state dir removed: " + pebbleRemoved);
         System.out.println("  Measured: 141 -> 109 packages, 11 -> 0 setuid binaries, Trivy 32 -> 31 CVEs; "
                 + "pebble 3 HIGH (CI run 38013091067) -> 0 fixable HIGH/CRITICAL (rebuilt image, local Trivy 0.75.0)");
@@ -88,7 +91,8 @@ class ContainerImageBenchmarkTest {
         assertTrue(purged, "the prod target must purge curl/wget/gnupg — the JVM uses none of them (§56)");
         assertTrue(purgeBeforeUpgrade, "purge before apt-get upgrade so removed packages are not refreshed");
         assertTrue(setuidStripped, "the prod target must strip setuid/setgid bits (§56)");
-        assertTrue(localKeepsWget, "the local target's HEALTHCHECK needs wget (P1-6 §47)");
+        assertTrue(localKeepsWget, "the local target's HEALTHCHECK needs wget, installed in an "
+                + "inherited stage because the Java 25 base has none (P1-6 §47, §62)");
         assertTrue(pebbleRemoved, "the prod target must remove the unmanaged pebble Go binary — "
                 + "apt cannot patch its Go stdlib (CVE-2026-97031/78667/78669) and the Trivy gate is HIGH/CRITICAL");
     }
@@ -113,9 +117,70 @@ class ContainerImageBenchmarkTest {
         }
     }
 
+    @Test
+    void java25_aot_cache_replaces_cds_archive() throws Exception {
+        System.out.println("\n" + "=".repeat(80));
+        System.out.println("  ▸ §62 JAVA 25 AOT CACHE (JEP 483/514/515)");
+        System.out.println("=".repeat(80));
+
+        String d = Files.readString(Path.of("Dockerfile"));
+        String md = Files.readString(Path.of("BENCHMARKS.md"));
+        String runtimeCmd = DockerfileStages.instructions(d, "runtime", "CMD");
+
+        boolean trainedWithG1 = DockerfileStages.instructions(d, "cds-training", "RUN")
+                .contains("java -XX:+UseG1GC -XX:AOTCacheOutput=/tmp/application.aot");
+        boolean launched = runtimeCmd.contains("\"-XX:AOTCache=application.aot\"")
+                && !runtimeCmd.contains("AOTMode");
+        boolean bothValidate = List.of("prod", "local").stream().allMatch(target -> DockerfileStages
+                .instructions(d, target, "RUN")
+                .contains("-XX:+UseG1GC -XX:AOTMode=on -XX:AOTCache=application.aot"));
+        boolean noCdsLeftovers = hasNoLegacyArchiveInstructions(d);
+        boolean documented = md.contains("## ⚡ 62.");
+
+        System.out.println("  Trained once with -XX:AOTCacheOutput under G1: " + trainedWithG1);
+        System.out.println("  CMD loads the cache in the default AOTMode=auto: " + launched);
+        System.out.println("  prod and local boot-validate with -XX:AOTMode=on: " + bothValidate);
+        System.out.println("  No CDS archive flags left: " + noCdsLeftovers);
+        System.out.println("  §62 evidence in BENCHMARKS.md: " + documented);
+        System.out.println("  Measured medians (prod profile, 7 runs): Java 21 + CDS 3.19 s, "
+                + "Java 25 + CDS 3.23 s, Java 25 + AOT cache 2.67 s");
+        System.out.println("=".repeat(80));
+
+        assertTrue(trainedWithG1, "train the AOT cache in cds-training with G1, the runtime collector (§62)");
+        assertTrue(launched, "the image CMD must load application.aot and keep the auto fallback (§62)");
+        assertTrue(bothValidate, "both targets must boot the app with -XX:AOTMode=on to validate the cache (§58, §62)");
+        assertTrue(noCdsLeftovers, "the AOT cache replaces the dynamic CDS archive; do not ship both (§62)");
+        assertTrue(documented, "BENCHMARKS.md must document the Java 25 measurement (§62)");
+    }
+
+    @Test
+    void legacy_archive_guard_ignores_comments_but_checks_instructions() throws Exception {
+        String d = Files.readString(Path.of("Dockerfile"));
+        String historicalComment = "# Previously: application.jsa -Xshare:on -XX:ArchiveClassesAtExit\n";
+        assertTrue(hasNoLegacyArchiveInstructions(historicalComment + d),
+                "historical comments must not trip the archive instruction guard");
+        assertFalse(hasNoLegacyArchiveInstructions(d.replace(
+                "\"-XX:AOTCache=application.aot\"", "\"-Xshare:auto\"")),
+                "legacy flags in the runtime CMD must still fail");
+        assertFalse(hasNoLegacyArchiveInstructions(d.replace(
+                "AOTCacheOutput=/tmp/application.aot", "ArchiveClassesAtExit=/tmp/application.aot")),
+                "legacy flags in the training RUN must still fail");
+        assertFalse(hasNoLegacyArchiveInstructions(d.replace(
+                "/tmp/application.aot ./application.aot", "/tmp/application.jsa ./application.jsa")),
+                "copying the former archive must still fail");
+    }
+
+    private static boolean hasNoLegacyArchiveInstructions(String dockerfile) {
+        return List.of("extractor", "java-base", "cds-training", "runtime", "prod", "local").stream()
+                .flatMap(stage -> DockerfileStages.instructions(dockerfile, stage).stream())
+                .noneMatch(instruction -> instruction.contains("application.jsa")
+                        || instruction.contains("-Xshare:")
+                        || instruction.contains("ArchiveClassesAtExit"));
+    }
+
     private static boolean trainsFullApplication(String dockerfile) {
         return dockerfile.contains("RUN --network=none env -i ")
-                && dockerfile.contains("-XX:ArchiveClassesAtExit=/tmp/application.jsa")
+                && dockerfile.contains("-XX:AOTCacheOutput=/tmp/application.aot")
                 && dockerfile.contains("-Dspring.context.exit=onRefresh")
                 && dockerfile.contains("-jar application.jar \\");
     }

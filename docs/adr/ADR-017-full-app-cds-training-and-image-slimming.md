@@ -58,3 +58,8 @@ Additionally, the upstream `eclipse-temurin:21-jre-resolute` base image bundled 
 
 - The build-time archive check boots the application with `-Xshare:on` and the training flags instead of running `java -version`, which maps only JDK classes. On Ubuntu's OpenJDK 21.0.12 a fat-JAR archive passed `-version` and crashed the real startup; the image's extracted layout boots fine, and the check now proves it on every build (~10 s per target).
 - ArchUnit and `spring-modulith-apt` are excluded from `runtimeClasspath` (0 classes loaded at runtime), and `hibernate-jcache`/`caffeine-jcache` are test-only. Boot JAR 95.6 → 89.1 MB. See BENCHMARKS.md §58. *(§61: the Spring Modulith runtime starter is gone altogether — Modulith is test-only — so the exclusions were removed with it.)*
+
+## Update (2026-10-23)
+
+- Java 25 (ADR-020, BENCHMARKS.md §62): the `cds-training` stage now trains a Java 25 **AOT cache** (`-XX:AOTCacheOutput`) instead of the dynamic CDS archive, with the same full-app, offline, `env -i` training; the `CMD` loads it with `-XX:AOTCache=application.aot` and the build-time boot check uses `-XX:AOTMode=on` instead of `-Xshare:on`. Prod-profile startup 3.19 s → 2.67 s on the §62 host.
+- The Java 25 base ships no curl, wget or gnupg. `wget` is installed with tini in the `runtime` stage for the `local` HEALTHCHECK; the `prod` purge is unchanged and still removes it.

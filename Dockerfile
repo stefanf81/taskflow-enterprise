@@ -1,18 +1,18 @@
 # syntax=docker/dockerfile:1
 
-# Spring Boot / Java 21 backend image. One Dockerfile, two final targets:
+# Spring Boot / Java 25 backend image. One Dockerfile, two final targets:
 #
 #   prod   (--target prod)   production image: Ubuntu package refresh on every
 #                            build, download tools purged, setuid bits stripped,
 #                            no HEALTHCHECK (Kubernetes probes own it).
-#   local  (--target local)  docker-compose image: wget kept for the
+#   local  (--target local)  docker-compose image: wget installed for the
 #                            HEALTHCHECK, no apt-get upgrade so local rebuilds
 #                            stay cache-friendly and fast. Last stage, so it is
 #                            also the default target: an untargeted
 #                            `docker build .` yields an image the compose
 #                            healthcheck (wget) works with.
 #
-# Everything above the two targets (JAR extraction, CDS training, tini, the
+# Everything above the two targets (JAR extraction, AOT cache training, tini, the
 # runtime layers and the launch command) is shared, so the variants cannot
 # drift apart.
 #
@@ -24,10 +24,16 @@
 # the extractor stage pins $BUILDPLATFORM, because JAR extraction is
 # architecture-independent and should run natively.
 #
-# Explicit -resolute (Ubuntu 26.04 LTS, glibc) because the floating 21-jre tag
+# Explicit -resolute (Ubuntu 26.04 LTS, glibc) because the floating 25-jre tag
 # tracks the current Ubuntu release and would drift silently. Renovate updates
-# the digest while the project's Java 21 policy keeps the major.
-ARG JAVA_IMAGE=eclipse-temurin:21-jre-resolute@sha256:e7b42d0fad9b3dd6d61d6816ce3984df079a5da7d8e9af81c464243d15c04e3e
+# the digest while the project's Java 25 policy keeps the major. Unlike the
+# Java 21 image, this base ships no curl, wget or gnupg (BENCHMARKS.md §62).
+# Latest available official -resolute image at the 2026-10-23 check: 25.0.4.1.
+# Retain the digest pin; see docs/deployment/java25-image-security.md for the
+# full scan and known JRE risks outside Trivy's coverage. APT cannot update
+# Temurin. Track Renovate/upstream for the patched image, then rebuild the cache.
+# Production approval is operator-controlled, not a CI/publication interlock.
+ARG JAVA_IMAGE=eclipse-temurin:25-jre-resolute@sha256:41d9263c0d5b2a74d89af6e29e73b04298bc65e3cb705d03e9e2271ef49fef84
 
 # JAR extraction is architecture-independent: run it natively on the build host
 # (Apple Silicon as well as amd64 CI). Compilation is performed by Gradle before
@@ -43,9 +49,9 @@ COPY build/libs/*.jar application.jar
 RUN --network=none java -Djarmode=tools -jar application.jar \
     extract --layers --destination extracted
 
-# CDS is architecture/JVM-specific. Training and runtime share the exact target
-# JRE and identity; package refreshes are confined to the prod target so they do
-# not retrain CDS.
+# The AOT cache (a CDS archive, JEP 483/514/515) is architecture/JVM-specific.
+# Training and runtime share the exact target JRE and identity; package
+# refreshes are confined to the prod target so they do not retrain it.
 # No --system for useradd: a --system account expects UID < 1000 and emits a
 # warning for the explicit 10001; without it shadow still locks the password.
 FROM ${JAVA_IMAGE} AS java-base
@@ -56,7 +62,7 @@ RUN groupadd --system --gid 10001 appgroup \
 
 FROM java-base AS cds-training
 
-# Match runtime paths, contents, and JAR timestamps for CDS classpath validation.
+# Match runtime paths, contents, and JAR timestamps for AOT cache classpath validation.
 COPY --link --from=extractor --chown=0:0 /app/extracted/dependencies/ ./
 COPY --link --from=extractor --chown=0:0 /app/extracted/spring-boot-loader/ ./
 COPY --link --from=extractor --chown=0:0 /app/extracted/snapshot-dependencies/ ./
@@ -71,14 +77,19 @@ USER 10001:10001
 # network isolation keeps that startup infrastructure-free. cache.type=redis
 # builds the production cache manager without connecting. env -i drops
 # build-injected variables such as BuildKit's OTEL_* tracing-socket endpoint,
-# which Spring Boot's OTLP exporters reject. Only the archive is published.
+# which Spring Boot's OTLP exporters reject. Only the cache is published.
+# -XX:AOTCacheOutput records the training run and then forks a JVM that writes
+# the cache: linked classes, archived heap objects and method profiles, which
+# the dynamic CDS archive of Java 21 could not hold (BENCHMARKS.md §62). G1 is
+# explicit because ergonomics would pick Serial on a small builder, and the
+# runtime uses G1 (JAVA_TOOL_OPTIONS).
 RUN --network=none env -i PATH="$PATH" LANG="$LANG" LC_ALL="$LC_ALL" \
-         java -XX:ArchiveClassesAtExit=/tmp/application.jsa \
+         java -XX:+UseG1GC -XX:AOTCacheOutput=/tmp/application.aot \
          -Dspring.context.exit=onRefresh \
          -Dspring.cache.type=redis \
          -Dotel.sdk.disabled=true \
          -jar application.jar \
-    && test -s /tmp/application.jsa
+    && test -s /tmp/application.aot
 
 # Shared runtime: tini, application layers, the trained archive and the launch
 # command. A complete, runnable image; the targets below add only the prod
@@ -92,10 +103,14 @@ FROM java-base AS runtime
 # on every local rebuild. No `apt-get upgrade` here; the prod target refreshes
 # packages on top. tini itself is not version-pinned, so a build without this
 # cached layer can resolve a newer tini from the archive.
+# wget is the local target's HEALTHCHECK client. The Java 21 base shipped it;
+# the Java 25 base does not, and without it every compose health check failed.
+# It is installed here rather than in the local target so a JAR change does not
+# re-run apt; the prod target purges it again.
 # --error-on=any: by default a transient download failure is only a warning
 # and `apt-get update` still succeeds; fail the build instead.
 RUN apt-get update --error-on=any \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Mount point for JVM diagnostics (GC log, OOM heap dump), owned by the runtime
@@ -112,7 +127,7 @@ COPY --link --from=extractor --chown=0:0 /app/extracted/dependencies/ ./
 COPY --link --from=extractor --chown=0:0 /app/extracted/spring-boot-loader/ ./
 COPY --link --from=extractor --chown=0:0 /app/extracted/snapshot-dependencies/ ./
 COPY --link --from=extractor --chown=0:0 /app/extracted/application/ ./
-COPY --link --from=cds-training --chown=0:0 --chmod=0444 /tmp/application.jsa ./application.jsa
+COPY --link --from=cds-training --chown=0:0 --chmod=0444 /tmp/application.aot ./application.aot
 
 # The Ubuntu base sets its own title and description labels, which every image
 # built on it inherits; replace them with this image's identity.
@@ -127,11 +142,14 @@ EXPOSE 8080
 # invariant flags so image arguments cannot override that tuning. tini forwards
 # shutdown signals and reaps children; exec-form CMD starts Java directly with
 # the extracted application JAR, not the original executable JAR.
+# -XX:AOTCache runs in the default AOTMode=auto: an unusable cache is skipped
+# and the JVM starts without it; diagnostics can include [error][aot] lines.
+# Do not combine AOTCache with -Xshare:* (including in JAVA_TOOL_OPTIONS): the
+# JVM rejects that combination regardless of argument order.
 ENTRYPOINT ["/usr/bin/tini", "--", "java"]
 CMD [ \
     "-XX:+ExitOnOutOfMemoryError", \
-    "-XX:SharedArchiveFile=application.jsa", \
-    "-Xshare:auto", \
+    "-XX:AOTCache=application.aot", \
     "-jar", \
     "application.jar" \
 ]
@@ -147,11 +165,13 @@ FROM runtime AS prod
 # Temurin's JRE lives in /opt/java/openjdk and is not managed by dpkg. tini
 # comes from the shared runtime stage; it was installed explicitly, so the
 # --auto-remove below keeps it, and the upgrade refreshes it.
-# The base ships curl, wget, and gnupg (plus ~30 dependencies: krb5, LDAP,
-# GnuTLS, libssh2, SQLite) for its own build; the JVM uses none of them, so
+# The runtime stage installs wget for the local HEALTHCHECK; the Java 21 base
+# also shipped curl and gnupg (plus ~30 dependencies: krb5, LDAP, GnuTLS,
+# libssh2, SQLite), the Java 25 base does not. The JVM uses none of them, so
 # Kubernetes probes must be httpGet rather than exec curl/wget. Purge them
-# before the upgrade so they are neither refreshed nor left for an intruder,
-# then drop setuid/setgid bits in case a pod is admitted with escalation.
+# (apt skips any that are not installed) before the upgrade so they are neither
+# refreshed nor left for an intruder, then drop setuid/setgid bits in case a
+# pod is admitted with escalation.
 # The base also ships Canonical's Pebble service manager at /usr/bin/pebble
 # (not dpkg-managed, so apt cannot patch it) and a world-writable
 # /var/lib/pebble state directory. Nothing starts either one; its static Go
@@ -172,16 +192,17 @@ RUN : "${APT_BUST}" \
 
 USER 10001:10001
 
-# Validate the archive after the package refresh, under the final identity and
+# Validate the cache after the package refresh, under the final identity and
 # classpath, by booting the application with it exactly like the training run
-# (-Xshare:on fails instead of silently falling back). A plain `java -version`
-# only maps the JDK classes: an archive that crashes the real startup passed it
-# (reproduced with a fat-JAR archive on Ubuntu's OpenJDK 21.0.12: -version exit 0,
-# application boot SIGSEGV). Fail the build on incompatibility; production
-# retains CDS fallback. Temporary JVM files do not become part of the image.
+# (-XX:AOTMode=on fails instead of silently falling back). A plain
+# `java -version` only maps the JDK classes: an archive that crashes the real
+# startup passed it (reproduced with a fat-JAR CDS archive on Ubuntu's OpenJDK
+# 21.0.12: -version exit 0, application boot SIGSEGV). Fail the build on
+# incompatibility; production retains the AOTMode=auto fallback. Temporary JVM
+# files do not become part of the image.
 RUN --network=none --mount=type=tmpfs,target=/tmp \
     env -i PATH="$PATH" LANG="$LANG" LC_ALL="$LC_ALL" \
-    java -Xshare:on -XX:SharedArchiveFile=application.jsa -Xlog:cds=info \
+    java -XX:+UseG1GC -XX:AOTMode=on -XX:AOTCache=application.aot -Xlog:aot=info \
          -Dspring.context.exit=onRefresh \
          -Dspring.cache.type=redis \
          -Dotel.sdk.disabled=true \
@@ -197,18 +218,18 @@ RUN --network=none --mount=type=tmpfs,target=/tmp \
 # -----------------------------------------------------------------------------
 FROM runtime AS local
 
-# Local development: no package layer of its own (tini comes from the shared
-# runtime stage). `apt-get upgrade` is intentionally omitted so local rebuilds
-# stay cache-friendly and fast, and the base's wget stays installed for the
+# Local development: no package layer of its own (tini and wget come from the
+# shared runtime stage). `apt-get upgrade` is intentionally omitted so local
+# rebuilds stay cache-friendly and fast, and wget stays installed for the
 # HEALTHCHECK below.
 USER 10001:10001
 
-# Validate the archive under the final identity and classpath by booting the
+# Validate the cache under the final identity and classpath by booting the
 # application with it (same check as the prod target). Temporary JVM files do
 # not become part of the image.
 RUN --network=none --mount=type=tmpfs,target=/tmp \
     env -i PATH="$PATH" LANG="$LANG" LC_ALL="$LC_ALL" \
-    java -Xshare:on -XX:SharedArchiveFile=application.jsa -Xlog:cds=info \
+    java -XX:+UseG1GC -XX:AOTMode=on -XX:AOTCache=application.aot -Xlog:aot=info \
          -Dspring.context.exit=onRefresh \
          -Dspring.cache.type=redis \
          -Dotel.sdk.disabled=true \
@@ -220,6 +241,6 @@ RUN --network=none --mount=type=tmpfs,target=/tmp \
 # (meant for CMD/ENTRYPOINT) on HEALTHCHECK's CMD too.
 # --start-interval (Docker Engine 25+; older engines ignore it) probes every 2 s
 # during the start period instead of waiting a full 30 s interval for the first
-# probe; 60 s covers slow boots without CDS. Same timing as docker-compose.yml.
+# probe; 60 s covers slow boots without the AOT cache. Same timing as docker-compose.yml.
 # hadolint ignore=DL3025
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=60s --start-interval=2s CMD wget -qO /dev/null http://localhost:8080/actuator/health/liveness || exit 1

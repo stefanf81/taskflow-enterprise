@@ -40,8 +40,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * Run with G1GC:
  *   JAVA_TOOL_OPTIONS="-XX:+UseG1GC" ./gradlew benchmarkTest --tests *GcComparison*
  * <p>
- * Run with Generational ZGC:
- *   JAVA_TOOL_OPTIONS="-XX:+UseZGC -XX:+ZGenerational" ./gradlew benchmarkTest --tests *GcComparison*
+ * Run with Generational ZGC (the only ZGC mode since JDK 24; -XX:+ZGenerational is obsolete):
+ *   JAVA_TOOL_OPTIONS="-XX:+UseZGC" ./gradlew benchmarkTest --tests *GcComparison*
  */
 @Tag("benchmark")
 @SpringBootTest(properties = {

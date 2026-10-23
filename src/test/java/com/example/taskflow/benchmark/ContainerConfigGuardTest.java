@@ -170,7 +170,7 @@ class ContainerConfigGuardTest {
         boolean twoTargets = "runtime".equals(DockerfileStages.parent(d, "prod"))
                 && "runtime".equals(DockerfileStages.parent(d, "local"));
         boolean sharedTraining = DockerfileStages.instructions(d, "cds-training", "RUN")
-                .contains("-XX:ArchiveClassesAtExit=/tmp/application.jsa");
+                .contains("-XX:AOTCacheOutput=/tmp/application.aot");
         // tini is installed once, in the shared runtime stage, before the application layers:
         // a new JAR must not invalidate the apt layer (local rebuilds stay cached and offline).
         List<String> runtime = DockerfileStages.instructions(d, "runtime");
@@ -188,7 +188,7 @@ class ContainerConfigGuardTest {
 
         System.out.println("  Dockerfile.x64 gone: " + noSecondFile);
         System.out.println("  prod and local both derive from the shared runtime stage: " + twoTargets);
-        System.out.println("  One CDS training stage: " + sharedTraining);
+        System.out.println("  One AOT cache training stage: " + sharedTraining);
         System.out.println("  tini installed in runtime before the application layers: " + tiniBeforeLayers);
         System.out.println("  local target runs no apt: " + localNoApt);
         System.out.println("  local is the default (last) stage: " + localIsDefault);
@@ -200,7 +200,7 @@ class ContainerConfigGuardTest {
 
         assertTrue(noSecondFile, "the production variant is the prod target of the single Dockerfile");
         assertTrue(twoTargets, "prod and local must both be final targets of the shared runtime stage");
-        assertTrue(sharedTraining, "CDS training must happen once, in the shared cds-training stage");
+        assertTrue(sharedTraining, "AOT cache training must happen once, in the shared cds-training stage");
         assertTrue(tiniBeforeLayers, "install tini in the runtime stage before the COPY layers, "
                 + "or every JAR change re-runs apt");
         assertTrue(localNoApt, "the local target must not run apt (cached, offline rebuilds)");

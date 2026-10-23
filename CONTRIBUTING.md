@@ -5,7 +5,7 @@
 ### Prerequisites
 
 - Git
-- OpenJDK 21 (the Gradle wrapper supplies Gradle 9.8.0)
+- OpenJDK 25 (the Gradle wrapper supplies Gradle 9.8.2; local Android Detox builds use JDK 21)
 - Node.js 24.21.0 and npm 12.2.0 (mobile/.nvmrc pins the Node version)
 - Docker Desktop with a running daemon for the Docker stack and PostgreSQL tests
 - At least 5 GB available to Docker Desktop for the full Compose stack
@@ -185,7 +185,7 @@ the mobile test and native build suites.
 
 ## Project Structure
 
-- `src/` — Spring Boot backend (Java 21, Gradle)
+- `src/` — Spring Boot backend (Java 25, Gradle)
 - `frontend/` — Angular 22 SPA (TypeScript, Tailwind CSS)
 - `mobile/` — React Native / Expo application (TypeScript)
 - `shared/schemas/` — Shared Zod validation schemas (`@taskflow/schemas`)

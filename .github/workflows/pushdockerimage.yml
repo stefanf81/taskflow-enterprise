@@ -60,7 +60,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  JAVA_VERSION: "21"
+  JAVA_VERSION: "25"
   NODE_VERSION: "24"
   REGISTRY: ghcr.io
   # renovate: datasource=github-releases depName=aquasecurity/trivy
