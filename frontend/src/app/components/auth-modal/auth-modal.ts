@@ -255,9 +255,11 @@ export class AuthModalComponent {
     }
 
     const user = this.authModel().username.trim();
-    const pass = this.authModel().password.trim();
+    // Passwords are sent verbatim (mobile and the backend never trim them), so a password
+    // with leading or trailing spaces works on every client. Only a blank one is refused.
+    const pass = this.authModel().password;
 
-    if (!user || !pass) {
+    if (!user || !pass.trim()) {
       this.errorMessage.set('Email and password are required.');
       return;
     }
@@ -329,11 +331,11 @@ export class AuthModalComponent {
   /** Handle registration submission. */
   onRegister(): void {
     const email = this.authModel().username.trim();
-    const pass = this.authModel().password.trim();
+    const pass = this.authModel().password; // verbatim, see onLogin
     const name = this.authModel().fullName.trim();
     const phone = this.authModel().phone.trim();
 
-    if (!email || !pass || !name || !phone) {
+    if (!email || !pass.trim() || !name || !phone) {
       this.errorMessage.set('Name, email, phone, and password are required.');
       return;
     }

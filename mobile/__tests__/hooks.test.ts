@@ -13,6 +13,7 @@ const mockCreateAppointmentFn = jest.fn();
 const mockUpdateAppointmentStatusFn = jest.fn();
 const mockDeleteAppointmentFn = jest.fn();
 const mockPublicCancelAppointmentFn = jest.fn();
+const mockGetShopTimeZoneFn = jest.fn();
 
 jest.mock('../src/api/appointments', () => ({
   appointmentsApi: {
@@ -22,6 +23,7 @@ jest.mock('../src/api/appointments', () => ({
     updateAppointmentStatus: (...args: unknown[]) => mockUpdateAppointmentStatusFn(...args),
     deleteAppointment: (...args: unknown[]) => mockDeleteAppointmentFn(...args),
     publicCancelAppointment: (...args: unknown[]) => mockPublicCancelAppointmentFn(...args),
+    getShopTimeZone: (...args: unknown[]) => mockGetShopTimeZoneFn(...args),
   },
 }));
 
@@ -92,6 +94,7 @@ function createWrapper() {
 }
 
 import { useAppointments, useBusySlots, useCreateAppointment, useUpdateAppointmentStatus, useDeleteAppointment, usePublicCancelAppointment } from '../src/hooks/useAppointments';
+import { useShopTimeZone } from '../src/hooks/useShopTimeZone';
 import { usePublicBarbers, useAdminBarbers, useBarberTimeOff, useAddTimeOff } from '../src/hooks/useBarbers';
 import { useCatalog } from '../src/hooks/useCatalog';
 import { useCustomerAppointments, useCancelCustomerAppointment } from '../src/hooks/useCustomer';
@@ -126,6 +129,28 @@ describe('Hooks', () => {
 
       expect(mockGetAllAppointmentsFn).toHaveBeenCalledWith('pending', 'Alex', 0, 10);
       expect(result.current.data).toBeDefined();
+    });
+  });
+
+  describe('useShopTimeZone', () => {
+    it('is null until the shop zone is known, then the zone', async () => {
+      mockGetShopTimeZoneFn.mockResolvedValueOnce('Europe/Berlin');
+
+      const { result } = await renderHook(() => useShopTimeZone(), { wrapper: createWrapper() });
+      expect(result.current).toBeNull();
+
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+
+      expect(result.current).toBe('Europe/Berlin');
+    });
+
+    it('stays null (phone clock) when the zone cannot be loaded', async () => {
+      mockGetShopTimeZoneFn.mockRejectedValue(new Error('offline'));
+
+      const { result } = await renderHook(() => useShopTimeZone(), { wrapper: createWrapper() });
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+
+      expect(result.current).toBeNull();
     });
   });
 

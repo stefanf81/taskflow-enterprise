@@ -24,6 +24,7 @@ const rules: readonly Rule[] = [
   },
   // Guest booking flow
   { methods: ['get'], test: (p) => p === '/api/v1/appointments/public/busy-slots' },
+  { methods: ['get'], test: (p) => p === '/api/v1/appointments/public/shop' },
   { methods: ['put'], test: (p) => /^\/api\/v1\/appointments\/public\/cancel\/[^/]+$/.test(p) },
   { methods: ['post'], test: (p) => p === '/api/v1/appointments' },
   // Reference data

@@ -5,13 +5,14 @@ import {
   AppointmentItem,
   AppointmentUpdateRequest,
 } from '../types/api';
-import { parseContract } from './contracts';
+import { parseContract, parseRequest } from './contracts';
 import {
   appointmentCreateSchema,
   appointmentDashboardResponseSchema,
   appointmentResponseSchema,
   appointmentUpdateSchema,
   busySlotsResponseSchema,
+  shopInfoResponseSchema,
 } from '@taskflow/schemas';
 
 export const appointmentsApi = {
@@ -48,7 +49,7 @@ export const appointmentsApi = {
     data: AppointmentCreateRequest,
     idempotencyKey?: string
   ): Promise<AppointmentItem> => {
-    const payload = parseContract(appointmentCreateSchema, data, 'POST /api/v1/appointments');
+    const payload = parseRequest(appointmentCreateSchema, data, 'POST /api/v1/appointments');
     const response = idempotencyKey
       ? await apiClient.post<AppointmentItem>('/api/v1/appointments', payload, {
           headers: { 'Idempotency-Key': idempotencyKey },
@@ -59,6 +60,16 @@ export const appointmentsApi = {
       response.data,
       'POST /api/v1/appointments',
     );
+  },
+
+  /** The shop's IANA time zone: what the server counts as past or bookable is decided in it. */
+  getShopTimeZone: async (): Promise<string> => {
+    const response = await apiClient.get<unknown>('/api/v1/appointments/public/shop');
+    return parseContract(
+      shopInfoResponseSchema,
+      response.data,
+      'GET /api/v1/appointments/public/shop',
+    ).timeZone;
   },
 
   getBusySlots: async (
@@ -86,7 +97,7 @@ export const appointmentsApi = {
     id: number,
     statusValue: AppointmentUpdateRequest['status']
   ): Promise<AppointmentItem> => {
-    const payload = parseContract(
+    const payload = parseRequest(
       appointmentUpdateSchema,
       { status: statusValue },
       'PUT /api/v1/appointments',

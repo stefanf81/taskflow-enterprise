@@ -1,5 +1,6 @@
 import { appointmentsApi } from '../src/api/appointments';
 import { apiClient } from '../src/api/client';
+import { getApiErrorMessage } from '../src/utils/errors';
 import type { AppointmentDashboardResponse } from '../src/types/api';
 
 jest.mock('../src/api/client', () => ({
@@ -98,6 +99,19 @@ describe('appointmentsApi', () => {
     });
   });
 
+  describe('getShopTimeZone', () => {
+    it('reads the shop zone from the public endpoint', async () => {
+      mockedGet.mockResolvedValueOnce({ data: { timeZone: 'America/New_York' } });
+      await expect(appointmentsApi.getShopTimeZone()).resolves.toBe('America/New_York');
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments/public/shop');
+    });
+
+    it('rejects a response without a zone', async () => {
+      mockedGet.mockResolvedValueOnce({ data: {} });
+      await expect(appointmentsApi.getShopTimeZone()).rejects.toThrow(/Contract violation/);
+    });
+  });
+
   describe('createAppointment', () => {
     it('sends POST with appointment data', async () => {
       mockedPost.mockResolvedValueOnce({ data: mockAppt });
@@ -108,6 +122,16 @@ describe('appointmentsApi', () => {
       });
       expect(mockedPost).toHaveBeenCalledWith('/api/v1/appointments', expect.any(Object));
       expect(result).toEqual(mockAppt);
+    });
+
+    it('rejects a malformed email before sending, with a message a user can act on', async () => {
+      const promise = appointmentsApi.createAppointment({
+        customerName: 'John', customerEmail: 'not-an-email', customerPhone: '+1',
+        barberName: 'Alex', bookingDate: '2026-08-01', bookingTime: '10:00', serviceType: 'Haircut',
+      });
+      await expect(promise).rejects.toMatchObject({ userFacing: true });
+      expect(getApiErrorMessage(await promise.catch((e) => e), 'x')).toMatch(/email/i);
+      expect(mockedPost).not.toHaveBeenCalled();
     });
 
     it('sends the Idempotency-Key header when provided', async () => {

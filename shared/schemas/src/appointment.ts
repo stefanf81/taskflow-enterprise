@@ -79,6 +79,13 @@ export type AppointmentResponse = zInfer<typeof appointmentResponseSchema>;
 /** GET /api/v1/appointments/public/busy-slots response (HH:mm strings). */
 export const busySlotsResponseSchema = array(string());
 
+/** GET /api/v1/appointments/public/shop response: the IANA time zone every booking is read in. */
+export const shopInfoResponseSchema = object({
+  timeZone: string().check(minLength(1)),
+});
+
+export type ShopInfoResponse = zInfer<typeof shopInfoResponseSchema>;
+
 export const pageMetadataSchema = object({
   number: number(),
   size: number(),

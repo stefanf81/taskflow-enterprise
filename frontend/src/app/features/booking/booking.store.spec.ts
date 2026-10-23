@@ -89,6 +89,10 @@ describe('BookingStore', () => {
       .match((req) => req.url.includes('/api/v1/reviews/public/barber-ratings'))
       .forEach((req) => req.flush(mockRatings));
     httpMock.match((req) => req.url === '/api/v1/barbers').forEach((req) => req.flush(mockBarbers));
+    // The shop's zone is the machine's own, so the wizard's clock is unchanged in these specs.
+    httpMock
+      .match((r) => r.url.includes('/public/shop'))
+      .forEach((r) => r.flush({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
     await fixture.whenStable();
     fixture.detectChanges();
   });
@@ -104,6 +108,23 @@ describe('BookingStore', () => {
     expect(store.bookingService()).toBe('Classic Haircut');
     expect(store.bookingBarber()).toBe('No Preference (First Available)');
     expect(store.selectedCategory()).toBe('all');
+  });
+
+  it('preselects the first catalog service instead of a hard-coded name', () => {
+    expect(store.bookingService()).toBe(mockServices[0]!.name);
+    expect(store.isStepValid(1)).toBe(true);
+  });
+
+  it('does not accept a service the catalog does not offer', () => {
+    store.bookingModel.update((m) => ({ ...m, serviceType: 'Retired Service' }));
+    expect(store.isStepValid(1)).toBe(false);
+  });
+
+  it('rejects a lookbook style the catalog does not offer and stays on step 1', () => {
+    store.selectLookbookStyle('Retired Service', 'hair');
+    expect(store.activeStep()).toBe(1);
+    expect(store.bookingService()).not.toBe('Retired Service');
+    expect(store.errorMessage()).toContain('Retired Service');
   });
 
   it('builds the stylist roster from the public API and joins ratings', () => {

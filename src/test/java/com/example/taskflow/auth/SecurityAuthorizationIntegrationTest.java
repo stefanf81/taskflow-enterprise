@@ -19,6 +19,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -179,6 +180,9 @@ class SecurityAuthorizationIntegrationTest {
                         .param("barberName", "No Preference (First Available)")
                         .param("bookingDate", "2030-05-16"))
                 .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/appointments/public/shop"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.timeZone").isNotEmpty());
         mockMvc.perform(get("/actuator/prometheus")).andExpect(status().isOk());
     }
 
@@ -233,6 +237,7 @@ class SecurityAuthorizationIntegrationTest {
                         .param("barberName", "No Preference (First Available)")
                         .param("bookingDate", "2030-05-16"))
                 .andExpect(status().isOk());
+        mockMvc.perform(head("/api/v1/appointments/public/shop")).andExpect(status().isOk());
     }
 
     // ------------------------------------------------------------------

@@ -62,6 +62,11 @@ jest.mock('../src/hooks/useCatalog', () => ({
   }),
 }));
 
+let mockShopTimeZone: string | null = null;
+jest.mock('../src/hooks/useShopTimeZone', () => ({
+  useShopTimeZone: () => mockShopTimeZone,
+}));
+
 jest.mock('../src/hooks/useBarbers', () => ({
   usePublicBarbers: () => ({ data: [{ id: 1, name: 'Alex the Barber' }] }),
 }));
@@ -122,6 +127,7 @@ describe('BookingScreen', () => {
     mockUuidCounter = 0;
     mockBusySlotsData = ['10:00'];
     mockBusySlotsLoading = false;
+    mockShopTimeZone = null;
     mockCatalogData = null;
     mockRouteNames = ['Home', 'Booking', 'Catalog', 'Lookbook'];
     mockReceiptProps = null;
@@ -327,6 +333,16 @@ describe('BookingScreen', () => {
     expect(getByText('Checking slot availability...')).toBeTruthy();
   });
 
+  it('does not advance past step 3 while availability is still loading', async () => {
+    mockBusySlotsLoading = true;
+    const { getByText, getAllByText } = await render(<BookingScreen />);
+    await fireEvent.press(getByText('Continue to Stylist'));
+    await fireEvent.press(getByText('Continue'));
+    await fireEvent.press(getByText('Continue'));
+    expect(getByText(/still checking availability/i)).toBeTruthy();
+    expect(getAllByText('3. Pick Date & Available Slot').length).toBe(2);
+  });
+
   // ============ SUBMIT ============
   it('submits booking successfully', async () => {
     const { getByText, getByPlaceholderText } = await render(<BookingScreen />);
@@ -484,6 +500,7 @@ describe('BookingScreen wizard behaviour', () => {
   };
 
   beforeEach(() => {
+    mockShopTimeZone = null;
     jest.clearAllMocks();
     freezeDate('2026-08-12T08:00:00');
     mockUseBusySlots = jest.fn();
@@ -562,6 +579,14 @@ describe('BookingScreen wizard behaviour', () => {
     // The default (13:00) is selectable: Continue advances to step 4.
     expect(getByText('4. Contact Details & Summary')).toBeTruthy();
     expect(getByText(/2026-08-12 @ 1:00 PM/)).toBeTruthy();
+  });
+
+  it("judges past slots and the default day in the shop's time zone, not the phone's", async () => {
+    // 12:30 UTC is 21:30 in Tokyo: nothing is left on Aug 12 there, whatever zone the phone is in.
+    moveClockTo('2026-08-12T12:30:00Z');
+    mockShopTimeZone = 'Asia/Tokyo';
+    await render(<BookingScreen />);
+    expect(mockUseBusySlots).toHaveBeenCalledWith(NO_PREFERENCE_BARBER, '2026-08-13', expect.anything());
   });
 
   it('defaults to the next bookable day when no slot is left today', async () => {

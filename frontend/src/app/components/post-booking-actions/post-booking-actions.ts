@@ -272,7 +272,7 @@ export class PostBookingActionsComponent {
   });
 
   onCancel(): void {
-    const publicId = this.cancelModel().publicId.trim();
+    const publicId = this.cancelModel().publicId.trim().toLowerCase();
     const email = this.cancelModel().email.trim();
     if (!publicId || !email) return;
 
@@ -299,7 +299,7 @@ export class PostBookingActionsComponent {
   }
 
   onReview(): void {
-    const publicId = this.reviewModel().publicId.trim();
+    const publicId = this.reviewModel().publicId.trim().toLowerCase();
     const email = this.reviewModel().email.trim();
     if (!publicId || !email) return;
 

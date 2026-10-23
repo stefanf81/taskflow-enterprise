@@ -17,6 +17,7 @@ import {
   isSlotInPast,
   isWithinBookingWindow,
   resolveBookableSelection,
+  shopWallClock,
 } from '../src/utils/time-utils';
 
 describe('time-utils', () => {
@@ -320,6 +321,37 @@ describe('booking-window helpers (MOB-4)', () => {
 
     it('returns null when nothing is selectable', () => {
       expect(resolveBookableSelection({ date: '2026-08-12', time: '16:00' }, ['2026-08-12'], at(17))).toBeNull();
+    });
+  });
+
+  describe('shopWallClock', () => {
+    const instant = new Date('2026-10-12T23:30:00Z');
+
+    it('reads the instant on the wall clock of the shop zone (as local components)', () => {
+      const tokyo = shopWallClock('Asia/Tokyo', instant);
+      expect([tokyo.getFullYear(), tokyo.getMonth(), tokyo.getDate()]).toEqual([2026, 9, 13]);
+      expect([tokyo.getHours(), tokyo.getMinutes()]).toEqual([8, 30]);
+
+      const newYork = shopWallClock('America/New_York', instant);
+      expect([newYork.getDate(), newYork.getHours(), newYork.getMinutes()]).toEqual([12, 19, 30]);
+    });
+
+    it('renders midnight as 00:00, never 24:00', () => {
+      const wall = shopWallClock('UTC', new Date('2026-10-13T00:05:00Z'));
+      expect([wall.getDate(), wall.getHours(), wall.getMinutes()]).toEqual([13, 0, 5]);
+    });
+
+    it('falls back to the phone clock without a usable zone', () => {
+      expect(shopWallClock(null, instant)).toBe(instant);
+      expect(shopWallClock('', instant)).toBe(instant);
+      expect(shopWallClock('Not/AZone', instant)).toBe(instant);
+    });
+
+    it('makes the local-component helpers decide in the shop zone', () => {
+      const tokyo = shopWallClock('Asia/Tokyo', instant); // 2026-10-13 08:30
+      expect(isSlotInPast('2026-10-13', '09:00', tokyo)).toBe(false);
+      expect(isSlotInPast('2026-10-13', '08:00', tokyo)).toBe(true);
+      expect(isSlotInPast('2026-10-12', '16:00', tokyo)).toBe(true);
     });
   });
 });

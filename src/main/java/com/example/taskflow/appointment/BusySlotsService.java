@@ -236,10 +236,15 @@ public class BusySlotsService {
      * the No Preference sentinel, for every barber). Unlike {@link #getBusySlots(String, String)}
      * this accounts for the service running into a later booking or past closing time.
      *
-     * <p>Uncached and only used for services longer than the grid step
-     * ({@link #DEFAULT_DURATION_MINUTES}); for those the cached, start-minute-only answer would
-     * offer slots that the booking then rejects with 400. Errors propagate like the cached path.
+     * <p>Only used for services longer than the grid step ({@link #DEFAULT_DURATION_MINUTES}); for
+     * those the start-minute-only answer would offer slots that the booking then rejects with 400.
+     * Cached per barber, date and duration like the start-minute answer (an uncached call ran four
+     * queries on every public request), and evicted with it: {@link AppointmentStatsService#clearAvailabilityCache}
+     * removes the entry of every duration the catalog offers. Errors propagate and are never
+     * cached, like the cached path.
      */
+    @Cacheable(value = "busySlots",
+            key = "#barberName + '-' + #bookingDate + '-' + #durationMinutes", sync = true)
     public List<String> getBusySlots(String barberName, String bookingDate, int durationMinutes) {
         LocalDate date = parseDate(bookingDate);
         List<BarberDay> days = AppointmentServiceImpl.NO_PREFERENCE_BARBER.equals(barberName)

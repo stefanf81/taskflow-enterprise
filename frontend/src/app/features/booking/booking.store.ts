@@ -1,5 +1,15 @@
-import { Injectable, signal, computed, inject, DestroyRef, isDevMode } from '@angular/core';
+import {
+  Injectable,
+  signal,
+  computed,
+  inject,
+  DestroyRef,
+  effect,
+  isDevMode,
+  untracked,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ShopClock } from '../../core/shop-clock';
 import { form, required } from '@angular/forms/signals';
 import { appointmentCreateSchema } from '@taskflow/schemas';
 import { AppointmentItem } from '../../types/api';
@@ -86,6 +96,7 @@ export class BookingStore {
   private readonly authState = inject(AuthState);
   private readonly customerStore = inject(CustomerStore);
   private readonly sessionEvents = inject(SessionEvents);
+  private readonly shopClock = inject(ShopClock);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly noPreferenceLabel = 'No Preference (First Available)';
@@ -113,7 +124,9 @@ export class BookingStore {
     barberName: this.noPreferenceLabel,
     bookingDate: '',
     bookingTime: '09:00',
-    serviceType: 'Classic Haircut',
+    // Chosen from the catalog (see the constructor): a hard-coded name would break the
+    // wizard as soon as that service is retired or renamed.
+    serviceType: '',
   });
 
   readonly bookingForm = form(this.bookingModel, (f) => {
@@ -148,12 +161,13 @@ export class BookingStore {
   readonly lastBookedTotal = signal<number>(0);
 
   /**
-   * "Now" as the browser sees it (the shop's local time). A signal — not a bare
+   * "Now" on the shop's wall clock (its time zone, as the server judges bookings; the visitor's
+   * own clock until the zone is known). A signal — not a bare
    * `new Date()` inside a computed — so the date carousel and the slot grid move
    * on when the wizard is re-entered, the tab becomes visible again, or local
    * midnight passes. See {@link watchToday} / {@link refreshToday}.
    */
-  readonly now = signal<Date>(new Date());
+  readonly now = signal<Date>(this.shopClock.now());
   readonly today = computed(() => toLocalDateString(this.now()));
 
   /** Set when the busy-slot lookup failed: availability is UNKNOWN, not "all free". */
@@ -275,6 +289,24 @@ export class BookingStore {
   private sessionContact = { customerName: '', customerEmail: '', customerPhone: '' };
 
   constructor() {
+    // The shop's zone arrives after the first render: re-read "now" in it.
+    effect(() => {
+      this.shopClock.timeZone();
+      untracked(() => this.refreshToday());
+    });
+
+    // Keep the selection on a service the catalog really offers: preselect the first one
+    // once the catalog loads, and fall back to it if the selected service was retired.
+    effect(() => {
+      const services = this.services();
+      untracked(() => {
+        const first = services[0];
+        if (first && !services.some((s) => s.name === this.bookingModel().serviceType)) {
+          this.bookingModel.update((m) => ({ ...m, serviceType: first.name }));
+        }
+      });
+    });
+
     // Nothing of a finished session may linger for the next visitor on a shared device:
     // the contact details, the receipt (it carries the customer's name and code) and the form.
     this.sessionEvents.sessionEnded.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
@@ -314,6 +346,13 @@ export class BookingStore {
   }
 
   selectLookbookStyle(serviceName: string, category: string): void {
+    // The lookbook names its styles itself; only a service the catalog offers can be booked.
+    if (!this.services().some((s) => s.name === serviceName)) {
+      this.appointmentStore.errorMessage.set(
+        `${serviceName} is not available right now. Please choose a service from the list.`,
+      );
+      return;
+    }
     this.bookingModel.update((m) => ({ ...m, serviceType: serviceName }));
     this.selectedCategory.set(category);
     this.activeStep.set(2);
@@ -325,7 +364,7 @@ export class BookingStore {
   isStepValid(step: number): boolean {
     const m = this.bookingModel();
     if (step === 1) {
-      return !!m.serviceType;
+      return this.services().some((s) => s.name === m.serviceType);
     }
     if (step === 2) {
       return !!m.barberName;
@@ -365,7 +404,7 @@ export class BookingStore {
    * has invalidated (a date that passed, a same-day time that started).
    */
   refreshToday(): void {
-    this.now.set(new Date());
+    this.now.set(this.shopClock.now());
     this.revalidateSelection();
   }
 
@@ -391,7 +430,7 @@ export class BookingStore {
           this.refreshToday();
           arm();
         },
-        msUntilNextLocalMidnight(new Date()) + 1000,
+        msUntilNextLocalMidnight(this.shopClock.now()) + 1000,
       );
     };
     arm();

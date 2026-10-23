@@ -100,6 +100,17 @@ class BarberServiceImplTest {
         assertTrue(eventsOfType(AvailabilityChangedEvent.class).get(0).affectsAllBarbers());
     }
 
+    @Test
+    void createBarber_refusesTheNoPreferenceSentinelAsAName() {
+        for (String name : List.of(AppointmentServiceImpl.NO_PREFERENCE_BARBER,
+                "  no preference (first available) ")) {
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                    () -> barberService.createBarber(new BarberRequest(name, null, null)));
+            assertTrue(ex.getMessage().contains("reserved"), ex.getMessage());
+        }
+        verifyNoInteractions(barberRepository);
+    }
+
     /** BKG-6b: a new barber must come with a schedule, otherwise nobody can ever book them. */
     @Test
     @SuppressWarnings("unchecked")

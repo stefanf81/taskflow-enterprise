@@ -40,7 +40,7 @@ describe('AdminDashboard shell', () => {
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
 
-    TestBed.inject(AuthState).isLoggedIn.set(true);
+    TestBed.inject(AuthState).applyRole('ROLE_ADMIN', 'admin');
     fixture.detectChanges();
 
     httpMock

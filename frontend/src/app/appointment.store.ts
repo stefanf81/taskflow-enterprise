@@ -71,7 +71,9 @@ export class AppointmentStore {
   // Core Admin Reactive States (Declarative Signals via httpResource)
   private readonly appointmentsResource = httpResource<AppointmentDashboardResponse>(
     () => {
-      if (!this.authState.isLoggedIn()) return undefined;
+      // The listing is admin-only on the backend: any other signed-in role would just
+      // collect a 403 on every login and refresh.
+      if (!this.authState.isLoggedIn() || this.authState.role() !== 'ROLE_ADMIN') return undefined;
       this.refreshTick();
       return this.appointmentsApi.dashboardUrl(
         this.selectedFilter(),

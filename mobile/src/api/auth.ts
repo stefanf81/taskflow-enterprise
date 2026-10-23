@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { parseContract } from './contracts';
+import { parseContract, parseRequest } from './contracts';
 import { LoginRequest, LoginResponse, MobileLoginResponse, RegisterRequest } from '../types/api';
 import {
   loginResponseSchema,
@@ -13,7 +13,7 @@ const LOGOUT_TIMEOUT_MS = 5000;
 
 export const authApi = {
   login: async (credentials: LoginRequest): Promise<MobileLoginResponse> => {
-    const payload = parseContract(
+    const payload = parseRequest(
       loginSchema,
       credentials,
       'POST /api/v1/auth/mobile/login'
@@ -43,7 +43,7 @@ export const authApi = {
   },
 
   register: async (data: RegisterRequest): Promise<void> => {
-    const payload = parseContract(registerSchema, data, 'POST /api/v1/auth/register');
+    const payload = parseRequest(registerSchema, data, 'POST /api/v1/auth/register');
     const response = await apiClient.post('/api/v1/auth/register', payload);
     parseContract(registerResponseSchema, response.data, 'POST /api/v1/auth/register');
   },

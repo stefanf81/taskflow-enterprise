@@ -22,7 +22,7 @@ class AppointmentControllerEventStreamTest {
 
     private final AppointmentService appointmentService = mock(AppointmentService.class);
     private final AppointmentEventStreamService streams = mock(AppointmentEventStreamService.class);
-    private final AppointmentController controller = new AppointmentController(appointmentService, streams);
+    private final AppointmentController controller = new AppointmentController(appointmentService, streams, java.time.Clock.systemUTC());
 
     @Test
     void jwtPrincipalPassesItsExpiryAndIdToTheStream() {
@@ -50,5 +50,16 @@ class AppointmentControllerEventStreamTest {
                 new UsernamePasswordAuthenticationToken("admin", "n/a"), new MockHttpServletResponse()));
 
         verify(streams).subscribe("admin", null, null);
+    }
+
+    @Test
+    void shopInfoReportsTheClockZoneAndIsPubliclyCacheable() {
+        AppointmentController inNewYork = new AppointmentController(appointmentService, streams,
+                java.time.Clock.system(java.time.ZoneId.of("America/New_York")));
+
+        var response = inNewYork.getShopInfo();
+
+        assertEquals("America/New_York", response.getBody().timeZone());
+        assertEquals("max-age=300, public", response.getHeaders().getCacheControl());
     }
 }

@@ -31,8 +31,10 @@ export const RootNavigator: React.FC = () => {
     role,
     isBootstrapping,
     isOffline,
+    storageUnavailable,
     sessionNotice,
     checkAuth,
+    resetSavedSession,
     logout,
     clearSessionNotice,
   } = useAuthStore(
@@ -41,8 +43,10 @@ export const RootNavigator: React.FC = () => {
       role: state.role,
       isBootstrapping: state.isBootstrapping,
       isOffline: state.isOffline,
+      storageUnavailable: state.storageUnavailable,
       sessionNotice: state.sessionNotice,
       checkAuth: state.checkAuth,
+      resetSavedSession: state.resetSavedSession,
       logout: state.logout,
       clearSessionNotice: state.clearSessionNotice,
     })),
@@ -119,11 +123,22 @@ export const RootNavigator: React.FC = () => {
   if (isOffline) {
     return (
       <View style={styles.splash}>
-        <Text style={styles.offlineText}>Could not reach TaskFlow.</Text>
-        <Text style={styles.offlineHint}>Check your connection and try again.</Text>
+        <Text style={styles.offlineText}>
+          {storageUnavailable ? 'Could not open your saved sign-in.' : 'Could not reach TaskFlow.'}
+        </Text>
+        <Text style={styles.offlineHint}>
+          {storageUnavailable
+            ? 'Secure storage on this device is not responding. Try again, or continue as a guest (your saved sign-in is removed from this device).'
+            : 'Check your connection and try again.'}
+        </Text>
         <TouchableOpacity style={styles.retryButton} onPress={() => checkAuth()}>
           <Text style={styles.retryText}>Retry</Text>
         </TouchableOpacity>
+        {storageUnavailable && (
+          <TouchableOpacity style={styles.retryButton} onPress={() => resetSavedSession()}>
+            <Text style={styles.retryText}>Continue as guest</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }

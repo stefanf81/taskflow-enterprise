@@ -35,10 +35,12 @@ import {
   getUpcomingDays,
   isSlotInPast,
   resolveBookableSelection,
+  shopWallClock,
   toLocalDateString,
 } from '../utils/time-utils';
 import { getApiErrorMessage, getHttpStatus } from '../utils/errors';
 import { useNow } from '../hooks/useNow';
+import { useShopTimeZone } from '../hooks/useShopTimeZone';
 import { AttemptKey, resolveAttemptKey } from '../utils/idempotency';
 
 type RouteProps = RouteProp<GuestTabParamList, 'Booking'>;
@@ -85,7 +87,9 @@ export const BookingScreen: React.FC = () => {
   // Wall clock for slot filtering. Ticks every minute and when the app returns
   // to the foreground, so past slots disable themselves and a midnight
   // rollover re-bases the day list without a dedicated timer.
-  const now = useNow();
+  // Dates and the past-slot rule follow the shop's time zone, as the server's do.
+  const shopTimeZone = useShopTimeZone();
+  const now = useNow(60_000, shopTimeZone);
   const todayKey = toLocalDateString(now);
   // The day list only depends on the calendar date, not on the minute, so it is rebuilt from
   // todayKey (noon: clear of DST shifts). Reading `now` here while depending on todayKey made
@@ -227,7 +231,7 @@ export const BookingScreen: React.FC = () => {
   // keeping it across a blur preserves replay semantics for an ambiguous
   // timeout followed by an identical re-submission.
   const resetWizard = useCallback(() => {
-    const first = getFirstSelectableSlot(upcomingDates, new Date());
+    const first = getFirstSelectableSlot(upcomingDates, shopWallClock(shopTimeZone));
     setStep(1);
     setSelectedBarber(NO_PREFERENCE_BARBER);
     setSelectedService(services[0]?.name ?? 'Classic Haircut');
@@ -239,7 +243,7 @@ export const BookingScreen: React.FC = () => {
     setServiceSearchQuery('');
     setSelectedCategory('all');
     setError(null);
-  }, [services, upcomingDates]);
+  }, [services, upcomingDates, shopTimeZone]);
 
   // The tab stays mounted while another tab/screen is shown, so leaving the
   // wizard (blur) must discard in-progress state or it would reappear stale.
@@ -293,9 +297,15 @@ export const BookingScreen: React.FC = () => {
       setError(null);
       setStep(3);
     } else if (step === 3) {
-      const slotError = getSlotValidationError(selectedDate, selectedTime, new Date());
+      const slotError = getSlotValidationError(selectedDate, selectedTime, shopWallClock(shopTimeZone));
       if (slotError) {
         setError(slotError);
+        return;
+      }
+      // While the lookup runs, busySlots is still [] (or the previous date's list): unknown
+      // availability must never be treated as "all free".
+      if (checkingSlots) {
+        setError('Still checking availability. Please wait a moment.');
         return;
       }
       if (busySlotsFailed) {
@@ -318,7 +328,7 @@ export const BookingScreen: React.FC = () => {
     }
 
     // The slot may have passed while the contact form was being filled in.
-    const slotError = getSlotValidationError(selectedDate, selectedTime, new Date());
+    const slotError = getSlotValidationError(selectedDate, selectedTime, shopWallClock(shopTimeZone));
     if (slotError) {
       setError(slotError);
       setStep(3);

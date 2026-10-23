@@ -69,6 +69,12 @@ public class BarberServiceImpl implements BarberService {
     @Transactional
     @CacheEvict(value = {"barbers", "publicBarbers"}, allEntries = true)
     public BarberResponse createBarber(BarberRequest request) {
+        // The booking flow treats this exact name as "any barber" and never stores it, so a real
+        // barber carrying it could be neither booked by name nor approved.
+        if (AppointmentServiceImpl.NO_PREFERENCE_BARBER.equalsIgnoreCase(request.name().trim())) {
+            throw new IllegalArgumentException("'" + AppointmentServiceImpl.NO_PREFERENCE_BARBER
+                    + "' is reserved and cannot be used as a barber name.");
+        }
         Barber saved = barberRepository.save(request.toEntity());
         // A barber without schedule rows is "not scheduled" on every day and could never be
         // booked. Give the new barber the default shift (app.booking.default-*), which

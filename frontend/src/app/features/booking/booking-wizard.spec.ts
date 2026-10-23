@@ -60,6 +60,10 @@ describe('BookingWizard accessibility (TODO 4.2, 4.3)', () => {
       );
     httpMock.match((r) => r.url.includes('/barber-ratings')).forEach((r) => r.flush([]));
     httpMock.match((r) => r.url === '/api/v1/barbers').forEach((r) => r.flush([]));
+    // The shop's zone is the machine's own, so the wizard's clock is unchanged in these specs.
+    httpMock
+      .match((r) => r.url.includes('/public/shop'))
+      .forEach((r) => r.flush({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
     await render();
   });
 

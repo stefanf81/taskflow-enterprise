@@ -31,7 +31,10 @@ export class CustomerStore {
   // reactively once AuthState flips to logged-in.
   private readonly appointmentsResource = httpResource<AppointmentPage>(
     () => {
-      if (!this.authState.isLoggedIn()) return undefined;
+      // Customers only: an admin has no bookings under /customer (and no portal).
+      if (!this.authState.isLoggedIn() || this.authState.role() !== 'ROLE_CUSTOMER') {
+        return undefined;
+      }
       this.refreshTick();
       return this.appointmentsApi.customerPageUrl(this.currentPage(), this.pageSize);
     },

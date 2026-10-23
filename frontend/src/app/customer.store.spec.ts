@@ -49,7 +49,7 @@ describe('CustomerStore', () => {
     httpMock = TestBed.inject(HttpTestingController);
 
     // B2: the resource is gated on auth — log in so the initial fetch fires.
-    TestBed.inject(AuthState).isLoggedIn.set(true);
+    TestBed.inject(AuthState).applyRole('ROLE_CUSTOMER', 'customer');
 
     fixture.detectChanges();
 
@@ -62,6 +62,16 @@ describe('CustomerStore', () => {
 
   afterEach(() => {
     httpMock.verify();
+  });
+
+  it('does not request the customer listing for a signed-in admin', () => {
+    const authState = TestBed.inject(AuthState);
+    authState.clear();
+    fixture.detectChanges();
+    authState.applyRole('ROLE_ADMIN', 'admin');
+    fixture.detectChanges();
+
+    httpMock.expectNone((req) => req.url.includes('/api/v1/customer/appointments'));
   });
 
   it('should initialize with default values', () => {

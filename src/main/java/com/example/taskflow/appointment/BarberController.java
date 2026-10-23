@@ -11,6 +11,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,9 +23,11 @@ import org.springframework.security.access.prepost.PreAuthorize;
 public class BarberController {
 
     private final BarberService barberService;
+    private final Clock clock;
 
-    public BarberController(BarberService barberService) {
+    public BarberController(BarberService barberService, Clock clock) {
         this.barberService = barberService;
+        this.clock = clock;
     }
 
     @GetMapping
@@ -78,6 +82,10 @@ public class BarberController {
     })
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<BarberTimeOffResponse> addTimeOff(@Parameter(description = "Barber database ID") @PathVariable Long barberId, @Valid @RequestBody BarberTimeOffRequest request) {
+        // Today is the shop's today (app.shop.time-zone), not the JVM's.
+        if (request.startDate().isBefore(LocalDate.now(clock))) {
+            throw new IllegalArgumentException("Start date must be today or in the future.");
+        }
         return new ResponseEntity<>(barberService.addTimeOff(barberId, request), HttpStatus.CREATED);
     }
 }

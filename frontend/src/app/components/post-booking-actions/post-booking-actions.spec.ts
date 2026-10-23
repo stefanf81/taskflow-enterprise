@@ -58,6 +58,27 @@ describe('PostBookingActionsComponent', () => {
     expect(component.cancelModel().publicId).toBe('');
   });
 
+  it('lower-cases and trims a typed booking code before cancelling (codes are lowercase UUIDs)', () => {
+    component.cancelModel.set({ publicId: '  ABCD-1234-EF  ', email: 'test@example.com' });
+    component.onCancel();
+
+    const req = httpMock.expectOne('/api/v1/appointments/public/cancel/abcd-1234-ef');
+    req.flush(null);
+  });
+
+  it('lower-cases a typed booking code before reviewing', () => {
+    component.reviewModel.set({
+      publicId: 'ABCD-1234-EF',
+      email: 'john@example.com',
+      rating: 4,
+      comment: '',
+    });
+    component.onReview();
+
+    const req = httpMock.expectOne('/api/v1/reviews/public/abcd-1234-ef');
+    req.flush(null);
+  });
+
   it('surfaces a cancellation verification failure', () => {
     component.cancelModel.set({ publicId: 'bad-id', email: 'test@example.com' });
     component.onCancel();

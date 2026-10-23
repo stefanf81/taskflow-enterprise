@@ -1,6 +1,8 @@
 package com.example.taskflow.appointment;
 
 import com.example.taskflow.appointment.internal.AppointmentRepository;
+import com.example.taskflow.catalog.CatalogService;
+import com.example.taskflow.catalog.ServiceItemResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -10,7 +12,9 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.RedisConnectionFailureException;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.concurrent.Callable;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -36,6 +40,9 @@ class AppointmentStatsServiceTest {
     private Cache busySlotsCache;
 
     @Mock
+    private CatalogService catalogService;
+
+    @Mock
     private Cache statsCache;
 
     @Mock
@@ -49,7 +56,7 @@ class AppointmentStatsServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AppointmentStatsService(cacheManager, CLOCK);
+        service = new AppointmentStatsService(cacheManager, CLOCK, catalogService);
     }
 
     @Test
@@ -62,6 +69,40 @@ class AppointmentStatsServiceTest {
         verify(busySlotsCache).evictIfPresent(
                 AppointmentServiceImpl.NO_PREFERENCE_BARBER + "-2026-05-16");
         verify(busySlotsCache, never()).evict(any());
+    }
+
+    @Test
+    void clearAvailabilityCache_shouldAlsoEvictLengthAwareListsOfLongServices() {
+        when(cacheManager.getCache(AppointmentStatsService.BUSY_SLOTS_CACHE)).thenReturn(busySlotsCache);
+        when(catalogService.getAllServices()).thenReturn(List.of(
+                service("Cut", 45), service("Fade", 90), service("Package", 120), service("Fade 2", 90)));
+
+        service.clearAvailabilityCache("Alex the Barber", LocalDate.of(2026, 5, 16));
+
+        String sentinel = AppointmentServiceImpl.NO_PREFERENCE_BARBER;
+        for (String barber : List.of("Alex the Barber", sentinel)) {
+            verify(busySlotsCache).evictIfPresent(barber + "-2026-05-16");
+            verify(busySlotsCache).evictIfPresent(barber + "-2026-05-16-90");
+            verify(busySlotsCache).evictIfPresent(barber + "-2026-05-16-120");
+        }
+        // 45 minutes uses the start-minute list, and a duration shared by two services is evicted once.
+        verify(busySlotsCache, never()).evictIfPresent("Alex the Barber-2026-05-16-45");
+        verify(busySlotsCache, times(4)).evictIfPresent(contains("-2026-05-16-"));
+    }
+
+    @Test
+    void clearAvailabilityCache_shouldStillEvictTheBaseKeysWhenTheCatalogCannotBeRead() {
+        when(cacheManager.getCache(AppointmentStatsService.BUSY_SLOTS_CACHE)).thenReturn(busySlotsCache);
+        when(catalogService.getAllServices()).thenThrow(new RedisConnectionFailureException("down"));
+
+        assertDoesNotThrow(() -> service.clearAvailabilityCache("Alex the Barber", LocalDate.of(2026, 5, 16)));
+
+        verify(busySlotsCache).evictIfPresent("Alex the Barber-2026-05-16");
+        verify(busySlotsCache).evictIfPresent(AppointmentServiceImpl.NO_PREFERENCE_BARBER + "-2026-05-16");
+    }
+
+    private static ServiceItemResponse service(String name, int minutes) {
+        return new ServiceItemResponse(1L, name, BigDecimal.TEN, minutes, "hair", null);
     }
 
     @Test

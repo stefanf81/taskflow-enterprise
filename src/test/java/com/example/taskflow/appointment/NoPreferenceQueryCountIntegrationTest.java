@@ -34,6 +34,7 @@ class NoPreferenceQueryCountIntegrationTest {
     private static final LocalDate MONDAY = LocalDate.of(2031, 3, 10);
 
     @Autowired private BusySlotsService busySlotsService;
+    @Autowired private org.springframework.cache.CacheManager cacheManager;
     @Autowired private BarberRepository barberRepository;
     @Autowired private BarberScheduleRepository barberScheduleRepository;
     @Autowired private AppointmentRepository appointmentRepository;
@@ -52,16 +53,14 @@ class NoPreferenceQueryCountIntegrationTest {
 
         long fewResolve = statementsDuring(() ->
                 assertTrue(busySlotsService.findFirstAvailableBarber(MONDAY, "10:00", 30).isEmpty()));
-        long fewLongSlots = statementsDuring(() -> busySlotsService.getBusySlots(
-                AppointmentServiceImpl.NO_PREFERENCE_BARBER, MONDAY.toString(), 120));
+        long fewLongSlots = statementsDuring(this::computeLongSlots);
 
         addWorkingBookedBarbers(10);
         assertEquals(few + 10, barberRepository.count());
 
         long manyResolve = statementsDuring(() ->
                 assertTrue(busySlotsService.findFirstAvailableBarber(MONDAY, "10:00", 30).isEmpty()));
-        long manyLongSlots = statementsDuring(() -> busySlotsService.getBusySlots(
-                AppointmentServiceImpl.NO_PREFERENCE_BARBER, MONDAY.toString(), 120));
+        long manyLongSlots = statementsDuring(this::computeLongSlots);
 
         assertEquals(fewResolve, manyResolve, "statement count must not grow with the number of barbers");
         assertEquals(fewLongSlots, manyLongSlots, "statement count must not grow with the number of barbers");
@@ -75,6 +74,16 @@ class NoPreferenceQueryCountIntegrationTest {
         entityManager.flush();
         assertEquals(firstFree.getId(),
                 busySlotsService.findFirstAvailableBarber(MONDAY, "10:00", 30).orElseThrow().getId());
+    }
+
+    /**
+     * The length-aware list is cached per duration (see {@code BusySlotsService}); the rows this test
+     * inserts bypass the booking events that evict it, so the cache is emptied first to measure the
+     * computation itself.
+     */
+    private void computeLongSlots() {
+        cacheManager.getCache(AppointmentStatsService.BUSY_SLOTS_CACHE).clear();
+        busySlotsService.getBusySlots(AppointmentServiceImpl.NO_PREFERENCE_BARBER, MONDAY.toString(), 120);
     }
 
     private long statementsDuring(Runnable action) {

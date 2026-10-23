@@ -89,8 +89,15 @@ describe('AppointmentStore', () => {
     expect(store.busySlots()).toEqual([]);
   });
 
+  it('does not request the admin listing for a signed-in customer (it would only 403)', () => {
+    authState.applyRole('ROLE_CUSTOMER', 'customer');
+    fixture.detectChanges();
+
+    httpMock.expectNone((r) => r.url.includes('/api/v1/appointments') && r.method === 'GET');
+  });
+
   it('should load appointments when logged in', async () => {
-    authState.isLoggedIn.set(true);
+    authState.applyRole('ROLE_ADMIN', 'admin');
     fixture.detectChanges();
 
     const req = httpMock.expectOne(
@@ -114,7 +121,7 @@ describe('AppointmentStore', () => {
   });
 
   it('signs out only after the server confirms (the session stays alive until then)', async () => {
-    authState.isLoggedIn.set(true);
+    authState.applyRole('ROLE_ADMIN', 'admin');
     fixture.detectChanges();
     httpMock.match(() => true).forEach((r) => r.flush(mockDashboard));
     fixture.detectChanges();
@@ -147,7 +154,7 @@ describe('AppointmentStore', () => {
   });
 
   it('should navigate multiple pages and enforce boundaries using nested metadata', async () => {
-    authState.isLoggedIn.set(true);
+    authState.applyRole('ROLE_ADMIN', 'admin');
     fixture.detectChanges();
     httpMock.expectOne(() => true).flush(mockDashboard);
     await fixture.whenStable();
@@ -192,7 +199,7 @@ describe('AppointmentStore', () => {
   });
 
   it('should debounce search and encode the query in the URL (B1)', async () => {
-    authState.isLoggedIn.set(true);
+    authState.applyRole('ROLE_ADMIN', 'admin');
     fixture.detectChanges();
     httpMock.expectOne(() => true).flush(mockDashboard);
     fixture.detectChanges();
@@ -236,7 +243,7 @@ describe('AppointmentStore', () => {
 
   describe('error-safe lists (FE-1)', () => {
     it('keeps every list signal readable after a failed load', async () => {
-      authState.isLoggedIn.set(true);
+      authState.applyRole('ROLE_ADMIN', 'admin');
       fixture.detectChanges();
       httpMock
         .expectOne((r) => r.url.includes('/api/v1/appointments'))
@@ -253,7 +260,7 @@ describe('AppointmentStore', () => {
     });
 
     it('recovers when a retry succeeds after a failure', async () => {
-      authState.isLoggedIn.set(true);
+      authState.applyRole('ROLE_ADMIN', 'admin');
       fixture.detectChanges();
       httpMock
         .expectOne((r) => r.url.includes('/api/v1/appointments'))
@@ -273,7 +280,7 @@ describe('AppointmentStore', () => {
 
   describe('refresh never drops an update (FE-6)', () => {
     it('restarts a load that is already in flight instead of ignoring the second refresh', async () => {
-      authState.isLoggedIn.set(true);
+      authState.applyRole('ROLE_ADMIN', 'admin');
       fixture.detectChanges();
       const first = httpMock.expectOne((r) => r.url.includes('/api/v1/appointments'));
 
@@ -291,7 +298,7 @@ describe('AppointmentStore', () => {
     });
 
     it('refetches a settled list on refresh', async () => {
-      authState.isLoggedIn.set(true);
+      authState.applyRole('ROLE_ADMIN', 'admin');
       fixture.detectChanges();
       httpMock.expectOne((r) => r.url.includes('/api/v1/appointments')).flush(mockDashboard);
       await fixture.whenStable();
@@ -312,7 +319,7 @@ describe('AppointmentStore', () => {
     };
 
     it('steps back when the current page no longer exists after a refresh', async () => {
-      authState.isLoggedIn.set(true);
+      authState.applyRole('ROLE_ADMIN', 'admin');
       fixture.detectChanges();
       httpMock.expectOne(() => true).flush(mockDashboard); // 3 pages
       await settle();
@@ -337,7 +344,7 @@ describe('AppointmentStore', () => {
     });
 
     it('does not clamp while a later page is still loading', async () => {
-      authState.isLoggedIn.set(true);
+      authState.applyRole('ROLE_ADMIN', 'admin');
       fixture.detectChanges();
       httpMock.expectOne(() => true).flush(mockDashboard);
       await settle();

@@ -112,6 +112,42 @@ describe('AuthModalComponent', () => {
     httpMock.expectNone('/api/v1/auth/register');
   });
 
+  it('sends the password verbatim (no trimming), like mobile and the backend', () => {
+    component.authModel.set({
+      username: ' admin ',
+      password: '  pass word1  ',
+      fullName: '',
+      phone: '',
+    });
+    component.onLogin();
+
+    const req = httpMock.expectOne('/api/v1/auth/login');
+    expect(req.request.body).toEqual({ username: 'admin', password: '  pass word1  ' });
+    req.flush({ role: 'ROLE_ADMIN', username: 'admin' });
+  });
+
+  it('refuses a blank (whitespace-only) password without a request', () => {
+    component.authModel.set({ username: 'admin', password: '   ', fullName: '', phone: '' });
+    component.onLogin();
+    httpMock.expectNone('/api/v1/auth/login');
+    expect(component.errorMessage()).toBe('Email and password are required.');
+  });
+
+  it('registers with the password verbatim', () => {
+    component.toggleMode();
+    component.authModel.set({
+      username: 'jane@example.com',
+      password: ' secret-password-1 ',
+      fullName: 'Jane Smith',
+      phone: '+1-555-0000',
+    });
+    component.onRegister();
+
+    const req = httpMock.expectOne('/api/v1/auth/register');
+    expect(req.request.body.password).toBe(' secret-password-1 ');
+    req.flush({ message: 'Account created successfully.' });
+  });
+
   it('registers the account and returns to login mode with a success message', () => {
     component.toggleMode();
     component.authModel.set({

@@ -19,6 +19,12 @@ interface AuthState {
   username: string | null;
   role: 'ROLE_ADMIN' | 'ROLE_CUSTOMER' | null;
   isOffline: boolean;
+  /**
+   * True when the saved sign-in could not even be read (Keychain/Keystore error), as opposed to
+   * the server being unreachable. Retrying may help once; if it keeps failing the user needs
+   * `resetSavedSession`, otherwise the app would be unusable for good.
+   */
+  storageUnavailable: boolean;
   error: string | null;
   /** Shown app-wide after the session ended without a user-initiated sign-out. */
   sessionNotice: string | null;
@@ -27,6 +33,8 @@ interface AuthState {
   register: (data: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
+  /** Drops the saved sign-in and continues as a guest (escape hatch for unreadable storage). */
+  resetSavedSession: () => Promise<void>;
   clearError: () => void;
   clearSessionNotice: () => void;
 }
@@ -36,6 +44,7 @@ const SIGNED_OUT = {
   username: null,
   role: null,
   isOffline: false,
+  storageUnavailable: false,
 } as const;
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -44,6 +53,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   username: null,
   role: null,
   isOffline: false,
+  storageUnavailable: false,
   error: null,
   sessionNotice: null,
 
@@ -129,10 +139,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({
         isBootstrapping: false,
         isOffline: true,
+        storageUnavailable: true,
         error: 'Secure credential storage is unavailable. Please try again.',
       });
       return;
     }
+    set({ storageUnavailable: false });
     if (!token) {
       set({ ...SIGNED_OUT, isBootstrapping: false, error: null });
       return;
@@ -199,6 +211,16 @@ export const useAuthStore = create<AuthState>((set) => ({
       error: null,
       sessionNotice: SESSION_EXPIRED_MESSAGE,
     });
+  },
+
+  resetSavedSession: async () => {
+    try {
+      await storage.clearSession();
+    } catch {
+      // the in-memory state below is cleared regardless
+    }
+    queryClient.clear();
+    set({ ...SIGNED_OUT, isBootstrapping: false, error: null, sessionNotice: null });
   },
 
   clearError: () => set({ error: null }),

@@ -272,12 +272,39 @@ class AuthControllerTest {
         when(userRepository.findByEmailIgnoreCase("race@test.com")).thenReturn(Optional.empty());
         when(passwordEncoder.encode("password123")).thenReturn("encoded");
         when(userRepository.save(any(AppUser.class)))
-                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key"));
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key",
+                        new java.sql.SQLException("duplicate key value", "23505")));
 
         ResponseEntity<RegisterResponse> result = authController.registerUser(request);
 
         assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
         assertEquals("Email is already registered.", result.getBody().message());
+    }
+
+    /** A value too long for its column (22001) is not a duplicate and must not say so. */
+    @Test
+    void registerUser_otherIntegrityViolationsAreNotReportedAsDuplicates() {
+        RegisterRequest request = new RegisterRequest("Long", "long@test.com", "password123", null);
+        when(userRepository.findByEmailIgnoreCase("long@test.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode("password123")).thenReturn("encoded");
+        org.springframework.dao.DataIntegrityViolationException tooLong =
+                new org.springframework.dao.DataIntegrityViolationException("too long",
+                        new java.sql.SQLException("value too long", "22001"));
+        when(userRepository.save(any(AppUser.class))).thenThrow(tooLong);
+
+        assertSame(tooLong, assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
+                () -> authController.registerUser(request)));
+    }
+
+    @Test
+    void registerRequest_rejectsAnEmailLongerThanTheBookingEmailLimit() {
+        String email = "a".repeat(60) + "@" + "b".repeat(36) + ".com"; // 101 characters, otherwise a valid address
+        try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
+            var violations = factory.getValidator()
+                    .validate(new RegisterRequest("Jane", email, "password123", "555"));
+            assertEquals(1, violations.size());
+            assertEquals("email", violations.iterator().next().getPropertyPath().toString());
+        }
     }
 
     @Test

@@ -142,11 +142,25 @@ public class AuthController {
         } catch (DataIntegrityViolationException e) {
             // Two concurrent registrations both passed the check above; the unique
             // constraint on email picked the winner. Answer the loser exactly like
-            // the pre-check does instead of leaking a 500.
-            return emailAlreadyRegistered();
+            // the pre-check does instead of leaking a 500. Any other integrity failure
+            // (e.g. a value too long for its column) is not a duplicate: let it surface.
+            if (isUniqueViolation(e)) {
+                return emailAlreadyRegistered();
+            }
+            throw e;
         }
 
         return ResponseEntity.status(HttpStatus.CREATED).body(new RegisterResponse("Account created successfully."));
+    }
+
+    /** SQLSTATE 23505 (unique_violation, PostgreSQL and H2) anywhere in the cause chain. */
+    private static boolean isUniqueViolation(Throwable error) {
+        for (Throwable t = error; t != null; t = t.getCause() == t ? null : t.getCause()) {
+            if (t instanceof java.sql.SQLException sql && "23505".equals(sql.getSQLState())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private ResponseEntity<RegisterResponse> emailAlreadyRegistered() {

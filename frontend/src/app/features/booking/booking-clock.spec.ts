@@ -38,6 +38,10 @@ describe('BookingStore clock (FE-5)', () => {
     httpMock.match((r) => r.url.includes('/api/v1/catalog')).forEach((r) => r.flush([]));
     httpMock.match((r) => r.url.includes('/barber-ratings')).forEach((r) => r.flush([]));
     httpMock.match((r) => r.url === '/api/v1/barbers').forEach((r) => r.flush([]));
+    // The shop's zone is the machine's own, so the wizard's clock is unchanged in these specs.
+    httpMock
+      .match((r) => r.url.includes('/public/shop'))
+      .forEach((r) => r.flush({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
     await fixture.whenStable();
     store.refreshToday();
   });
@@ -263,6 +267,10 @@ describe('BookingWizard UI (FE-5, FE-10, FE-11, FE-1)', () => {
       );
     httpMock.match((r) => r.url.includes('/barber-ratings')).forEach((r) => r.flush([]));
     httpMock.match((r) => r.url === '/api/v1/barbers').forEach((r) => r.flush([]));
+    // The shop's zone is the machine's own, so the wizard's clock is unchanged in these specs.
+    httpMock
+      .match((r) => r.url.includes('/public/shop'))
+      .forEach((r) => r.flush({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
     await fixture.whenStable();
     fixture.detectChanges();
   });
@@ -345,5 +353,70 @@ describe('BookingWizard UI (FE-5, FE-10, FE-11, FE-1)', () => {
     fixture.detectChanges();
     expect(el().textContent).toContain('Could not load the barber directory.');
     expect(el().textContent).toContain('No Preference');
+  });
+});
+
+describe('BookingStore clock in the shop time zone', () => {
+  it('follows the zone the backend reports, not the visitor clock', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // 23:30 UTC on Monday 12 October: still Monday in New York, already Tuesday in Tokyo.
+    vi.setSystemTime(new Date('2026-10-12T23:30:00Z'));
+    try {
+      TestBed.configureTestingModule({
+        imports: [TestHost],
+        providers: [provideHttpClient(), provideHttpClientTesting()],
+      });
+      const fixture = TestBed.createComponent(TestHost);
+      const store = fixture.componentInstance.store;
+      const httpMock = TestBed.inject(HttpTestingController);
+      fixture.detectChanges();
+      httpMock.match((r) => r.url.includes('/api/v1/catalog')).forEach((r) => r.flush([]));
+      httpMock.match((r) => r.url.includes('/barber-ratings')).forEach((r) => r.flush([]));
+      httpMock.match((r) => r.url === '/api/v1/barbers').forEach((r) => r.flush([]));
+
+      httpMock
+        .expectOne((r) => r.url === '/api/v1/appointments/public/shop')
+        .flush({ timeZone: 'Asia/Tokyo' });
+      await fixture.whenStable();
+      expect(store.today()).toBe('2026-10-13');
+
+      // Not a one-off: the zone drives the past-slot decision too (08:30 in Tokyo).
+      expect(store.isSlotUnavailable('08:00')).toBe(false); // no date picked yet
+      store.bookingModel.update((m) => ({ ...m, bookingDate: '2026-10-13' }));
+      expect(store.isSlotUnavailable('08:00')).toBe(true);
+      expect(store.isSlotUnavailable('09:00')).toBe(false);
+
+      httpMock.match((r) => r.url.includes('/public/busy-slots')).forEach((r) => r.flush([]));
+      httpMock.verify();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the visitor clock when the zone cannot be loaded', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 12, 14, 30));
+    try {
+      TestBed.configureTestingModule({
+        imports: [TestHost],
+        providers: [provideHttpClient(), provideHttpClientTesting()],
+      });
+      const fixture = TestBed.createComponent(TestHost);
+      const store = fixture.componentInstance.store;
+      const httpMock = TestBed.inject(HttpTestingController);
+      fixture.detectChanges();
+      httpMock.match((r) => r.url.includes('/api/v1/catalog')).forEach((r) => r.flush([]));
+      httpMock.match((r) => r.url.includes('/barber-ratings')).forEach((r) => r.flush([]));
+      httpMock.match((r) => r.url === '/api/v1/barbers').forEach((r) => r.flush([]));
+      httpMock
+        .expectOne((r) => r.url === '/api/v1/appointments/public/shop')
+        .flush('down', { status: 503, statusText: 'Service Unavailable' });
+      await fixture.whenStable();
+
+      expect(store.today()).toBe('2026-10-12');
+      httpMock.verify();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

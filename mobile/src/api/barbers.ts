@@ -1,6 +1,6 @@
 import { apiClient } from './client';
 import { Barber, BarberTimeOff, BarberTimeOffRequest, PublicBarber } from '../types/api';
-import { parseContract } from './contracts';
+import { parseContract, parseRequest } from './contracts';
 import {
   barberResponseListSchema,
   barberTimeOffResponseListSchema,
@@ -34,7 +34,7 @@ export const barbersApi = {
   },
 
   addTimeOff: async (barberId: number, data: BarberTimeOffRequest): Promise<BarberTimeOff> => {
-    const payload = parseContract(
+    const payload = parseRequest(
       barberTimeOffSchema,
       data,
       'POST /api/v1/barbers/{id}/time-off',

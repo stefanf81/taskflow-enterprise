@@ -698,7 +698,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         int duration = service.getDurationMinutes() != null && service.getDurationMinutes() > 0
                 ? service.getDurationMinutes() : BusySlotsService.DEFAULT_DURATION_MINUTES;
         // Services that fit in one grid step get the same answer from the cached path; only
-        // longer ones need the (uncached) length-aware computation.
+        // longer ones need the length-aware computation (cached per duration).
         return duration > BusySlotsService.DEFAULT_DURATION_MINUTES
                 ? busySlotsService.getBusySlots(barberName, bookingDate, duration)
                 : busySlotsService.getBusySlots(barberName, bookingDate);

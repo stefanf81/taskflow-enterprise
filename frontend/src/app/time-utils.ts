@@ -72,6 +72,50 @@ export function formatLocalDate(dateStr: string): string {
  */
 export const MAX_BOOKING_DAYS_AHEAD = 90;
 
+/**
+ * The shop's wall clock as a `Date` whose LOCAL components (getHours(), getDate(), ...) read the
+ * time in the shop's time zone, so every helper below that works on local components decides
+ * "today", "past" and "too far ahead" the way the server does (it judges bookings in the shop
+ * zone, not the visitor's). The returned value is a shifted stand-in for display and comparison
+ * only, never an instant to send anywhere.
+ *
+ * Without a (valid) zone the visitor's own clock is returned: the server stays authoritative and
+ * rejects what this guesses wrong.
+ */
+export function shopWallClock(
+  timeZone: string | null | undefined,
+  instant: Date = new Date(),
+): Date {
+  if (!timeZone) return instant;
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }).formatToParts(instant);
+    const read = (type: Intl.DateTimeFormatPartTypes): number =>
+      Number(parts.find((part) => part.type === type)?.value);
+    const wall = new Date(
+      read('year'),
+      read('month') - 1,
+      read('day'),
+      read('hour'),
+      read('minute'),
+      read('second'),
+      instant.getMilliseconds(),
+    );
+    return Number.isNaN(wall.getTime()) ? instant : wall;
+  } catch {
+    // Unknown zone id or no Intl time-zone support.
+    return instant;
+  }
+}
+
 /** Formats a Date as YYYY-MM-DD from its LOCAL components (never the UTC-shifted `toISOString`). */
 export function toLocalDateString(date: Date): string {
   const year = date.getFullYear();

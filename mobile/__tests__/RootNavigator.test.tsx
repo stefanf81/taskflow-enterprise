@@ -1,11 +1,12 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { RootNavigator } from '../src/navigation/RootNavigator';
 
 // Mock the auth store
 const mockCheckAuth = jest.fn();
 const mockLogout = jest.fn();
+const mockResetSavedSession = jest.fn();
 const mockUseAuthStore = jest.fn();
 const mockUseFonts = jest.fn();
 
@@ -181,5 +182,36 @@ describe('RootNavigator', () => {
     await render(<RootNavigator />);
 
     await waitFor(() => expect(mockLogout).toHaveBeenCalledTimes(1));
+  });
+
+  describe('offline screen', () => {
+    const base = {
+      isAuthenticated: false,
+      role: null,
+      isBootstrapping: false,
+      isOffline: true,
+      checkAuth: mockCheckAuth,
+      resetSavedSession: mockResetSavedSession,
+      logout: mockLogout,
+    };
+
+    it('only offers a retry when the server is unreachable', async () => {
+      mockUseAuthStore.mockReturnValue({ ...base, storageUnavailable: false });
+
+      const { getByText, queryByText } = await render(<RootNavigator />);
+
+      expect(getByText('Could not reach TaskFlow.')).toBeTruthy();
+      expect(queryByText('Continue as guest')).toBeNull();
+    });
+
+    it('offers to drop the saved sign-in when secure storage cannot be read', async () => {
+      mockUseAuthStore.mockReturnValue({ ...base, storageUnavailable: true });
+
+      const { getByText } = await render(<RootNavigator />);
+
+      expect(getByText('Could not open your saved sign-in.')).toBeTruthy();
+      await fireEvent.press(getByText('Continue as guest'));
+      expect(mockResetSavedSession).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -34,10 +35,13 @@ public class AppointmentController {
 
     private final AppointmentService appointmentService;
     private final AppointmentEventStreamService eventStreamService;
+    private final Clock clock;
 
-    public AppointmentController(AppointmentService appointmentService, AppointmentEventStreamService eventStreamService) {
+    public AppointmentController(AppointmentService appointmentService, AppointmentEventStreamService eventStreamService,
+                                 Clock clock) {
         this.appointmentService = appointmentService;
         this.eventStreamService = eventStreamService;
+        this.clock = clock;
     }
 
     @GetMapping
@@ -94,6 +98,16 @@ public class AppointmentController {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noCache().cachePrivate().mustRevalidate())
                 .body(appointment);
+    }
+
+    @GetMapping("/public/shop")
+    @Operation(summary = "Get the shop's time zone, which decides what counts as past or bookable (Guest Access)")
+    @ApiResponse(responseCode = "200", description = "Shop time zone returned")
+    public ResponseEntity<ShopInfoResponse> getShopInfo() {
+        // Changes only with a deployment: same 5 m public tier as the catalog.
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
+                .body(new ShopInfoResponse(clock.getZone().getId()));
     }
 
     @GetMapping("/public/busy-slots")

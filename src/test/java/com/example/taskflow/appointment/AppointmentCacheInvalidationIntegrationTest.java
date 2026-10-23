@@ -160,6 +160,37 @@ class AppointmentCacheInvalidationIntegrationTest {
         assertTrue(busySlotsService.getBusySlots(BARBER, DATE.toString()).contains("10:00"));
     }
 
+    /**
+     * Services longer than one grid step get a length-aware busy list. It is cached per duration
+     * (it used to cost four queries per public request) and must be evicted by the same events.
+     */
+    @Test
+    void lengthAwareBusySlots_areCachedPerDurationAndEvictedByABooking() {
+        serviceItemRepository.save(new ServiceItem("Long Cut", new BigDecimal("60.00"), 90, "hair", ""));
+        // Saved straight through the repository, so the cached catalog list must be dropped by hand
+        // (CatalogService mutations evict it themselves).
+        cacheManager.getCache("services").clear();
+        String key = BARBER + "-" + DATE + "-90";
+        String aggregateKey = AppointmentServiceImpl.NO_PREFERENCE_BARBER + "-" + DATE + "-90";
+
+        List<String> before = busySlotsService.getBusySlots(BARBER, DATE.toString(), 90);
+        busySlotsService.getBusySlots(AppointmentServiceImpl.NO_PREFERENCE_BARBER, DATE.toString(), 90);
+        assertNotNull(busySlotsCache.get(key), "the 90-minute list must be cached under its own key");
+        assertNotNull(busySlotsCache.get(aggregateKey));
+        // A different length is a different list, not a hit on the 90-minute entry.
+        assertNull(busySlotsCache.get(BARBER + "-" + DATE + "-120"));
+        // 16:00 + 90 minutes runs past the 17:00 closing time; 09:00 is free.
+        assertTrue(before.contains("16:00"));
+        assertFalse(before.contains("09:00"));
+
+        appointmentService.createAppointment(bookingRequest("10:00"), null);
+
+        assertNull(busySlotsCache.get(key), "a booking must evict the length-aware list");
+        assertNull(busySlotsCache.get(aggregateKey), "...and its First Available aggregate");
+        List<String> after = busySlotsService.getBusySlots(BARBER, DATE.toString(), 90);
+        assertTrue(after.contains("09:00"), "09:00 + 90 minutes now overlaps the 10:00 booking");
+    }
+
     @Test
     void statusChange_evictsBoth() {
         var created = appointmentService.createAppointment(bookingRequest("10:00"), null);

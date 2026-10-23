@@ -1,4 +1,5 @@
 import { getApiErrorMessage, getHttpStatus, getRetryAfterSeconds } from '../src/utils/errors';
+import { ApiContractError } from '../src/api/contracts';
 import {
   EXPIRY_SKEW_MS,
   SESSION_EXPIRED_MESSAGE,
@@ -121,5 +122,17 @@ describe('utils/publicId', () => {
     expect(normalizePublicId('  123E4567-E89B-12D3-A456-426614174000\n')).toBe(
       '123e4567-e89b-12d3-a456-426614174000',
     );
+  });
+});
+
+describe('getApiErrorMessage with contract violations', () => {
+  it('shows the schema message for a request the user must fix', () => {
+    const err = new ApiContractError('POST /api/v1/appointments', 'customerEmail: Invalid email format', ['Invalid email format'], true);
+    expect(getApiErrorMessage(err, 'Failed to submit booking.')).toBe('Invalid email format');
+  });
+
+  it('hides a response contract violation behind the fallback', () => {
+    const err = new ApiContractError('GET /api/v1/catalog', 'x: Required', ['Required'], false);
+    expect(getApiErrorMessage(err, 'Something went wrong.')).toBe('Something went wrong.');
   });
 });

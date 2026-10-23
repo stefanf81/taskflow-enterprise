@@ -22,11 +22,15 @@ class BarberControllerTest {
     @Mock
     private BarberService barberService;
 
+    /** Monday 2026-07-20 08:00 in the shop. */
+    private static final java.time.Clock CLOCK = java.time.Clock.fixed(
+            java.time.Instant.parse("2026-07-20T08:00:00Z"), java.time.ZoneOffset.UTC);
+
     private BarberController barberController;
 
     @BeforeEach
     void setUp() {
-        barberController = new BarberController(barberService);
+        barberController = new BarberController(barberService, CLOCK);
     }
 
     @Test
@@ -85,6 +89,29 @@ class BarberControllerTest {
 
         assertEquals(HttpStatus.CREATED, result.getStatusCode());
         assertNotNull(result.getBody());
+    }
+
+    @Test
+    void addTimeOff_rejectsAStartDateBeforeTheShopsToday() {
+        BarberTimeOffRequest request = new BarberTimeOffRequest(LocalDate.of(2026, 7, 19), LocalDate.of(2026, 7, 23), "Vacation");
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> barberController.addTimeOff(1L, request));
+
+        assertEquals("Start date must be today or in the future.", ex.getMessage());
+        verifyNoInteractions(barberService);
+    }
+
+    /** 22:00 on the 20th in New York is already the 21st in UTC: the shop's today is still the 20th. */
+    @Test
+    void addTimeOff_acceptsTheShopsTodayEvenWhenItIsAlreadyTomorrowInUtc() {
+        BarberController controller = new BarberController(barberService, java.time.Clock.fixed(
+                java.time.Instant.parse("2026-07-21T02:00:00Z"), java.time.ZoneId.of("America/New_York")));
+        BarberTimeOffRequest request = new BarberTimeOffRequest(LocalDate.of(2026, 7, 20), LocalDate.of(2026, 7, 20), "Sick");
+        when(barberService.addTimeOff(eq(1L), any(BarberTimeOffRequest.class)))
+                .thenReturn(new BarberTimeOffResponse(1L, LocalDate.of(2026, 7, 20), LocalDate.of(2026, 7, 20), "Sick"));
+
+        assertEquals(HttpStatus.CREATED, controller.addTimeOff(1L, request).getStatusCode());
     }
 
     @Test

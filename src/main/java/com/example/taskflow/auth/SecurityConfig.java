@@ -166,6 +166,8 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments/public/busy-slots").permitAll()
                 .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/public/busy-slots").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/appointments/public/shop").permitAll()
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/public/shop").permitAll()
                 .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/appointments").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/catalog", "/api/v1/catalog/**").permitAll()

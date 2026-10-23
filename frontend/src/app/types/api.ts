@@ -170,6 +170,10 @@ export interface ServiceItemResponse {
   price: number;
 }
 
+export interface ShopInfoResponse {
+  timeZone?: string;
+}
+
 export interface SseEmitter {
   timeout?: number;
 }

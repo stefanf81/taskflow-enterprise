@@ -22,6 +22,9 @@ export class AppointmentsApi {
   private readonly base = '/api/v1/appointments';
   private readonly customerBase = '/api/v1/customer/appointments';
 
+  /** Public shop facts (time zone), the way the server reads booking dates. */
+  readonly shopInfoUrl = `${this.base}/public/shop`;
+
   /** Resource URL for the admin appointment dashboard (single source of the endpoint). */
   dashboardUrl(statusFilter: string, search: string, page: number, size: number): string {
     let params = new HttpParams().set('page', page.toString()).set('size', size.toString());

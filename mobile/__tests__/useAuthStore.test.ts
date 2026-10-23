@@ -56,6 +56,7 @@ const resetState = () =>
     username: null,
     role: null,
     isOffline: false,
+    storageUnavailable: false,
     error: null,
     sessionNotice: null,
   });
@@ -330,6 +331,34 @@ describe('useAuthStore', () => {
 
       expect(useAuthStore.getState().isOffline).toBe(true);
       expect(useAuthStore.getState().error).toMatch(/Secure credential storage is unavailable/);
+    });
+
+    it('flags unreadable storage so the UI can offer a way out, and clears the flag once it reads again', async () => {
+      (storage.getToken as jest.Mock).mockRejectedValueOnce(new Error('Keystore error'));
+      await useAuthStore.getState().checkAuth();
+      expect(useAuthStore.getState().storageUnavailable).toBe(true);
+
+      (storage.getToken as jest.Mock).mockResolvedValueOnce(null);
+      await useAuthStore.getState().checkAuth();
+      expect(useAuthStore.getState().storageUnavailable).toBe(false);
+      expect(useAuthStore.getState().isOffline).toBe(false);
+    });
+  });
+
+  describe('resetSavedSession', () => {
+    it('drops the saved sign-in and continues as a guest even if the removal fails', async () => {
+      useAuthStore.setState({ isOffline: true, storageUnavailable: true, error: 'x' });
+      (storage.clearSession as jest.Mock).mockRejectedValueOnce(new Error('Keystore error'));
+
+      await useAuthStore.getState().resetSavedSession();
+
+      const state = useAuthStore.getState();
+      expect(storage.clearSession).toHaveBeenCalled();
+      expect(state.isOffline).toBe(false);
+      expect(state.storageUnavailable).toBe(false);
+      expect(state.isAuthenticated).toBe(false);
+      expect(state.isBootstrapping).toBe(false);
+      expect(state.error).toBeNull();
     });
   });
 

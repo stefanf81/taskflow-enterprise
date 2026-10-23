@@ -98,6 +98,7 @@ describe('mobile api client', () => {
         ['post', '/api/v1/auth/register'],
         ['post', '/api/v1/appointments'],
         ['get', '/api/v1/appointments/public/busy-slots'],
+        ['get', '/api/v1/appointments/public/shop'],
         ['put', '/api/v1/appointments/public/cancel/123e4567-e89b-12d3-a456-426614174000'],
         ['get', '/api/v1/catalog'],
         ['get', '/api/v1/barbers'],

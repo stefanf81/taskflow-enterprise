@@ -409,7 +409,8 @@
         "properties": {
           "email": {
             "format": "email",
-            "minLength": 1,
+            "maxLength": 100,
+            "minLength": 0,
             "type": "string"
           },
           "fullName": {
@@ -527,6 +528,14 @@
           },
           "price": {
             "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "ShopInfoResponse": {
+        "properties": {
+          "timeZone": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -980,6 +989,27 @@
           }
         },
         "summary": "Cancel an appointment securely as a guest by verifying the booking email (Guest Access)",
+        "tags": [
+          "Barber Appointment Management System"
+        ]
+      }
+    },
+    "/api/v1/appointments/public/shop": {
+      "get": {
+        "operationId": "getShopInfo",
+        "responses": {
+          "200": {
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopInfoResponse"
+                }
+              }
+            },
+            "description": "Shop time zone returned"
+          }
+        },
+        "summary": "Get the shop's time zone, which decides what counts as past or bookable (Guest Access)",
         "tags": [
           "Barber Appointment Management System"
         ]

@@ -73,7 +73,7 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
 
     // B2: the CustomerStore resource is gated on auth — log in so the initial
     // appointments fetch fires.
-    TestBed.inject(AuthState).isLoggedIn.set(true);
+    TestBed.inject(AuthState).applyRole('ROLE_CUSTOMER', 'customer');
 
     fixture.detectChanges();
 

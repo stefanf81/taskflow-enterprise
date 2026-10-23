@@ -1,6 +1,6 @@
 import { apiClient } from './client';
 import { BarberRating, ReviewRequest } from '../types/api';
-import { parseContract } from './contracts';
+import { parseContract, parseRequest } from './contracts';
 import { barberRatingResponseListSchema, reviewSchema } from '@taskflow/schemas';
 
 export const reviewsApi = {
@@ -14,7 +14,7 @@ export const reviewsApi = {
   },
 
   submitReview: async (publicId: string, data: ReviewRequest): Promise<void> => {
-    const payload = parseContract(reviewSchema, data, 'POST /api/v1/reviews/public');
+    const payload = parseRequest(reviewSchema, data, 'POST /api/v1/reviews/public');
     await apiClient.post(`/api/v1/reviews/public/${encodeURIComponent(publicId)}`, payload);
   },
 };

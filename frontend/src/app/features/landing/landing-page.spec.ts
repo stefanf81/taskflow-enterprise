@@ -33,6 +33,10 @@ describe('LandingPage', () => {
       .match((req) => req.url.includes('/api/v1/reviews/public/barber-ratings'))
       .forEach((req) => req.flush([]));
     httpMock.match((req) => req.url === '/api/v1/barbers').forEach((req) => req.flush([]));
+    // The shop's zone is the machine's own, so the wizard's clock is unchanged in these specs.
+    httpMock
+      .match((r) => r.url.includes('/public/shop'))
+      .forEach((r) => r.flush({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
     await fixture.whenStable();
     fixture.detectChanges();
   });

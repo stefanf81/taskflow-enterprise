@@ -11,6 +11,7 @@ import {
   isSlotInPast,
   msUntilNextLocalMidnight,
   parseTimeToMinutes,
+  shopWallClock,
   toLocalDateString,
 } from './time-utils';
 
@@ -129,6 +130,40 @@ describe('time-utils', () => {
     it('computes the time left until local midnight', () => {
       expect(msUntilNextLocalMidnight(new Date(2026, 9, 12, 23, 0, 0))).toBe(3_600_000);
       expect(msUntilNextLocalMidnight(new Date(2026, 9, 12, 0, 0, 0))).toBe(86_400_000);
+    });
+  });
+
+  describe('shopWallClock', () => {
+    const instant = new Date('2026-10-12T23:30:00Z');
+
+    it('reads the instant on the wall clock of the shop zone (as local components)', () => {
+      const tokyo = shopWallClock('Asia/Tokyo', instant);
+      expect([tokyo.getFullYear(), tokyo.getMonth(), tokyo.getDate()]).toEqual([2026, 9, 13]);
+      expect([tokyo.getHours(), tokyo.getMinutes()]).toEqual([8, 30]);
+
+      const newYork = shopWallClock('America/New_York', instant);
+      expect([newYork.getFullYear(), newYork.getMonth(), newYork.getDate()]).toEqual([2026, 9, 12]);
+      expect([newYork.getHours(), newYork.getMinutes()]).toEqual([19, 30]);
+    });
+
+    it('renders midnight as 00:00, never 24:00', () => {
+      const wall = shopWallClock('UTC', new Date('2026-10-13T00:05:00Z'));
+      expect([wall.getDate(), wall.getHours(), wall.getMinutes()]).toEqual([13, 0, 5]);
+    });
+
+    it('falls back to the visitor clock without a usable zone', () => {
+      expect(shopWallClock(null, instant)).toBe(instant);
+      expect(shopWallClock('', instant)).toBe(instant);
+      expect(shopWallClock('Not/AZone', instant)).toBe(instant);
+    });
+
+    it('makes the local-component helpers decide in the shop zone', () => {
+      // 23:30 UTC on the 12th is already the 13th, 08:30 in Tokyo: the 12th is over, 09:00 is next.
+      const tokyo = shopWallClock('Asia/Tokyo', instant);
+      expect(isBookableDate('2026-10-12', tokyo)).toBe(false);
+      expect(isBookableDate('2026-10-13', tokyo)).toBe(true);
+      expect(isSlotInPast('2026-10-13', '09:00', tokyo)).toBe(false);
+      expect(isSlotInPast('2026-10-13', '08:00', tokyo)).toBe(true);
     });
   });
 });

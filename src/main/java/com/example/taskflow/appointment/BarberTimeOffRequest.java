@@ -1,7 +1,6 @@
 package com.example.taskflow.appointment;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -14,8 +13,9 @@ import java.time.LocalDate;
  * (A1 — mass assignment hardening). The barber is resolved from the path variable.
  */
 public record BarberTimeOffRequest(
+        // "Today or later" is checked by BarberController against the shop clock: a
+        // @FutureOrPresent here would use the JVM time zone and refuse the shop's today.
         @NotNull(message = "Start date is required")
-        @FutureOrPresent(message = "Start date must be today or in the future")
         LocalDate startDate,
 
         @NotNull(message = "End date is required")

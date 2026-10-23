@@ -1,3 +1,5 @@
+import { ApiContractError } from '../api/contracts';
+
 /** Helpers for turning Axios/transport failures into user-visible messages. */
 
 interface HttpErrorShape {
@@ -41,9 +43,16 @@ export function getRetryAfterSeconds(err: unknown, now: number = Date.now()): nu
  * - otherwise the server `{ message }` when provided (booking rule violations,
  *   409 conflicts, 400 unknown barber, ...)
  * - 503 without a body: a "temporarily unavailable" hint
+ * - a request the schemas rejected before sending: the schema's own message
+ *   ("Invalid email format"); a response that broke the contract is not the user's
+ *   business, so it gets `fallback` instead of "Contract violation for GET ..."
  * - otherwise the Error message, or `fallback`
  */
 export function getApiErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiContractError) {
+    return (err.userFacing ? err.issueMessages[0] : undefined) || fallback;
+  }
+
   const http = asHttpError(err);
   const status = http?.response?.status;
 
