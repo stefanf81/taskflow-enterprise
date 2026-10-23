@@ -119,6 +119,11 @@ jobs:
               - gradle/**
 
             workflows:
+              - 'verify.sh'
+              - 'start-docker.sh'
+              - 'stop-docker.sh'
+              - 'scripts/check-verification-ports.cjs'
+              - 'scripts/verify.test.cjs'
               - '.github/workflows/**'
               - '.github/actions/**'
               - '.github/scripts/**'
@@ -263,6 +268,15 @@ jobs:
 
       - name: Test SARIF converters
         run: python3 -m unittest discover -s scripts -p 'test_*sarif.py' -v
+
+      - name: Set up Node.js for verification script tests
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Test verification orchestration without Docker
+        run: node --test scripts/verify.test.cjs
 
       - name: Lint workflows
         run: |

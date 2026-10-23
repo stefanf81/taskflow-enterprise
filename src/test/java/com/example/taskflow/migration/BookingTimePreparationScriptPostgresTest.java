@@ -58,11 +58,19 @@ class BookingTimePreparationScriptPostgresTest {
     private static void legacyRow(Connection c, String name, String barber, String date, String time, String status)
             throws SQLException {
         // V1 schema: booking_time is VARCHAR; the legacy unique index also contains status
-        exec(c, "INSERT INTO appointments (customer_name, customer_email, customer_phone, barber_name, "
-                + "booking_date, booking_time, service_type, status, public_id, created_at, updated_at) VALUES ('"
-                + name + "', '" + name.replace(' ', '.') + "@x.test', '1', '" + barber + "', DATE '" + date + "', '"
-                + time + "', 'Classic Haircut', '" + status + "', '" + java.util.UUID.randomUUID()
-                + "', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
+        try (var ps = c.prepareStatement("INSERT INTO appointments (customer_name, customer_email, customer_phone, "
+                + "barber_name, booking_date, booking_time, service_type, status, public_id, created_at, updated_at) "
+                + "VALUES (?, ?, '1', ?, CAST(? AS DATE), ?, 'Classic Haircut', ?, ?, "
+                + "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")) {
+            ps.setString(1, name);
+            ps.setString(2, name.replace(' ', '.') + "@x.test");
+            ps.setString(3, barber);
+            ps.setString(4, date);
+            ps.setString(5, time);
+            ps.setString(6, status);
+            ps.setString(7, java.util.UUID.randomUUID().toString());
+            ps.executeUpdate();
+        }
     }
 
     private Map<String, String> statuses(Connection c) throws SQLException {
@@ -216,6 +224,17 @@ class BookingTimePreparationScriptPostgresTest {
             try (Connection c = connect(database)) {
                 assertEquals("PENDING", statuses(c).get("p2"));
                 assertEquals("9:00", times(c).get("p1"));
+            }
+        });
+    }
+
+    @Test
+    void legacyFixturePreservesQuotedValues() throws Exception {
+        withLegacyDatabase(database -> {
+            try (Connection c = connect(database)) {
+                legacyRow(c, "O'Connor", "Alex's Chair", MONDAY, "9:00", "PENDING");
+                assertEquals(Map.of("O'Connor", "PENDING"), statuses(c));
+                assertEquals(Map.of("O'Connor", "9:00"), times(c));
             }
         });
     }

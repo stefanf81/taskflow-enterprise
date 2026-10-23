@@ -94,7 +94,9 @@ class FlywayMigrationTest {
         // db/seed (V2/V11 demo data) is part of the dev/test layout these assertions rely on.
         Flyway.configure().dataSource(url, "sa", "")
                 .locations("classpath:db/migration", "classpath:db/seed").load().migrate();
-        return DriverManager.getConnection(url, "sa", "");
+        Properties connectionProperties = new Properties();
+        connectionProperties.setProperty("user", "sa");
+        return DriverManager.getConnection(url, connectionProperties);
     }
 
     private static long scalar(Connection connection, String sql) throws SQLException {

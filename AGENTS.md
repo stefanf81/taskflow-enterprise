@@ -67,7 +67,8 @@ npm run lint:all         # frontend ESLint + strict type check + prettier, and m
 ./gradlew test           # unit + H2-backed integration tests
 ./gradlew testcontainersTest # tagged PostgreSQL integration tests (requires Docker)
 ./gradlew containerConfigTest # container-config guards on Dockerfile/compose/nginx/image workflows (part of check)
-./gradlew check          # test + OWASP dependency check (fails on CVSS >= 7)
+./gradlew check          # H2 tests, coverage, container-config guards and SpotBugs
+./gradlew dependencyCheckAnalyze # explicit OWASP scan (fails on CVSS >= 7)
 ./gradlew bootJar        # build production JAR
 ./gradlew bootRun        # run backend locally (uses H2 by default)
 ```
@@ -114,7 +115,9 @@ To maintain absolute data privacy, cost efficiency, and low-latency development 
 ```bash
 ./start-docker.sh        # docker compose up (db → backend → frontend, health-checked)
 ./stop-docker.sh         # docker compose down
-./verify.sh              # full-stack quality check (auto-starts Docker if needed, cleans up on exit)
+./verify.sh              # full-stack verification; requires no existing stack, builds fresh, cleans up
+./verify.sh --quick      # static/unit/coverage checks; no PostgreSQL or E2E/Docker startup
+node --test scripts/verify.test.cjs # stubbed verification lifecycle regression tests
 ```
 
 ### Security
@@ -177,7 +180,9 @@ Security scans (filesystem lints, container image vulnerability scans, and DAST 
 - `./gradlew test` runs the Docker-independent H2 test suite. Use
   `./gradlew testcontainersTest` for the tagged PostgreSQL/Testcontainers suite;
   that task requires Docker.
-- `./gradlew check` includes OWASP dependency check — build will fail if any dependency has CVSS >= 7.
+- Full `./verify.sh` also requires `psql` on `PATH` for the migration-preparation script tests. Homebrew's `libpq` is keg-only: use `PATH="$(brew --prefix libpq)/bin:$PATH" ./verify.sh` after installing it.
+- On macOS Rancher Desktop (`unix://…/.rd/docker.sock`), `verify.sh` sets `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock` for Ryuk unless already explicitly set. Direct Gradle invocations need that environment override too; do not disable Ryuk or change the host Docker endpoint to fix the VM mount.
+- `./gradlew check` does not run OWASP dependency checking. Run `./gradlew dependencyCheckAnalyze` explicitly when needed (fails on CVSS >= 7).
 - Container-config guards (`@Tag("container-config")`: `ContainerImageBenchmarkTest`, `GlibcTuningBenchmarkTest`, `ContainerConfigGuardTest`) are excluded from `test` and run in `containerConfigTest`, which declares the files they read as inputs. A new guard that reads another file must add it to that task's `inputs.files` (and, if it is a workflow, to CI's `docker_backend` filter).
 - The `.env` file (from `.env.example`) is required by docker-compose and is git-ignored — copy `.env.example` to `.env` and adjust as needed. Change default passwords before production use.
 - Frontend `dist/` and `node_modules/` are gitignored. Do not commit build artifacts.

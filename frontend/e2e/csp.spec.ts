@@ -185,6 +185,10 @@ test.describe('Content-Security-Policy (nginx image)', () => {
     const shellHtml = await shell.text();
     expect(shellHtml).toContain('<body ngcm');
 
+    for (const html of [landingHtml, shellHtml]) {
+      expect(html).not.toMatch(/data-beasties-media|media="print"[^>]*onload=/);
+    }
+
     const csp = landing.headers()['content-security-policy'] ?? '';
     expect(shell.headers()['content-security-policy']).toBe(csp);
     const landingHashes = inlineScriptHashes(landingHtml);

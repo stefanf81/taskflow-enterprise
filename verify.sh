@@ -1,119 +1,194 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Color Codes
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
 
-# Cleanup hook configuration
-AUTO_STOP_DOCKER="${AUTO_STOP_DOCKER:-false}"
-STARTED_DOCKER=false
+usage() {
+  cat <<'EOF'
+Usage: ./verify.sh [--quick] [--stop-docker] [--help]
 
-# The Playwright suite shares one client IP; its auth calls (me/csrf/login/
-# register/logout) would exhaust the production 20/min auth bucket mid-run.
-# Raise the bucket for this local verification stack only.
-export APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE="${APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE:-200}"
+Default: lint, baseline/type checks, web/mobile coverage, backend check,
+PostgreSQL tests, a fresh Docker build, and Playwright through nginx.
+--quick        Skip PostgreSQL tests, Docker startup and Playwright.
+--stop-docker  Compatibility flag: owned containers are always stopped.
+--help         Show this help.
 
+No source files are formatted or regenerated. Existing Compose containers
+(even stopped ones) and occupied Compose ports are rejected, not taken over.
+To fix formatting explicitly: npm --prefix frontend run format
+Named volumes are preserved; E2E tests may change their application data.
+The OpenAPI baseline is validated locally; live-backend drift remains a CI check.
+EOF
+}
+
+QUICK=false
 for arg in "$@"; do
-  if [ "$arg" == "--stop-docker" ]; then
-    AUTO_STOP_DOCKER=true
-  fi
+  case "$arg" in
+    --quick) QUICK=true ;;
+    --stop-docker) ;; # Kept for existing callers; never authorizes taking over a stack.
+    --help|-h) usage; exit 0 ;;
+    *) printf 'Unknown option: %s\n' "$arg" >&2; usage >&2; exit 2 ;;
+  esac
 done
+
+GREEN='' RED='' NC=''
+if [ -t 1 ] && [ -z "${NO_COLOR+x}" ]; then
+  GREEN=$'\033[0;32m' RED=$'\033[0;31m' NC=$'\033[0m'
+fi
+
+OWN_STACK=false
+LOCK_HELD=false
+ACTIVE_PID=''
+START_TIME=$SECONDS
+CURRENT_STEP='preflight'
+LOCK_DIR="${TMPDIR:-/tmp}/taskflow-verify-$(printf '%s' "$ROOT" | cksum | awk '{print $1}').lock"
+
+# Give each asynchronous command its own process group. Signals can then stop
+# npm/Gradle/startup descendants as well as their immediate wrapper process.
+set -m
+interrupt() {
+  trap '' INT TERM
+  if [ -n "$ACTIVE_PID" ]; then
+    kill -TERM -- "-$ACTIVE_PID" 2>/dev/null || true
+    wait "$ACTIVE_PID" 2>/dev/null || true
+    ACTIVE_PID=''
+  fi
+  exit "$1"
+}
 
 cleanup() {
-  if [ "$STARTED_DOCKER" = true ] || [ "$AUTO_STOP_DOCKER" = true ]; then
-    echo "🔌 Post-verification cleanup: stopping Docker containers..."
-    ./stop-docker.sh || true
+  local status=$?
+  trap - EXIT
+  trap '' INT TERM
+  if [ "$OWN_STACK" = true ]; then
+    if [ "$status" -ne 0 ]; then
+      docker compose ps >&2 || true
+      docker compose logs --no-color --tail 80 >&2 || true
+    fi
+    printf 'Stopping verification containers (preserving volumes)...\n'
+    if ! ./stop-docker.sh; then
+      printf 'Container cleanup failed; run ./stop-docker.sh manually.\n' >&2
+      if [ "$status" -eq 0 ]; then status=1; CURRENT_STEP='container cleanup'; fi
+    fi
   fi
+  if [ "$LOCK_HELD" = true ]; then rmdir "$LOCK_DIR" || true; fi
+  if [ "$status" -eq 0 ]; then
+    printf '%sRequested checks passed (%ss).%s\n' "$GREEN" "$((SECONDS - START_TIME))" "$NC"
+  else
+    printf '%sVerification failed during %s (exit %s, %ss).%s\n' \
+      "$RED" "$CURRENT_STEP" "$status" "$((SECONDS - START_TIME))" "$NC" >&2
+  fi
+  exit "$status"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'interrupt 130' INT
+trap 'interrupt 143' TERM
 
-echo "Starting Full-Stack Local Quality Verification..."
-
-# 1. Format and check Frontend
-echo "Checking Frontend code formatting..."
-if ! (cd frontend && npx prettier --check .); then
-  echo -e "${RED}Frontend formatting checks failed! Running formatter...${NC}"
-  (cd frontend && npx prettier --write .)
-fi
-
-# 2. Run Frontend Tests
-echo "Running Frontend unit tests..."
-if ! (cd frontend && npm test); then
-  echo -e "${RED}Frontend unit tests failed!${NC}"
-  exit 1
-fi
-
-# 3. Run Backend Tests
-echo "Running Spring Boot backend verification and tests..."
-if ! ./gradlew check test; then
-  echo -e "${RED}Backend build or tests failed!${NC}"
-  exit 1
-fi
-
-# 4. Run E2E Tests through the public Nginx ingress.
-echo "Running Playwright E2E tests..."
-if ! curl -fs --max-time 3 http://localhost:4200/api/v1/catalog > /dev/null 2>&1; then
-  echo "Backend is not running — starting full application stack via ./start-docker.sh..."
-  ./start-docker.sh
-  STARTED_DOCKER=true
-fi
-
-echo "Waiting for the Nginx API ingress to become ready..."
-for attempt in {1..30}; do
-  if curl -fs --max-time 3 http://localhost:4200/api/v1/catalog > /dev/null 2>&1; then
-    break
+run_step() {
+  CURRENT_STEP=$1
+  shift
+  local started=$SECONDS status=0
+  printf '\n==> %s\n' "$CURRENT_STEP"
+  "$@" &
+  ACTIVE_PID=$!
+  wait "$ACTIVE_PID" || status=$?
+  ACTIVE_PID=''
+  if [ "$status" -ne 0 ]; then
+    if [ "$CURRENT_STEP" = 'workspace lint, types and formatting' ]; then
+      printf 'For formatting failures, run explicitly: npm --prefix frontend run format\n' >&2
+    fi
+    return "$status"
   fi
-  if [ "$attempt" -eq 30 ]; then
-    echo -e "${RED}Nginx API ingress did not become ready!${NC}"
+  printf 'PASS: %s (%ss)\n' "$CURRENT_STEP" "$((SECONDS - started))"
+}
+
+for command in node npm java; do
+  if ! command -v "$command" >/dev/null 2>&1; then
+    printf 'Missing prerequisite: %s\n' "$command" >&2
     exit 1
   fi
-  sleep 1
 done
-
-# The strict Nginx CSP (`script-src 'self'`) blocks inline event handlers.
-# Angular's inlineCritical optimization serves the stylesheet as
-# `media="print" onload="this.media='all'"`, so that CSP leaves the page
-# unstyled. Fail fast if the served bundle shipped that pattern.
-if ! INDEX_HTML="$(curl -fs --max-time 5 http://localhost:4200/ 2>/dev/null)"; then
-  echo -e "${RED}Could not fetch http://localhost:4200/ to verify the served bundle!${NC}"
+if [ ! -x ./gradlew ] || [ ! -d frontend/node_modules ] || [ ! -d mobile/node_modules ]; then
+  printf 'Install frontend/mobile dependencies and ensure ./gradlew is executable first.\n' >&2
   exit 1
 fi
-
-if printf '%s' "$INDEX_HTML" | grep -qE 'media="print"[^>]*onload='; then
-  echo -e "${RED}Built index.html uses the CSP-blocked inline onload async-CSS trick (keep optimization.styles.inlineCritical=false)!${NC}"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  printf 'Another verification may be running. If not, remove the stale lock with: rmdir "%s"\n' "$LOCK_DIR" >&2
   exit 1
 fi
+LOCK_HELD=true
 
-# Only the production image serves a hashed bundle. If a dev server (npm start)
-# already occupies :4200, the Docker stack is skipped above and this check
-# cannot exercise the strict-CSP path — report that instead of passing silently.
-if ! printf '%s' "$INDEX_HTML" | grep -qE 'main-[A-Za-z0-9_-]+\.js'; then
-  echo -e "${YELLOW}Warning: http://localhost:4200/ is not serving a hashed production bundle (dev server?), so the production CSP/CSS check was skipped. Stop 'npm start' and re-run to verify the Docker image.${NC}"
-else
-  # The production Angular build emits an inline SRI import map. Nginx must
-  # authorize its exact bytes with the sha384 source expression generated in
-  # the frontend Dockerfile; without it the import map is blocked and the SRI
-  # metadata for every lazy chunk is silently discarded.
-  IMPORT_MAP_COUNT="$(printf '%s' "$INDEX_HTML" | grep -o '<script type="importmap">[^<]*</script>' | wc -l | tr -d ' ' || true)"
-  if [ "$IMPORT_MAP_COUNT" -ne 1 ]; then
-    echo -e "${RED}Expected exactly one inline import map in the served index.html, found ${IMPORT_MAP_COUNT}!${NC}"
-    exit 1
+assert_fresh_stack() {
+  local containers
+  containers="$(docker compose ps --all --quiet)" || return 1
+  if [ -n "$containers" ]; then
+    printf 'Existing Compose containers found. Stop them with ./stop-docker.sh first.\n' >&2
+    return 1
   fi
-  IMPORT_MAP_JSON="$(printf '%s' "$INDEX_HTML" | grep -o '<script type="importmap">[^<]*</script>' | sed -e 's#^<script type="importmap">##' -e 's#</script>$##' || true)"
-  IMPORT_MAP_HASH="$(printf '%s' "$IMPORT_MAP_JSON" | openssl dgst -sha384 -binary | openssl base64 -A)"
-  CSP_HEADER="$(curl -fsSI --max-time 5 http://localhost:4200/ | tr -d '\r' | grep -i '^content-security-policy:' || true)"
-  if ! printf '%s' "$CSP_HEADER" | grep -q "sha384-${IMPORT_MAP_HASH}"; then
-    echo -e "${RED}Served Content-Security-Policy does not authorize the inline import map (missing sha384-${IMPORT_MAP_HASH})!${NC}"
-    exit 1
+  # Read port bindings from Compose rather than duplicating them in this script.
+  docker compose config --format json | node scripts/check-verification-ports.cjs
+}
+
+if [ "$QUICK" = false ]; then
+  for command in docker curl psql; do
+    command -v "$command" >/dev/null 2>&1 || { printf 'Missing prerequisite: %s\n' "$command" >&2; exit 1; }
+  done
+  [ -f .env ] || { printf 'Create .env from .env.example before full verification.\n' >&2; exit 1; }
+  docker info >/dev/null
+  docker compose version >/dev/null
+  run_step 'fresh-stack preflight' assert_fresh_stack
+fi
+
+run_step 'workspace lint, types and formatting' npm run lint:all
+run_step 'OpenAPI baseline validation (not live drift)' npm run api:spec:check
+run_step 'generated API types' npm run sync:api-types:check
+run_step 'frontend tests and coverage' npm --prefix frontend test -- --watch=false --coverage
+run_step 'mobile security tests and coverage' npm --prefix mobile test -- --ci --coverage --maxWorkers=50%
+run_step 'backend tests, coverage and static checks' ./gradlew check
+
+if [ "$QUICK" = true ]; then
+  printf '\nSKIPPED (--quick): PostgreSQL tests, Docker image build, ingress and Playwright.\n'
+  exit 0
+fi
+
+# Rancher Desktop exposes a macOS client socket at ~/.rd/docker.sock, but Ryuk
+# runs inside the Linux VM and must mount its /var/run/docker.sock instead.
+# Keep the host connection untouched and always respect an explicit override.
+if [ -z "${TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE+x}" ] && [ "$(uname -s)" = Darwin ]; then
+  DOCKER_ENDPOINT="${DOCKER_HOST:-$(docker context inspect --format '{{.Endpoints.docker.Host}}')}"
+  case "$DOCKER_ENDPOINT" in
+    unix://*/.rd/docker.sock)
+      export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
+      printf '\nRancher Desktop: using the VM Docker socket for Testcontainers cleanup.\n'
+      ;;
+  esac
+fi
+run_step 'PostgreSQL parity tests' ./gradlew testcontainersTest
+# Recheck after the tests: never silently adopt a stack started in the meantime.
+run_step 'fresh-stack ownership check' assert_fresh_stack
+export APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE="${APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE:-200}"
+# Set ownership before startup so even a partially failed Compose up is cleaned.
+OWN_STACK=true
+run_step 'fresh application build and startup' ./start-docker.sh
+
+wait_for_ingress() {
+  local timeout="${VERIFY_READY_TIMEOUT_SECONDS:-120}"
+  if ! [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || [ "${#timeout}" -gt 4 ] || [ "$timeout" -gt 3600 ]; then
+    printf 'VERIFY_READY_TIMEOUT_SECONDS must be an integer from 1 to 3600.\n' >&2
+    return 1
   fi
-fi
-
-if ! (cd frontend && E2E_DOCKER=true npm run e2e); then
-  echo -e "${RED}E2E tests failed!${NC}"
-  exit 1
-fi
-
-echo -e "${GREEN}All checks passed successfully! Safe to commit & push.${NC}"
+  local deadline=$((SECONDS + timeout))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if curl --fail --silent --show-error --max-time 3 http://localhost:4200/ >/dev/null 2>&1 &&
+       curl --fail --silent --show-error --max-time 3 http://localhost:4200/api/v1/catalog >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  printf 'Nginx/API ingress did not become ready within %s seconds.\n' "$timeout" >&2
+  return 1
+}
+run_step 'nginx/API readiness' wait_for_ingress
+# CSP/SRI and both HTML shells are verified independently in e2e/csp.spec.ts.
+run_step 'production-ingress Playwright tests' env E2E_DOCKER=true PLAYWRIGHT_HTML_OPEN=never npm --prefix frontend run e2e

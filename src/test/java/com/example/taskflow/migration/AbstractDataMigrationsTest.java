@@ -76,9 +76,12 @@ abstract class AbstractDataMigrationsTest {
         }
     }
 
-    private static void exec(Connection c, String sql) throws SQLException {
-        try (Statement st = c.createStatement()) {
-            st.execute(sql);
+    private static void exec(Connection c, String sql, Object... args) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            for (int i = 0; i < args.length; i++) {
+                ps.setObject(i + 1, args[i]);
+            }
+            ps.execute();
         }
     }
 
@@ -87,13 +90,13 @@ abstract class AbstractDataMigrationsTest {
     }
 
     private static void insertAppointment(Connection c, String name, String email, String phone, String barber,
-                                          String barberIdExpr, String date, String time, String service,
+                                          String assignedBarber, String date, String time, String service,
                                           String status, String publicId) throws SQLException {
         exec(c, "INSERT INTO appointments (customer_name, customer_email, customer_phone, barber_name, barber_id, "
                 + "booking_date, booking_time, service_type, status, public_id, created_at, updated_at) VALUES ("
-                + "'" + name + "', '" + email + "', '" + phone + "', '" + barber + "', " + barberIdExpr + ", DATE '"
-                + date + "', TIME '" + time + "', '" + service + "', '" + status + "', '" + publicId
-                + "', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
+                + "?, ?, ?, ?, (SELECT id FROM barbers WHERE name = ?), CAST(? AS DATE), CAST(? AS TIME), "
+                + "?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                name, email, phone, barber, assignedBarber, date, time, service, status, publicId);
     }
 
     // ------------------------------------------------------------------ DATA-2 layout
@@ -152,11 +155,11 @@ abstract class AbstractDataMigrationsTest {
 
             // 2. real data created afterwards
             insertAppointment(c, "Real Customer", "real@customer.test", "555-9999", "Alex the Barber",
-                    "(SELECT id FROM barbers WHERE name = 'Alex the Barber')", "2031-05-05", "10:00",
+                    "Alex the Barber", "2031-05-05", "10:00",
                     "Classic Haircut", "APPROVED", "11111111-2222-3333-4444-555555555555");
             // a look-alike: seed e-mail but different phone and name must NOT be treated as seed data
             insertAppointment(c, "Other David", "david@example.com", "555-7777", "Sara the Stylist",
-                    "(SELECT id FROM barbers WHERE name = 'Sara the Stylist')", "2031-05-05", "11:00",
+                    "Sara the Stylist", "2031-05-05", "11:00",
                     "Classic Haircut", "PENDING", "22222222-3333-4444-5555-666666666666");
             exec(c, "INSERT INTO reviews (appointment_id, rating, comment, created_at) VALUES "
                     + "((SELECT id FROM appointments WHERE public_id = '11111111-2222-3333-4444-555555555555'), "
@@ -223,12 +226,12 @@ abstract class AbstractDataMigrationsTest {
                     + "('Unique One', 10.00, 15, 'hair', 'untouched')");
             long dupA = singleLong(c, "SELECT id FROM services WHERE name = 'classic haircut'");
             long dupB = singleLong(c, "SELECT id FROM services WHERE name = 'CLASSIC HAIRCUT'");
-            insertAppointment(c, "A", "a@x.test", "1", "Alex the Barber", "NULL", "2031-05-05", "09:00",
+            insertAppointment(c, "A", "a@x.test", "1", "Alex the Barber", null, "2031-05-05", "09:00",
                     "classic haircut", "PENDING", "aaaaaaaa-0000-0000-0000-000000000001");
-            insertAppointment(c, "B", "b@x.test", "1", "Alex the Barber", "NULL", "2031-05-05", "10:00",
+            insertAppointment(c, "B", "b@x.test", "1", "Alex the Barber", null, "2031-05-05", "10:00",
                     "CLASSIC HAIRCUT", "PENDING", "aaaaaaaa-0000-0000-0000-000000000002");
-            exec(c, "UPDATE appointments SET service_id = " + dupA + " WHERE customer_name = 'A'");
-            exec(c, "UPDATE appointments SET service_id = " + dupB + " WHERE customer_name = 'B'");
+            exec(c, "UPDATE appointments SET service_id = ? WHERE customer_name = 'A'", dupA);
+            exec(c, "UPDATE appointments SET service_id = ? WHERE customer_name = 'B'", dupB);
 
             flyway(url, DEV_MIGRATION).load().migrate();
 
@@ -254,7 +257,7 @@ abstract class AbstractDataMigrationsTest {
         String url = newUrl();
         flyway(url, DEV_MIGRATION).target("31").load().migrate();
         try (Connection c = open(url)) {
-            insertAppointment(c, "NoSvc", "n@x.test", "1", "Alex the Barber", "NULL", "2031-05-05", "09:00",
+            insertAppointment(c, "NoSvc", "n@x.test", "1", "Alex the Barber", null, "2031-05-05", "09:00",
                     "Legacy free text", "PENDING", "bbbbbbbb-0000-0000-0000-000000000001");
             flyway(url, DEV_MIGRATION).load().migrate();
             assertEquals("Legacy free text", singleString(c,
@@ -272,23 +275,23 @@ abstract class AbstractDataMigrationsTest {
         LocalDate past = LocalDate.now().minusDays(30);
         try (Connection c = open(url)) {
             // what V26 leaves behind: DENIED, sentinel name, no barber
-            insertAppointment(c, "Silent Sam", "sam@x.test", "1", SENTINEL, "NULL", future.toString(), "09:30",
+            insertAppointment(c, "Silent Sam", "sam@x.test", "1", SENTINEL, null, future.toString(), "09:30",
                     "Classic Haircut", "DENIED", "cccccccc-0000-0000-0000-000000000001");
             // already notified (an earlier DECLINED notice mentioning that date)
-            insertAppointment(c, "Told Tina", "tina@x.test", "1", SENTINEL, "NULL", future.toString(), "10:30",
+            insertAppointment(c, "Told Tina", "tina@x.test", "1", SENTINEL, null, future.toString(), "10:30",
                     "Classic Haircut", "DENIED", "cccccccc-0000-0000-0000-000000000002");
             exec(c, "INSERT INTO notification_outbox (recipient, type, message, sent_at, status) VALUES "
-                    + "('tina@x.test', 'EMAIL', 'Subject: Appointment DECLINED - on " + future + " ...', "
-                    + "CURRENT_TIMESTAMP, 'SENT')");
+                    + "('tina@x.test', 'EMAIL', ?, CURRENT_TIMESTAMP, 'SENT')",
+                    "Subject: Appointment DECLINED - on " + future + " ...");
             // a past slot: no apology
-            insertAppointment(c, "Old Olga", "olga@x.test", "1", SENTINEL, "NULL", past.toString(), "09:30",
+            insertAppointment(c, "Old Olga", "olga@x.test", "1", SENTINEL, null, past.toString(), "09:30",
                     "Classic Haircut", "DENIED", "cccccccc-0000-0000-0000-000000000003");
             // a normal admin denial of a real barber is not V26's doing
             insertAppointment(c, "Real Rita", "rita@x.test", "1", "Alex the Barber",
-                    "(SELECT id FROM barbers WHERE name = 'Alex the Barber')", future.toString(), "11:30",
+                    "Alex the Barber", future.toString(), "11:30",
                     "Classic Haircut", "DENIED", "cccccccc-0000-0000-0000-000000000004");
             // a sentinel booking that is still active is not denied
-            insertAppointment(c, "Active Al", "al@x.test", "1", SENTINEL, "NULL", future.toString(), "12:30",
+            insertAppointment(c, "Active Al", "al@x.test", "1", SENTINEL, null, future.toString(), "12:30",
                     "Classic Haircut", "PENDING", "cccccccc-0000-0000-0000-000000000005");
         }
 
@@ -380,26 +383,26 @@ abstract class AbstractDataMigrationsTest {
 
             // Slot 10:00: Alex and Sara are busy -> the sentinel booking must go to Marcus.
             insertAppointment(c, "Alex busy", "a1@x.test", "1", "Alex the Barber",
-                    "(SELECT id FROM barbers WHERE name = 'Alex the Barber')", monday, "10:00",
+                    "Alex the Barber", monday, "10:00",
                     "Classic Haircut", "APPROVED", "dddddddd-0000-0000-0000-000000000001");
             insertAppointment(c, "Sara busy", "s1@x.test", "1", "Sara the Stylist",
-                    "(SELECT id FROM barbers WHERE name = 'Sara the Stylist')", monday, "10:00",
+                    "Sara the Stylist", monday, "10:00",
                     "Classic Haircut", "PENDING", "dddddddd-0000-0000-0000-000000000002");
-            insertAppointment(c, "Sentinel one", "n1@x.test", "1", SENTINEL, "NULL", monday, "10:00",
+            insertAppointment(c, "Sentinel one", "n1@x.test", "1", SENTINEL, null, monday, "10:00",
                     "Classic Haircut", "PENDING", "dddddddd-0000-0000-0000-000000000003");
 
             // Slot 11:00: all three barbers busy -> the sentinel booking can only be denied.
             for (String barber : new String[] {"Alex the Barber", "Sara the Stylist", "Marcus Master Blade"}) {
                 insertAppointment(c, barber + " 11", barber.substring(0, 2) + "@x.test", "1", barber,
-                        "(SELECT id FROM barbers WHERE name = '" + barber + "')", monday, "11:00",
+                        barber, monday, "11:00",
                         "Classic Haircut", "APPROVED", "dddddddd-1111-0000-0000-0000000000" + barber.length());
             }
-            insertAppointment(c, "Sentinel two", "n2@x.test", "1", SENTINEL, "NULL", monday, "11:00",
+            insertAppointment(c, "Sentinel two", "n2@x.test", "1", SENTINEL, null, monday, "11:00",
                     "Classic Haircut", "PENDING", "dddddddd-0000-0000-0000-000000000004");
 
             // the index really guards this schema
             assertThrows(SQLException.class, () -> insertAppointment(c, "dup", "d@x.test", "1", "Alex the Barber",
-                    "NULL", monday, "10:00", "Classic Haircut", "PENDING", "dddddddd-0000-0000-0000-000000000009"));
+                    null, monday, "10:00", "Classic Haircut", "PENDING", "dddddddd-0000-0000-0000-000000000009"));
 
             flyway(url, DEV_MIGRATION).target("26").load().migrate();
 
@@ -419,13 +422,42 @@ abstract class AbstractDataMigrationsTest {
     // ------------------------------------------------------------------ V35 end time + overlap constraint
 
     private static void linkService(Connection c, String customerName, String serviceName) throws SQLException {
-        exec(c, "UPDATE appointments SET service_id = (SELECT id FROM services WHERE name = '" + serviceName
-                + "') WHERE customer_name = '" + customerName + "'");
+        exec(c, "UPDATE appointments SET service_id = (SELECT id FROM services WHERE name = ?) "
+                + "WHERE customer_name = ?", serviceName, customerName);
     }
 
     private static String endTimeOf(Connection c, String customerName) throws SQLException {
-        return singleString(c, "SELECT booking_end_time FROM appointments WHERE customer_name = '"
-                + customerName + "'").substring(0, 8);
+        return singleString(c, "SELECT booking_end_time FROM appointments WHERE customer_name = ?",
+                customerName).substring(0, 8);
+    }
+
+    @Test
+    void fixtureHelpersBindQuotedValuesAndNullableBarberReferences() throws Exception {
+        String url = newUrl();
+        flyway(url, DEV_MIGRATION).target("34").load().migrate();
+        String customer = "O'Connor";
+        String service = "O'Brien's Cut";
+        try (Connection c = open(url)) {
+            exec(c, "INSERT INTO services (name, price, duration_minutes, category) VALUES (?, 25, 30, 'hair')",
+                    service);
+            insertAppointment(c, customer, "o'connor@x.test", "1'2", "Alex the Barber", "Alex the Barber",
+                    "2031-05-05", "09:00", service, "PENDING", "eeeeeeee-1111-0000-0000-000000000001");
+            insertAppointment(c, "' OR '1'='1", "literal@x.test", "1", "Alex the Barber", null,
+                    "2031-05-05", "10:00", "Free text", "DENIED", "eeeeeeee-1111-0000-0000-000000000002");
+            linkService(c, customer, service);
+
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM appointments WHERE customer_name = ? "
+                    + "AND customer_email = ? AND customer_phone = ? AND barber_id IS NOT NULL AND service_id IS NOT NULL",
+                    customer, "o'connor@x.test", "1'2"));
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM appointments WHERE customer_name = ? AND barber_id IS NULL",
+                    "' OR '1'='1"));
+            assertEquals("PENDING", statusOf(c, customer));
+            assertEquals("DENIED", statusOf(c, "' OR '1'='1"));
+
+            flyway(url, DEV_MIGRATION).load().migrate();
+            assertEquals("09:30:00", endTimeOf(c, customer));
+            assertEquals("11:00:00", endTimeOf(c, "' OR '1'='1"));
+        }
     }
 
     @Test
@@ -434,15 +466,15 @@ abstract class AbstractDataMigrationsTest {
         flyway(url, DEV_MIGRATION).target("34").load().migrate();
         String date = LocalDate.now().plusDays(30).toString();
         try (Connection c = open(url)) {
-            insertAppointment(c, "Exec", "e@x.test", "1", "Alex the Barber", "NULL", date, "09:00",
+            insertAppointment(c, "Exec", "e@x.test", "1", "Alex the Barber", null, date, "09:00",
                     "The Executive Package", "PENDING", "eeeeeeee-0000-0000-0000-000000000001");
             linkService(c, "Exec", "The Executive Package");                                  // 60 min
-            insertAppointment(c, "Fade", "f@x.test", "1", "Alex the Barber", "NULL", date, "13:00",
+            insertAppointment(c, "Fade", "f@x.test", "1", "Alex the Barber", null, date, "13:00",
                     "Modern Skin Fade", "DENIED", "eeeeeeee-0000-0000-0000-000000000002");
             linkService(c, "Fade", "Modern Skin Fade");                                       // 45 min, any status
-            insertAppointment(c, "Legacy", "l@x.test", "1", "Sara the Stylist", "NULL", date, "10:00",
+            insertAppointment(c, "Legacy", "l@x.test", "1", "Sara the Stylist", null, date, "10:00",
                     "Free text", "APPROVED", "eeeeeeee-0000-0000-0000-000000000003");         // no service
-            insertAppointment(c, "Late", "late@x.test", "1", "Sara the Stylist", "NULL", date, "23:30",
+            insertAppointment(c, "Late", "late@x.test", "1", "Sara the Stylist", null, date, "23:30",
                     "Free text", "PENDING", "eeeeeeee-0000-0000-0000-000000000004");          // would wrap
         }
 
@@ -459,7 +491,7 @@ abstract class AbstractDataMigrationsTest {
 
             // NOT NULL and end >= start from now on
             assertThrows(SQLException.class, () -> insertAppointment(c, "NoEnd", "n@x.test", "1",
-                    "Marcus Master Blade", "NULL", date, "09:00", "Free text", "PENDING",
+                    "Marcus Master Blade", null, date, "09:00", "Free text", "PENDING",
                     "eeeeeeee-0000-0000-0000-000000000005"));
             assertThrows(SQLException.class, () -> exec(c, "UPDATE appointments SET booking_end_time = TIME '08:00' "
                     + "WHERE customer_name = 'Exec'"));
@@ -472,7 +504,7 @@ abstract class AbstractDataMigrationsTest {
         flyway(url, DEV_MIGRATION).target("34").load().migrate();
         String future = LocalDate.now().plusDays(30).toString();
         String past = LocalDate.now().minusDays(30).toString();
-        String alex = "(SELECT id FROM barbers WHERE name = 'Alex the Barber')";
+        String alex = "Alex the Barber";
         try (Connection c = open(url)) {
             exec(c, "INSERT INTO services (name, price, duration_minutes, category, description) VALUES "
                     + "('Long Treatment', 50.00, 90, 'hair', 'ninety minutes')");
@@ -498,7 +530,7 @@ abstract class AbstractDataMigrationsTest {
             insertAppointment(c, "Cancelled", "cx@x.test", "1", "Alex the Barber", alex, future, "16:00",
                     "Classic Haircut", "CANCELLED", "ffffffff-0000-0000-0000-000000000006");
             insertAppointment(c, "Sara Same Time", "ss@x.test", "1", "Sara the Stylist",
-                    "(SELECT id FROM barbers WHERE name = 'Sara the Stylist')", future, "10:00",
+                    "Sara the Stylist", future, "10:00",
                     "Classic Haircut", "PENDING", "ffffffff-0000-0000-0000-000000000007");
             // a past overlap is repaired too, but nobody is e-mailed about a slot long gone
             insertAppointment(c, "Past Long", "pl@x.test", "1", "Alex the Barber", alex, past, "10:00",
@@ -546,16 +578,16 @@ abstract class AbstractDataMigrationsTest {
                 SQLException ex = assertThrows(SQLException.class, () -> exec(c,
                         "INSERT INTO appointments (customer_name, customer_email, customer_phone, barber_name, "
                                 + "booking_date, booking_time, booking_end_time, service_type, status, public_id, "
-                                + "created_at, updated_at) VALUES ('Racer', 'r@x.test', '1', 'Alex the Barber', DATE '"
-                                + future + "', TIME '14:00', TIME '15:00', 'Cut', 'PENDING', "
-                                + "'ffffffff-0000-0000-0000-00000000000a', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"));
+                                + "created_at, updated_at) VALUES ('Racer', 'r@x.test', '1', 'Alex the Barber', "
+                                + "CAST(? AS DATE), TIME '14:00', TIME '15:00', 'Cut', 'PENDING', "
+                                + "'ffffffff-0000-0000-0000-00000000000a', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", future));
                 assertEquals("23P01", ex.getSQLState());
             }
         }
     }
 
     private static String statusOf(Connection c, String customerName) throws SQLException {
-        return singleString(c, "SELECT status FROM appointments WHERE customer_name = '" + customerName + "'");
+        return singleString(c, "SELECT status FROM appointments WHERE customer_name = ?", customerName);
     }
 
     private static long singleLong(Connection c, String sql) throws SQLException {
@@ -565,10 +597,15 @@ abstract class AbstractDataMigrationsTest {
         }
     }
 
-    private static String singleString(Connection c, String sql) throws SQLException {
-        try (Statement st = c.createStatement(); ResultSet rs = st.executeQuery(sql)) {
-            assertTrue(rs.next());
-            return rs.getString(1);
+    private static String singleString(Connection c, String sql, Object... args) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            for (int i = 0; i < args.length; i++) {
+                ps.setObject(i + 1, args[i]);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                assertTrue(rs.next());
+                return rs.getString(1);
+            }
         }
     }
 
@@ -587,4 +624,3 @@ abstract class AbstractDataMigrationsTest {
                 "a missing applied migration must not pass validation silently in production");
     }
 }
-
