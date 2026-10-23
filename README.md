@@ -132,7 +132,7 @@ following setup is the shortest supported path after cloning the repository.
   separate Gradle installation is not needed; if no JDK 25 is installed, the
   foojay toolchain resolver downloads one. Local Android Detox builds still use
   JDK 21 (`mobile/e2e/README.md`).
-- Node.js 24.22.1 and npm 12.2.0. Mobile pins Node in `mobile/.nvmrc`; the
+- Node.js 24.22.1 and npm 12.2.1. Mobile pins Node in `mobile/.nvmrc`; the
   frontend declares its npm version in `frontend/package.json`.
 - Docker Desktop with a running daemon and at least 5 GB available to Docker
   for the full Compose stack. Docker Engine 25 or later (Compose 2.20.2 or later):

@@ -2040,9 +2040,9 @@ Renovate keeps the stack current: every pinned backend library, Gradle 9.8.2 and
 
 | Release | Date | Note |
 | :--- | :--- | :--- |
-| Spring Boot 4.1.2 | 2026-10-22 | Its BOM ships Tomcat 11.0.27, Hibernate 7.4.13, Netty 4.2.19, PgJDBC 42.7.14, SLF4J 2.0.20 and Byte Buddy 1.18.15 — exactly our pins, so after the upgrade those six overrides can be dropped. Spring Modulith 2.1.2 the same day. |
+| Spring Boot 4.1.2 | 2026-10-22 | Its BOM ships Tomcat 11.0.27, Hibernate 7.4.13, Netty 4.2.19, PgJDBC 42.7.14, SLF4J 2.0.20 and Byte Buddy 1.18.15 — exactly our pins, so after the upgrade those six overrides can be dropped. Spring Modulith 2.1.2 the same day. *(Done 2026-10-23: Boot 4.1.2 + Modulith 2.1.2 adopted and the six overrides removed; the resolved versions of those families are unchanged. Side effect: the explicit `tomcat-embed-core` declaration had re-added `tomcat-annotations-api`, which `spring-boot-tomcat` excludes; it is no longer on the runtime classpath.)* |
 | `@angular/build`/`cli`/`ssr` 22.2.4 | 2026-10-22 | Its one perf entry (external component stylesheets read once) does not apply: the app has no component stylesheets. |
-| Vite 8.3.5 (override 8.3.3) | 2026-10-21 | Bug fixes only; dev server and Vitest only. |
+| Vite 8.3.5 (override 8.3.3) | 2026-10-21 | Bug fixes only; dev server and Vitest only. *(Adopted 2026-10-23 together with Angular 22.2.4, npm 12.2.1 and `expo-detox-config-plugin` 13.1.0; initial bundle unchanged at 543.99 kB.)* |
 | nginx 1.30.6 in Alpine 3.24 | 2026-10-22 | CVE-2026-93479/15176 (§60); CI picks it up through `APK_BUST`, a local image needs `--build-arg APK_BUST=$(date +%s)`. |
 
 TypeScript 7 stays blocked (`@angular/compiler-cli` 22.2/22.3-next and `typescript-eslint` 8.72 still cap it below 6.1). Java 25 stays rejected per §58 (5–8% lower throughput on this workload). *(Superseded by §62.)*

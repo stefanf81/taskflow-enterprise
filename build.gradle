@@ -50,7 +50,6 @@ dependencyAnalysis {
 				exclude(libs.error.prone.annotations)
 				exclude(libs.micrometer.prometheus)
 				exclude(libs.micrometer.tracing.otel)
-				exclude(libs.netty.codec.dns)
 				exclude(libs.opentelemetry.semconv)
 				exclude(libs.opentelemetry.sender.jdk)
 				exclude(libs.spring.boot.starter.actuator)
@@ -119,16 +118,10 @@ dependencies {
 	implementation platform(libs.prometheus.metrics.bom)
 	implementation platform(libs.jackson2.bom)
 	implementation platform(libs.jackson3.bom)
-	implementation platform(libs.netty.bom)
 	implementation platform(libs.log4j2.bom)
 	constraints {
 		implementation(libs.commons.lang3)
 		implementation(libs.logback.classic)
-		implementation(libs.slf4j.api)
-		implementation(libs.slf4j.jul.to.slf4j)
-		implementation(libs.slf4j.jcl.over.slf4j)
-		testImplementation(libs.byte.buddy)
-		testImplementation(libs.byte.buddy.agent)
 	}
 	// Spring Boot
 	implementation libs.spring.boot.starter.data.jpa
@@ -143,19 +136,11 @@ dependencies {
 	// Log4j API used by Spring Boot's log4j-to-slf4j bridge.
 	implementation libs.log4j2.api
 	implementation libs.log4j2.to.slf4j
-	// Netty — explicit pins so dependency tooling and container scanners resolve
-	// the patched DNS codec version directly.
-	// Originally pinned for GHSA-mfg7-5gfp-c4w3 (DNS Record Decoder memory leak);
-	// bumped to 4.2.19.Final for the latest patch release.
-	implementation libs.netty.codec.dns
-	// Tomcat embed — explicit pins so dependency tooling and container scanners
-	// resolve the patched version directly. Spring Boot 4.1.1 ships the vulnerable
-	// 11.0.24; 11.0.25 fixed CVE-2026-68525, CVE-2026-65905, CVE-2026-65182
-	// (all CRITICAL); the pin tracks the latest patch. Keep core/el/websocket aligned;
-	// drop once Spring Boot BOM ships >= the pinned version (4.1.2 ships 11.0.27).
-	implementation libs.tomcat.embed.core
-	implementation libs.tomcat.embed.el
-	implementation libs.tomcat.embed.websocket
+	// Netty (incl. netty-codec-dns, GHSA-mfg7-5gfp-c4w3), Tomcat embed (CVE-2026-68525,
+	// CVE-2026-65905, CVE-2026-65182), Hibernate, PgJDBC, SLF4J and Byte Buddy are no longer
+	// pinned here: the Spring Boot 4.1.2 BOM manages exactly the versions these overrides
+	// pinned (Netty 4.2.19.Final, Tomcat 11.0.27, Hibernate 7.4.13.Final, PgJDBC 42.7.14,
+	// SLF4J 2.0.20, Byte Buddy 1.18.15). Re-add a pin only if a fix lands before the BOM.
 	// Jackson — explicit pins so dependency tooling sees the correct versions
 	// (BOM property overrides are not resolved consistently by all tooling).
 	//   - jackson-databind 2.x / jackson-core 2.x: fixes 8 CVEs (HIGH: async parser bypass,

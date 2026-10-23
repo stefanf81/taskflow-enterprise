@@ -6,7 +6,7 @@
 
 - Git
 - OpenJDK 25 (the Gradle wrapper supplies Gradle 9.8.2; local Android Detox builds use JDK 21)
-- Node.js 24.21.0 and npm 12.2.0 (mobile/.nvmrc pins the Node version)
+- Node.js 24.21.0 and npm 12.2.1 (mobile/.nvmrc pins the Node version)
 - Docker Desktop with a running daemon for the Docker stack and PostgreSQL tests
 - At least 5 GB available to Docker Desktop for the full Compose stack
 - OpenSSL, needed to create the local Compose RSA key pair
@@ -47,7 +47,7 @@ first keeps the local file dependency aligned with CI and the checked-in lockfil
 npm run sync:api-types:check
 ```
 
-### Backend (Spring Boot 4.1.1)
+### Backend (Spring Boot 4.1.2)
 
 ```bash
 ./gradlew test           # Fast H2-backed tests; Docker is not required
