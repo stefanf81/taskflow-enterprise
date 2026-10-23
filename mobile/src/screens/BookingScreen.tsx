@@ -362,7 +362,14 @@ export const BookingScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView testID="booking-scroll-view" contentContainerStyle={styles.scrollContent}>
+      {/* iOS does not resize the window for the keyboard: inset the content so the step 4 fields
+          and the submit button can be scrolled above it, and let taps through while it is open. */}
+      <ScrollView
+        testID="booking-scroll-view"
+        contentContainerStyle={styles.scrollContent}
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Wizard Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Booking Assistant</Text>

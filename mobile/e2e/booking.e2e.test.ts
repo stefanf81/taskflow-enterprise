@@ -18,6 +18,12 @@ import { device, element, by, expect, waitFor } from 'detox';
 // hero and header assertions fail; a release build never reloads in place.
 const relaunch = () => device.launchApp({ newInstance: true });
 
+// Detox never scrolls by itself, and iOS does not resize the window for the keyboard: the field
+// or button below the focused input sits behind it until the scroll view is moved. iOS also
+// requires 100% visibility before replaceText/tap.
+const scrollIntoView = (matcher: ReturnType<typeof by.id>, scrollViewId: string) =>
+  waitFor(element(matcher)).toBeVisible(100).whileElement(by.id(scrollViewId)).scroll(150, 'down');
+
 describe('Guest Booking Flow', () => {
   beforeEach(relaunch);
 
@@ -120,8 +126,11 @@ describe('Guest Booking Flow', () => {
     await expect(element(by.text('4. Contact Details & Summary'))).toBeVisible();
 
     // Fill in contact details using replaceText for fast, keyboard-layout-agnostic entry
+    await scrollIntoView(by.id('customer-name-input'), 'booking-scroll-view');
     await element(by.id('customer-name-input')).replaceText('John Smith');
+    await scrollIntoView(by.id('customer-email-input'), 'booking-scroll-view');
     await element(by.id('customer-email-input')).replaceText('john@example.com');
+    await scrollIntoView(by.id('customer-phone-input'), 'booking-scroll-view');
     await element(by.id('customer-phone-input')).replaceText('15551234567');
 
     await waitFor(element(by.text('Confirm & Request Booking')))
@@ -150,8 +159,18 @@ describe('Guest Login Flow', () => {
 
   it('signs in as admin and lands on the dashboard', async () => {
     await element(by.text('Sign In / Register')).tap();
+    // On iOS the open keyboard covers the next control, and the scroll view shifts the content
+    // to keep the focused field above it; Detox's visibility check ignores the keyboard. Close it
+    // with Return after each field, as a user would. Android needs none of this (Espresso's
+    // replaceText never opens the keyboard), and the IME action there swallowed the Sign In tap.
+    const closeKeyboard = async (id: string) => {
+      if (device.getPlatform() === 'ios') await element(by.id(id)).tapReturnKey();
+    };
     await element(by.id('login-email-input')).replaceText('admin');
+    await closeKeyboard('login-email-input');
     await element(by.id('login-password-input')).replaceText('admin-password');
+    await closeKeyboard('login-password-input');
+    await scrollIntoView(by.id('login-submit-btn'), 'login-scroll-view');
     await element(by.id('login-submit-btn')).tap();
 
     // The admin tab navigator replaces the guest stack once the backend accepts the login.
