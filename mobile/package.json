@@ -67,6 +67,9 @@
   },
   "private": true,
   "overrides": {
+    "@expo/cli": {
+      "zod": "$zod"
+    },
     "braces": "file:vendor/braces-3.0.3-patched.tgz",
     "node-forge": "file:vendor/node-forge-1.4.0-patched.tgz",
     "postcss": "8.5.31",

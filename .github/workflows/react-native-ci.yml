@@ -939,7 +939,8 @@ jobs:
           HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: |
           brew tap wix/brew
-          brew install applesimutils
+          # A fully qualified install trusts only this formula, not the whole tap.
+          brew install wix/brew/applesimutils
 
       - name: Build Detox framework cache
         run: npx detox build-framework-cache
