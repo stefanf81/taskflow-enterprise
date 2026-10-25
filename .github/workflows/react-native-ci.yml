@@ -726,7 +726,12 @@ jobs:
   # the nightly red without blocking pull requests.
   e2e-backend-jar:
     name: Mobile E2E backend JAR
-    if: github.event_name == 'schedule'
+    # Nightly, and manually dispatchable so a change to the E2E setup itself
+    # (e.g. the Homebrew formula trust fix) can be verified without waiting a
+    # day for the schedule. Still outside the required gates.
+    if: &e2e-gate |
+      github.event_name == 'schedule' ||
+        github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-26.04
     timeout-minutes: 15
 
@@ -766,7 +771,7 @@ jobs:
   android-e2e:
     name: Android Detox E2E
     needs: e2e-backend-jar
-    if: github.event_name == 'schedule'
+    if: *e2e-gate
     runs-on: ubuntu-26.04
     timeout-minutes: 60
     defaults:
@@ -878,7 +883,7 @@ jobs:
   ios-e2e:
     name: iOS Detox E2E
     needs: e2e-backend-jar
-    if: github.event_name == 'schedule'
+    if: *e2e-gate
     runs-on: macos-26
     timeout-minutes: 75
     defaults:
