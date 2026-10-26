@@ -204,9 +204,14 @@
         <div class="lg:col-span-7">
           <!-- Prerendered like the sections above, so first paint is unchanged, but its chunk
                (the wizard + Signal Forms, ~105 kB raw) is fetched on idle instead of riding in
-               main.js, and hydrated on the first interaction — event replay delivers that click
-               once the chunk lands. -->
-          @defer (on idle; hydrate on interaction) {
+               main.js.
+               Hydration is `on idle`, NOT `on interaction`: this block is not self-contained.
+               The lookbook drives it from outside (through LookbookSelectionBus), its service
+               list has to render before anyone touches the wizard, and the guest page's shared
+               `.alert-error` / `.alert-success` banners live in its template. With
+               `hydrate on interaction` none of that happened until the wizard itself was
+               clicked — four appointment-flow e2e tests caught it. -->
+          @defer (on idle; hydrate on idle) {
             <app-booking-wizard />
           } @placeholder {
             <div class="h-[640px]"></div>
