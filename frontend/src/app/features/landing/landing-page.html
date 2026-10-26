@@ -108,6 +108,34 @@
                     {{ service.description }}
                   </p>
                 </div>
+              } @empty {
+                <!-- The catalog is fetched after hydration, so the prerendered page (and the
+                     in-flight state that follows it) would otherwise show an empty panel and
+                     push everything below it down once the rows arrive. These placeholders
+                     reserve that height. Rendered identically on the server and in the browser,
+                     so hydration still matches. -->
+                @if (servicesError()) {
+                  <!-- the error and its retry button are rendered above the list -->
+                } @else if (servicesLoaded()) {
+                  <p class="text-xs text-zinc-400 font-light">
+                    No treatments are on the menu right now.
+                  </p>
+                } @else {
+                  @for (row of skeletonRows; track row) {
+                    <div
+                      aria-hidden="true"
+                      class="border-b border-white/5 pb-4 last:border-none last:pb-0 animate-pulse"
+                    >
+                      <div class="flex justify-between items-center mb-2">
+                        <div class="h-4 w-40 rounded bg-white/10"></div>
+                        <div class="h-4 w-12 rounded bg-white/10"></div>
+                      </div>
+                      <div class="h-2.5 w-28 rounded bg-white/5 mb-2.5"></div>
+                      <div class="h-3 w-full rounded bg-white/5 mb-1.5"></div>
+                      <div class="h-3 w-3/4 rounded bg-white/5"></div>
+                    </div>
+                  }
+                }
               }
             </div>
 
@@ -174,7 +202,15 @@
 
         <!-- RIGHT COLUMN: GUIDED STEPPER WIZARD (7 COLS) -->
         <div class="lg:col-span-7">
-          <app-booking-wizard />
+          <!-- Prerendered like the sections above, so first paint is unchanged, but its chunk
+               (the wizard + Signal Forms, ~105 kB raw) is fetched on idle instead of riding in
+               main.js, and hydrated on the first interaction — event replay delivers that click
+               once the chunk lands. -->
+          @defer (on idle; hydrate on interaction) {
+            <app-booking-wizard />
+          } @placeholder {
+            <div class="h-[640px]"></div>
+          }
         </div>
       </div>
 

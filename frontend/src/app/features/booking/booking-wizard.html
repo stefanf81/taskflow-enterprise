@@ -210,6 +210,31 @@
               {{ service.description }}
             </span>
           </button>
+        } @empty {
+          <!-- Same reasoning as the grooming menu on the landing page: the catalog lands after
+               hydration, and an empty scroll area would collapse to nothing and then jump to its
+               full height. Once the catalog has answered, an empty list is a real result. -->
+          @if (catalogError()) {
+            <!-- the error and its retry button are rendered above the list -->
+          } @else if (catalogLoaded()) {
+            <p class="text-xs text-zinc-400 font-light py-4 text-center">
+              No treatments match your search.
+            </p>
+          } @else {
+            @for (row of skeletonRows; track row) {
+              <div
+                aria-hidden="true"
+                class="card w-full p-4 border border-white/5 bg-zinc-900/30 animate-pulse"
+              >
+                <div class="flex justify-between items-center">
+                  <div class="h-5 w-44 rounded bg-white/10"></div>
+                  <div class="h-5 w-14 rounded bg-white/10"></div>
+                </div>
+                <div class="h-2.5 w-28 rounded bg-white/5 mt-1.5"></div>
+                <div class="h-3 w-full rounded bg-white/5 mt-2"></div>
+              </div>
+            }
+          }
         }
       </div>
     </div>

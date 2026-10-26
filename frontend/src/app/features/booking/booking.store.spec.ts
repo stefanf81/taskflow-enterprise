@@ -8,6 +8,7 @@ import { ServiceItem, PublicBarber, BarberRating, AppointmentItem } from '../../
 import { toLocalDateString } from '../../time-utils';
 import { AuthState } from '../../auth.state';
 import { NETWORK_ERROR_MESSAGE } from '../../core/api/extract-api-error';
+import { LookbookSelectionBus } from './lookbook-selection';
 
 /** A bookable (non-Sunday, within 90 days, never today) date for tests that run on the real clock. */
 const FUTURE = (() => {
@@ -204,6 +205,19 @@ describe('BookingStore', () => {
     expect(store.selectedCategory()).toBe('hair');
     expect(store.activeStep()).toBe(2);
     expect(store.successMessage()).toContain('Lookbook Style selected');
+  });
+
+  it('applies a lookbook pick made through the bus before the wizard existed', () => {
+    // The landing page no longer imports this store, so a click can land before the deferred
+    // wizard has mounted. The bus holds it; the store picks it up when it is finally created.
+    expect(store.activeStep()).toBe(1);
+
+    TestBed.inject(LookbookSelectionBus).select('Modern Skin Fade', 'hair');
+    fixture.detectChanges();
+
+    expect(store.bookingService()).toBe('Modern Skin Fade');
+    expect(store.selectedCategory()).toBe('hair');
+    expect(store.activeStep()).toBe(2);
   });
 
   it('selects a stylist and refreshes slot availability', async () => {

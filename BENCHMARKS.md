@@ -2078,7 +2078,7 @@ TypeScript 7 stays blocked (`@angular/compiler-cli` 22.2/22.3-next and `typescri
 
 * **Renovate auto-merge bypasses the image jobs.** Patch/pin/digest updates use GitHub's platform auto-merge, which waits only for the seven required checks. `Build Docker (backend/frontend)` (Trivy gate, prod-image boot, CDS share, graceful shutdown), `Workflow Lint` and `Dockerfile Lint` are not required, so a base-image or action digest PR merges even when the only jobs that test it fail. `docs/ci/overview.md` says pin and digest updates "remain reviewable PRs", which the config contradicts. Options: `platformAutomerge: false` for the `dockerfile`, `docker-compose`, `github-actions` and `custom.regex` managers (Renovate's own auto-merge requires every check, but with branch work only on Mondays the merge then waits a week), or make the image jobs required (a fresh upstream CVE would then block unrelated PRs, which is why they are not). A policy decision.
 * **SHA pins with major-only comments** (`# v6` setup-gradle/dependency-submission, `# v4` paths-filter/login/setup-buildx, `# v7` build-push, `# v1` ccache): Renovate treats every release of that major as a digest update, so minor releases auto-merge under the patch/pin/digest rule. AGENTS.md already asks for full `# vX.Y.Z` comments. The Renovate container image (`renovate_version: "44"`, receives `RENOVATE_TOKEN`) floats on its major and is not tracked; pin `44.x.y@sha256:…` on an uppercase `*_VERSION` variable with a `# renovate:` comment.
-* **Defer the booking wizard on `/`** (`@defer (on idle; on viewport; hydrate on idle)`, `BookingStore` via dynamic `import()` for the lookbook hand-off): measured on a scratch build, initial JS 544.19 → 439.26 kB raw (−19%) and 146.73 → 121.95 kB transfer (−17%); Signal Forms (~76 kB) and `features/booking` (46 kB) leave the critical path while the wizard markup stays prerendered. FCP is unchanged (prerendered); TBT/INP should improve. A code change that needs the Playwright suite.
+* ~~**Defer the booking wizard on `/`**~~ — **applied in §63**, with `hydrate on interaction` rather than `hydrate on idle` and a signal bus (not a dynamic `import()`) for the lookbook hand-off.
 * **`inlineCritical: true`** (+ the 163-byte Beasties loader in the CSP inventory and `e2e/csp.spec.ts`) and **`font-display: optional`** for Inter (README: slow-4G LCP 1,644 ms vs FCP 995 ms is the swap) — both need a measurement and the latter a design call.
 * **`hibernate.criteria.plan_cache_enabled=true`** (Hibernate 7 default `false`, `@since 7.0`): the admin list/search uses Specifications, whose page and count queries are re-translated on every request; §23's plan-cache rationale ("dynamic filters from the JPA Criteria API") does not hold on Hibernate 7. Admin-only traffic; needs an A/B.
 * **Redis modules:** the official `redis:8.x-alpine` image's entrypoint loads every module in `/usr/local/lib/redis/modules` (RediSearch, RedisJSON, RedisBloom, RedisTimeSeries); the app uses strings, Lua, `SET NX`, `PTTL` and pub/sub. An empty tmpfs over that directory stops it; measure `INFO memory`/startup and confirm `MODULE LIST` first (no Docker daemon here).
@@ -2155,3 +2155,43 @@ All 18 runs answered 0 non-2xx. The spread between rounds of the *same* image, `
 **Rollback:** restore that exact previous **application image digest** in the deployment, including its Java 21 runtime, Java 21-built JAR and matching CDS archive. Do **not** change only `JAVA_IMAGE` to Java 21: the new JAR is class-file version 69 (Java 21 accepts at most 65), and the new Dockerfile uses Java-25 AOT flags. A base-only rollback will not start. No database migration was introduced by this upgrade.
 
 **Verification:** the startup and throughput runs above; `./gradlew check bootJar` on Java 25 (587 tests, coverage, SpotBugs); container guards now 14/14, including the legacy-comment regression test. `local` and `prod` targets built with strict `-XX:AOTMode=on` validation; refreshed production arm64 and emulated-amd64 builds scanned as documented above. PostgreSQL integration **38/38**, Docker Playwright **16/16**, local Detox **iOS 9/9 and Android 9/9** against the standalone Java 25.0.5 backend using existing release binaries (not fresh native builds). The temporary iOS test simulator and backend were cleaned up. GitHub workflows were not triggered: changes remain local at the user's request. **Native amd64 throughput and production JRE-risk approval remain outstanding.**
+
+
+## ⚡ 63. Deferring the Booking Wizard and Reserving the Catalog's Space (2026-10-26)
+
+**Goal:** take the two frontend items §61 left open — the eager booking wizard, and (new here) the fact that the prerendered landing page ships an *empty* grooming menu.
+
+**Methodology:** `ng build --configuration production` on this machine, before and after, same commit otherwise. Bytes attributed to source packages by decoding the sourcemap `mappings` VLQs per initial chunk, rather than reading chunk names.
+
+### Where the initial bundle went (before)
+
+| Source | Raw |
+| :--- | ---: |
+| `@angular/core` | 167.1 kB |
+| `@angular/router` | 76.6 kB |
+| `@angular/forms` (Signal Forms) | 59.8 kB |
+| `@angular/common` | 49.6 kB |
+| `zod` (mini) | 25.0 kB |
+| `rxjs` | 22.3 kB |
+| `@angular/platform-browser` | 12.7 kB |
+| application code | ~60 kB |
+
+Framework and libraries were ~76% of the 545 kB; `@angular/cdk` is correctly lazy-only. The lever is therefore what loads eagerly, not what is in the tree.
+
+### Result
+
+| | Before | After |
+| :--- | ---: | ---: |
+| Initial total, raw | 545.53 kB | **440.87 kB (−19.2%)** |
+| Initial total, transfer | 147.05 kB | **122.23 kB (−16.9%)** |
+| `main.js`, raw | 120.23 kB | **20.25 kB (−83%)** |
+| Initial files | 8 | 6 |
+
+* **The wizard is now `@defer (on idle; hydrate on interaction)`.** It stays prerendered, so first paint is byte-identical; only its chunk (the wizard plus Signal Forms) leaves `main.js`, fetched on idle and hydrated on the first click, which event replay delivers. `hydrate on interaction` rather than §61's proposed `hydrate on idle`: the wizard is the page's primary call to action, and idle hydration would pull the chunk's parse cost back into the quiet window for a visitor who never touches it.
+* **The hand-off, not the template, was the blocker.** `landing-page.ts` statically imported `BookingStore` for one lookbook call, and that import alone pulls Signal Forms into the eager bundle no matter what the template defers. Replaced with `LookbookSelectionBus`, a root service holding the pick in a signal. A dynamic `import()` (§61's suggestion) would have worked for the bytes but loses the click: a signal buffers a pick made before the wizard mounts, and `BookingStore` applies it on construction, waiting for the catalog request to settle first so a valid style is not rejected as unknown.
+* **The prerendered page shipped an empty menu.** `@for (service of services())` had no empty branch, so the grooming menu and the wizard's step-1 list were blank in `index.html` until hydration *and* `/api/v1/catalog` both completed — the menu then grew from zero and pushed the hours, products and testimonial blocks down. Placeholder rows now reserve that height. They render only while the catalog has not answered (`ServiceCatalogStore.hasLoaded`, false both while prerendering and while the first request is in flight, so server and browser markup match and hydration is clean); once it has, an empty list shows a real "no treatments" message instead of pulsing forever.
+* **CSP unaffected.** The inline-script inventory of both shells is unchanged in kind and order (`importmap`, `event-contract`, `event-bootstrap`, `json` / `importmap`), so `frontend/Dockerfile`'s `EXPECTED` and `e2e/csp.spec.ts` need no update.
+
+**Not done here:** no service worker (still absent, and still the clearest gap against comparable Angular setups — repeat visits revalidate the shell and refetch the catalog); `inlineCritical` stays off for the Beasties/CSP reason already documented in §61 and `frontend/README.md`.
+
+**Verification:** `npm run lint`, `npm run format:check`, 344 unit tests passing with coverage thresholds met (the landing spec needed its `HttpTestingController` flush turned into a drain loop — the wizard's requests now only exist after its defer block resolves, so flushing once and awaiting `whenStable()` deadlocked; this also cut the suite from 76 s to 6 s by removing seven 10 s hook timeouts). Production build and prerender within budgets, with `index.html` re-checked for the wizard markup and the placeholder rows. Playwright: the a11y suite's landing-page and login-modal steps pass; its admin-dashboard step and the CSP and appointment-flow suites need a backend and the built nginx image, and no Docker daemon was available here — **they have not been run against this change.**

@@ -31,6 +31,7 @@ import { CustomerStore } from '../../customer.store';
 import { ServiceCatalogStore } from '../../service-catalog.store';
 import { PublicBarberStore } from '../../public-barber.store';
 import { ReviewStore } from '../../review.store';
+import { LookbookSelectionBus } from './lookbook-selection';
 
 /** Model shape for the Signal Forms booking wizard. */
 export interface BookingFormModel {
@@ -107,6 +108,7 @@ export class BookingStore {
   // and simply empty), so steps 1 and 2 can say "could not load" with a retry instead of
   // rendering an unexplained blank list.
   readonly catalogError = this.catalogStore.errorMessage;
+  readonly catalogLoaded = this.catalogStore.hasLoaded;
   readonly rosterError = this.publicBarberStore.errorMessage;
 
   // Shared loading / alert state (single source: AppointmentStore).
@@ -288,7 +290,24 @@ export class BookingStore {
   /** Contact details of the signed-in customer, re-applied whenever the form resets. */
   private sessionContact = { customerName: '', customerEmail: '', customerPhone: '' };
 
+  private readonly lookbookSelection = inject(LookbookSelectionBus);
+
   constructor() {
+    // The lookbook lives on the landing page, which no longer imports this store (that static
+    // import pulled Signal Forms and the wizard into the eager main.js). The bus holds the pick
+    // in a signal, so one made before the wizard hydrated is applied here on construction.
+    let lastLookbookSeq = 0;
+    effect(() => {
+      const pick = this.lookbookSelection.pick();
+      if (!pick || pick.seq === lastLookbookSeq) return;
+      // The wizard can now hydrate before the catalog has answered, and selectLookbookStyle
+      // validates the style against it. Wait for the request to settle rather than reject a
+      // style that is about to become valid; a failed catalog still reports "not available".
+      if (this.catalogStore.isLoading()) return;
+      lastLookbookSeq = pick.seq;
+      untracked(() => this.selectLookbookStyle(pick.serviceName, pick.category));
+    });
+
     // The shop's zone arrives after the first render: re-read "now" in it.
     effect(() => {
       this.shopClock.timeZone();
