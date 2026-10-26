@@ -109,6 +109,43 @@ but JDBC and security components are used; this review does **not** certify all
 those paths as unreachable. Oracle's CVE records above were cross-checked
 against the OpenJDK affected-version matrix; they are not scanner detections.
 
+## Java 21 rollback image (recorded 2026-10-26)
+
+The §62 rollback requires the complete previous **application image** digest,
+not just its base: the Java 25 JAR is class-file version 69 (Java 21 accepts at
+most 65) and the Dockerfile uses Java 25 AOT flags, so changing only
+`JAVA_IMAGE` back will not start.
+
+The last backend image published before the Java 25 upgrade (`fd87e8f`) is:
+
+```
+ghcr.io/stefanf81/taskflow-backend@sha256:7a026aae390d96c3a6cfb4eed1639352bd52d1e9a7126f6e422d9b245fe9ec6e
+```
+
+| | |
+| :--- | :--- |
+| Source commit | `0d1a06c24422b626cfdd6a5e98235840257421c0` |
+| Workflow run | [#52, 2026-10-21](https://github.com/stefanf81/taskflow-enterprise/actions/runs/39571487017) (`JAVA_VERSION: 21`) |
+| Tags pushed then | `:0d1a06c24422b626cfdd6a5e98235840257421c0` and `:latest` |
+
+Run #53 (`d7be207`, 2026-10-23) is the first backend image built after the Java
+25 commit, so #52 is the boundary. The immutable commit-SHA tag still addresses
+this digest; `:latest` has since moved to Java 25.
+
+**Still required of the operator**, because neither is visible from this
+repository:
+
+1. **Confirm this is the digest actually deployed.** The GitOps manifests live
+   in the separate `homelab/TF` repository, and the running deployment may pin
+   an older image than the newest Java 21 build. Compare against the cluster
+   (`kubectl get deploy taskflow-backend -o jsonpath='{..image}'`) and record
+   the deployed digest if it differs — that one, not this one, is the rollback
+   target.
+2. **Pin it against retention.** A digest survives only while something
+   references it. Confirm the GHCR package retention policy (and any untagged
+   cleanup) will not prune it, or add a durable tag such as
+   `:rollback-java21`.
+
 ## Operational conclusion
 
 - Keep the current latest-available official base **digest pin**; no new
