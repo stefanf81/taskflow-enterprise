@@ -4,8 +4,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { Router, provideRouter } from '@angular/router';
 import { LandingPage } from './landing-page';
-import { AuthState, SESSION_EXPIRED_MESSAGE } from '../../auth.state';
-import { ServiceCatalogStore } from '../../service-catalog.store';
+import { AuthState, SESSION_EXPIRED_MESSAGE } from '../../core/auth/auth.state';
+import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
 import { DashboardPrefetch } from '../../dashboard-loaders';
 // Imported for its side effect only: the wizard is behind `@defer`, whose dynamic import would
 // otherwise have to be transformed mid-test, taking longer than the settle loop below waits.

@@ -1,14 +1,14 @@
 import { Component, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { AuthState } from '../../auth.state';
+import { AuthState } from '../../core/auth/auth.state';
 import { DashboardPrefetch } from '../../dashboard-loaders';
-import { AppointmentStore } from '../../appointment.store';
-import { ServiceCatalogStore } from '../../service-catalog.store';
-import { AnnouncementBarComponent } from '../../components/announcement-bar/announcement-bar';
-import { AuthModalComponent } from '../../components/auth-modal/auth-modal';
-import { FaqSectionComponent } from '../../components/faq-section/faq-section';
-import { LookbookComponent } from '../../components/lookbook/lookbook';
-import { PostBookingActionsComponent } from '../../components/post-booking-actions/post-booking-actions';
+import { AppointmentStore } from '../../core/appointments/appointment.store';
+import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
+import { AnnouncementBarComponent } from './announcement-bar/announcement-bar';
+import { AuthModalComponent } from './auth-modal/auth-modal';
+import { FaqSectionComponent } from './faq-section/faq-section';
+import { LookbookComponent } from './lookbook/lookbook';
+import { PostBookingActionsComponent } from './post-booking-actions/post-booking-actions';
 import { BookingWizard } from '../booking/booking-wizard';
 import { LookbookSelectionBus } from '../booking/lookbook-selection';
 
@@ -40,14 +40,14 @@ export class LandingPage {
   private readonly router = inject(Router);
   private readonly dashboardPrefetch = inject(DashboardPrefetch);
 
-  readonly isLoggedIn = this.authState.isLoggedIn;
+  protected readonly isLoggedIn = this.authState.isLoggedIn;
   readonly showAdminLoginModal = signal(false);
-  readonly services = this.catalogStore.services;
+  protected readonly services = this.catalogStore.services;
   readonly servicesLoading = this.catalogStore.isLoading;
-  readonly servicesError = this.catalogStore.errorMessage;
-  readonly servicesLoaded = this.catalogStore.hasLoaded;
+  protected readonly servicesError = this.catalogStore.errorMessage;
+  protected readonly servicesLoaded = this.catalogStore.hasLoaded;
   /** Placeholder rows shown until the catalog arrives; the seeded catalog has five services. */
-  readonly skeletonRows = [0, 1, 2, 3, 4];
+  protected readonly skeletonRows = [0, 1, 2, 3, 4];
 
   constructor() {
     // A session that expired elsewhere in the app sends the user here with the
@@ -78,11 +78,11 @@ export class LandingPage {
     this.catalogStore.loadServices();
   }
 
-  selectLookbookStyle(serviceName: string, category: string): void {
+  protected selectLookbookStyle(serviceName: string, category: string): void {
     this.lookbookSelection.select(serviceName, category);
   }
 
-  onAuthLoginSuccess(role: string): void {
+  protected onAuthLoginSuccess(role: string): void {
     this.appointmentStore.showSuccess(
       role === 'ROLE_ADMIN' ? 'Welcome back, Owner!' : 'Welcome back!',
     );

@@ -4,8 +4,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { AdminAppointmentsTab } from './admin-appointments-tab';
-import { AppointmentStore } from '../../appointment.store';
-import { AuthState } from '../../auth.state';
+import { AppointmentStore } from '../../core/appointments/appointment.store';
+import { AuthState } from '../../core/auth/auth.state';
 import { AppointmentsApi } from '../../core/api/appointments-api';
 import { AppointmentDashboardResponse } from '../../types/api';
 

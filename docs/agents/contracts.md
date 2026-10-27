@@ -8,7 +8,7 @@ _Detail moved out of [`AGENTS.md`](../../AGENTS.md); the text is unchanged._
   - `api/openapi.json`: reviewed, canonical OpenAPI contract baseline.
   - `frontend/src/app/types/api.ts` and `mobile/src/types/api.ts`: generated API DTO contracts synchronized from the baseline.
   - `frontend/src/theme/tokens.json` and `mobile/src/theme/tokens.json`: Obsidian & Gold design system tokens.
-  - `frontend/src/app/time-utils.ts` and `mobile/src/utils/time-utils.ts`: Pure 12h/24h time and date utilities.
+  - `frontend/src/app/core/time-utils.ts` and `mobile/src/utils/time-utils.ts`: Pure 12h/24h time and date utilities.
   - `frontend/src/component-map.json` and `mobile/src/component-map.json`: Cross-platform feature component mapping metadata.
 ## Cross-Platform AI Feature Synchronization Workflow
 

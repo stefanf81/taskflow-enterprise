@@ -78,7 +78,7 @@ shared event fanout before relying on real-time updates across replicas.
 │   └── eas.json                  # EAS Build profiles (Android APK/AAB, iOS IPA)
 ├── frontend/src/                 # Web-owned contracts, theme, utilities, and map
 │   ├── app/types/api.ts          # Web API contracts (OpenAPI aligned)
-│   ├── app/time-utils.ts         # Web 12h/24h time formatting and date logic
+│   ├── app/core/time-utils.ts         # Web 12h/24h time formatting and date logic
 │   ├── theme/tokens.json         # Web Obsidian & Gold theme tokens
 │   └── component-map.json        # Cross-platform Web ↔ Mobile feature mapping
 ├── mobile/src/                   # Mobile-owned contracts, theme, utilities, and map

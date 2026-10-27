@@ -64,6 +64,26 @@ export default defineConfig(
     },
   },
   {
+    // core/ is the app-wide layer (API clients, singletons, session). Features depend on it, never
+    // the other way round; lazy feature loading lives in app.routes.ts / dashboard-loaders.ts.
+    files: ['src/app/core/**/*.ts'],
+    ignores: ['**/*.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/features/**'],
+              message:
+                'core/ must not depend on features/; inject an abstraction from core instead.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.html'],
     extends: [...angular.configs.templateRecommended, ...angular.configs.templateAccessibility],
   },

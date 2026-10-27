@@ -1,10 +1,10 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
-import { AppointmentStore } from '../../appointment.store';
-import { isCustomerCancellable, statusLabel } from '../../appointment-status';
-import { CustomerStore } from '../../customer.store';
-import { formatTime12Hour, formatLocalDate } from '../../time-utils';
+import { AppointmentStore } from '../../core/appointments/appointment.store';
+import { isCustomerCancellable, statusLabel } from './appointment-status';
+import { CustomerStore } from '../../core/customer/customer.store';
+import { formatTime12Hour, formatLocalDate } from '../../core/time-utils';
 
 /**
  * Lazy-loaded Customer dashboard (route: /customer). Extracted from the monolithic
@@ -23,31 +23,31 @@ export class CustomerPortal {
   private readonly router = inject(Router);
 
   readonly errorMessage = this.store.errorMessage;
-  readonly successMessage = this.store.successMessage;
+  protected readonly successMessage = this.store.successMessage;
   readonly cancelErrorMessage = this.customerStore.cancelErrorMessage;
-  readonly isLoading = this.customerStore.isLoading;
-  readonly loadErrorMessage = this.customerStore.loadErrorMessage;
-  readonly currentPage = this.customerStore.currentPage;
-  readonly totalPages = this.customerStore.totalPages;
+  protected readonly isLoading = this.customerStore.isLoading;
+  protected readonly loadErrorMessage = this.customerStore.loadErrorMessage;
+  protected readonly currentPage = this.customerStore.currentPage;
+  protected readonly totalPages = this.customerStore.totalPages;
 
-  loadAppointments(): void {
+  protected loadAppointments(): void {
     this.customerStore.loadAppointments();
   }
 
-  nextPage(): void {
+  protected nextPage(): void {
     this.customerStore.nextPage();
   }
 
-  prevPage(): void {
+  protected prevPage(): void {
     this.customerStore.prevPage();
   }
 
-  statusLabel(status: string): string {
+  protected statusLabel(status: string): string {
     return statusLabel(status);
   }
 
   /** Cancelled and denied bookings are final: no Cancel button. */
-  isCancellable(status: string): boolean {
+  protected isCancellable(status: string): boolean {
     return isCustomerCancellable(status);
   }
 
@@ -55,7 +55,7 @@ export class CustomerPortal {
     return formatTime12Hour(time24);
   }
 
-  formatLocalDate(dateStr: string): string {
+  protected formatLocalDate(dateStr: string): string {
     return formatLocalDate(dateStr);
   }
 

@@ -1,7 +1,7 @@
 import { Component, OnInit, inject, DestroyRef } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { AuthState } from './auth.state';
+import { AuthState } from './core/auth/auth.state';
 import { isServerRender } from './core/platform';
 
 /**

@@ -6,9 +6,9 @@ import { provideRouter } from '@angular/router';
 import { CustomerPortal } from './customer-portal';
 import { AppointmentPage } from '../../types/api';
 import { AppointmentsApi } from '../../core/api/appointments-api';
-import { AppointmentStore } from '../../appointment.store';
-import { CustomerStore } from '../../customer.store';
-import { AuthState } from '../../auth.state';
+import { AppointmentStore } from '../../core/appointments/appointment.store';
+import { CustomerStore } from '../../core/customer/customer.store';
+import { AuthState } from '../../core/auth/auth.state';
 
 /**
  * TE1: Component-level QA suite for the Customer dashboard.

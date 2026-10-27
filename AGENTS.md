@@ -77,6 +77,7 @@ CI
 
 Frontend
 - Never read `httpResource().value` directly in a computed or template (it throws in error state); use `safeResourceValue` and gate on `error()`/`hasValue()`.
+- Layout is feature-first: one feature's stores and child components live in `src/app/features/<name>/`; app-wide code and stores shared by several features live in `src/app/core/` (which must not import `features/`). Update `component-map.json` when a file moves (`npm run check:component-map`).
 - Guest endpoints are marked with the `PUBLIC_REQUEST` token, not matched by URL.
 - The `access_token` cookie is HttpOnly and never read by JavaScript; the role lives only in the in-memory `AuthState`.
 - The landing page must not import `BookingStore` (it pulls Signal Forms into `main.js`); use `LookbookSelectionBus`.

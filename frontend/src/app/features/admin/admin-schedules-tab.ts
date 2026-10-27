@@ -1,9 +1,9 @@
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { form, required, FormField } from '@angular/forms/signals';
-import { AppointmentStore } from '../../appointment.store';
-import { BarberStore } from '../../barber.store';
-import { formatLocalDate } from '../../time-utils';
+import { AppointmentStore } from '../../core/appointments/appointment.store';
+import { BarberStore } from './barber.store';
+import { formatLocalDate } from '../../core/time-utils';
 
 interface TimeOffFormModel {
   startDate: string;
@@ -21,21 +21,21 @@ export class AdminSchedulesTab {
   private readonly barberStore = inject(BarberStore);
   private readonly appointmentStore = inject(AppointmentStore);
 
-  readonly barbersList = this.barberStore.barbers;
-  readonly timeOffs = this.barberStore.timeOffs;
-  readonly selectedBarberId = this.barberStore.selectedBarberId;
+  protected readonly barbersList = this.barberStore.barbers;
+  protected readonly timeOffs = this.barberStore.timeOffs;
+  protected readonly selectedBarberId = this.barberStore.selectedBarberId;
   readonly timeOffActionError = this.barberStore.actionErrorMessage;
-  readonly timeOffActionSuccess = this.barberStore.actionSuccessMessage;
-  readonly isSaving = this.barberStore.isSaving;
-  readonly loadError = this.barberStore.errorMessage;
+  protected readonly timeOffActionSuccess = this.barberStore.actionSuccessMessage;
+  protected readonly isSaving = this.barberStore.isSaving;
+  protected readonly loadError = this.barberStore.errorMessage;
 
   readonly timeOffModel = signal<TimeOffFormModel>({ startDate: '', endDate: '', reason: '' });
-  readonly timeOffForm = form(this.timeOffModel, (f) => {
+  protected readonly timeOffForm = form(this.timeOffModel, (f) => {
     required(f.startDate);
     required(f.endDate);
   });
 
-  selectAdminBarber(id: number): void {
+  protected selectAdminBarber(id: number): void {
     this.barberStore.selectBarber(id);
   }
 
@@ -60,13 +60,13 @@ export class AdminSchedulesTab {
     }
   }
 
-  retryLoad(): void {
+  protected retryLoad(): void {
     this.barberStore.loadBarbers();
     const barberId = this.selectedBarberId();
     if (barberId) this.barberStore.loadTimeOffs(barberId);
   }
 
-  formatLocalDate(dateStr: string): string {
+  protected formatLocalDate(dateStr: string): string {
     return formatLocalDate(dateStr);
   }
 }
