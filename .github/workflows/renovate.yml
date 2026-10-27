@@ -50,8 +50,8 @@ env:
   #
   # Pinned to an exact release, not the floating major: this job holds
   # RENOVATE_TOKEN, and on `44` every new 44.x.y arrived as a `digest` update,
-  # which renovate.json automerges. An exact version makes the next release a
-  # `minor`, which requires review.
+  # which renovate.json automerges. An exact version plus the non-automerged
+  # `Renovate image` group in renovate.json makes every update a reviewed PR.
   #
   # NOT named RENOVATE_VERSION: this action forwards env vars matching
   # /^(?:RENOVATE_\w+|LOG_LEVEL|GITHUB_COM_TOKEN|NODE_OPTIONS|...)$/ into the
