@@ -6,7 +6,7 @@ package com.example.taskflow.appointment;
  * customer's e-mail accordingly. Published inside the cancelling transaction, so the
  * notification outbox row commits or rolls back together with the cancellation.
  */
-public record AppointmentCancelledEvent(Appointment appointment, CancelledBy cancelledBy) {
+public record AppointmentCancelledEvent(AppointmentDetails appointment, CancelledBy cancelledBy) {
 
     public enum CancelledBy {
         /** The signed-in customer cancelled their own booking. */

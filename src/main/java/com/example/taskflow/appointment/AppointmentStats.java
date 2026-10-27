@@ -1,5 +1,4 @@
 package com.example.taskflow.appointment;
-
 public record AppointmentStats(
     long total,
     long pending,

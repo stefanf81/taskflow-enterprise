@@ -15,7 +15,7 @@ import java.util.List;
  * to keep that class focused on the security filter chain.
  */
 @Configuration
-public class CorsConfig {
+class CorsConfig {
 
     private final String allowedOrigins;
 

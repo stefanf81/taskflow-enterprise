@@ -35,7 +35,7 @@ import java.time.temporal.ChronoUnit;
  * {@link NotificationRelayScheduler}.
  */
 @Component
-public class NotificationSender {
+class NotificationSender {
 
     private static final Logger logger = LoggerFactory.getLogger(NotificationSender.class);
 

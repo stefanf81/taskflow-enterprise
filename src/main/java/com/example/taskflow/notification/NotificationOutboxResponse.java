@@ -1,8 +1,7 @@
 package com.example.taskflow.notification;
 
 import java.time.LocalDateTime;
-
-public record NotificationOutboxResponse(
+record NotificationOutboxResponse(
     Long id,
     String recipient,
     String type,

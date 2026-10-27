@@ -1,7 +1,7 @@
 package com.example.taskflow.review;
 import com.example.taskflow.review.internal.ReviewRepository;
 
-import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.AppointmentDetails;
 import com.example.taskflow.appointment.AppointmentService;
 import com.example.taskflow.appointment.AppointmentStatus;
 import com.example.taskflow.core.ResourceNotFoundException;
@@ -17,7 +17,7 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 
 @Service
-public class ReviewServiceImpl implements ReviewService {
+class ReviewServiceImpl implements ReviewService {
 
     /** SQL-standard SQLSTATE for a unique-constraint violation (PostgreSQL and H2). */
     private static final String UNIQUE_VIOLATION = "23505";
@@ -46,7 +46,7 @@ public class ReviewServiceImpl implements ReviewService {
         // Resolve the appointment through the appointment module's public API
         // instead of reaching into its internal AppointmentRepository
         // (Spring Modulith module boundary).
-        Appointment appointment = appointmentService.findByPublicId(publicId);
+        AppointmentDetails appointment = appointmentService.findDetailsByPublicId(publicId).orElse(null);
         if (appointment == null) {
             // Do not echo the publicId — that would let an attacker enumerate which
             // IDs exist (information disclosure / enumeration oracle).
@@ -57,14 +57,14 @@ public class ReviewServiceImpl implements ReviewService {
         // appointment, mirroring the public-cancel verification pattern. This
         // prevents anyone holding the public UUID from leaving a review for an
         // appointment they don't own.
-        if (!appointment.getCustomerEmail().equalsIgnoreCase(request.customerEmail().trim())) {
+        if (!appointment.customerEmail().equalsIgnoreCase(request.customerEmail().trim())) {
             throw new IllegalArgumentException("Verification failed: the provided email does not match this booking.");
         }
 
         // Compare against the enum directly for type safety rather than the
         // String view of the status (which would silently miss a typo or a
         // future status renaming caught only at runtime).
-        if (appointment.getStatusEnum() != AppointmentStatus.APPROVED) {
+        if (appointment.status() != AppointmentStatus.APPROVED) {
             throw new IllegalArgumentException("Only completed appointments can be reviewed.");
         }
 
@@ -75,11 +75,11 @@ public class ReviewServiceImpl implements ReviewService {
             throw new IllegalArgumentException("This appointment has not taken place yet and cannot be reviewed.");
         }
 
-        if (reviewRepository.existsByAppointmentId(appointment.getId())) {
+        if (reviewRepository.existsByAppointmentId(appointment.id())) {
             throw new IllegalArgumentException(ALREADY_REVIEWED);
         }
 
-        Review review = new Review(appointment, request.rating(), request.comment());
+        Review review = new Review(appointment.id(), request.rating(), request.comment());
         try {
             reviewRepository.save(review);
         } catch (DataIntegrityViolationException ex) {
@@ -97,13 +97,13 @@ public class ReviewServiceImpl implements ReviewService {
         }
     }
 
-    private boolean hasStarted(Appointment appointment) {
-        if (appointment.getBookingDate() == null || appointment.getBookingTime() == null) {
+    private boolean hasStarted(AppointmentDetails appointment) {
+        if (appointment.bookingDate() == null || appointment.bookingTime() == null) {
             return false;
         }
         try {
             LocalDateTime start = LocalDateTime.of(
-                    appointment.getBookingDate(), LocalTime.parse(appointment.getBookingTime().trim()));
+                    appointment.bookingDate(), LocalTime.parse(appointment.bookingTime().trim()));
             return !start.isAfter(LocalDateTime.now(clock));
         } catch (DateTimeParseException ex) {
             // An unparseable stored time cannot be proven to be in the past.

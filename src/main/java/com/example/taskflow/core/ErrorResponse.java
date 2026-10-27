@@ -2,8 +2,7 @@ package com.example.taskflow.core;
 
 import java.time.Instant;
 import java.util.List;
-
-public record ErrorResponse(
+record ErrorResponse(
     Instant timestamp,
     int status,
     String error,

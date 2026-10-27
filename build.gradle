@@ -167,6 +167,10 @@ dependencies {
 	// and spring-modulith-starter-core only added Moments (an @hourly and a @daily
 	// job publishing events nothing consumes), a module-verification post-processor,
 	// ArchUnit and the annotation processor to the boot JAR.
+	// The module declarations (package-info.java @ApplicationModule, @Modulithic on the application
+	// class) are compile-time metadata only: compileOnly keeps spring-modulith-api out of the boot
+	// JAR, and an annotation that is missing at run time is ignored by the JVM.
+	compileOnly libs.spring.modulith.api
 	// Observability
 	implementation libs.spring.boot.micrometer.tracing.opentelemetry
 	implementation libs.micrometer.prometheus

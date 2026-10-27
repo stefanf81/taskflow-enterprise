@@ -1,9 +1,8 @@
 package com.example.taskflow.notification;
 import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 
-import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.AppointmentDetails;
 import com.example.taskflow.appointment.AppointmentService;
-import com.example.taskflow.appointment.AppointmentStatus;
 import com.example.taskflow.core.LogSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +19,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Component
-public class AppointmentReminderScheduler {
+class AppointmentReminderScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(AppointmentReminderScheduler.class);
 
@@ -89,37 +88,25 @@ public class AppointmentReminderScheduler {
 
     @Transactional
     public void processOne(Long appointmentId) {
-        // A5: re-load the single row with a PESSIMISTIC_WRITE lock inside this
-        // dedicated transaction so the lock is held only for this appointment and
-        // released on commit — not for the whole sweep. Delegated to the
-        // appointment module's public lockForReminder API so this notification
-        // component never touches the appointment module's internal repository
-        // (Spring Modulith boundary).
-        Appointment appointment = appointmentService.lockForReminder(appointmentId).orElse(null);
-        if (appointment == null || Boolean.TRUE.equals(appointment.getReminderSent())) {
-            return;
-        }
-
-        // The id was selected before the lock was taken; the appointment may have been denied,
-        // cancelled or moved in between. Re-check under the lock and skip rather than remind a
-        // customer about a booking that no longer exists.
+        // A5: the appointment module re-loads the single row with a PESSIMISTIC_WRITE lock inside
+        // this dedicated transaction, so the lock is held only for this appointment and released
+        // on commit, not for the whole sweep. It re-checks status, date and reminderSent under
+        // the lock and marks the reminder as sent in the same transaction as the outbox row below.
         LocalDate tomorrow = LocalDate.now(clock).plusDays(1);
-        if (appointment.getStatusEnum() != AppointmentStatus.APPROVED
-                || !tomorrow.equals(appointment.getBookingDate())) {
-            logger.info("Skipping reminder for appointment id={}: status={} date={} no longer qualifies",
-                    appointment.getId(), appointment.getStatus(), appointment.getBookingDate());
+        AppointmentDetails appointment = appointmentService.claimReminder(appointmentId, tomorrow).orElse(null);
+        if (appointment == null) {
             return;
         }
 
-        logger.info("Queueing reminder for appointment id={} on {}", appointment.getId(), appointment.getBookingDate());
+        logger.info("Queueing reminder for appointment id={} on {}", appointment.id(), appointment.bookingDate());
 
         String message = String.format("Hi %s, this is a reminder for your %s appointment with %s tomorrow at %s.",
-                appointment.getCustomerName(), appointment.getServiceType(), appointment.getBarberName(), appointment.getBookingTime());
+                appointment.customerName(), appointment.serviceType(), appointment.barberName(), appointment.bookingTime());
 
         // Enqueue as PENDING: the relay claims PENDING/FAILED rows only, so this is what actually
         // gets the e-mail sent. (It used to be inserted as already-SENT and was never dispatched.)
         NotificationOutbox outbox = new NotificationOutbox(
-                appointment.getCustomerEmail(),
+                appointment.customerEmail(),
                 "EMAIL",
                 message,
                 LocalDateTime.now(clock),
@@ -127,10 +114,5 @@ public class AppointmentReminderScheduler {
         );
 
         notificationOutboxRepository.save(outbox);
-
-        // Mark as handled; this row's PESSIMISTIC_WRITE lock is released when the
-        // transaction for this single appointment commits.
-        appointment.setReminderSent(true);
-        appointmentService.save(appointment);
     }
 }

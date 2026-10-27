@@ -23,7 +23,7 @@ import java.time.ZoneId;
  * Tests can override the bean with a fixed clock.
  */
 @Configuration
-public class ClockConfig {
+class ClockConfig {
 
     @Bean
     public Clock shopClock(@Value("${app.shop.time-zone:UTC}") String timeZone) {

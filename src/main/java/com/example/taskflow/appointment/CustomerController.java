@@ -19,7 +19,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 @Tag(name = "Customer Dashboard", description = "Endpoints for logged-in customers")
 @Validated
 @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
-public class CustomerController {
+class CustomerController {
 
     private final AppointmentService appointmentService;
 

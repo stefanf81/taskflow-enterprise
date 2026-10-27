@@ -3,14 +3,14 @@ package com.example.taskflow.appointment;
 import org.springframework.context.ApplicationEvent;
 
 public class AppointmentStatusChangedEvent extends ApplicationEvent {
-    private final Appointment appointment;
+    private final AppointmentDetails appointment;
 
-    public AppointmentStatusChangedEvent(Object source, Appointment appointment) {
+    public AppointmentStatusChangedEvent(Object source, AppointmentDetails appointment) {
         super(source);
         this.appointment = appointment;
     }
 
-    public Appointment getAppointment() {
+    public AppointmentDetails getAppointment() {
         return appointment;
     }
 }

@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import java.util.List;
 
 @ControllerAdvice
-public class GlobalExceptionHandler {
+class GlobalExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 

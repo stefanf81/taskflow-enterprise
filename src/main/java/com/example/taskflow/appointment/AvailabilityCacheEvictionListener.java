@@ -25,7 +25,7 @@ import java.time.LocalDate;
  * and the partial unique slot index).
  */
 @Component
-public class AvailabilityCacheEvictionListener {
+class AvailabilityCacheEvictionListener {
 
     private static final Logger logger = LoggerFactory.getLogger(AvailabilityCacheEvictionListener.class);
 

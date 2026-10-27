@@ -5,7 +5,7 @@ package com.example.taskflow.auth;
  * bearer token is returned to the mobile app so it can be stored in the native
  * secure store and sent in the Authorization header.
  */
-public record MobileLoginResponse(
+record MobileLoginResponse(
         String accessToken,
         String tokenType,
         long expiresIn,

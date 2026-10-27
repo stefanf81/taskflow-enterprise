@@ -1,6 +1,5 @@
 package com.example.taskflow.review;
 
-import com.example.taskflow.appointment.Appointment;
 import jakarta.persistence.*;
 import org.hibernate.annotations.Cache;
 import org.hibernate.annotations.CacheConcurrencyStrategy;
@@ -15,9 +14,9 @@ public class Review {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "appointment_id", nullable = false, unique = true)
-    private Appointment appointment;
+    /** The reviewed appointment, referenced by id: the appointment module owns that aggregate. */
+    @Column(name = "appointment_id", nullable = false, unique = true)
+    private Long appointmentId;
 
     @Column(nullable = false)
     private Integer rating;
@@ -35,8 +34,8 @@ public class Review {
 
     public Review() {}
 
-    public Review(Appointment appointment, Integer rating, String comment) {
-        this.appointment = appointment;
+    public Review(Long appointmentId, Integer rating, String comment) {
+        this.appointmentId = appointmentId;
         this.rating = rating;
         this.comment = comment;
     }

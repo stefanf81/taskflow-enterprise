@@ -60,7 +60,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <em>revoked</em> token (logout) is observable: {@link TokenRevokedEvent} closes its streams.
  */
 @Service
-public class AppointmentEventStreamService {
+class AppointmentEventStreamService {
 
     private static final Logger logger = LoggerFactory.getLogger(AppointmentEventStreamService.class);
     private static final long STREAM_TIMEOUT_MILLIS = Duration.ofMinutes(30).toMillis();

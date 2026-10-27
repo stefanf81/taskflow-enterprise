@@ -59,6 +59,7 @@ Default dev/test credentials are `admin` / `admin-password`; `.env` (from `.env.
 Backend
 - Flyway only, `ddl-auto=validate` everywhere. Never edit a released migration; there is deliberately no V16.
 - Authorization is deny-by-default: a new endpoint needs an explicit `SecurityConfig` rule, a `HEAD` twin for every `GET`, `@PreAuthorize` if admin-only, and a case in `SecurityAuthorizationIntegrationTest`.
+- Module boundaries are checked by `ModularityTest`: declare a new cross-module dependency in the module's `package-info.java` (`allowedDependencies`), pass other modules `AppointmentDetails`-style snapshots instead of entities, and keep controllers/`*Impl` classes package-private (ADR-022).
 - Inject the `Clock`; never call no-arg `now()`. Raw SQL inserts into `appointments` must supply `booking_end_time`.
 - Never persist the "No Preference" sentinel; resolve it to a real barber inside the booking transaction.
 - Cache TTLs, `Cache-Control` and the `ShallowEtagHeaderFilter` must stay aligned; caches fail open (Redis errors never fail a request).

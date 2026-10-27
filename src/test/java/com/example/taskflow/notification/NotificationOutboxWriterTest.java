@@ -5,6 +5,7 @@ import com.example.taskflow.appointment.Appointment;
 import com.example.taskflow.appointment.AppointmentCancelledEvent;
 import com.example.taskflow.appointment.AppointmentCancelledEvent.CancelledBy;
 import com.example.taskflow.appointment.AppointmentStatusChangedEvent;
+import com.example.taskflow.testsupport.AppointmentDetailsFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,7 +43,7 @@ class NotificationOutboxWriterTest {
         when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
 
         appointment.setStatus("APPROVED");
-        writer.handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, appointment));
+        writer.handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, AppointmentDetailsFixtures.of(appointment)));
 
         ArgumentCaptor<NotificationOutbox> captor = ArgumentCaptor.forClass(NotificationOutbox.class);
         verify(outboxRepository, times(1)).save(captor.capture());
@@ -61,7 +62,7 @@ class NotificationOutboxWriterTest {
 
         appointment.setStatus("DENIED");
         assertThrows(RuntimeException.class, () ->
-                writer.handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, appointment)));
+                writer.handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, AppointmentDetailsFixtures.of(appointment))));
     }
 
     private NotificationOutbox captureSaved() {
@@ -79,7 +80,7 @@ class NotificationOutboxWriterTest {
             reset(outboxRepository);
             when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            writer.handleAppointmentCancelled(new AppointmentCancelledEvent(appointment, actor));
+            writer.handleAppointmentCancelled(new AppointmentCancelledEvent(AppointmentDetailsFixtures.of(appointment), actor));
 
             NotificationOutbox enqueued = captureSaved();
             assertEquals("john@test.com", enqueued.getRecipient());
@@ -95,7 +96,7 @@ class NotificationOutboxWriterTest {
     void barberUnavailableCancellationExplainsWhy() {
         when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        writer.handleAppointmentCancelled(new AppointmentCancelledEvent(appointment, CancelledBy.BARBER_UNAVAILABLE));
+        writer.handleAppointmentCancelled(new AppointmentCancelledEvent(AppointmentDetailsFixtures.of(appointment), CancelledBy.BARBER_UNAVAILABLE));
 
         assertTrue(captureSaved().getMessage().contains("Barber Alex is unavailable on that day"));
     }
@@ -105,7 +106,7 @@ class NotificationOutboxWriterTest {
         when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
         appointment.setBookingTime("10:00:00");
 
-        writer.handleAppointmentCancelled(new AppointmentCancelledEvent(appointment, CancelledBy.GUEST));
+        writer.handleAppointmentCancelled(new AppointmentCancelledEvent(AppointmentDetailsFixtures.of(appointment), CancelledBy.GUEST));
 
         assertTrue(captureSaved().getMessage().contains(" at 10:00 has been cancelled"));
     }
@@ -115,7 +116,7 @@ class NotificationOutboxWriterTest {
         when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
         appointment.setStatus("CANCELLED");
 
-        writer.handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, appointment));
+        writer.handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, AppointmentDetailsFixtures.of(appointment)));
 
         String message = captureSaved().getMessage();
         assertTrue(message.contains("has been cancelled"), message);
@@ -127,6 +128,6 @@ class NotificationOutboxWriterTest {
         when(outboxRepository.save(any(NotificationOutbox.class))).thenThrow(new RuntimeException("db error"));
 
         assertThrows(RuntimeException.class, () ->
-                writer.handleAppointmentCancelled(new AppointmentCancelledEvent(appointment, CancelledBy.ADMIN)));
+                writer.handleAppointmentCancelled(new AppointmentCancelledEvent(AppointmentDetailsFixtures.of(appointment), CancelledBy.ADMIN)));
     }
 }

@@ -5,33 +5,19 @@ import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModules;
 
 /**
- * Spring Modulith verification of the application's modular monolith structure.
- *
- * <p>Replaces flat, hand-rolled cross-module cycle + dependency rules. Modulith
- * derives modules from the package structure of {@link TaskflowApplication}'s
- * subpackages ({@code appointment}, {@code auth}, {@code catalog},
- * {@code notification}, {@code review}, {@code core}) and verifies that:
+ * Spring Modulith verification of the modular monolith. Modules are the direct sub-packages of
+ * {@link TaskflowApplication}'s package ({@code appointment}, {@code auth}, {@code catalog},
+ * {@code notification}, {@code review}, {@code core}); each declares its allowed dependencies in
+ * its {@code package-info.java}. {@code verify()} fails on:
  *
  * <ul>
- *   <li>each module's {@code internal/} subpackage is only accessed from within
- *       that same module — repositories in
- *       {@code com.example.taskflow.X.internal} are not directly referenced by
- *       other modules, forcing cross-module access to go through the module's
- *       public service API (e.g. {@code CatalogService.findServiceByName},
- *       {@code AppointmentService.findByPublicId});</li>
- *   <li>the module dependency graph is free of cycles;</li>
- *   <li>module names, named interfaces, and package-info declarations (when
- *       present) are consistent.</li>
+ *   <li>a dependency cycle between modules;</li>
+ *   <li>a reference into another module's non-API packages (e.g. its {@code internal} repositories);</li>
+ *   <li>a dependency a module did not declare in {@code allowedDependencies}.</li>
  * </ul>
  *
- * <p>The classic ArchUnit rules in {@link ArchitectureTest} (no field injection,
- * no standard streams, no core → feature dependencies) continue to enforce
- * cross-cutting coding standards that Modulith does not cover natively; the two
- * suites complement each other.
- *
- * <p>Auto-generated PlantUML/C4 diagrams of this module structure can be
- * produced by {@code ApplicationModules.of(TaskflowApplication.class)
- * .documenter().writeDocumentation()}.
+ * <p>See ADR-022. {@link ArchitectureTest} keeps the coding-standard rules Modulith does not cover.
+ * Diagrams: {@code ApplicationModules.of(TaskflowApplication.class).documenter().writeDocumentation()}.
  */
 class ModularityTest {
 

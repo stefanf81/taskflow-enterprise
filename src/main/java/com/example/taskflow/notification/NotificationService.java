@@ -12,7 +12,7 @@ import java.util.List;
  * restores the layered architecture.
  */
 @Service
-public class NotificationService {
+class NotificationService {
 
     private final NotificationOutboxRepository repository;
 

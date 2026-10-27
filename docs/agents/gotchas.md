@@ -7,7 +7,7 @@ _Detail moved out of [`AGENTS.md`](../../AGENTS.md); the text is unchanged._
 - **Testcontainers** are used for PostgreSQL integration tests. The tagged
   `testcontainersTest` task requires Docker; the default `test` task excludes
   those tests and runs against H2 without Docker.
-- **ArchUnit** enforces package-level architecture constraints (`src/test/java/com/example/taskflow/architecture/`).
+- **Module boundaries** are enforced by Spring Modulith (`ModularityTest`, ADR-022): each module's `package-info.java` lists `allowedDependencies`, and only a module's public root-package types are its API. A new cross-module call needs the dependency declared there; hand other modules snapshots (`AppointmentDetails`), never the `Appointment` entity; keep controllers, `*Impl` classes and glue package-private. `ArchitectureTest` (ArchUnit) only keeps the coding-standard rules. Each module has an `@ApplicationModuleTest` (`*ModuleTest`) that boots just that module; give it its own uniquely named fixtures, because the in-memory H2 database is shared with other test classes that delete the seed rows.
 ## Gotchas
 
 - `./gradlew test` runs the Docker-independent H2 test suite. Use

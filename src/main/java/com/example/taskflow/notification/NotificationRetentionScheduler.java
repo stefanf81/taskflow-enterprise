@@ -22,7 +22,7 @@ import java.time.LocalDateTime;
  * every day).
  */
 @Component
-public class NotificationRetentionScheduler {
+class NotificationRetentionScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(NotificationRetentionScheduler.class);
 

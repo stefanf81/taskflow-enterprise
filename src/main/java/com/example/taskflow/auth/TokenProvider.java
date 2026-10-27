@@ -12,7 +12,7 @@ import java.time.Instant;
 import java.util.stream.Collectors;
 
 @Component
-public class TokenProvider {
+class TokenProvider {
 
     private final long tokenLifetimeSeconds;
 

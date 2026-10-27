@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 @RestController
 @RequestMapping("/api/v1/reviews")
 @Tag(name = "Client Reviews", description = "Public review submissions and rating aggregates")
-public class ReviewController {
+class ReviewController {
 
     private final ReviewService reviewService;
 

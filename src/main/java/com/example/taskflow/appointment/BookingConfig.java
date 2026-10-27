@@ -6,5 +6,5 @@ import org.springframework.context.annotation.Configuration;
 /** Registers {@link BookingProperties}. */
 @Configuration
 @EnableConfigurationProperties(BookingProperties.class)
-public class BookingConfig {
+class BookingConfig {
 }

@@ -6,7 +6,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 /** Publishes dashboard refresh signals only after the appointment transaction commits. */
 @Component
-public class AppointmentEventStreamListener {
+class AppointmentEventStreamListener {
 
     private final AppointmentEventStreamService eventStreamService;
 

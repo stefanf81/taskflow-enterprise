@@ -35,7 +35,7 @@ class ReviewRatingsIntegrationTest {
                 LocalDate.of(2025, 1, 6), String.format("10:%02d", minute), "Classic Haircut");
         a.setStatus(status);
         a = appointmentRepository.save(a);
-        reviewRepository.save(new Review(a, rating, "r"));
+        reviewRepository.save(new Review(a.getId(), rating, "r"));
     }
 
     @Test

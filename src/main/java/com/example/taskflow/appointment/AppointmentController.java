@@ -31,7 +31,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 @RequestMapping("/api/v1/appointments")
 @Tag(name = "Barber Appointment Management System", description = "Operations for booking and approving appointments")
 @Validated
-public class AppointmentController {
+class AppointmentController {
 
     private final AppointmentService appointmentService;
     private final AppointmentEventStreamService eventStreamService;

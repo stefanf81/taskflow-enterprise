@@ -36,7 +36,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Service
-public class AppointmentServiceImpl implements AppointmentService {
+class AppointmentServiceImpl implements AppointmentService {
 
     private static final Logger logger = LoggerFactory.getLogger(AppointmentServiceImpl.class);
 
@@ -568,7 +568,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         // Publish the status-change event. The notification outbox entry is written
         // by the (separate) notification slice listener so the appointment slice
         // stays decoupled from the notification slice (ArchUnit cycle rule).
-        eventPublisher.publishEvent(new AppointmentStatusChangedEvent(this, savedItem));
+        eventPublisher.publishEvent(new AppointmentStatusChangedEvent(this, AppointmentDetails.of(savedItem)));
         publishAdminEvent(AppointmentAdminEvent.Type.UPDATED, savedItem.getId());
 
         return AppointmentResponse.fromEntity(savedItem);
@@ -658,7 +658,7 @@ public class AppointmentServiceImpl implements AppointmentService {
 
         item.setStatus(AppointmentStatus.CANCELLED);
         Appointment saved = appointmentRepository.save(item);
-        eventPublisher.publishEvent(new AppointmentCancelledEvent(saved, cancelledBy));
+        eventPublisher.publishEvent(new AppointmentCancelledEvent(AppointmentDetails.of(saved), cancelledBy));
         publishAvailabilityChange(
                 AvailabilityChangedEvent.single(saved.getBarberName(), saved.getBookingDate()));
         publishAdminEvent(AppointmentAdminEvent.Type.UPDATED, saved.getId());
@@ -742,8 +742,9 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
-    public Appointment findByPublicId(String publicId) {
-        return appointmentRepository.findByPublicId(publicId);
+    @Transactional(readOnly = true)
+    public Optional<AppointmentDetails> findDetailsByPublicId(String publicId) {
+        return Optional.ofNullable(appointmentRepository.findByPublicId(publicId)).map(AppointmentDetails::of);
     }
 
     private void publishAdminEvent(AppointmentAdminEvent.Type type, Long appointmentId) {
@@ -768,18 +769,24 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public java.util.Optional<Appointment> lockForReminder(Long id) {
-        // Only APPROVED bookings get reminders: one cancelled or declined after the id sweep
-        // (but before this lock) must not be reminded about.
-        return appointmentRepository.findByIdForUpdate(id)
-                .filter(a -> a.getStatusEnum() == AppointmentStatus.APPROVED);
-    }
-
-    @Override
     @Transactional
-    public void save(Appointment appointment) {
+    public Optional<AppointmentDetails> claimReminder(Long id, LocalDate tomorrow) {
+        Appointment appointment = appointmentRepository.findByIdForUpdate(id).orElse(null);
+        if (appointment == null || Boolean.TRUE.equals(appointment.getReminderSent())) {
+            return Optional.empty();
+        }
+        // The id was selected before the lock was taken; the booking may have been denied,
+        // cancelled or moved in between. Re-check under the lock and skip rather than remind a
+        // customer about a booking that no longer exists.
+        if (appointment.getStatusEnum() != AppointmentStatus.APPROVED
+                || !tomorrow.equals(appointment.getBookingDate())) {
+            logger.info("Skipping reminder for appointment id={}: status={} date={} no longer qualifies",
+                    appointment.getId(), appointment.getStatus(), appointment.getBookingDate());
+            return Optional.empty();
+        }
+        appointment.setReminderSent(true);
         appointmentRepository.save(appointment);
+        return Optional.of(AppointmentDetails.of(appointment));
     }
 
     /**

@@ -32,7 +32,7 @@ import java.util.Locale;
 @RestController
 @RequestMapping("/api/v1/auth")
 @Tag(name = "Authentication Portal", description = "Endpoints for user authentication")
-public class AuthController {
+class AuthController {
 
     private final AuthenticationManager authenticationManager;
     private final TokenProvider tokenProvider;

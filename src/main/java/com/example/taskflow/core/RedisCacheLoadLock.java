@@ -19,7 +19,7 @@ import java.util.function.Supplier;
  * off, {@link #tryAcquire} throws immediately and the caller loads without the lease. The template
  * is resolved lazily (first miss), so creating this lock never touches Redis.
  */
-public final class RedisCacheLoadLock implements SingleFlightCacheManager.DistributedLoadLock {
+final class RedisCacheLoadLock implements SingleFlightCacheManager.DistributedLoadLock {
 
     static final String KEY_PREFIX = "lock:";
     public static final Duration DEFAULT_LEASE = Duration.ofSeconds(10);
