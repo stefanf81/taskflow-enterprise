@@ -1,6 +1,6 @@
 package com.example.taskflow.features;
 
-import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.Barber;
 import com.example.taskflow.appointment.internal.BarberRepository;

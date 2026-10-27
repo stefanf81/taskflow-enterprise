@@ -59,6 +59,10 @@
             "$ref": "#/components/schemas/AppointmentStats"
           }
         },
+        "required": [
+          "page",
+          "stats"
+        ],
         "type": "object"
       },
       "AppointmentResponse": {
@@ -104,6 +108,20 @@
             "type": "string"
           }
         },
+        "required": [
+          "barberName",
+          "bookingDate",
+          "bookingTime",
+          "createdAt",
+          "customerEmail",
+          "customerName",
+          "customerPhone",
+          "id",
+          "publicId",
+          "serviceType",
+          "status",
+          "updatedAt"
+        ],
         "type": "object"
       },
       "AppointmentStats": {
@@ -137,6 +155,15 @@
             "type": "integer"
           }
         },
+        "required": [
+          "approved",
+          "approvedRevenue",
+          "denied",
+          "overdue",
+          "pending",
+          "progress",
+          "total"
+        ],
         "type": "object"
       },
       "AppointmentUpdateRequest": {
@@ -167,6 +194,11 @@
             "type": "integer"
           }
         },
+        "required": [
+          "averageRating",
+          "barberName",
+          "reviewCount"
+        ],
         "type": "object"
       },
       "BarberRequest": {
@@ -209,6 +241,10 @@
             "type": "string"
           }
         },
+        "required": [
+          "id",
+          "name"
+        ],
         "type": "object"
       },
       "BarberTimeOffRequest": {
@@ -251,6 +287,11 @@
             "type": "string"
           }
         },
+        "required": [
+          "endDate",
+          "id",
+          "startDate"
+        ],
         "type": "object"
       },
       "CancelRequest": {
@@ -306,6 +347,10 @@
             "type": "string"
           }
         },
+        "required": [
+          "role",
+          "username"
+        ],
         "type": "object"
       },
       "MobileLoginResponse": {
@@ -327,6 +372,13 @@
             "type": "string"
           }
         },
+        "required": [
+          "accessToken",
+          "expiresIn",
+          "role",
+          "tokenType",
+          "username"
+        ],
         "type": "object"
       },
       "NotificationOutboxResponse": {
@@ -356,6 +408,13 @@
             "type": "string"
           }
         },
+        "required": [
+          "id",
+          "message",
+          "recipient",
+          "retryCount",
+          "status"
+        ],
         "type": "object"
       },
       "PagedModelAppointmentResponse": {
@@ -413,6 +472,10 @@
             "type": "string"
           }
         },
+        "required": [
+          "id",
+          "name"
+        ],
         "type": "object"
       },
       "RegisterRequest": {
@@ -454,6 +517,9 @@
             "type": "string"
           }
         },
+        "required": [
+          "message"
+        ],
         "type": "object"
       },
       "ReviewRequest": {
@@ -540,6 +606,13 @@
             "type": "number"
           }
         },
+        "required": [
+          "category",
+          "durationMinutes",
+          "id",
+          "name",
+          "price"
+        ],
         "type": "object"
       },
       "ShopInfoResponse": {
@@ -548,6 +621,9 @@
             "type": "string"
           }
         },
+        "required": [
+          "timeZone"
+        ],
         "type": "object"
       },
       "SseEmitter": {

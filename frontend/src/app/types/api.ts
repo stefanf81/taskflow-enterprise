@@ -171,7 +171,7 @@ export interface ServiceItemResponse {
 }
 
 export interface ShopInfoResponse {
-  timeZone?: string;
+  timeZone: string;
 }
 
 export interface SseEmitter {

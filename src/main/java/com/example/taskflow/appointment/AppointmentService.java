@@ -18,6 +18,13 @@ public interface AppointmentService {
     /** Busy slots for booking {@code serviceType} (null/blank = ignore the service's length). */
     java.util.List<String> getBusySlots(String barberName, String bookingDate, String serviceType);
     void publicCancelAppointment(String publicId, String email);
+    /**
+     * Barber name of every listed appointment that is still APPROVED, keyed by appointment id.
+     * Other modules (review ratings) reference appointments by id and ask here instead of joining
+     * the appointment table themselves.
+     */
+    java.util.Map<Long, String> findApprovedBarberNames(java.util.Collection<Long> appointmentIds);
+
     /** Read-only view of the booking with this public id; empty when none exists. */
     Optional<AppointmentDetails> findDetailsByPublicId(String publicId);
 
@@ -38,8 +45,9 @@ public interface AppointmentService {
      * and not yet reminded, then marks the reminder as sent and returns the booking so the caller
      * can enqueue the e-mail. Empty when there is nothing to remind about.
      *
-     * <p>Joins the caller's transaction, so the {@code reminderSent} flag and the caller's outbox
-     * row commit (or roll back) together and the row lock is held only until that commit.
+     * <p>Requires the caller's transaction ({@code Propagation.MANDATORY}; it throws without one),
+     * so the {@code reminderSent} flag and the caller's outbox row commit (or roll back) together
+     * and the row lock is held only until that commit.
      */
     Optional<AppointmentDetails> claimReminder(Long id, LocalDate tomorrow);
 }

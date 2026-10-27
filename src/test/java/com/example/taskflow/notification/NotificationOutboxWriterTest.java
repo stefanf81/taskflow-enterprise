@@ -1,8 +1,9 @@
 package com.example.taskflow.notification;
 import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 
-import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.AppointmentCancelledEvent;
+import com.example.taskflow.appointment.AppointmentDetails;
 import com.example.taskflow.appointment.AppointmentCancelledEvent.CancelledBy;
 import com.example.taskflow.appointment.AppointmentStatusChangedEvent;
 import com.example.taskflow.testsupport.AppointmentDetailsFixtures;
@@ -121,6 +122,17 @@ class NotificationOutboxWriterTest {
         String message = captureSaved().getMessage();
         assertTrue(message.contains("has been cancelled"), message);
         assertFalse(message.contains("status has been updated"), message);
+    }
+
+    @Test
+    void aSnapshotWithoutStatusIsTreatedAsPendingInsteadOfFailingTheTransaction() {
+        when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
+        AppointmentDetails noStatus = new AppointmentDetails(1L, "pub-1", "John Doe", "john@test.com",
+                "Barber Alex", "Haircut", LocalDate.now(), "10:00", null);
+
+        writer.handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, noStatus));
+
+        assertTrue(captureSaved().getMessage().contains("PENDING"));
     }
 
     @Test

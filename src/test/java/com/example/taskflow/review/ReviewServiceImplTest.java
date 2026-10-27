@@ -1,6 +1,6 @@
 package com.example.taskflow.review;
 
-import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.AppointmentDetails;
 import com.example.taskflow.appointment.AppointmentService;
 import com.example.taskflow.testsupport.AppointmentDetailsFixtures;
@@ -250,6 +250,36 @@ class ReviewServiceImplTest {
         ArgumentCaptor<Review> saved = ArgumentCaptor.forClass(Review.class);
         verify(reviewRepository).save(saved.capture());
         assertTrue(saved.getValue() != null);
+    }
+
+    private static ReviewRepository.AppointmentRating rating(long appointmentId, int value) {
+        return new ReviewRepository.AppointmentRating() {
+            @Override public Long getAppointmentId() { return appointmentId; }
+            @Override public Integer getRating() { return value; }
+        };
+    }
+
+    @Test
+    void barberRatingsCountOnlyReviewsWhoseAppointmentIsStillApproved() {
+        when(reviewRepository.findAllRatings()).thenReturn(List.of(
+                rating(1, 5), rating(2, 3), rating(3, 4), rating(4, 1)));
+        // appointment 4 was denied after its review: the appointment module does not return it
+        when(appointmentService.findApprovedBarberNames(List.of(1L, 2L, 3L, 4L)))
+                .thenReturn(java.util.Map.of(1L, "Sara", 2L, "Alex", 3L, "Alex"));
+
+        List<BarberRatingResponse> ratings = service.getBarberRatings();
+
+        assertEquals(List.of(
+                new BarberRatingResponse("Alex", 3.5, 2L),
+                new BarberRatingResponse("Sara", 5.0, 1L)), ratings);
+    }
+
+    @Test
+    void noReviewsMeansNoRatings() {
+        when(reviewRepository.findAllRatings()).thenReturn(List.of());
+        when(appointmentService.findApprovedBarberNames(List.of())).thenReturn(java.util.Map.of());
+
+        assertTrue(service.getBarberRatings().isEmpty());
     }
 
     // --- rating bounds are enforced by bean validation on the request record ---

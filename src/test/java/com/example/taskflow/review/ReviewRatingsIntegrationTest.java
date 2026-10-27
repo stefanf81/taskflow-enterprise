@@ -1,6 +1,6 @@
 package com.example.taskflow.review;
 
-import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.review.internal.ReviewRepository;
 import org.junit.jupiter.api.BeforeEach;

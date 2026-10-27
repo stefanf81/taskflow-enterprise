@@ -174,15 +174,9 @@ function generateTypesFromSchemas(schemas) {
 // Response DTOs that get a generated contract: the TypeScript response set plus ShopInfoResponse.
 const ZOD_RESPONSE_SCHEMAS = [...RESPONSE_SCHEMAS, 'ShopInfoResponse'].sort();
 
-// Fields the backend leaves out of the JSON when null (Jackson NON_NULL). OpenAPI does not say so
-// (springdoc emits no `required` list for these DTOs), so they are listed here and generated as
-// optional. The hand-written validators read them as "" (omittedAsEmptyString).
-const OMITTED_WHEN_NULL = {
-  BarberResponse: ['email', 'phone'],
-  BarberTimeOffResponse: ['reason'],
-  NotificationOutboxResponse: ['sentAt', 'type'],
-  ServiceItemResponse: ['description'],
-};
+// Which fields can be absent comes from the spec: the backend marks every response record component
+// `required` unless it is annotated @Nullable (OpenApiResponseNullabilityConfig), because Jackson
+// omits null fields from every response.
 
 const lowerFirst = (name) => name.charAt(0).toLowerCase() + name.slice(1);
 const contractName = (schemaName) => `${lowerFirst(schemaName)}Contract`;
@@ -218,12 +212,17 @@ function generateResponseContracts(schemas) {
     blocks.set(name, null); // cycle guard
     const schema = schemas[name];
     const deps = new Set();
-    const omitted = new Set(OMITTED_WHEN_NULL[name] || []);
+    if (!Array.isArray(schema.required)) {
+      throw new Error(
+        `Response schema ${name} has no "required" list. Make it a record (or mark its fields with ` +
+          '@Schema(requiredMode = REQUIRED)) so the spec says which fields are always present.',
+      );
+    }
+    const required = new Set(schema.required);
     const fields = Object.entries(schema.properties || {}).map(([key, prop]) => {
       let expression = zodExpression(prop, used, deps);
-      // Every response property is present unless it is listed as omitted-when-null, or the
-      // schema itself marks it optional (a `required` list that does not include it).
-      const optionalField = omitted.has(key) || (schema.required && !schema.required.includes(key));
+      // Jackson omits null fields, so a property the spec does not list as required may be absent.
+      const optionalField = !required.has(key);
       if (optionalField) { used.add('optional'); expression = `optional(${expression})`; }
       const field = /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
       return `  ${field}: ${expression},`;

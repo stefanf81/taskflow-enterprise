@@ -1,4 +1,5 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.internal.Appointment;
 
 import java.time.LocalDate;
 
@@ -18,6 +19,13 @@ public record AppointmentDetails(
         String bookingTime,
         AppointmentStatus status) {
 
+    /** A booking without a status is PENDING, as {@code Appointment.getStatus()} reports it. */
+    public AppointmentDetails {
+        if (status == null) {
+            status = AppointmentStatus.PENDING;
+        }
+    }
+
     static AppointmentDetails of(Appointment appointment) {
         return new AppointmentDetails(
                 appointment.getId(),
@@ -28,6 +36,6 @@ public record AppointmentDetails(
                 appointment.getServiceType(),
                 appointment.getBookingDate(),
                 appointment.getBookingTime(),
-                appointment.getStatusEnum() != null ? appointment.getStatusEnum() : AppointmentStatus.PENDING);
+                appointment.getStatusEnum());
     }
 }

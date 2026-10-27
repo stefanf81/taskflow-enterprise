@@ -1,5 +1,7 @@
 package com.example.taskflow.appointment;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Output DTO for barber listing endpoints. Used in two ways:
  * <ol>
@@ -13,7 +15,7 @@ package com.example.taskflow.appointment;
  * @param email the barber's email
  * @param phone the barber's phone number
  */
-public record BarberResponse(Long id, String name, String email, String phone) {
+public record BarberResponse(Long id, String name, @Nullable String email, @Nullable String phone) {
 
     /**
      * Factory method: create a {@code BarberResponse} from a fully loaded {@link Barber} entity.

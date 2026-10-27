@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.modulith.test.ApplicationModuleTest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.modulith.test.PublishedEvents;
+import org.springframework.transaction.IllegalTransactionStateException;
 
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
@@ -15,12 +16,13 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Boots the appointment module with the modules it is allowed to depend on (catalog, core) and
  * checks what the rest of the system receives from it: {@link AppointmentDetails} snapshots in the
- * events, never the {@link Appointment} entity.
+ * events, never the {@code Appointment} entity.
  */
 @ApplicationModuleTest(mode = ApplicationModuleTest.BootstrapMode.DIRECT_DEPENDENCIES)
 @TestPropertySource(properties = {"app.rate-limit.enabled=false", "app.schedulers.enabled=false"})
@@ -73,6 +75,14 @@ class AppointmentModuleTest {
         assertEquals("module-approve@example.com", details.customerEmail());
         assertEquals(serviceName, details.serviceType());
         appointments.deleteAppointment(booked.id());
+    }
+
+    @Test
+    void claimingAReminderOutsideATransactionIsRefused() {
+        // The reminder flag must commit with the notification module's outbox row; on its own it
+        // would commit first and a failed outbox write would lose the e-mail.
+        assertThrows(IllegalTransactionStateException.class,
+                () -> appointments.claimReminder(1L, aWorkingDayInTwoWeeks()));
     }
 
     @Test

@@ -1,6 +1,6 @@
 package com.example.taskflow.notification;
 
-import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 import com.example.taskflow.testsupport.MutableTestClock;

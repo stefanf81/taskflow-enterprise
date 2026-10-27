@@ -1,12 +1,14 @@
 package com.example.taskflow.notification;
 
+import org.jspecify.annotations.Nullable;
+
 import java.time.LocalDateTime;
 record NotificationOutboxResponse(
     Long id,
     String recipient,
-    String type,
+    @Nullable String type,
     String message,
-    LocalDateTime sentAt,
+    @Nullable LocalDateTime sentAt,
     String status,
     int retryCount
 ) {

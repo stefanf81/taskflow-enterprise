@@ -1,4 +1,5 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
 import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
@@ -897,6 +898,26 @@ class AppointmentServiceImplTest {
         appointmentService.getBusySlots("Alex the Barber", lastBookable.toString());
         verify(appointmentRepository).findActiveForBarberOnDate("Alex the Barber", TODAY);
         verify(appointmentRepository).findActiveForBarberOnDate("Alex the Barber", lastBookable);
+    }
+
+    @Test
+    void approvedBarberNamesAreLookedUpInBoundedChunks() {
+        List<Long> ids = java.util.stream.LongStream.rangeClosed(1, 1100).boxed().toList();
+        when(appointmentRepository.findBarberNamesByIdsAndStatus(any(), eq(AppointmentStatus.APPROVED)))
+                .thenAnswer(inv -> {
+                    java.util.Collection<Long> chunk = inv.getArgument(0);
+                    return chunk.stream().filter(id -> id % 2 == 0).map(id -> (AppointmentRepository.IdAndBarberName)
+                            new AppointmentRepository.IdAndBarberName() {
+                                @Override public Long getId() { return id; }
+                                @Override public String getBarberName() { return "Alex"; }
+                            }).toList();
+                });
+
+        java.util.Map<Long, String> names = appointmentService.findApprovedBarberNames(ids);
+
+        assertEquals(550, names.size());
+        assertEquals("Alex", names.get(2L));
+        verify(appointmentRepository, times(3)).findBarberNamesByIdsAndStatus(any(), eq(AppointmentStatus.APPROVED));
     }
 
     @Test

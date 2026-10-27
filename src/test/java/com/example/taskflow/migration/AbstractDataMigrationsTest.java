@@ -1,6 +1,6 @@
 package com.example.taskflow.migration;
 
-import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.AppointmentStatusChangedEvent;
 import com.example.taskflow.testsupport.AppointmentDetailsFixtures;
 import com.example.taskflow.notification.NotificationOutbox;

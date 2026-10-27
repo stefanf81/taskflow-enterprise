@@ -15,6 +15,8 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 @Service
 class ReviewServiceImpl implements ReviewService {
@@ -37,7 +39,26 @@ class ReviewServiceImpl implements ReviewService {
     @Override
     @Transactional(readOnly = true)
     public List<BarberRatingResponse> getBarberRatings() {
-        return reviewRepository.getBarberRatings();
+        // Reviews reference their appointment by id. Only reviews whose appointment is still
+        // APPROVED count: one attached to a booking that was later denied or cancelled no longer
+        // reflects a service that was delivered. The appointment module answers which those are.
+        List<ReviewRepository.AppointmentRating> ratings = reviewRepository.findAllRatings();
+        Map<Long, String> barberByAppointment = appointmentService.findApprovedBarberNames(
+                ratings.stream().map(ReviewRepository.AppointmentRating::getAppointmentId).toList());
+
+        Map<String, long[]> sumAndCount = new TreeMap<>();
+        for (ReviewRepository.AppointmentRating rating : ratings) {
+            String barber = barberByAppointment.get(rating.getAppointmentId());
+            if (barber == null || rating.getRating() == null) {
+                continue;
+            }
+            long[] totals = sumAndCount.computeIfAbsent(barber, ignored -> new long[2]);
+            totals[0] += rating.getRating();
+            totals[1]++;
+        }
+        return sumAndCount.entrySet().stream()
+                .map(e -> new BarberRatingResponse(e.getKey(), (double) e.getValue()[0] / e.getValue()[1], e.getValue()[1]))
+                .toList();
     }
 
     @Override

@@ -1,5 +1,7 @@
 package com.example.taskflow.catalog;
 
+import org.jspecify.annotations.Nullable;
+
 import java.math.BigDecimal;
 
 public record ServiceItemResponse(
@@ -8,7 +10,8 @@ public record ServiceItemResponse(
     BigDecimal price,
     Integer durationMinutes,
     String category,
-    String description
+    // Omitted from the JSON when null (spring.jackson.default-property-inclusion=non_null).
+    @Nullable String description
 ) {
     public static ServiceItemResponse fromEntity(ServiceItem item) {
         return new ServiceItemResponse(

@@ -20,7 +20,7 @@ CI packages and starts the backend, authenticates, verifies the live document ag
 
 ## Addendum: generated response contracts
 
-`npm run sync:api-types` also writes `shared/schemas/src/generated/api-responses.ts`, a structural zod/mini schema for every response DTO. The hand-written response validators stay authoritative at runtime; a parity spec in the frontend compares their field sets and optionality with the generated contracts. A third-party generator (Orval, Hey API, Kubb) was not adopted: the repository already has a dependency-free generator for the types, the contract surface is about 15 DTOs, and the validators need rules OpenAPI cannot express.
+`npm run sync:api-types` also writes `shared/schemas/src/generated/api-responses.ts`, a structural zod/mini schema for every response DTO. The hand-written response validators stay authoritative at runtime; a parity spec in the frontend compares their field sets and optionality with the generated contracts. Which response fields may be absent is part of the document: the backend marks every response record component `required` unless it is JSpecify `@Nullable` (Jackson omits nulls globally). A third-party generator (Orval, Hey API, Kubb) was not adopted: the repository already has a dependency-free generator for the types, the contract surface is about 15 DTOs, and the validators need rules OpenAPI cannot express.
 
 ## Consequences
 

@@ -1,4 +1,5 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
@@ -22,6 +23,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -742,6 +744,23 @@ class AppointmentServiceImpl implements AppointmentService {
         cancelAppointment(item, AppointmentCancelledEvent.CancelledBy.GUEST, true);
     }
 
+    /** Ids per IN query; Hibernate pads IN lists to powers of two, so few plans are cached. */
+    private static final int ID_LOOKUP_CHUNK = 512;
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Map<Long, String> findApprovedBarberNames(java.util.Collection<Long> appointmentIds) {
+        java.util.Map<Long, String> names = new java.util.HashMap<>();
+        List<Long> ids = List.copyOf(new java.util.LinkedHashSet<>(appointmentIds));
+        for (int from = 0; from < ids.size(); from += ID_LOOKUP_CHUNK) {
+            List<Long> chunk = ids.subList(from, Math.min(from + ID_LOOKUP_CHUNK, ids.size()));
+            for (var row : appointmentRepository.findBarberNamesByIdsAndStatus(chunk, AppointmentStatus.APPROVED)) {
+                names.put(row.getId(), row.getBarberName());
+            }
+        }
+        return names;
+    }
+
     @Override
     @Transactional(readOnly = true)
     public Optional<AppointmentDetails> findDetailsByPublicId(String publicId) {
@@ -770,7 +789,9 @@ class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
-    @Transactional
+    // MANDATORY: the flag must commit together with the caller's outbox row. In a transaction of
+    // its own it would commit first, and a failed outbox write would lose the reminder for good.
+    @Transactional(propagation = Propagation.MANDATORY)
     public Optional<AppointmentDetails> claimReminder(Long id, LocalDate tomorrow) {
         Appointment appointment = appointmentRepository.findByIdForUpdate(id).orElse(null);
         if (appointment == null || Boolean.TRUE.equals(appointment.getReminderSent())) {

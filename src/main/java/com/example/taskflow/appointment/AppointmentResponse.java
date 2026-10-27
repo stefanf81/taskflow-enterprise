@@ -1,4 +1,5 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.internal.Appointment;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;

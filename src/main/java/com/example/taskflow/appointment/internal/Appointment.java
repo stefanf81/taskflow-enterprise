@@ -1,4 +1,7 @@
-package com.example.taskflow.appointment;
+package com.example.taskflow.appointment.internal;
+
+import com.example.taskflow.appointment.AppointmentStatus;
+import com.example.taskflow.appointment.Barber;
 
 import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.core.StringTimeConverter;
