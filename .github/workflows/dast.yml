@@ -34,6 +34,10 @@ concurrency:
 env:
   JAVA_VERSION: "25"
   NODE_VERSION: "24"
+  # The ZAP image is run directly instead of through zaproxy/action-api-scan /
+  # action-full-scan: those wrappers default to the mutable `:stable` tag.
+  # zap-image: tracked by the dedicated regex manager in .github/renovate.json
+  ZAP_VERSION: "2.17.0@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238"
 
 defaults:
   run:
@@ -114,7 +118,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
+        image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
 
         env:
           POSTGRES_DB: taskflow
@@ -131,7 +135,7 @@ jobs:
           --health-retries 30
 
       redis:
-        image: redis:8.10.2-alpine@sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0
+        image: redis:8.10.3-alpine@sha256:896f241f438ab6a210cfb24f573b84bea721a4cbe67f1b4fd07eb638b3b02a7b
 
         ports:
           - 6379:6379
@@ -204,32 +208,44 @@ jobs:
       - name: Run authenticated OWASP ZAP API Scan
         id: zap_api
         continue-on-error: true
-        uses: zaproxy/action-api-scan@5158fe4d9d8fcc75ea204db81317cce7f9e5453d # v0.10.0
         env:
           ZAP_AUTH_HEADER: Authorization
           ZAP_AUTH_HEADER_VALUE: Bearer ${{ steps.auth.outputs.token }}
           ZAP_AUTH_HEADER_SITE: http://localhost:8080
-        with:
-          target: api/openapi.json
-          format: openapi
-          fail_action: true
-          allow_issue_writing: false
-          artifact_name: zap-api-report
-          rules_file_name: .zap/api-rules.tsv
-          cmd_options: >-
-            -O http://localhost:8080
-            -T 10
-
-      # The ZAP action's built-in artifact upload expects these default names.
-      - name: Preserve ZAP API reports
-        if: always() && steps.zap_api.outcome != 'skipped'
         run: |
-          for extension in json html md; do
-            source="report_${extension}.${extension}"
-            if [[ -f "$source" ]]; then
-              cp "$source" "zap-api-report.${extension}"
-            fi
-          done
+          set -euo pipefail
+
+          # The image runs as `zap` (uid 1000), not the runner user, and writes
+          # its reports into the mounted workspace.
+          chmod a+w "$GITHUB_WORKSPACE"
+
+          zap_exit=0
+          docker run --rm \
+            --network host \
+            --volume "$GITHUB_WORKSPACE:/zap/wrk:rw" \
+            --env ZAP_AUTH_HEADER \
+            --env ZAP_AUTH_HEADER_VALUE \
+            --env ZAP_AUTH_HEADER_SITE \
+            "ghcr.io/zaproxy/zaproxy:${ZAP_VERSION}" \
+            zap-api-scan.py \
+              -t api/openapi.json \
+              -f openapi \
+              -O http://localhost:8080 \
+              -c .zap/api-rules.tsv \
+              -J zap-api-report.json \
+              -w zap-api-report.md \
+              -r zap-api-report.html \
+              -T 10 \
+            || zap_exit=$?
+
+          # 1 = FAIL alerts, 2 = WARN alerts only, 3 = scan error. Every non-zero
+          # code fails this step, as the action did with `fail_action: true`.
+          case "$zap_exit" in
+            0) ;;
+            1 | 2) echo "::warning::OWASP ZAP reported alerts (exit code $zap_exit)" ;;
+            *) echo "::error::OWASP ZAP could not complete the scan (exit code $zap_exit)" ;;
+          esac
+          exit "$zap_exit"
 
       - name: Set up Python
         if: always()
@@ -345,7 +361,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
+        image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
 
         env:
           POSTGRES_DB: taskflow
@@ -362,7 +378,7 @@ jobs:
           --health-retries 30
 
       redis:
-        image: redis:8.10.2-alpine@sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0
+        image: redis:8.10.3-alpine@sha256:896f241f438ab6a210cfb24f573b84bea721a4cbe67f1b4fd07eb638b3b02a7b
 
         ports:
           - 6379:6379
@@ -497,29 +513,48 @@ jobs:
       - name: Run authenticated OWASP ZAP frontend scan
         id: zap_web
         continue-on-error: true
-        uses: zaproxy/action-full-scan@3c58388149901b9a03b7718852c5ba889646c27c # v0.13.0
         env:
           ZAP_AUTH_HEADER: Authorization
           ZAP_AUTH_HEADER_VALUE: Bearer ${{ steps.auth.outputs.token }}
           ZAP_AUTH_HEADER_SITE: http://localhost:4200
-        with:
-          target: http://localhost:4200
-          fail_action: true
-          allow_issue_writing: false
-          artifact_name: zap-web-report
-          rules_file_name: .zap/web-rules.tsv
-          cmd_options: >-
-            ${{ env.ENABLE_AJAX_SPIDER == 'true' && '-j -m 5 -T 15' || '-T 10' }}
-
-      - name: Preserve ZAP frontend reports
-        if: always() && steps.zap_web.outcome != 'skipped'
         run: |
-          for extension in json html md; do
-            source="report_${extension}.${extension}"
-            if [[ -f "$source" ]]; then
-              cp "$source" "zap-web-report.${extension}"
-            fi
-          done
+          set -euo pipefail
+
+          if [[ "$ENABLE_AJAX_SPIDER" == "true" ]]; then
+            spider_options=(-j -m 5 -T 15)
+          else
+            spider_options=(-T 10)
+          fi
+
+          # The image runs as `zap` (uid 1000), not the runner user, and writes
+          # its reports into the mounted workspace.
+          chmod a+w "$GITHUB_WORKSPACE"
+
+          zap_exit=0
+          docker run --rm \
+            --network host \
+            --volume "$GITHUB_WORKSPACE:/zap/wrk:rw" \
+            --env ZAP_AUTH_HEADER \
+            --env ZAP_AUTH_HEADER_VALUE \
+            --env ZAP_AUTH_HEADER_SITE \
+            "ghcr.io/zaproxy/zaproxy:${ZAP_VERSION}" \
+            zap-full-scan.py \
+              -t http://localhost:4200 \
+              -c .zap/web-rules.tsv \
+              -J zap-web-report.json \
+              -w zap-web-report.md \
+              -r zap-web-report.html \
+              "${spider_options[@]}" \
+            || zap_exit=$?
+
+          # 1 = FAIL alerts, 2 = WARN alerts only, 3 = scan error. Every non-zero
+          # code fails this step, as the action did with `fail_action: true`.
+          case "$zap_exit" in
+            0) ;;
+            1 | 2) echo "::warning::OWASP ZAP reported alerts (exit code $zap_exit)" ;;
+            *) echo "::error::OWASP ZAP could not complete the scan (exit code $zap_exit)" ;;
+          esac
+          exit "$zap_exit"
 
       - name: Set up Python
         if: always()

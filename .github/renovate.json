@@ -15,6 +15,14 @@
       "matchStrings": ["# renovate-image: tracked by the dedicated regex manager in \\.github/renovate\\.json\\s+RENOVATEBOT_VERSION: \\\"(?<currentValue>[^@\\\"]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\\""],
       "depNameTemplate": "ghcr.io/renovatebot/renovate",
       "datasourceTemplate": "docker"
+    },
+    {
+      "description": "Update the OWASP ZAP scanner image tag and digest together in dast.yml",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/dast\\.yml$/"],
+      "matchStrings": ["# zap-image: tracked by the dedicated regex manager in \\.github/renovate\\.json\\s+ZAP_VERSION: \\\"(?<currentValue>[^@\\\"]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\\""],
+      "depNameTemplate": "ghcr.io/zaproxy/zaproxy",
+      "datasourceTemplate": "docker"
     }
   ],
   "branchPrefix": "renovate/",
@@ -63,6 +71,11 @@
       "matchManagers": ["npm"],
       "matchDepTypes": ["overrides"],
       "rangeStrategy": "pin"
+    },
+    {
+      "description": "OWASP ZAP scanner image: follow numbered releases only, not the weekly/nightly/stable/bare tags",
+      "matchPackageNames": ["ghcr.io/zaproxy/zaproxy"],
+      "allowedVersions": "/^\\d+\\.\\d+\\.\\d+$/"
     },
     {
       "description": "Keep fast-uri on the compatible 3.x release line",
