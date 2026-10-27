@@ -306,6 +306,14 @@
       "matchUpdateTypes": ["major"],
       "enabled": false,
       "groupName": "Blocked on Expo SDK upgrade"
+    },
+    {
+      "description": "The Renovate image runs with RENOVATE_TOKEN: review every update, patches included. Its own group keeps it out of the automerged all-patch batch (one non-automerge member would hold that whole branch back). Must stay below the catch-all groups.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/renovatebot/renovate"],
+      "groupName": "Renovate image",
+      "groupSlug": "renovate-image",
+      "automerge": false
     }
   ]
 }
