@@ -15,7 +15,7 @@
     "test:frontend": "npm --prefix frontend test",
     "test:mobile": "npm --prefix mobile test",
     "test:verify": "node --test scripts/verify.test.cjs",
-    "lint:all": "npm --prefix frontend run lint && npm --prefix frontend run format:check && npm --prefix mobile run lint && npm run check:component-map",
+    "lint:all": "npm --prefix frontend run lint && npm --prefix frontend run format:check && npm --prefix mobile run lint && npm run check:component-map && npm run check:dependency-tree",
     "sync:api-types": "node scripts/sync-api-types.js api/openapi.json",
     "sync:api-types:check": "node scripts/sync-api-types.js --check api/openapi.json",
     "api:spec:update": "node scripts/check-openapi-contract.js --write --auth http://localhost:8080/v3/api-docs",
@@ -23,7 +23,8 @@
     "docker:start": "./start-docker.sh",
     "docker:stop": "./stop-docker.sh",
     "verify:all": "./verify.sh",
-    "check:component-map": "node scripts/check-component-map.js"
+    "check:component-map": "node scripts/check-component-map.js",
+    "check:dependency-tree": "node scripts/check-dependency-tree.js"
   },
   "devDependencies": {
     "jsdom": "30.1.3",

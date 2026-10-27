@@ -15,6 +15,15 @@ config.watchFolders = [
   path.resolve(workspaceRoot, 'node_modules'),
 ];
 
+// The hoisted root also holds every frontend dependency (Angular, Vite, Vitest, Playwright, ...).
+// Keep Metro from crawling the packages the app cannot reach (~16k files, a quarter of the root
+// node_modules); the list is derived from the lockfile, see metro/workspaceBlockList.js.
+const { workspaceBlockList } = require('./metro/workspaceBlockList');
+config.resolver.blockList = [
+  ...[].concat(config.resolver.blockList || []),
+  ...workspaceBlockList(workspaceRoot),
+];
+
 // Look in the app's own node_modules first (a package whose version conflicts with the hoisted one
 // is installed there), then in the hoisted root.
 config.resolver.nodeModulesPaths = [

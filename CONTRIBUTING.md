@@ -52,6 +52,14 @@ for the frontend's vitest) must resolve to the same version from the tool's loca
 the app: when two workspaces need different versions, pin the one the hoisted tool needs in
 the root `devDependencies`.
 
+`npm run check:dependency-tree` (part of `lint:all`, and run by CI after every install) reads
+`npm ls --all` and fails when any package resolves a dependency outside the range it declares.
+`npm ci` does not check this, and `legacy-peer-deps` (which mobile needs) hides peer conflicts, so
+this is the only guard against one workspace's hoisted version serving another workspace's tools.
+Peer mismatches that cannot be fixed under `legacy-peer-deps` are listed, with a reason, in
+`KNOWN_PEER_MISMATCHES` in `scripts/check-dependency-tree.js`. Regenerate the lockfile with
+`npm install`; never hand-edit or merge lockfiles.
+
 ### Backend (Spring Boot 4.1.2)
 
 ```bash

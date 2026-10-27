@@ -137,6 +137,26 @@ runs:
         # (The dependency-health audit keeps them - deprecation is signal there.)
         npm ci "${args[@]}" 2> >(grep --line-buffered -v '^npm warn deprecated' >&2)
 
+    # `npm ci` installs the lockfile without checking that each package got a version inside its
+    # declared range, and the workspace-wide legacy-peer-deps (needed by mobile) hides peer
+    # conflicts. With hoisting, one workspace's version can silently serve another's tools.
+    - name: Check dependency tree
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        PACKAGE_PATH: ${{ inputs.package-path }}
+        SHARED_SCHEMAS: ${{ inputs.shared-schemas }}
+      run: |
+        set -euo pipefail
+        ws=()
+        if [[ "$PACKAGE_PATH" != "." ]]; then
+          ws+=(--workspace "$PACKAGE_PATH")
+          if [[ "$SHARED_SCHEMAS" == "true" && "$PACKAGE_PATH" != "shared/schemas" ]]; then
+            ws+=(--workspace shared/schemas)
+          fi
+        fi
+        node scripts/check-dependency-tree.js "${ws[@]}"
+
     - name: Save node_modules
       if: inputs.cache-node-modules == 'true' && steps.nm-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6

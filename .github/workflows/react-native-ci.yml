@@ -562,12 +562,25 @@ jobs:
       # Restored before `pod install`, whose stub stamping keeps existing
       # slices; a stale snapshot is simply rebuilt by Expo's own hash check,
       # so a prefix fallback is safe on every event.
+      # npm workspaces hoist expo-modules-jsi to the repository root's node_modules (a version
+      # conflict would put it under mobile/node_modules instead), so resolve the real directory
+      # from the app rather than hard-coding either location.
+      - &locate-expo-modules-jsi
+        name: Locate ExpoModulesJSI xcframework
+        id: jsi-path
+        shell: bash
+        working-directory: mobile
+        run: |
+          set -euo pipefail
+          dir="$(node -p "require('path').relative(process.env.GITHUB_WORKSPACE, require('path').dirname(require.resolve('expo-modules-jsi/package.json')))")"
+          echo "path=${dir}/apple/Products/ExpoModulesJSI.xcframework" >> "$GITHUB_OUTPUT"
+
       - &restore-expo-modules-jsi
         name: Restore ExpoModulesJSI xcframework
         id: jsi-cache
         uses: actions/cache/restore@v6
         with:
-          path: mobile/node_modules/expo-modules-jsi/apple/Products/ExpoModulesJSI.xcframework
+          path: ${{ steps.jsi-path.outputs.path }}
           key: expo-modules-jsi-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             expo-modules-jsi-${{ runner.os }}-${{ runner.arch }}-
@@ -663,7 +676,7 @@ jobs:
         continue-on-error: true
         uses: actions/cache/save@v6
         with:
-          path: mobile/node_modules/expo-modules-jsi/apple/Products/ExpoModulesJSI.xcframework
+          path: ${{ steps.jsi-path.outputs.path }}
           key: ${{ steps.jsi-cache.outputs.cache-primary-key }}
 
       - name: Upload iOS simulator application
@@ -938,6 +951,7 @@ jobs:
       - *restore-cocoapods-specs
       - *configure-cocoapods
       - *configure-xcode-node
+      - *locate-expo-modules-jsi
       - *restore-expo-modules-jsi
       - *install-pods
 

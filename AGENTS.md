@@ -90,7 +90,7 @@ Mobile
 - Subscribe to the auth store with per-field selectors, never the whole store. No bulk Prettier runs (mobile has no `.prettierrc`).
 
 Dependencies
-- `frontend`, `mobile` and `shared/schemas` are npm workspaces with one root `package-lock.json` (always `npm ci`, not `npm install`). `overrides`, `allowScripts` and the vendored patch tarballs (`file:mobile/vendor/…`) only work in the root `package.json`. Hoisting must not change which version a tool sees: the root pins `jsdom` for the frontend's vitest (mobile's jest-environment-jsdom nests its own). New versions need to age 3 days like Renovate's hold; see CONTRIBUTING.
+- `frontend`, `mobile` and `shared/schemas` are npm workspaces with one root `package-lock.json` (always `npm ci`, not `npm install`). `overrides`, `allowScripts` and the vendored patch tarballs (`file:mobile/vendor/…`) only work in the root `package.json`. Hoisting must not change which version a tool sees: `npm run check:dependency-tree` (in `lint:all` and after every CI install) fails on any dependency resolved outside its declared range; the root pins `jsdom` for the frontend's vitest. Never hand-edit or merge lockfiles: `npm ci` does not check ranges. New versions need to age 3 days like Renovate's hold; see CONTRIBUTING.
 
 Contracts
 - After any backend DTO or endpoint change: start the backend, `npm run api:spec:update`, `npm run sync:api-types`, commit the baseline and the generated files (both `types/api.ts` and `shared/schemas/src/generated/api-responses.ts`), update the matching hand-written response schema in `shared/schemas` (a parity spec fails otherwise), then run `npm run sync:api-types:check`.
