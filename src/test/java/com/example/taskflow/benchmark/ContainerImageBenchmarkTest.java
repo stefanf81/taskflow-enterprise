@@ -31,7 +31,7 @@ class ContainerImageBenchmarkTest {
         System.out.println("=".repeat(80));
 
         String d = Files.readString(Path.of("Dockerfile"));
-        String md = Files.readString(Path.of("BENCHMARKS.md"));
+        String md = Files.readString(Path.of("docs/BENCHMARKS.md"));
 
         boolean fullApp = trainsFullApplication(d);
         boolean noTrimmedContext = !d.contains("CdsTrainingApplication")
@@ -124,7 +124,7 @@ class ContainerImageBenchmarkTest {
         System.out.println("=".repeat(80));
 
         String d = Files.readString(Path.of("Dockerfile"));
-        String md = Files.readString(Path.of("BENCHMARKS.md"));
+        String md = Files.readString(Path.of("docs/BENCHMARKS.md"));
         String runtimeCmd = DockerfileStages.instructions(d, "runtime", "CMD");
 
         boolean trainedWithG1 = DockerfileStages.instructions(d, "cds-training", "RUN")

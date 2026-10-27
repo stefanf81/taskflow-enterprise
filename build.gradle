@@ -282,7 +282,7 @@ tasks.register("containerConfigTest", Test) {
 		enabled = false
 	}
 	inputs.files("Dockerfile", "Dockerfile.x64", "docker-compose.yml", "frontend/nginx.conf",
-			".github/workflows/ci.yml", ".github/workflows/pushdockerimage.yml", "BENCHMARKS.md",
+			".github/workflows/ci.yml", ".github/workflows/pushdockerimage.yml", "docs/BENCHMARKS.md",
 			"scripts/benchmark-cds-startup.sh", "scripts/benchmark-glibc-tuning.sh")
 			.withPropertyName("containerConfigFiles")
 			.withPathSensitivity(PathSensitivity.RELATIVE)

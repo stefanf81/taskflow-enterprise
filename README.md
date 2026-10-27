@@ -106,7 +106,7 @@ shared event fanout before relying on real-time updates across replicas.
 └── ARCHITECTURE.md               # End-to-End Architectural Blueprint
 ```
 
-### P0–P2 Structures & Tunings (see `ARCHITECTURE.md` / `BENCHMARKS.md`)
+### P0–P2 Structures & Tunings (see `ARCHITECTURE.md` / `docs/BENCHMARKS.md`)
 
 - `core/AsyncConfig.java` — bounded `ThreadPoolTaskExecutor` `core=8 max=64 queue=100 CallerRunsPolicy` (`taskflow-async-` prefix, 30 s graceful) replaces unbounded `@EnableAsync` default.
 - `core/RateLimiterConfig.java` — stateless Redis Lua `EVAL` (`INCR`+`PEXPIRE` 1 RTT, `HIGHEST_PRECEDENCE+20`, skips `/actuator/health/**` and CORS `OPTIONS` preflights); per-JVM `FixedWindowCounter` fallback behind `RedisBackoff` (one probe per back-off interval).
@@ -374,10 +374,10 @@ Renovate authentication details.
 ## 📚 Documentation & ADRs
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Detailed end-to-end data flow and architectural analysis
-- [AGENTS.md](AGENTS.md) — Developer guidelines and AI agent instructions
-- [BENCHMARKS.md](BENCHMARKS.md) — Exhaustive performance benchmarks, JVM tuning, and load profiles
+- [AGENTS.md](AGENTS.md) — Short agent instructions; detail in [docs/agents/](docs/agents/)
+- [BENCHMARKS.md](docs/BENCHMARKS.md) — Exhaustive performance benchmarks, JVM tuning, and load profiles
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Development setup, quality gates, and contribution workflow
-- [SYSTEM-HARDENING.md](SYSTEM-HARDENING.md) — Zero-trust security & container hardening policy
+- [SYSTEM-HARDENING.md](docs/SYSTEM-HARDENING.md) — Zero-trust security & container hardening policy
 - [docs/TODO.md](docs/TODO.md) — Prioritized engineering backlog and security audit tracking
 - [docs/ci/](docs/ci/README.md) — CI/CD design rationale and workflow audit history
 - [frontend/README.md](frontend/README.md) — Angular 22 Signals frontend architecture & design system

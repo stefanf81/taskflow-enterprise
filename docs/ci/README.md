@@ -77,5 +77,5 @@ All nightly crons in this repository are scheduled between **22:00 and 22:50 UTC
 
 - [Detailed CI/CD Design Rationale](overview.md)
 - [Workflow Audit Report (2026-08-20)](audit-2026-08-20.md)
-- [Zero-Trust Security & Container Hardening Policy](../../SYSTEM-HARDENING.md)
+- [Zero-Trust Security & Container Hardening Policy](../SYSTEM-HARDENING.md)
 - [Architecture Decision Records (ADRs)](../adr/)
