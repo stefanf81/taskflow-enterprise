@@ -17,7 +17,8 @@ shared/schemas/
 │   ├── appointment.ts  # Booking creation, updates, SSE events, and dashboard models
 │   ├── auth.ts         # Login, registration, and user identity models
 │   ├── catalog.ts      # Services and barber catalog models
-│   └── review.ts       # Customer reviews and barber ratings models
+│   ├── review.ts       # Customer reviews and barber ratings models
+│   └── generated/      # Structural response contracts generated from api/openapi.json (not exported)
 └── package.json
 ```
 
