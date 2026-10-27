@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent, screen } from '@testing-library/react-native';
-import { StylistCard } from '../src/components/booking/StylistCard';
+import { StylistCard } from '../src/features/booking/StylistCard';
 
 describe('StylistCard Component', () => {
   it('renders stylist details correctly', async () => {

@@ -1,4 +1,4 @@
-import { notificationsApi } from '../src/api/notifications';
+import { notificationsApi } from '../src/features/admin/notifications';
 import { apiClient } from '../src/api/client';
 
 jest.mock('../src/api/client', () => ({

@@ -3,14 +3,14 @@ import { render, fireEvent, screen, act, waitFor } from '@testing-library/react-
 
 const mockMutateAsyncFn = jest.fn();
 
-jest.mock('../src/hooks/useAppointments', () => ({
+jest.mock('../src/core/appointments/useAppointments', () => ({
   usePublicCancelAppointment: () => ({
     mutateAsync: mockMutateAsyncFn,
     isPending: false,
   }),
 }));
 
-import { PublicCancelModal } from '../src/components/booking/PublicCancelModal';
+import { PublicCancelModal } from '../src/features/landing/PublicCancelModal';
 
 describe('PublicCancelModal', () => {
   beforeEach(() => {

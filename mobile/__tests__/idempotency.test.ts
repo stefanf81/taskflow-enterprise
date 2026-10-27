@@ -2,7 +2,7 @@ jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => '123e4567-e89b-12d3-a456-426614174000'),
 }));
 
-import { resolveAttemptKey } from '../src/utils/idempotency';
+import { resolveAttemptKey } from '../src/features/booking/idempotency';
 
 describe('resolveAttemptKey', () => {
   it('mints a key on the first attempt', () => {

@@ -17,7 +17,7 @@ jest.mock('@react-navigation/native', () => ({
 let mockIsError: boolean;
 const mockRefetch = jest.fn();
 
-jest.mock('../src/hooks/useCatalog', () => ({
+jest.mock('../src/core/catalog/useCatalog', () => ({
   useCatalog: () => ({
     data: [
       { id: 1, name: 'Classic Haircut', price: 45, durationMinutes: 30, category: 'hair', description: 'Classic' },
@@ -30,7 +30,7 @@ jest.mock('../src/hooks/useCatalog', () => ({
   }),
 }));
 
-import { CatalogScreen, getBookingRouteName } from '../src/screens/CatalogScreen';
+import { CatalogScreen, getBookingRouteName } from '../src/features/landing/CatalogScreen';
 
 describe('CatalogScreen', () => {
   beforeEach(() => {

@@ -1,0 +1,115 @@
+import { apiClient } from '../../api/client';
+import {
+  AppointmentCreateRequest,
+  AppointmentDashboardResponse,
+  AppointmentItem,
+  AppointmentUpdateRequest,
+} from '../../types/api';
+import { parseContract, parseRequest } from '../../api/contracts';
+import {
+  appointmentCreateSchema,
+  appointmentDashboardResponseSchema,
+  appointmentResponseSchema,
+  appointmentUpdateSchema,
+  busySlotsResponseSchema,
+  shopInfoResponseSchema,
+} from '@taskflow/schemas';
+
+export const appointmentsApi = {
+  getAllAppointments: async (
+    statusFilter?: string,
+    search?: string,
+    page = 0,
+    size = 10
+  ): Promise<AppointmentDashboardResponse> => {
+    const params: Record<string, string | number> = {
+      page,
+      size,
+    };
+    if (statusFilter && statusFilter !== 'all') {
+      params.status = statusFilter.toUpperCase();
+    }
+    // The backend matches name/email/phone (contains) and publicId (exact);
+    // surrounding whitespace would make an otherwise exact match fail.
+    const term = search?.trim();
+    if (term) {
+      params.search = term;
+    }
+    const response = await apiClient.get<AppointmentDashboardResponse>('/api/v1/appointments', {
+      params,
+    });
+    return parseContract(
+      appointmentDashboardResponseSchema,
+      response.data,
+      'GET /api/v1/appointments',
+    );
+  },
+
+  createAppointment: async (
+    data: AppointmentCreateRequest,
+    idempotencyKey?: string
+  ): Promise<AppointmentItem> => {
+    const payload = parseRequest(appointmentCreateSchema, data, 'POST /api/v1/appointments');
+    const response = idempotencyKey
+      ? await apiClient.post<AppointmentItem>('/api/v1/appointments', payload, {
+          headers: { 'Idempotency-Key': idempotencyKey },
+        })
+      : await apiClient.post<AppointmentItem>('/api/v1/appointments', payload);
+    return parseContract(
+      appointmentResponseSchema,
+      response.data,
+      'POST /api/v1/appointments',
+    );
+  },
+
+  /** The shop's IANA time zone: what the server counts as past or bookable is decided in it. */
+  getShopTimeZone: async (): Promise<string> => {
+    const response = await apiClient.get<unknown>('/api/v1/appointments/public/shop');
+    return parseContract(
+      shopInfoResponseSchema,
+      response.data,
+      'GET /api/v1/appointments/public/shop',
+    ).timeZone;
+  },
+
+  getBusySlots: async (
+    barberName: string,
+    bookingDate: string,
+    serviceType?: string
+  ): Promise<string[]> => {
+    // serviceType lets the server also mark slots where a long service would overlap a later
+    // booking or run past closing time (otherwise the booking is rejected with 400 at submit).
+    const response = await apiClient.get<string[]>('/api/v1/appointments/public/busy-slots', {
+      params: serviceType ? { barberName, bookingDate, serviceType } : { barberName, bookingDate },
+    });
+    return parseContract(
+      busySlotsResponseSchema,
+      response.data,
+      'GET /api/v1/appointments/public/busy-slots',
+    );
+  },
+
+  publicCancelAppointment: async (publicId: string, email: string): Promise<void> => {
+    await apiClient.put(`/api/v1/appointments/public/cancel/${encodeURIComponent(publicId)}`, { email });
+  },
+
+  updateAppointmentStatus: async (
+    id: number,
+    statusValue: AppointmentUpdateRequest['status']
+  ): Promise<AppointmentItem> => {
+    const payload = parseRequest(
+      appointmentUpdateSchema,
+      { status: statusValue },
+      'PUT /api/v1/appointments',
+    );
+    const response = await apiClient.put<AppointmentItem>(
+      `/api/v1/appointments/${id}`,
+      payload
+    );
+    return parseContract(appointmentResponseSchema, response.data, 'PUT /api/v1/appointments');
+  },
+
+  deleteAppointment: async (id: number): Promise<void> => {
+    await apiClient.delete(`/api/v1/appointments/${id}`);
+  },
+};

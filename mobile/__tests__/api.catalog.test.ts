@@ -1,4 +1,4 @@
-import { catalogApi } from '../src/api/catalog';
+import { catalogApi } from '../src/core/catalog/catalog';
 import { apiClient } from '../src/api/client';
 
 jest.mock('../src/api/client', () => ({

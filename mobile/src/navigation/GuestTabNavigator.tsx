@@ -1,10 +1,10 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { HomeScreen } from '../screens/HomeScreen';
-import { BookingScreen } from '../screens/BookingScreen';
-import { CatalogScreen } from '../screens/CatalogScreen';
-import { LookbookScreen } from '../screens/LookbookScreen';
+import { HomeScreen } from '../features/landing/HomeScreen';
+import { BookingScreen } from '../features/booking/BookingScreen';
+import { CatalogScreen } from '../features/landing/CatalogScreen';
+import { LookbookScreen } from '../features/landing/LookbookScreen';
 import { GuestTabParamList } from '../types/navigation';
 import { colors } from '../theme/colors';
 

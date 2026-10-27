@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import { TimeSlotPicker } from '../src/components/booking/TimeSlotPicker';
+import { TimeSlotPicker } from '../src/features/booking/TimeSlotPicker';
 
 const MOCK_SLOTS = ['09:00', '10:00', '11:00', '13:00'];
 

@@ -3,12 +3,12 @@ import { renderHook, act, cleanup } from '@testing-library/react-native';
 import { QueryClientProvider, focusManager } from '@tanstack/react-query';
 
 const mockGetNotifications = jest.fn();
-jest.mock('../src/api/notifications', () => ({
+jest.mock('../src/features/admin/notifications', () => ({
   notificationsApi: { getNotifications: (...args: unknown[]) => mockGetNotifications(...args) },
 }));
 
 import { queryClient } from '../src/query/queryClient';
-import { NOTIFICATIONS_POLL_MS, useNotifications } from '../src/hooks/useNotifications';
+import { NOTIFICATIONS_POLL_MS, useNotifications } from '../src/features/admin/useNotifications';
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>

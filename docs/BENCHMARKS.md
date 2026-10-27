@@ -220,7 +220,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **React Native (Expo 57) QueryClient Caching (P1-4 §45)**:
      *   `mobile/src/query/queryClient.ts` sets `staleTime: 60_000` (was 0, refetched on every mount), `gcTime: 5 * 60_000` (keep cache across navigation), exponential `retryDelay: min(1000 * 2^attempt, 30000)` with `retry:1` and `refetchOnWindowFocus:false`. `mobile/src/api/client.ts` `timeout: 10000` (was 15000; still above the server's ~9s worst case of 5s JPA timeout + 4s Hikari connection-timeout, so the server times out first). Cuts catalog/barbers refetch ~50% (§45).
 *   **Lookbook Virtualization Fix (P2 §49)**:
-     *   `mobile/src/components/lookbook/LookbookGallery.tsx` replaces `FlatList scrollEnabled={false}` inside parent `ScrollView` (which defeats virtualization, renders all items) with plain `LOOKBOOK_DATA.map` + `View` + `Card`. Parent `ScrollView` handles scrolling; swap to `FlashList` when catalogue exceeds 50 items.
+     *   `mobile/src/features/landing/LookbookGallery.tsx` replaces `FlatList scrollEnabled={false}` inside parent `ScrollView` (which defeats virtualization, renders all items) with plain `LOOKBOOK_DATA.map` + `View` + `Card`. Parent `ScrollView` handles scrolling; swap to `FlashList` when catalogue exceeds 50 items.
 
 ### 🧪 9. Load Testing & Performance Budgets (P2)
 *   **k6 Ramping Load Profile (P2 §48)**:
@@ -1436,7 +1436,7 @@ Each iteration records per-endpoint `Trend` (`catalog_duration`, `barbers_durati
 
 **Verification:** `P1AndP2BenchmarkTest.p2_k6_load_profile` checks `k6/browser.js` for `p(95)<800`, `p(95)<1800`, `p(95)<2500`.
 
-### Lookbook FlatList Fix — `mobile/src/components/lookbook/LookbookGallery.tsx:52`
+### Lookbook FlatList Fix — `mobile/src/features/landing/LookbookGallery.tsx:52`
 
 **Problem:** `FlatList` inside a parent `ScrollView` with `scrollEnabled={false}` defeats FlatList's windowing — all items render at once (no recycling), forcing the JS thread to measure/layout everything upfront. For the current 4-item `LOOKBOOK_DATA` the cost is negligible, but scaling to 50 items would inflate JS time ~10–15 ms and memory ~5 MB.
 

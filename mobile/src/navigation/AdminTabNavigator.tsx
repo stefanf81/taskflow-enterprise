@@ -1,10 +1,10 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { AdminDashboardScreen } from '../screens/AdminDashboardScreen';
-import { AdminCatalogScreen } from '../screens/AdminCatalogScreen';
-import { AdminSchedulesScreen } from '../screens/AdminSchedulesScreen';
-import { AdminNotificationsScreen } from '../screens/AdminNotificationsScreen';
+import { AdminDashboardScreen } from '../features/admin/AdminDashboardScreen';
+import { AdminCatalogScreen } from '../features/admin/AdminCatalogScreen';
+import { AdminSchedulesScreen } from '../features/admin/AdminSchedulesScreen';
+import { AdminNotificationsScreen } from '../features/admin/AdminNotificationsScreen';
 import { AdminTabParamList } from '../types/navigation';
 import { colors } from '../theme/colors';
 

@@ -5,7 +5,7 @@ import {
   BookingScreen,
   getPostBookingDestination,
   NO_PREFERENCE_BARBER,
-} from '../src/screens/BookingScreen';
+} from '../src/features/booking/BookingScreen';
 import { freezeDate, moveClockTo, restoreClock } from '../test/fakeClock';
 
 // ==================== Mock navigation ====================
@@ -56,18 +56,18 @@ const DEFAULT_CATALOG = [
   { id: 4, name: 'The Executive Package', price: 80, durationMinutes: 60, category: 'combo', description: 'Haircut + beard + shave.' },
 ];
 
-jest.mock('../src/hooks/useCatalog', () => ({
+jest.mock('../src/core/catalog/useCatalog', () => ({
   useCatalog: () => ({
     data: mockCatalogData ?? DEFAULT_CATALOG,
   }),
 }));
 
 let mockShopTimeZone: string | null = null;
-jest.mock('../src/hooks/useShopTimeZone', () => ({
+jest.mock('../src/features/booking/useShopTimeZone', () => ({
   useShopTimeZone: () => mockShopTimeZone,
 }));
 
-jest.mock('../src/hooks/useBarbers', () => ({
+jest.mock('../src/core/barbers/useBarbers', () => ({
   usePublicBarbers: () => ({ data: [{ id: 1, name: 'Alex the Barber' }] }),
 }));
 
@@ -77,7 +77,7 @@ jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => `123e4567-e89b-12d3-a456-42661417${String(++mockUuidCounter).padStart(4, '0')}`),
 }));
 
-jest.mock('../src/hooks/useAppointments', () => {
+jest.mock('../src/core/appointments/useAppointments', () => {
   const mutateAsync = jest.fn();
   mockMutateAsync = mutateAsync;
   return {
@@ -106,7 +106,7 @@ let mockReceiptProps: {
   onOpenPublicActions: (publicId: string) => void;
 } | null = null;
 
-jest.mock('../src/components/booking/ReceiptModal', () => ({
+jest.mock('../src/features/booking/ReceiptModal', () => ({
   ReceiptModal: (props: any) => {
     mockReceiptProps = props;
     return <>{null}</>;

@@ -15,7 +15,7 @@ jest.mock('@react-navigation/native', () => ({
 const mockRegisterFn = jest.fn();
 const mockClearErrorFn = jest.fn();
 
-jest.mock('../src/store/useAuthStore', () => ({
+jest.mock('../src/core/auth/useAuthStore', () => ({
   useAuthStore: () => ({
     register: mockRegisterFn,
     clearError: mockClearErrorFn,
@@ -23,7 +23,7 @@ jest.mock('../src/store/useAuthStore', () => ({
   }),
 }));
 
-import { RegisterScreen } from '../src/screens/RegisterScreen';
+import { RegisterScreen } from '../src/features/auth/RegisterScreen';
 
 describe('RegisterScreen', () => {
   afterEach(() => {

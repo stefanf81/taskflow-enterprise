@@ -8,7 +8,7 @@ import {
   isTokenExpired,
 } from '../src/utils/session';
 import { isPublicEndpoint } from '../src/api/publicEndpoints';
-import { normalizePublicId } from '../src/utils/publicId';
+import { normalizePublicId } from '../src/features/landing/publicId';
 
 describe('utils/errors', () => {
   const http = (status: number, data: unknown = {}, headers: Record<string, unknown> = {}) => ({

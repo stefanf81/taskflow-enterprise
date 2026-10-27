@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent, screen } from '@testing-library/react-native';
-import { AdminCatalogScreen } from '../src/screens/AdminCatalogScreen';
+import { AdminCatalogScreen } from '../src/features/admin/AdminCatalogScreen';
 
 let mockIsError: boolean;
 let mockServices: Array<{
@@ -13,7 +13,7 @@ let mockServices: Array<{
 }>;
 const mockRefetch = jest.fn();
 
-jest.mock('../src/hooks/useCatalog', () => ({
+jest.mock('../src/core/catalog/useCatalog', () => ({
   useCatalog: () => ({
     data: mockServices,
     isLoading: false,

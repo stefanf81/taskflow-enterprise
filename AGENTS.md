@@ -85,7 +85,7 @@ Frontend
 - Prettier: 100 columns, single quotes, run from `frontend/`.
 
 Mobile
-- Public calls go through `src/api/publicEndpoints.ts`; follow the Rules of React (the compiler bails out silently, `reactCompiler.test.ts` catches it).
+- Layout mirrors web: a feature's screens/hooks/API calls live in `src/features/<name>/`, what several features share in `src/core/<domain>/`. Public calls go through `src/api/publicEndpoints.ts`; follow the Rules of React (the compiler bails out silently, `reactCompiler.test.ts` catches it).
 - Subscribe to the auth store with per-field selectors, never the whole store. No bulk Prettier runs (mobile has no `.prettierrc`).
 
 Contracts

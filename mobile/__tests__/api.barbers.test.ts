@@ -1,4 +1,4 @@
-import { barbersApi } from '../src/api/barbers';
+import { barbersApi } from '../src/core/barbers/barbers';
 import { apiClient } from '../src/api/client';
 
 jest.mock('../src/api/client', () => ({

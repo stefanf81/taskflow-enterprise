@@ -3,13 +3,13 @@ import { render } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { CustomerTabNavigator } from '../src/navigation/CustomerTabNavigator';
 
-jest.mock('../src/screens/CustomerPortalScreen', () => ({
+jest.mock('../src/features/customer/CustomerPortalScreen', () => ({
   CustomerPortalScreen: () => <>{null}</>,
 }));
-jest.mock('../src/screens/BookingScreen', () => ({
+jest.mock('../src/features/booking/BookingScreen', () => ({
   BookingScreen: () => <>{null}</>,
 }));
-jest.mock('../src/screens/CatalogScreen', () => ({
+jest.mock('../src/features/landing/CatalogScreen', () => ({
   CatalogScreen: () => <>{null}</>,
 }));
 

@@ -1,4 +1,4 @@
-import { authApi } from '../src/api/auth';
+import { authApi } from '../src/core/auth/auth';
 import { ApiContractError } from '../src/api/contracts';
 import { http, HttpResponse } from 'msw';
 import { server } from '../test/mocks/server';

@@ -9,18 +9,18 @@ Use this skill when a user asks to port or synchronize a new feature, component 
 
 ## Feature Component Mapping Matrix
 Refer to `frontend/src/component-map.json` or `mobile/src/component-map.json` to identify exact target files for each feature domain:
-* **Stylist Cards**: `frontend/src/app/features/booking/stylist-card/stylist-card.ts` ↔ `mobile/src/components/booking/StylistCard.tsx`
-* **Booking Wizard**: `frontend/src/app/features/booking/booking-wizard.ts` (`booking-wizard.html`) ↔ `mobile/src/screens/BookingScreen.tsx`
-* **Customer Portal**: `frontend/src/app/features/customer/customer-portal.ts` (`customer-portal.html`) ↔ `mobile/src/screens/CustomerPortalScreen.tsx`
-* **Admin Dashboard**: `frontend/src/app/features/admin/admin-dashboard.ts` (`admin-dashboard.html`) ↔ `mobile/src/screens/AdminDashboardScreen.tsx`
-* **Lookbook**: `frontend/src/app/features/landing/lookbook/lookbook.ts` ↔ `mobile/src/screens/LookbookScreen.tsx`
+* **Stylist Cards**: `frontend/src/app/features/booking/stylist-card/stylist-card.ts` ↔ `mobile/src/features/booking/StylistCard.tsx`
+* **Booking Wizard**: `frontend/src/app/features/booking/booking-wizard.ts` (`booking-wizard.html`) ↔ `mobile/src/features/booking/BookingScreen.tsx`
+* **Customer Portal**: `frontend/src/app/features/customer/customer-portal.ts` (`customer-portal.html`) ↔ `mobile/src/features/customer/CustomerPortalScreen.tsx`
+* **Admin Dashboard**: `frontend/src/app/features/admin/admin-dashboard.ts` (`admin-dashboard.html`) ↔ `mobile/src/features/admin/AdminDashboardScreen.tsx`
+* **Lookbook**: `frontend/src/app/features/landing/lookbook/lookbook.ts` ↔ `mobile/src/features/landing/LookbookScreen.tsx`
 
 ## Architectural Translation Rules
 
 ### 1. State Management & Data Fetching
 * **Angular Signals & Stores (`*.store.ts`)**:
   * Angular 22 uses `signal()`, `computed()`, and RxJS stores.
-  * Map these to React Native **TanStack Query** custom hooks (`mobile/src/hooks/use*.ts`) for server state, or **Zustand** (`mobile/src/store/use*.ts`) for client state.
+  * Map these to React Native **TanStack Query** custom hooks (`use*.ts` in the matching `mobile/src/features/<feature>/` or `mobile/src/core/<domain>/` folder) for server state, or **Zustand** (`mobile/src/core/auth/useAuthStore.ts`) for client state.
 * API contracts are generated into `frontend/src/app/types/api.ts` and `mobile/src/types/api.ts` from the reviewed `api/openapi.json` baseline. For backend contract changes: run `npm run api:spec:update`, `npm run sync:api-types`, and `npm run sync:api-types:check` from the repository root.
 
 ### 2. UI Component Structure

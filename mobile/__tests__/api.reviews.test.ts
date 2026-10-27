@@ -1,4 +1,4 @@
-import { reviewsApi } from '../src/api/reviews';
+import { reviewsApi } from '../src/features/landing/reviews';
 import { apiClient } from '../src/api/client';
 
 jest.mock('../src/api/client', () => ({

@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import { PublicActionsScreen } from '../src/screens/PublicActionsScreen';
+import { PublicActionsScreen } from '../src/features/landing/PublicActionsScreen';
 
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
@@ -9,12 +9,12 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 // Mock modal components
-jest.mock('../src/components/booking/PublicCancelModal', () => ({
+jest.mock('../src/features/landing/PublicCancelModal', () => ({
   PublicCancelModal: ({ visible, onClose }: { visible: boolean; onClose: () => void }) =>
     visible ? <>{null}</> : null,
 }));
 
-jest.mock('../src/components/booking/PublicReviewModal', () => ({
+jest.mock('../src/features/landing/PublicReviewModal', () => ({
   PublicReviewModal: ({ visible, onClose }: { visible: boolean; onClose: () => void }) =>
     visible ? <>{null}</> : null,
 }));

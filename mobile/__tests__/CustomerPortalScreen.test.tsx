@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, fireEvent, waitFor, screen } from '@testing-library/react-native';
 import { Alert } from 'react-native';
-import { CustomerPortalScreen } from '../src/screens/CustomerPortalScreen';
+import { CustomerPortalScreen } from '../src/features/customer/CustomerPortalScreen';
 import type { AppointmentPage } from '../src/types/api';
 
 // ==================== Controllable mocks ====================
@@ -14,7 +14,7 @@ let mockLogout: jest.Mock;
 let mockUsername: string;
 let mockHookArgs: unknown[];
 
-jest.mock('../src/hooks/useCustomer', () => ({
+jest.mock('../src/features/customer/useCustomer', () => ({
   useCustomerAppointments: (...args: unknown[]) => {
     mockHookArgs = args;
     return {
@@ -30,7 +30,7 @@ jest.mock('../src/hooks/useCustomer', () => ({
   }),
 }));
 
-jest.mock('../src/store/useAuthStore', () => ({
+jest.mock('../src/core/auth/useAuthStore', () => ({
   useAuthStore: () => ({
     username: mockUsername,
     logout: mockLogout,

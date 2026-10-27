@@ -4,16 +4,16 @@ import { NavigationContainer } from '@react-navigation/native';
 import { GuestTabNavigator } from '../src/navigation/GuestTabNavigator';
 
 // Mock the screen components
-jest.mock('../src/screens/HomeScreen', () => ({
+jest.mock('../src/features/landing/HomeScreen', () => ({
   HomeScreen: () => <>{null}</>,
 }));
-jest.mock('../src/screens/BookingScreen', () => ({
+jest.mock('../src/features/booking/BookingScreen', () => ({
   BookingScreen: () => <>{null}</>,
 }));
-jest.mock('../src/screens/CatalogScreen', () => ({
+jest.mock('../src/features/landing/CatalogScreen', () => ({
   CatalogScreen: () => <>{null}</>,
 }));
-jest.mock('../src/screens/LookbookScreen', () => ({
+jest.mock('../src/features/landing/LookbookScreen', () => ({
   LookbookScreen: () => <>{null}</>,
 }));
 

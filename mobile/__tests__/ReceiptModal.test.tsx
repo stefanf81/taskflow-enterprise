@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import { ReceiptModal } from '../src/components/booking/ReceiptModal';
+import { ReceiptModal } from '../src/features/booking/ReceiptModal';
 
 const mockAppointment = {
   id: 1,

@@ -1,4 +1,4 @@
-import { appointmentsApi } from '../src/api/appointments';
+import { appointmentsApi } from '../src/core/appointments/appointments';
 import { apiClient } from '../src/api/client';
 import { getApiErrorMessage } from '../src/utils/errors';
 import type { AppointmentDashboardResponse } from '../src/types/api';
