@@ -1,4 +1,4 @@
-package com.example.taskflow.appointment;
+package com.example.taskflow.appointment.stream;
 
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;

@@ -1,4 +1,4 @@
-package com.example.taskflow.appointment;
+package com.example.taskflow.appointment.stream;
 
 import com.example.taskflow.testsupport.MutableTestClock;
 import org.junit.jupiter.api.Test;

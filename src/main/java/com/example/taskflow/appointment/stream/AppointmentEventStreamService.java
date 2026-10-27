@@ -1,4 +1,4 @@
-package com.example.taskflow.appointment;
+package com.example.taskflow.appointment.stream;
 
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -60,7 +60,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <em>revoked</em> token (logout) is observable: {@link TokenRevokedEvent} closes its streams.
  */
 @Service
-class AppointmentEventStreamService {
+public class AppointmentEventStreamService {
 
     private static final Logger logger = LoggerFactory.getLogger(AppointmentEventStreamService.class);
     private static final long STREAM_TIMEOUT_MILLIS = Duration.ofMinutes(30).toMillis();

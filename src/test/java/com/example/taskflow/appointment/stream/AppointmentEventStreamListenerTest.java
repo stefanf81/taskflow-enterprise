@@ -1,4 +1,4 @@
-package com.example.taskflow.appointment;
+package com.example.taskflow.appointment.stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

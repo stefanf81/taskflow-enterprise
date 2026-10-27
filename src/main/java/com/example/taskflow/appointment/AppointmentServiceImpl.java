@@ -1,4 +1,5 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 
