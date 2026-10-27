@@ -109,8 +109,8 @@ for command in node npm java; do
     exit 1
   fi
 done
-if [ ! -x ./gradlew ] || [ ! -d frontend/node_modules ] || [ ! -d mobile/node_modules ]; then
-  printf 'Install frontend/mobile dependencies and ensure ./gradlew is executable first.\n' >&2
+if [ ! -x ./gradlew ] || [ ! -d node_modules ]; then
+  printf 'Run npm ci at the repository root (installs frontend, mobile and shared/schemas) and ensure ./gradlew is executable first.\n' >&2
   exit 1
 fi
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then

@@ -37,15 +37,20 @@ ephemeral signing keys by default.
 
 ### JavaScript Dependencies
 
-Run these commands from the repository root. Installing the shared package
-first keeps the local file dependency aligned with CI and the checked-in lockfiles.
+Run these commands from the repository root. `frontend`, `mobile` and `shared/schemas`
+are npm workspaces with a single root `package-lock.json`, so one `npm ci` installs
+all of them (dependencies are hoisted to the root `node_modules`).
 
 ```bash
-(cd shared/schemas && npm ci)
-(cd frontend && npm ci)
-(cd mobile && npm ci)
+npm ci
 npm run sync:api-types:check
 ```
+
+`overrides` and `allowScripts` only take effect in the **root** `package.json`; do not add
+them to a workspace. A package that a hoisted tool consumes as a peer (for example `jsdom`
+for the frontend's vitest) must resolve to the same version from the tool's location as from
+the app: when two workspaces need different versions, pin the one the hoisted tool needs in
+the root `devDependencies`.
 
 ### Backend (Spring Boot 4.1.2)
 
@@ -60,7 +65,7 @@ npm run sync:api-types:check
 ### Frontend (Angular 22)
 
 ```bash
-(cd frontend && npm ci)  # Install locked dependencies
+# Dependencies come from the single `npm ci` at the repository root
 (cd frontend && npm start) # Dev server on :4200 (proxies /api to :8080)
 ```
 
@@ -75,7 +80,6 @@ Install the browser required by Playwright once per machine:
 ### Mobile (React Native / Expo)
 
 ```bash
-(cd mobile && npm ci)
 (cd mobile && npm start) # Start Expo Metro Bundler
 (cd mobile && npm test)  # Run Jest unit and component tests
 (cd mobile && npm run lint) # Typecheck TypeScript

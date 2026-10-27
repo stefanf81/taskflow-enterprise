@@ -6,13 +6,21 @@ const workspaceRoot = path.resolve(projectRoot, '..');
 
 const config = getDefaultConfig(projectRoot);
 
-// Watch only what the app imports from outside its folder (the shared zod schemas); watching the
-// whole repository also crawled the backend, frontend and docs on every Metro start.
-config.watchFolders = [path.resolve(workspaceRoot, 'shared')];
+// npm workspaces hoist dependencies to <repo>/node_modules (one zod for the app, the shared
+// schemas and Expo CLI). Watch only what the app imports from outside its folder: the shared zod
+// schemas and the hoisted packages. Watching the whole repository also crawled the backend,
+// frontend and docs on every Metro start.
+config.watchFolders = [
+  path.resolve(workspaceRoot, 'shared'),
+  path.resolve(workspaceRoot, 'node_modules'),
+];
 
-// The shared schemas resolve zod from this app's node_modules (the repository root has none the
-// app uses, and Metro cannot serve files outside the watched folders).
-config.resolver.nodeModulesPaths = [path.resolve(projectRoot, 'node_modules')];
+// Look in the app's own node_modules first (a package whose version conflicts with the hoisted one
+// is installed there), then in the hoisted root.
+config.resolver.nodeModulesPaths = [
+  path.resolve(projectRoot, 'node_modules'),
+  path.resolve(workspaceRoot, 'node_modules'),
+];
 
 const zodLocales = require('./metro/zodLocales');
 

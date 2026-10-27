@@ -93,9 +93,6 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            frontend/package-lock.json
-            mobile/package-lock.json
-            shared/schemas/package-lock.json
           check-latest: true
 
       - name: Verify Node and npm
@@ -112,7 +109,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PACKAGES=("." "shared/schemas" "frontend" "mobile")
+          PACKAGES=(".")  # one npm workspaces lockfile covers frontend, mobile and shared/schemas
           has_error=false
 
           for pkg in "${PACKAGES[@]}"; do
@@ -140,11 +137,8 @@ jobs:
           set -euo pipefail
           echo "Installing dependencies across monorepo packages..."
 
+          # One install covers every workspace (frontend, mobile, shared/schemas).
           npm ci --ignore-scripts
-          # shared/schemas must be installed before its local consumers.
-          npm ci --prefix shared/schemas --ignore-scripts
-          npm ci --prefix frontend --ignore-scripts
-          npm ci --prefix mobile --ignore-scripts
 
       - name: Check Unused Dependencies
         shell: bash

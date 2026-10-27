@@ -412,7 +412,7 @@ still passing on legitimately skipped ones (e.g. documentation-only PRs).
 Shared step logic lives in local composite actions under `.github/actions/`, so
 the same implementation is not copied across workflows (and cannot drift):
 
-- `npm-ci` — installs `shared/schemas` then a target package with `npm ci`
+- `npm-ci` — runs `npm ci` from the repository root against the single workspaces lockfile, for one workspace plus `shared/schemas` (or all with `package-path: .`)
   (`package-path`, `shared-schemas`, `ignore-scripts` inputs). Opt-in
   `cache-node-modules` restores an exact-match `node_modules` cache and skips
   the install on a hit (used by the E2E job).

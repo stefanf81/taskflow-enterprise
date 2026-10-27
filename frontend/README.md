@@ -78,20 +78,19 @@ repository pins these versions through `mobile/.nvmrc` and
 To download dependencies and launch the local Angular development server on **`http://localhost:4200`**:
 
 ```bash
-# From the repository root, install the local shared package first
-cd shared/schemas
+# From the repository root: one install for all workspaces (frontend, mobile, shared/schemas)
 npm ci
 
-# Navigate to the frontend directory and install locked dependencies
-cd ../../frontend
-npm ci
+# Or only the web app and the shared schemas
+npm ci --workspace frontend --workspace shared/schemas
 
 # Start the dev server
+cd frontend
 npm start
 ```
 
-The shared package is referenced through `file:../shared/schemas`; installing
-it first matches the CI setup and ensures its lockfile is honored. The Angular
+The shared package is an npm workspace (`@taskflow/schemas`, linked into `node_modules`) and
+the lockfile lives at the repository root. The Angular
 application proxies API requests to `http://localhost:8080`, so start the
 backend separately with `./gradlew bootRun` or start the full Docker stack.
 The dev server bundles `@taskflow/schemas` with the app instead of prebundling it

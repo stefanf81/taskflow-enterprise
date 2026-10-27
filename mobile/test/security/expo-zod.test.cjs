@@ -14,7 +14,8 @@ const { createMCPDevToolsExtensionSchema } = cliRequire(
 
 test('Expo CLI resolves the same patched Zod as the app', () => {
   assert.equal(cliRequire.resolve('zod'), require.resolve('zod'));
-  const lock = require('../../package-lock.json');
+  // One lockfile at the repository root since the npm workspaces migration.
+  const lock = require('../../../package-lock.json');
   for (const [path, pkg] of Object.entries(lock.packages)) {
     if (!path.endsWith('node_modules/zod')) continue;
     const [major, minor, patch] = pkg.version.split('.').map(Number);

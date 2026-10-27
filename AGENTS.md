@@ -42,6 +42,7 @@ npm start | npm test | npm run lint | npm run build | npm run e2e
 npm start | npm test | npm run lint
 
 # Whole repo (root)
+npm ci                          # installs every npm workspace (frontend, mobile, shared/schemas)
 npm run lint:all                # frontend ESLint + tsc + Prettier, mobile tsc
 npm run test:all                # frontend + mobile unit tests
 npm run api:spec:update         # refresh api/openapi.json from a running local backend
@@ -87,6 +88,9 @@ Frontend
 Mobile
 - Layout mirrors web: a feature's screens/hooks/API calls live in `src/features/<name>/`, what several features share in `src/core/<domain>/`. Public calls go through `src/api/publicEndpoints.ts`; follow the Rules of React (the compiler bails out silently, `reactCompiler.test.ts` catches it).
 - Subscribe to the auth store with per-field selectors, never the whole store. No bulk Prettier runs (mobile has no `.prettierrc`).
+
+Dependencies
+- `frontend`, `mobile` and `shared/schemas` are npm workspaces with one root `package-lock.json` (always `npm ci`, not `npm install`). `overrides`, `allowScripts` and the vendored patch tarballs (`file:mobile/vendor/…`) only work in the root `package.json`. Hoisting must not change which version a tool sees: the root pins `jsdom` for the frontend's vitest (mobile's jest-environment-jsdom nests its own). New versions need to age 3 days like Renovate's hold; see CONTRIBUTING.
 
 Contracts
 - After any backend DTO or endpoint change: start the backend, `npm run api:spec:update`, `npm run sync:api-types`, commit the baseline and both generated files, then run `npm run sync:api-types:check`.

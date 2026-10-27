@@ -149,14 +149,14 @@ requires Android Studio, the Android SDK, and an emulator or device.
 git clone <repo-url>
 cd <repo-directory>
 
-(cd shared/schemas && npm ci)
-(cd frontend && npm ci)
-(cd mobile && npm ci)
+npm ci
 npm run sync:api-types:check
 ```
 
-The shared package is a local file dependency of both clients, so install it
-first. Use `npm ci`, not `npm install`, to honor the checked-in lockfiles.
+The repository is an npm workspaces monorepo (`frontend`, `mobile`, `shared/schemas`)
+with one lockfile at the root, so a single `npm ci` installs all three. Use `npm ci`,
+not `npm install`, to honor the checked-in lockfile. To install only one app, run
+`npm ci --workspace frontend --workspace shared/schemas` (or `--workspace mobile`).
 
 ### Configure Docker Compose
 
@@ -271,8 +271,7 @@ cd mobile
 # Create mobile/.env from mobile/.env.example and adjust the API URL if needed
 cp .env.example .env
 
-# Install locked dependencies (run shared/schemas npm ci first from the root setup)
-npm ci
+# Dependencies are already installed by the single `npm ci` at the repository root.
 
 # Generate the native project on first run; Expo Go is not supported because
 # expo-secure-store is a native module.
@@ -310,7 +309,7 @@ npm test
 ### 4. Run Web Frontend Locally (Angular 22)
 
 ```bash
-(cd frontend && npm ci && npm start)
+(cd frontend && npm start)   # after `npm ci` at the repository root
 ```
 
 - Dev server runs on `http://localhost:4200` and proxies `/api` requests to `http://localhost:8080`.

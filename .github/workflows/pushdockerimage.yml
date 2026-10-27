@@ -192,8 +192,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: |
-            frontend/package-lock.json
-            shared/schemas/package-lock.json
+            package-lock.json
 
       - name: Install Dependencies
         uses: ./.github/actions/npm-ci
@@ -205,7 +204,7 @@ jobs:
         with:
           path: frontend/.angular/cache
           # Same prefix as ci.yml so a publish run reuses CI's warm cache.
-          key: angular-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json', 'shared/schemas/package-lock.json') }}
+          key: angular-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             angular-${{ runner.os }}-
 

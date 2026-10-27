@@ -17,11 +17,6 @@
   },
   "private": true,
   "packageManager": "npm@12.2.1",
-  "overrides": {
-    "esbuild": "0.28.2",
-    "fast-uri": "3.1.9",
-    "vite": "8.3.5"
-  },
   "dependencies": {
     "@angular/cdk": "^22.2.4",
     "@angular/common": "^22.2.2",
@@ -33,7 +28,7 @@
     "@angular/router": "^22.2.2",
     "@angular/ssr": "^22.2.4",
     "@tailwindcss/postcss": "^4.3.3",
-    "@taskflow/schemas": "file:../shared/schemas",
+    "@taskflow/schemas": "*",
     "rxjs": "~7.8.2",
     "zod": "^4.6.7"
   },
@@ -55,12 +50,5 @@
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.1",
     "vitest": "^5.0.3"
-  },
-  "allowScripts": {
-    "@parcel/watcher": true,
-    "esbuild": true,
-    "fsevents": true,
-    "lmdb": true,
-    "msgpackr-extract": true
   }
 }

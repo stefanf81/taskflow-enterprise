@@ -101,17 +101,15 @@ running the Android Detox commands.
 ## First-Time Setup
 
 ```bash
-# From the repository root, install the local shared package first.
-(cd shared/schemas && npm ci)
+# From the repository root: one install for all workspaces (frontend, mobile, shared/schemas).
+# Use `npm ci --workspace mobile --workspace shared/schemas` to install only the mobile app.
+npm ci
 
 cd mobile
 
 # Create the mobile environment file and set EXPO_PUBLIC_API_URL for the
 # simulator, emulator, or physical device as described below.
 cp .env.example .env
-
-# Install locked JS dependencies.
-npm ci
 
 # Generate native iOS project + install CocoaPods (macOS/iOS only)
 npx expo prebuild --platform ios
