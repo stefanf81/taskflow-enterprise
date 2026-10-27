@@ -10,14 +10,15 @@ import { FaqSectionComponent } from '../../components/faq-section/faq-section';
 import { LookbookComponent } from '../../components/lookbook/lookbook';
 import { PostBookingActionsComponent } from '../../components/post-booking-actions/post-booking-actions';
 import { BookingWizard } from '../booking/booking-wizard';
-import { BookingStore } from '../booking/booking.store';
+import { LookbookSelectionBus } from '../booking/lookbook-selection';
 
 /**
  * Guest landing page (route `/`).
  *
  * Composes the public marketing sections and hosts the booking wizard. Owns
  * only shell-level UI state (login modal + lookbook → wizard hand-off); the
- * booking flow itself lives in {@link BookingStore}.
+ * booking flow itself lives in `BookingStore`, which this component deliberately does NOT
+ * import — see {@link LookbookSelectionBus}.
  */
 @Component({
   selector: 'app-landing-page',
@@ -33,7 +34,7 @@ import { BookingStore } from '../booking/booking.store';
 })
 export class LandingPage {
   private readonly authState = inject(AuthState);
-  private readonly bookingStore = inject(BookingStore);
+  private readonly lookbookSelection = inject(LookbookSelectionBus);
   private readonly appointmentStore = inject(AppointmentStore);
   private readonly catalogStore = inject(ServiceCatalogStore);
   private readonly router = inject(Router);
@@ -44,6 +45,9 @@ export class LandingPage {
   readonly services = this.catalogStore.services;
   readonly servicesLoading = this.catalogStore.isLoading;
   readonly servicesError = this.catalogStore.errorMessage;
+  readonly servicesLoaded = this.catalogStore.hasLoaded;
+  /** Placeholder rows shown until the catalog arrives; the seeded catalog has five services. */
+  readonly skeletonRows = [0, 1, 2, 3, 4];
 
   constructor() {
     // A session that expired elsewhere in the app sends the user here with the
@@ -75,7 +79,7 @@ export class LandingPage {
   }
 
   selectLookbookStyle(serviceName: string, category: string): void {
-    this.bookingStore.selectLookbookStyle(serviceName, category);
+    this.lookbookSelection.select(serviceName, category);
   }
 
   onAuthLoginSuccess(role: string): void {

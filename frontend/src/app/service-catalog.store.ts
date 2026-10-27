@@ -33,6 +33,16 @@ export class ServiceCatalogStore {
   /** Error-safe: an empty list (never a throw) while loading or after a failed load. */
   readonly services = safeResourceValue<ServiceItem[]>(this.servicesResource, []);
   readonly isLoading = this.servicesResource.isLoading;
+  /**
+   * Whether the request has produced a list. False while prerendering (no request is made) and
+   * while the first load is in flight, so the placeholder rows that stand in for the menu render
+   * identically on the server and in the browser, and hydration still matches. Once this turns
+   * true an empty list really means "no services", not "not here yet".
+   */
+  readonly hasLoaded = computed(() => {
+    const status = this.servicesResource.status();
+    return status === 'resolved' || status === 'local';
+  });
   readonly errorMessage = computed(() => {
     const err = this.servicesResource.error();
     return err ? 'Could not load service catalog.' : null;

@@ -44,6 +44,26 @@ export default defineConfig(
     },
   },
   {
+    // The booking wizard is `@defer`red on `/`; a static import of its store from the landing
+    // page pulls Signal Forms and the wizard back into main.js (BENCHMARKS.md §63).
+    files: ['src/app/features/landing/**/*.ts'],
+    ignores: ['**/*.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/booking/booking.store'],
+              message:
+                'Use LookbookSelectionBus: importing BookingStore puts Signal Forms in main.js (§63).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.html'],
     extends: [...angular.configs.templateRecommended, ...angular.configs.templateAccessibility],
   },

@@ -8,6 +8,7 @@ import { ServiceItem, PublicBarber, BarberRating, AppointmentItem } from '../../
 import { toLocalDateString } from '../../time-utils';
 import { AuthState } from '../../auth.state';
 import { NETWORK_ERROR_MESSAGE } from '../../core/api/extract-api-error';
+import { LookbookSelectionBus } from './lookbook-selection';
 
 /** A bookable (non-Sunday, within 90 days, never today) date for tests that run on the real clock. */
 const FUTURE = (() => {
@@ -204,6 +205,19 @@ describe('BookingStore', () => {
     expect(store.selectedCategory()).toBe('hair');
     expect(store.activeStep()).toBe(2);
     expect(store.successMessage()).toContain('Lookbook Style selected');
+  });
+
+  it('applies a lookbook pick made through the bus after the wizard exists', () => {
+    // A pick made before the store exists is covered by the 'BookingStore lookbook hand-off'
+    // suite below; this one checks that an already-constructed store reacts to the bus.
+    expect(store.activeStep()).toBe(1);
+
+    TestBed.inject(LookbookSelectionBus).select('Modern Skin Fade', 'hair');
+    fixture.detectChanges();
+
+    expect(store.bookingService()).toBe('Modern Skin Fade');
+    expect(store.selectedCategory()).toBe('hair');
+    expect(store.activeStep()).toBe(2);
   });
 
   it('selects a stylist and refreshes slot availability', async () => {
@@ -609,5 +623,66 @@ describe('BookingStore', () => {
       expect(store.showReceiptModal()).toBe(false);
       httpMock.match(() => true);
     });
+  });
+});
+
+describe('BookingStore lookbook hand-off', () => {
+  const services: ServiceItem[] = [
+    {
+      id: 1,
+      name: 'Classic Haircut',
+      price: 25,
+      durationMinutes: 30,
+      category: 'hair',
+      description: 'Desc',
+    },
+    {
+      id: 2,
+      name: 'Modern Skin Fade',
+      price: 30,
+      durationMinutes: 45,
+      category: 'hair',
+      description: 'Desc',
+    },
+  ];
+
+  afterEach(() => {
+    const httpMock = TestBed.inject(HttpTestingController);
+    httpMock.match(() => true);
+    httpMock.verify();
+  });
+
+  it('applies a pick made before BookingStore was constructed, once the catalog has loaded', async () => {
+    TestBed.configureTestingModule({
+      imports: [TestHost],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    // The lookbook is clicked while the deferred wizard (and with it the store) does not exist.
+    TestBed.inject(LookbookSelectionBus).select('Modern Skin Fade', 'hair');
+
+    const fixture = TestBed.createComponent(TestHost);
+    const store = fixture.componentInstance.store;
+    const httpMock = TestBed.inject(HttpTestingController);
+    fixture.detectChanges();
+
+    // Catalog still in flight: the pick waits instead of being rejected as unknown.
+    expect(store.activeStep()).toBe(1);
+    expect(store.errorMessage()).toBeFalsy();
+
+    httpMock.match((r) => r.url.includes('/api/v1/catalog')).forEach((r) => r.flush(services));
+    httpMock.match((r) => r.url === '/api/v1/barbers').forEach((r) => r.flush([]));
+    httpMock
+      .match((r) => r.url.includes('/api/v1/reviews/public/barber-ratings'))
+      .forEach((r) => r.flush([]));
+    httpMock
+      .match((r) => r.url.includes('/public/shop'))
+      .forEach((r) => r.flush({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(store.bookingService()).toBe('Modern Skin Fade');
+    expect(store.selectedCategory()).toBe('hair');
+    expect(store.activeStep()).toBe(2);
+    expect(store.errorMessage()).toBeFalsy();
   });
 });

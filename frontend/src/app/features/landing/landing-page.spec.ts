@@ -7,6 +7,9 @@ import { LandingPage } from './landing-page';
 import { AuthState, SESSION_EXPIRED_MESSAGE } from '../../auth.state';
 import { ServiceCatalogStore } from '../../service-catalog.store';
 import { DashboardPrefetch } from '../../dashboard-loaders';
+// Imported for its side effect only: the wizard is behind `@defer`, whose dynamic import would
+// otherwise have to be transformed mid-test, taking longer than the settle loop below waits.
+import '../booking/booking-wizard';
 
 describe('LandingPage', () => {
   let fixture: ComponentFixture<LandingPage>;
@@ -28,6 +31,16 @@ describe('LandingPage', () => {
     fixture.detectChanges();
 
     httpMock = TestBed.inject(HttpTestingController);
+    // The booking wizard sits in a `@defer (on idle)` block, so it mounts — and issues its own
+    // requests — only after that trigger fires, which is one or more macrotasks after the first
+    // round of flushes. Drain repeatedly instead of flushing once, or `whenStable()` waits
+    // forever on requests that had not been made yet.
+    await settlePublicRequests();
+    expect(fixture.nativeElement.querySelector('app-booking-wizard')).toBeTruthy();
+  });
+
+  /** Flushes every public GET the landing page and its deferred children make. */
+  function flushPublicRequests(): void {
     httpMock.match((req) => req.url.includes('/api/v1/catalog')).forEach((req) => req.flush([]));
     httpMock
       .match((req) => req.url.includes('/api/v1/reviews/public/barber-ratings'))
@@ -37,9 +50,26 @@ describe('LandingPage', () => {
     httpMock
       .match((r) => r.url.includes('/public/shop'))
       .forEach((r) => r.flush({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
-    await fixture.whenStable();
+  }
+
+  /**
+   * Renders, flushes and lets timers run until the wizard's defer block has mounted and its
+   * requests are answered. `whenStable()` is deliberately not used: the wizard's requests only
+   * exist after the block resolves, so awaiting stability before they are flushed deadlocks.
+   */
+  async function settlePublicRequests(): Promise<void> {
+    for (let i = 0; i < 50; i++) {
+      fixture.detectChanges();
+      flushPublicRequests();
+      if (fixture.nativeElement.querySelector('app-booking-wizard')) break;
+      await new Promise((resolve) => setTimeout(resolve));
+    }
+    // One more round for anything the now-mounted wizard asked for.
     fixture.detectChanges();
-  });
+    flushPublicRequests();
+    await new Promise((resolve) => setTimeout(resolve));
+    fixture.detectChanges();
+  }
 
   it('renders the public navigation, hero and booking wizard', () => {
     const compiled = fixture.nativeElement as HTMLElement;
