@@ -10,8 +10,9 @@ wizard out of the eager bundle (initial JS 545 → 441 kB raw, 147 → 122 kB tr
 
 The assets are already shaped well for it: content-hashed bundles served
 `public, immutable, max-age=15552000`, SRI on every script, an integrity-carrying import
-map, and Brotli-11 sidecars. The CSP needs no change — it has no `worker-src`, so the
-`default-src 'self'` fallback already permits a same-origin worker.
+map, and Brotli-11 sidecars. For loading the worker script the CSP needs no change: it has
+no `worker-src` or `child-src`, so `worker-src` falls back to `script-src`, whose `'self'`
+already permits a same-origin worker. Registering it is a different matter (item 6 below).
 
 Before scoping the work, the realistic payoff was estimated against what the app already
 does, because that turns out to decide the question.
@@ -59,9 +60,11 @@ which is a product decision, not a performance one.
    until the worker updates; `SwUpdate` handling and a reload prompt become mandatory
    rather than optional.
 6. **Trusted Types is enforced.** The CSP sets `require-trusted-types-for 'script'` with
-   only the `angular` and `angular#bundler` policies. Whether `ngsw-worker.js` needs its
-   own policy under this configuration is **unverified** and must be checked on the built
-   image before any adoption, not after.
+   only the `angular` and `angular#bundler` policies. `navigator.serviceWorker.register()`
+   is a Trusted Types sink (it takes a `TrustedScriptURL`), so registration is **expected to
+   be blocked** unless Angular passes a URL created through an allowed policy, or a policy
+   for it is added to `trusted-types`. What Angular's `provideServiceWorker` does under this
+   CSP is unverified and must be checked on the built image before any adoption, not after.
 
 ## Decision
 

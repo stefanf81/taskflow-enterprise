@@ -2182,8 +2182,8 @@ Framework and libraries were ~76% of the 545 kB; `@angular/cdk` is correctly laz
 
 | | Before | After |
 | :--- | ---: | ---: |
-| Initial total, raw | 545.53 kB | **440.87 kB (−19.2%)** |
-| Initial total, transfer | 147.05 kB | **122.23 kB (−16.9%)** |
+| Initial total, raw | 545.53 kB | **440.73 kB (−19.2%)** |
+| Initial total, transfer | 147.05 kB | **122.26 kB (−16.9%)** |
 | `main.js`, raw | 120.23 kB | **20.25 kB (−83%)** |
 | Initial files | 8 | 6 |
 
@@ -2195,4 +2195,6 @@ Framework and libraries were ~76% of the 545 kB; `@angular/cdk` is correctly laz
 
 **Not done here:** no service worker (still absent, and still the clearest gap against comparable Angular setups — repeat visits revalidate the shell and refetch the catalog); `inlineCritical` stays off for the Beasties/CSP reason already documented in §61 and `frontend/README.md`.
 
-**Verification:** `npm run lint`, `npm run format:check`, 344 unit tests passing with coverage thresholds met (the landing spec needed its `HttpTestingController` flush turned into a drain loop — the wizard's requests now only exist after its defer block resolves, so flushing once and awaiting `whenStable()` deadlocked; this also cut the suite from 76 s to 6 s by removing seven 10 s hook timeouts). Production build and prerender within budgets, with `index.html` re-checked for the wizard markup and the placeholder rows. Playwright could not be run in full locally (no Docker daemon, and no JDK 25 obtainable, so the backend would not start); the a11y suite's landing-page and login-modal steps pass there. CI ran the rest: the first push failed four `appointment-flow` tests on the `hydrate on interaction` trigger described above, which the `hydrate on idle` fix addresses.
+**Verification:** `npm run lint`, `npm run format:check`, 344 unit tests passing with coverage thresholds met (the landing spec needed its `HttpTestingController` flush turned into a drain loop — the wizard's requests now only exist after its defer block resolves, so flushing once and awaiting `whenStable()` deadlocked; this also cut the suite from 76 s to 6 s by removing seven 10 s hook timeouts). Production build and prerender within budgets, with `index.html` re-checked for the wizard markup and the placeholder rows. Playwright could not be run in full locally (no Docker daemon, and no JDK 25 obtainable, so the backend would not start); the a11y suite's landing-page and login-modal steps pass there. CI ran the rest: the first push failed four `appointment-flow` tests on the `hydrate on interaction` trigger described above; with `hydrate on idle`, End-to-End Playwright passed on `ec7bb03`.
+
+**Review follow-ups:** the `initial` budget dropped from 550/600 kB to **470/500 kB** and an ESLint `no-restricted-imports` rule on `features/landing/**` rejects a `booking.store` import, so the regression the unit tests cannot see (re-importing `BookingStore` from the landing page) now fails lint and the build. A new `BookingStore lookbook hand-off` spec picks through the bus *before* the store exists and fails if the store stops waiting for the catalog. The CSR-only `@placeholder` was 640 px against a measured prerendered step-1 height of 847 px (1280 px viewport) / 867 px (390 px), so it is now 850 px.

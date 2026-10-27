@@ -73,7 +73,7 @@ export class BookingWizard {
   /** Price shown on the receipt: captured when the booking was submitted. */
   readonly lastBookedTotal = this.store.lastBookedTotal;
 
-  /** Placeholder rows shown until the catalog arrives; the seeded catalog has five services. */
+  /** Placeholder rows shown until the catalog arrives; four fill the 380 px scroll area. */
   readonly skeletonRows = [0, 1, 2, 3];
 
   readonly steps = WIZARD_STEPS.map((label, index) => ({ num: index + 1, label }));

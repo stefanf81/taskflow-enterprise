@@ -214,7 +214,10 @@
           @defer (on idle; hydrate on idle) {
             <app-booking-wizard />
           } @placeholder {
-            <div class="h-[640px]"></div>
+            <!-- Only shown on client-side navigation to `/` (the prerendered page renders the
+                 wizard itself). Matches its prerendered step-1 height: 847 px at 1280 px wide,
+                 867 px at 390 px. -->
+            <div class="h-[850px]"></div>
           }
         </div>
       </div>
