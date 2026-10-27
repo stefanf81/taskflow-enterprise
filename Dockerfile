@@ -28,12 +28,13 @@
 # tracks the current Ubuntu release and would drift silently. Renovate updates
 # the digest while the project's Java 25 policy keeps the major. Unlike the
 # Java 21 image, this base ships no curl, wget or gnupg (BENCHMARKS.md §62).
-# Latest available official -resolute image at the 2026-10-23 check: 25.0.4.1.
+# Latest available official -resolute image at the 2026-10-27 check: 25.0.4.1
+# (the 2026-10-27 digest is an Ubuntu base refresh of the same JRE build).
 # Retain the digest pin; see docs/deployment/java25-image-security.md for the
 # full scan and known JRE risks outside Trivy's coverage. APT cannot update
 # Temurin. Track Renovate/upstream for the patched image, then rebuild the cache.
 # Production approval is operator-controlled, not a CI/publication interlock.
-ARG JAVA_IMAGE=eclipse-temurin:25-jre-resolute@sha256:41d9263c0d5b2a74d89af6e29e73b04298bc65e3cb705d03e9e2271ef49fef84
+ARG JAVA_IMAGE=eclipse-temurin:25-jre-resolute@sha256:f9d26d6ca476513a3c7081291e0c05e5f5c2c66f77dcf21704cf8bcdb94f4342
 
 # JAR extraction is architecture-independent: run it natively on the build host
 # (Apple Silicon as well as amd64 CI). Compilation is performed by Gradle before

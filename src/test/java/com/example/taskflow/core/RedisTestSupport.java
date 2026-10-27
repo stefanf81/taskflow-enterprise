@@ -17,7 +17,7 @@ public final class RedisTestSupport {
 
     public static final String ENV = "TASKFLOW_TEST_REDIS_URL";
     /** The image docker-compose runs. */
-    public static final String IMAGE = "redis:8.10.2-alpine";
+    public static final String IMAGE = "redis:8.10.3-alpine";
 
     private RedisTestSupport() {
     }

@@ -370,6 +370,10 @@
             "$ref": "#/components/schemas/PageMetadata"
           }
         },
+        "required": [
+          "content",
+          "page"
+        ],
         "type": "object"
       },
       "PageMetadata": {
@@ -391,6 +395,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "number",
+          "size",
+          "totalElements",
+          "totalPages"
+        ],
         "type": "object"
       },
       "PublicBarberResponse": {
