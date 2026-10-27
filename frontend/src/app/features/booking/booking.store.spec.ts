@@ -648,7 +648,6 @@ describe('BookingStore lookbook hand-off', () => {
 
   afterEach(() => {
     const httpMock = TestBed.inject(HttpTestingController);
-    httpMock.match(() => true);
     httpMock.verify();
   });
 

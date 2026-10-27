@@ -48,7 +48,7 @@ concurrency:
 env:
   # Keep in sync with the config validator image tag in ci.yml (Workflow Lint).
   #
-  # Pinned to an exact release, not the floating major: this job holds
+  # Pinned to an exact release and digest, not the floating major: this job holds
   # RENOVATE_TOKEN, and on `44` every new 44.x.y arrived as a `digest` update,
   # which renovate.json automerges. An exact version plus the non-automerged
   # `Renovate image` group in renovate.json makes every update a reviewed PR.
@@ -56,8 +56,8 @@ env:
   # NOT named RENOVATE_VERSION: this action forwards env vars matching
   # /^(?:RENOVATE_\w+|LOG_LEVEL|GITHUB_COM_TOKEN|NODE_OPTIONS|...)$/ into the
   # container, so that name would reach Renovate as an unknown config option.
-  # renovate: datasource=docker depName=ghcr.io/renovatebot/renovate
-  RENOVATEBOT_VERSION: "44.186.0"
+  # renovate-image: tracked by the dedicated regex manager in .github/renovate.json
+  RENOVATEBOT_VERSION: "44.186.0@sha256:bb31bae31d6ac1cf61f5a4a10c6d1836bdbb56906c239f01af309fd902d24274"
   # Persists both the repository cache (extract results) and the file-based
   # package/HTTP cache beside it, so datasource lookups revalidate with ETags
   # instead of refetching from an empty cache on every ephemeral runner.

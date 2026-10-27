@@ -7,6 +7,16 @@
     "abandonments:recommended",
     ":maintainLockFilesWeekly"
   ],
+  "customManagers": [
+    {
+      "description": "Update the Renovate image tag and digest together in both workflows",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/(ci|renovate)\\.yml$/"],
+      "matchStrings": ["# renovate-image: tracked by the dedicated regex manager in \\.github/renovate\\.json\\s+RENOVATEBOT_VERSION: \\\"(?<currentValue>[^@\\\"]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\\""],
+      "depNameTemplate": "ghcr.io/renovatebot/renovate",
+      "datasourceTemplate": "docker"
+    }
+  ],
   "branchPrefix": "renovate/",
   "rebaseWhen": "auto",
   "schedule": ["on monday"],

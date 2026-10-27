@@ -53,8 +53,8 @@ env:
   TRIVY_VERSION: v0.76.1
 
   # Keep in sync with renovate.yml's RENOVATEBOT_VERSION.
-  # renovate: datasource=docker depName=ghcr.io/renovatebot/renovate
-  RENOVATEBOT_VERSION: "44.186.0"
+  # renovate-image: tracked by the dedicated regex manager in .github/renovate.json
+  RENOVATEBOT_VERSION: "44.186.0@sha256:bb31bae31d6ac1cf61f5a4a10c6d1836bdbb56906c239f01af309fd902d24274"
 
 defaults:
   run:
