@@ -1147,11 +1147,21 @@ jobs:
             exit 1
           fi
 
+      # Checked before the simulator boots: a first boot saturates the runner,
+      # and the backend's 3 s health probes all timed out under it.
+      - name: Wait for backend
+        uses: ./.github/actions/wait-backend
+        with:
+          pid: ${{ steps.backend.outputs.pid }}
+          log-file: e2e-backend.log
+
+      - *mobile-backend-preflight
+
       # Detox gets this simulator's UDID (.detoxrc.js). Matching by type alone
       # let it pick and boot another "iPhone 17 Pro" inside its silent setup
       # (2-17 min). The boot starts after the builds: booting during them
-      # slowed the framework-cache step from seconds to 2.5 min. The backend
-      # checks below overlap it, and the wait step before Detox times it.
+      # slowed the framework-cache step from seconds to 2.5 min. The wait step
+      # before Detox times it.
       - name: Create and start booting the Detox simulator
         id: simulator
         run: |
@@ -1165,14 +1175,6 @@ jobs:
           fi
           echo "udid=${udid}" >> "$GITHUB_OUTPUT"
           xcrun simctl boot "${udid}"
-
-      - name: Wait for backend
-        uses: ./.github/actions/wait-backend
-        with:
-          pid: ${{ steps.backend.outputs.pid }}
-          log-file: e2e-backend.log
-
-      - *mobile-backend-preflight
 
       - name: Wait for the Detox simulator to finish booting
         timeout-minutes: 25
