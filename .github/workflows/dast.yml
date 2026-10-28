@@ -33,7 +33,7 @@ concurrency:
 
 env:
   JAVA_VERSION: "25"
-  NODE_VERSION: "24"
+  NODE_VERSION: "26"
   # The ZAP image is run directly instead of through zaproxy/action-api-scan /
   # action-full-scan: those wrappers default to the mutable `:stable` tag.
   # zap-image: tracked by the dedicated regex manager in .github/renovate.json

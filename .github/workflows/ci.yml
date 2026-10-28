@@ -44,7 +44,7 @@ concurrency:
 
 env:
   JAVA_VERSION: "25"
-  NODE_VERSION: "24"
+  NODE_VERSION: "26"
 
   REGISTRY: ghcr.io
   IMAGE_TAG: ${{ github.sha }}

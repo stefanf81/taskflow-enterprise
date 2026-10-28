@@ -69,7 +69,7 @@ From the repository root, run `npm run sync:api-types` after the reviewed OpenAP
 
 ### Prerequisites
 
-Make sure you have **Node.js 24.21.0** and **npm 12.2.1** installed. The
+Make sure you have **Node.js 26.13.0** and **npm 12.2.1** installed. The
 repository pins these versions through `mobile/.nvmrc` and
 `frontend/package.json`.
 

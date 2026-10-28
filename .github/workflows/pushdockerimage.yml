@@ -61,7 +61,7 @@ concurrency:
 
 env:
   JAVA_VERSION: "25"
-  NODE_VERSION: "24"
+  NODE_VERSION: "26"
   REGISTRY: ghcr.io
   # renovate: datasource=github-releases depName=aquasecurity/trivy
   TRIVY_VERSION: v0.76.1
