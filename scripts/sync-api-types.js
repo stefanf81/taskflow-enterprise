@@ -2,22 +2,23 @@
 /**
  * TaskFlow OpenAPI to TypeScript Contract Synchronizer
  *
- * Fetches the backend OpenAPI spec (GET /v3/api-docs) and generates
- * TypeScript interface definitions in both platform clients, plus structural zod/mini schemas
+ * Reads the reviewed OpenAPI baseline (api/openapi.json, refreshed by `npm run api:spec:update`) and
+ * generates TypeScript interface definitions in both platform clients, plus structural zod/mini schemas
  * for the response DTOs (shared/schemas/src/generated/api-responses.ts). The hand-written
  * response schemas stay the runtime validators (they add enums, lengths, defaults); a parity
  * test compares their fields with the generated ones, so a response field added by the backend
  * cannot be silently stripped by a validator.
  *
- * Usage: node scripts/sync-api-types.js [--check] [optional_openapi_url_or_file]
+ * Usage: node scripts/sync-api-types.js [--check] [openapi_file]
+ *
+ * Only a local file is accepted: generating from a live server would write unreviewed network data
+ * into committed sources (CodeQL js/http-to-file-access).
  */
 
 const fs = require('fs');
 const path = require('path');
-const http = require('http');
-const https = require('https');
 
-const DEFAULT_URL = 'http://localhost:8080/v3/api-docs';
+const DEFAULT_SPEC = path.resolve(__dirname, '../api/openapi.json');
 const TARGET_FILES = [
   path.resolve(__dirname, '../frontend/src/app/types/api.ts'),
   path.resolve(__dirname, '../mobile/src/types/api.ts'),
@@ -112,27 +113,10 @@ const TYPE_OVERRIDES = {
 // Main
 // ---------------------------------------------------------------------------
 function loadOpenApiSpec(source) {
-  if (!source.startsWith('http://') && !source.startsWith('https://')) {
-    return Promise.resolve(JSON.parse(fs.readFileSync(source, 'utf8')));
+  if (/^https?:\/\//i.test(source)) {
+    throw new Error('Pass the OpenAPI baseline file; refresh it from a running backend with npm run api:spec:update.');
   }
-
-  return new Promise((resolve, reject) => {
-    const client = source.startsWith('https') ? https : http;
-    const req = client.get(source, (res) => {
-      if (res.statusCode !== 200) {
-        reject(new Error(`Failed to fetch OpenAPI spec: HTTP ${res.statusCode}`));
-        return;
-      }
-      let rawData = '';
-      res.on('data', (chunk) => { rawData += chunk; });
-      res.on('end', () => {
-        try { resolve(JSON.parse(rawData)); }
-        catch (e) { reject(e); }
-      });
-    });
-    req.setTimeout(5000, () => { req.destroy(); reject(new Error('Request timed out')); });
-    req.on('error', (err) => reject(err));
-  });
+  return JSON.parse(fs.readFileSync(source, 'utf8'));
 }
 
 function generateTypesFromSchemas(schemas) {
@@ -263,11 +247,11 @@ function formatForTarget(generated, targetFile) {
 async function main() {
   const args = process.argv.slice(2);
   const check = args[0] === '--check';
-  const source = args.find((arg) => arg !== '--check') || DEFAULT_URL;
+  const source = args.find((arg) => arg !== '--check') || DEFAULT_SPEC;
   console.log(`Loading OpenAPI spec from ${source} ...`);
 
   try {
-    const spec = await loadOpenApiSpec(source);
+    const spec = loadOpenApiSpec(source);
 
     if (!spec.components || !spec.components.schemas) {
       throw new Error('Invalid OpenAPI document: missing components.schemas');

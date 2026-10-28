@@ -7,6 +7,11 @@ const { promisify } = require('node:util');
 
 const execute = promisify(execFile);
 
+// The logged status is copied from this fixed table, so nothing the server sends is written to the
+// diagnostics files (CodeQL js/http-to-file-access); a status outside 100-599 is logged as "invalid".
+const HTTP_STATUS_CODES = Array.from({ length: 500 }, (_, index) => index + 100);
+const loggedStatus = (status) => HTTP_STATUS_CODES.find((code) => code === status) ?? 'invalid';
+
 async function preflight({
   baseUrl = 'http://localhost:8080',
   timeoutMs = 10_000,
@@ -33,7 +38,7 @@ async function preflight({
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
       });
-      receivedStatus = response.status;
+      receivedStatus = loggedStatus(response.status);
       if (response.status !== status) {
         await response.body?.cancel();
         throw new Error('Unexpected HTTP status');
