@@ -898,6 +898,21 @@ jobs:
       - *raise-gradle-memory
 
       - *install-android-sdk
+
+      # The emulator step installs the latest emulator and the system image
+      # (~45 s) before it boots. Fetch both now, alongside the app build; that
+      # step then finds them installed. Only network and unzip, so unlike an
+      # early emulator boot it does not compete with Gradle for the CPU.
+      - name: Start downloading the emulator in the background
+        run: |
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "${SDKMANAGER}" ]]; then
+            SDKMANAGER="$(command -v sdkmanager)"
+          fi
+          nohup bash -c '"$0" --install emulator "system-images;android-35;google_apis;x86_64" > "$1" 2>&1; echo $? > "$2"' \
+            "${SDKMANAGER}" "${RUNNER_TEMP}/emulator-sdk.log" "${RUNNER_TEMP}/emulator-sdk.status" \
+            > /dev/null 2>&1 &
+
       - *install-dependencies
       - *save-npm-cache
 
@@ -955,6 +970,22 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+
+      # Not fatal: whatever the download did not install, the emulator step
+      # installs itself.
+      - name: Wait for the background emulator download
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          status_file="${RUNNER_TEMP}/emulator-sdk.status"
+          start=$SECONDS
+          while [[ ! -s "${status_file}" ]]; do sleep 1; done
+          echo "Waited $((SECONDS - start)) s for the emulator download."
+          if [[ "$(cat "${status_file}")" != 0 ]]; then
+            cat "${RUNNER_TEMP}/emulator-sdk.log"
+            echo "::warning::Background emulator download failed; the emulator step installs it."
+          fi
 
       - name: Wait for backend
         uses: ./.github/actions/wait-backend
@@ -1082,10 +1113,24 @@ jobs:
           # A fully qualified install trusts only this formula, not the whole tap.
           brew install wix/brew/applesimutils
 
-      # .detoxrc.js asks for any simulator of type "iPhone 17 Pro". A freshly
-      # created simulator's first boot took 2 min in one run and 17 min in the
-      # next, all inside Detox's silent setup. Start it here so the boot
-      # overlaps the release build; the wait step before Detox times it.
+      - name: Build Detox framework cache
+        run: npx detox build-framework-cache
+
+      # The raw xcodebuild output is too long for the Actions log; keep it as
+      # an artifact and print the tail when the build fails.
+      - name: Build Detox release app
+        run: |
+          log="${RUNNER_TEMP}/ios-e2e-build.log"
+          if ! npm run e2e:build > "${log}" 2>&1; then
+            tail -n 150 "${log}"
+            exit 1
+          fi
+
+      # Detox gets this simulator's UDID (.detoxrc.js). Matching by type alone
+      # let it pick and boot another "iPhone 17 Pro" inside its silent setup
+      # (2-17 min). The boot starts after the builds: booting during them
+      # slowed the framework-cache step from seconds to 2.5 min. The backend
+      # checks below overlap it, and the wait step before Detox times it.
       - name: Create and start booting the Detox simulator
         id: simulator
         run: |
@@ -1100,20 +1145,6 @@ jobs:
           echo "udid=${udid}" >> "$GITHUB_OUTPUT"
           xcrun simctl boot "${udid}"
 
-      - name: Build Detox framework cache
-        run: npx detox build-framework-cache
-
-      # The raw xcodebuild output is too long for the Actions log; keep it as
-      # an artifact and print the tail when the build fails.
-      - name: Build Detox release app
-        run: |
-          log="${RUNNER_TEMP}/ios-e2e-build.log"
-          if ! npm run e2e:build > "${log}" 2>&1; then
-            tail -n 150 "${log}"
-            exit 1
-          fi
-
-      # .detoxrc.js asks for any simulator of type "iPhone 17 Pro".
       - name: Wait for backend
         uses: ./.github/actions/wait-backend
         with:

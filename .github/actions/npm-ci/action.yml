@@ -79,9 +79,8 @@ runs:
         key: npm-cache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
 
     # setup-node only reads `packageManager` to enable npm caching; it never
-    # installs that npm version, and Node 26 bundles npm 11. Corepack is
-    # deprecated and being removed from Node distributions, so install the
-    # declared npm explicitly. Derived from frontend/package.json so the pin
+    # installs that npm version, and Node 26 bundles npm 11. Node 25 stopped
+    # bundling Corepack, so install the declared npm explicitly. Derived from frontend/package.json so the pin
     # cannot drift; npm 12 also enforces the `allowScripts` allowlists.
     - name: Ensure declared npm version
       if: steps.nm-cache.outputs.cache-hit != 'true'
