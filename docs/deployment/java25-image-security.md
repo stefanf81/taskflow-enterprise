@@ -10,10 +10,10 @@ sha256:41d9263c0d5b2a74d89af6e29e73b04298bc65e3cb705d03e9e2271ef49fef84
 Temurin 25.0.4.1+1 / Ubuntu 26.04
 ```
 
-**2026-10-27 digest refresh:** the Dockerfile now pins
-`sha256:f9d26d6ca476513a3c7081291e0c05e5f5c2c66f77dcf21704cf8bcdb94f4342`
-(built 2026-10-26). It still ships Temurin 25.0.4.1+1, so it is an Ubuntu base
-refresh, not the patched JRE. The scan results below were taken on the digest
+**2026-10-28 digest refresh:** the Dockerfile now pins
+`sha256:acd83cdf6c9b5bfcd7c4e9d3e1969bacaacdcfa034c074500ab28610fb840f81`
+(pushed 2026-10-28; previous pin `sha256:f9d26d6ca476513a3c7081291e0c05e5f5c2c66f77dcf21704cf8bcdb94f4342`,
+built 2026-10-26, Temurin 25.0.4.1+1). Its Temurin build has not been recorded here yet. The scan results below were taken on the digest
 above and have **not** been repeated for the new one; CI's image scan covers it
 on the next build.
 

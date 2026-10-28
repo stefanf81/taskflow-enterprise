@@ -57,7 +57,7 @@ env:
   # /^(?:RENOVATE_\w+|LOG_LEVEL|GITHUB_COM_TOKEN|NODE_OPTIONS|...)$/ into the
   # container, so that name would reach Renovate as an unknown config option.
   # renovate-image: tracked by the dedicated regex manager in .github/renovate.json
-  RENOVATEBOT_VERSION: "44.186.0@sha256:bb31bae31d6ac1cf61f5a4a10c6d1836bdbb56906c239f01af309fd902d24274"
+  RENOVATEBOT_VERSION: "44.192.0@sha256:20f0903127aef0ce838410be939680ced244bb42f00ce2e4bd793ad231a35419"
   # Persists both the repository cache (extract results) and the file-based
   # package/HTTP cache beside it, so datasource lookups revalidate with ETags
   # instead of refetching from an empty cache on every ephemeral runner.

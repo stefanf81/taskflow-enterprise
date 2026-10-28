@@ -54,7 +54,7 @@ env:
 
   # Keep in sync with renovate.yml's RENOVATEBOT_VERSION.
   # renovate-image: tracked by the dedicated regex manager in .github/renovate.json
-  RENOVATEBOT_VERSION: "44.186.0@sha256:bb31bae31d6ac1cf61f5a4a10c6d1836bdbb56906c239f01af309fd902d24274"
+  RENOVATEBOT_VERSION: "44.192.0@sha256:20f0903127aef0ce838410be939680ced244bb42f00ce2e4bd793ad231a35419"
 
 defaults:
   run:
@@ -368,7 +368,7 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-read-only: false
 
@@ -465,7 +465,7 @@ jobs:
       # Before an entry exists (or after eviction) the restore falls through
       # to the newest Linux entry of any job, e.g. the Android build's.
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-read-only: ${{ github.event_name != 'push' }}
 
@@ -573,7 +573,7 @@ jobs:
       # integration tests use this variable the same way
       # (gradle/actions .github/workflows/integ-test-restore-gradle-home.yml).
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         env:
           GRADLE_BUILD_ACTION_CACHE_KEY_JOB: backend
         with:
@@ -704,7 +704,7 @@ jobs:
       # rather than adding setup-gradle. `backend` owns writes in this workflow;
       # restore its entry (see `package`).
       - name: Submit Dependency Graph
-        uses: gradle/actions/dependency-submission@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/dependency-submission@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         env:
           GRADLE_BUILD_ACTION_CACHE_KEY_JOB: backend
         with:

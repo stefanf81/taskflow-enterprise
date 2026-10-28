@@ -254,7 +254,7 @@ jobs:
       # Note: restore-keys must NOT end with a dash — append-timestamp adds the
       # separator itself.
       - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639 # v1.2.20
+        uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
         with:
           key: android-ccache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
@@ -264,7 +264,7 @@ jobs:
           evict-old-files: job
 
       - name: Set up Gradle caching
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - &install-android-sdk
         name: Install Android SDK components
@@ -767,7 +767,7 @@ jobs:
 
       # Restores ci.yml's `backend` entry read-only, like its `package` job.
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         env:
           GRADLE_BUILD_ACTION_CACHE_KEY_JOB: backend
         with:
@@ -822,7 +822,7 @@ jobs:
 
       # The `android` job owns the writable Gradle cache; restore its entry.
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         env:
           GRADLE_BUILD_ACTION_CACHE_KEY_JOB: android
         with:
