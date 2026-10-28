@@ -43,9 +43,11 @@ module.exports = {
   devices: {
     simulator: {
       type: 'ios.simulator',
-      device: {
-        type: 'iPhone 17 Pro',
-      },
+      // CI boots one simulator ahead of time and passes its UDID: matching by type alone let
+      // Detox pick (and silently boot) a different "iPhone 17 Pro" on runners that have several.
+      device: process.env.DETOX_IOS_SIMULATOR_UDID
+        ? { id: process.env.DETOX_IOS_SIMULATOR_UDID }
+        : { type: 'iPhone 17 Pro' },
     },
     emulator: {
       type: 'android.emulator',

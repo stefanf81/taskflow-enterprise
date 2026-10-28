@@ -1115,8 +1115,15 @@ jobs:
           xcrun simctl bootstatus "${UDID}" -b
           echo "Simulator ready after $((SECONDS - start)) s of waiting." | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Pinned to the simulator booted above. Debug logging shows the setup
+      # phase (device allocation, app install, launch), which info level leaves
+      # silent; it sat there for 2-17 min in earlier runs. The step timeout
+      # fails a hang well inside the job budget so the diagnostics still run.
       - name: Run Detox on the iOS simulator
-        run: npx detox test --configuration ios.sim.release --headless --take-screenshots failing --record-logs failing --artifacts-location artifacts/detox
+        timeout-minutes: 30
+        env:
+          DETOX_IOS_SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: npx detox test --configuration ios.sim.release --headless --loglevel debug --take-screenshots failing --record-logs failing --artifacts-location artifacts/detox
 
       - *mobile-backend-diagnostics
 
