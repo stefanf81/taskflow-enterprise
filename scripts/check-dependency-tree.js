@@ -35,6 +35,11 @@ const KNOWN_PEER_MISMATCHES = {
   // jest-environment-jsdom passes its own (nested) jsdom to this base class; in a mobile-only
   // install nothing else provides the peer.
   '@jest/environment-jsdom-abstract>jsdom': 'jest-environment-jsdom injects its nested jsdom.',
+  // @angular/build 22.2.5 made @oxc-parser/binding-wasm32-wasi a dependency without a `cpu`
+  // restriction, so it installs everywhere; its hoisted runtime cannot see the emnapi copies
+  // nested under it. The WASI binding is only a fallback when no native oxc binary exists.
+  '@napi-rs/wasm-runtime>@emnapi/core': 'WASI fallback of oxc-parser; native bindings are used.',
+  '@napi-rs/wasm-runtime>@emnapi/runtime': 'WASI fallback of oxc-parser; native bindings are used.',
 };
 
 function readManifest(relDir) {
