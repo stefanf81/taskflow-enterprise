@@ -17,11 +17,13 @@ const getBaseUrl = () => {
     } catch {
       throw new Error('EXPO_PUBLIC_API_URL must be a valid absolute URL.');
     }
-    if (Platform.OS === 'android' && hostname === 'localhost') {
+    const isExplicitLocalE2eBuild = process.env.EXPO_PUBLIC_E2E_LOCAL_API === 'true';
+    // E2E builds keep localhost: Detox forwards the emulator's port to the host (`reversePorts`
+    // in .detoxrc.js), which avoids the emulator's 10.0.2.2 route that intermittently failed in CI.
+    if (Platform.OS === 'android' && hostname === 'localhost' && !isExplicitLocalE2eBuild) {
       url = url.replace(hostname, '10.0.2.2');
       hostname = '10.0.2.2';
     }
-    const isExplicitLocalE2eBuild = process.env.EXPO_PUBLIC_E2E_LOCAL_API === 'true';
     if (!__DEV__ && !isExplicitLocalE2eBuild && protocol !== 'https:') {
       throw new Error(
         'Production API URL must use HTTPS. Found: ' + url +

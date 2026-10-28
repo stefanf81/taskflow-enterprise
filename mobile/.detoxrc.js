@@ -27,6 +27,9 @@ module.exports = {
     'android.release': {
       type: 'android.apk',
       binaryPath: 'android/app/build/outputs/apk/release/app-release.apk',
+      // E2E builds call http://localhost:8080 (src/api/client.ts); `adb reverse` forwards it to
+      // the backend on the host instead of the emulator's 10.0.2.2 route.
+      reversePorts: [8080],
       // One ABI: the Apple Silicon emulator is arm64-v8a, and every extra ABI repeats the native
       // C++ build. An x86_64 emulator needs DETOX_ANDROID_ABIS=x86_64 (comma-separated list).
       // JAVA_HOME/ANDROID_HOME default to the Homebrew/Android Studio locations on a Mac; CI (the

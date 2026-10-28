@@ -152,4 +152,4 @@ The E2E suite validates critical guest user journeys end-to-end:
    ```
 
 4. **HTTPS Bypass for Local Emulator Tests:**
-   The release API client configuration (`src/api/client.ts`) allows `http://10.0.2.2` and `http://localhost` during local emulator testing while strictly enforcing `https://` for external production domains.
+   The release API client configuration (`src/api/client.ts`) allows `http://10.0.2.2` and `http://localhost` during local emulator testing (E2E builds keep `localhost` on Android; `.detoxrc.js` forwards port 8080 with `reversePorts`) while strictly enforcing `https://` for external production domains.
