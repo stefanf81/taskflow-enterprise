@@ -38,7 +38,6 @@
       "zod": "^4.6.7"
     },
     "braces": "file:mobile/vendor/braces-3.0.3-patched.tgz",
-    "node-forge": "file:mobile/vendor/node-forge-1.4.0-patched.tgz",
     "postcss": "8.5.32",
     "uuid": "11.1.1",
     "@xmldom/xmldom": "0.8.15",
