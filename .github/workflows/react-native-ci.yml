@@ -385,11 +385,11 @@ jobs:
   # succeed may not have saved a snapshot, so its prefix is left alone.
   ccache-retention:
     name: Prune old ccache snapshots
-    needs: [android, ios, android-e2e]
+    needs: [android, ios, android-e2e, ios-e2e]
     if: >-
       !cancelled() && github.event_name != 'pull_request' &&
       (needs.android.result == 'success' || needs.ios.result == 'success' ||
-      needs.android-e2e.result == 'success')
+      needs.android-e2e.result == 'success' || needs.ios-e2e.result == 'success')
     runs-on: ubuntu-26.04
     timeout-minutes: 5
 
@@ -406,6 +406,7 @@ jobs:
           ANDROID_RESULT: ${{ needs.android.result }}
           IOS_RESULT: ${{ needs.ios.result }}
           ANDROID_E2E_RESULT: ${{ needs.android-e2e.result }}
+          IOS_E2E_RESULT: ${{ needs.ios-e2e.result }}
         run: |
           set -euo pipefail
 
@@ -413,6 +414,7 @@ jobs:
           [[ "$ANDROID_RESULT" == success ]] && prefixes+=("ccache-android-ccache-")
           [[ "$IOS_RESULT" == success ]] && prefixes+=("ccache-ios-ccache-")
           [[ "$ANDROID_E2E_RESULT" == success ]] && prefixes+=("ccache-android-e2e-ccache-")
+          [[ "$IOS_E2E_RESULT" == success ]] && prefixes+=("ccache-ios-e2e-ccache-")
           prefixes_json="$(printf '%s\n' "${prefixes[@]}" | jq -R . | jq -sc .)"
 
           stale_ids="$(gh api --method GET --paginate --slurp \
@@ -584,15 +586,14 @@ jobs:
           max-size: 1G
           evict-old-files: job
 
-      # Xcode does not hand the job environment to its compiler processes, so
-      # CCACHE_DIR never reaches RN's wrapper and ccache falls back to its
-      # macOS default directory (the first run stored 0 objects in CCACHE_DIR).
-      # Point that default at the directory ccache-action persists.
-      - name: Route ccache's default directory to the cached one
-        run: |
-          mkdir -p "$CCACHE_DIR" "$HOME/Library/Caches"
-          rm -rf "$HOME/Library/Caches/ccache"
-          ln -s "$CCACHE_DIR" "$HOME/Library/Caches/ccache"
+      # RN's wrapper runs `exec $CCACHE_BINARY clang "$@"`, but CCACHE_BINARY
+      # is a build setting, and Xcode exports build settings to script phases,
+      # not to compiler processes. The compiles ran bare clang and ccache saw
+      # no calls at all (CompileC: 150 tasks, ~1500 s of task time). Compilers
+      # do inherit xcodebuild's environment, so provide the variable there.
+      - &expose-ccache-binary
+        name: Expose ccache to React Native's compiler wrapper
+        run: echo "CCACHE_BINARY=$(command -v ccache)" >> "$GITHUB_ENV"
 
       - &configure-cocoapods
         name: Configure CocoaPods
@@ -1056,6 +1057,10 @@ jobs:
     env:
       EXPO_PUBLIC_API_URL: http://localhost:8080
       EXPO_PUBLIC_E2E_LOCAL_API: "true"
+      # Same ccache wiring as the `ios` job; see there.
+      USE_CCACHE: "1"
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 1G
 
     steps:
       - name: Check out repository
@@ -1097,6 +1102,22 @@ jobs:
       - *read-ruby-version
       - *cache-cocoapods-gems
       - *restore-cocoapods-specs
+
+      # Own snapshots: this Release build compiles with other flags than the
+      # `ios` job's Debug build, so they share no objects. Set up before
+      # `pod install`, which wires in the wrapper only when ccache is on PATH.
+      # Pruned by `ccache-retention`.
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+        with:
+          key: ios-e2e-ccache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ios-e2e-ccache-${{ runner.os }}
+          append-timestamp: true
+          max-size: 1G
+          evict-old-files: job
+      - *expose-ccache-binary
+
       - *configure-cocoapods
       - *configure-xcode-node
       - *locate-expo-modules-jsi
