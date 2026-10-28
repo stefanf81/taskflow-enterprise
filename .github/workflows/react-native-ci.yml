@@ -362,15 +362,19 @@ jobs:
           retention-days: 7
 
   # ccache-action saves a new timestamped snapshot on every run
-  # (`ccache-android-ccache-<os>-<lockfile hash>-<timestamp>`, ~37 MB) and
-  # restores only the newest one through its prefix restore key. Older
-  # snapshots on the same ref are never read again, so keep just the newest.
-  # Pull-request snapshots are left to cleanup-pr-caches.yml, which deletes
-  # every cache of the PR ref when it closes.
+  # (`ccache-<job>-ccache-<os>-<lockfile hash>-<timestamp>`, ~37 MB for
+  # Android) and restores only the newest one through its prefix restore key.
+  # Older snapshots on the same ref are never read again, so keep just the
+  # newest per job. Pull-request snapshots are left to cleanup-pr-caches.yml,
+  # which deletes every cache of the PR ref when it closes. A job that did not
+  # succeed may not have saved a snapshot, so its prefix is left alone.
   ccache-retention:
-    name: Prune old Android ccache snapshots
-    needs: android
-    if: github.event_name != 'pull_request' && needs.android.result == 'success'
+    name: Prune old ccache snapshots
+    needs: [android, ios, android-e2e]
+    if: >-
+      !cancelled() && github.event_name != 'pull_request' &&
+      (needs.android.result == 'success' || needs.ios.result == 'success' ||
+      needs.android-e2e.result == 'success')
     runs-on: ubuntu-26.04
     timeout-minutes: 5
 
@@ -379,18 +383,29 @@ jobs:
 
     # No checkout: this job only calls the GitHub API.
     steps:
-      - name: Delete all but the newest snapshot on this ref
+      - name: Delete all but the newest snapshot per job on this ref
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           REF: ${{ github.ref }}
+          ANDROID_RESULT: ${{ needs.android.result }}
+          IOS_RESULT: ${{ needs.ios.result }}
+          ANDROID_E2E_RESULT: ${{ needs.android-e2e.result }}
         run: |
           set -euo pipefail
 
+          prefixes=()
+          [[ "$ANDROID_RESULT" == success ]] && prefixes+=("ccache-android-ccache-")
+          [[ "$IOS_RESULT" == success ]] && prefixes+=("ccache-ios-ccache-")
+          [[ "$ANDROID_E2E_RESULT" == success ]] && prefixes+=("ccache-android-e2e-ccache-")
+          prefixes_json="$(printf '%s\n' "${prefixes[@]}" | jq -R . | jq -sc .)"
+
           stale_ids="$(gh api --method GET --paginate --slurp \
             "/repos/$REPO/actions/caches" -f per_page=100 -f ref="$REF" \
-            | jq -r '
-              [.[].actions_caches[] | select(.key | startswith("ccache-android-ccache-"))]
+            | jq -r --argjson prefixes "$prefixes_json" '
+              [.[].actions_caches[]] as $caches
+              | $prefixes[] as $p
+              | [$caches[] | select(.key | startswith($p))]
               | sort_by([.created_at, .id])
               | .[0:-1][] | .id
             ')"
@@ -465,6 +480,15 @@ jobs:
       # `fast` builds a single arch for CI; `full` builds every target and is
       # available only through workflow_dispatch.
       NATIVE_SCOPE: ${{ inputs.native_scope || 'fast' }}
+      # React Native's post_install routes every pod's clang through its
+      # ccache wrapper only when USE_CCACHE=1 and ccache is on PATH; otherwise
+      # it strips the wrapper ("[Ccache]: Removing Ccache from CC, ..."). The
+      # wrapper points CCACHE_CONFIGPATH at RN's own ccache.conf (sloppiness,
+      # depend mode), which replaces the config file ccache-action writes, so
+      # the cache dir and size must come from the environment.
+      USE_CCACHE: "1"
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 1G
 
     steps:
       - name: Check out repository
@@ -515,21 +539,23 @@ jobs:
           path: ${{ github.workspace }}/.gem
           key: cocoapods-${{ runner.os }}-ruby${{ steps.ruby.outputs.version }}-${{ env.COCOAPODS_VERSION }}
 
-      # Cache the CocoaPods CDN/spec cache so `pod install --no-repo-update`
-      # does not re-resolve and re-download pod specs on every run. Keyed on
-      # the JavaScript dependency lock, which determines the pod graph. Saved
-      # right after `pod install` and never from pull requests: a lockfile PR
-      # misses the exact key on every run, and saving its PR-scoped copy cost
-      # ~9 s at the end of the job while evicting main's caches.
-      - &restore-cocoapods-specs
-        name: Restore CocoaPods spec cache
-        id: pods-cache
-        uses: actions/cache/restore@v6
+      # No ~/Library/Caches/CocoaPods cache: every pod is a local podspec from
+      # node_modules or a React Native prebuilt (fetched into
+      # ~/Library/Caches/ReactNative at ~90 MB/s), so nothing in it was reused,
+      # and restoring the 314 MB snapshot cost ~29 s per run. The CDN spec
+      # index lives in ~/.cocoapods/repos and was never part of it.
+
+      # Same timestamped-snapshot scheme as the Android job (see there); the
+      # `ccache-retention` job keeps only the newest snapshot per ref.
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
         with:
-          path: ~/Library/Caches/CocoaPods
-          key: cocoapods-specs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: ios-ccache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            cocoapods-specs-${{ runner.os }}-
+            ios-ccache-${{ runner.os }}
+          append-timestamp: true
+          max-size: 1G
+          evict-old-files: job
 
       - &configure-cocoapods
         name: Configure CocoaPods
@@ -597,19 +623,10 @@ jobs:
           # generate and use CocoaPods' local lockfile during this build.
           pod install --no-repo-update
 
-      - name: Save CocoaPods spec cache
-        if: github.event_name != 'pull_request' && steps.pods-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v6
-        with:
-          path: ~/Library/Caches/CocoaPods
-          key: ${{ steps.pods-cache.outputs.cache-primary-key }}
-
-      # Native compile caching is deliberately not enabled on iOS: with the
-      # Expo-generated Pods project the ccache objects never landed in the
-      # configured directory, and a restored DerivedData/Build snapshot made
+      # C/C++/Objective-C compiles go through ccache (job env above). A
+      # restored DerivedData/Build snapshot is deliberately not used: it made
       # xcodebuild slower (fresh project UUIDs invalidate the incremental
-      # database). Revisit if Expo/RN make the pod graph cache-stable.
+      # database). Swift compiles are not cached.
       - name: Build unsigned iOS simulator application
         shell: bash
         run: |
@@ -799,6 +816,11 @@ jobs:
       EXPO_PUBLIC_E2E_LOCAL_API: "true"
       # The runner and its emulator are x86_64 (.detoxrc.js defaults to arm64-v8a for Apple Silicon).
       DETOX_ANDROID_ABIS: x86_64
+      # Same ccache settings as the `android` job; see there.
+      CCACHE_COMPILERCHECK: content
+      CCACHE_SLOPPINESS: time_macros,include_file_mtime,include_file_ctime,file_stat_matches
+      CCACHE_MAXSIZE: 1G
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
 
     steps:
       - name: Check out repository
@@ -857,8 +879,25 @@ jobs:
 
       - *prebuild-android
 
+      # Own snapshots: this x86_64 release build shares few objects with the
+      # `android` job's arm64-v8a debug build. Pruned by `ccache-retention`.
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+        with:
+          key: android-e2e-ccache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            android-e2e-ccache-${{ runner.os }}
+          append-timestamp: true
+          max-size: 1G
+          evict-old-files: job
+
+      # The build command lives in .detoxrc.js, so apply the ccache init
+      # script through Gradle's init.d directory instead of --init-script.
       - name: Build Detox release APK and test APK
         run: |
+          init_d="${GRADLE_USER_HOME:-$HOME/.gradle}/init.d"
+          mkdir -p "$init_d"
+          cp "$GITHUB_WORKSPACE/.github/scripts/android-ccache.init.gradle" "$init_d/"
           chmod +x android/gradlew
           npm run e2e:build:android
 
@@ -979,7 +1018,6 @@ jobs:
       - *prebuild-ios
       - *read-ruby-version
       - *cache-cocoapods-gems
-      - *restore-cocoapods-specs
       - *configure-cocoapods
       - *configure-xcode-node
       - *locate-expo-modules-jsi

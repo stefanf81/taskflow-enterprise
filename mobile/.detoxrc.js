@@ -32,9 +32,12 @@ module.exports = {
       reversePorts: [8080],
       // One ABI: the Apple Silicon emulator is arm64-v8a, and every extra ABI repeats the native
       // C++ build. An x86_64 emulator needs DETOX_ANDROID_ABIS=x86_64 (comma-separated list).
+      // Only the :app tasks: the unqualified `assembleRelease assembleAndroidTest` also built every
+      // library module's debug variant and androidTest APK (incl. debug C++ builds) that Detox never
+      // installs. Detox needs only app-release.apk and app-release-androidTest.apk.
       // JAVA_HOME/ANDROID_HOME default to the Homebrew/Android Studio locations on a Mac; CI (the
       // nightly android-e2e job on Linux) sets its own.
-      build: `${RELEASE_BUNDLE_ENV} JAVA_HOME="\${JAVA_HOME:-/opt/homebrew/opt/openjdk@21}" ANDROID_HOME="\${ANDROID_HOME:-$HOME/Library/Android/sdk}" ./android/gradlew -p android assembleRelease assembleAndroidTest -DtestBuildType=release -PreactNativeArchitectures="\${DETOX_ANDROID_ABIS:-arm64-v8a}"`,
+      build: `${RELEASE_BUNDLE_ENV} JAVA_HOME="\${JAVA_HOME:-/opt/homebrew/opt/openjdk@21}" ANDROID_HOME="\${ANDROID_HOME:-$HOME/Library/Android/sdk}" ./android/gradlew -p android :app:assembleRelease :app:assembleAndroidTest -DtestBuildType=release -PreactNativeArchitectures="\${DETOX_ANDROID_ABIS:-arm64-v8a}"`,
     },
   },
   devices: {
