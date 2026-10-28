@@ -539,11 +539,23 @@ jobs:
           path: ${{ github.workspace }}/.gem
           key: cocoapods-${{ runner.os }}-ruby${{ steps.ruby.outputs.version }}-${{ env.COCOAPODS_VERSION }}
 
-      # No ~/Library/Caches/CocoaPods cache: every pod is a local podspec from
-      # node_modules or a React Native prebuilt (fetched into
-      # ~/Library/Caches/ReactNative at ~90 MB/s), so nothing in it was reused,
-      # and restoring the 314 MB snapshot cost ~29 s per run. The CDN spec
-      # index lives in ~/.cocoapods/repos and was never part of it.
+      # CocoaPods' download cache. The pods are local podspecs, but React
+      # Native's and Expo's prebuilt pods are `:http` sources, and their
+      # extracted copies live here: without it `pod install` took 97 s instead
+      # of 53 s (unpacking ReactNativeDependencies alone took 50 s), more than
+      # the ~29 s restore. Keyed on the JavaScript dependency lock, which
+      # determines the pod graph. Saved right after `pod install` and never
+      # from pull requests: a lockfile PR misses the exact key on every run,
+      # and saving its PR-scoped copy cost ~9 s while evicting main's caches.
+      - &restore-cocoapods-specs
+        name: Restore CocoaPods download cache
+        id: pods-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/Library/Caches/CocoaPods
+          key: cocoapods-specs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            cocoapods-specs-${{ runner.os }}-
 
       # Same timestamped-snapshot scheme as the Android job (see there); the
       # `ccache-retention` job keeps only the newest snapshot per ref.
@@ -556,6 +568,16 @@ jobs:
           append-timestamp: true
           max-size: 1G
           evict-old-files: job
+
+      # Xcode does not hand the job environment to its compiler processes, so
+      # CCACHE_DIR never reaches RN's wrapper and ccache falls back to its
+      # macOS default directory (the first run stored 0 objects in CCACHE_DIR).
+      # Point that default at the directory ccache-action persists.
+      - name: Route ccache's default directory to the cached one
+        run: |
+          mkdir -p "$CCACHE_DIR" "$HOME/Library/Caches"
+          rm -rf "$HOME/Library/Caches/ccache"
+          ln -s "$CCACHE_DIR" "$HOME/Library/Caches/ccache"
 
       - &configure-cocoapods
         name: Configure CocoaPods
@@ -622,6 +644,14 @@ jobs:
           # JavaScript dependency graph is locked by the root package-lock.json;
           # generate and use CocoaPods' local lockfile during this build.
           pod install --no-repo-update
+
+      - name: Save CocoaPods download cache
+        if: github.event_name != 'pull_request' && steps.pods-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: ~/Library/Caches/CocoaPods
+          key: ${{ steps.pods-cache.outputs.cache-primary-key }}
 
       # C/C++/Objective-C compiles go through ccache (job env above). A
       # restored DerivedData/Build snapshot is deliberately not used: it made
@@ -1018,6 +1048,7 @@ jobs:
       - *prebuild-ios
       - *read-ruby-version
       - *cache-cocoapods-gems
+      - *restore-cocoapods-specs
       - *configure-cocoapods
       - *configure-xcode-node
       - *locate-expo-modules-jsi
