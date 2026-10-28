@@ -236,13 +236,12 @@ manage ordinary libraries such as Axios, Zod, Zustand, TanStack Query, and React
 Hook Form. React Navigation and native test tooling remain review-only grouped
 updates because they carry React Native peer-dependency constraints.
 
-### Vendored Security Patches (node-forge & braces)
+### Vendored Security Patch (braces)
 
-TaskFlow vendors backports of upstream security fixes for two dependencies until published npm fixes are released:
-1. **`node-forge@1.4.0` (CVE-2026-85393 / GHSA-86w9-cpqp-85rv):** Fixes RSA PKCS#1 v1.5 `DigestAlgorithm` validation.
-2. **`braces@3.0.3` (CVE-2026-93687 / GHSA-vfj7-8cjw-p6xm):** Caps AST recursive parsing depth at `MAX_DEPTH = 100` to prevent call stack overflow crashes in Jest/micromatch.
+TaskFlow vendors a backport of an upstream security fix until a published npm fix is released:
+1. **`braces@3.0.3` (CVE-2026-93687 / GHSA-vfj7-8cjw-p6xm):** Caps AST recursive parsing depth at `MAX_DEPTH = 100` to prevent call stack overflow crashes in Jest/micromatch. (`node-forge` CVE-2026-85393 / GHSA-86w9-cpqp-85rv is resolved by upstream `node-forge@1.4.2`, verified by `mobile/test/security/node-forge.test.cjs`.)
 
-Patches are applied via npm `overrides` (in the root `package.json`) using local `.tgz` archives in `mobile/vendor/`. This preserves `lockfileVersion: 3` (ensuring Renovate compatibility) and requires no install-time script execution (`npm ci --ignore-scripts` compatible).
+The patch is applied via npm `overrides` (in the root `package.json`) using a local `.tgz` archive in `mobile/vendor/`. This preserves `lockfileVersion: 3` (ensuring Renovate compatibility) and requires no install-time script execution (`npm ci --ignore-scripts` compatible).
 
 > For detailed patch diffs, tarball rebuild scripts, test suites, and upstream removal procedures, see **[`mobile/vendor/README.md`](vendor/README.md)**.
 
