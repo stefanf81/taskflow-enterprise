@@ -5,8 +5,8 @@ maintainers publish fixed npm releases.
 
 - `*.patch` — human-readable unified diffs of the upstream fixes.
 - `*-patched.tgz` — official registry releases with the patch applied.
-  Referenced by `mobile/package.json` `overrides`, so they are installed on
-  every `npm install`/`npm ci` (including `--ignore-scripts`) while keeping
+  Referenced by the root `package.json` `overrides` (`file:mobile/vendor/...`), so they are
+  installed on every `npm install`/`npm ci` (including `--ignore-scripts`) while keeping
   `package-lock.json` at lockfileVersion 3 (which Renovate can parse).
 - `rebuild-*.sh` — regenerate each tarball from the official registry release,
   verifying its sha512 checksum and re-applying the patch.
@@ -19,21 +19,22 @@ Regenerate with:
 ```
 
 The rebuilt tarballs have new bytes (gzip embeds a timestamp), so the
-`integrity` recorded for them in `mobile/package-lock.json` goes stale and the
+`integrity` recorded for them in the root `package-lock.json` goes stale and the
 next `npm ci` fails. Refresh and verify before committing (from the repository
 root):
 
 ```bash
-npm install --prefix mobile
-npm ci --prefix mobile
-npm test --prefix mobile
+npm install
+npm ci
+npm test --workspace mobile
 ```
 
-Commit the regenerated tarballs together with `mobile/package-lock.json`. If a
-bare `npm install` reports `ENOENT ... node_modules/<dependent>/vendor/...`,
-that is npm resolving a `file:` override relative to the dependent package;
-restore the stale entry to `file:vendor/<tarball>` with the rebuilt tarball's
-sha512 integrity, then use `npm ci`.
+Commit the regenerated tarballs together with `package-lock.json`. If a bare
+`npm install` reports `ENOENT ... node_modules/<dependent>/vendor/...`, that is
+npm resolving a `file:` override relative to the dependent package; restore the
+stale entry to `file:mobile/vendor/<tarball>` with the rebuilt tarball's sha512
+integrity, then use `npm ci`. Check with an empty cache
+(`npm ci --cache "$(mktemp -d)"`): a populated `~/.npm` cache can hide a wrong path.
 
 ## node-forge CVE-2026-85393
 
@@ -56,6 +57,6 @@ a nesting-depth guard. `braces-3.0.3.patch` backports upstream
 See `mobile/README.md` for details.
 
 When upstream ships a fixed release for either package, delete its patch,
-tarball, and rebuild script, remove its `mobile/package.json` `overrides`
+tarball, and rebuild script, remove its root `package.json` `overrides`
 entry, regenerate the lockfile, and rerun the mobile tests (which include the
 regression suites in `mobile/test/security/`).

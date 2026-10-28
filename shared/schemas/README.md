@@ -17,24 +17,26 @@ shared/schemas/
 │   ├── appointment.ts  # Booking creation, updates, SSE events, and dashboard models
 │   ├── auth.ts         # Login, registration, and user identity models
 │   ├── catalog.ts      # Services and barber catalog models
-│   └── review.ts       # Customer reviews and barber ratings models
-├── package.json
-└── package-lock.json
+│   ├── review.ts       # Customer reviews and barber ratings models
+│   └── generated/      # Structural response contracts generated from api/openapi.json (not exported)
+└── package.json
 ```
 
 ## Usage
 
 ### Installation in Consumer Packages
 
-Referenced in `frontend/package.json` and `mobile/package.json` as a local file dependency:
+`shared/schemas` is an npm workspace of the repository root. `frontend/package.json` and
+`mobile/package.json` depend on it as `"@taskflow/schemas": "*"`, which npm satisfies with the
+local workspace (a symlink in the root `node_modules`):
 
 ```json
 "dependencies": {
-  "@taskflow/schemas": "file:../shared/schemas"
+  "@taskflow/schemas": "*"
 }
 ```
 
-> **Important:** Always run `npm ci` in `shared/schemas/` first before running `npm ci` in `frontend/` or `mobile/`.
+> **Important:** Run `npm ci` once at the repository root. It installs every workspace from the single root lockfile; no per-package install order is needed.
 
 ### Consuming in TypeScript / Frontend / Mobile
 
@@ -68,9 +70,9 @@ The schemas are written with `zod/mini`, the functional API of the same `zod` 4 
 
 ## Quality Gates
 
-To verify that the shared package dependencies are intact and lockfiles are clean:
+To verify that the shared package dependencies are intact and the lockfile is clean:
 
 ```bash
-cd shared/schemas
-npm ci
+# from the repository root
+npm ci --workspace shared/schemas
 ```

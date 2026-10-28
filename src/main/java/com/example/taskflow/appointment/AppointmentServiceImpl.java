@@ -1,4 +1,6 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.internal.Appointment;
+import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 
@@ -21,6 +23,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -36,7 +39,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Service
-public class AppointmentServiceImpl implements AppointmentService {
+class AppointmentServiceImpl implements AppointmentService {
 
     private static final Logger logger = LoggerFactory.getLogger(AppointmentServiceImpl.class);
 
@@ -568,7 +571,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         // Publish the status-change event. The notification outbox entry is written
         // by the (separate) notification slice listener so the appointment slice
         // stays decoupled from the notification slice (ArchUnit cycle rule).
-        eventPublisher.publishEvent(new AppointmentStatusChangedEvent(this, savedItem));
+        eventPublisher.publishEvent(new AppointmentStatusChangedEvent(this, AppointmentDetails.of(savedItem)));
         publishAdminEvent(AppointmentAdminEvent.Type.UPDATED, savedItem.getId());
 
         return AppointmentResponse.fromEntity(savedItem);
@@ -658,7 +661,7 @@ public class AppointmentServiceImpl implements AppointmentService {
 
         item.setStatus(AppointmentStatus.CANCELLED);
         Appointment saved = appointmentRepository.save(item);
-        eventPublisher.publishEvent(new AppointmentCancelledEvent(saved, cancelledBy));
+        eventPublisher.publishEvent(new AppointmentCancelledEvent(AppointmentDetails.of(saved), cancelledBy));
         publishAvailabilityChange(
                 AvailabilityChangedEvent.single(saved.getBarberName(), saved.getBookingDate()));
         publishAdminEvent(AppointmentAdminEvent.Type.UPDATED, saved.getId());
@@ -741,9 +744,27 @@ public class AppointmentServiceImpl implements AppointmentService {
         cancelAppointment(item, AppointmentCancelledEvent.CancelledBy.GUEST, true);
     }
 
+    /** Ids per IN query; Hibernate pads IN lists to powers of two, so few plans are cached. */
+    private static final int ID_LOOKUP_CHUNK = 512;
+
     @Override
-    public Appointment findByPublicId(String publicId) {
-        return appointmentRepository.findByPublicId(publicId);
+    @Transactional(readOnly = true)
+    public java.util.Map<Long, String> findApprovedBarberNames(java.util.Collection<Long> appointmentIds) {
+        java.util.Map<Long, String> names = new java.util.HashMap<>();
+        List<Long> ids = List.copyOf(new java.util.LinkedHashSet<>(appointmentIds));
+        for (int from = 0; from < ids.size(); from += ID_LOOKUP_CHUNK) {
+            List<Long> chunk = ids.subList(from, Math.min(from + ID_LOOKUP_CHUNK, ids.size()));
+            for (var row : appointmentRepository.findBarberNamesByIdsAndStatus(chunk, AppointmentStatus.APPROVED)) {
+                names.put(row.getId(), row.getBarberName());
+            }
+        }
+        return names;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<AppointmentDetails> findDetailsByPublicId(String publicId) {
+        return Optional.ofNullable(appointmentRepository.findByPublicId(publicId)).map(AppointmentDetails::of);
     }
 
     private void publishAdminEvent(AppointmentAdminEvent.Type type, Long appointmentId) {
@@ -768,18 +789,26 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public java.util.Optional<Appointment> lockForReminder(Long id) {
-        // Only APPROVED bookings get reminders: one cancelled or declined after the id sweep
-        // (but before this lock) must not be reminded about.
-        return appointmentRepository.findByIdForUpdate(id)
-                .filter(a -> a.getStatusEnum() == AppointmentStatus.APPROVED);
-    }
-
-    @Override
-    @Transactional
-    public void save(Appointment appointment) {
+    // MANDATORY: the flag must commit together with the caller's outbox row. In a transaction of
+    // its own it would commit first, and a failed outbox write would lose the reminder for good.
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<AppointmentDetails> claimReminder(Long id, LocalDate tomorrow) {
+        Appointment appointment = appointmentRepository.findByIdForUpdate(id).orElse(null);
+        if (appointment == null || Boolean.TRUE.equals(appointment.getReminderSent())) {
+            return Optional.empty();
+        }
+        // The id was selected before the lock was taken; the booking may have been denied,
+        // cancelled or moved in between. Re-check under the lock and skip rather than remind a
+        // customer about a booking that no longer exists.
+        if (appointment.getStatusEnum() != AppointmentStatus.APPROVED
+                || !tomorrow.equals(appointment.getBookingDate())) {
+            logger.info("Skipping reminder for appointment id={}: status={} date={} no longer qualifies",
+                    appointment.getId(), appointment.getStatus(), appointment.getBookingDate());
+            return Optional.empty();
+        }
+        appointment.setReminderSent(true);
         appointmentRepository.save(appointment);
+        return Optional.of(AppointmentDetails.of(appointment));
     }
 
     /**

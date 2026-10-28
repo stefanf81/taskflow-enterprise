@@ -27,3 +27,4 @@ This directory records architectural decisions made during the development of Ta
 | [ADR-019](ADR-019-zod-mini-shared-schemas.md) | `zod/mini` for the Shared Schemas | Accepted |
 | [ADR-020](ADR-020-java-25-and-aot-cache.md) | Java 25 LTS with an AOT Cache Instead of the CDS Archive | Candidate accepted; production risk approval pending |
 | [ADR-021](ADR-021-service-worker-scope.md) | Service Worker for the Web App — Scope and Recommendation | Proposed (recommendation: do not adopt yet) |
+| [ADR-022](ADR-022-enforced-module-boundaries.md) | Enforced Module Boundaries (Spring Modulith) | Accepted |

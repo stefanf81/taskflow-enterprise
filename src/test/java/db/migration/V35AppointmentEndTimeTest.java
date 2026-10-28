@@ -1,6 +1,6 @@
 package db.migration;
 
-import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.internal.Appointment;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;

@@ -11,7 +11,7 @@ let mockUpdateMutate: jest.Mock;
 let mockDeleteMutate: jest.Mock;
 let mockHookArgs: any[] | null;
 
-jest.mock('../src/hooks/useAppointments', () => ({
+jest.mock('../src/core/appointments/useAppointments', () => ({
   useAppointments: (...args: any[]) => {
     mockHookArgs = args;
     return {
@@ -26,11 +26,11 @@ jest.mock('../src/hooks/useAppointments', () => ({
 }));
 
 const mockLogout = jest.fn();
-jest.mock('../src/store/useAuthStore', () => ({
+jest.mock('../src/core/auth/useAuthStore', () => ({
   useAuthStore: () => ({ logout: mockLogout }),
 }));
 
-import { AdminDashboardScreen } from '../src/screens/AdminDashboardScreen';
+import { AdminDashboardScreen } from '../src/features/admin/AdminDashboardScreen';
 
 const defaultStats = {
   total: 1, pending: 1, approved: 0, denied: 0, overdue: 0, progress: 0, approvedRevenue: 0,

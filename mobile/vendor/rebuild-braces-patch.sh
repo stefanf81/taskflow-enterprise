@@ -3,8 +3,8 @@
 # Rebuilds braces-3.0.3-patched.tgz from the official npm release plus the
 # checked-in backport of upstream PR #72 (CVE-2026-93687 / GHSA-vfj7-8cjw-p6xm).
 #
-# The vendored tarball is consumed by mobile/package.json "overrides"
-# (braces -> file:vendor/braces-3.0.3-patched.tgz) so the fix applies to every
+# The vendored tarball is consumed by the root package.json "overrides"
+# (braces -> file:mobile/vendor/braces-3.0.3-patched.tgz) so the fix applies to every
 # install, including `npm ci --ignore-scripts`, without forcing the npm
 # patchedDependencies lockfileVersion 4 that Renovate cannot parse.
 #
@@ -62,6 +62,6 @@ COPYFILE_DISABLE=1 tar czf "${OUT_FILE}" package
 echo "Wrote ${OUT_FILE}"
 echo
 echo "NOTE: the rebuilt tarball has new bytes, so the integrity recorded in"
-echo "mobile/package-lock.json is now stale. From mobile/ run:"
-echo "  npm install && npm ci && npm test"
+echo "The root package-lock.json is now stale. From the repository root run:"
+echo "  npm install && npm ci && npm test --workspace mobile"
 echo "then commit the tarball together with the lockfile."

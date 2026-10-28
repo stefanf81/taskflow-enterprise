@@ -1,0 +1,114 @@
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { Modal } from '../../components/common/Modal';
+import { Input } from '../../components/common/Input';
+import { Button } from '../../components/common/Button';
+import { ErrorMessage } from '../../components/common/ErrorMessage';
+import { usePublicCancelAppointment } from '../../core/appointments/useAppointments';
+import { colors } from '../../theme/colors';
+import { getApiErrorMessage } from '../../utils/errors';
+import { normalizePublicId, PUBLIC_ID_PLACEHOLDER } from './publicId';
+
+interface PublicCancelModalProps {
+  visible: boolean;
+  initialPublicId?: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+export const PublicCancelModal: React.FC<PublicCancelModalProps> = ({
+  visible,
+  initialPublicId = '',
+  onClose,
+  onSuccess,
+}) => {
+  const [publicId, setPublicId] = useState(initialPublicId);
+
+  // useState only reads its initial value: re-sync whenever the modal is
+  // (re)opened or the reference passed in from the route changes, so a new
+  // booking's ID is never shadowed by a stale one.
+  useEffect(() => {
+    if (visible) setPublicId(initialPublicId);
+  }, [visible, initialPublicId]);
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const cancelMutation = usePublicCancelAppointment();
+
+  const handleCancel = async () => {
+    if (!publicId.trim() || !email.trim()) {
+      setError('Both Public Reference ID and Customer Email are required.');
+      return;
+    }
+
+    setError(null);
+    try {
+      await cancelMutation.mutateAsync({ publicId: normalizePublicId(publicId), email: email.trim() });
+      onSuccess();
+      onClose();
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Failed to cancel appointment.'));
+    }
+  };
+
+  return (
+    <Modal visible={visible} onClose={onClose} title="Cancel Appointment">
+      <View style={styles.container}>
+        <Text style={styles.description}>
+          Enter your Public Reference ID and the email address used during booking to cancel your appointment.
+        </Text>
+
+        <ErrorMessage message={error || ''} />
+
+        <Input
+          label="Public Reference ID"
+          placeholder={PUBLIC_ID_PLACEHOLDER}
+          value={publicId}
+          onChangeText={setPublicId}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+
+        <Input
+          label="Customer Email"
+          placeholder="your.email@example.com"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+
+        <View style={styles.buttons}>
+          <Button title="Back" variant="secondary" onPress={onClose} style={styles.halfBtn} />
+          <Button
+            title="Cancel Appointment"
+            variant="danger"
+            loading={cancelMutation.isPending}
+            onPress={handleCancel}
+            style={styles.halfBtn}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    paddingVertical: 4,
+  },
+  description: {
+    color: colors.text.secondary,
+    fontSize: 13,
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  buttons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  halfBtn: {
+    flex: 1,
+  },
+});

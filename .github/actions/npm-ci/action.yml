@@ -1,15 +1,17 @@
 name: Install npm dependencies
 description: >-
   Install the npm version declared in frontend/package.json `packageManager`,
-  then run `npm ci` for a package, optionally bootstrapping shared/schemas
-  first. Runs from the repository root so callers do not need a working
-  directory.
+  then run `npm ci` from the repository root against the single npm workspaces
+  lockfile, for one workspace (plus shared/schemas) or for all of them. Runs
+  from the repository root so callers do not need a working directory.
 inputs:
   package-path:
-    description: Repository-relative path of the package to install (e.g. frontend, mobile, .).
+    description: >-
+      Workspace to install (e.g. frontend, mobile). Use `.` to install every
+      workspace and the root tooling.
     required: true
   shared-schemas:
-    description: Install shared/schemas before the target package.
+    description: Also install the shared/schemas workspace (the web and mobile apps import it).
     required: false
     default: "true"
   ignore-scripts:
@@ -18,10 +20,11 @@ inputs:
     default: "false"
   cache-node-modules:
     description: >-
-      Opt-in. Restore <package-path>/node_modules and shared/schemas/node_modules
-      from an exact-match cache keyed on OS, architecture, Node and declared npm
-      versions, install flags, both lockfiles and package.json files (npm 12
-      allowScripts), the .npmrc files and this action itself. On a hit, skip the npm upgrade
+      Opt-in. Restore the hoisted node_modules, <package-path>/node_modules and
+      shared/schemas/node_modules from an exact-match cache keyed on OS,
+      architecture, Node and declared npm versions, install flags, the lockfile
+      and package.json files (npm 12 allowScripts and overrides live in the root
+      one), the .npmrc and this action itself. On a hit, skip the npm upgrade
       and `npm ci`. On a miss, install as usual and save. There are no restore
       keys, so a partial or stale tree is never reused. This mode also owns the
       npm download cache (~/.npm): it is restored only on a node_modules miss,
@@ -44,7 +47,7 @@ runs:
         # package.json carries npm 12's `allowScripts` (which install scripts
         # run) and is not reflected in the lockfile; this file carries the
         # `npm ci` arguments. Hash both so a policy or flag change misses.
-        INPUTS_HASH: ${{ hashFiles(format('{0}/package-lock.json', inputs.package-path), format('{0}/package.json', inputs.package-path), format('{0}/.npmrc', inputs.package-path), 'shared/schemas/package-lock.json', 'shared/schemas/package.json', 'shared/schemas/.npmrc', '.npmrc', '.github/actions/npm-ci/action.yml') }}
+        INPUTS_HASH: ${{ hashFiles('package-lock.json', 'package.json', format('{0}/package.json', inputs.package-path), 'shared/schemas/package.json', '.npmrc', '.github/actions/npm-ci/action.yml') }}
       run: |
         set -euo pipefail
         declared="$(node -p "require('./frontend/package.json').packageManager || 'npm'")"
@@ -58,6 +61,7 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: |
+          node_modules
           ${{ inputs.package-path }}/node_modules
           shared/schemas/node_modules
         key: ${{ steps.nm-key.outputs.key }}
@@ -72,7 +76,7 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: ~/.npm
-        key: npm-cache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/package-lock.json', inputs.package-path), 'shared/schemas/package-lock.json') }}
+        key: npm-cache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
 
     # setup-node only reads `packageManager` to enable npm caching; it never
     # installs that npm version, and Node 24 bundles npm 11. Corepack is
@@ -102,37 +106,25 @@ runs:
           echo "npm $want already active"
         fi
 
-    - name: Install shared/schemas
-      if: inputs.shared-schemas == 'true' && steps.nm-cache.outputs.cache-hit != 'true'
-      shell: bash
-      working-directory: ${{ github.workspace }}
-      env:
-        IGNORE_SCRIPTS: ${{ inputs.ignore-scripts }}
-      run: |
-        set -euo pipefail
-        args=(--prefix shared/schemas --prefer-offline --no-audit --no-fund)
-        if [[ "$IGNORE_SCRIPTS" == "true" ]]; then
-          args+=(--ignore-scripts)
-        fi
-        # `npm ci` prints `npm warn deprecated` for transitively-pinned
-        # unmaintained packages (glob 6/7/8, rimraf 2/4, inflight, abab,
-        # domexception, whatwg-encoding) pulled in by Jest 29 / jsdom 20 /
-        # detox->bunyan. Those majors are deliberately held back, so the
-        # warnings are not actionable in normal installs. Filter only those
-        # lines from stderr; every other warning and error still surfaces.
-        # (The dependency-health audit keeps them - deprecation is signal there.)
-        npm ci "${args[@]}" 2> >(grep --line-buffered -v '^npm warn deprecated' >&2)
-
     - name: Install ${{ inputs.package-path }}
       if: steps.nm-cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: ${{ github.workspace }}
       env:
         PACKAGE_PATH: ${{ inputs.package-path }}
+        SHARED_SCHEMAS: ${{ inputs.shared-schemas }}
         IGNORE_SCRIPTS: ${{ inputs.ignore-scripts }}
       run: |
         set -euo pipefail
-        args=(--prefix "$PACKAGE_PATH" --prefer-offline --no-audit --no-fund)
+        args=(--prefer-offline --no-audit --no-fund)
+        if [[ "$PACKAGE_PATH" != "." ]]; then
+          # Only the requested workspace(s): `npm ci` reads the one root lockfile but installs
+          # just their dependency trees.
+          args+=(--workspace "$PACKAGE_PATH")
+          if [[ "$SHARED_SCHEMAS" == "true" && "$PACKAGE_PATH" != "shared/schemas" ]]; then
+            args+=(--workspace shared/schemas)
+          fi
+        fi
         if [[ "$IGNORE_SCRIPTS" == "true" ]]; then
           args+=(--ignore-scripts)
         fi
@@ -145,11 +137,32 @@ runs:
         # (The dependency-health audit keeps them - deprecation is signal there.)
         npm ci "${args[@]}" 2> >(grep --line-buffered -v '^npm warn deprecated' >&2)
 
+    # `npm ci` installs the lockfile without checking that each package got a version inside its
+    # declared range, and the workspace-wide legacy-peer-deps (needed by mobile) hides peer
+    # conflicts. With hoisting, one workspace's version can silently serve another's tools.
+    - name: Check dependency tree
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        PACKAGE_PATH: ${{ inputs.package-path }}
+        SHARED_SCHEMAS: ${{ inputs.shared-schemas }}
+      run: |
+        set -euo pipefail
+        ws=()
+        if [[ "$PACKAGE_PATH" != "." ]]; then
+          ws+=(--workspace "$PACKAGE_PATH")
+          if [[ "$SHARED_SCHEMAS" == "true" && "$PACKAGE_PATH" != "shared/schemas" ]]; then
+            ws+=(--workspace shared/schemas)
+          fi
+        fi
+        node scripts/check-dependency-tree.js "${ws[@]}"
+
     - name: Save node_modules
       if: inputs.cache-node-modules == 'true' && steps.nm-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6
       with:
         path: |
+          node_modules
           ${{ inputs.package-path }}/node_modules
           shared/schemas/node_modules
         key: ${{ steps.nm-key.outputs.key }}

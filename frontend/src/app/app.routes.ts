@@ -1,7 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { Router, RouterLink, Routes } from '@angular/router';
-import { authGuard } from './auth.guard';
-import { AuthState } from './auth.state';
+import { authGuard } from './core/auth/auth.guard';
+import { AuthState } from './core/auth/auth.state';
 import { loadAdminDashboard, loadCustomerPortal } from './dashboard-loaders';
 import { LandingPage } from './features/landing/landing-page';
 

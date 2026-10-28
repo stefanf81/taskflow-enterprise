@@ -18,7 +18,15 @@ public interface AppointmentService {
     /** Busy slots for booking {@code serviceType} (null/blank = ignore the service's length). */
     java.util.List<String> getBusySlots(String barberName, String bookingDate, String serviceType);
     void publicCancelAppointment(String publicId, String email);
-    Appointment findByPublicId(String publicId);
+    /**
+     * Barber name of every listed appointment that is still APPROVED, keyed by appointment id.
+     * Other modules (review ratings) reference appointments by id and ask here instead of joining
+     * the appointment table themselves.
+     */
+    java.util.Map<Long, String> findApprovedBarberNames(java.util.Collection<Long> appointmentIds);
+
+    /** Read-only view of the booking with this public id; empty when none exists. */
+    Optional<AppointmentDetails> findDetailsByPublicId(String publicId);
 
     /**
      * Returns the IDs of APPROVED appointments scheduled for {@code tomorrow}
@@ -32,19 +40,14 @@ public interface AppointmentService {
     List<Long> findAppointmentIdsNeedingReminders(LocalDate tomorrow);
 
     /**
-     * Loads a single appointment with a {@code PESSIMISTIC_WRITE} lock so the
-     * reminder writer can mark {@code reminderSent = true} and commit per row
-     * without holding locks across multiple appointments.
+     * Claims the 24-hour reminder for one appointment: loads it with a {@code PESSIMISTIC_WRITE}
+     * lock, re-checks under the lock that it is still APPROVED, scheduled for {@code tomorrow}
+     * and not yet reminded, then marks the reminder as sent and returns the booking so the caller
+     * can enqueue the e-mail. Empty when there is nothing to remind about.
      *
-     * <p>Designed to be called from a {@code @Transactional} method on the
-     * caller side so the lock is released on the caller's transaction commit
-     * (same propagation semantics as the previous direct repository call).
+     * <p>Requires the caller's transaction ({@code Propagation.MANDATORY}; it throws without one),
+     * so the {@code reminderSent} flag and the caller's outbox row commit (or roll back) together
+     * and the row lock is held only until that commit.
      */
-    Optional<Appointment> lockForReminder(Long id);
-
-    /**
-     * Persists the (mutated) appointment entity — used by reminder writers to
-     * flip {@code reminderSent} on a previously locked row.
-     */
-    void save(Appointment appointment);
+    Optional<AppointmentDetails> claimReminder(Long id, LocalDate tomorrow);
 }

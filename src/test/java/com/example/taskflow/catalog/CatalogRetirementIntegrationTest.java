@@ -1,6 +1,6 @@
 package com.example.taskflow.catalog;
 
-import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.auth.AppUser;
 import com.example.taskflow.auth.internal.UserRepository;

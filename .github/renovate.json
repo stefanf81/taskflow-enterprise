@@ -138,7 +138,7 @@
     {
       "description": "Expo's plist parser (@expo/plist 0.10, still on SDK 58) omits the MIME type required by @xmldom/xmldom 0.9",
       "matchManagers": ["npm"],
-      "matchFileNames": ["mobile/package.json"],
+      "matchFileNames": ["package.json", "mobile/package.json"],
       "matchPackageNames": ["@xmldom/xmldom"],
       "allowedVersions": "/^0\\.8\\./"
     },

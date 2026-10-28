@@ -3,7 +3,7 @@
   "workspaces": {
     ".": {
       "entry": ["k6/*.js"],
-      "ignoreDependencies": ["k6"]
+      "ignoreDependencies": ["k6", "jsdom"]
     },
     "frontend": {
       "entry": ["test/setup.ts", "src/app/types/api.ts"]

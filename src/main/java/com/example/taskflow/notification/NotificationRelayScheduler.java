@@ -43,7 +43,7 @@ import java.util.UUID;
  * <p>Delivery itself is performed by {@link NotificationSender}.
  */
 @Component
-public class NotificationRelayScheduler {
+class NotificationRelayScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(NotificationRelayScheduler.class);
     private static final int MAX_RETRIES = OutboxBackoff.MAX_ATTEMPTS;

@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent, screen } from '@testing-library/react-native';
-import { HomeScreen } from '../src/screens/HomeScreen';
+import { HomeScreen } from '../src/features/landing/HomeScreen';
 
 // Mock navigation
 const mockNavigate = jest.fn();
@@ -17,17 +17,17 @@ const mockRefetchBarbers = jest.fn();
 const mockRefetchServices = jest.fn();
 
 // Mock hooks
-jest.mock('../src/hooks/useReviews', () => ({
+jest.mock('../src/features/landing/useReviews', () => ({
   useBarberRatings: () => ({ data: [], isError: mockRatingsError }),
 }));
-jest.mock('../src/hooks/useBarbers', () => ({
+jest.mock('../src/core/barbers/useBarbers', () => ({
   usePublicBarbers: () => ({
     data: [],
     isError: mockBarbersError,
     refetch: mockRefetchBarbers,
   }),
 }));
-jest.mock('../src/hooks/useCatalog', () => ({
+jest.mock('../src/core/catalog/useCatalog', () => ({
   useCatalog: () => ({
     data: [],
     isError: mockServicesError,
@@ -36,15 +36,15 @@ jest.mock('../src/hooks/useCatalog', () => ({
 }));
 
 // Mock auth store
-jest.mock('../src/store/useAuthStore', () => ({
+jest.mock('../src/core/auth/useAuthStore', () => ({
   useAuthStore: () => ({ isAuthenticated: false, role: null }),
 }));
 
 // Mock child components
-jest.mock('../src/components/booking/StylistCard', () => ({
+jest.mock('../src/features/booking/StylistCard', () => ({
   StylistCard: () => <>{null}</>,
 }));
-jest.mock('../src/components/lookbook/LookbookGallery', () => ({
+jest.mock('../src/features/landing/LookbookGallery', () => ({
   LookbookGallery: () => <>{null}</>,
 }));
 

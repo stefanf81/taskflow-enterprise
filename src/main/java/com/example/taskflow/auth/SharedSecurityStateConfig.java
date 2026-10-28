@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets;
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(name = SharedStateStore.PROPERTY, havingValue = SharedStateStore.REDIS)
-public class SharedSecurityStateConfig {
+class SharedSecurityStateConfig {
 
     @Bean
     RedisTokenRevocationStore redisTokenRevocationStore(StringRedisTemplate redisTemplate) {

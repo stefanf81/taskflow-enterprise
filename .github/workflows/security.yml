@@ -209,7 +209,7 @@ jobs:
           scan-ref: .
           # `.cache`: trivy-action keeps its DB under $GITHUB_WORKSPACE/.cache/trivy.
           skip-dirs: frontend,mobile,shared,.git,.gradle,build,.cache
-          # The root package-lock.json (workspace tooling: knip) is scanned
+          # The root package-lock.json (all JavaScript workspaces) is scanned
           # as its own component below so findings are not misattributed to
           # the Backend component.
           skip-files: package-lock.json
@@ -230,75 +230,10 @@ jobs:
           category: trivy-fs-Backend
           wait-for-processing: "false"
 
-      - name: Trivy FS (Frontend)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          version: ${{ env.TRIVY_VERSION }}
-          scan-type: fs
-          scanners: vuln
-          scan-ref: frontend
-          skip-dirs: node_modules,dist
-          trivyignores: .trivyignore
-          ignore-unfixed: true
-          format: sarif
-          output: trivy-results-frontend.sarif
-          exit-code: 0
-
-      - name: Upload Frontend SARIF
-        if: always() && hashFiles('trivy-results-frontend.sarif') != ''
-        uses: ./.github/actions/upload-sarif
-        with:
-          path: trivy-results-frontend.sarif
-          category: trivy-fs-Frontend
-          wait-for-processing: "false"
-
-      - name: Trivy FS (Mobile)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          version: ${{ env.TRIVY_VERSION }}
-          scan-type: fs
-          scanners: vuln
-          scan-ref: mobile
-          skip-dirs: node_modules,android,ios
-          trivyignores: .trivyignore
-          ignore-unfixed: true
-          format: sarif
-          output: trivy-results-mobile.sarif
-          exit-code: 0
-
-      - name: Upload Mobile SARIF
-        if: always() && hashFiles('trivy-results-mobile.sarif') != ''
-        uses: ./.github/actions/upload-sarif
-        with:
-          path: trivy-results-mobile.sarif
-          category: trivy-fs-Mobile
-          wait-for-processing: "false"
-
-      - name: Trivy FS (Shared)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          version: ${{ env.TRIVY_VERSION }}
-          scan-type: fs
-          scanners: vuln
-          scan-ref: shared/schemas
-          skip-dirs: node_modules
-          trivyignores: .trivyignore
-          ignore-unfixed: true
-          format: sarif
-          output: trivy-results-shared.sarif
-          exit-code: 0
-
-      - name: Upload Shared SARIF
-        if: always() && hashFiles('trivy-results-shared.sarif') != ''
-        uses: ./.github/actions/upload-sarif
-        with:
-          path: trivy-results-shared.sarif
-          category: trivy-fs-Shared
-          wait-for-processing: "false"
-
-      # Workspace tooling lockfile (root package.json: knip). Kept as its own
-      # component so findings are attributable to the lockfile's owner.
-      - name: Trivy FS (Root)
+      # The single npm workspaces lockfile covers frontend, mobile, shared/schemas and the
+      # root tooling (knip). Trivy finds lockfiles, not package.json files, so scanning the
+      # frontend/, mobile/ and shared/schemas directories separately would match nothing now.
+      - name: Trivy FS (JavaScript workspaces)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: ${{ env.TRIVY_VERSION }}
@@ -308,15 +243,15 @@ jobs:
           trivyignores: .trivyignore
           ignore-unfixed: true
           format: sarif
-          output: trivy-results-root.sarif
+          output: trivy-results-javascript.sarif
           exit-code: 0
 
-      - name: Upload Root SARIF
-        if: always() && hashFiles('trivy-results-root.sarif') != ''
+      - name: Upload JavaScript SARIF
+        if: always() && hashFiles('trivy-results-javascript.sarif') != ''
         uses: ./.github/actions/upload-sarif
         with:
-          path: trivy-results-root.sarif
-          category: trivy-fs-Root
+          path: trivy-results-javascript.sarif
+          category: trivy-fs-JavaScript
           wait-for-processing: "false"
 
   ###########################################################

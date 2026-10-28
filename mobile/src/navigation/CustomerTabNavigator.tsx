@@ -1,9 +1,9 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { CustomerPortalScreen } from '../screens/CustomerPortalScreen';
-import { BookingScreen } from '../screens/BookingScreen';
-import { CatalogScreen } from '../screens/CatalogScreen';
+import { CustomerPortalScreen } from '../features/customer/CustomerPortalScreen';
+import { BookingScreen } from '../features/booking/BookingScreen';
+import { CatalogScreen } from '../features/landing/CatalogScreen';
 import { CustomerTabParamList } from '../types/navigation';
 import { colors } from '../theme/colors';
 

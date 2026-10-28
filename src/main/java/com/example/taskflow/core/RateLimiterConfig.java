@@ -21,7 +21,7 @@ import java.util.Collections;
 
 @Configuration
 @ConditionalOnProperty(name = "app.rate-limit.enabled", havingValue = "true", matchIfMissing = false)
-public class RateLimiterConfig {
+class RateLimiterConfig {
 
     private static final Logger log = LoggerFactory.getLogger(RateLimiterConfig.class);
 

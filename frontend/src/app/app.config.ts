@@ -9,7 +9,7 @@ import { provideHttpClient, withInterceptors, withXsrfConfiguration } from '@ang
 import { provideRouter, withInMemoryScrolling, withViewTransitions } from '@angular/router';
 import { catchError, of, retry, timeout } from 'rxjs';
 
-import { authInterceptor } from './auth.interceptor';
+import { authInterceptor } from './core/auth/auth.interceptor';
 import { AuthApi } from './core/api/auth-api';
 import { isServerRender } from './core/platform';
 import { routes } from './app.routes';

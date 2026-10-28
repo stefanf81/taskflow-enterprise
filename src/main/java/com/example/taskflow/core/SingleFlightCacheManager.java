@@ -46,7 +46,7 @@ import java.util.function.Supplier;
  * Hits never touch the lock; only misses of {@code get(key, loader)} ({@code @Cacheable(sync = true)})
  * do.
  */
-public class SingleFlightCacheManager implements CacheManager {
+class SingleFlightCacheManager implements CacheManager {
 
     /**
      * A cross-process lease on one cache key. {@link #tryAcquire} returns a token when this caller

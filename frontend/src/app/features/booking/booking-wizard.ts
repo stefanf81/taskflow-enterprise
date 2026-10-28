@@ -9,9 +9,9 @@ import {
   viewChildren,
 } from '@angular/core';
 import { FormField, FormRoot } from '@angular/forms/signals';
-import { formatTime12Hour } from '../../time-utils';
-import { ReceiptModalComponent } from '../../components/receipt-modal/receipt-modal';
-import { StylistCard } from '../../components/stylist-card/stylist-card';
+import { formatTime12Hour } from '../../core/time-utils';
+import { ReceiptModalComponent } from './receipt-modal/receipt-modal';
+import { StylistCard } from './stylist-card/stylist-card';
 import { BookingStore, WIZARD_STEPS } from './booking.store';
 
 /**
@@ -39,63 +39,63 @@ export class BookingWizard {
   }
 
   readonly bookingModel = this.store.bookingModel;
-  readonly bookingForm = this.store.bookingForm;
-  readonly bookingService = this.store.bookingService;
-  readonly bookingBarber = this.store.bookingBarber;
-  readonly bookingDate = this.store.bookingDate;
-  readonly bookingTime = this.store.bookingTime;
-  readonly activeStep = this.store.activeStep;
-  readonly selectedCategory = this.store.selectedCategory;
-  readonly serviceSearchQuery = this.store.serviceSearchQuery;
-  readonly filteredServices = this.store.filteredServices;
-  readonly selectedServiceObj = this.store.selectedServiceObj;
-  readonly stylistProfiles = this.store.stylistProfiles;
-  readonly upcomingBookingDays = this.store.upcomingBookingDays;
-  readonly estimatedEndTime = this.store.estimatedEndTime;
-  readonly formattedBookingDate = this.store.formattedBookingDate;
-  readonly formattedTotal = this.store.formattedTotal;
-  readonly timeSlots = this.store.timeSlots;
+  protected readonly bookingForm = this.store.bookingForm;
+  protected readonly bookingService = this.store.bookingService;
+  protected readonly bookingBarber = this.store.bookingBarber;
+  protected readonly bookingDate = this.store.bookingDate;
+  protected readonly bookingTime = this.store.bookingTime;
+  protected readonly activeStep = this.store.activeStep;
+  protected readonly selectedCategory = this.store.selectedCategory;
+  protected readonly serviceSearchQuery = this.store.serviceSearchQuery;
+  protected readonly filteredServices = this.store.filteredServices;
+  protected readonly selectedServiceObj = this.store.selectedServiceObj;
+  protected readonly stylistProfiles = this.store.stylistProfiles;
+  protected readonly upcomingBookingDays = this.store.upcomingBookingDays;
+  protected readonly estimatedEndTime = this.store.estimatedEndTime;
+  protected readonly formattedBookingDate = this.store.formattedBookingDate;
+  protected readonly formattedTotal = this.store.formattedTotal;
+  protected readonly timeSlots = this.store.timeSlots;
   readonly noPreferenceLabel = this.store.noPreferenceLabel;
 
-  readonly busySlots = this.store.busySlots;
-  readonly slotsError = this.store.slotsError;
+  protected readonly busySlots = this.store.busySlots;
+  protected readonly slotsError = this.store.slotsError;
   readonly emailError = this.store.emailError;
-  readonly catalogError = this.store.catalogError;
-  readonly catalogLoaded = this.store.catalogLoaded;
-  readonly rosterError = this.store.rosterError;
-  readonly isCheckingSlots = this.store.isCheckingSlots;
-  readonly isSubmitting = this.store.isSubmitting;
-  readonly errorMessage = this.store.errorMessage;
-  readonly successMessage = this.store.successMessage;
+  protected readonly catalogError = this.store.catalogError;
+  protected readonly catalogLoaded = this.store.catalogLoaded;
+  protected readonly rosterError = this.store.rosterError;
+  protected readonly isCheckingSlots = this.store.isCheckingSlots;
+  protected readonly isSubmitting = this.store.isSubmitting;
+  protected readonly errorMessage = this.store.errorMessage;
+  protected readonly successMessage = this.store.successMessage;
 
-  readonly showReceiptModal = this.store.showReceiptModal;
-  readonly lastBookedAppointment = this.store.lastBookedAppointment;
+  protected readonly showReceiptModal = this.store.showReceiptModal;
+  protected readonly lastBookedAppointment = this.store.lastBookedAppointment;
   /** Price shown on the receipt: captured when the booking was submitted. */
-  readonly lastBookedTotal = this.store.lastBookedTotal;
+  protected readonly lastBookedTotal = this.store.lastBookedTotal;
 
   /** Placeholder rows shown until the catalog arrives; four fill the 380 px scroll area. */
-  readonly skeletonRows = [0, 1, 2, 3];
+  protected readonly skeletonRows = [0, 1, 2, 3];
 
-  readonly steps = WIZARD_STEPS.map((label, index) => ({ num: index + 1, label }));
-  readonly activeStepLabel = computed(() => WIZARD_STEPS[this.activeStep() - 1] ?? '');
+  protected readonly steps = WIZARD_STEPS.map((label, index) => ({ num: index + 1, label }));
+  protected readonly activeStepLabel = computed(() => WIZARD_STEPS[this.activeStep() - 1] ?? '');
 
   // Step 4 field messages only appear once a field was touched (blurred) or a submit was
   // attempted, so a freshly opened form does not fire a burst of role="alert" errors.
-  readonly nameError = computed(() =>
+  protected readonly nameError = computed(() =>
     this.bookingForm.customerName().touched() && !this.bookingModel().customerName.trim()
       ? 'Full name is required.'
       : null,
   );
-  readonly visibleEmailError = computed(() =>
+  protected readonly visibleEmailError = computed(() =>
     this.bookingForm.customerEmail().touched() ? this.emailError() : null,
   );
-  readonly phoneError = computed(() =>
+  protected readonly phoneError = computed(() =>
     this.bookingForm.customerPhone().touched() && !this.bookingModel().customerPhone.trim()
       ? 'Phone number is required.'
       : null,
   );
 
-  submitBooking(): void {
+  protected submitBooking(): void {
     // A submit attempt reveals the message of every contact field, touched or not.
     this.bookingForm.customerName().markAsTouched();
     this.bookingForm.customerEmail().markAsTouched();
@@ -117,12 +117,12 @@ export class BookingWizard {
   }
 
   /** Accessible name of a step tab: its visible content is only a number or a check mark. */
-  stepTabLabel(step: number): string {
+  protected stepTabLabel(step: number): string {
     const label = `Step ${step} of ${WIZARD_STEPS.length}: ${WIZARD_STEPS[step - 1] ?? ''}`;
     return this.activeStep() > step ? `${label}, completed` : label;
   }
 
-  isStepReachable(step: number): boolean {
+  protected isStepReachable(step: number): boolean {
     return this.store.isStepReachable(step);
   }
 
@@ -131,7 +131,7 @@ export class BookingWizard {
    * Home and End only move focus between the step tabs; Enter/Space (the button's native
    * click) activate the focused step, which {@link setStep} refuses for a gated step.
    */
-  onStepKeydown(event: KeyboardEvent, index: number): void {
+  protected onStepKeydown(event: KeyboardEvent, index: number): void {
     const tabs = this.stepTabs();
     const last = tabs.length - 1;
     let target: number;
@@ -155,63 +155,63 @@ export class BookingWizard {
     tabs[target]?.nativeElement.focus();
   }
 
-  isSlotUnavailable(slot: string): boolean {
+  protected isSlotUnavailable(slot: string): boolean {
     return this.store.isSlotUnavailable(slot);
   }
 
-  isSlotPast(slot: string): boolean {
+  protected isSlotPast(slot: string): boolean {
     return this.store.isSlotPast(slot);
   }
 
-  retrySlots(): void {
+  protected retrySlots(): void {
     this.store.onBarberOrDateChange();
   }
 
-  retryCatalog(): void {
+  protected retryCatalog(): void {
     this.store.retryCatalog();
   }
 
-  retryRoster(): void {
+  protected retryRoster(): void {
     this.store.retryRoster();
   }
 
-  isStepValid(step: number): boolean {
+  protected isStepValid(step: number): boolean {
     return this.store.isStepValid(step);
   }
 
-  setStep(step: number): void {
+  protected setStep(step: number): void {
     this.store.setStep(step);
   }
 
-  goToNextStep(): void {
+  protected goToNextStep(): void {
     this.store.goToNextStep();
   }
 
-  goToPrevStep(): void {
+  protected goToPrevStep(): void {
     this.store.goToPrevStep();
   }
 
-  selectService(name: string): void {
+  protected selectService(name: string): void {
     this.store.selectService(name);
   }
 
-  selectStylist(name: string): void {
+  protected selectStylist(name: string): void {
     this.store.selectStylist(name);
   }
 
-  setServiceCategory(category: string): void {
+  protected setServiceCategory(category: string): void {
     this.store.setServiceCategory(category);
   }
 
-  selectBookingDate(dateStr: string): void {
+  protected selectBookingDate(dateStr: string): void {
     this.store.selectBookingDate(dateStr);
   }
 
-  selectTimeSlot(slot: string): void {
+  protected selectTimeSlot(slot: string): void {
     this.store.selectTimeSlot(slot);
   }
 
-  formatTime12Hour(time24: string): string {
+  protected formatTime12Hour(time24: string): string {
     return formatTime12Hour(time24);
   }
 }

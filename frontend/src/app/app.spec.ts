@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { Router, provideRouter } from '@angular/router';
-import { AuthState } from './auth.state';
+import { AuthState } from './core/auth/auth.state';
 
 describe('App shell', () => {
   let fixture: ComponentFixture<App>;

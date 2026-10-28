@@ -198,13 +198,13 @@ This document tracks unresolved security findings, architectural technical debt,
 
 ### 4.4 Stale `initialPublicId` in Mobile Public Actions Screen (Resolved)
 - **Resolved:** the modals re-sync the id when `visible`/`initialPublicId` change. The original finding follows for context.
-- **Location:** `mobile/src/screens/PublicActionsScreen.tsx:16`, `mobile/src/components/booking/PublicCancelModal.tsx:23`
+- **Location:** `mobile/src/features/landing/PublicActionsScreen.tsx:16`, `mobile/src/features/landing/PublicCancelModal.tsx:23`
 - **Problem:** `useState(initialPublicId)` in `PublicCancelModal` and `PublicReviewModal` initializes once upon mounting. Re-navigating to the screen with a different booking code retains the initial pre-filled value.
 - **Remediation:** Add `useEffect(() => { if (visible) setPublicId(initialPublicId); }, [visible, initialPublicId]);`.
 
 ### 4.5 Mobile Notification Polling in Background/Inactive Tabs (Resolved)
 - **Resolved:** polling is gated by `useIsFocused()` and TanStack `focusManager` follows `AppState`. The original finding follows for context.
-- **Location:** `mobile/src/hooks/useNotifications.ts:8`
+- **Location:** `mobile/src/features/admin/useNotifications.ts:8`
 - **Problem:** `refetchInterval: 15000` polls the outbox endpoint every 15 seconds continuously as long as the tab remains mounted in the bottom tab navigator.
 - **Remediation:** Gate polling using `useIsFocused()` from `@react-navigation/native` (`refetchInterval: isFocused ? 15000 : false`).
 

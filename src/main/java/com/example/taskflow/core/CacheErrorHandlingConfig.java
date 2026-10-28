@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Configuration;
 
 /** Registers {@link FailOpenCacheErrorHandler} for every {@code @Cacheable}/{@code @CacheEvict}. */
 @Configuration
-public class CacheErrorHandlingConfig implements CachingConfigurer {
+class CacheErrorHandlingConfig implements CachingConfigurer {
 
     @Override
     public CacheErrorHandler errorHandler() {

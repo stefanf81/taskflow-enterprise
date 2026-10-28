@@ -57,7 +57,7 @@ import java.util.UUID;
 // Defence in depth: the admin controllers also carry @PreAuthorize, so a URL
 // rule that is missing a method (HEAD, PATCH, ...) cannot expose them on its own.
 @EnableMethodSecurity
-public class SecurityConfig {
+class SecurityConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(SecurityConfig.class);
 

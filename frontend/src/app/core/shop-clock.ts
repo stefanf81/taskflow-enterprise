@@ -4,7 +4,7 @@ import { AppointmentsApi } from './api/appointments-api';
 import { PUBLIC_REQUEST } from './http/public-request.token';
 import { isServerRender } from './platform';
 import { safeResourceValue } from './resource-utils';
-import { shopWallClock } from '../time-utils';
+import { shopWallClock } from './time-utils';
 import { shopInfoResponseSchema } from '@taskflow/schemas';
 
 /**

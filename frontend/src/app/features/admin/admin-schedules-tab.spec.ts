@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { AdminSchedulesTab } from './admin-schedules-tab';
-import { BarberStore } from '../../barber.store';
+import { BarberStore } from './barber.store';
 
 describe('AdminSchedulesTab', () => {
   let fixture: ComponentFixture<AdminSchedulesTab>;

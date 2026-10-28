@@ -18,7 +18,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 @RestController
 @RequestMapping("/api/v1/catalog")
 @Tag(name = "Service Catalog", description = "Operations for managing shop services and pricing")
-public class CatalogController {
+class CatalogController {
 
     private final CatalogService catalogService;
 

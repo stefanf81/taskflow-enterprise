@@ -32,7 +32,7 @@ import java.util.Arrays;
  * pass through untouched. Hiding it also keeps the CSRF decision consistent —
  * a cookie that authenticates nothing is not an ambient credential.
  */
-public class StaleAccessTokenCookieFilter extends OncePerRequestFilter {
+class StaleAccessTokenCookieFilter extends OncePerRequestFilter {
 
     static final String COOKIE_NAME = "access_token";
 

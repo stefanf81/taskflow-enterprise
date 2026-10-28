@@ -1,7 +1,8 @@
 package com.example.taskflow.migration;
 
-import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.AppointmentStatusChangedEvent;
+import com.example.taskflow.testsupport.AppointmentDetailsFixtures;
 import com.example.taskflow.notification.NotificationOutbox;
 import com.example.taskflow.notification.NotificationOutboxWriter;
 import com.example.taskflow.notification.internal.NotificationOutboxRepository;
@@ -313,7 +314,7 @@ abstract class AbstractDataMigrationsTest {
             appointment.setStatus("DENIED");
             NotificationOutboxRepository repository = Mockito.mock(NotificationOutboxRepository.class);
             new NotificationOutboxWriter(repository)
-                    .handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, appointment));
+                    .handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, AppointmentDetailsFixtures.of(appointment)));
             ArgumentCaptor<NotificationOutbox> expected = ArgumentCaptor.forClass(NotificationOutbox.class);
             Mockito.verify(repository).save(expected.capture());
             assertEquals(expected.getValue().getMessage(),
@@ -565,7 +566,7 @@ abstract class AbstractDataMigrationsTest {
             appointment.setStatus("DENIED");
             NotificationOutboxRepository repository = Mockito.mock(NotificationOutboxRepository.class);
             new NotificationOutboxWriter(repository)
-                    .handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, appointment));
+                    .handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, AppointmentDetailsFixtures.of(appointment)));
             ArgumentCaptor<NotificationOutbox> expected = ArgumentCaptor.forClass(NotificationOutbox.class);
             Mockito.verify(repository).save(expected.capture());
             assertEquals(expected.getValue().getMessage(),

@@ -1,4 +1,6 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.internal.Appointment;
+import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
 import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
@@ -734,7 +736,8 @@ class AppointmentServiceImplTest {
         verify(appointmentRepository).save(pending);
         verify(appointmentRepository, never()).delete(any(Appointment.class));
         AppointmentCancelledEvent event = eventsOfType(AppointmentCancelledEvent.class).get(0);
-        assertSame(pending, event.appointment());
+        assertEquals("public-1", event.appointment().publicId());
+        assertEquals(AppointmentStatus.CANCELLED, event.appointment().status());
         assertEquals(AppointmentCancelledEvent.CancelledBy.GUEST, event.cancelledBy());
         assertTrue(eventsOfType(AppointmentStatusChangedEvent.class).isEmpty(),
                 "cancel must not publish the status-change event with the stale status");
@@ -821,14 +824,39 @@ class AppointmentServiceImplTest {
     // ── misc ─────────────────────────────────────────────────────────────────
 
     @Test
-    void testLockForReminderOnlyReturnsApprovedBookings() {
-        when(appointmentRepository.findByIdForUpdate(1L))
-                .thenReturn(Optional.of(appointment(1, AppointmentStatus.APPROVED, TOMORROW, "10:00")));
-        when(appointmentRepository.findByIdForUpdate(2L))
-                .thenReturn(Optional.of(appointment(2, AppointmentStatus.CANCELLED, TOMORROW, "10:00")));
+    void claimReminderMarksAnApprovedBookingForTomorrowAsSentAndReturnsIt() {
+        Appointment approved = appointment(1, AppointmentStatus.APPROVED, TOMORROW, "10:00");
+        approved.setReminderSent(false);
+        when(appointmentRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(approved));
 
-        assertTrue(appointmentService.lockForReminder(1L).isPresent());
-        assertTrue(appointmentService.lockForReminder(2L).isEmpty());
+        Optional<AppointmentDetails> claimed = appointmentService.claimReminder(1L, TOMORROW);
+
+        assertTrue(claimed.isPresent());
+        assertEquals("john@test.com", claimed.get().customerEmail());
+        assertEquals(AppointmentStatus.APPROVED, claimed.get().status());
+        assertTrue(approved.getReminderSent());
+        verify(appointmentRepository).save(approved);
+    }
+
+    @Test
+    void claimReminderSkipsBookingsThatNoLongerQualifyUnderTheLock() {
+        Appointment cancelled = appointment(2, AppointmentStatus.CANCELLED, TOMORROW, "10:00");
+        Appointment denied = appointment(3, AppointmentStatus.DENIED, TOMORROW, "10:00");
+        Appointment pending = appointment(4, AppointmentStatus.PENDING, TOMORROW, "10:00");
+        Appointment moved = appointment(5, AppointmentStatus.APPROVED, TOMORROW.plusDays(3), "10:00");
+        Appointment alreadySent = appointment(6, AppointmentStatus.APPROVED, TOMORROW, "10:00");
+        alreadySent.setReminderSent(true);
+        for (Appointment a : List.of(cancelled, denied, pending, moved, alreadySent)) {
+            when(appointmentRepository.findByIdForUpdate(a.getId())).thenReturn(Optional.of(a));
+        }
+        when(appointmentRepository.findByIdForUpdate(9L)).thenReturn(Optional.empty());
+
+        for (long id : new long[] {2, 3, 4, 5, 6, 9}) {
+            assertTrue(appointmentService.claimReminder(id, TOMORROW).isEmpty(), "id " + id);
+        }
+        assertNotEquals(Boolean.TRUE, cancelled.getReminderSent());
+        assertNotEquals(Boolean.TRUE, moved.getReminderSent());
+        verify(appointmentRepository, never()).save(any());
     }
 
     @Test
@@ -873,10 +901,38 @@ class AppointmentServiceImplTest {
     }
 
     @Test
-    void testFindByPublicId() {
+    void approvedBarberNamesAreLookedUpInBoundedChunks() {
+        List<Long> ids = java.util.stream.LongStream.rangeClosed(1, 1100).boxed().toList();
+        when(appointmentRepository.findBarberNamesByIdsAndStatus(any(), eq(AppointmentStatus.APPROVED)))
+                .thenAnswer(inv -> {
+                    java.util.Collection<Long> chunk = inv.getArgument(0);
+                    return chunk.stream().filter(id -> id % 2 == 0).map(id -> (AppointmentRepository.IdAndBarberName)
+                            new AppointmentRepository.IdAndBarberName() {
+                                @Override public Long getId() { return id; }
+                                @Override public String getBarberName() { return "Alex"; }
+                            }).toList();
+                });
+
+        java.util.Map<Long, String> names = appointmentService.findApprovedBarberNames(ids);
+
+        assertEquals(550, names.size());
+        assertEquals("Alex", names.get(2L));
+        verify(appointmentRepository, times(3)).findBarberNamesByIdsAndStatus(any(), eq(AppointmentStatus.APPROVED));
+    }
+
+    @Test
+    void testFindDetailsByPublicId() {
         Appointment appt = appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00");
         when(appointmentRepository.findByPublicId("public-1")).thenReturn(appt);
-        assertSame(appt, appointmentService.findByPublicId("public-1"));
+        when(appointmentRepository.findByPublicId("nope")).thenReturn(null);
+
+        AppointmentDetails details = appointmentService.findDetailsByPublicId("public-1").orElseThrow();
+
+        assertEquals(1L, details.id());
+        assertEquals("public-1", details.publicId());
+        assertEquals("john@test.com", details.customerEmail());
+        assertEquals(AppointmentStatus.PENDING, details.status());
+        assertTrue(appointmentService.findDetailsByPublicId("nope").isEmpty());
     }
 
     @Test

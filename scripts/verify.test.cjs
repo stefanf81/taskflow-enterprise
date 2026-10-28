@@ -13,7 +13,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function fixture(t, settings = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-test-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  for (const name of ['bin', 'scripts', 'frontend/node_modules', 'mobile/node_modules']) {
+  for (const name of ['bin', 'scripts', 'node_modules']) {
     fs.mkdirSync(path.join(dir, name), { recursive: true });
   }
   fs.copyFileSync(path.join(root, 'verify.sh'), path.join(dir, 'verify.sh'));

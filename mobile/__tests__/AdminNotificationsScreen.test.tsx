@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent, screen } from '@testing-library/react-native';
-import { AdminNotificationsScreen } from '../src/screens/AdminNotificationsScreen';
+import { AdminNotificationsScreen } from '../src/features/admin/AdminNotificationsScreen';
 
 let mockIsError: boolean;
 let mockIsFocused: boolean;
@@ -11,7 +11,7 @@ jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => mockIsFocused,
 }));
 
-jest.mock('../src/hooks/useNotifications', () => ({
+jest.mock('../src/features/admin/useNotifications', () => ({
   useNotifications: (...args: unknown[]) => mockUseNotifications(...args) ?? ({
     data: [
       { id: 1, recipient: 'admin@taskflow.com', type: 'APPOINTMENT_CONFIRMED', message: 'Appointment confirmed for John', sentAt: '2026-07-24T10:00:00', status: 'SENT' },

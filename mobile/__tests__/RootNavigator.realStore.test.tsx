@@ -54,13 +54,13 @@ jest.mock('../src/navigation/AdminTabNavigator', () => {
   const { Text } = require('react-native');
   return { AdminTabNavigator: () => <Text>ADMIN AREA</Text> };
 });
-jest.mock('../src/screens/PublicActionsScreen', () => {
+jest.mock('../src/features/landing/PublicActionsScreen', () => {
   const { Text } = require('react-native');
   return { PublicActionsScreen: () => <Text>PUBLIC ACTIONS</Text> };
 });
 
 import { RootNavigator } from '../src/navigation/RootNavigator';
-import { useAuthStore } from '../src/store/useAuthStore';
+import { useAuthStore } from '../src/core/auth/useAuthStore';
 import { queryClient } from '../src/query/queryClient';
 import { SESSION_EXPIRED_MESSAGE } from '../src/utils/session';
 

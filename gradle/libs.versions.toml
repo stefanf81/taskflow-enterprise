@@ -65,6 +65,7 @@ jackson3-databind = { module = "tools.jackson.core:jackson-databind", version.re
 hibernate-jcache = { module = "org.hibernate.orm:hibernate-jcache" }
 hibernate-core = { module = "org.hibernate.orm:hibernate-core" }
 caffeine-jcache = { module = "com.github.ben-manes.caffeine:jcache", version.ref = "caffeine" }
+spring-modulith-api = { module = "org.springframework.modulith:spring-modulith-api", version.ref = "spring-modulith" }
 spring-modulith-test = { module = "org.springframework.modulith:spring-modulith-starter-test", version.ref = "spring-modulith" }
 micrometer-prometheus = { module = "io.micrometer:micrometer-registry-prometheus" }
 micrometer-tracing-otel = { module = "io.micrometer:micrometer-tracing-bridge-otel" }

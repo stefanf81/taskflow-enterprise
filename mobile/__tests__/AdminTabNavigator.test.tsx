@@ -3,16 +3,16 @@ import { render } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { AdminTabNavigator } from '../src/navigation/AdminTabNavigator';
 
-jest.mock('../src/screens/AdminDashboardScreen', () => ({
+jest.mock('../src/features/admin/AdminDashboardScreen', () => ({
   AdminDashboardScreen: () => <>{null}</>,
 }));
-jest.mock('../src/screens/AdminCatalogScreen', () => ({
+jest.mock('../src/features/admin/AdminCatalogScreen', () => ({
   AdminCatalogScreen: () => <>{null}</>,
 }));
-jest.mock('../src/screens/AdminSchedulesScreen', () => ({
+jest.mock('../src/features/admin/AdminSchedulesScreen', () => ({
   AdminSchedulesScreen: () => <>{null}</>,
 }));
-jest.mock('../src/screens/AdminNotificationsScreen', () => ({
+jest.mock('../src/features/admin/AdminNotificationsScreen', () => ({
   AdminNotificationsScreen: () => <>{null}</>,
 }));
 

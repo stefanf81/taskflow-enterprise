@@ -15,7 +15,7 @@ const mockDeleteAppointmentFn = jest.fn();
 const mockPublicCancelAppointmentFn = jest.fn();
 const mockGetShopTimeZoneFn = jest.fn();
 
-jest.mock('../src/api/appointments', () => ({
+jest.mock('../src/core/appointments/appointments', () => ({
   appointmentsApi: {
     getAllAppointments: (...args: unknown[]) => mockGetAllAppointmentsFn(...args),
     getBusySlots: (...args: unknown[]) => mockGetBusySlotsFn(...args),
@@ -32,7 +32,7 @@ const mockGetAdminBarbersFn = jest.fn();
 const mockGetTimeOffFn = jest.fn();
 const mockAddTimeOffFn = jest.fn();
 
-jest.mock('../src/api/barbers', () => ({
+jest.mock('../src/core/barbers/barbers', () => ({
   barbersApi: {
     getPublicBarbers: (...args: unknown[]) => mockGetPublicBarbersFn(...args),
     getAdminBarbers: (...args: unknown[]) => mockGetAdminBarbersFn(...args),
@@ -42,7 +42,7 @@ jest.mock('../src/api/barbers', () => ({
 }));
 
 const mockGetAllServicesFn = jest.fn();
-jest.mock('../src/api/catalog', () => ({
+jest.mock('../src/core/catalog/catalog', () => ({
   catalogApi: {
     getAllServices: (...args: unknown[]) => mockGetAllServicesFn(...args),
   },
@@ -50,7 +50,7 @@ jest.mock('../src/api/catalog', () => ({
 
 const mockCustomerGetAppointmentsFn = jest.fn();
 const mockCustomerCancelAppointmentFn = jest.fn();
-jest.mock('../src/api/customer', () => ({
+jest.mock('../src/features/customer/customer', () => ({
   customerApi: {
     getAppointments: (...args: unknown[]) => mockCustomerGetAppointmentsFn(...args),
     cancelAppointment: (...args: unknown[]) => mockCustomerCancelAppointmentFn(...args),
@@ -58,7 +58,7 @@ jest.mock('../src/api/customer', () => ({
 }));
 
 const mockGetNotificationsFn = jest.fn();
-jest.mock('../src/api/notifications', () => ({
+jest.mock('../src/features/admin/notifications', () => ({
   notificationsApi: {
     getNotifications: (...args: unknown[]) => mockGetNotificationsFn(...args),
   },
@@ -66,7 +66,7 @@ jest.mock('../src/api/notifications', () => ({
 
 const mockGetBarberRatingsFn = jest.fn();
 const mockSubmitReviewFn = jest.fn();
-jest.mock('../src/api/reviews', () => ({
+jest.mock('../src/features/landing/reviews', () => ({
   reviewsApi: {
     getBarberRatings: (...args: unknown[]) => mockGetBarberRatingsFn(...args),
     submitReview: (...args: unknown[]) => mockSubmitReviewFn(...args),
@@ -93,13 +93,13 @@ function createWrapper() {
   };
 }
 
-import { useAppointments, useBusySlots, useCreateAppointment, useUpdateAppointmentStatus, useDeleteAppointment, usePublicCancelAppointment } from '../src/hooks/useAppointments';
-import { useShopTimeZone } from '../src/hooks/useShopTimeZone';
-import { usePublicBarbers, useAdminBarbers, useBarberTimeOff, useAddTimeOff } from '../src/hooks/useBarbers';
-import { useCatalog } from '../src/hooks/useCatalog';
-import { useCustomerAppointments, useCancelCustomerAppointment } from '../src/hooks/useCustomer';
-import { useNotifications } from '../src/hooks/useNotifications';
-import { useBarberRatings, useSubmitReview } from '../src/hooks/useReviews';
+import { useAppointments, useBusySlots, useCreateAppointment, useUpdateAppointmentStatus, useDeleteAppointment, usePublicCancelAppointment } from '../src/core/appointments/useAppointments';
+import { useShopTimeZone } from '../src/features/booking/useShopTimeZone';
+import { usePublicBarbers, useAdminBarbers, useBarberTimeOff, useAddTimeOff } from '../src/core/barbers/useBarbers';
+import { useCatalog } from '../src/core/catalog/useCatalog';
+import { useCustomerAppointments, useCancelCustomerAppointment } from '../src/features/customer/useCustomer';
+import { useNotifications } from '../src/features/admin/useNotifications';
+import { useBarberRatings, useSubmitReview } from '../src/features/landing/useReviews';
 
 describe('Hooks', () => {
   beforeEach(() => {

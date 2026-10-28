@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent, screen } from '@testing-library/react-native';
-import { LookbookGallery } from '../src/components/lookbook/LookbookGallery';
+import { LookbookGallery } from '../src/features/landing/LookbookGallery';
 
 describe('LookbookGallery Component', () => {
   it('renders all lookbook items', async () => {

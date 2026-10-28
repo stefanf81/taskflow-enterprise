@@ -78,7 +78,7 @@ shared event fanout before relying on real-time updates across replicas.
 │   └── eas.json                  # EAS Build profiles (Android APK/AAB, iOS IPA)
 ├── frontend/src/                 # Web-owned contracts, theme, utilities, and map
 │   ├── app/types/api.ts          # Web API contracts (OpenAPI aligned)
-│   ├── app/time-utils.ts         # Web 12h/24h time formatting and date logic
+│   ├── app/core/time-utils.ts         # Web 12h/24h time formatting and date logic
 │   ├── theme/tokens.json         # Web Obsidian & Gold theme tokens
 │   └── component-map.json        # Cross-platform Web ↔ Mobile feature mapping
 ├── mobile/src/                   # Mobile-owned contracts, theme, utilities, and map
@@ -106,7 +106,7 @@ shared event fanout before relying on real-time updates across replicas.
 └── ARCHITECTURE.md               # End-to-End Architectural Blueprint
 ```
 
-### P0–P2 Structures & Tunings (see `ARCHITECTURE.md` / `BENCHMARKS.md`)
+### P0–P2 Structures & Tunings (see `ARCHITECTURE.md` / `docs/BENCHMARKS.md`)
 
 - `core/AsyncConfig.java` — bounded `ThreadPoolTaskExecutor` `core=8 max=64 queue=100 CallerRunsPolicy` (`taskflow-async-` prefix, 30 s graceful) replaces unbounded `@EnableAsync` default.
 - `core/RateLimiterConfig.java` — stateless Redis Lua `EVAL` (`INCR`+`PEXPIRE` 1 RTT, `HIGHEST_PRECEDENCE+20`, skips `/actuator/health/**` and CORS `OPTIONS` preflights); per-JVM `FixedWindowCounter` fallback behind `RedisBackoff` (one probe per back-off interval).
@@ -116,7 +116,7 @@ shared event fanout before relying on real-time updates across replicas.
 - `src/main/resources/application-prod.properties` — Micrometer `percentiles-histogram=true` + `slo=50ms,100ms,200ms` (`/actuator/prometheus` histogram buckets; quantiles via `histogram_quantile`), `spring.data.redis.timeout=250ms`, Hikari leak detection off, Hikari `maximum-pool-size=25/minimum-idle=25` (fixed-size) + PgBouncer ceiling comment (`pool×replicas < 100`, `>2 → PgBouncer transaction`).
 - `docker-compose.yml` & `homelab/TF/gitops/apps/taskflow/backend.yaml` `JAVA_TOOL_OPTIONS` — explicit `-XX:+UseContainerSupport` (cgroup-aware, self-documenting), `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/var/log/taskflow`, `-Xlog:gc*:file=/var/log/taskflow/gc.log:time,uptime:filecount=3,filesize=10m` (3×10 MB), plus `UseG1GC`/`MaxGCPauseMillis=100`/`AlwaysPreTouch`/`MaxDirectMemorySize|Metaspace 256m`.
 - `k6/load.js` is the isolated-stack `ramping-vus` profile (`0→50 30 s →200 60 s →0 30 s`, `gracefulRampDown 10 s`, thresholds `http_req_failed rate<0.01`, `p95<500 p99<800`, `checks 1.0`; workload `70% catalog/barbers /20% busySlots /10% health`, `sleep 0.1`); public CI runs `k6/probe.js` at one request/second to remain below the per-IP rate limiter. `k6/browser.js` uses one Chromium VU for Lookbook→stylist→slot→form and CWV thresholds `ttfb<800 fcp<1800 lcp<2500`.
-- `mobile/src/query/queryClient.ts` (`staleTime 60_000` was 0, `gcTime 5*60_000`, `retry:1` exponential `retryDelay` `min(1000*2^attempt,30000)`, `refetchOnWindowFocus:false`) + `mobile/src/api/client.ts` (`timeout 10000` was 15000, fail-fast < JPA 5 s+Hikari 20 s); `mobile/src/components/lookbook/LookbookGallery.tsx` — `FlatList scrollEnabled={false}` inside `ScrollView` → `LOOKBOOK_DATA.map` + `View` + `Card` (parent `ScrollView` owns scroll; `FlashList` >50 items).
+- `mobile/src/query/queryClient.ts` (`staleTime 60_000` was 0, `gcTime 5*60_000`, `retry:1` exponential `retryDelay` `min(1000*2^attempt,30000)`, `refetchOnWindowFocus:false`) + `mobile/src/api/client.ts` (`timeout 10000` was 15000, fail-fast < JPA 5 s+Hikari 20 s); `mobile/src/features/landing/LookbookGallery.tsx` — `FlatList scrollEnabled={false}` inside `ScrollView` → `LOOKBOOK_DATA.map` + `View` + `Card` (parent `ScrollView` owns scroll; `FlashList` >50 items).
 
 ---
 
@@ -149,14 +149,14 @@ requires Android Studio, the Android SDK, and an emulator or device.
 git clone <repo-url>
 cd <repo-directory>
 
-(cd shared/schemas && npm ci)
-(cd frontend && npm ci)
-(cd mobile && npm ci)
+npm ci
 npm run sync:api-types:check
 ```
 
-The shared package is a local file dependency of both clients, so install it
-first. Use `npm ci`, not `npm install`, to honor the checked-in lockfiles.
+The repository is an npm workspaces monorepo (`frontend`, `mobile`, `shared/schemas`)
+with one lockfile at the root, so a single `npm ci` installs all three. Use `npm ci`,
+not `npm install`, to honor the checked-in lockfile. To install only one app, run
+`npm ci --workspace frontend --workspace shared/schemas` (or `--workspace mobile`).
 
 ### Configure Docker Compose
 
@@ -271,8 +271,7 @@ cd mobile
 # Create mobile/.env from mobile/.env.example and adjust the API URL if needed
 cp .env.example .env
 
-# Install locked dependencies (run shared/schemas npm ci first from the root setup)
-npm ci
+# Dependencies are already installed by the single `npm ci` at the repository root.
 
 # Generate the native project on first run; Expo Go is not supported because
 # expo-secure-store is a native module.
@@ -310,7 +309,7 @@ npm test
 ### 4. Run Web Frontend Locally (Angular 22)
 
 ```bash
-(cd frontend && npm ci && npm start)
+(cd frontend && npm start)   # after `npm ci` at the repository root
 ```
 
 - Dev server runs on `http://localhost:4200` and proxies `/api` requests to `http://localhost:8080`.
@@ -374,10 +373,10 @@ Renovate authentication details.
 ## 📚 Documentation & ADRs
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Detailed end-to-end data flow and architectural analysis
-- [AGENTS.md](AGENTS.md) — Developer guidelines and AI agent instructions
-- [BENCHMARKS.md](BENCHMARKS.md) — Exhaustive performance benchmarks, JVM tuning, and load profiles
+- [AGENTS.md](AGENTS.md) — Short agent instructions; detail in [docs/agents/](docs/agents/)
+- [BENCHMARKS.md](docs/BENCHMARKS.md) — Exhaustive performance benchmarks, JVM tuning, and load profiles
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Development setup, quality gates, and contribution workflow
-- [SYSTEM-HARDENING.md](SYSTEM-HARDENING.md) — Zero-trust security & container hardening policy
+- [SYSTEM-HARDENING.md](docs/SYSTEM-HARDENING.md) — Zero-trust security & container hardening policy
 - [docs/TODO.md](docs/TODO.md) — Prioritized engineering backlog and security audit tracking
 - [docs/ci/](docs/ci/README.md) — CI/CD design rationale and workflow audit history
 - [frontend/README.md](frontend/README.md) — Angular 22 Signals frontend architecture & design system

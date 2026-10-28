@@ -36,7 +36,7 @@ import java.util.Locale;
  * began in Redis restarts locally.
  */
 @Component
-public class LoginAttemptLimiter {
+class LoginAttemptLimiter {
 
     private final int maxFailures;
     private final long windowMillis;

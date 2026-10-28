@@ -29,7 +29,7 @@ import java.util.concurrent.Callable;
  * {@code evict}/{@code clear} (unawaited {@code UNLINK}).
  */
 @Service
-public class AppointmentStatsService {
+class AppointmentStatsService {
 
     static final String BUSY_SLOTS_CACHE = "busySlots";
     static final String STATS_CACHE = "appointmentStats";

@@ -4,7 +4,7 @@
 
 ## Context
 
-Both web (`frontend/src/app/app.ts`) and mobile (`mobile/src/screens/BookingScreen.tsx`) offer `No Preference (First Available)` as a barber choice. Historically `AppointmentServiceImpl.createAppointment()` persisted that sentinel string verbatim with `barber_id = NULL` and skipped schedule/time-off validation for it.
+Both web (`frontend/src/app/app.ts`) and mobile (`mobile/src/features/booking/BookingScreen.tsx`) offer `No Preference (First Available)` as a barber choice. Historically `AppointmentServiceImpl.createAppointment()` persisted that sentinel string verbatim with `barber_id = NULL` and skipped schedule/time-off validation for it.
 
 That broke the anti-double-booking guarantee established by ADR-013:
 

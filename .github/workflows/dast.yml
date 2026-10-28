@@ -419,8 +419,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: |
-            frontend/package-lock.json
-            shared/schemas/package-lock.json
+            package-lock.json
 
       - name: Download Backend JAR
         uses: actions/download-artifact@v8
@@ -462,7 +461,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: frontend/.angular/cache
-          key: angular-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json', 'shared/schemas/package-lock.json') }}
+          key: angular-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             angular-${{ runner.os }}-
 

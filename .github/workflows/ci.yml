@@ -116,6 +116,9 @@ jobs:
               - shared/**
               - api/**
               - scripts/**
+              - package.json
+              - package-lock.json
+              - .npmrc
 
             dependency_submission:
               - '*.gradle'
@@ -771,7 +774,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: frontend/.angular/cache
-          key: angular-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json', 'shared/schemas/package-lock.json') }}
+          key: angular-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             angular-${{ runner.os }}-
 
@@ -997,7 +1000,7 @@ jobs:
       - name: Resolve Playwright version
         id: playwright-version
         run: |
-          version="$(node -p "require('./frontend/package-lock.json').packages['node_modules/playwright-core'].version")"
+          version="$(node -p "require('./package-lock.json').packages['node_modules/playwright-core'].version")"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright Browsers

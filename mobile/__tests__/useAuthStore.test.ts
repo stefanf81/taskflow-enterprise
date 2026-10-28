@@ -1,11 +1,11 @@
-import { useAuthStore } from '../src/store/useAuthStore';
-import { authApi } from '../src/api/auth';
+import { useAuthStore } from '../src/core/auth/useAuthStore';
+import { authApi } from '../src/core/auth/auth';
 import { storage } from '../src/utils/storage';
 import { queryClient } from '../src/query/queryClient';
 import { SESSION_EXPIRED_MESSAGE } from '../src/utils/session';
 import { freezeDate, restoreClock } from '../test/fakeClock';
 
-jest.mock('../src/api/auth', () => ({
+jest.mock('../src/core/auth/auth', () => ({
   authApi: {
     login: jest.fn(),
     register: jest.fn(),
@@ -73,7 +73,7 @@ describe('useAuthStore', () => {
 
   it('starts logged out and bootstrapping', () => {
     jest.isolateModules(() => {
-      const { useAuthStore: fresh } = require('../src/store/useAuthStore');
+      const { useAuthStore: fresh } = require('../src/core/auth/useAuthStore');
       const state = fresh.getState();
       expect(state.isAuthenticated).toBe(false);
       expect(state.isBootstrapping).toBe(true);

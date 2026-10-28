@@ -1,6 +1,6 @@
 package com.example.taskflow.benchmark;
 
-import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.AppointmentCreateRequest;
 import com.example.taskflow.appointment.AppointmentService;
 import com.example.taskflow.appointment.AppointmentStatus;

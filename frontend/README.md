@@ -56,7 +56,7 @@ This project uses **Tailwind CSS v4** (`^4.3.3`) natively within Angular 22's mo
 The frontend owns its contract files under `src/`:
 
 - **API Types (`src/app/types/api.ts`)**: Generated from the reviewed root-level `api/openapi.json` baseline. Do not edit manually; use the workspace contract commands.
-- **Pure Time Utilities (`src/app/time-utils.ts`)**: Owns pure time formatting and date validation functions.
+- **Pure Time Utilities (`src/app/core/time-utils.ts`)**: Owns pure time formatting and date validation functions.
 - **Design Tokens (`src/theme/tokens.json`)**: Defines the frontend's Gold & Obsidian theme values used by `src/styles.css`.
 
 ---
@@ -78,20 +78,19 @@ repository pins these versions through `mobile/.nvmrc` and
 To download dependencies and launch the local Angular development server on **`http://localhost:4200`**:
 
 ```bash
-# From the repository root, install the local shared package first
-cd shared/schemas
+# From the repository root: one install for all workspaces (frontend, mobile, shared/schemas)
 npm ci
 
-# Navigate to the frontend directory and install locked dependencies
-cd ../../frontend
-npm ci
+# Or only the web app and the shared schemas
+npm ci --workspace frontend --workspace shared/schemas
 
 # Start the dev server
+cd frontend
 npm start
 ```
 
-The shared package is referenced through `file:../shared/schemas`; installing
-it first matches the CI setup and ensures its lockfile is honored. The Angular
+The shared package is an npm workspace (`@taskflow/schemas`, linked into `node_modules`) and
+the lockfile lives at the repository root. The Angular
 application proxies API requests to `http://localhost:8080`, so start the
 backend separately with `./gradlew bootRun` or start the full Docker stack.
 The dev server bundles `@taskflow/schemas` with the app instead of prebundling it

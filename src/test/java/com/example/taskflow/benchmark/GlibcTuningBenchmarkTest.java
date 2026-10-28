@@ -30,7 +30,7 @@ class GlibcTuningBenchmarkTest {
 
         Path compose = Path.of("docker-compose.yml");
         Path dockerfile = Path.of("Dockerfile");
-        Path benchmarks = Path.of("BENCHMARKS.md");
+        Path benchmarks = Path.of("docs/BENCHMARKS.md");
         Path script = Path.of("scripts/benchmark-glibc-tuning.sh");
 
         long t0 = System.nanoTime();

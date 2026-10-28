@@ -15,7 +15,7 @@ jest.mock('@react-navigation/native', () => ({
 const mockLoginFn = jest.fn();
 const mockClearErrorFn = jest.fn();
 
-jest.mock('../src/store/useAuthStore', () => ({
+jest.mock('../src/core/auth/useAuthStore', () => ({
   useAuthStore: () => ({
     login: mockLoginFn,
     clearError: mockClearErrorFn,
@@ -23,7 +23,7 @@ jest.mock('../src/store/useAuthStore', () => ({
   }),
 }));
 
-import { LoginScreen } from '../src/screens/LoginScreen';
+import { LoginScreen } from '../src/features/auth/LoginScreen';
 
 describe('LoginScreen', () => {
   afterEach(() => {

@@ -1,7 +1,8 @@
 package com.example.taskflow.notification;
 
-import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.AppointmentDetails;
 import com.example.taskflow.appointment.AppointmentService;
+import com.example.taskflow.appointment.AppointmentStatus;
 import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,8 +49,8 @@ class AppointmentReminderSchedulerTest {
 
     private AppointmentReminderScheduler reminderScheduler;
 
-    private Appointment app1;
-    private Appointment app2;
+    private AppointmentDetails app1;
+    private AppointmentDetails app2;
 
     @BeforeEach
     void setUp() {
@@ -57,34 +58,24 @@ class AppointmentReminderSchedulerTest {
         reminderScheduler = new AppointmentReminderScheduler(
                 appointmentService, notificationOutboxRepository, selfProvider, clock, true);
 
-        app1 = new Appointment("John Doe", "john.doe@example.com", "123456789", "Barber Alex",
-                TOMORROW, "10:00", "Haircut");
-        app1.setId(1L);
-        app1.setReminderSent(false);
-        app1.setStatus("APPROVED");
-
-        app2 = new Appointment("Jane Smith", null /* null e-mail must not break the sweep */, "987654321",
-                "Barber Sam", TOMORROW, "11:00", "Shave");
-        app2.setId(2L);
-        app2.setReminderSent(false);
-        app2.setStatus("APPROVED");
+        app1 = new AppointmentDetails(1L, "pub-1", "John Doe", "john.doe@example.com", "Barber Alex",
+                "Haircut", TOMORROW, "10:00", AppointmentStatus.APPROVED);
+        app2 = new AppointmentDetails(2L, "pub-2", "Jane Smith", null /* null e-mail must not break the sweep */,
+                "Barber Sam", "Shave", TOMORROW, "11:00", AppointmentStatus.APPROVED);
     }
 
     @Test
-    void testProcessReminders_QueuesPendingRowsAndMarksAppointments() {
+    void testProcessReminders_QueuesPendingRowsForEveryClaimedAppointment() {
         when(selfProvider.getIfAvailable()).thenReturn(reminderScheduler);
         // 2031-03-10 23:30 in the shop => tomorrow is 03-11 (UTC "now" is already 03-11 => 03-12 if wrong)
         when(appointmentService.findAppointmentIdsNeedingReminders(TOMORROW))
                 .thenReturn(Arrays.asList(1L, 2L));
-        when(appointmentService.lockForReminder(1L)).thenReturn(Optional.of(app1));
-        when(appointmentService.lockForReminder(2L)).thenReturn(Optional.of(app2));
+        when(appointmentService.claimReminder(1L, TOMORROW)).thenReturn(Optional.of(app1));
+        when(appointmentService.claimReminder(2L, TOMORROW)).thenReturn(Optional.of(app2));
         when(notificationOutboxRepository.save(any(NotificationOutbox.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         reminderScheduler.processReminders();
-
-        assertTrue(app1.getReminderSent());
-        assertTrue(app2.getReminderSent());
 
         ArgumentCaptor<NotificationOutbox> rows = ArgumentCaptor.forClass(NotificationOutbox.class);
         verify(notificationOutboxRepository, times(2)).save(rows.capture());
@@ -98,11 +89,9 @@ class AppointmentReminderSchedulerTest {
         assertEquals("john.doe@example.com", rows.getAllValues().get(0).getRecipient());
         assertTrue(rows.getAllValues().get(0).getMessage().contains("tomorrow at 10:00"));
 
-        verify(appointmentService, times(1)).save(app1);
-        verify(appointmentService, times(1)).save(app2);
         verify(appointmentService, times(1)).findAppointmentIdsNeedingReminders(TOMORROW);
-        verify(appointmentService, times(1)).lockForReminder(1L);
-        verify(appointmentService, times(1)).lockForReminder(2L);
+        verify(appointmentService, times(1)).claimReminder(1L, TOMORROW);
+        verify(appointmentService, times(1)).claimReminder(2L, TOMORROW);
     }
 
     @Test
@@ -113,25 +102,14 @@ class AppointmentReminderSchedulerTest {
         reminderScheduler.processReminders();
 
         verify(notificationOutboxRepository, never()).save(any(NotificationOutbox.class));
-        verify(appointmentService, never()).save(any(Appointment.class));
+        verify(appointmentService, never()).claimReminder(any(), any());
     }
 
     @Test
-    void appointmentDeniedAfterTheIdWasSelectedGetsNoReminder() {
-        app1.setStatus("DENIED");
-        when(appointmentService.lockForReminder(1L)).thenReturn(Optional.of(app1));
-
-        reminderScheduler.processOne(1L);
-
-        verify(notificationOutboxRepository, never()).save(any(NotificationOutbox.class));
-        verify(appointmentService, never()).save(any(Appointment.class));
-        assertFalse(app1.getReminderSent());
-    }
-
-    @Test
-    void appointmentStillPendingGetsNoReminder() {
-        app1.setStatus("PENDING");
-        when(appointmentService.lockForReminder(1L)).thenReturn(Optional.of(app1));
+    void anAppointmentTheModuleDoesNotClaimGetsNoReminder() {
+        // Denied/cancelled/moved/already reminded/vanished: the appointment module re-checks under
+        // the row lock and answers empty (see AppointmentServiceImplTest), so no outbox row is written.
+        when(appointmentService.claimReminder(1L, TOMORROW)).thenReturn(Optional.empty());
 
         reminderScheduler.processOne(1L);
 
@@ -139,33 +117,15 @@ class AppointmentReminderSchedulerTest {
     }
 
     @Test
-    void appointmentMovedToAnotherDayGetsNoReminder() {
-        app1.setBookingDate(TOMORROW.plusDays(3));
-        when(appointmentService.lockForReminder(1L)).thenReturn(Optional.of(app1));
+    void tomorrowIsTheShopsTomorrowNotUtcs() {
+        when(appointmentService.claimReminder(1L, TOMORROW)).thenReturn(Optional.of(app1));
+        when(notificationOutboxRepository.save(any(NotificationOutbox.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         reminderScheduler.processOne(1L);
 
-        verify(notificationOutboxRepository, never()).save(any(NotificationOutbox.class));
-        verify(appointmentService, never()).save(any(Appointment.class));
-    }
-
-    @Test
-    void alreadyRemindedAppointmentIsSkipped() {
-        app1.setReminderSent(true);
-        when(appointmentService.lockForReminder(1L)).thenReturn(Optional.of(app1));
-
-        reminderScheduler.processOne(1L);
-
-        verify(notificationOutboxRepository, never()).save(any(NotificationOutbox.class));
-    }
-
-    @Test
-    void vanishedAppointmentIsSkipped() {
-        when(appointmentService.lockForReminder(1L)).thenReturn(Optional.empty());
-
-        reminderScheduler.processOne(1L);
-
-        verify(notificationOutboxRepository, never()).save(any(NotificationOutbox.class));
+        verify(appointmentService).claimReminder(1L, TOMORROW);
+        verify(notificationOutboxRepository).save(any(NotificationOutbox.class));
     }
 
     @Test

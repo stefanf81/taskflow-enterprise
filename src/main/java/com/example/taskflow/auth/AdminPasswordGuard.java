@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ConditionalOnProperty(name = "app.security.require-strong-admin-password", havingValue = "true")
-public class AdminPasswordGuard {
+class AdminPasswordGuard {
 
     static final String DEV_DEFAULT = "admin-password";
 

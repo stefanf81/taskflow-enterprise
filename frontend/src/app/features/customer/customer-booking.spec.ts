@@ -5,7 +5,7 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { CustomerBooking } from './customer-booking';
 import { BookingStore } from '../booking/booking.store';
-import { AuthState } from '../../auth.state';
+import { AuthState } from '../../core/auth/auth.state';
 import { AppointmentPage } from '../../types/api';
 
 describe('CustomerBooking (signed-in booking entry, FE-7)', () => {

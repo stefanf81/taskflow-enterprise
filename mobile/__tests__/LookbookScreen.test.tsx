@@ -1,13 +1,13 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import { LookbookScreen } from '../src/screens/LookbookScreen';
+import { LookbookScreen } from '../src/features/landing/LookbookScreen';
 
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate }),
 }));
 
-jest.mock('../src/components/lookbook/LookbookGallery', () => ({
+jest.mock('../src/features/landing/LookbookGallery', () => ({
   LookbookGallery: () => <>{null}</>,
 }));
 

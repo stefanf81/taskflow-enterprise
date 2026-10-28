@@ -16,7 +16,7 @@ import java.util.Optional;
 
 @Service
 @Transactional
-public class CatalogServiceImpl implements CatalogService {
+class CatalogServiceImpl implements CatalogService {
 
     private static final Logger logger = LoggerFactory.getLogger(CatalogServiceImpl.class);
 

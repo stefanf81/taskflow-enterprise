@@ -1,4 +1,4 @@
-import { customerApi } from '../src/api/customer';
+import { customerApi } from '../src/features/customer/customer';
 import { apiClient } from '../src/api/client';
 import type { AppointmentPage } from '../src/types/api';
 

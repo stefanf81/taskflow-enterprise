@@ -3,8 +3,8 @@ import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { asyncScheduler, throttleTime } from 'rxjs';
 import { Router } from '@angular/router';
-import { AppointmentStore } from '../../appointment.store';
-import { AdminEventsService } from '../../admin-events.service';
+import { AppointmentStore } from '../../core/appointments/appointment.store';
+import { AdminEventsService } from './admin-events.service';
 import { AdminAppointmentsTab } from './admin-appointments-tab';
 import { AdminServicesTab } from './admin-services-tab';
 import { AdminSchedulesTab } from './admin-schedules-tab';
@@ -38,9 +38,9 @@ export class AdminDashboard {
   private readonly adminEvents = inject(AdminEventsService);
 
   readonly stats = this.store.stats;
-  readonly loadErrorMessage = this.store.loadErrorMessage;
-  readonly errorMessage = this.store.errorMessage;
-  readonly successMessage = this.store.successMessage;
+  protected readonly loadErrorMessage = this.store.loadErrorMessage;
+  protected readonly errorMessage = this.store.errorMessage;
+  protected readonly successMessage = this.store.successMessage;
 
   readonly adminView = signal<'appointments' | 'services' | 'schedules' | 'notifications'>(
     'appointments',
@@ -65,7 +65,7 @@ export class AdminDashboard {
     this.adminView.set(view);
   }
 
-  loadAppointments(): void {
+  protected loadAppointments(): void {
     this.store.loadAppointments(this.store.selectedFilter(), this.store.searchQuery());
   }
 

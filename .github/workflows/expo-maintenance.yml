@@ -48,8 +48,7 @@ jobs:
           node-version-file: mobile/.nvmrc
           cache: npm
           cache-dependency-path: |
-            mobile/package-lock.json
-            shared/schemas/package-lock.json
+            package-lock.json
 
       - name: Install dependencies
         uses: ./.github/actions/npm-ci
@@ -80,7 +79,7 @@ jobs:
 
           PR_NUMBER=$(gh pr list --base "$BASE_BRANCH" --head "$MAINTENANCE_BRANCH" --state open --json number --jq '.[0].number')
 
-          if git diff --quiet -- mobile/package.json mobile/package-lock.json; then
+          if git diff --quiet -- mobile/package.json package-lock.json; then
             echo "Expo SDK dependencies are up to date."
             if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "null" ]; then
               echo "Closing obsolete maintenance PR #$PR_NUMBER..."
@@ -160,7 +159,7 @@ jobs:
           git switch -C "$MAINTENANCE_BRANCH"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add mobile/package.json mobile/package-lock.json
+          git add mobile/package.json package-lock.json
           git commit -m 'chore(mobile): align Expo SDK dependencies'
 
           # Push using -c http.extraheader to authenticate origin without writing token into .git/config

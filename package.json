@@ -3,22 +3,59 @@
   "version": "1.0.0",
   "private": true,
   "description": "TaskFlow Enterprise Monorepo Root Workspace",
+  "packageManager": "npm@12.2.1",
+  "workspaces": [
+    "frontend",
+    "mobile",
+    "shared/schemas"
+  ],
   "scripts": {
     "deps:unused": "knip --include dependencies",
     "test:all": "npm --prefix frontend test && npm --prefix mobile test",
     "test:frontend": "npm --prefix frontend test",
     "test:mobile": "npm --prefix mobile test",
     "test:verify": "node --test scripts/verify.test.cjs",
-    "lint:all": "npm --prefix frontend run lint && npm --prefix frontend run format:check && npm --prefix mobile run lint",
+    "lint:all": "npm --prefix frontend run lint && npm --prefix frontend run format:check && npm --prefix mobile run lint && npm run check:component-map && npm run check:dependency-tree",
     "sync:api-types": "node scripts/sync-api-types.js api/openapi.json",
     "sync:api-types:check": "node scripts/sync-api-types.js --check api/openapi.json",
     "api:spec:update": "node scripts/check-openapi-contract.js --write --auth http://localhost:8080/v3/api-docs",
     "api:spec:check": "node scripts/check-openapi-contract.js api/openapi.json",
     "docker:start": "./start-docker.sh",
     "docker:stop": "./stop-docker.sh",
-    "verify:all": "./verify.sh"
+    "verify:all": "./verify.sh",
+    "check:component-map": "node scripts/check-component-map.js",
+    "check:dependency-tree": "node scripts/check-dependency-tree.js"
   },
   "devDependencies": {
+    "jsdom": "30.1.3",
     "knip": "6.43.0"
+  },
+  "overrides": {
+    "esbuild": "0.28.2",
+    "fast-uri": "3.1.9",
+    "vite": "8.3.5",
+    "@expo/cli": {
+      "zod": "^4.6.7"
+    },
+    "braces": "file:mobile/vendor/braces-3.0.3-patched.tgz",
+    "node-forge": "file:mobile/vendor/node-forge-1.4.0-patched.tgz",
+    "postcss": "8.5.32",
+    "uuid": "11.1.1",
+    "@xmldom/xmldom": "0.8.15",
+    "brace-expansion": "5.0.12",
+    "nanoid": "3.3.20",
+    "@istanbuljs/load-nyc-config": {
+      "js-yaml": "5.5.0"
+    }
+  },
+  "allowScripts": {
+    "@parcel/watcher": true,
+    "detox": true,
+    "dtrace-provider": true,
+    "esbuild": true,
+    "fsevents": true,
+    "lmdb": true,
+    "msgpackr-extract": true,
+    "msw": true
   }
 }

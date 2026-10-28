@@ -19,7 +19,7 @@ jest.mock('expo-splash-screen', () => ({
   hideAsync: jest.fn(() => Promise.resolve()),
 }));
 
-jest.mock('../src/store/useAuthStore', () => ({
+jest.mock('../src/core/auth/useAuthStore', () => ({
   useAuthStore: () => mockUseAuthStore(),
 }));
 
@@ -33,13 +33,13 @@ jest.mock('../src/navigation/CustomerTabNavigator', () => ({
 jest.mock('../src/navigation/AdminTabNavigator', () => ({
   AdminTabNavigator: () => <>{null}</>,
 }));
-jest.mock('../src/screens/LoginScreen', () => ({
+jest.mock('../src/features/auth/LoginScreen', () => ({
   LoginScreen: () => <>{null}</>,
 }));
-jest.mock('../src/screens/RegisterScreen', () => ({
+jest.mock('../src/features/auth/RegisterScreen', () => ({
   RegisterScreen: () => <>{null}</>,
 }));
-jest.mock('../src/screens/PublicActionsScreen', () => ({
+jest.mock('../src/features/landing/PublicActionsScreen', () => ({
   PublicActionsScreen: () => <>{null}</>,
 }));
 

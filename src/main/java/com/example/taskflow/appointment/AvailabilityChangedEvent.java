@@ -15,7 +15,7 @@ import java.time.LocalDate;
  * barbers, all dates" (used when the roster itself changes, because the
  * "First Available" aggregate spans every barber and every date).
  */
-public record AvailabilityChangedEvent(String barberName, LocalDate startDate, LocalDate endDate) {
+record AvailabilityChangedEvent(String barberName, LocalDate startDate, LocalDate endDate) {
 
     /** A single barber on a single date. */
     public static AvailabilityChangedEvent single(String barberName, LocalDate bookingDate) {

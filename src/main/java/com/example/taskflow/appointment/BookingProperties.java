@@ -20,7 +20,7 @@ import java.util.List;
  * </ul>
  */
 @ConfigurationProperties(prefix = "app.booking")
-public record BookingProperties(
+record BookingProperties(
         @DefaultValue("90") int maxAdvanceDays,
         @DefaultValue("5") int maxActivePerEmail,
         @DefaultValue("09:00") String defaultShiftStart,

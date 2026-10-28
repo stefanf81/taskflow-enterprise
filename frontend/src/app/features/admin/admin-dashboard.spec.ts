@@ -4,9 +4,9 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { Router, provideRouter } from '@angular/router';
 import { AdminDashboard, REFRESH_THROTTLE_MS } from './admin-dashboard';
-import { AppointmentStore } from '../../appointment.store';
-import { AuthState } from '../../auth.state';
-import { AdminEventsService } from '../../admin-events.service';
+import { AppointmentStore } from '../../core/appointments/appointment.store';
+import { AuthState } from '../../core/auth/auth.state';
+import { AdminEventsService } from './admin-events.service';
 import { AppointmentDashboardResponse } from '../../types/api';
 
 describe('AdminDashboard shell', () => {

@@ -1,7 +1,7 @@
 package com.example.taskflow.notification;
 import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 
-import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.AppointmentDetails;
 import com.example.taskflow.appointment.AppointmentCancelledEvent;
 import com.example.taskflow.appointment.AppointmentStatusChangedEvent;
 import com.example.taskflow.core.LogSanitizer;
@@ -36,10 +36,10 @@ public class NotificationOutboxWriter {
      */
     @EventListener
     public void handleAppointmentStatusChanged(AppointmentStatusChangedEvent event) {
-        Appointment appointment = event.getAppointment();
+        AppointmentDetails appointment = event.getAppointment();
         try {
             NotificationOutbox outbox = new NotificationOutbox(
-                    safe(appointment.getCustomerEmail()),
+                    safe(appointment.customerEmail()),
                     "EMAIL",
                     buildStatusChangeMessage(appointment),
                     LocalDateTime.now(),
@@ -61,10 +61,10 @@ public class NotificationOutboxWriter {
      */
     @EventListener
     public void handleAppointmentCancelled(AppointmentCancelledEvent event) {
-        Appointment appointment = event.appointment();
+        AppointmentDetails appointment = event.appointment();
         try {
             NotificationOutbox outbox = new NotificationOutbox(
-                    safe(appointment.getCustomerEmail()),
+                    safe(appointment.customerEmail()),
                     "EMAIL",
                     buildCancellationMessage(appointment, event.cancelledBy()),
                     LocalDateTime.now(),
@@ -80,13 +80,13 @@ public class NotificationOutboxWriter {
         return value != null ? value.replace("\n", "").replace("\r", "") : "";
     }
 
-    private String buildStatusChangeMessage(Appointment appointment) {
-        String name = safe(appointment.getCustomerName());
-        String barber = safe(appointment.getBarberName());
-        String service = safe(appointment.getServiceType());
-        String date = appointment.getBookingDate() != null ? appointment.getBookingDate().toString() : "";
-        String time = safe(appointment.getBookingTime());
-        String status = safe(appointment.getStatus());
+    private String buildStatusChangeMessage(AppointmentDetails appointment) {
+        String name = safe(appointment.customerName());
+        String barber = safe(appointment.barberName());
+        String service = safe(appointment.serviceType());
+        String date = appointment.bookingDate() != null ? appointment.bookingDate().toString() : "";
+        String time = safe(appointment.bookingTime());
+        String status = safe(appointment.status().name());
 
         String subject;
         String content;
@@ -109,13 +109,13 @@ public class NotificationOutboxWriter {
         return "Subject: " + subject + " - " + content;
     }
 
-    private String buildCancellationMessage(Appointment appointment,
+    private String buildCancellationMessage(AppointmentDetails appointment,
                                             AppointmentCancelledEvent.CancelledBy cancelledBy) {
-        String name = safe(appointment.getCustomerName());
-        String barber = safe(appointment.getBarberName());
-        String service = safe(appointment.getServiceType());
-        String date = appointment.getBookingDate() != null ? appointment.getBookingDate().toString() : "";
-        String time = safe(appointment.getBookingTime());
+        String name = safe(appointment.customerName());
+        String barber = safe(appointment.barberName());
+        String service = safe(appointment.serviceType());
+        String date = appointment.bookingDate() != null ? appointment.bookingDate().toString() : "";
+        String time = safe(appointment.bookingTime());
         if (time.length() > 5) {
             time = time.substring(0, 5);
         }

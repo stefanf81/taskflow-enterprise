@@ -20,7 +20,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 @RestController
 @RequestMapping("/api/v1/barbers")
 @Tag(name = "Barber Management", description = "Operations for managing barbers, schedules, and time-off")
-public class BarberController {
+class BarberController {
 
     private final BarberService barberService;
     private final Clock clock;

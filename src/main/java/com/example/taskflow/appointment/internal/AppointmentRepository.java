@@ -1,6 +1,5 @@
 package com.example.taskflow.appointment.internal;
 
-import com.example.taskflow.appointment.Appointment;
 import com.example.taskflow.appointment.AppointmentStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -63,6 +62,18 @@ public interface AppointmentRepository
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT a FROM Appointment a WHERE a.id = :id")
     java.util.Optional<Appointment> findByIdForUpdate(@Param("id") Long id);
+
+    /** Barber of each listed appointment that has the given status (for the review ratings). */
+    @Query("SELECT a.id AS id, a.barberName AS barberName FROM Appointment a "
+            + "WHERE a.id IN :ids AND a.status = :status")
+    List<IdAndBarberName> findBarberNamesByIdsAndStatus(@Param("ids") java.util.Collection<Long> ids,
+                                                         @Param("status") AppointmentStatus status);
+
+    interface IdAndBarberName {
+        Long getId();
+
+        String getBarberName();
+    }
 
     /**
      * PENDING/APPROVED appointments of one barber on one date, with the service

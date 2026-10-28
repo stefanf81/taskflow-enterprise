@@ -21,16 +21,16 @@ import {
   isSlotInPast,
   msUntilNextLocalMidnight,
   toLocalDateString,
-} from '../../time-utils';
+} from '../../core/time-utils';
 import { AppointmentsApi } from '../../core/api/appointments-api';
 import { extractApiError } from '../../core/api/extract-api-error';
 import { SessionEvents } from '../../core/session-events';
-import { AppointmentStore } from '../../appointment.store';
-import { AuthState } from '../../auth.state';
-import { CustomerStore } from '../../customer.store';
-import { ServiceCatalogStore } from '../../service-catalog.store';
-import { PublicBarberStore } from '../../public-barber.store';
-import { ReviewStore } from '../../review.store';
+import { AppointmentStore } from '../../core/appointments/appointment.store';
+import { AuthState } from '../../core/auth/auth.state';
+import { CustomerStore } from '../../core/customer/customer.store';
+import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
+import { PublicBarberStore } from './public-barber.store';
+import { ReviewStore } from '../../core/reviews/review.store';
 import { LookbookSelectionBus } from './lookbook-selection';
 
 /** Model shape for the Signal Forms booking wizard. */

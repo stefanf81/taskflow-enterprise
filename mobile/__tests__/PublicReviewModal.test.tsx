@@ -2,14 +2,14 @@ import React from 'react';
 import { render, fireEvent, screen, act } from '@testing-library/react-native';
 
 const mockMutateAsync = jest.fn();
-jest.mock('../src/hooks/useReviews', () => ({
+jest.mock('../src/features/landing/useReviews', () => ({
   useSubmitReview: () => ({
     mutateAsync: mockMutateAsync,
     isPending: false,
   }),
 }));
 
-import { PublicReviewModal } from '../src/components/booking/PublicReviewModal';
+import { PublicReviewModal } from '../src/features/landing/PublicReviewModal';
 
 describe('PublicReviewModal', () => {
   beforeEach(() => {

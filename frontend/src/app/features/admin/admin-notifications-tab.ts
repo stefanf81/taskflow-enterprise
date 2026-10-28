@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { NotificationStore } from '../../notification.store';
+import { NotificationStore } from './notification.store';
 
 /** Owner dashboard · notification outbox tab. */
 @Component({
@@ -11,11 +11,11 @@ import { NotificationStore } from '../../notification.store';
 export class AdminNotificationsTab {
   private readonly notificationStore = inject(NotificationStore);
 
-  readonly notificationsList = this.notificationStore.notifications;
+  protected readonly notificationsList = this.notificationStore.notifications;
   readonly isLoading = this.notificationStore.isLoading;
-  readonly loadError = this.notificationStore.errorMessage;
+  protected readonly loadError = this.notificationStore.errorMessage;
 
-  retryLoad(): void {
+  protected retryLoad(): void {
     this.notificationStore.loadNotifications();
   }
 }

@@ -5,8 +5,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { BookingStore } from './booking.store';
 import { ServiceItem, PublicBarber, BarberRating, AppointmentItem } from '../../types/api';
-import { toLocalDateString } from '../../time-utils';
-import { AuthState } from '../../auth.state';
+import { toLocalDateString } from '../../core/time-utils';
+import { AuthState } from '../../core/auth/auth.state';
 import { NETWORK_ERROR_MESSAGE } from '../../core/api/extract-api-error';
 import { LookbookSelectionBus } from './lookbook-selection';
 

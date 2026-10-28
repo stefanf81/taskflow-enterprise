@@ -1,4 +1,6 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.internal.Appointment;
+import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
 import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
@@ -23,7 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Service
-public class BarberServiceImpl implements BarberService {
+class BarberServiceImpl implements BarberService {
 
     private static final Logger logger = LoggerFactory.getLogger(BarberServiceImpl.class);
 
@@ -148,7 +150,7 @@ public class BarberServiceImpl implements BarberService {
             appointment.setStatus(AppointmentStatus.CANCELLED);
             Appointment saved = appointmentRepository.save(appointment);
             eventPublisher.publishEvent(new AppointmentCancelledEvent(
-                    saved, AppointmentCancelledEvent.CancelledBy.BARBER_UNAVAILABLE));
+                    AppointmentDetails.of(saved), AppointmentCancelledEvent.CancelledBy.BARBER_UNAVAILABLE));
             eventPublisher.publishEvent(new AppointmentAdminEvent(
                     AppointmentAdminEvent.Type.UPDATED, saved.getId(), Instant.now(clock)));
             count++;

@@ -1,4 +1,5 @@
 package com.example.taskflow.appointment;
+import com.example.taskflow.appointment.stream.AppointmentEventStreamService;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletResponse;

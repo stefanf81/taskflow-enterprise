@@ -1,9 +1,9 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import { AdminSchedulesScreen } from '../src/screens/AdminSchedulesScreen';
+import { AdminSchedulesScreen } from '../src/features/admin/AdminSchedulesScreen';
 
 const mockMutateAsync = jest.fn();
-jest.mock('../src/hooks/useBarbers', () => ({
+jest.mock('../src/core/barbers/useBarbers', () => ({
   useAdminBarbers: () => ({
     data: [
       { id: 1, name: 'Alex the Barber', email: '', phone: '' },

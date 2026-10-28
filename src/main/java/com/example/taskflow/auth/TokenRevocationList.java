@@ -39,7 +39,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>It does not react to a user being demoted or deleted.
  */
 @Component
-public class TokenRevocationList {
+class TokenRevocationList {
 
     /** Caps the local map; beyond it, Redis hits are no longer cached locally (they stay in Redis). */
     static final int MAX_LOCAL_ENTRIES = 100_000;

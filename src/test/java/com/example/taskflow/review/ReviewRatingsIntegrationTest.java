@@ -1,6 +1,6 @@
 package com.example.taskflow.review;
 
-import com.example.taskflow.appointment.Appointment;
+import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.review.internal.ReviewRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +35,7 @@ class ReviewRatingsIntegrationTest {
                 LocalDate.of(2025, 1, 6), String.format("10:%02d", minute), "Classic Haircut");
         a.setStatus(status);
         a = appointmentRepository.save(a);
-        reviewRepository.save(new Review(a, rating, "r"));
+        reviewRepository.save(new Review(a.getId(), rating, "r"));
     }
 
     @Test

@@ -15,7 +15,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 @RequestMapping("/api/v1/notifications")
 @PreAuthorize("hasRole('ADMIN')")
 @Tag(name = "Notification Outbox", description = "View history of sent SMS/Emails")
-public class NotificationController {
+class NotificationController {
 
     private final NotificationService notificationService;
 

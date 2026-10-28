@@ -7,9 +7,9 @@ import { provideRouter } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { App } from './app';
 import { PrerenderBackend } from './core/http/prerender-backend';
-import { PublicBarberStore } from './public-barber.store';
-import { ReviewStore } from './review.store';
-import { ServiceCatalogStore } from './service-catalog.store';
+import { PublicBarberStore } from './features/booking/public-barber.store';
+import { ReviewStore } from './core/reviews/review.store';
+import { ServiceCatalogStore } from './core/catalog/service-catalog.store';
 
 /** The guest landing is prerendered at build time, where there is no backend. */
 describe('prerendering (server platform)', () => {
