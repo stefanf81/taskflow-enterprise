@@ -236,12 +236,16 @@ manage ordinary libraries such as Axios, Zod, Zustand, TanStack Query, and React
 Hook Form. React Navigation and native test tooling remain review-only grouped
 updates because they carry React Native peer-dependency constraints.
 
-### Vendored Security Patch (braces)
+### Vendored Security Patches (braces, deepmerge, stream-json)
 
-TaskFlow vendors a backport of an upstream security fix until a published npm fix is released:
-1. **`braces@3.0.3` (CVE-2026-93687 / GHSA-vfj7-8cjw-p6xm):** Caps AST recursive parsing depth at `MAX_DEPTH = 100` to prevent call stack overflow crashes in Jest/micromatch. (`node-forge` CVE-2026-85393 / GHSA-86w9-cpqp-85rv is resolved by upstream `node-forge@1.4.2`, verified by `mobile/test/security/node-forge.test.cjs`.)
+TaskFlow vendors backports of upstream security fixes until a usable npm fix is released:
+1. **`braces@3.0.3` (CVE-2026-93687 / GHSA-vfj7-8cjw-p6xm):** Caps AST recursive parsing depth at `MAX_DEPTH = 100` to prevent call stack overflow crashes in Jest/micromatch.
+2. **`deepmerge@4.3.1` (GHSA-gcqx-w48m-w2h4):** Defines a `__proto__` key as an own property instead of replacing the merged object's prototype (Expo config, Jest config). No fixed release exists.
+3. **`stream-json@1.9.1` (GHSA-mjw6-4jj6-33hc, GHSA-528h-pc64-c93x):** Backports the 3.6.0 `__proto__` fix and the 3.5.0 filter depth cap for Detox and bunyamin, which cannot load the ESM-only 3.x line. GHSA-hqr4-qq8f-hg3x affects only the 3.x JSONC parser.
 
-The patch is applied via npm `overrides` (in the root `package.json`) using a local `.tgz` archive in `mobile/vendor/`. This preserves `lockfileVersion: 3` (ensuring Renovate compatibility) and requires no install-time script execution (`npm ci --ignore-scripts` compatible).
+(`node-forge` CVE-2026-85393 / GHSA-86w9-cpqp-85rv is resolved by upstream `node-forge@1.4.2`, verified by `mobile/test/security/node-forge.test.cjs`.)
+
+The patches are applied via npm `overrides` (in the root `package.json`) using local `.tgz` archives in `mobile/vendor/`. This preserves `lockfileVersion: 3` (ensuring Renovate compatibility) and requires no install-time script execution (`npm ci --ignore-scripts` compatible).
 
 > For detailed patch diffs, tarball rebuild scripts, test suites, and upstream removal procedures, see **[`mobile/vendor/README.md`](vendor/README.md)**.
 

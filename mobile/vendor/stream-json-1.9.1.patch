@@ -1,0 +1,68 @@
+--- a/Assembler.js
++++ b/Assembler.js
+@@ -13,6 +13,16 @@
+     this.key = null;
+   };
+ 
++// TaskFlow backport of uhop/stream-json@2f2d35b (GHSA-mjw6-4jj6-33hc): like JSON.parse, a
++// "__proto__" key becomes an own data property, never the inherited __proto__ setter.
++const setProperty = (object, key, value) => {
++  if (key === '__proto__') {
++    Object.defineProperty(object, key, {value, writable: true, enumerable: true, configurable: true});
++  } else {
++    object[key] = value;
++  }
++};
++
+ class Assembler extends EventEmitter {
+   static connectTo(stream, options) {
+     return new Assembler(options).connectTo(stream);
+@@ -120,7 +130,7 @@
+       if (this.current instanceof Array) {
+         this.current.push(value);
+       } else {
+-        this.current[this.key] = value;
++        setProperty(this.current, this.key, value);
+         this.key = null;
+       }
+     }
+@@ -138,7 +148,7 @@
+       } else {
+         value = this.reviver(this.key, value);
+         if (value !== undefined) {
+-          this.current[this.key] = value;
++          setProperty(this.current, this.key, value);
+         }
+         this.key = null;
+       }
+--- a/filters/FilterBase.js
++++ b/filters/FilterBase.js
+@@ -2,6 +2,10 @@
+ 
+ const {Transform} = require('stream');
+ 
++// TaskFlow backport of the stream-json 3.5.0 depth cap (GHSA-528h-pc64-c93x): path filters
++// rebuild the path from the nesting stack on every token, so deep input costs O(depth^2).
++const DEFAULT_MAX_DEPTH = 1024;
++
+ class FilterBase extends Transform {
+   static stringFilter(string, separator) {
+     return stack => {
+@@ -51,6 +55,7 @@
+     }
+ 
+     this._once = options && options.once;
++    this._maxDepth = (options && options.maxDepth) || DEFAULT_MAX_DEPTH;
+     this._previousToken = '';
+   }
+ 
+@@ -86,6 +91,9 @@
+         break;
+     }
+     this._previousToken = chunk.name;
++    if (this._stack.length > this._maxDepth) {
++      return callback(new RangeError(`filter: JSON nesting depth exceeds maxDepth (${this._maxDepth})`));
++    }
+     // check, if we allow a chunk
+     if (this._checkChunk(chunk)) {
+       return callback(null);

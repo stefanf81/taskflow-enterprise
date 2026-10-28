@@ -38,6 +38,8 @@
       "zod": "^4.6.7"
     },
     "braces": "file:mobile/vendor/braces-3.0.3-patched.tgz",
+    "deepmerge": "file:mobile/vendor/deepmerge-4.3.1-patched.tgz",
+    "stream-json": "file:mobile/vendor/stream-json-1.9.1-patched.tgz",
     "postcss": "8.5.32",
     "uuid": "11.1.1",
     "@xmldom/xmldom": "0.8.15",
