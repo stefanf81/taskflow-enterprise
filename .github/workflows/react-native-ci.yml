@@ -896,7 +896,12 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           working-directory: mobile
-          script: npx detox test --configuration android.emu.release --headless --take-screenshots failing --record-logs failing --artifacts-location artifacts/detox
+          # The google_apis image's setup wizard (com.google.android.googlesdksetup) can ANR on a
+          # cold boot; its "isn't responding" dialog takes window focus and every Espresso action
+          # then fails (run 40739750111). Disabling it kills the process and its dialog.
+          script: |
+            adb shell pm disable-user --user 0 com.google.android.googlesdksetup || true
+            npx detox test --configuration android.emu.release --headless --take-screenshots failing --record-logs failing --artifacts-location artifacts/detox
 
       - &mobile-backend-diagnostics
         name: Capture backend diagnostics on failure
