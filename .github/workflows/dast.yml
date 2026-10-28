@@ -474,7 +474,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          npm --prefix frontend exec -- ng build
+          npm --workspace frontend exec -- ng build
           docker build --tag taskflow-dast-frontend frontend
 
       - name: Start production frontend ingress

@@ -312,3 +312,13 @@ test('verification lock rejects a second run and is released on interruption', a
     false,
   );
 });
+
+test('workflows never use npm --prefix exec, which keeps the root working directory', () => {
+  const workflows = path.join(root, '.github/workflows');
+  for (const name of fs.readdirSync(workflows).filter((file) => file.endsWith('.yml'))) {
+    const content = fs.readFileSync(path.join(workflows, name), 'utf8');
+    assert.doesNotMatch(content, /npm\s+--prefix\s+\S+\s+exec\b/, name);
+  }
+  const dast = fs.readFileSync(path.join(workflows, 'dast.yml'), 'utf8');
+  assert.match(dast, /npm --workspace frontend exec -- ng build/);
+});
