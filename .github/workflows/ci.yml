@@ -285,6 +285,9 @@ jobs:
       - name: Test verification orchestration without Docker
         run: node --test scripts/verify.test.cjs
 
+      - name: Test mobile E2E backend probes and diagnostics
+        run: node --test .github/scripts/mobile-e2e-backend.test.cjs
+
       - name: Lint workflows
         run: |
           set -euo pipefail

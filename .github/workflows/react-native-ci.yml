@@ -842,6 +842,12 @@ jobs:
       - name: Start backend
         id: backend
         uses: ./.github/actions/start-backend
+        env: &e2e-backend-access-log
+          # CI-only: path/status/duration, never query strings, headers, credentials or bodies.
+          SERVER_TOMCAT_ACCESSLOG_ENABLED: "true"
+          SERVER_TOMCAT_ACCESSLOG_DIRECTORY: ${{ github.workspace }}/e2e-backend-diagnostics
+          SERVER_TOMCAT_ACCESSLOG_PATTERN: "%t %m %U %s %D"
+          SERVER_TOMCAT_ACCESSLOG_BUFFERED: "false"
         with:
           jar-path: e2e-backend-jar/*.jar
           log-file: e2e-backend.log
@@ -870,6 +876,12 @@ jobs:
           pid: ${{ steps.backend.outputs.pid }}
           log-file: e2e-backend.log
 
+      - &mobile-backend-preflight
+        name: Verify mobile backend authentication
+        working-directory: .
+        timeout-minutes: 1
+        run: node .github/scripts/mobile-e2e-backend.cjs preflight
+
       # A fresh AVD without a snapshot, so its clock is the runner's (a resumed
       # snapshot keeps its old date, see mobile/e2e/README.md). The AVD name is
       # the one .detoxrc.js asks for, so Detox attaches to this emulator.
@@ -886,6 +898,18 @@ jobs:
           working-directory: mobile
           script: npx detox test --configuration android.emu.release --headless --take-screenshots failing --record-logs failing --artifacts-location artifacts/detox
 
+      - &mobile-backend-diagnostics
+        name: Capture backend diagnostics on failure
+        if: failure() && steps.backend.outputs.pid != ''
+        continue-on-error: true
+        timeout-minutes: 2
+        working-directory: .
+        env:
+          BACKEND_PID: ${{ steps.backend.outputs.pid }}
+          # Android builds with JDK 21, but its backend and attach tools must use JDK 25.
+          BACKEND_JAVA_HOME: ${{ env.JAVA_HOME_25_X64 || env.JAVA_HOME }}
+        run: node .github/scripts/mobile-e2e-backend.cjs diagnostics
+
       - name: Upload Detox artifacts and backend log
         if: always()
         uses: actions/upload-artifact@v7
@@ -894,6 +918,7 @@ jobs:
           path: |
             mobile/artifacts/detox/
             e2e-backend.log
+            e2e-backend-diagnostics/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -937,6 +962,7 @@ jobs:
       - name: Start backend
         id: backend
         uses: ./.github/actions/start-backend
+        env: *e2e-backend-access-log
         with:
           jar-path: e2e-backend-jar/*.jar
           log-file: e2e-backend.log
@@ -995,8 +1021,12 @@ jobs:
           pid: ${{ steps.backend.outputs.pid }}
           log-file: e2e-backend.log
 
+      - *mobile-backend-preflight
+
       - name: Run Detox on the iOS simulator
         run: npx detox test --configuration ios.sim.release --headless --take-screenshots failing --record-logs failing --artifacts-location artifacts/detox
+
+      - *mobile-backend-diagnostics
 
       - name: Upload Detox artifacts, build log and backend log
         if: always()
@@ -1007,5 +1037,6 @@ jobs:
             mobile/artifacts/detox/
             ${{ runner.temp }}/ios-e2e-build.log
             e2e-backend.log
+            e2e-backend-diagnostics/
           if-no-files-found: ignore
           retention-days: 7

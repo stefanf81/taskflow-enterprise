@@ -27,6 +27,19 @@ Both Android and iOS share the exact same E2E test suite file (`e2e/booking.e2e.
 
 `react-native-ci.yml` runs this suite every night (`schedule` only) in the `android-e2e` and `ios-e2e` jobs. There is no Docker on GitHub's macOS runners, so instead of the compose stack both jobs start the packaged backend JAR on `localhost:8080` with the default profile (in-memory H2 with the demo seed data) and build the apps with `EXPO_PUBLIC_API_URL=http://localhost:8080`. The Android job builds `x86_64` (`DETOX_ANDROID_ABIS`) for the runner's emulator. The jobs do not block pull requests; failed-test screenshots and logs are in the `android-e2e-artifacts`/`ios-e2e-artifacts` run artifacts. To rehearse a CI run locally, run the JAR the same way (`./gradlew bootJar`, then `java -jar build/libs/*.jar` without a profile) and build with that API URL.
 
+Both jobs also run on manual workflow dispatch. Before Detox, a bounded authentication preflight
+checks mobile login, bearer `/auth/me` and logout with the disposable dev admin. It fails rather
+than retries if any operation exceeds the app's existing 10-second request timeout; no app timeout
+or Detox assertion is relaxed. This verifies (and warms) the real authentication path, not just liveness.
+
+The artifacts include `e2e-backend-diagnostics/`: preflight timings and CI-only Tomcat access logs
+(`timestamp method path status duration`, with `%D` in microseconds; no query strings, headers or
+bodies). On failure, a best-effort collector records process CPU/memory, bounded Java 25 platform
+and virtual-thread dumps, then another timed authentication probe. Use these with the simulator
+screenshot: a `timeout of 10000ms exceeded` message means the HTTP request already failed, so
+increasing Detox's wait for `Logout` cannot fix it. A host preflight does not prove simulator networking
+is healthy; a later host probe passing can help distinguish a transient/device-side failure.
+
 ---
 
 ## 🛠️ Prerequisites
