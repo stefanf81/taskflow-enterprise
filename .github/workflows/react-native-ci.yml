@@ -1034,6 +1034,24 @@ jobs:
           # A fully qualified install trusts only this formula, not the whole tap.
           brew install wix/brew/applesimutils
 
+      # .detoxrc.js asks for any simulator of type "iPhone 17 Pro". A freshly
+      # created simulator's first boot took 2 min in one run and 17 min in the
+      # next, all inside Detox's silent setup. Start it here so the boot
+      # overlaps the release build; the wait step before Detox times it.
+      - name: Create and start booting the Detox simulator
+        id: simulator
+        run: |
+          set -euo pipefail
+          udid="$(xcrun simctl list devices available -j \
+            | jq -r '[.devices[][] | select(.name == "iPhone 17 Pro")] | first | .udid // empty')"
+          if [[ -z "$udid" ]]; then
+            runtime="$(xcrun simctl list runtimes available -j \
+              | jq -r '[.runtimes[] | select(.platform == "iOS")] | last | .identifier')"
+            udid="$(xcrun simctl create "iPhone 17 Pro" com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro "${runtime}")"
+          fi
+          echo "udid=${udid}" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "${udid}"
+
       - name: Build Detox framework cache
         run: npx detox build-framework-cache
 
@@ -1048,16 +1066,6 @@ jobs:
           fi
 
       # .detoxrc.js asks for any simulator of type "iPhone 17 Pro".
-      - name: Ensure the Detox simulator exists
-        run: |
-          set -euo pipefail
-          if xcrun simctl list devices available | grep -q 'iPhone 17 Pro ('; then
-            exit 0
-          fi
-          runtime="$(xcrun simctl list runtimes available -j \
-            | jq -r '[.runtimes[] | select(.platform == "iOS")] | last | .identifier')"
-          xcrun simctl create "iPhone 17 Pro" com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro "${runtime}"
-
       - name: Wait for backend
         uses: ./.github/actions/wait-backend
         with:
@@ -1065,6 +1073,16 @@ jobs:
           log-file: e2e-backend.log
 
       - *mobile-backend-preflight
+
+      - name: Wait for the Detox simulator to finish booting
+        timeout-minutes: 25
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -euo pipefail
+          start=$SECONDS
+          xcrun simctl bootstatus "${UDID}" -b
+          echo "Simulator ready after $((SECONDS - start)) s of waiting." | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Run Detox on the iOS simulator
         run: npx detox test --configuration ios.sim.release --headless --take-screenshots failing --record-logs failing --artifacts-location artifacts/detox
