@@ -1188,11 +1188,27 @@ jobs:
       # phase (device allocation, app install, launch), which info level leaves
       # silent; it sat there for 2-17 min in earlier runs. The step timeout
       # fails a hang well inside the job budget so the diagnostics still run.
+      # No `--record-logs`: on iOS it runs `simctl get_app_container` and a
+      # debug-level `log stream` before every launch, and every test relaunches
+      # the app. On the loaded simulator those calls took 1.5-26 s each and
+      # the app took up to 31 s to start (iOS 433 s vs Android 109 s for the
+      # same 9 tests). The step below dumps the app's log once on failure.
       - name: Run Detox on the iOS simulator
         timeout-minutes: 30
         env:
           DETOX_IOS_SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
-        run: npx detox test --configuration ios.sim.release --headless --loglevel debug --take-screenshots failing --record-logs failing --artifacts-location artifacts/detox
+        run: npx detox test --configuration ios.sim.release --headless --loglevel debug --take-screenshots failing --artifacts-location artifacts/detox
+
+      - name: Collect the app's simulator log on failure
+        if: failure() && steps.simulator.outputs.udid != ''
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          mkdir -p artifacts/detox
+          xcrun simctl spawn "${UDID}" log show --last 1h --info --style compact \
+            --predicate 'process == "TaskFlowMobile"' > artifacts/detox/simulator-app.log
 
       - *mobile-backend-diagnostics
 
