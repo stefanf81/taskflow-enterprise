@@ -550,8 +550,7 @@ jobs:
       # determines the pod graph. Saved right after `pod install` and never
       # from pull requests: a lockfile PR misses the exact key on every run,
       # and saving its PR-scoped copy cost ~9 s while evicting main's caches.
-      - &restore-cocoapods-specs
-        name: Restore CocoaPods download cache
+      - name: Restore CocoaPods download cache
         id: pods-cache
         uses: actions/cache/restore@v6
         with:
@@ -635,8 +634,7 @@ jobs:
           restore-keys: |
             expo-modules-jsi-${{ runner.os }}-${{ runner.arch }}-
 
-      - &install-pods
-        name: Install CocoaPods dependencies
+      - name: Install CocoaPods dependencies
         working-directory: mobile/ios
         shell: bash
         run: |
