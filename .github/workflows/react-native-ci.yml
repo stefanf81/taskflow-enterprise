@@ -1276,25 +1276,23 @@ jobs:
         if: steps.native-build.outcome == 'success'
         run: |
           set -euo pipefail
+          # In place: without a source map hermesc embeds the bundle's absolute
+          # path in the bytecode, so a repack elsewhere never matches. The
+          # cache-hit repack runs at this same path.
           built=ios/build/Build/Products/Release-iphonesimulator/TaskFlowMobile.app
-          copy="${RUNNER_TEMP}/repack-check/TaskFlowMobile.app"
-          mkdir -p "$(dirname "$copy")"
-          ditto "$built" "$copy"
-          "$GITHUB_WORKSPACE/.github/scripts/repack-ios-e2e.sh" "$copy" > "${RUNNER_TEMP}/repack-check.log" 2>&1 \
-            || { tail -n 60 "${RUNNER_TEMP}/repack-check.log"; exit 1; }
+          native="${RUNNER_TEMP}/repack-check/TaskFlowMobile.app"
+          mkdir -p "$(dirname "$native")"
+          ditto "$built" "$native"
           sums() { (cd "$1" && find main.jsbundle assets -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256); }
-          if diff <(sums "$built") <(sums "$copy"); then
+          if "$GITHUB_WORKSPACE/.github/scripts/repack-ios-e2e.sh" "$built" > "${RUNNER_TEMP}/repack-check.log" 2>&1 \
+            && diff <(sums "$native") <(sums "$built"); then
             echo "Repack reproduces the native build's bundle and assets." | tee -a "$GITHUB_STEP_SUMMARY"
             echo "equal=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::Repack differs from the native build; not caching the app."
-            # The unminified JavaScript before hermesc shows what differs.
-            out=artifacts/detox/repack-diff
-            mkdir -p "$out"
-            cp "$(dirname "$built")/main.jsbundle" "$out/native.js"
-            cp "$(dirname "$copy")/main.jsbundle" "$out/repack.js"
-            cp "${RUNNER_TEMP}/repack-check.log" "$out/"
-            diff "$out/native.js" "$out/repack.js" | cut -c1-300 | head -n 80 || true
+            tail -n 60 "${RUNNER_TEMP}/repack-check.log"
+            echo "::warning::Repack differs from the native build; testing the native app and not caching it."
+            rm -rf "$built"
+            ditto "$native" "$built"
           fi
 
       - name: Save the Detox app for this fingerprint
