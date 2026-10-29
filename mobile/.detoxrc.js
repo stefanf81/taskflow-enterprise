@@ -1,6 +1,7 @@
-// Expo's (experimental) Metro tree shaking for the release bundle. E2E release builds and the EAS
-// `preview` profile run it so it gets device coverage; `production` follows after a green run.
-const RELEASE_BUNDLE_ENV = 'EXPO_UNSTABLE_METRO_OPTIMIZE_GRAPH=1 EXPO_UNSTABLE_TREE_SHAKING=1';
+// Environment of the release JavaScript bundle (Metro tree shaking); see the module.
+const RELEASE_BUNDLE_ENV = Object.entries(require('./e2e/release-bundle-env'))
+  .map(([name, value]) => `${name}=${value}`)
+  .join(' ');
 
 /** @type {Detox.DetoxConfig} */
 module.exports = {

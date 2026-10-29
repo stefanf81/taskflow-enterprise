@@ -281,23 +281,9 @@ jobs:
           mkdir -p "$(dirname "$props")"
           echo 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8' >> "$props"
 
-      - &install-android-sdk
-        name: Install Android SDK components
+      - name: Install Android SDK components
         shell: bash
-        run: |
-          set -euo pipefail
-          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
-          if [[ ! -x "${SDKMANAGER}" ]]; then
-            SDKMANAGER="$(command -v sdkmanager)"
-          fi
-
-          set +o pipefail
-          yes | "${SDKMANAGER}" --licenses >/dev/null
-          set -o pipefail
-          "${SDKMANAGER}" --install \
-            'platforms;android-37.0' \
-            'build-tools;37.0.0' \
-            'ndk;27.1.12297006'
+        run: '"$GITHUB_WORKSPACE/.github/scripts/install-android-sdk.sh"'
 
       - *install-dependencies
       - *save-npm-cache
@@ -888,16 +874,8 @@ jobs:
             25
             21
 
-      # Own Gradle-home entry (written on main only, setup-gradle's default),
-      # with the build cache enabled below. Sharing the `android` job's entry
-      # gave no task hits: that job builds Debug with JDK 17, this one Release
-      # with JDK 21, so all 382 tasks ran (5 min) even on the nightly.
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-
-      - *raise-gradle-memory
-
-      - *install-android-sdk
+      - *install-dependencies
+      - *save-npm-cache
 
       # The emulator step installs the latest emulator and the system image
       # (~45 s) before it boots. Fetch both now, alongside the app build; that
@@ -912,9 +890,6 @@ jobs:
           nohup bash -c '"$0" --install emulator "system-images;android-35;google_apis;x86_64" > "$1" 2>&1; echo $? > "$2"' \
             "${SDKMANAGER}" "${RUNNER_TEMP}/emulator-sdk.log" "${RUNNER_TEMP}/emulator-sdk.status" \
             > /dev/null 2>&1 &
-
-      - *install-dependencies
-      - *save-npm-cache
 
       - name: Download backend JAR
         uses: actions/download-artifact@v8
@@ -941,9 +916,78 @@ jobs:
 
       - *prebuild-android
 
+      # The native APKs change only with the native fingerprint (native
+      # dependencies, config plugins, app config; @expo/fingerprint), so they
+      # are cached per fingerprint and a hit gets only this commit's JavaScript
+      # (.github/scripts/repack-android-e2e.sh): no NDK, Gradle or ccache. A
+      # full build checks that the repack reproduces its bundle byte for byte
+      # before it saves the APKs, so a hit is never a different app.
+      - &native-fingerprint
+        name: Compute the native fingerprint
+        id: fingerprint
+        env:
+          PLATFORM: ${{ runner.os == 'macOS' && 'ios' || 'android' }}
+        run: |
+          set -euo pipefail
+          hash="$(../node_modules/.bin/fingerprint fingerprint:generate --platform "$PLATFORM" | jq -r .hash)"
+          echo "Native $PLATFORM fingerprint: $hash" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+          # The iOS app is compiled by the selected Xcode, which is not an input
+          # of the fingerprint.
+          if [[ "$PLATFORM" == ios ]]; then
+            echo "toolchain=$(xcodebuild -version | head -n 1 | tr -d ' ')" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore the Detox APKs for this fingerprint
+        id: apk-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: &detox-apks |
+            mobile/android/app/build/outputs/apk/release/app-release.apk
+            mobile/android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk
+            mobile/android/app/build/detox-react-res.sha256
+          key: &detox-apk-key detox-apk-v1-${{ runner.os }}-${{ env.DETOX_ANDROID_ABIS }}-${{ steps.fingerprint.outputs.hash }}-${{ hashFiles('mobile/.detoxrc.js') }}
+
+      # Falls back to the full build when the JS image/font assets differ from
+      # the cached APK's: Gradle compiles those into the APK's resources.
+      - name: Repack the cached APK with this commit's JavaScript
+        id: repack
+        if: steps.apk-cache.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          script="$GITHUB_WORKSPACE/.github/scripts/repack-android-e2e.sh"
+          js="${RUNNER_TEMP}/detox-js"
+          repacked=false
+          if ! "$script" bundle "$js"; then
+            echo "::warning::Bundling for the repack failed; building natively."
+          elif ! cmp -s "$js/res.sha256" android/app/build/detox-react-res.sha256; then
+            echo "::notice::JavaScript assets changed since the cached APK; building natively."
+          elif ! "$script" apk android/app/build/outputs/apk/release/app-release.apk "$js/index.android.bundle"; then
+            echo "::warning::Repacking the cached APK failed; building natively."
+          else
+            echo "Repacked the cached APK (no native build)." | tee -a "$GITHUB_STEP_SUMMARY"
+            repacked=true
+          fi
+          echo "repacked=$repacked" >> "$GITHUB_OUTPUT"
+
+      # Own Gradle-home entry (written on main only, setup-gradle's default),
+      # with the build cache enabled below. Sharing the `android` job's entry
+      # gave no task hits: that job builds Debug with JDK 17, this one Release
+      # with JDK 21, so all 382 tasks ran (5 min) even on the nightly.
+      - name: Set up Gradle
+        if: steps.repack.outputs.repacked != 'true'
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - *raise-gradle-memory
+
+      - name: Install Android SDK components
+        if: steps.repack.outputs.repacked != 'true'
+        run: '"$GITHUB_WORKSPACE/.github/scripts/install-android-sdk.sh"'
+
       # Own snapshots: this x86_64 release build shares few objects with the
       # `android` job's arm64-v8a debug build. Pruned by `ccache-retention`.
       - name: Set up ccache
+        if: steps.repack.outputs.repacked != 'true'
         uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
         with:
           key: android-e2e-ccache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -958,6 +1002,8 @@ jobs:
       # enable the build cache (`--build-cache` in the `android` job) through
       # the Gradle-home properties.
       - name: Build Detox release APK and test APK
+        id: native-build
+        if: steps.repack.outputs.repacked != 'true'
         run: |
           gradle_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
           init_d="$gradle_home/init.d"
@@ -966,6 +1012,34 @@ jobs:
           echo 'org.gradle.caching=true' >> "$gradle_home/gradle.properties"
           chmod +x android/gradlew
           npm run e2e:build:android
+
+      # Only an APK the repack reproduces exactly is cached for later repacks.
+      - name: Check the repack against the native build
+        id: repack-check
+        if: steps.native-build.outcome == 'success'
+        run: |
+          set -euo pipefail
+          script="$GITHUB_WORKSPACE/.github/scripts/repack-android-e2e.sh"
+          js="${RUNNER_TEMP}/detox-js-check"
+          "$script" bundle "$js"
+          "$script" res-manifest android/app/build/generated/res/react/release > android/app/build/detox-react-res.sha256
+          built="$(unzip -p android/app/build/outputs/apk/release/app-release.apk assets/index.android.bundle | sha256sum | cut -d' ' -f1)"
+          repacked="$(sha256sum "$js/index.android.bundle" | cut -d' ' -f1)"
+          if [[ "$built" == "$repacked" ]] && cmp -s "$js/res.sha256" android/app/build/detox-react-res.sha256; then
+            echo "Repack reproduces the native build's bundle and assets." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "equal=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Repack differs from the native build (bundle $built vs $repacked); not caching the APKs."
+            diff "$js/res.sha256" android/app/build/detox-react-res.sha256 || true
+          fi
+
+      - name: Save the Detox APKs for this fingerprint
+        if: steps.repack-check.outputs.equal == 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: *detox-apks
+          key: *detox-apk-key
 
       - name: Enable KVM for the emulator
         working-directory: .
@@ -1102,15 +1176,53 @@ jobs:
       # Same setup as the `ios` job (its caches are restored, never saved here).
       - *select-xcode
       - *prebuild-ios
+      - *configure-xcode-node
+
+      # Cached per native fingerprint like the Android APKs (see android-e2e):
+      # a hit re-bundles only this commit's JavaScript into the app
+      # (.github/scripts/repack-ios-e2e.sh) and skips `pod install` and
+      # xcodebuild. A full build checks that the repack reproduces its bundle
+      # and assets before it saves the app.
+      - *native-fingerprint
+
+      - name: Restore the Detox app for this fingerprint
+        id: app-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: &detox-app mobile/ios/build/Build/Products/Release-iphonesimulator/TaskFlowMobile.app
+          key: &detox-app-key detox-app-v1-${{ runner.os }}-${{ steps.fingerprint.outputs.toolchain }}-${{ steps.fingerprint.outputs.hash }}-${{ hashFiles('mobile/.detoxrc.js') }}
+
+      - name: Repack the cached app with this commit's JavaScript
+        id: repack
+        if: steps.app-cache.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          if "$GITHUB_WORKSPACE/.github/scripts/repack-ios-e2e.sh" ios/build/Build/Products/Release-iphonesimulator/TaskFlowMobile.app; then
+            echo "Repacked the cached app (no native build)." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "repacked=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Repacking the cached app failed; building natively."
+            echo "repacked=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - *read-ruby-version
       - *cache-cocoapods-gems
-      - *restore-cocoapods-specs
+
+      - name: Restore CocoaPods download cache
+        if: steps.repack.outputs.repacked != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/Library/Caches/CocoaPods
+          key: cocoapods-specs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            cocoapods-specs-${{ runner.os }}-
 
       # Own snapshots: this Release build compiles with other flags than the
       # `ios` job's Debug build, so they share no objects. Set up before
       # `pod install`, which wires in the wrapper only when ccache is on PATH.
       # Pruned by `ccache-retention`.
       - name: Set up ccache
+        if: steps.repack.outputs.repacked != 'true'
         uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
         with:
           key: ios-e2e-ccache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -1122,10 +1234,13 @@ jobs:
       - *expose-ccache-binary
 
       - *configure-cocoapods
-      - *configure-xcode-node
       - *locate-expo-modules-jsi
       - *restore-expo-modules-jsi
-      - *install-pods
+
+      - name: Install CocoaPods dependencies
+        if: steps.repack.outputs.repacked != 'true'
+        working-directory: mobile/ios
+        run: pod install --no-repo-update
 
       # Detox drives iOS simulators through applesimutils.
       - name: Install applesimutils
@@ -1143,12 +1258,42 @@ jobs:
       # The raw xcodebuild output is too long for the Actions log; keep it as
       # an artifact and print the tail when the build fails.
       - name: Build Detox release app
+        id: native-build
+        if: steps.repack.outputs.repacked != 'true'
         run: |
           log="${RUNNER_TEMP}/ios-e2e-build.log"
           if ! npm run e2e:build > "${log}" 2>&1; then
             tail -n 150 "${log}"
             exit 1
           fi
+
+      # Only an app the repack reproduces exactly is cached for later repacks.
+      - name: Check the repack against the native build
+        id: repack-check
+        if: steps.native-build.outcome == 'success'
+        run: |
+          set -euo pipefail
+          built=ios/build/Build/Products/Release-iphonesimulator/TaskFlowMobile.app
+          copy="${RUNNER_TEMP}/repack-check/TaskFlowMobile.app"
+          mkdir -p "$(dirname "$copy")"
+          ditto "$built" "$copy"
+          "$GITHUB_WORKSPACE/.github/scripts/repack-ios-e2e.sh" "$copy" > "${RUNNER_TEMP}/repack-check.log" 2>&1 \
+            || { tail -n 60 "${RUNNER_TEMP}/repack-check.log"; exit 1; }
+          sums() { (cd "$1" && find main.jsbundle assets -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256); }
+          if diff <(sums "$built") <(sums "$copy"); then
+            echo "Repack reproduces the native build's bundle and assets." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "equal=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Repack differs from the native build; not caching the app."
+          fi
+
+      - name: Save the Detox app for this fingerprint
+        if: steps.repack-check.outputs.equal == 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: *detox-app
+          key: *detox-app-key
 
       # Checked before the simulator boots: a first boot saturates the runner,
       # and the backend's 3 s health probes all timed out under it.
