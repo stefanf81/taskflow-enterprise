@@ -9,6 +9,10 @@
 // before AGP's afterEvaluate snapshots them into the native-build tasks.
 // Modules without CMake simply ignore the extra `externalNativeBuild`
 // arguments.
+//
+// It also limits the app's lint to the app module: AGP defaults
+// `checkDependencies` to true, which re-analyses every Expo/React Native
+// library in node_modules (~85 s of the android job, all third-party code).
 gradle.allprojects { project ->
     def addCcacheLaunchers = {
         project.android.defaultConfig.externalNativeBuild.cmake.arguments.addAll([
@@ -16,6 +20,9 @@ gradle.allprojects { project ->
             '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache',
         ])
     }
-    project.plugins.withId('com.android.application') { addCcacheLaunchers() }
+    project.plugins.withId('com.android.application') {
+        addCcacheLaunchers()
+        project.android.lint.checkDependencies = false
+    }
     project.plugins.withId('com.android.library') { addCcacheLaunchers() }
 }
