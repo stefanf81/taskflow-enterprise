@@ -935,7 +935,7 @@ jobs:
           # The iOS app is compiled by the selected Xcode, which is not an input
           # of the fingerprint.
           if [[ "$PLATFORM" == ios ]]; then
-            echo "toolchain=$(xcodebuild -version | head -n 1 | tr -d ' ')" >> "$GITHUB_OUTPUT"
+            echo "toolchain=$(xcodebuild -version | sed -n '1s/ //gp')" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Restore the Detox APKs for this fingerprint
