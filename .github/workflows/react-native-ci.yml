@@ -887,7 +887,7 @@ jobs:
           if [[ ! -x "${SDKMANAGER}" ]]; then
             SDKMANAGER="$(command -v sdkmanager)"
           fi
-          nohup bash -c '"$0" --install emulator "system-images;android-35;google_apis;x86_64" > "$1" 2>&1; echo $? > "$2"' \
+          nohup bash -c '"$0" --install emulator "system-images;android-35;google_atd;x86_64" > "$1" 2>&1; echo $? > "$2"' \
             "${SDKMANAGER}" "${RUNNER_TEMP}/emulator-sdk.log" "${RUNNER_TEMP}/emulator-sdk.status" \
             > /dev/null 2>&1 &
 
@@ -1080,18 +1080,21 @@ jobs:
       # A fresh AVD without a snapshot, so its clock is the runner's (a resumed
       # snapshot keeps its old date, see mobile/e2e/README.md). The AVD name is
       # the one .detoxrc.js asks for, so Detox attaches to this emulator.
+      # google_atd is Google's Automated Test Device image: the Google APIs
+      # image without preinstalled apps and with background services that
+      # tests do not need disabled.
       - name: Run Detox on the Android emulator
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 35
-          target: google_apis
+          target: google_atd
           arch: x86_64
           profile: pixel_6
           avd-name: Pixel_6_API_35
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           working-directory: mobile
-          # The google_apis image's setup wizard (com.google.android.googlesdksetup) can ANR on a
+          # The Google APIs images' setup wizard (com.google.android.googlesdksetup) can ANR on a
           # cold boot; its "isn't responding" dialog takes window focus and every Espresso action
           # then fails (run 40739750111). Disabling it kills the process and its dialog.
           script: |
