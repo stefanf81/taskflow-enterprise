@@ -57,7 +57,7 @@ env:
   # /^(?:RENOVATE_\w+|LOG_LEVEL|GITHUB_COM_TOKEN|NODE_OPTIONS|...)$/ into the
   # container, so that name would reach Renovate as an unknown config option.
   # renovate-image: tracked by the dedicated regex manager in .github/renovate.json
-  RENOVATEBOT_VERSION: "44.192.0@sha256:20f0903127aef0ce838410be939680ced244bb42f00ce2e4bd793ad231a35419"
+  RENOVATEBOT_VERSION: "44.198.3@sha256:bf344aa39d5b592ec728e1db5c3e1d940a5093a89a4598073efcb18d592d121c"
   # Persists both the repository cache (extract results) and the file-based
   # package/HTTP cache beside it, so datasource lookups revalidate with ETags
   # instead of refetching from an empty cache on every ephemeral runner.
@@ -102,7 +102,7 @@ jobs:
       # refs; Renovate's github-actions manager keeps the digest current from
       # the version comment below.
       - name: Run Renovate
-        uses: renovatebot/github-action@2804199d260ad00c1fae0e9e842888369391c776 # v46.3.10
+        uses: renovatebot/github-action@43b963bf5dd5e57f1f95c59765a018d782870211 # v46.3.11
         with:
           token: ${{ secrets.RENOVATE_TOKEN }}
           # Also loaded as global config so the global gitAuthor is this repo's

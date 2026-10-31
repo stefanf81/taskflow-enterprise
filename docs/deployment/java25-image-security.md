@@ -10,6 +10,12 @@ sha256:41d9263c0d5b2a74d89af6e29e73b04298bc65e3cb705d03e9e2271ef49fef84
 Temurin 25.0.4.1+1 / Ubuntu 26.04
 ```
 
+**2026-10-31 digest refresh:** the Dockerfile now pins
+`sha256:b6e00330337143a2c1a20f1c1c693d4b6ce9a3c30ade8b9d03fc68cc9e3871e7`
+(previous pin `sha256:acd83cdf6c9b5bfcd7c4e9d3e1969bacaacdcfa034c074500ab28610fb840f81`),
+applied ahead of Renovate's 3-day soak at the maintainer's request. The Temurin build and scan
+results have not been recorded for it; CI's image scan covers it on the next build.
+
 **2026-10-28 digest refresh:** the Dockerfile now pins
 `sha256:acd83cdf6c9b5bfcd7c4e9d3e1969bacaacdcfa034c074500ab28610fb840f81`
 (pushed 2026-10-28; previous pin `sha256:f9d26d6ca476513a3c7081291e0c05e5f5c2c66f77dcf21704cf8bcdb94f4342`,

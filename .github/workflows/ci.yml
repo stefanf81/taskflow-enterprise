@@ -54,7 +54,7 @@ env:
 
   # Keep in sync with renovate.yml's RENOVATEBOT_VERSION.
   # renovate-image: tracked by the dedicated regex manager in .github/renovate.json
-  RENOVATEBOT_VERSION: "44.192.0@sha256:20f0903127aef0ce838410be939680ced244bb42f00ce2e4bd793ad231a35419"
+  RENOVATEBOT_VERSION: "44.198.3@sha256:bf344aa39d5b592ec728e1db5c3e1d940a5093a89a4598073efcb18d592d121c"
 
 defaults:
   run:
@@ -898,7 +898,7 @@ jobs:
           --health-retries 30
 
       redis:
-        image: &redis-image redis:8.10.3-alpine@sha256:896f241f438ab6a210cfb24f573b84bea721a4cbe67f1b4fd07eb638b3b02a7b
+        image: &redis-image redis:8.10.3-alpine@sha256:21090af93f8324db2f0f0f4f38a7c60369d47d917e000c3423d89d2ae2883537
 
         ports:
           - 6379:6379
