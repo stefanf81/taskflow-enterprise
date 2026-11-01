@@ -1,6 +1,9 @@
 import { AppState } from 'react-native';
 import * as Network from 'expo-network';
 import { focusManager, onlineManager, QueryClient } from '@tanstack/react-query';
+import { ApiContractError } from '../api/contracts';
+import { getHttpStatus, getRetryAfterSeconds } from '../utils/errors';
+import { SessionExpiredError } from '../utils/session';
 
 // TanStack Query has no notion of React Native's app lifecycle by default:
 // without this, `refetchInterval` keeps polling while the app is backgrounded.
@@ -35,6 +38,36 @@ onlineManager.setEventListener((setOnline) => {
   return () => subscription.remove();
 });
 
+const MAX_QUERY_RETRIES = 1;
+const MAX_RETRY_DELAY_MS = 30_000;
+// A longer server-requested wait is surfaced as an error instead ("try again in N s").
+const MAX_RETRY_AFTER_MS = 10_000;
+
+/**
+ * Retry a failed query at most once, and only when another attempt can succeed:
+ * a network failure or timeout, 408, or a 5xx. Another 4xx would be the same answer,
+ * a broken contract stays broken, and an expired session must not be ended twice.
+ * A 429 is retried only when the server sent a short `Retry-After` (waited out by
+ * queryRetryDelay); any status with a longer `Retry-After` is not retried.
+ */
+export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
+  if (failureCount >= MAX_QUERY_RETRIES) return false;
+  if (error instanceof ApiContractError || error instanceof SessionExpiredError) return false;
+  const status = getHttpStatus(error);
+  if (status === undefined || status === 408) return true;
+  const retryAfter = getRetryAfterSeconds(error);
+  if (retryAfter !== null && retryAfter * 1000 > MAX_RETRY_AFTER_MS) return false;
+  if (status === 429) return retryAfter !== null;
+  return status >= 500;
+}
+
+/** Exponential backoff, or the server's `Retry-After` when it sent one (both capped). */
+export function queryRetryDelay(attemptIndex: number, error: unknown): number {
+  const retryAfter = getRetryAfterSeconds(error);
+  if (retryAfter !== null) return Math.min(retryAfter * 1000, MAX_RETRY_DELAY_MS);
+  return Math.min(1000 * 2 ** attemptIndex, MAX_RETRY_DELAY_MS);
+}
+
 // One cache instance is shared by the app and auth lifecycle. Clearing it on
 // logout/expiry prevents one user's cached data appearing for the next user.
 //
@@ -44,13 +77,17 @@ onlineManager.setEventListener((setOnline) => {
 // queries pending without an error and hold mutations until the network
 // returns, sending a booking or cancellation minutes after the user tapped it.
 // With 'always', TanStack turns refetchOnReconnect off unless it is set.
+//
+// refetchOnWindowFocus (app foreground, see focusManager above) stays off by
+// default: reference data does not change while the app is in the background.
+// The hooks for volatile data (appointments, busy slots, notifications) opt in.
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       networkMode: 'always',
       refetchOnReconnect: true,
-      retry: 1,
-      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+      retry: shouldRetryQuery,
+      retryDelay: queryRetryDelay,
       refetchOnWindowFocus: false,
       staleTime: 60_000,
       gcTime: 5 * 60_000,

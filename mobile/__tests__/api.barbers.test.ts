@@ -24,8 +24,9 @@ describe('barbersApi', () => {
       ];
       mockedGet.mockResolvedValueOnce({ data: mockBarbers });
 
-      const result = await barbersApi.getPublicBarbers();
-      expect(mockedGet).toHaveBeenCalledWith('/api/v1/barbers');
+      const { signal } = new AbortController();
+      const result = await barbersApi.getPublicBarbers({ signal });
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/barbers', { signal });
       expect(result).toEqual(mockBarbers);
     });
   });
@@ -36,7 +37,7 @@ describe('barbersApi', () => {
       mockedGet.mockResolvedValueOnce({ data: mockBarbers });
 
       const result = await barbersApi.getAdminBarbers();
-      expect(mockedGet).toHaveBeenCalledWith('/api/v1/barbers/admin');
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/barbers/admin', { signal: undefined });
       expect(result).toEqual(mockBarbers);
     });
   });
@@ -46,8 +47,9 @@ describe('barbersApi', () => {
       const mockTimeOff = [{ id: 1, startDate: '2026-08-01', endDate: '2026-08-03', reason: 'Vacation' }];
       mockedGet.mockResolvedValueOnce({ data: mockTimeOff });
 
-      const result = await barbersApi.getTimeOff(1);
-      expect(mockedGet).toHaveBeenCalledWith('/api/v1/barbers/1/time-off');
+      const { signal } = new AbortController();
+      const result = await barbersApi.getTimeOff(1, { signal });
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/barbers/1/time-off', { signal });
       expect(result).toEqual(mockTimeOff);
     });
   });

@@ -21,8 +21,9 @@ describe('notificationsApi', () => {
       ];
       mockedGet.mockResolvedValueOnce({ data: mockData });
 
-      const result = await notificationsApi.getNotifications();
-      expect(mockedGet).toHaveBeenCalledWith('/api/v1/notifications');
+      const { signal } = new AbortController();
+      const result = await notificationsApi.getNotifications({ signal });
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/notifications', { signal });
       expect(result).toEqual(mockData);
     });
 

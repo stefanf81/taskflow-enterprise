@@ -21,10 +21,9 @@ describe('storage', () => {
     mockDeleteItemAsync.mockResolvedValue(undefined);
     // Default to native platform
     (Platform as any).OS = 'ios';
-    // Clear module-level memoryStore that persists across tests
+    // Clear the module-level memoryStore and credential cache that persist across tests
     (Platform as any).OS = 'web';
-    await storage.removeToken();
-    await storage.removeUserData();
+    await storage.clearSession();
     (Platform as any).OS = 'ios';
   });
 
@@ -187,7 +186,9 @@ describe('storage', () => {
     it('stores and reads the expiry through SecureStore on native', async () => {
       await storage.setTokenExpiry(1_786_000_000_000.7);
       expect(mockSetItemAsync).toHaveBeenCalledWith('taskflow_token_expires_at', '1786000000000');
+      await expect(storage.getTokenExpiry()).resolves.toBe(1_786_000_000_000);
 
+      await storage.removeTokenExpiry();
       mockGetItemAsync.mockResolvedValue('1786000000000');
       await expect(storage.getTokenExpiry()).resolves.toBe(1_786_000_000_000);
       expect(mockGetItemAsync).toHaveBeenCalledWith('taskflow_token_expires_at');
@@ -196,6 +197,7 @@ describe('storage', () => {
     it('returns null when no or garbage expiry is stored', async () => {
       mockGetItemAsync.mockResolvedValue(null);
       await expect(storage.getTokenExpiry()).resolves.toBeNull();
+      await storage.removeTokenExpiry();
       mockGetItemAsync.mockResolvedValue('not-a-number');
       await expect(storage.getTokenExpiry()).resolves.toBeNull();
     });
@@ -203,6 +205,9 @@ describe('storage', () => {
     it('does not fail requests when the expiry cannot be read', async () => {
       mockGetItemAsync.mockRejectedValue(new Error('keychain locked'));
       await expect(storage.getTokenExpiry()).resolves.toBeNull();
+      // An unreadable expiry is not cached: the next request reads it again.
+      mockGetItemAsync.mockResolvedValue('1786000000000');
+      await expect(storage.getTokenExpiry()).resolves.toBe(1_786_000_000_000);
     });
 
     it('fails closed when the expiry cannot be written on native', async () => {
@@ -224,6 +229,67 @@ describe('storage', () => {
       expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_token_expires_at');
       mockDeleteItemAsync.mockRejectedValue(new Error('fail'));
       await expect(storage.removeTokenExpiry()).rejects.toThrow('Secure credential removal failed.');
+    });
+  });
+
+  // ==================== in-memory credential cache ====================
+  describe('credential cache', () => {
+    it('reads the token and expiry from SecureStore once, then from memory', async () => {
+      mockGetItemAsync.mockImplementation(async (key: string) =>
+        key === 'taskflow_auth_token' ? 'stored-token' : '1786000000000',
+      );
+      for (let i = 0; i < 3; i++) {
+        await expect(storage.getToken()).resolves.toBe('stored-token');
+        await expect(storage.getTokenExpiry()).resolves.toBe(1_786_000_000_000);
+      }
+      expect(mockGetItemAsync).toHaveBeenCalledTimes(2);
+    });
+
+    it('serves a freshly stored token without a SecureStore read', async () => {
+      await storage.setToken('login-token');
+      await storage.setTokenExpiry(1_786_000_000_000);
+      await expect(storage.getToken()).resolves.toBe('login-token');
+      await expect(storage.getTokenExpiry()).resolves.toBe(1_786_000_000_000);
+      expect(mockGetItemAsync).not.toHaveBeenCalled();
+    });
+
+    it('drops the cached expiry when a new token is stored', async () => {
+      await storage.setTokenExpiry(1);
+      await storage.setToken('next-token');
+      mockGetItemAsync.mockResolvedValue(null);
+      await expect(storage.getTokenExpiry()).resolves.toBeNull();
+      expect(mockGetItemAsync).toHaveBeenCalledWith('taskflow_token_expires_at');
+    });
+
+    it('forgets the token on clearSession, even when the deletion fails', async () => {
+      await storage.setToken('session-token');
+      mockDeleteItemAsync.mockRejectedValue(new Error('fail'));
+      await expect(storage.clearSession()).rejects.toThrow('Secure credential removal failed.');
+      // Not served from memory any more; SecureStore stays the authority.
+      mockGetItemAsync.mockResolvedValue(null);
+      await expect(storage.getToken()).resolves.toBeNull();
+      expect(mockGetItemAsync).toHaveBeenCalledWith('taskflow_auth_token');
+    });
+
+    it('does not cache a token read that a logout overtook', async () => {
+      let finishRead!: (value: string) => void;
+      mockGetItemAsync.mockImplementationOnce(
+        () => new Promise<string>((resolve) => (finishRead = resolve)),
+      );
+      const inFlight = storage.getToken();
+      await storage.clearSession();
+      finishRead('revoked-token');
+      await expect(inFlight).resolves.toBe('revoked-token');
+
+      mockGetItemAsync.mockResolvedValue(null);
+      await expect(storage.getToken()).resolves.toBeNull();
+    });
+
+    it('does not cache a token SecureStore failed to read', async () => {
+      mockGetItemAsync.mockRejectedValueOnce(new Error('locked'));
+      await expect(storage.getToken()).rejects.toThrow('Secure credential storage is unavailable.');
+      mockGetItemAsync.mockResolvedValue('stored-token');
+      await expect(storage.getToken()).resolves.toBe('stored-token');
     });
   });
 

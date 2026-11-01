@@ -4,7 +4,7 @@ import { catalogApi } from './catalog';
 export const useCatalog = () => {
   return useQuery({
     queryKey: ['catalog'],
-    queryFn: () => catalogApi.getAllServices(),
+    queryFn: ({ signal }) => catalogApi.getAllServices({ signal }),
     staleTime: 60000,
   });
 };

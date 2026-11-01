@@ -1,4 +1,4 @@
-import { apiClient } from '../../api/client';
+import { apiClient, RequestOptions } from '../../api/client';
 import {
   AppointmentCreateRequest,
   AppointmentDashboardResponse,
@@ -20,7 +20,8 @@ export const appointmentsApi = {
     statusFilter?: string,
     search?: string,
     page = 0,
-    size = 10
+    size = 10,
+    { signal }: RequestOptions = {},
   ): Promise<AppointmentDashboardResponse> => {
     const params: Record<string, string | number> = {
       page,
@@ -37,6 +38,7 @@ export const appointmentsApi = {
     }
     const response = await apiClient.get<AppointmentDashboardResponse>('/api/v1/appointments', {
       params,
+      signal,
     });
     return parseContract(
       appointmentDashboardResponseSchema,
@@ -63,8 +65,8 @@ export const appointmentsApi = {
   },
 
   /** The shop's IANA time zone: what the server counts as past or bookable is decided in it. */
-  getShopTimeZone: async (): Promise<string> => {
-    const response = await apiClient.get<unknown>('/api/v1/appointments/public/shop');
+  getShopTimeZone: async ({ signal }: RequestOptions = {}): Promise<string> => {
+    const response = await apiClient.get<unknown>('/api/v1/appointments/public/shop', { signal });
     return parseContract(
       shopInfoResponseSchema,
       response.data,
@@ -75,12 +77,14 @@ export const appointmentsApi = {
   getBusySlots: async (
     barberName: string,
     bookingDate: string,
-    serviceType?: string
+    serviceType?: string,
+    { signal }: RequestOptions = {},
   ): Promise<string[]> => {
     // serviceType lets the server also mark slots where a long service would overlap a later
     // booking or run past closing time (otherwise the booking is rejected with 400 at submit).
     const response = await apiClient.get<string[]>('/api/v1/appointments/public/busy-slots', {
       params: serviceType ? { barberName, bookingDate, serviceType } : { barberName, bookingDate },
+      signal,
     });
     return parseContract(
       busySlotsResponseSchema,

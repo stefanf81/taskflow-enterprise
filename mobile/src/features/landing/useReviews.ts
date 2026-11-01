@@ -5,7 +5,7 @@ import { ReviewRequest } from '../../types/api';
 export const useBarberRatings = () => {
   return useQuery({
     queryKey: ['barberRatings'],
-    queryFn: () => reviewsApi.getBarberRatings(),
+    queryFn: ({ signal }) => reviewsApi.getBarberRatings({ signal }),
     staleTime: 30000,
   });
 };

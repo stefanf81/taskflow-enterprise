@@ -21,8 +21,9 @@ describe('catalogApi', () => {
       ];
       mockedGet.mockResolvedValueOnce({ data: mockServices });
 
-      const result = await catalogApi.getAllServices();
-      expect(mockedGet).toHaveBeenCalledWith('/api/v1/catalog');
+      const { signal } = new AbortController();
+      const result = await catalogApi.getAllServices({ signal });
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/catalog', { signal });
       expect(result).toEqual(mockServices);
     });
 

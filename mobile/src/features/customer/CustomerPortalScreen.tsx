@@ -81,7 +81,6 @@ export const CustomerPortalScreen: React.FC = () => {
             cancelMutation.mutate(publicId, {
               onSuccess: () => {
                 showSuccess('Appointment cancelled successfully.');
-                refetch();
               },
               onError: (err) => showError(getApiErrorMessage(err, 'Failed to cancel appointment.')),
             });

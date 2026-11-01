@@ -85,7 +85,6 @@ export const AdminDashboardScreen: React.FC = () => {
       {
         onSuccess: () => {
           showSuccess('Appointment APPROVED! Client notification email dispatched.');
-          refetch();
         },
         onError: (err) => showError(getApiErrorMessage(err, 'Failed to approve appointment.')),
       },
@@ -98,7 +97,6 @@ export const AdminDashboardScreen: React.FC = () => {
       {
         onSuccess: () => {
           showSuccess('Appointment DECLINED. Client notification email dispatched.');
-          refetch();
         },
         onError: (err) => showError(getApiErrorMessage(err, 'Failed to decline appointment.')),
       },
@@ -115,7 +113,6 @@ export const AdminDashboardScreen: React.FC = () => {
           deleteMutation.mutate(id, {
             onSuccess: () => {
               showSuccess('Booking permanently deleted.');
-              refetch();
             },
             onError: (err) => showError(getApiErrorMessage(err, 'Failed to delete booking.')),
           });

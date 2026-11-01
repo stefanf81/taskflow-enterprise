@@ -1,24 +1,28 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { appointmentsApi } from './appointments';
 import { AppointmentCreateRequest, AppointmentUpdateRequest } from '../../types/api';
 
 export const useAppointments = (filter?: string, search?: string, page = 0, size = 10) => {
   return useQuery({
     queryKey: ['appointments', filter, search, page, size],
-    queryFn: () => appointmentsApi.getAllAppointments(filter, search, page, size),
+    queryFn: ({ signal }) =>
+      appointmentsApi.getAllAppointments(filter, search, page, size, { signal }),
     staleTime: 10000,
+    // Keep the current page on screen while another page, filter or search term loads.
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: true,
   });
 };
 
 export const useBusySlots = (barberName: string, bookingDate: string, serviceType?: string) => {
   return useQuery({
     queryKey: ['busySlots', barberName, bookingDate, serviceType ?? ''],
-    queryFn: () =>
-      serviceType
-        ? appointmentsApi.getBusySlots(barberName, bookingDate, serviceType)
-        : appointmentsApi.getBusySlots(barberName, bookingDate),
+    // No placeholderData: another barber's or day's busy slots must never be shown as this one's.
+    queryFn: ({ signal }) =>
+      appointmentsApi.getBusySlots(barberName, bookingDate, serviceType, { signal }),
     enabled: !!barberName && barberName.length > 0 && !!bookingDate,
     staleTime: 5000,
+    refetchOnWindowFocus: true,
   });
 };
 

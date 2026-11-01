@@ -8,8 +8,31 @@ const EXPIRY_KEY = 'taskflow_token_expires_at';
 // Memory fallback for web or test environments where SecureStore isn't native
 const memoryStore = new Map<string, string>();
 
+// In-memory copy of the token and its expiry: every protected request needs both,
+// and each SecureStore read crosses the native bridge. SecureStore stays the
+// persistence layer. `undefined` means "not read yet" (launch, or after a write or
+// removal), so the next read goes to SecureStore again.
+let cachedToken: string | null | undefined;
+let cachedExpiry: number | null | undefined;
+// Bumped by every token/expiry write and removal: a read that was in flight
+// meanwhile must not cache the value it saw (a logout racing a request).
+let credentialGeneration = 0;
+
+/** A token change also drops the cached expiry: an old expiry says nothing about a new token. */
+function invalidateCachedToken(): number {
+  cachedToken = undefined;
+  cachedExpiry = undefined;
+  return ++credentialGeneration;
+}
+
+function invalidateCachedExpiry(): number {
+  cachedExpiry = undefined;
+  return ++credentialGeneration;
+}
+
 export const storage = {
   async setToken(token: string): Promise<void> {
+    const generation = invalidateCachedToken();
     try {
       if (Platform.OS === 'web') {
         memoryStore.set(TOKEN_KEY, token);
@@ -27,14 +50,18 @@ export const storage = {
       );
       memoryStore.set(TOKEN_KEY, token);
     }
+    if (generation === credentialGeneration) cachedToken = token;
   },
 
   async getToken(): Promise<string | null> {
+    if (cachedToken !== undefined) return cachedToken;
+    const generation = credentialGeneration;
+    let token: string | null;
     try {
-      if (Platform.OS === 'web') {
-        return memoryStore.get(TOKEN_KEY) || null;
-      }
-      return await SecureStore.getItemAsync(TOKEN_KEY);
+      token =
+        Platform.OS === 'web'
+          ? memoryStore.get(TOKEN_KEY) || null
+          : await SecureStore.getItemAsync(TOKEN_KEY);
     } catch (err) {
       if (Platform.OS !== 'web') {
         throw new Error('Secure credential storage is unavailable.');
@@ -43,11 +70,14 @@ export const storage = {
         '[storage] SecureStore.getToken failed, falling back to in-memory storage. Error:',
         err instanceof Error ? err.message : err,
       );
-      return memoryStore.get(TOKEN_KEY) || null;
+      token = memoryStore.get(TOKEN_KEY) || null;
     }
+    if (generation === credentialGeneration) cachedToken = token;
+    return token;
   },
 
   async removeToken(): Promise<void> {
+    invalidateCachedToken();
     try {
       if (Platform.OS === 'web') {
         memoryStore.delete(TOKEN_KEY);
@@ -134,6 +164,7 @@ export const storage = {
   /** Persist the absolute expiry (epoch ms) of the stored bearer token. */
   async setTokenExpiry(expiresAtMs: number): Promise<void> {
     const value = String(Math.trunc(expiresAtMs));
+    const generation = invalidateCachedExpiry();
     try {
       if (Platform.OS === 'web') {
         memoryStore.set(EXPIRY_KEY, value);
@@ -150,10 +181,13 @@ export const storage = {
       );
       memoryStore.set(EXPIRY_KEY, value);
     }
+    if (generation === credentialGeneration) cachedExpiry = Number(value);
   },
 
   /** Absolute expiry (epoch ms) of the stored token, or null when unknown (e.g. pre-upgrade installs). */
   async getTokenExpiry(): Promise<number | null> {
+    if (cachedExpiry !== undefined) return cachedExpiry;
+    const generation = credentialGeneration;
     let raw: string | null;
     try {
       raw =
@@ -165,10 +199,13 @@ export const storage = {
       return null;
     }
     const parsed = raw ? Number(raw) : NaN;
-    return Number.isFinite(parsed) ? parsed : null;
+    const expiry = Number.isFinite(parsed) ? parsed : null;
+    if (generation === credentialGeneration) cachedExpiry = expiry;
+    return expiry;
   },
 
   async removeTokenExpiry(): Promise<void> {
+    invalidateCachedExpiry();
     try {
       if (Platform.OS === 'web') {
         memoryStore.delete(EXPIRY_KEY);

@@ -1,5 +1,5 @@
 import { renderHook, act } from '@testing-library/react-native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 
 // ============================================================
@@ -127,8 +127,78 @@ describe('Hooks', () => {
 
       await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
 
-      expect(mockGetAllAppointmentsFn).toHaveBeenCalledWith('pending', 'Alex', 0, 10);
+      expect(mockGetAllAppointmentsFn).toHaveBeenCalledWith('pending', 'Alex', 0, 10, { signal: expect.any(AbortSignal) });
       expect(result.current.data).toBeDefined();
+    });
+
+    it('keeps the previous page on screen while the next one loads', async () => {
+      const firstPage = {
+        page: { content: [], page: { number: 0, size: 10, totalElements: 20, totalPages: 2 } },
+        stats: null,
+      };
+      mockGetAllAppointmentsFn
+        .mockResolvedValueOnce(firstPage)
+        .mockReturnValueOnce(new Promise(() => undefined));
+
+      const { result, rerender } = await renderHook(
+        ({ page }: { page: number }) => useAppointments('all', '', page, 10),
+        { wrapper: createWrapper(), initialProps: { page: 0 } },
+      );
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+      expect(result.current.data).toEqual(firstPage);
+
+      await rerender({ page: 1 });
+
+      expect(result.current.isPlaceholderData).toBe(true);
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.data).toEqual(firstPage);
+    });
+
+    it('aborts the request when the screen unmounts before it finishes', async () => {
+      let signal: AbortSignal | undefined;
+      mockGetAllAppointmentsFn.mockImplementationOnce(
+        (_filter, _search, _page, _size, options: { signal: AbortSignal }) => {
+          signal = options.signal;
+          return new Promise(() => undefined);
+        },
+      );
+
+      const { unmount } = await renderHook(() => useAppointments('all', '', 0, 10), {
+        wrapper: createWrapper(),
+      });
+      await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+      expect(signal?.aborted).toBe(false);
+
+      await unmount();
+
+      expect(signal?.aborted).toBe(true);
+    });
+
+    it('opts volatile data into refetching when the app returns to the foreground', async () => {
+      mockGetAllAppointmentsFn.mockResolvedValue({
+        page: { content: [], page: { number: 0, size: 10, totalElements: 0, totalPages: 0 } },
+        stats: null,
+      });
+      mockGetBusySlotsFn.mockResolvedValue([]);
+      mockCustomerGetAppointmentsFn.mockResolvedValue({
+        content: [], page: { number: 0, size: 10, totalElements: 0, totalPages: 0 },
+      });
+      mockGetAllServicesFn.mockResolvedValue([]);
+      const wrapper = createWrapper();
+      await renderHook(() => useAppointments('all', '', 0, 10), { wrapper });
+      await renderHook(() => useBusySlots('Alex', '2026-08-01'), { wrapper });
+      await renderHook(() => useCustomerAppointments(0, 10), { wrapper });
+      await renderHook(() => useCatalog(), { wrapper });
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+
+      const focusRefetch = (queryKey: unknown[]) =>
+        lastQueryClient!.getQueryCache().find({ queryKey, exact: false })?.observers[0]?.options
+          .refetchOnWindowFocus;
+      expect(focusRefetch(['appointments'])).toBe(true);
+      expect(focusRefetch(['busySlots'])).toBe(true);
+      expect(focusRefetch(['customerAppointments'])).toBe(true);
+      // Reference data keeps the global default (off).
+      expect(focusRefetch(['catalog'])).toBeUndefined();
     });
   });
 
@@ -162,7 +232,7 @@ describe('Hooks', () => {
 
       await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
 
-      expect(mockGetBusySlotsFn).toHaveBeenCalledWith('Alex', '2026-08-01');
+      expect(mockGetBusySlotsFn).toHaveBeenCalledWith('Alex', '2026-08-01', undefined, { signal: expect.any(AbortSignal) });
     });
 
     it('does not fetch when barberName is empty', async () => {
@@ -280,7 +350,7 @@ describe('Hooks', () => {
 
       await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
 
-      expect(mockGetTimeOffFn).toHaveBeenCalledWith(1);
+      expect(mockGetTimeOffFn).toHaveBeenCalledWith(1, { signal: expect.any(AbortSignal) });
     });
 
     it('does not fetch when barberId is null', async () => {
@@ -330,7 +400,7 @@ describe('Hooks', () => {
 
       await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
 
-      expect(mockCustomerGetAppointmentsFn).toHaveBeenCalledWith(0, 10);
+      expect(mockCustomerGetAppointmentsFn).toHaveBeenCalledWith(0, 10, { signal: expect.any(AbortSignal) });
     });
   });
 
@@ -358,6 +428,25 @@ describe('Hooks', () => {
       await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
 
       expect(mockGetNotificationsFn).toHaveBeenCalled();
+    });
+
+    it('refetches a stale outbox when the app returns to the foreground', async () => {
+      mockGetNotificationsFn.mockResolvedValue([]);
+      await renderHook(() => useNotifications({ poll: true }), { wrapper: createWrapper() });
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+      expect(mockGetNotificationsFn).toHaveBeenCalledTimes(1);
+
+      try {
+        await act(async () => {
+          focusManager.setFocused(false);
+          focusManager.setFocused(true);
+          await new Promise((r) => setTimeout(r, 50));
+        });
+      } finally {
+        focusManager.setFocused(undefined);
+      }
+
+      expect(mockGetNotificationsFn).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -5,7 +5,7 @@ import { BarberTimeOffRequest } from '../../types/api';
 export const usePublicBarbers = () => {
   return useQuery({
     queryKey: ['publicBarbers'],
-    queryFn: () => barbersApi.getPublicBarbers(),
+    queryFn: ({ signal }) => barbersApi.getPublicBarbers({ signal }),
     staleTime: 60000,
   });
 };
@@ -13,7 +13,7 @@ export const usePublicBarbers = () => {
 export const useAdminBarbers = () => {
   return useQuery({
     queryKey: ['adminBarbers'],
-    queryFn: () => barbersApi.getAdminBarbers(),
+    queryFn: ({ signal }) => barbersApi.getAdminBarbers({ signal }),
     staleTime: 60000,
   });
 };
@@ -21,7 +21,8 @@ export const useAdminBarbers = () => {
 export const useBarberTimeOff = (barberId: number | null) => {
   return useQuery({
     queryKey: ['barberTimeOff', barberId],
-    queryFn: () => (barberId ? barbersApi.getTimeOff(barberId) : Promise.resolve([])),
+    queryFn: ({ signal }) =>
+      barberId ? barbersApi.getTimeOff(barberId, { signal }) : Promise.resolve([]),
     enabled: barberId !== null,
   });
 };

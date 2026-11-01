@@ -16,9 +16,11 @@ interface UseNotificationsOptions {
 export const useNotifications = ({ poll = true }: UseNotificationsOptions = {}) => {
   return useQuery({
     queryKey: ['notifications'],
-    queryFn: () => notificationsApi.getNotifications(),
+    queryFn: ({ signal }) => notificationsApi.getNotifications({ signal }),
     refetchInterval: poll ? NOTIFICATIONS_POLL_MS : false,
     refetchIntervalInBackground: false,
+    // Back from the background: a stale outbox is refetched at once, not at the next tick.
+    refetchOnWindowFocus: true,
     // A hidden tab also stops observing the cache (TanStack's React Native
     // guide): no re-render when another screen refreshes the outbox, and on
     // refocus a stale (>60 s) list is refetched as on mount.

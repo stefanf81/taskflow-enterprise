@@ -24,8 +24,9 @@ describe('reviewsApi', () => {
       ];
       mockedGet.mockResolvedValueOnce({ data: mockRatings });
 
-      const result = await reviewsApi.getBarberRatings();
-      expect(mockedGet).toHaveBeenCalledWith('/api/v1/reviews/public/barber-ratings');
+      const { signal } = new AbortController();
+      const result = await reviewsApi.getBarberRatings({ signal });
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/reviews/public/barber-ratings', { signal });
       expect(result).toEqual(mockRatings);
     });
   });

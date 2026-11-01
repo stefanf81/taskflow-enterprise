@@ -55,6 +55,14 @@ export const apiClient = axios.create({
   timeout: 10000,
 });
 
+/**
+ * Per-call options of the API modules' read functions. Query hooks pass TanStack's
+ * `signal`, so a request whose query was superseded or unmounted is aborted.
+ */
+export interface RequestOptions {
+  signal?: AbortSignal;
+}
+
 // ---------------------------------------------------------------------------
 // Local session teardown (shared by proactive expiry and 401 handling)
 // ---------------------------------------------------------------------------
@@ -92,8 +100,8 @@ apiClient.interceptors.request.use(
       return config;
     }
 
-    // Both keychain/keystore reads cross the native bridge; run them together
-    // instead of one after the other on every protected request.
+    // Served from storage's in-memory copy; only the first protected request
+    // after launch or a credential change reads the keychain/keystore.
     const [token, expiresAt] = await Promise.all([storage.getToken(), storage.getTokenExpiry()]);
     if (!token) {
       return config;

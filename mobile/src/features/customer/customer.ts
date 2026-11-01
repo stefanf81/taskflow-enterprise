@@ -1,13 +1,17 @@
-import { apiClient } from '../../api/client';
+import { apiClient, RequestOptions } from '../../api/client';
 import { AppointmentPage } from '../../types/api';
 import { parseContract } from '../../api/contracts';
 import { pagedAppointmentResponseSchema } from '@taskflow/schemas';
 
 export const customerApi = {
-  getAppointments: async (page = 0, size = 10): Promise<AppointmentPage> => {
+  getAppointments: async (
+    page = 0,
+    size = 10,
+    { signal }: RequestOptions = {},
+  ): Promise<AppointmentPage> => {
     const response = await apiClient.get<AppointmentPage>(
       '/api/v1/customer/appointments',
-      { params: { page, size } }
+      { params: { page, size }, signal }
     );
     return parseContract(
       pagedAppointmentResponseSchema,
