@@ -80,6 +80,97 @@ abstract class AbstractRedisCacheLoadLockTest {
         return ((SingleFlightCacheManager) wrapped).getCache(CACHE);
     }
 
+    /**
+     * {@code @CacheEvict(allEntries = true)} with the SCAN writer: only that cache's keys go. Over
+     * Lettuce the writer clears asynchronously (as the default KEYS writer did), hence the polling.
+     */
+    @Test
+    void clearingACacheWithTheScanWriterDeletesOnlyItsOwnKeys() throws InterruptedException {
+        RedisCacheManager manager = RedisCacheManager.builder(CacheConfig.scanningCacheWriter(factoryA))
+                .cacheDefaults(new CacheConfig().cacheConfiguration())
+                .build();
+        manager.afterPropertiesSet();
+        String cleared = "scan-cleared-" + UUID.randomUUID();
+        String kept = "scan-kept-" + UUID.randomUUID();
+        String unrelated = "rate_limit:" + UUID.randomUUID() + ":api";
+        try {
+            for (int i = 0; i < 25; i++) {
+                manager.getCache(cleared).put("k" + i, "v");
+            }
+            manager.getCache(kept).put("k", "v");
+            redis.opsForValue().set(unrelated, "1", Duration.ofMinutes(1));
+
+            manager.getCache(cleared).clear();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (!redis.keys(cleared + "::*").isEmpty() && System.nanoTime() < deadline) {
+                Thread.sleep(20);
+            }
+
+            assertTrue(redis.keys(cleared + "::*").isEmpty());
+            assertEquals(null, manager.getCache(cleared).get("k0"));
+            assertEquals("v", manager.getCache(kept).get("k").get());
+            assertEquals("1", redis.opsForValue().get(unrelated));
+        } finally {
+            manager.getCache(kept).invalidate();
+            redis.delete(unrelated);
+        }
+    }
+
+    /** The keepalive options are accepted by the transport, and a reset connection is replaced on use. */
+    @Test
+    void keepAliveConnectionsWorkAndAResetConnectionIsReopened() {
+        java.net.URI uri = java.net.URI.create(redisUrl());
+        var standalone = new org.springframework.data.redis.connection.RedisStandaloneConfiguration(
+                uri.getHost(), uri.getPort() > 0 ? uri.getPort() : 6379);
+        io.lettuce.core.ClientOptions.Builder options = io.lettuce.core.ClientOptions.builder()
+                .socketOptions(io.lettuce.core.SocketOptions.builder().connectTimeout(Duration.ofSeconds(1)).build());
+        RedisConnectionConfig.enableKeepAlive(options);
+        LettuceConnectionFactory factory = new LettuceConnectionFactory(standalone,
+                org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration.builder()
+                        .clientOptions(options.build()).build());
+        factory.afterPropertiesSet();
+        factory.start();
+        try {
+            StringRedisTemplate template = new StringRedisTemplate(factory);
+            String probe = "keepalive-" + UUID.randomUUID();
+            template.opsForValue().set(probe, "1", Duration.ofMinutes(1));
+            RedisConnectionRecovery recovery = new RedisConnectionRecovery(factory::resetConnection, 1, 0,
+                    System::currentTimeMillis);
+
+            recovery.recordFailure(new org.springframework.dao.QueryTimeoutException("simulated"));
+
+            assertEquals(1, recovery.resetCount());
+            assertEquals("1", template.opsForValue().get(probe), "a new shared connection is opened");
+            template.delete(probe);
+        } finally {
+            factory.destroy();
+        }
+    }
+
+    /** The rate-limit script's {count, PTTL} reply through the real template, and Retry-After from it. */
+    @Test
+    void rateLimiterRetryAfterIsTheRestOfTheSharedWindow() throws Exception {
+        String client = "test-" + UUID.randomUUID();
+        var filter = new RateLimiterConfig(100, 20).createRateLimitFilter(redis);
+        try {
+            org.springframework.mock.web.MockHttpServletResponse response = null;
+            for (int i = 0; i < 21; i++) {
+                var request = new org.springframework.mock.web.MockHttpServletRequest("POST", "/api/v1/auth/login");
+                request.setRemoteAddr(client);
+                response = new org.springframework.mock.web.MockHttpServletResponse();
+                filter.doFilter(request, response, new org.springframework.mock.web.MockFilterChain());
+            }
+
+            assertEquals(429, response.getStatus());
+            long retryAfter = Long.parseLong(response.getHeader("Retry-After"));
+            assertTrue(retryAfter >= 55 && retryAfter <= 60, "Retry-After=" + retryAfter);
+            Long ttl = redis.getExpire("rate_limit:" + client + ":auth", TimeUnit.MILLISECONDS);
+            assertTrue(ttl != null && ttl > 0 && ttl <= 60_000, "ttl=" + ttl);
+        } finally {
+            redis.delete("rate_limit:" + client + ":auth");
+        }
+    }
+
     @Test
     void concurrentMissesOnTwoReplicasRunTheLoaderOnceStoreTheValueAndReleaseTheLock() throws Exception {
         Cache a = replica(factoryA, Duration.ofSeconds(10), Duration.ofSeconds(5));

@@ -11,8 +11,14 @@ import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.boot.cache.autoconfigure.RedisCacheManagerBuilderCustomizer;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
+import org.springframework.cache.CacheManager;
+import org.springframework.data.redis.cache.BatchStrategies;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.cache.RedisCacheWriter;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.JacksonJsonRedisSerializer;
@@ -193,21 +199,38 @@ public class CacheConfig {
      * manager already serialises and is left untouched.
      *
      * <p>Static so the post-processor is available early without instantiating this configuration;
-     * the Redis template is looked up lazily on the first miss, never during startup.
+     * the Redis template is looked up lazily on the first miss, never during startup. The cache
+     * commands' failures also feed the shared {@link RedisConnectionRecovery}, resolved when the
+     * Redis cache manager is wrapped.
      */
     @Bean
     public static BeanPostProcessor singleFlightCacheManagerPostProcessor(
-            Environment environment, ObjectProvider<StringRedisTemplate> redisTemplate) {
-        RedisBackoff backoff = new RedisBackoff("Redis cache");
-        SingleFlightCacheManager.DistributedLoadLock lock = null;
-        if (SharedStateStore.isRedis(environment)) {
-            Duration lease = Duration.ofMillis(environment.getProperty("app.cache.single-flight.lock-lease-ms",
-                    Long.class, RedisCacheLoadLock.DEFAULT_LEASE.toMillis()));
-            lock = new RedisCacheLoadLock(redisTemplate::getObject, lease, backoff);
-        }
+            Environment environment, ObjectProvider<StringRedisTemplate> redisTemplate,
+            ObjectProvider<RedisConnectionRecovery> connectionRecovery) {
+        boolean sharedLease = SharedStateStore.isRedis(environment);
+        Duration lease = Duration.ofMillis(environment.getProperty("app.cache.single-flight.lock-lease-ms",
+                Long.class, RedisCacheLoadLock.DEFAULT_LEASE.toMillis()));
         Duration maxWait = Duration.ofMillis(environment.getProperty("app.cache.single-flight.max-wait-ms",
                 Long.class, SingleFlightCacheManager.DEFAULT_MAX_WAIT.toMillis()));
-        return singleFlightPostProcessor(lock, maxWait, backoff);
+        return new BeanPostProcessor() {
+            @Override
+            public Object postProcessAfterInitialization(Object bean, String beanName) {
+                if (!(bean instanceof RedisCacheManager redis)) {
+                    return bean;
+                }
+                RedisBackoff backoff = new RedisBackoff("Redis cache", connectionRecovery.getIfAvailable());
+                SingleFlightCacheManager.DistributedLoadLock lock = sharedLease
+                        ? new RedisCacheLoadLock(redisTemplate::getObject, lease, backoff)
+                        : null;
+                return wrap(redis, lock, maxWait, backoff);
+            }
+        };
+    }
+
+    static BeanPostProcessor singleFlightCacheManagerPostProcessor(
+            Environment environment, ObjectProvider<StringRedisTemplate> redisTemplate) {
+        return singleFlightCacheManagerPostProcessor(environment, redisTemplate, new StaticListableBeanFactory()
+                .getBeanProvider(RedisConnectionRecovery.class));
     }
 
     static BeanPostProcessor singleFlightPostProcessor(SingleFlightCacheManager.DistributedLoadLock lock,
@@ -220,11 +243,14 @@ public class CacheConfig {
         return new BeanPostProcessor() {
             @Override
             public Object postProcessAfterInitialization(Object bean, String beanName) {
-                return bean instanceof RedisCacheManager redis
-                        ? new SingleFlightCacheManager(new RedisBackoffCacheManager(redis, backoff), lock, maxWait)
-                        : bean;
+                return bean instanceof RedisCacheManager redis ? wrap(redis, lock, maxWait, backoff) : bean;
             }
         };
+    }
+
+    private static CacheManager wrap(RedisCacheManager redis, SingleFlightCacheManager.DistributedLoadLock lock,
+                                     Duration maxWait, RedisBackoff backoff) {
+        return new SingleFlightCacheManager(new RedisBackoffCacheManager(redis, backoff), lock, maxWait);
     }
 
     /** The admin dashboard's server-sent-event stream (see {@code AppointmentController}). */
@@ -251,6 +277,25 @@ public class CacheConfig {
                         || (accept != null && accept.contains("text/event-stream"));
             }
         };
+    }
+
+    static final int CLEAR_SCAN_BATCH = 1000;
+
+    /**
+     * {@code @CacheEvict(allEntries = true)} clears a cache by pattern. The default writer finds the
+     * keys with {@code KEYS}, which blocks Redis while it walks the whole database - not only the
+     * cache entries but every rate-limit bucket, revocation, login counter and lease in it.
+     * {@code SCAN} walks it in steps of 1000 keys between which other commands run. The writer is
+     * otherwise the default one (non-locking); the decorators above wrap the resulting manager.
+     */
+    @Bean
+    public RedisCacheManagerBuilderCustomizer scanningCacheWriterCustomizer(
+            ObjectProvider<RedisConnectionFactory> connectionFactory) {
+        return builder -> builder.cacheWriter(scanningCacheWriter(connectionFactory.getObject()));
+    }
+
+    static RedisCacheWriter scanningCacheWriter(RedisConnectionFactory connectionFactory) {
+        return RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory, BatchStrategies.scan(CLEAR_SCAN_BATCH));
     }
 
     /**

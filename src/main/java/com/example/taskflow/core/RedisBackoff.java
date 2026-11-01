@@ -18,6 +18,9 @@ import java.util.function.LongSupplier;
  * <p>Logging is rate-limited by construction: one WARN when Redis becomes unavailable, one INFO when
  * it answers again, DEBUG in between. Only the component name and the exception message are logged,
  * never keys or values (keys can carry token ids; values can carry lock tokens).
+ *
+ * <p>Callers that use the shared command connection pass the process-wide
+ * {@link RedisConnectionRecovery}, which replaces that connection after repeated command timeouts.
  */
 public final class RedisBackoff {
 
@@ -29,6 +32,7 @@ public final class RedisBackoff {
     private final String component;
     private final long backoffMillis;
     private final LongSupplier clock;
+    private final RedisConnectionRecovery recovery;
     private final AtomicLong skipUntilMillis = new AtomicLong();
     private volatile boolean degraded;
 
@@ -36,13 +40,23 @@ public final class RedisBackoff {
         this(component, DEFAULT_BACKOFF_MILLIS, System::currentTimeMillis);
     }
 
+    /** @param recovery told about every outcome; {@code null} for none */
+    public RedisBackoff(String component, RedisConnectionRecovery recovery) {
+        this(component, DEFAULT_BACKOFF_MILLIS, System::currentTimeMillis, recovery);
+    }
+
     public RedisBackoff(String component, long backoffMillis, LongSupplier clock) {
+        this(component, backoffMillis, clock, null);
+    }
+
+    public RedisBackoff(String component, long backoffMillis, LongSupplier clock, RedisConnectionRecovery recovery) {
         if (backoffMillis < 0) {
             throw new IllegalArgumentException("backoffMillis must not be negative");
         }
         this.component = component;
         this.backoffMillis = backoffMillis;
         this.clock = clock;
+        this.recovery = recovery;
     }
 
     /**
@@ -75,6 +89,9 @@ public final class RedisBackoff {
 
     public void recordFailure(RuntimeException e) {
         skipUntilMillis.set(clock.getAsLong() + backoffMillis);
+        if (recovery != null) {
+            recovery.recordFailure(e);
+        }
         if (!degraded) {
             degraded = true;
             log.warn("{}: Redis unavailable, using the per-JVM fallback and retrying every {} ms: {}",
@@ -85,6 +102,9 @@ public final class RedisBackoff {
     }
 
     public void recordSuccess() {
+        if (recovery != null) {
+            recovery.recordSuccess();
+        }
         if (degraded) {
             skipUntilMillis.set(0);
             degraded = false;
