@@ -1,6 +1,9 @@
 package com.example.taskflow.auth;
 
+import com.example.taskflow.core.RedisBackoff;
+import com.example.taskflow.core.RedisConnectionRecovery;
 import com.example.taskflow.core.SharedStateStore;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,20 +22,25 @@ import java.nio.charset.StandardCharsets;
  * <p>Nothing here connects during context refresh: Lettuce connects lazily on the first command,
  * and the revocation channel subscription is started off the startup path (see
  * {@link RevocationChannelSubscriber}), so a backend whose Redis is unreachable still starts and
- * serves logins with the in-memory fallbacks.
+ * serves logins with the in-memory fallbacks. Command failures of the denylist and the login
+ * counter feed {@link RedisConnectionRecovery}; the pub/sub subscription uses its own connection.
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(name = SharedStateStore.PROPERTY, havingValue = SharedStateStore.REDIS)
 class SharedSecurityStateConfig {
 
     @Bean
-    RedisTokenRevocationStore redisTokenRevocationStore(StringRedisTemplate redisTemplate) {
-        return new RedisTokenRevocationStore(redisTemplate);
+    RedisTokenRevocationStore redisTokenRevocationStore(StringRedisTemplate redisTemplate,
+                                                        ObjectProvider<RedisConnectionRecovery> connectionRecovery) {
+        return new RedisTokenRevocationStore(redisTemplate,
+                new RedisBackoff("Token revocation list", connectionRecovery.getIfAvailable()));
     }
 
     @Bean
-    RedisLoginFailureCounter redisLoginFailureCounter(StringRedisTemplate redisTemplate) {
-        return new RedisLoginFailureCounter(redisTemplate);
+    RedisLoginFailureCounter redisLoginFailureCounter(StringRedisTemplate redisTemplate,
+                                                      ObjectProvider<RedisConnectionRecovery> connectionRecovery) {
+        return new RedisLoginFailureCounter(redisTemplate,
+                new RedisBackoff("Login attempt limiter", connectionRecovery.getIfAvailable()));
     }
 
     /**

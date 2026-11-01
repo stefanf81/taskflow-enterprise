@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.EventListener;
 import com.example.taskflow.core.TokenRevokedEvent;
 import org.springframework.http.HttpStatus;
@@ -58,6 +59,12 @@ import java.util.concurrent.atomic.AtomicLong;
  * <em>not</em> observable here without a database lookup per heartbeat; such a connection stays open
  * until its token expires, the 30-minute stream timeout elapses or the client reconnects. A
  * <em>revoked</em> token (logout) is observable: {@link TokenRevokedEvent} closes its streams.
+ *
+ * <p><b>Shutdown.</b> A stream is an async request that never ends by itself, and Tomcat's graceful
+ * shutdown waits for every open request: one open dashboard held every shutdown for the whole
+ * {@code spring.lifecycle.timeout-per-shutdown-phase} (30 s). {@link #closeAllStreams} completes them
+ * all when the context starts closing and refuses new subscriptions from then on; the dashboard
+ * reconnects (to another instance, or to this one once it is back) and reloads the REST snapshot.
  */
 @Service
 public class AppointmentEventStreamService {
@@ -84,6 +91,7 @@ public class AppointmentEventStreamService {
     private final ThreadPoolExecutor ownedDispatcher;
     private final Map<String, List<Subscription>> emittersByAdmin = new ConcurrentHashMap<>();
     private final AtomicLong droppedEvents = new AtomicLong();
+    private volatile boolean closing;
 
     @Autowired
     public AppointmentEventStreamService(
@@ -152,6 +160,9 @@ public class AppointmentEventStreamService {
      * @param tokenId        the access token's {@code jti}; the stream is closed when it is revoked
      */
     public SseEmitter subscribe(String adminName, Instant tokenExpiresAt, String tokenId) {
+        if (closing) {
+            throw shuttingDown();
+        }
         SseEmitter emitter = newEmitter(STREAM_TIMEOUT_MILLIS);
         emitter.onCompletion(() -> remove(adminName, emitter));
         emitter.onTimeout(() -> remove(adminName, emitter));
@@ -172,6 +183,12 @@ public class AppointmentEventStreamService {
             logger.debug("Evicting oldest dashboard event stream of an administrator at the connection limit");
             evict(old.emitter());
         }
+        if (closing) {
+            // closeAllStreams() may have run between the check above and the registration
+            remove(adminName, emitter);
+            emitter.complete();
+            throw shuttingDown();
+        }
 
         try {
             emitter.send(SseEmitter.event().name("ready").comment("dashboard event stream connected"));
@@ -181,6 +198,26 @@ public class AppointmentEventStreamService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Unable to open dashboard event stream.", ex);
         }
+    }
+
+    private static ResponseStatusException shuttingDown() {
+        return new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Server is shutting down.");
+    }
+
+    /**
+     * Completes every open stream as soon as the context starts closing. {@link ContextClosedEvent}
+     * is published before any lifecycle bean is stopped, so before the web server's graceful
+     * shutdown ({@code WebServerGracefulShutdownLifecycle}) starts waiting for open requests.
+     */
+    @EventListener(ContextClosedEvent.class)
+    void closeAllStreams() {
+        closing = true;
+        emittersByAdmin.forEach((adminName, subscriptions) -> {
+            for (Subscription subscription : subscriptions) {
+                remove(adminName, subscription.emitter());
+                subscription.emitter().complete();
+            }
+        });
     }
 
     /** Overridable for tests; production uses a plain {@link SseEmitter}. */

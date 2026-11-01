@@ -32,14 +32,20 @@ class RateLimiterConfigTest {
         filter = rateLimiterConfig.createRateLimitFilter(redisTemplate);
     }
 
+    /** The script returns {count, remaining window in ms}. */
     private void mockExecute(Long returnValue) {
-        when(redisTemplate.execute(ArgumentMatchers.<RedisScript<Long>>any(), anyList(), anyString()))
-                .thenReturn(returnValue);
+        mockExecute(returnValue, 42_000L);
+    }
+
+    private void mockExecute(Long count, Long remainingMillis) {
+        when(redisTemplate.execute(ArgumentMatchers.<RedisScript<List<Long>>>any(), anyList(), anyString()))
+                .thenReturn(List.of(count, remainingMillis));
     }
 
     private void mockExecuteForKey(String expectedKey, Long returnValue) {
-        when(redisTemplate.execute(ArgumentMatchers.<RedisScript<Long>>any(), eq(List.of(expectedKey)), eq("60000")))
-                .thenReturn(returnValue);
+        when(redisTemplate.execute(ArgumentMatchers.<RedisScript<List<Long>>>any(), eq(List.of(expectedKey)),
+                eq("60000")))
+                .thenReturn(List.of(returnValue, 60_000L));
     }
 
     @Test
@@ -75,8 +81,49 @@ class RateLimiterConfigTest {
 
         verify(filterChain, never()).doFilter(any(), any());
         assertEquals(429, response.getStatus());
-        assertEquals("60", response.getHeader("Retry-After"));
+        assertEquals("42", response.getHeader("Retry-After"), "the rest of the shared window, not a fixed 60");
         assertTrue(response.getContentAsString().contains("Too many requests"));
+    }
+
+    @Test
+    void retryAfterRoundsTheRemainingWindowUpToWholeSeconds() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/catalog");
+        request.setRemoteAddr("192.0.2.4");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        mockExecute(101L, 41_001L);
+
+        filter.doFilter(request, response, mock(FilterChain.class));
+
+        assertEquals(429, response.getStatus());
+        assertEquals("42", response.getHeader("Retry-After"));
+    }
+
+    @Test
+    void retryAfterSecondsStaysWithinOneSecondAndTheWindow() {
+        assertEquals(1, RateLimiterConfig.retryAfterSeconds(1));
+        assertEquals(1, RateLimiterConfig.retryAfterSeconds(1_000));
+        assertEquals(2, RateLimiterConfig.retryAfterSeconds(1_001));
+        assertEquals(60, RateLimiterConfig.retryAfterSeconds(60_000));
+        assertEquals(60, RateLimiterConfig.retryAfterSeconds(600_000), "never longer than the window");
+        assertEquals(60, RateLimiterConfig.retryAfterSeconds(-1), "unknown remaining time: the whole window");
+    }
+
+    @Test
+    void fallbackRetryAfterComesFromTheLocalWindow() throws Exception {
+        when(redisTemplate.execute(ArgumentMatchers.<RedisScript<List<Long>>>any(), anyList(), anyString()))
+                .thenThrow(new RuntimeException("redis down"));
+
+        MockHttpServletResponse response = null;
+        for (int i = 0; i < 21; i++) {
+            MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login");
+            request.setRemoteAddr("203.0.113.8");
+            response = new MockHttpServletResponse();
+            filter.doFilter(request, response, mock(FilterChain.class));
+        }
+
+        assertEquals(429, response.getStatus());
+        long retryAfter = Long.parseLong(response.getHeader("Retry-After"));
+        assertTrue(retryAfter >= 1 && retryAfter <= 60, "Retry-After from the per-JVM window: " + retryAfter);
     }
 
     @Test
@@ -138,7 +185,7 @@ class RateLimiterConfigTest {
 
         filter.doFilter(request, response, filterChain);
 
-        verify(redisTemplate, times(1)).execute(ArgumentMatchers.<RedisScript<Long>>any(), eq(List.of("rate_limit:127.0.0.1:api")), eq("60000"));
+        verify(redisTemplate, times(1)).execute(ArgumentMatchers.<RedisScript<List<Long>>>any(), eq(List.of("rate_limit:127.0.0.1:api")), eq("60000"));
         verify(filterChain, times(1)).doFilter(request, response);
         assertEquals(200, response.getStatus());
     }
@@ -202,7 +249,7 @@ class RateLimiterConfigTest {
 
     @Test
     void redisFailureFallsBackToAnInMemoryLimitInsteadOfFailingOpen() throws Exception {
-        when(redisTemplate.execute(ArgumentMatchers.<RedisScript<Long>>any(), anyList(), anyString()))
+        when(redisTemplate.execute(ArgumentMatchers.<RedisScript<List<Long>>>any(), anyList(), anyString()))
                 .thenThrow(new RuntimeException("redis down"));
 
         int blockedAt = -1;
@@ -220,12 +267,12 @@ class RateLimiterConfigTest {
         assertEquals(21, blockedAt, "the 21st auth request in the window is refused even with Redis down");
         // After the first failure Redis is skipped for a backoff period rather than
         // being retried (and timing out) on every request.
-        verify(redisTemplate, times(1)).execute(ArgumentMatchers.<RedisScript<Long>>any(), anyList(), anyString());
+        verify(redisTemplate, times(1)).execute(ArgumentMatchers.<RedisScript<List<Long>>>any(), anyList(), anyString());
     }
 
     @Test
     void fallbackStillCountsAddressesSeparately() throws Exception {
-        when(redisTemplate.execute(ArgumentMatchers.<RedisScript<Long>>any(), anyList(), anyString()))
+        when(redisTemplate.execute(ArgumentMatchers.<RedisScript<List<Long>>>any(), anyList(), anyString()))
                 .thenThrow(new RuntimeException("redis down"));
 
         for (int i = 0; i < 21; i++) {

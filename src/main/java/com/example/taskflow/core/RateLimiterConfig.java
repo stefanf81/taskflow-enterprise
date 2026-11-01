@@ -6,6 +6,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -18,6 +20,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.List;
 
 @Configuration
 @ConditionalOnProperty(name = "app.rate-limit.enabled", havingValue = "true", matchIfMissing = false)
@@ -29,18 +32,22 @@ class RateLimiterConfig {
      * Atomic INCR + PEXPIRE via Lua. Two-command INCR then EXPIRE leaks a key
      * without TTL if the process crashes between commands → permanent block.
      * Lua runs atomically on Redis's single thread; EVAL is the production
-     * pattern per spring-boot-best-practice / jhipster.
+     * pattern per spring-boot-best-practice / jhipster. Returns
+     * {@code {count, remaining window in ms}}; the remaining time becomes
+     * {@code Retry-After}. A key without a TTL (PTTL -1) gets one, so it can
+     * never become a permanent block either.
      */
-    private static final DefaultRedisScript<Long> RATE_LIMIT_SCRIPT;
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static final DefaultRedisScript<List<Long>> RATE_LIMIT_SCRIPT = new DefaultRedisScript<>(
+            // KEYS[1]=rate_limit:ip:kind  ARGV[1]=ttlMillis (60000)
+            "local c = redis.call('incr', KEYS[1]); "
+                    + "local t = redis.call('pttl', KEYS[1]); "
+                    + "if t < 0 then redis.call('pexpire', KEYS[1], ARGV[1]); t = tonumber(ARGV[1]) end; "
+                    + "return {c, t}",
+            (Class) List.class);
 
-    static {
-        // KEYS[1]=rate_limit:ip:kind  ARGV[1]=ttlMillis (60000)
-        String lua = "local c = redis.call('incr', KEYS[1]); "
-                + "if c == 1 then redis.call('pexpire', KEYS[1], ARGV[1]) end; "
-                + "return c";
-        RATE_LIMIT_SCRIPT = new DefaultRedisScript<>();
-        RATE_LIMIT_SCRIPT.setScriptText(lua);
-        RATE_LIMIT_SCRIPT.setResultType(Long.class);
+    /** A request's count in its window and the seconds until that window ends (at least 1). */
+    record Count(long count, long retryAfterSeconds) {
     }
 
     private static final long WINDOW_MILLIS = 60_000;
@@ -61,13 +68,22 @@ class RateLimiterConfig {
      */
     private final FixedWindowCounter localFallback = new FixedWindowCounter(WINDOW_MILLIS, 50_000);
     /** Skips Redis after it failed, so an outage costs one timeout per interval, not one per request. */
-    private final RedisBackoff redisBackoff = new RedisBackoff("Rate limiter");
+    private final RedisBackoff redisBackoff;
 
+    @Autowired
     public RateLimiterConfig(
             @Value("${app.rate-limit.max-requests-per-minute:100}") int maxRequestsPerMinute,
-            @Value("${app.rate-limit.auth-max-requests-per-minute:20}") int authMaxRequestsPerMinute) {
+            @Value("${app.rate-limit.auth-max-requests-per-minute:20}") int authMaxRequestsPerMinute,
+            ObjectProvider<RedisConnectionRecovery> connectionRecovery) {
         this.maxRequestsPerMinute = maxRequestsPerMinute;
         this.authMaxRequestsPerMinute = authMaxRequestsPerMinute;
+        this.redisBackoff = new RedisBackoff("Rate limiter", connectionRecovery.getIfAvailable());
+    }
+
+    RateLimiterConfig(int maxRequestsPerMinute, int authMaxRequestsPerMinute) {
+        this.maxRequestsPerMinute = maxRequestsPerMinute;
+        this.authMaxRequestsPerMinute = authMaxRequestsPerMinute;
+        this.redisBackoff = new RedisBackoff("Rate limiter");
     }
 
     @Bean
@@ -105,7 +121,8 @@ class RateLimiterConfig {
 
                 String redisKey = "rate_limit:" + clientIp + ":" + (isAuthEndpoint ? "auth" : "api");
 
-                long currentCount = countRequest(redisTemplate, redisKey);
+                Count counted = countRequest(redisTemplate, redisKey);
+                long currentCount = counted.count();
                 if (currentCount > maxRequests) {
                     // Logged once per client, bucket and window: the counter passes the limit exactly
                     // once, and a line per rejected request let one client write ~1 MB/s of log.
@@ -116,7 +133,7 @@ class RateLimiterConfig {
                                 + "are rejected without logging", safeIp, safePath);
                     }
                     response.setStatus(429);
-                    response.setHeader("Retry-After", "60");
+                    response.setHeader("Retry-After", String.valueOf(counted.retryAfterSeconds()));
                     response.setContentType("application/json;charset=UTF-8");
                     response.getWriter().write("{\"error\":\"Too many requests. Please try again later.\"}");
                     return;
@@ -146,24 +163,32 @@ class RateLimiterConfig {
      * (or was within the last {@link RedisBackoff#DEFAULT_BACKOFF_MILLIS}), the per-JVM
      * fallback counter is used instead, so limits — in particular the strict
      * auth bucket that protects BCrypt — keep applying during a Redis outage
-     * rather than silently disappearing.
+     * rather than silently disappearing. {@code Retry-After} comes from the
+     * window that counted the request.
      */
-    private long countRequest(StringRedisTemplate redisTemplate, String redisKey) {
+    private Count countRequest(StringRedisTemplate redisTemplate, String redisKey) {
         if (redisBackoff.allowRequest()) {
             try {
-                Long count = redisTemplate.execute(
+                List<Long> result = redisTemplate.execute(
                         RATE_LIMIT_SCRIPT,
                         Collections.singletonList(redisKey),
                         String.valueOf(WINDOW_MILLIS));
                 redisBackoff.recordSuccess();
-                if (count != null) {
-                    return count;
+                if (result != null && result.size() == 2 && result.get(0) != null && result.get(1) != null) {
+                    return new Count(result.get(0), retryAfterSeconds(result.get(1)));
                 }
             } catch (RuntimeException e) {
                 redisBackoff.recordFailure(e);
             }
         }
-        return localFallback.increment(redisKey);
+        long count = localFallback.increment(redisKey);
+        return new Count(count, localFallback.secondsUntilReset(redisKey));
+    }
+
+    /** Remaining window in ms → whole seconds, rounded up, at least 1, at most the window. */
+    static long retryAfterSeconds(long remainingMillis) {
+        long millis = remainingMillis <= 0 ? WINDOW_MILLIS : Math.min(remainingMillis, WINDOW_MILLIS);
+        return Math.max(1, (millis + 999) / 1000);
     }
 
     /**
