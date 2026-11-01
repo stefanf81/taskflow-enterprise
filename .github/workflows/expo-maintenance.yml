@@ -42,13 +42,21 @@ jobs:
           token: ${{ secrets.RENOVATE_TOKEN }}
           persist-credentials: false
 
+      # No setup-node cache: this weekly run only restores the `main` snapshot
+      # of npm's download cache that react-native-ci.yml maintains for the
+      # same mobile install, and never saves one.
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version-file: mobile/.nvmrc
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
+          package-manager-cache: false
+
+      - name: Restore npm download cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: npm-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install dependencies
         uses: ./.github/actions/npm-ci

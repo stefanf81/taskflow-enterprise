@@ -308,7 +308,7 @@ jobs:
           fi
 
       - name: Enforce ZAP API scan results
-        if: ${{ always() && !cancelled() }}
+        if: ${{ !cancelled() }}
         env:
           API_OUTCOME: ${{ steps.zap_api.outcome || 'skipped' }}
         run: |
@@ -413,13 +413,13 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
+      # No setup-node cache: the npm-ci action below restores ~/.npm itself,
+      # and only when its node_modules cache misses (a hit downloads nothing).
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
+          package-manager-cache: false
 
       - name: Download Backend JAR
         uses: actions/download-artifact@v8
@@ -465,10 +465,13 @@ jobs:
           restore-keys: |
             angular-${{ runner.os }}-
 
+      # Same inputs as ci.yml's frontend jobs, so this restores the
+      # node_modules entry `main` CI saved.
       - name: Install frontend dependencies
         uses: ./.github/actions/npm-ci
         with:
           package-path: frontend
+          cache-node-modules: "true"
 
       - name: Build production frontend image
         run: |
@@ -616,7 +619,7 @@ jobs:
           fi
 
       - name: Enforce ZAP web scan results
-        if: ${{ always() && !cancelled() }}
+        if: ${{ !cancelled() }}
         env:
           WEB_OUTCOME: ${{ steps.zap_web.outcome || 'skipped' }}
         run: |
