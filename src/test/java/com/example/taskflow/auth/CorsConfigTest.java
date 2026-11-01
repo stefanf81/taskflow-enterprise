@@ -25,6 +25,16 @@ class CorsConfigTest {
     }
 
     @Test
+    void exposesNoForbiddenResponseHeader() {
+        CorsConfiguration corsConfiguration = new CorsConfig("http://localhost:4200").corsConfigurationSource()
+                .getCorsConfiguration(new MockHttpServletRequest());
+
+        assertNotNull(corsConfiguration);
+        // Set-Cookie is a forbidden response header name: browsers never expose it to scripts.
+        assertEquals(java.util.List.of("X-XSRF-TOKEN"), corsConfiguration.getExposedHeaders());
+    }
+
+    @Test
     void wildcardOriginFailsFast() {
         CorsConfig config = new CorsConfig("*");
         assertThrows(IllegalStateException.class, config::corsConfigurationSource);
