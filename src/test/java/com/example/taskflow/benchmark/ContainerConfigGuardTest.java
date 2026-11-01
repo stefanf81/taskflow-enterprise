@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -13,7 +14,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * Guards the container configuration decisions measured in BENCHMARKS.md §42, §43, §47 and
  * §56: the split nginx cache locations, the deployment-owned JVM diagnostics in
  * docker-compose.yml, the HEALTHCHECK that only the Dockerfile's {@code local} target carries,
- * and the single-Dockerfile layout whose target platform is chosen by the builder.
+ * the single-Dockerfile layout whose target platform is chosen by the builder, and the compose
+ * proxy subnet, readiness gate, Redis eviction policy and loopback-only datastore ports.
  *
  * <p>The nginx and diagnostics assertions used to live in {@link P1AndP2BenchmarkTest}, which
  * is tagged {@code benchmark}; no workflow runs {@code benchmarkTest}, so they never executed
@@ -209,6 +211,71 @@ class ContainerConfigGuardTest {
         assertTrue(onlyBuildPlatform, "the target platform comes from the builder; only the extractor pins $BUILDPLATFORM");
         assertTrue(composeLocal, "docker-compose.yml must build the local target");
         assertTrue(workflowsProd, "the image workflows must build the prod target for linux/amd64");
+    }
+
+    /**
+     * Tomcat's RemoteIpValve trusts X-Forwarded-For only from addresses matching
+     * APP_TRUSTED_PROXY_REGEX. The regex is only meaningful against a pinned frontend-tier
+     * subnet: left to Docker's address pools, the Nginx container could land anywhere in
+     * 172.17-31/16 or 192.168/16.
+     */
+    @Test
+    void compose_trusts_forwarding_headers_only_from_the_pinned_frontend_subnet() throws Exception {
+        String yml = Files.readString(Path.of("docker-compose.yml"));
+        String prefix = "- APP_TRUSTED_PROXY_REGEX=";
+        List<String> regexes = yml.lines().map(String::strip).filter(line -> line.startsWith(prefix))
+                .map(line -> line.substring(prefix.length())).toList();
+        assertEquals(1, regexes.size(), "the backend must set APP_TRUSTED_PROXY_REGEX exactly once");
+        assertTrue(yml.contains("""
+                  frontend-tier:
+                    driver: bridge
+                    ipam:
+                      config:
+                        - subnet: 172.30.0.0/24
+                """), "frontend-tier must pin the subnet the proxy regex trusts");
+        assertTrue(yml.contains("""
+                  backend-tier:
+                    driver: bridge
+                    ipam:
+                      config:
+                        - subnet: 172.30.1.0/24
+                """), "backend-tier must be pinned too, or its automatic pool may overlap frontend-tier");
+
+        Pattern trusted = Pattern.compile(regexes.getFirst());
+        for (String proxy : List.of("172.30.0.2", "172.30.0.254")) {
+            assertTrue(trusted.matcher(proxy).matches(), "the regex must match frontend-tier address " + proxy);
+        }
+        for (String other : List.of("172.30.1.2", "172.18.0.3", "172.31.0.2", "192.168.0.2", "127.0.0.1",
+                "172.30.0.2.5")) {
+            assertFalse(trusted.matcher(other).matches(), "the regex must not trust " + other);
+        }
+    }
+
+    /**
+     * Compose-only runtime decisions: the frontend waits for readiness (set after the
+     * CommandLineRunners and ApplicationReadyEvent listeners), Redis never evicts the
+     * revocation/throttle keys, and only the frontend is published beyond loopback.
+     */
+    @Test
+    void compose_gates_on_readiness_never_evicts_and_publishes_datastores_on_loopback() throws Exception {
+        String yml = Files.readString(Path.of("docker-compose.yml"));
+        assertTrue(yml.contains("\"http://localhost:8080/actuator/health/readiness\"]"),
+                "the compose backend healthcheck must probe readiness");
+        assertFalse(yml.contains("/actuator/health/liveness\"]"),
+                "liveness is UP before the admin sync runs; the compose healthcheck must not use it");
+
+        assertTrue(yml.contains("- \"--maxmemory-policy\"\n      - \"noeviction\""),
+                "Redis must not evict: every key has a TTL, so volatile-* would drop revoked:<jti> too");
+        assertFalse(yml.contains("- \"volatile-") || yml.contains("- \"allkeys-"), "no evicting maxmemory-policy");
+
+        Pattern published = Pattern.compile("^\\s+- \"([0-9.]+:)?\\d+:\\d+\"");
+        List<String> ports = yml.lines().filter(line -> published.matcher(line).find())
+                .map(line -> line.strip().split("\\s+#")[0]).toList();
+        assertFalse(ports.isEmpty(), "expected published ports in docker-compose.yml");
+        for (String port : ports) {
+            assertTrue(port.startsWith("- \"127.0.0.1:") || port.equals("- \"4200:8080\""),
+                    "only the frontend may be published beyond loopback, found " + port);
+        }
     }
 
     private static int indexOf(List<String> instructions, java.util.function.Predicate<String> match) {

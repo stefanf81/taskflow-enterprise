@@ -47,8 +47,10 @@ services:
     # Docker's 10 s default often cuts the shutdown checkpoint short (postgres image docs);
     # a SIGKILLed server replays WAL on the next start and delays service_healthy.
     stop_grace_period: 60s
+    # Loopback only: the backend reaches db over backend-tier; the host port is for
+    # local psql and the Testcontainers-free PostgreSQL tests, not for the LAN.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql
     # Parallel queries allocate their dynamic shared memory in /dev/shm, which Docker
@@ -108,13 +110,15 @@ services:
       # 20/min auth bucket (csrf/me/login/register/logout) mid-suite. verify.sh
       # and `npm run e2e:docker` export a higher value; normal local runs keep 20.
       - APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE=${APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE:-20}
-      # The backend accepts forwarding headers only from the Nginx container.
-      # Keep this in sync with the trusted proxy network in the deployment.
+      # The backend accepts forwarding headers only from the Nginx container, i.e.
+      # from frontend-tier, whose subnet is pinned below (networks: ipam). Without
+      # the pin Docker picks any free pool (172.17-31/16, then 192.168.x/20), so a
+      # 172.16/12 pattern could miss the proxy or trust unrelated networks.
       # Single backslashes on purpose: YAML plain scalars do no escape processing,
       # so a doubled `\\.` reaches the JVM as a literal backslash + any-char and the
       # pattern never matches the proxy's address (every client then shares one
-      # rate-limit bucket). Keep in sync with the real proxy network.
-      - APP_TRUSTED_PROXY_REGEX=^172\.([1][6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}$
+      # rate-limit bucket). Change it together with the frontend-tier subnet.
+      - APP_TRUSTED_PROXY_REGEX=^172\.30\.0\.\d{1,3}$
       # The local stack runs the prod profile, whose admin-password guard rejects the
       # well-known development password the E2E suites log in with. Real deployments
       # leave this unset (guard on); only this disposable local stack turns it off.
@@ -162,8 +166,15 @@ services:
     # (service_healthy) waited ~30 s for a backend that boots in ~8 s. During the start
     # period the probe runs every 2 s and failures do not count; 60 s also covers slow
     # (no-CDS, emulated) boots, after which the 30 s interval applies again.
+    # Readiness, not liveness: liveness is UP as soon as the context has refreshed,
+    # before the CommandLineRunners (admin account sync) and ApplicationReadyEvent
+    # listeners have run; readiness turns ACCEPTING_TRAFFIC only after them, so the
+    # frontend (service_healthy) and the E2E suites never hit a half-started app.
+    # The readiness group holds only the readiness state (no db/redis), so a Redis
+    # outage does not mark the backend unhealthy (ADR-018). The image's HEALTHCHECK
+    # (local target) stays on liveness for standalone `docker run`.
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/actuator/health/liveness"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/actuator/health/readiness"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -202,12 +213,22 @@ services:
       - "yes"                    # Prevents latency spikes from rate-limit key churn
       - "--maxmemory"           # Cap memory at 50% of container limit (512M)
       - "256mb"
-      - "--maxmemory-policy"    # Only evict keys that have a TTL set
-      - "volatile-lru"          # Safe: rate-limit + cache keys all have TTLs
+      # Never evict. Every key has a TTL, so any volatile-* policy may drop the
+      # security keys too: an evicted revoked:<jti> silently un-revokes a token,
+      # an evicted login_failures:* / rate_limit:* resets a throttle. With
+      # noeviction a full Redis rejects writes (OOM error) instead; each caller
+      # already treats a failed command as "Redis down" (ADR-018): caches skip the
+      # write, the limiters count per JVM, a revocation stays pending locally. The
+      # working set (60 s rate windows, <=10 min cache entries) is far below 256mb.
+      # Mirror this policy in the production Redis (homelab/TF).
+      - "--maxmemory-policy"
+      - "noeviction"
       - "--stop-writes-on-bgsave-error" # Don't reject writes if persistence fails
       - "no"                     # Cache/rate-limiter can lose data safely
+    # Loopback only: the backend uses backend-tier. Redis has no requirepass and the
+    # official image turns protected-mode off, so a 0.0.0.0 binding exposed it to the LAN.
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redisdata:/data
     networks:
@@ -237,11 +258,13 @@ services:
     image: jaegertracing/jaeger:2.22.0
     container_name: taskflow-jaeger
     profiles: ["observability"]
+    # Loopback only. The compose backend exports to jaeger:4318 over backend-tier; the
+    # host port serves `./gradlew bootRun` (localhost:4318). Only OTLP HTTP is
+    # received (jaeger-config.yaml); the health port 13133 is probed inside the
+    # container and needs no host mapping.
     ports:
-      - "16686:16686"        # Jaeger UI (HTTP)
-      - "4317:4317"          # OTLP gRPC
-      - "4318:4318"          # OTLP HTTP
-      - "13133:13133"        # Health check (healthcheckv2 extension)
+      - "127.0.0.1:16686:16686"  # Jaeger UI (HTTP)
+      - "127.0.0.1:4318:4318"    # OTLP HTTP
     environment:
       - JAEGER_LISTEN_HOST=0.0.0.0
       - LOG_LEVEL=info
@@ -323,8 +346,20 @@ volumes:
   redisdata:
   backend-diagnostics:
 
+# Both subnets are pinned: APP_TRUSTED_PROXY_REGEX (backend) trusts frontend-tier's
+# /24 only. backend-tier is pinned next to it so its automatic allocation cannot claim
+# a 172.30.0.0/16 pool that would overlap frontend-tier. Docker's default pools
+# allocate from 172.17.0.0/16 upwards, so 172.30 is only taken on hosts with many
+# networks; if creation fails with "Pool overlaps", remove the conflicting network
+# or move both subnets and the regex together.
 networks:
   frontend-tier:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
   backend-tier:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.1.0/24
