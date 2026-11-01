@@ -48,7 +48,7 @@ which is a product decision, not a performance one.
    buffers that response breaks the stream exactly as `ShallowEtagHeaderFilter` did before
    it was made to skip SSE (§44). It must be explicitly excluded, and covered by a test.
 3. **Nothing authenticated may be cached.** `/auth/me`, the admin listings and
-   `busy-slots` (30 s private, volatile) must stay out of `dataGroups`. Caching `/auth/me`
+   `busy-slots` (`no-cache, private`, volatile) must stay out of `dataGroups`. Caching `/auth/me`
    in a worker that outlives a logout is a security bug, not a staleness bug. Only the
    public, already-`cachePublic` endpoints (catalog, barbers, barber-ratings) are
    candidates.

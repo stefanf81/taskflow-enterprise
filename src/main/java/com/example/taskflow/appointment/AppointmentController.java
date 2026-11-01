@@ -64,8 +64,10 @@ class AppointmentController {
             @RequestParam(defaultValue = "10") @Max(100) int size) {
 
         AppointmentDashboardResponse response = appointmentService.getAllAppointments(status, search, page, size);
+        // Customer names, e-mails and phones: no-store keeps them out of the browser and
+        // device HTTP caches, where they would outlive the session.
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.noCache().cachePrivate().mustRevalidate())
+                .cacheControl(CacheControl.noStore())
                 .body(response);
     }
 
@@ -98,7 +100,7 @@ class AppointmentController {
 
         AppointmentResponse appointment = appointmentService.getAppointmentById(id);
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.noCache().cachePrivate().mustRevalidate())
+                .cacheControl(CacheControl.noStore())
                 .body(appointment);
     }
 
@@ -134,8 +136,11 @@ class AppointmentController {
             @RequestParam(required = false) String serviceType) {
 
         java.util.List<String> busySlots = appointmentService.getBusySlots(barberName, bookingDate, serviceType);
+        // Revalidated on every request: a max-age let the browser or the app's HTTP cache answer
+        // the refetch that follows a booking, so the slot just taken still looked free. The ETag
+        // keeps an unchanged list at a 304.
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(30, TimeUnit.SECONDS).cachePrivate().mustRevalidate())
+                .cacheControl(CacheControl.noCache().cachePrivate())
                 .body(busySlots);
     }
 
