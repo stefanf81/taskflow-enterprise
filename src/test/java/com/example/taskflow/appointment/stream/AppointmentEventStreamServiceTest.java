@@ -351,4 +351,59 @@ class AppointmentEventStreamServiceTest {
         assertEquals(1, revokedStream.sends.get());
         assertEquals(2, otherStream.sends.get());
     }
+
+    @Test
+    void contextCloseCompletesEveryStreamAndRefusesNewOnes() {
+        TestEmitter alice = new TestEmitter();
+        TestEmitter bob = new TestEmitter();
+        AppointmentEventStreamService service = serviceWith(2, Runnable::run,
+                new MutableTestClock(START), List.of(alice, bob));
+        service.subscribe("alice");
+        service.subscribe("bob");
+
+        service.closeAllStreams();
+
+        assertTrue(alice.completed, "an open stream would hold graceful shutdown for its whole timeout");
+        assertTrue(bob.completed);
+        assertEquals(0, service.connectionCount("alice"));
+        assertEquals(0, service.connectionCount("bob"));
+        ResponseStatusException refused = assertThrows(ResponseStatusException.class,
+                () -> service.subscribe("alice"));
+        assertEquals(503, refused.getStatusCode().value());
+    }
+
+    @Test
+    void closingTheApplicationContextClosesTheStreamsBeforeLifecycleBeansStop() {
+        TestEmitter stream = new TestEmitter();
+        List<Boolean> completedWhenStopping = new ArrayList<>();
+        try (var context = new org.springframework.context.annotation.AnnotationConfigApplicationContext()) {
+            context.registerBean(AppointmentEventStreamService.class,
+                    () -> serviceWith(2, Runnable::run, new MutableTestClock(START), List.of(stream)));
+            // Stands in for the web server's graceful shutdown, a SmartLifecycle stopped on close.
+            context.registerBean("webServerGracefulShutdown", org.springframework.context.SmartLifecycle.class,
+                    () -> new org.springframework.context.SmartLifecycle() {
+                        private volatile boolean running;
+
+                        @Override
+                        public void start() {
+                            running = true;
+                        }
+
+                        @Override
+                        public void stop() {
+                            completedWhenStopping.add(stream.completed);
+                            running = false;
+                        }
+
+                        @Override
+                        public boolean isRunning() {
+                            return running;
+                        }
+                    });
+            context.refresh();
+            context.getBean(AppointmentEventStreamService.class).subscribe("admin");
+        }
+
+        assertEquals(List.of(true), completedWhenStopping);
+    }
 }
