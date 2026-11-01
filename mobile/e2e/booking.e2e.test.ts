@@ -17,6 +17,10 @@ import { device, element, by, expect, waitFor } from 'detox';
 // (device.reloadReactNative) brings the Home ScrollView back scrolled down, so the
 // hero and header assertions fail; a release build never reloads in place.
 const relaunch = () => device.launchApp({ newInstance: true });
+// Cold launches on hosted macOS runners vary widely (34-57 s in passing nightlies, 82 s plus a
+// premature "ready" on 2026-11-01, which ran the hook past Jest's 120 s testTimeout), so the
+// hook gets its own budget.
+const RELAUNCH_TIMEOUT_MS = 240_000;
 
 // Detox never scrolls by itself, and iOS does not resize the window for the keyboard: the field
 // or button below the focused input sits behind it until the scroll view is moved. iOS also
@@ -25,7 +29,7 @@ const scrollIntoView = (matcher: ReturnType<typeof by.id>, scrollViewId: string)
   waitFor(element(matcher)).toBeVisible(100).whileElement(by.id(scrollViewId)).scroll(150, 'down');
 
 describe('Guest Booking Flow', () => {
-  beforeEach(relaunch);
+  beforeEach(relaunch, RELAUNCH_TIMEOUT_MS);
 
   it('displays the home screen on launch', async () => {
     // The Hero section title should be visible
@@ -142,7 +146,7 @@ describe('Guest Booking Flow', () => {
 });
 
 describe('Guest Login Flow', () => {
-  beforeEach(relaunch);
+  beforeEach(relaunch, RELAUNCH_TIMEOUT_MS);
 
   it('navigates to login via Sign In / Register', async () => {
     await element(by.text('Sign In / Register')).tap();
@@ -173,10 +177,12 @@ describe('Guest Login Flow', () => {
     await scrollIntoView(by.id('login-submit-btn'), 'login-scroll-view');
     await element(by.id('login-submit-btn')).tap();
 
-    // The admin tab navigator replaces the guest stack once the backend accepts the login.
+    // The admin tab navigator replaces the guest stack once the backend accepts the login and the
+    // session is written to the Keychain. On a freshly booted simulator those three writes took
+    // 27 s (securityd still migrating) while the login itself answered in 450 ms.
     await waitFor(element(by.label('Logout')))
       .toBeVisible()
-      .withTimeout(10000);
+      .withTimeout(45000);
     await expect(element(by.text('Sign In to TaskFlow'))).not.toBeVisible();
   });
 });
