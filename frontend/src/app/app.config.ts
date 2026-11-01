@@ -11,6 +11,7 @@ import { catchError, of, retry, timeout } from 'rxjs';
 
 import { authInterceptor } from './core/auth/auth.interceptor';
 import { AuthApi } from './core/api/auth-api';
+import { requestTimeoutInterceptor } from './core/http/request-timeout.interceptor';
 import { isServerRender } from './core/platform';
 import { routes } from './app.routes';
 
@@ -42,7 +43,7 @@ export const appConfig: ApplicationConfig = {
 
     // FetchBackend is the default HttpBackend in Angular 22 (`withFetch()` is deprecated).
     provideHttpClient(
-      withInterceptors([authInterceptor]),
+      withInterceptors([requestTimeoutInterceptor, authInterceptor]),
       withXsrfConfiguration({
         cookieName: 'XSRF-TOKEN',
         headerName: 'X-XSRF-TOKEN',
