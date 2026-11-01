@@ -60,6 +60,14 @@ Peer mismatches that cannot be fixed under `legacy-peer-deps` are listed, with a
 `KNOWN_PEER_MISMATCHES` in `scripts/check-dependency-tree.js`. Regenerate the lockfile with
 `npm install`; never hand-edit or merge lockfiles.
 
+Security overrides that cross a major version are keyed by the vulnerable line only
+(`"minimatch@^9"`, `"minimatch@^10"`, `"glob@^10"`, `"glob@^13"` → minimatch 11 / glob 14 for
+GHSA-g3hv-75wg-m249 and GHSA-3g3m-2fjr-6pw4), so older lines with a different API (glob 6–8,
+minimatch 3/5, which do not contain the vulnerable code) keep their versions. Drop each entry
+once ESLint, Expo and Jest's `test-exclude` declare the fixed major themselves. npm does not
+re-resolve a lockfile entry that still satisfies its range when an override is added; check
+`npm ls glob minimatch --all` afterwards, since a nested copy can stay on the old version.
+
 ### Backend (Spring Boot 4.1.2)
 
 ```bash
