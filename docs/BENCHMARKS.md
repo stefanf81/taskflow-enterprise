@@ -609,7 +609,7 @@ All tests performed through the live Docker Nginx container (`taskflow-frontend`
 | :--- | :---: | :--- |
 | Brotli on-the-fly (L6) fallback | ✅ Deployed | `brotli on` in nginx `server` block |
 | **Pre-compressed Brotli (L11) — preferred path** | ✅ **Deployed** | `brotli_static on` + `RUN brotli --best` in Dockerfile |
-| Gzip fallback for legacy clients | ✅ Deployed | `gzip on` + `gzip_disable "MSIE [1-6]."` |
+| Gzip fallback for clients without `br` | ✅ Deployed | `gzip on` + `gzip_static on` |
 | Static `.br` sidecar files | ✅ Generated at build time | `find ... -exec brotli --best {} \;` after `COPY` in Dockerfile |
 
 ### Static Assets — Compression Ratio Comparison
@@ -649,7 +649,7 @@ Note: API JSON is proxied from the backend and is compressed on-the-fly (no pre-
 
 4. **On-the-fly Brotli L6 is retained as a fallback** for API JSON responses (which can't be pre-compressed) and for edge cases where a `.br` sidecar file is missing (e.g., after a config change without rebuild).
 
-5. **Gzip is retained for legacy HTTP/1.0 clients** that don't support `Accept-Encoding: br`. The `gzip_disable "MSIE [1-6]."` directive skips compression entirely for ancient IE versions that have broken gzip implementations.
+5. **Gzip is retained for clients that do not send `br` in `Accept-Encoding`** (HTTP libraries and tools rather than browsers). It is not an HTTP/1.0 fallback: with the default `gzip_http_version 1.1`, nginx does not gzip HTTP/1.0 requests at all. The former `gzip_disable "MSIE [1-6]."` was removed on 2026-11-01; IE 6 is long gone, and h5bp's current `server-configs-nginx` compression settings no longer carry it.
 
 **Verdict:** Static assets are served via **pre-compressed Brotli level 11** with zero on-the-fly compression overhead — a pure win with no tradeoff. API JSON responses use on-the-fly Brotli L6, which is marginally faster than gzip (9.4 ms vs 10.8 ms total). Gzip sits as a legacy fallback only.
 
@@ -1017,7 +1017,7 @@ Expo SDK 57/RN 0.86 handle Android edge-to-edge by default. The application uses
 
 | Concern | Selected Behavior |
 | :--- | :--- |
-| **Browser multiplexing** | HTTP/2 remains enabled at the client-facing edge. |
+| **Browser multiplexing** | The frontend image listens on cleartext HTTP/1.1 (`listen 8080`, no `http2`); browsers get HTTP/2 from the TLS-terminating ingress in front of it. |
 | **Nginx upstream support** | Open-source Nginx proxies HTTP/1.1 to upstream application servers; `proxy_http_version 2` is not a valid replacement for this use case. |
 | **Connection reuse** | `keepalive 64` plus a cleared `Connection` header keeps backend TCP connections warm without attempting unsupported upstream HTTP/2 proxying. |
 

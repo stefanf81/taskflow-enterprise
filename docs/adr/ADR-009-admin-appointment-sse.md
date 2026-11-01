@@ -80,8 +80,8 @@ app.sse.heartbeat-interval-ms=20000
 The Nginx location in `frontend/nginx.conf` must retain:
 
 - `proxy_buffering off`
-- `proxy_cache off`
-- `proxy_read_timeout 1h`
+- no `proxy_cache` (off by default; the explicit `proxy_cache off` was a no-op and was removed on 2026-11-01)
+- `proxy_read_timeout 1h` (the JSON `/api/` location uses 30 s; this exact-match location keeps its own)
 - `gzip off` and `brotli off`
 
 ## Verification
