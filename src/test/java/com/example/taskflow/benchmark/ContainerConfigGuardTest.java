@@ -79,6 +79,142 @@ class ContainerConfigGuardTest {
     }
 
     /**
+     * Spring Security writes some of the same headers (X-Frame-Options, X-Content-Type-Options,
+     * Cross-Origin-Resource-Policy, HSTS on HTTPS). add_header appends, and two CORP fields
+     * combine into an invalid value that browsers ignore, so every header nginx sets must be
+     * hidden from the upstream response, once, at server level (both proxy locations inherit it).
+     */
+    @Test
+    void nginx_hides_upstream_copies_of_its_own_security_headers() throws Exception {
+        String content = Files.readString(Path.of("frontend/nginx.conf"));
+        List<String> nginxHeaders = new java.util.ArrayList<>(content.lines()
+                .map(String::strip)
+                .filter(line -> line.startsWith("add_header ") && line.endsWith(" always;"))
+                .map(line -> line.split("\\s+")[1])
+                .filter(name -> !List.of("Cache-Control", "Vary", "Last-Modified").contains(name))
+                .distinct()
+                .toList());
+        nginxHeaders.add("Content-Security-Policy"); // from the generated csp.conf include
+        assertTrue(nginxHeaders.containsAll(List.of("X-Frame-Options", "X-Content-Type-Options",
+                "Cross-Origin-Resource-Policy", "Strict-Transport-Security")), "parsed " + nginxHeaders);
+        for (String header : nginxHeaders) {
+            assertEquals(1, content.split("proxy_hide_header " + header + ";", -1).length - 1,
+                    header + " is set by nginx, so the upstream copy must be hidden exactly once (server level)");
+        }
+        for (String location : List.of("location = /api/v1/appointments/events {", "location ^~ /api/ {")) {
+            assertFalse(block(content, location).contains("proxy_hide_header"),
+                    location + " must inherit the server-level proxy_hide_header list, not replace it");
+        }
+    }
+
+    /**
+     * Without {@code always}, add_header skips error statuses: a 404 for a chunk removed by a
+     * rolling deploy or rollback must not be cached immutable for 6 months.
+     */
+    @Test
+    void nginx_long_lived_cache_control_skips_error_responses() throws Exception {
+        String content = Files.readString(Path.of("frontend/nginx.conf"));
+        assertTrue(content.contains("add_header Cache-Control \"public, immutable, max-age=15552000\";"),
+                "hashed bundles: immutable Cache-Control without `always`");
+        assertTrue(content.contains("add_header Cache-Control \"public, max-age=3600, must-revalidate\";"),
+                "unhashed assets: Cache-Control without `always`");
+        assertFalse(content.contains("max-age=15552000\" always;") || content.contains("must-revalidate\" always;"),
+                "`always` would also cache 404s for missing assets");
+    }
+
+    @Test
+    void nginx_api_proxy_is_isolated_and_bounded() throws Exception {
+        String content = Files.readString(Path.of("frontend/nginx.conf"));
+        assertFalse(content.contains("location /api/ {"),
+                "a plain prefix lets the static-asset regex locations capture /api/... .js or .png");
+        String api = block(content, "location ^~ /api/ {");
+        assertTrue(api.contains("proxy_connect_timeout 5s;") && api.contains("proxy_read_timeout 30s;"),
+                "the JSON API must not wait nginx's 60 s defaults for a hung backend");
+        assertTrue(api.contains("error_page 502 503 504 @api_unavailable;"),
+                "nginx's own 502/503/504 must keep their status and come back as JSON");
+        String problem = block(content, "location @api_unavailable {");
+        assertTrue(problem.contains("types { }") && problem.contains("default_type application/problem+json;")
+                        && problem.contains("\"status\":$status"),
+                "the API error body must be RFC 9457 problem JSON carrying the original status");
+        assertFalse(problem.contains("add_header"), "the error location must keep the server-level headers");
+
+        String sse = block(content, "location = /api/v1/appointments/events {");
+        assertTrue(sse.contains("proxy_read_timeout 1h;") && sse.contains("proxy_buffering off;"),
+                "the SSE stream keeps its unbuffered, long-lived proxy (ADR-009)");
+        assertFalse(sse.contains("error_page"), "the SSE location is not part of the JSON error mapping");
+    }
+
+    /**
+     * The image listens on plain HTTP, so $scheme would override a TLS ingress's https. The
+     * ingress's X-Forwarded-Proto is honoured only when real-ip.conf trusted the peer.
+     */
+    @Test
+    void nginx_forwards_the_ingress_scheme_only_from_trusted_peers() throws Exception {
+        String content = Files.readString(Path.of("frontend/nginx.conf"));
+        assertFalse(content.contains("X-Forwarded-Proto $scheme;"), "$scheme hides the ingress's https");
+        assertEquals(2, content.split(java.util.regex.Pattern.quote("proxy_set_header X-Forwarded-Proto $forwarded_proto;"), -1).length - 1,
+                "both proxy locations must forward $forwarded_proto");
+        assertTrue(content.contains("set $forwarded_proto $scheme;")
+                        && content.contains("if ($realip_remote_addr != $remote_addr) {")
+                        && content.contains("set $forwarded_proto $trusted_forwarded_proto;"),
+                "the forwarded header may only replace $scheme for a peer the realip module trusted");
+        assertTrue(content.indexOf("include /etc/nginx/real-ip.conf;") < content.indexOf("set $forwarded_proto $scheme;"),
+                "the real-ip settings belong to the server block that evaluates the trust check");
+        String map = block(content, "map $http_x_forwarded_proto $trusted_forwarded_proto {");
+        assertTrue(map.contains("default $scheme;") && map.contains("https   https;"),
+                "only http/https are accepted from the ingress");
+    }
+
+    /**
+     * The resolver lives in the mounted upstream file with the server address, so a deployment
+     * that replaces the file controls both. Each http-level setting is declared once.
+     */
+    @Test
+    void nginx_upstream_file_owns_its_resolver_and_http_settings_are_not_duplicated() throws Exception {
+        String main = Files.readString(Path.of("frontend/nginx-main.conf"));
+        String server = Files.readString(Path.of("frontend/nginx.conf"));
+        String upstream = Files.readString(Path.of("frontend/nginx-upstream-server.conf"));
+        String ci = Files.readString(Path.of("frontend/nginx-upstream-server-ci.conf"));
+        assertFalse(directives(main).anyMatch(line -> line.startsWith("resolver ")),
+                "no http-level resolver: it belongs to the mounted upstream file");
+        assertTrue(upstream.contains("resolver 127.0.0.11 ipv6=off valid=30s;")
+                        && upstream.contains("server backend:8080 resolve;"),
+                "the Compose upstream resolves the backend at run time through Docker's DNS");
+        assertTrue(directives(ci).noneMatch(line -> line.startsWith("resolver ") || line.contains(" resolve")),
+                "the CI upstream is resolved once at startup (--add-host)");
+        assertTrue(server.contains("include /etc/nginx/upstream-server.conf;"));
+
+        for (String directive : List.of("sendfile ", "tcp_nopush ", "tcp_nodelay ", "keepalive_timeout 65;")) {
+            assertTrue(directives(main).anyMatch(line -> line.startsWith(directive)), directive + " in nginx-main.conf");
+            assertTrue(directives(server).noneMatch(line -> line.startsWith(directive)),
+                    directive + " is http-level, set once in nginx-main.conf");
+        }
+        assertFalse(server.contains("gzip_disable"), "no MSIE 6 workaround");
+        assertFalse(server.contains("proxy_cache off;"), "proxy_cache is off by default and never enabled");
+    }
+
+    /** The text between a block's opening line and its matching closing brace. */
+    private static String block(String content, String opening) {
+        int start = content.indexOf(opening);
+        assertTrue(start >= 0, "missing block: " + opening);
+        int depth = 0;
+        for (int i = start + opening.length() - 1; i < content.length(); i++) {
+            char c = content.charAt(i);
+            if (c == '{') {
+                depth++;
+            } else if (c == '}' && --depth == 0) {
+                return content.substring(start, i + 1);
+            }
+        }
+        throw new AssertionError("unterminated block: " + opening);
+    }
+
+    /** Non-comment lines, stripped. */
+    private static java.util.stream.Stream<String> directives(String content) {
+        return content.lines().map(String::strip).filter(line -> !line.isEmpty() && !line.startsWith("#"));
+    }
+
+    /**
      * The guest landing is prerendered into index.html; every other route needs the
      * client-rendered index.csr.html, and so does `/` for a browser that has a session (it would
      * otherwise paint the guest page before redirecting). Both shells must stay revalidated.

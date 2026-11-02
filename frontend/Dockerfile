@@ -194,8 +194,8 @@ COPY nginx.conf /etc/nginx/http.d/default.conf
 # this include is missing or the snippet is malformed.
 COPY --from=compression /csp.conf /etc/nginx/csp.conf
 
-# Default upstream uses Docker's embedded DNS. CI mounts a static alternative
-# over this file when the backend runs directly on the runner host.
+# Backend address and its resolver (Docker's embedded DNS by default). CI mounts a
+# static alternative over this file when the backend runs directly on the runner host.
 COPY nginx-upstream-server.conf /etc/nginx/upstream-server.conf
 
 # Empty by default; a deployment behind an ingress mounts its own over this file

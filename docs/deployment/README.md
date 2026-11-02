@@ -74,3 +74,28 @@ The Compose stack now carries these settings; the manifests in `homelab/TF/gitop
 
   `ExitOnOutOfMemoryError` makes the kubelet restart the container in the same pod, and an `emptyDir` survives that restart, so the dump stays readable with `kubectl cp` or `kubectl debug`. The dump is named `java_pid<pid>.hprof`, and an existing file is never overwritten. Under tini the JVM gets the same PID in every restarted container, so while that file exists a later OOM writes no dump at all (the JVM logs `Unable to create … File exists`): copy it off and delete it after analysis. A PVC instead of the `emptyDir` keeps the dump across pod deletion, but most volume types are not created writable for UID 10001: set `securityContext.fsGroup: 10001` on the pod. The GC log rotates the previous run's file to `gc.log.0` when the JVM starts.
 - **Frontend `/` routing (ingress):** the guest landing is prerendered. nginx in the frontend image serves `index.html` (prerendered) for `/` to guests and `index.csr.html` when the request carries an `access_token` cookie (and for every other client route), and sends `Vary: Cookie` on `/`. The ingress must pass `/` and the `Cookie` header through unchanged and must not cache `/` or any HTML (both shells are `Cache-Control: no-cache`). It must not add its own `Content-Security-Policy` or rewrite the HTML: the image's CSP authorizes the inline scripts by their sha384 hashes, so an ingress CSP or an injected script blocks hydration.
+
+## Upgrade Notes (2026-11-01, frontend nginx edge)
+
+The frontend image changed how it reaches the backend and what it forwards; check the frontend manifests in `homelab/TF/gitops/apps/taskflow/`:
+
+- **Resolver moved into the upstream file.** `nginx-main.conf` no longer sets `resolver 127.0.0.11` (Docker's embedded DNS, which does not exist in a pod). The resolver now sits next to the backend address in `/etc/nginx/upstream-server.conf` (upstream-level [`resolver`](https://nginx.org/en/docs/http/ngx_http_upstream_module.html#resolver), nginx 1.27.3+; the image ships 1.30), so the file a deployment mounts there controls both. A mounted file that uses `resolve` without its own `resolver` now fails at startup with `no resolver defined to resolve names at run time in upstream "backend_upstream"`. Pick one of:
+
+  ```nginx
+  # A: static ClusterIP Service (simplest). No `resolve`, no `resolver`: nginx resolves the
+  # name once at startup through the pod's /etc/resolv.conf; a ClusterIP is stable for the
+  # Service's lifetime, and kube-proxy spreads connections across the backend pods.
+  server taskflow-backend.taskflow.svc.cluster.local:8080;
+
+  # B: re-resolve at run time, e.g. a headless Service (pod IPs, nginx balances itself).
+  # nginx's resolver ignores resolv.conf search domains: use the FQDN. The resolver is the
+  # cluster DNS Service (`kubectl -n kube-system get svc kube-dns`; 10.43.0.10 on k3s,
+  # 10.96.0.10 on kubeadm); its name also works, it is resolved once at startup.
+  resolver kube-dns.kube-system.svc.cluster.local valid=30s;
+  server taskflow-backend.taskflow.svc.cluster.local:8080 resolve;
+  ```
+
+  Mount the file over `/etc/nginx/upstream-server.conf` (a ConfigMap with `subPath`), as CI does with `frontend/nginx-upstream-server-ci.conf`.
+- **X-Forwarded-Proto.** nginx used to send `X-Forwarded-Proto: $scheme`, always `http` because the image listens on plain HTTP, overriding a TLS ingress's `https` (Spring then built `http://` redirects and treated requests as insecure). It now forwards the incoming `X-Forwarded-Proto` (`http` or `https` only) when, and only when, the mounted `/etc/nginx/real-ip.conf` trusts the peer (`set_real_ip_from`, see `frontend/nginx-real-ip.conf`); every other request still gets `http`. The ingress must set or overwrite `X-Forwarded-Proto` itself (ingress-nginx and Traefik do by default). With HTTPS reaching Spring, Spring Security also writes `Strict-Transport-Security`; nginx hides the backend's copy and sends its own, as it now does for every security header it sets (two `Cross-Origin-Resource-Policy` fields had made browsers ignore CORP).
+- **API timeouts and errors.** `/api/` now gives up after 5 s connecting and 30 s waiting for the backend (was 60 s each), and answers its own 502/503/504 with an RFC 9457 `application/problem+json` body instead of nginx's HTML page. The admin SSE stream keeps its 1 h read timeout. An ingress timeout above 30 s on `/api/` no longer extends anything.
+- **Asset caching.** `Cache-Control: public, immutable, max-age=15552000` is no longer sent on error responses, so a 404 for a chunk during a rolling deploy or rollback is not cached for 6 months. An ingress or CDN in front must not add its own long-lived caching to 4xx/5xx responses either.
