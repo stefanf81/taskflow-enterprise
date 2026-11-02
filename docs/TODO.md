@@ -23,7 +23,9 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Problem:** `spring.security.user.password=${SPRING_SECURITY_PASSWORD:admin-password}` provides a weak default. Unlike persistent RSA keys (`app.rsa.require-persistent-keys=true`), `application-prod.properties` does not fail fast if `SPRING_SECURITY_PASSWORD` is omitted, allowing production instances to bootstrap with `admin` / `admin-password`.
 - **Remediation:** Remove `:admin-password` fallback in `application-prod.properties` (`spring.security.user.password=${SPRING_SECURITY_PASSWORD}`) to abort context initialization if the environment variable is missing.
 
-### 1.3 Datastore Host Interface Exposure & Redis Authentication
+### 1.3 Datastore Host Interface Exposure & Redis Authentication (Partly resolved)
+- **Done:** `docker-compose.yml` publishes PostgreSQL, Redis and Jaeger on `127.0.0.1` only (the frontend's `4200` is the one port left on all interfaces); `ContainerConfigGuardTest` fails on a new non-loopback datastore port.
+- **Still open:** Redis still has no `--requirepass` (needs `spring.data.redis.password` in `application-prod.properties` and the production secret). The original finding follows for context.
 - **Location:** `docker-compose.yml:42, 159`, `src/main/resources/application-prod.properties:146-149`
 - **Problem:** PostgreSQL (`5432:5432`) and Redis (`6379:6379`) bind to `0.0.0.0` on the host. Redis runs without `--requirepass`, allowing unauthorized network clients to flush rate limits, inspect cached barber contact details, or poison cache entries.
 - **Evidence:** The official `redis` Docker image disables Redis protected mode at build time (docker-library patches `protected-mode` to `0`), so a published port with no `requirepass` has no compensating control.
@@ -37,7 +39,7 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Remediation:** Replace `env_file` with explicit environment entries: `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`.
 
 ### 1.5 Rate Limiter Fail-Closed Policy on Authentication Routes (Resolved differently)
-- **Resolved differently:** instead of failing closed (503), the limiter now falls back to a per-JVM in-memory counter with the same limits when Redis errors, and skips Redis for 5 s after a failure. Auth routes therefore stay throttled during an outage and a Redis outage no longer adds a timeout to every request. The original finding follows for context.
+- **Resolved differently:** instead of failing closed (503), the limiter now falls back to a per-JVM in-memory counter with the same limits when Redis errors, and skips Redis for 5 s after a failure. Auth routes therefore stay throttled during an outage and a Redis outage no longer adds a timeout to every request. The compose Redis no longer evicts (`noeviction`), so `rate_limit:*` buckets cannot be dropped under memory pressure; a full Redis rejects the write and the fallback counter applies. The original finding follows for context.
 - **Location:** `src/main/java/com/example/taskflow/core/RateLimiterConfig.java:111-113`
 - **Problem:** `doFilterInternal` catches all Redis execution exceptions and logs a warning, failing open. Under Redis memory eviction (`volatile-lru`) or connection failure, rate limits (20 req/min) on `/api/v1/auth/` routes are bypassed.
 - **Remediation:** Fail closed (HTTP 503 + `Retry-After: 60`) specifically when `isAuthEndpoint` is true, while retaining fail-open behavior for general API routes.
@@ -49,6 +51,7 @@ This document tracks unresolved security findings, architectural technical debt,
 
 ### 1.7 Stateless JWT Revocation & Denylist on Logout (Mostly resolved)
 - **Done:** tokens carry a `jti`; `POST /auth/logout` (now `permitAll`) revokes the presented token via `TokenRevocationList`, checked by the `JwtDecoder`. With `app.state.store=redis` (prod) the denylist is shared by all replicas (`revoked:<jti>` with a TTL equal to the token's remaining lifetime) and revocations are announced on a pub/sub channel so other replicas close the token's admin SSE streams. The mobile app calls `/auth/logout` on logout.
+- **Eviction:** the compose Redis runs `--maxmemory-policy noeviction` (was `volatile-lru`, which could evict `revoked:<jti>` because every denylist key has a TTL); a full Redis now rejects the write and the revocation stays pending locally. The production Redis (homelab/TF) must use the same policy.
 - **Still open:** demoting/deleting a user does not revoke their tokens; a revocation made during a Redis outage is kept locally and written once Redis answers, but is lost if that replica restarts first; Redis without persistence forgets revocations on restart. The original finding follows for context.
 - **Location:** `src/main/java/com/example/taskflow/auth/AuthController.java:157-170`, `src/main/java/com/example/taskflow/auth/TokenProvider.java:41-48`
 - **Problem:** `POST /api/v1/auth/logout` only clears the client-side cookie; native mobile clients have no logout endpoint. Issued tokens remain valid until the 1-hour expiration.
@@ -62,6 +65,7 @@ This document tracks unresolved security findings, architectural technical debt,
 
 ### 1.9 Trusted-Proxy Regex Mis-Escaped in Compose (Partly resolved)
 - **Done:** `docker-compose.yml` uses single backslashes (verified to match `172.18.0.3`); `application-prod.properties` no longer has a default, so an unset `APP_TRUSTED_PROXY_REGEX` aborts startup; `frontend/nginx-real-ip.conf` provides an opt-in real-IP include for ingress deployments.
+- **Done:** compose pins `frontend-tier` to `172.30.0.0/24` (and `backend-tier` to `172.30.1.0/24`) and the regex trusts only that /24 (`^172\.30\.0\.\d{1,3}$`) instead of all of 172.16/12, which also covered Docker networks the proxy is not on; `ContainerConfigGuardTest` asserts both.
 - **Still open:** confirm the production value in the separate GitOps repository uses single backslashes, and consider a startup assertion that the compiled regex matches the actual proxy address. The original finding follows for context.
 - **Location:** `docker-compose.yml:86`, `src/main/resources/application-prod.properties:113`
 - **Problem:** The Compose value contains doubled backslashes. YAML applies no escape processing, so the JVM receives a regex whose `\\.` sequences require a literal backslash and matches no IP. Verified with `docker compose config`: the parsed value matches neither `172.18.0.2` nor `127.0.0.1`. Tomcat's `RemoteIpValve` therefore never trusts Nginx's `X-Forwarded-For`, `getRemoteAddr()` returns the Nginx container IP, and every client shares one rate-limit bucket (also corrupting access logs). The inbound-XFF stripping in `frontend/nginx.conf` remains correct; only the trust decision fails.
