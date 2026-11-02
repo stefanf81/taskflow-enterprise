@@ -44,7 +44,7 @@ class P1AndP2BenchmarkTest {
     @Test
     void p1_3_cacheControl_headers() throws Exception {
         System.out.println("\n" + "=".repeat(80));
-        System.out.println("  ▸ P1-3 CACHE-CONTROL HEADERS (5m public /mustRevalidate)");
+        System.out.println("  ▸ P1-3 CACHE-CONTROL HEADERS (5m public / no-cache revalidated)");
         System.out.println("=".repeat(80));
 
         // Seed
@@ -72,11 +72,10 @@ class P1AndP2BenchmarkTest {
 
         assertNotNull(catalogCC); assertTrue(catalogCC.contains("max-age=300") && catalogCC.contains("public"), "catalog 5m public");
         assertNotNull(barbersCC); assertTrue(barbersCC.contains("max-age=300"), "barbers 5m");
-        assertNotNull(ratingsCC); assertTrue(ratingsCC.contains("max-age=300"), "ratings 5m");
-        assertNotNull(busyCC); assertTrue(busyCC.contains("max-age=30") || busyCC.contains("must-revalidate"), "busySlots 30s or must-revalidate");
+        assertNotNull(ratingsCC); assertEquals("no-cache, public", ratingsCC, "ratings revalidated (ETag 304)");
+        assertNotNull(busyCC); assertEquals("no-cache, private", busyCC, "busySlots revalidated (ETag 304)");
 
-        // Verify admin and customer private endpoints use private must-revalidate
-        // (need auth, but we can at least check that public does not leak private)
+        // The authenticated tiers (no-store) are asserted in HttpCacheHeadersIntegrationTest.
         System.out.println("  ✓ P1-3 Cache-Control headers verified");
         System.out.println("=".repeat(80));
     }

@@ -45,9 +45,9 @@ class BarberController {
     @ApiResponse(responseCode = "200", description = "List of all barbers returned")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<BarberResponse>> getAdminBarbers() {
-        // Admin barbers: must-revalidate to avoid stale admin view, but allow ETag 304
+        // Admin barbers carry staff e-mails and phones: never stored by an HTTP cache
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.noCache().cachePrivate().mustRevalidate())
+                .cacheControl(CacheControl.noStore())
                 .body(barberService.getAllBarbers());
     }
 

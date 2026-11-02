@@ -108,7 +108,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Bounded Async Executor (P0-1 §38)**:
      *   `AsyncConfig` replaces Spring's unbounded `ThreadPoolTaskExecutor` default (core=8, max=`Integer.MAX_VALUE`, queue=`Integer.MAX_VALUE`) with **core=8 max=64 queue=100 keepAlive=60s** `CallerRunsPolicy` (`taskflow-async-` prefix, `waitForTasksToCompleteOnShutdown=true` 30s). Benchmark: 148 tasks/sec burst, 319 ms avg, peak 8 threads, p99 <5s — backpressure prevents OOM (§38).
 *   **HTTP Cache-Control Headers (P1-3 §44)**:
-     *   `CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic()` for `GET /api/v1/catalog` / `GET /api/v1/barbers` / `GET /api/v1/reviews/public/barber-ratings` (5m public, aligns with `@Cacheable` TTL 10m, ETag `ShallowEtagHeaderFilter` 304), `maxAge(30, TimeUnit.SECONDS).cachePrivate().mustRevalidate()` for `GET /api/v1/appointments/public/busy-slots` (30s private, volatile), and `noCache().cachePrivate().mustRevalidate()` for admin `GET /api/v1/barbers/admin` & `GET /api/v1/appointments` dashboards (must-revalidate, ETag).
+     *   `CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic()` for `GET /api/v1/catalog` / `GET /api/v1/barbers` / `GET /api/v1/appointments/public/shop` (5m public, aligns with `@Cacheable` TTL 10m, ETag `ShallowEtagHeaderFilter` 304), `noCache()` (revalidated every time, ETag 304) for `GET /api/v1/reviews/public/barber-ratings` (public) and `GET /api/v1/appointments/public/busy-slots` (private), and `noStore()` for the responses with personal data: admin `GET /api/v1/appointments` (+ `/{id}`), `GET /api/v1/barbers/admin` and `GET /api/v1/customer/appointments`.
 
 ### 📦 3. Serialization & Caching (Jackson 3.x & Redis)
 *   **Jackson 3.x Library**:
@@ -1268,23 +1268,33 @@ location / { try_files $uri $uri/ /index.html; }
 | :--- | :--- | :--- | :--- | :--- |
 | `GET /api/v1/catalog` | `public, max-age=300` | **5m** | Public | §39 `services` cache TTL 10m — CDN can serve without revalidation for 5m, then ETag 304 |
 | `GET /api/v1/barbers` (`publicBarbers`) | `public, max-age=300` | **5m** | Public | Pairs with `publicBarbers` 10m cache |
-| `GET /api/v1/reviews/public/barber-ratings` | `public, max-age=300` | **5m** | Public | Aggregated ratings change infrequently |
-| `GET /api/v1/appointments/public/busy-slots?barber&date` | `private, max-age=30, must-revalidate` | **30s** | Private | Per-barber/date, volatile — short TTL, `must-revalidate` after 30s |
-| `GET /api/v1/appointments` (admin paginated) | `private, no-cache, must-revalidate` | **0** | Private | Admin dashboard must see pending arrivals immediately; ETag allows 304 |
-| `GET /api/v1/barbers/admin` | `private, no-cache, must-revalidate` | **0** | Private | Same — stale admin view is a correctness bug |
+| `GET /api/v1/appointments/public/shop` | `public, max-age=300` | **5m** | Public | Shop time zone, changes only with a deployment |
+| `GET /api/v1/reviews/public/barber-ratings` | `public, no-cache` | **0** (ETag 304) | Public | Both clients reload it right after the visitor's own review; not cached server-side |
+| `GET /api/v1/appointments/public/busy-slots?barber&date` | `private, no-cache` | **0** (ETag 304) | Private | Refetched after every booking/cancel/time-off change; the `busySlots` server cache (2m) is evicted on commit |
+| `GET /api/v1/appointments` (admin paginated), `GET /api/v1/appointments/{id}` | `no-store` | — | None | Customer names, e-mails, phones |
+| `GET /api/v1/customer/appointments` | `no-store` | — | None | The customer's own bookings |
+| `GET /api/v1/barbers/admin` | `no-store` | — | None | Staff e-mails and phones |
+| Other authenticated GETs (`/notifications`, `/barbers/{id}/time-off`, `/auth/me`) | Spring Security default `no-cache, no-store, max-age=0, must-revalidate` | — | None | No explicit tier; the security header writer fills it in |
 
-Controllers: `src/main/java/com/example/taskflow/catalog/CatalogController.java:35` `maxAge(5, MINUTES).cachePublic()`, `BarberController.java:35` `maxAge(5, MINUTES).cachePublic()` / `:45` `noCache().cachePrivate().mustRevalidate()`, `AppointmentController.java:59` `noCache().cachePrivate().mustRevalidate()` / `:105` `maxAge(30, SECONDS).cachePrivate().mustRevalidate()`, `ReviewController.java:34`.
+Controllers: `src/main/java/com/example/taskflow/catalog/CatalogController.java` `maxAge(5, MINUTES).cachePublic()`, `BarberController.java` `maxAge(5, MINUTES).cachePublic()` / `getAdminBarbers` `noStore()`, `AppointmentController.java` `getAllAppointments`/`getAppointmentById` `noStore()` / `getShopInfo` `maxAge(5, MINUTES).cachePublic()` / `getBusySlots` `noCache().cachePrivate()`, `CustomerController.java` `noStore()`, `ReviewController.java` `noCache().cachePublic()`.
 
-**Benchmark:** `P1AndP2BenchmarkTest.p1_3_cacheControl_headers` — seeds 1 barber + 1 service, fires `MockMvc` `GET /catalog`, `/barbers`, `/reviews/public/barber-ratings`, `/appointments/public/busy-slots` in sequence, asserts headers. **4 GETs in ~few ms** (avg low-µs per request, dominated by `MockMvc` overhead, not header logic).
+**Benchmark:** `P1AndP2BenchmarkTest.p1_3_cacheControl_headers` — seeds 1 barber + 1 service, fires `MockMvc` `GET /catalog`, `/barbers`, `/reviews/public/barber-ratings`, `/appointments/public/busy-slots` in sequence, asserts headers. **4 GETs in ~few ms** (avg low-µs per request, dominated by `MockMvc` overhead, not header logic). `HttpCacheHeadersIntegrationTest` (part of `./gradlew test`) asserts every tier through the full filter chain, including the `304` on an unchanged busy-slots list and the `200` with the new slot after a booking.
 
 ```
 Catalog   Cache-Control: max-age=300, public
 Barbers   Cache-Control: max-age=300, public
-Ratings   Cache-Control: max-age=300, public
-BusySlots Cache-Control: private, max-age=30, must-revalidate
+Ratings   Cache-Control: no-cache, public
+BusySlots Cache-Control: no-cache, private
 ```
 
-**Verdict:** Tiered `Cache-Control` (5m public / 30s private / `must-revalidate` admin) correctly balances CDN efficiency and freshness. With `ShallowEtagHeaderFilter`, clients get `304 Not Modified` after TTL expiry without re-downloading JSON — saves bandwidth with zero server-side complexity.
+**Verdict:** Tiered `Cache-Control` (5m public for reference data nobody edits from a client / `no-cache` + ETag for data a client refetches after its own mutation / `no-store` for personal data) balances CDN efficiency, freshness and privacy. With `ShallowEtagHeaderFilter`, an unchanged `no-cache` response costs a `304 Not Modified` instead of the JSON.
+
+**Update (client HTTP caches):** the first version sent `private, max-age=30, must-revalidate` on busy slots, `public, max-age=300` on ratings and `private, no-cache, must-revalidate` on the admin and customer lists. Two problems, both from caches outside the app's own code:
+
+* **Stale slots after a booking.** A `max-age` lets a client's HTTP cache answer without asking the server. Browsers do that, and so does the mobile app: React Native's Android networking gives OkHttp a 10 MB disk cache ([`OkHttpClientProvider.kt`](https://github.com/facebook/react-native/blob/main/packages/react-native/ReactAndroid/src/main/java/com/facebook/react/modules/network/OkHttpClientProvider.kt)), and on iOS it uses an `NSURLSession` default configuration, which has the shared `NSURLCache` ([`RCTHTTPRequestHandler.mm`](https://github.com/facebook/react-native/blob/main/packages/react-native/Libraries/Network/RCTHTTPRequestHandler.mm)). After a booking, cancel or time-off change, TanStack Query / `httpResource` invalidated and refetched, but the refetch was answered from that cache for up to 30 s: the slot just taken still looked free and submitting it failed. Ratings had the same problem for 5 minutes after the visitor's own review. Both are now `no-cache` ([RFC 9111 §5.2.2.4](https://www.rfc-editor.org/rfc/rfc9111#section-5.2.2.4)): stored, but revalidated every time, so the ETag keeps an unchanged list at a `304`. The server-side `busySlots` TTL (2m) is unchanged; it is evicted after every availability commit, so it never was the stale layer.
+* **Personal data on disk.** `no-cache` still lets a private cache store the response ([MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#no-cache)); the admin appointment lists (customer names, e-mails, phones), the customer's own bookings and the admin barber roster stayed in the browser or OkHttp/NSURLCache disk cache after logout ([OWASP MASTG-TEST-0052](https://mas.owasp.org/MASTG/tests/android/MASVS-STORAGE/MASTG-TEST-0052/)). They now send `no-store`, as the login responses already did. **Trade-off:** these lists lose the `304` — with nothing stored, a client has no ETag to send, so every refetch downloads the page again (a page of at most 100 rows). Spring's stock `ShallowEtagHeaderFilter` skips `no-store` responses; the GET-only override in `CacheConfig` does not check `Cache-Control`, so they still get an (unused) `ETag` header.
+
+Catalog, public barbers and shop info keep `public, max-age=300`: no client edits them (catalog and barber mutations exist only as admin API calls, and the server evicts its own cache on them), so a visitor seeing a change up to 5 minutes late is acceptable.
 
 **Update (§58):** `ShallowEtagHeaderFilter` buffers the whole response to hash it, and it also wrapped the admin SSE stream (`GET /api/v1/appointments/events`): the stream sent nothing, not even headers, until it ended 30 minutes later. The filter now skips that path and `Accept: text/event-stream`; `AppointmentEventStreamHttpIntegrationTest` reads the stream over a real socket.
 
@@ -1390,7 +1400,7 @@ export const options = {
 };
 ```
 
-Workload mix (per-iteration `Math.random()`): **70% `GET /api/v1/catalog` `/barbers` (cached, §39/§44), 20% `GET /api/v1/appointments/public/busy-slots` (volatile, 30s cache), 10% `GET /actuator/health/liveness`** — mirrors the production read-heavy distribution in §32. *(Correction, §61: nginx does not proxy `/actuator`, so that 10% was answered by the SPA fallback and never reached the backend; it is now `GET /api/v1/reviews/public/barber-ratings`.)*
+Workload mix (per-iteration `Math.random()`): **70% `GET /api/v1/catalog` `/barbers` (cached, §39/§44), 20% `GET /api/v1/appointments/public/busy-slots` (volatile, `no-cache`), 10% `GET /actuator/health/liveness`** — mirrors the production read-heavy distribution in §32. *(Correction, §61: nginx does not proxy `/actuator`, so that 10% was answered by the SPA fallback and never reached the backend; it is now `GET /api/v1/reviews/public/barber-ratings`.)*
 
 | Stage | VUs | Duration | Purpose |
 | :--- | ---: | :--- | :--- |

@@ -39,9 +39,9 @@ class CustomerController {
             @Parameter(description = "Page number (0-indexed)") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size") @RequestParam(defaultValue = "10") @Max(100) int size) {
         String email = authentication.getName();
-        // Private, must-revalidate — appointments mutate frequently; ETag handles 304
+        // no-store: the customer's own bookings must not stay in the device HTTP cache after logout
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.noCache().cachePrivate().mustRevalidate())
+                .cacheControl(CacheControl.noStore())
                 .body(appointmentService.getMyAppointments(email, page, size));
     }
 

@@ -65,7 +65,7 @@ Backend
 - Never persist the "No Preference" sentinel; resolve it to a real barber inside the booking transaction.
 - A response DTO field that can be null must be JSpecify `@Nullable` (Jackson omits nulls; the OpenAPI `required` lists and the client contracts are derived from it).
 - Cache TTLs, `Cache-Control` and the `ShallowEtagHeaderFilter` must stay aligned; caches fail open (Redis errors never fail a request).
-- No customer data in logs or traces.
+- No customer data in logs or traces; responses carrying personal data send `no-store` (a client's HTTP cache keeps `no-cache` on disk).
 - Prod fails fast without `APP_TRUSTED_PROXY_REGEX` and `APP_CORS_ALLOWED_ORIGINS`.
 
 Containers

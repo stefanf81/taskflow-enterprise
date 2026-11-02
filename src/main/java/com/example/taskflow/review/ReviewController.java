@@ -12,7 +12,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/v1/reviews")
@@ -29,9 +28,11 @@ class ReviewController {
     @Operation(summary = "Get aggregated ratings for all barbers")
     @ApiResponse(responseCode = "200", description = "Aggregated barber ratings returned")
     public ResponseEntity<List<BarberRatingResponse>> getBarberRatings() {
-        // Ratings are aggregated and change infrequently — 5m public cache with ETag
+        // Both clients reload the ratings right after the visitor submits a review, and the
+        // aggregate is not cached server-side: no-cache lets that reload see the new review,
+        // while the ETag keeps an unchanged list at a 304.
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
+                .cacheControl(CacheControl.noCache().cachePublic())
                 .body(reviewService.getBarberRatings());
     }
 
