@@ -101,6 +101,32 @@ class ContainerConfigGuardTest {
                 "both HTML shells must be revalidated on every load");
     }
 
+    /**
+     * One image runs under Docker Compose (embedded DNS at 127.0.0.11) and Kubernetes (cluster
+     * DNS Service). A hardcoded resolver address makes every runtime upstream lookup fail on
+     * the other platform, so the entrypoint derives it from /etc/resolv.conf at start and the
+     * Dockerfile bakes a default so the build-time {@code nginx -t} finds the included file.
+     */
+    @Test
+    void nginx_resolver_is_taken_from_resolv_conf_at_container_start() throws Exception {
+        String main = Files.readString(Path.of("frontend/nginx-main.conf"));
+        assertTrue(main.contains("include /var/cache/nginx/resolver.conf;"),
+                "nginx-main.conf must include the resolver file written at container start");
+        assertFalse(Pattern.compile("(?m)^\\s*resolver\\s").matcher(main).find(),
+                "nginx-main.conf must not hardcode a resolver (127.0.0.11 does not exist on Kubernetes)");
+
+        String entrypoint = Files.readString(Path.of("frontend/docker-entrypoint.sh"));
+        assertTrue(entrypoint.contains("/etc/resolv.conf")
+                        && entrypoint.contains("/var/cache/nginx/resolver.conf"),
+                "docker-entrypoint.sh must write resolver.conf from the nameservers in /etc/resolv.conf");
+        assertTrue(entrypoint.contains("resolvers=127.0.0.11"),
+                "docker-entrypoint.sh must fall back to Docker's embedded DNS when resolv.conf has no nameserver");
+
+        String dockerfile = Files.readString(Path.of("frontend/Dockerfile"));
+        assertTrue(dockerfile.contains("> /var/cache/nginx/resolver.conf"),
+                "the Dockerfile must bake a default resolver.conf, otherwise the build-time `RUN nginx -t` fails");
+    }
+
     @Test
     void p1_2_jvm_diagnostics_flags() throws Exception {
         System.out.println("\n" + "=".repeat(80));

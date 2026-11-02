@@ -7,6 +7,9 @@
 # directories baked into the image layer, so this script must run at
 # container launch before nginx starts.
 #
+# It also writes resolver.conf (the runtime DNS server nginx-main.conf includes) from
+# /etc/resolv.conf, so one image works under Docker Compose and Kubernetes.
+#
 # After creating the directories, execs nginx to replace the shell process
 # (PID 1 becomes nginx, ensuring it receives signals properly).
 #
@@ -34,6 +37,20 @@ mkdir -p \
     /var/cache/nginx/fastcgi_temp \
     /var/cache/nginx/uwsgi_temp \
     /var/cache/nginx/scgi_temp
+
+# Point nginx's runtime resolver at the platform's own DNS server(s). nginx-main.conf
+# includes this file. An IPv6 nameserver needs brackets in the resolver directive and
+# a zone suffix (fe80::1%eth0) is not accepted, so both are normalised. Fall back to
+# Docker's embedded DNS when resolv.conf lists no nameserver. The file is written to
+# a temporary name and renamed so nginx never reads a half-written include.
+resolvers=$(awk '$1 == "nameserver" {
+    a = $2; sub(/%.*/, "", a)
+    if (a ~ /:/) a = "[" a "]"
+    printf "%s%s", sep, a; sep = " "
+}' /etc/resolv.conf 2>/dev/null || true)
+[ -n "$resolvers" ] || resolvers=127.0.0.11
+printf 'resolver %s ipv6=off valid=30s;\n' "$resolvers" > /var/cache/nginx/resolver.conf.tmp
+mv /var/cache/nginx/resolver.conf.tmp /var/cache/nginx/resolver.conf
 
 if [ "$(id -u)" -eq 0 ]; then
     exec nginx -e stderr -g "daemon off; user nginx-runtime;"

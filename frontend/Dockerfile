@@ -155,7 +155,9 @@ RUN addgroup \
 # Create the static HTML root and pre-create temp directories with correct
 # ownership. At runtime, the /var/cache/nginx tmpfs mount in docker-compose
 # hides these directories, so docker-entrypoint.sh recreates them on every
-# container start.
+# container start. The same applies to resolver.conf: the file baked here is the
+# Docker Compose default that lets the build-time `nginx -t` pass, and the
+# entrypoint overwrites it at start with the nameservers of the running platform.
 # Note: Static assets in /usr/share/nginx/html remain owned by root:root (default)
 # with read-only permissions for defense-in-depth, ensuring the unprivileged
 # worker cannot modify or tamper with web assets even if exploited.
@@ -166,6 +168,7 @@ RUN mkdir -p \
         /var/cache/nginx/fastcgi_temp \
         /var/cache/nginx/uwsgi_temp \
         /var/cache/nginx/scgi_temp \
+    && echo 'resolver 127.0.0.11 ipv6=off valid=30s;' > /var/cache/nginx/resolver.conf \
     && chown -R "${NGINX_UID}:${NGINX_GID}" \
         /var/cache/nginx
 
