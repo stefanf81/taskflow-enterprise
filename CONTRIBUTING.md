@@ -63,7 +63,12 @@ Peer mismatches that cannot be fixed under `legacy-peer-deps` are listed, with a
 Security overrides that cross a major version are keyed by the vulnerable line only
 (`"minimatch@^9"`, `"minimatch@^10"`, `"glob@^10"`, `"glob@^13"` → minimatch 11 / glob 14 for
 GHSA-g3hv-75wg-m249 and GHSA-3g3m-2fjr-6pw4), so older lines with a different API (glob 6–8,
-minimatch 3/5, which do not contain the vulnerable code) keep their versions. Drop each entry
+minimatch 3/5, which do not contain the vulnerable code) keep their versions. Dependabot alert
+#89 still flags those minimatch 3/5 copies (its range is `< 11.0.1`, and no fixed 3.x/5.x
+release exists); minimatch 11 is not callable from CommonJS, so their consumers (`test-exclude`,
+Detox's `glob@8`, `bunyan` → `glob@6`) cannot take the override. Dismiss it as "vulnerable code
+not actually used"; `mobile/test/security/minimatch.test.cjs` fails if any installed copy below
+11.0.1 ships the globParts optimizer, or if a consumer stops getting a callable minimatch. Drop each entry
 once ESLint, Expo and Jest's `test-exclude` declare the fixed major themselves. npm does not
 re-resolve a lockfile entry that still satisfies its range when an override is added; check
 `npm ls glob minimatch --all` afterwards, since a nested copy can stay on the old version.
