@@ -186,18 +186,21 @@ jobs:
         with:
           persist-credentials: false
 
+      # No setup-node cache: the npm-ci action below restores ~/.npm itself,
+      # and only when its node_modules cache misses (a hit downloads nothing).
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
+          package-manager-cache: false
 
+      # Same inputs as ci.yml's frontend jobs, so a publish run restores CI's
+      # node_modules entry for the same lockfile.
       - name: Install Dependencies
         uses: ./.github/actions/npm-ci
         with:
           package-path: frontend
+          cache-node-modules: "true"
 
       - name: Cache Angular Build
         uses: actions/cache@v6
@@ -232,7 +235,8 @@ jobs:
     # Run regardless of which artifact job was skipped (we only `need` them
     # to gate ordering — downloads are individually conditionally skipped).
     # `cancelled` too: a cancelled artifact job leaves no artifact to download.
-    if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    # `!cancelled()`, not `always()`: a cancelled run must not keep pushing.
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
 
     runs-on: ubuntu-26.04
     timeout-minutes: 30
@@ -427,7 +431,7 @@ jobs:
 
       - name: Key Trivy Java DB cache
         id: trivy-java-db-key
-        if: always() && matrix.component == 'backend' && !inputs.skip_scan
+        if: ${{ !cancelled() && matrix.component == 'backend' && !inputs.skip_scan }}
         env:
           META: ${{ github.workspace }}/.cache/trivy/java-db/metadata.json
         run: |
@@ -442,7 +446,7 @@ jobs:
         # Best effort: a concurrent job may have saved the same download.
         continue-on-error: true
         if: >-
-          always() &&
+          !cancelled() &&
           steps.trivy-java-db-key.outputs.key != '' &&
           steps.trivy-java-db-key.outputs.key != steps.trivy-java-db-cache.outputs.cache-matched-key
         uses: actions/cache/save@v6
@@ -493,7 +497,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload SARIF
-        if: always() && hashFiles('trivy-results.sarif') != ''
+        if: ${{ !cancelled() && hashFiles('trivy-results.sarif') != '' }}
         uses: ./.github/actions/upload-sarif
         with:
           path: trivy-results.sarif

@@ -288,6 +288,9 @@ jobs:
       - name: Test mobile E2E backend probes and diagnostics
         run: node --test .github/scripts/mobile-e2e-backend.test.cjs
 
+      - name: Test workflow policy guards
+        run: node --test .github/scripts/workflow-policy.test.cjs
+
       - name: Lint workflows
         run: |
           set -euo pipefail
@@ -560,8 +563,8 @@ jobs:
 
       # Within this workflow, `backend` owns the shared Gradle cache writes
       # (`backend-integration` writes only its own entry, from `main` pushes).
-      # The Android and dependency-audit workflows retain their own writable
-      # caching. Read-only packaging avoids competing saves of shared entries.
+      # The Android workflow retains its own writable caching. Read-only
+      # packaging avoids competing saves of shared entries.
       #
       # GRADLE_BUILD_ACTION_CACHE_KEY_JOB restores the newest `backend` entry
       # (wrapper, dependencies, build cache). setup-gradle keys Gradle User
@@ -626,10 +629,15 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
+      # No npm install here, so no npm cache: without `package-manager-cache:
+      # false`, setup-node enables npm caching from the root `packageManager`
+      # field and saves an empty ~/.npm under the key other setup-node jobs
+      # would restore.
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
 
       - name: Download Backend JAR
         uses: actions/download-artifact@v8

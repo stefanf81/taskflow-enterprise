@@ -11,7 +11,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: write
   contents: read
 
 jobs:
@@ -19,6 +18,10 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
 
+    permissions:
+      actions: write
+
+    # No checkout: this job only calls the GitHub API.
     steps:
       - name: Delete caches older than 3 days
         env:
@@ -33,17 +36,33 @@ jobs:
           echo "Searching for caches last accessed before: $CUTOFF"
 
           # Offload filtering to jq for better performance
-          CACHE_IDS=$(gh api --paginate "/repos/$REPO/actions/caches?per_page=100" \
-            --jq ".actions_caches[] | select(.last_accessed_at < \"$CUTOFF\") | .id")
+          ids="$(gh api --paginate "/repos/$REPO/actions/caches?per_page=100" \
+            --jq ".actions_caches[] | select(.last_accessed_at < \"$CUTOFF\") | .id")"
 
-          if [ -z "$CACHE_IDS" ]; then
+          if [[ -z "$ids" ]]; then
             echo "No caches found older than $CUTOFF"
             exit 0
           fi
 
-          echo "Found old caches. Deleting..."
-          for ID in $CACHE_IDS; do
-            echo "Deleting cache $ID"
-            # The || true prevents the whole workflow from failing if a single deletion fails (e.g. race condition)
-            gh api --method DELETE "/repos/$REPO/actions/caches/$ID" || echo "Failed to delete cache $ID, continuing..."
-          done
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+          deleted=0
+          failures=0
+          while IFS= read -r id; do
+            if gh api --silent --method DELETE "/repos/$REPO/actions/caches/$id" 2> "$error_file"; then
+              deleted=$((deleted + 1))
+              continue
+            fi
+            error="$(<"$error_file")"
+            # 404: GitHub's own eviction (or a PR cleanup) got there first.
+            if [[ "$error" != *"(HTTP 404)"* ]]; then
+              echo "::error::Failed to delete cache $id: $error"
+              failures=$((failures + 1))
+            fi
+          done <<< "$ids"
+
+          echo "Deleted $deleted cache(s) last accessed before $CUTOFF." | tee -a "$GITHUB_STEP_SUMMARY"
+          if (( failures > 0 )); then
+            echo "::error::$failures cache deletion(s) failed."
+            exit 1
+          fi

@@ -7,7 +7,10 @@ inputs:
   buildkit-image:
     description: BuildKit image used by the docker-container driver.
     required: false
-    default: moby/buildkit:buildx-stable-1
+    # Pinned instead of the floating `buildx-stable-1` tag (v0.33.1 when
+    # pinned) so a retargeted tag cannot change the builder unreviewed.
+    # buildkit-image: tracked by the dedicated regex manager in .github/renovate.json
+    default: "moby/buildkit:v0.33.1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea"
 runs:
   using: composite
   steps:
