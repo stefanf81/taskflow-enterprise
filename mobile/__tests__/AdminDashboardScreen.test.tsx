@@ -217,6 +217,8 @@ describe('AdminDashboardScreen', () => {
     await waitFor(() => {
       expect(screen.getByText(/Appointment APPROVED/i)).toBeTruthy();
     });
+    // The mutation hooks invalidate ['appointments']; the screen does not refetch on top.
+    expect(mockRefetch).not.toHaveBeenCalled();
   });
 
   it('calls updateStatus mutate with DENIED on decline press', async () => {
@@ -240,6 +242,7 @@ describe('AdminDashboardScreen', () => {
     await waitFor(() => {
       expect(screen.getByText(/Appointment DECLINED/i)).toBeTruthy();
     });
+    expect(mockRefetch).not.toHaveBeenCalled();
   });
 
   it('shows error banner when approve fails', async () => {
@@ -308,6 +311,7 @@ describe('AdminDashboardScreen', () => {
     await waitFor(() => {
       expect(screen.getByText('Booking permanently deleted.')).toBeTruthy();
     });
+    expect(mockRefetch).not.toHaveBeenCalled();
 
     alertSpy.mockRestore();
   });

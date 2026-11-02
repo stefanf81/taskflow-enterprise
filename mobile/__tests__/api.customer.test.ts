@@ -24,9 +24,11 @@ describe('customerApi', () => {
       };
       mockedGet.mockResolvedValueOnce({ data: mockResponse });
 
-      const result = await customerApi.getAppointments(1, 10);
+      const { signal } = new AbortController();
+      const result = await customerApi.getAppointments(1, 10, { signal });
       expect(mockedGet).toHaveBeenCalledWith('/api/v1/customer/appointments', {
         params: { page: 1, size: 10 },
+        signal,
       });
       expect(result).toEqual(mockResponse);
     });

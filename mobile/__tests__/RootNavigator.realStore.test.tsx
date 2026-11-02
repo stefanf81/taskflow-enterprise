@@ -63,6 +63,7 @@ import { RootNavigator } from '../src/navigation/RootNavigator';
 import { useAuthStore } from '../src/core/auth/useAuthStore';
 import { queryClient } from '../src/query/queryClient';
 import { SESSION_EXPIRED_MESSAGE } from '../src/utils/session';
+import { storage } from '../src/utils/storage';
 
 const secureMemory: Map<string, string> = require('expo-secure-store').__memory;
 
@@ -90,7 +91,9 @@ async function submitLogin(username = 'admin', password = 'wrong-password') {
 }
 
 describe('RootNavigator with the real auth store (MOB-1)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Through storage, so its in-memory copy of the token is dropped as well.
+    await storage.clearSession();
     secureMemory.clear();
     queryClient.clear();
     resetStore();
@@ -224,7 +227,9 @@ describe('RootNavigator with the real auth store (MOB-1)', () => {
 });
 
 describe('session lifecycle in RootNavigator (MOB-8/9)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Through storage, so its in-memory copy of the token is dropped as well.
+    await storage.clearSession();
     secureMemory.clear();
     queryClient.clear();
     resetStore();

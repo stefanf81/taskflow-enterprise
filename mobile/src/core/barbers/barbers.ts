@@ -1,4 +1,4 @@
-import { apiClient } from '../../api/client';
+import { apiClient, RequestOptions } from '../../api/client';
 import { Barber, BarberTimeOff, BarberTimeOffRequest, PublicBarber } from '../../types/api';
 import { parseContract, parseRequest } from '../../api/contracts';
 import {
@@ -10,13 +10,13 @@ import {
 } from '@taskflow/schemas';
 
 export const barbersApi = {
-  getPublicBarbers: async (): Promise<PublicBarber[]> => {
-    const response = await apiClient.get<PublicBarber[]>('/api/v1/barbers');
+  getPublicBarbers: async ({ signal }: RequestOptions = {}): Promise<PublicBarber[]> => {
+    const response = await apiClient.get<PublicBarber[]>('/api/v1/barbers', { signal });
     return parseContract(publicBarberResponseListSchema, response.data, 'GET /api/v1/barbers');
   },
 
-  getAdminBarbers: async (): Promise<Barber[]> => {
-    const response = await apiClient.get<Barber[]>('/api/v1/barbers/admin');
+  getAdminBarbers: async ({ signal }: RequestOptions = {}): Promise<Barber[]> => {
+    const response = await apiClient.get<Barber[]>('/api/v1/barbers/admin', { signal });
     return parseContract(
       barberResponseListSchema,
       response.data,
@@ -24,8 +24,13 @@ export const barbersApi = {
     );
   },
 
-  getTimeOff: async (barberId: number): Promise<BarberTimeOff[]> => {
-    const response = await apiClient.get<BarberTimeOff[]>(`/api/v1/barbers/${barberId}/time-off`);
+  getTimeOff: async (
+    barberId: number,
+    { signal }: RequestOptions = {},
+  ): Promise<BarberTimeOff[]> => {
+    const response = await apiClient.get<BarberTimeOff[]>(`/api/v1/barbers/${barberId}/time-off`, {
+      signal,
+    });
     return parseContract(
       barberTimeOffResponseListSchema,
       response.data,

@@ -52,6 +52,16 @@ describe('appointmentsApi', () => {
       expect(result).toEqual(mockResponse);
     });
 
+    it('passes the abort signal to axios', async () => {
+      mockedGet.mockResolvedValueOnce({ data: emptyDashboard });
+      const { signal } = new AbortController();
+      await appointmentsApi.getAllAppointments('all', undefined, 2, 10, { signal });
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments', {
+        params: { page: 2, size: 10 },
+        signal,
+      });
+    });
+
     it('includes status filter when not "all"', async () => {
       mockedGet.mockResolvedValueOnce({ data: emptyDashboard });
       await appointmentsApi.getAllAppointments('pending');
@@ -102,8 +112,9 @@ describe('appointmentsApi', () => {
   describe('getShopTimeZone', () => {
     it('reads the shop zone from the public endpoint', async () => {
       mockedGet.mockResolvedValueOnce({ data: { timeZone: 'America/New_York' } });
-      await expect(appointmentsApi.getShopTimeZone()).resolves.toBe('America/New_York');
-      expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments/public/shop');
+      const { signal } = new AbortController();
+      await expect(appointmentsApi.getShopTimeZone({ signal })).resolves.toBe('America/New_York');
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments/public/shop', { signal });
     });
 
     it('rejects a response without a zone', async () => {
@@ -163,9 +174,11 @@ describe('appointmentsApi', () => {
 
     it('passes the selected service so long services are checked against later bookings', async () => {
       mockedGet.mockResolvedValueOnce({ data: ['16:00'] });
-      await appointmentsApi.getBusySlots('Alex', '2026-08-01', 'Deluxe Package');
+      const { signal } = new AbortController();
+      await appointmentsApi.getBusySlots('Alex', '2026-08-01', 'Deluxe Package', { signal });
       expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments/public/busy-slots', {
         params: { barberName: 'Alex', bookingDate: '2026-08-01', serviceType: 'Deluxe Package' },
+        signal,
       });
     });
   });

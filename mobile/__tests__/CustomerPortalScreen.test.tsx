@@ -202,7 +202,7 @@ describe('CustomerPortalScreen', () => {
     alertSpy.mockRestore();
   });
 
-  it('calls refetch after cancel succeeds', async () => {
+  it('leaves the refresh after a cancel to the mutation hook', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
       const confirmBtn = buttons?.find((b: any) => b.text === 'Yes, Cancel');
       if (confirmBtn?.onPress) confirmBtn.onPress();
@@ -213,8 +213,11 @@ describe('CustomerPortalScreen', () => {
     await render(<CustomerPortalScreen />);
     await fireEvent.press(screen.getByText('Cancel Booking'));
     await waitFor(() => {
-      expect(mockRefetch).toHaveBeenCalled();
+      expect(screen.getByText('Appointment cancelled successfully.')).toBeTruthy();
     });
+    // useCancelCustomerAppointment invalidates ['customerAppointments']; a refetch here
+    // would request the same page a second time.
+    expect(mockRefetch).not.toHaveBeenCalled();
     alertSpy.mockRestore();
   });
 

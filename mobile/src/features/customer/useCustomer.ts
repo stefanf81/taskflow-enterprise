@@ -1,11 +1,14 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customerApi } from './customer';
 
 export const useCustomerAppointments = (page = 0, size = 10) => {
   return useQuery({
     queryKey: ['customerAppointments', page, size],
-    queryFn: () => customerApi.getAppointments(page, size),
+    queryFn: ({ signal }) => customerApi.getAppointments(page, size, { signal }),
     staleTime: 10000,
+    // Keep the current page on screen while the next one loads.
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: true,
   });
 };
 

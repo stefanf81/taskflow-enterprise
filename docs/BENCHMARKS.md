@@ -218,7 +218,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 
 ### 📱 8. Mobile & Client Layer
 *   **React Native (Expo 57) QueryClient Caching (P1-4 §45)**:
-     *   `mobile/src/query/queryClient.ts` sets `staleTime: 60_000` (was 0, refetched on every mount), `gcTime: 5 * 60_000` (keep cache across navigation), exponential `retryDelay: min(1000 * 2^attempt, 30000)` with `retry:1` and `refetchOnWindowFocus:false`. `mobile/src/api/client.ts` `timeout: 10000` (was 15000; still above the server's ~9s worst case of 5s JPA timeout + 4s Hikari connection-timeout, so the server times out first). Cuts catalog/barbers refetch ~50% (§45).
+     *   `mobile/src/query/queryClient.ts` sets `staleTime: 60_000` (was 0, refetched on every mount), `gcTime: 5 * 60_000` (keep cache across navigation), one retry for transient failures only (`shouldRetryQuery`: network/timeout, 408, 5xx; never 4xx or contract/session errors) after 1s or the server's `Retry-After`, and `refetchOnWindowFocus:false` except on the volatile appointment, busy-slot and notification queries (focus = app foreground). `mobile/src/api/client.ts` `timeout: 10000` (was 15000; still above the server's ~9s worst case of 5s JPA timeout + 4s Hikari connection-timeout, so the server times out first). Cuts catalog/barbers refetch ~50% (§45).
 *   **Lookbook Virtualization Fix (P2 §49)**:
      *   `mobile/src/features/landing/LookbookGallery.tsx` replaces `FlatList scrollEnabled={false}` inside parent `ScrollView` (which defeats virtualization, renders all items) with plain `LOOKBOOK_DATA.map` + `View` + `Card`. Parent `ScrollView` handles scrolling; swap to `FlashList` when catalogue exceeds 50 items.
 
@@ -1310,18 +1310,21 @@ Catalog, public barbers and shop info keep `public, max-age=300`: no client edit
 | :--- | :--- | :--- | :--- |
 | `staleTime` | `0` (default, refetch on every `useQuery` mount) | **`60_000` (60s)** | Catalog/barbers change infrequently; 60s stale avoids refetch when navigating between tabs |
 | `gcTime` | `5 * 60_000` (default) | **`5 * 60_000` (5m)** | Explicit — keep cache across navigation for 5m before GC |
-| `retryDelay` | — | **`min(1000 * 2^attempt, 30000)` exponential + `retry:1`** | One retry with exponential backoff (1s → 2s → capped 30s), `refetchOnWindowFocus:false` |
+| `retry` | `3` (default) | **`shouldRetryQuery`** (was `retry: 1`) | At most one retry, and only where it can succeed: network error/timeout, 408, 5xx. Never a 4xx, an `ApiContractError` or a `SessionExpiredError` (`retry: 1` retried a 401 and ended the session twice); a 429 only with a `Retry-After` ≤ 10 s, and no status whose `Retry-After` is longer |
+| `retryDelay` | exponential (default) | **`queryRetryDelay`**: `min(1000 * 2^attempt, 30000)`, or the server's `Retry-After` (capped 30s) | With one retry, the single wait is 1s (or the `Retry-After`); the exponential formula only matters if `MAX_QUERY_RETRIES` is raised |
+| `refetchOnWindowFocus` | `true` (default) | **`false` globally, `true` on volatile queries** | "Focus" is the app returning to the foreground (`focusManager` ← `AppState`), not tab navigation (that is governed by `staleTime`). Reference data stays put; `useAppointments`, `useCustomerAppointments`, `useBusySlots` and `useNotifications` opt in, and refetch only when stale |
 | `timeout` | `15000` (15s) | **`10000` (10s)** | Fail-fast on flaky networks, while still exceeding the server's own worst case (`jakarta.persistence.query.timeout=5000` + `Hikari connection-timeout=4000` ≈ 9s) so the server's own timeout fires first and returns a proper error response rather than an abrupt client-side abort |
 
 **Expected Impact:**
 
 * `staleTime 0→60s` cuts `catalog`/`barbers`/`publicBarbers` GETs by **~50%** under normal tab navigation (every mount no longer refetches within the 60s window).
 * `gcTime 5m` retains data when the user switches tabs and returns within 5m — no loading spinner on back-navigation.
+* Every `queryFn` passes TanStack's `signal` to axios, so a query that is unmounted or superseded (next page, new search term) aborts its request instead of finishing it in the background; paginated lists keep the previous page (`placeholderData: keepPreviousData`) instead of flashing a spinner.
 * `timeout 10s` vs old 15s: user sees an error boundary 5s sooner on flaky mobile networks, while the 10s ceiling still sits above the server's ~9s worst case (5s JPA + 4s Hikari), so most failures surface as a server-side timeout response rather than a client-side abort.
 
 **Verification:** `P1AndP2BenchmarkTest.p1_4_mobile_tuning` asserts `queryClient.ts` contains `staleTime: 60_000`, `gcTime: 5 * 60_000`, `retryDelay`, and `client.ts` contains `timeout: 10000` and no `timeout: 15000`.
 
-**Verdict:** `60s` stale + `5m` GC + exponential retry is the correct mobile default for read-mostly reference data. Combined with the native `expo-secure-store` bearer flow, it keeps the mobile app responsive on flaky networks without hammering the backend.
+**Verdict:** `60s` stale + `5m` GC + one retry for transient failures only is the correct mobile default for read-mostly reference data. Combined with the native `expo-secure-store` bearer flow, it keeps the mobile app responsive on flaky networks without hammering the backend.
 
 ---
 

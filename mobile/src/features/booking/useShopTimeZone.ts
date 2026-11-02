@@ -9,7 +9,7 @@ import { appointmentsApi } from '../../core/appointments/appointments';
 export function useShopTimeZone(): string | null {
   const { data } = useQuery({
     queryKey: ['shopTimeZone'],
-    queryFn: appointmentsApi.getShopTimeZone,
+    queryFn: ({ signal }) => appointmentsApi.getShopTimeZone({ signal }),
     staleTime: Infinity,
     gcTime: Infinity,
   });
