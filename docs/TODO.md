@@ -71,6 +71,11 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Problem:** The Compose value contains doubled backslashes. YAML applies no escape processing, so the JVM receives a regex whose `\\.` sequences require a literal backslash and matches no IP. Verified with `docker compose config`: the parsed value matches neither `172.18.0.2` nor `127.0.0.1`. Tomcat's `RemoteIpValve` therefore never trusts Nginx's `X-Forwarded-For`, `getRemoteAddr()` returns the Nginx container IP, and every client shares one rate-limit bucket (also corrupting access logs). The inbound-XFF stripping in `frontend/nginx.conf` remains correct; only the trust decision fails.
 - **Remediation:** Use single backslashes in the YAML value (`^172\.([1][6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}$`), keep the scope limited to the actual proxy network, and add a startup or integration assertion that the compiled regex matches the Nginx container address. Apply the same escaping wherever the value is copied — the production value lives in the separate GitOps repository.
 
+### 1.10 Application Connects as the PostgreSQL Superuser (Partly resolved)
+- **Done:** `application-prod.properties` no longer falls back to the well-known password `postgres-password`; an unset `SPRING_DATASOURCE_PASSWORD` aborts startup.
+- **Still open:** the prod profile connects as `postgres`, so any application compromise (SQL injection, deserialisation, SSRF to the JDBC layer) runs with superuser rights (`COPY … TO PROGRAM`, `ALTER SYSTEM`, reading every database).
+- **Remediation:** create a non-superuser owner role for Flyway and a least-privilege runtime role (DML only on the `taskflow` schema), give Flyway its own `spring.flyway.user`/`password`, install `pg_stat_statements` (V37) and `btree_gist` (V35) as the superuser during provisioning instead of from the migration, and set the runtime role in the GitOps repository and `docker-compose.yml`.
+
 ---
 
 ## 2. Data Layer & Application Robustness (P1 — High/Medium Priority)
