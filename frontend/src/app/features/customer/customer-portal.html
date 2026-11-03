@@ -75,7 +75,8 @@
           Retry
         </button>
       </div>
-    } @else if (isLoading()) {
+    } @else if (isLoading() && customerStore.appointments().length === 0) {
+      <!-- A refresh keeps the current rows on screen; the placeholder is for the first load. -->
       <div
         class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20"
       >

@@ -23,10 +23,11 @@
           role="button"
           [attr.aria-label]="'Select barber: ' + barber.name"
           class="p-4 rounded-xl border cursor-pointer transition-all"
-          [class.bg-gold_20]="selectedBarberId() === barber.id"
-          [class.border-gold]="selectedBarberId() === barber.id"
-          [class.bg-zinc-900]="selectedBarberId() !== barber.id"
-          [class.border-white_5]="selectedBarberId() !== barber.id"
+          [class]="
+            selectedBarberId() === barber.id
+              ? 'bg-gold/20 border-gold'
+              : 'bg-zinc-900 border-white/5'
+          "
           (click)="selectAdminBarber(barber.id)"
           (keydown.enter)="selectAdminBarber(barber.id)"
           (keydown.space)="selectAdminBarber(barber.id); $event.preventDefault()"

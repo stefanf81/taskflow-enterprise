@@ -109,6 +109,19 @@ describe('AdminAppointmentsTab', () => {
     expect(store.successMessage()?.toLowerCase()).toContain('approved');
   });
 
+  it('keeps the rows on screen while a refresh is in flight', () => {
+    TestBed.inject(AppointmentStore).refresh();
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).not.toContain('Loading appointments');
+    expect(text).toContain('Alice');
+
+    httpMock
+      .expectOne((r) => r.url.includes('/api/v1/appointments') && r.method === 'GET')
+      .flush(mockDashboard);
+  });
+
   it('should deny an appointment and surface an error on failure', () => {
     component.denyAppointment(2);
     const req = httpMock.expectOne((r) => r.url.endsWith('/api/v1/appointments/2'));

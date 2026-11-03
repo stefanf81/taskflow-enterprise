@@ -27,6 +27,29 @@ describe('AdminSchedulesTab', () => {
       .forEach((r) => r.flush([{ id: 1, name: 'Alex the Barber', email: '', phone: '' }]));
   });
 
+  it('highlights the selected barber with real Tailwind classes', () => {
+    const store = TestBed.inject(BarberStore);
+    const card = (): HTMLElement =>
+      fixture.nativeElement.querySelector('[aria-label="Select barber: Alex the Barber"]');
+    const select = (id: number): void => {
+      store.selectBarber(id);
+      fixture.detectChanges();
+      httpMock.match((r) => r.url.includes('/time-off')).forEach((r) => r.flush([]));
+    };
+
+    select(2);
+    expect(card().classList).toContain('bg-zinc-900');
+    expect(card().classList).toContain('border-white/5');
+    expect(card().classList).not.toContain('bg-gold/20');
+
+    select(1);
+    expect(card().classList).toContain('bg-gold/20');
+    expect(card().classList).toContain('border-gold');
+    expect(card().classList).not.toContain('bg-zinc-900');
+    // The static classes survive the [class] binding.
+    expect(card().classList).toContain('p-4');
+  });
+
   it('requires both dates before submitting time off', () => {
     component.addTimeOff();
     expect(component.timeOffActionError()).toBe('Start and end dates are required.');
