@@ -36,7 +36,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * <p>Every key in the application property files must therefore exist, and not be removed
  * (deprecation level {@code error}), in the configuration metadata of the classpath; keys under
  * {@code spring.jpa.properties.} must be non-deprecated Hibernate or Jakarta Persistence settings.
- * {@code app.*} keys are the application's own and have no metadata.
+ * The application's own {@code app.*} keys are checked too: the configuration processor generates
+ * their metadata from the {@code @ConfigurationProperties} records, and
+ * {@code META-INF/additional-spring-configuration-metadata.json} declares the few that are only read
+ * by a condition or by {@code logback-spring.xml}. A misspelt or retired {@code app.*} key fails here.
  */
 class PropertyKeysMetadataTest {
 
@@ -69,15 +72,13 @@ class PropertyKeysMetadataTest {
         }
         List<String> problems = new ArrayList<>();
         for (String key : properties.stringPropertyNames()) {
-            if (!key.startsWith("app.")) {
-                String problem = check(key);
-                if (problem != null) {
-                    problems.add(key + ": " + problem);
-                }
+            String problem = check(key);
+            if (problem != null) {
+                problems.add(key + ": " + problem);
             }
         }
         Collections.sort(problems);
-        assertEquals(List.of(), problems, file + " has keys Spring Boot or Hibernate would ignore");
+        assertEquals(List.of(), problems, file + " has keys Spring Boot, Hibernate or the application would ignore");
     }
 
     @Test
@@ -91,6 +92,23 @@ class PropertyKeysMetadataTest {
                 "spring.web.error.include-message", "management.endpoint.prometheus.access",
                 "spring.datasource.driverClassName", "spring.jpa.properties.hibernate.jdbc.batch_size")) {
             assertNull(check(bound), bound);
+        }
+    }
+
+    /** The application's own keys: bound by a properties record, or declared as additional metadata. */
+    @Test
+    void appKeysAreCheckedAgainstTheGeneratedMetadata() {
+        for (String misspelt : List.of("app.jwt.lifetime", "app.rate-limit.max-request-per-minute",
+                "app.sse.max-connection-per-admin", "app.shop.timezone", "app.unknown.key")) {
+            assertNotNull(check(misspelt), misspelt);
+        }
+        for (String known : List.of("app.jwt.lifetime-seconds", "app.rsa.require-persistent-keys",
+                "app.rate-limit.login-max-failures", "app.rate-limit.auth-max-requests-per-minute",
+                "app.sse.heartbeat-interval-ms", "app.notification.retention-cron", "app.instance.id",
+                "app.cache.single-flight.max-wait-ms", "app.booking.max-advance-days", "app.schedulers.enabled",
+                "app.state.store", "app.security.require-strong-admin-password",
+                "app.logging.async.max-flush-time-ms", "app.rateLimit.maxRequestsPerMinute")) {
+            assertNull(check(known), known);
         }
     }
 

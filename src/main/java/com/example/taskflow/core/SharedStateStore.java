@@ -10,7 +10,7 @@ import java.util.HexFormat;
 /**
  * Where cross-replica state lives: the JWT denylist ({@code TokenRevocationList}), the failed-login
  * counters ({@code LoginAttemptLimiter}) and the cross-replica cache-load lock
- * ({@link SingleFlightCacheManager}).
+ * ({@code core.cache.SingleFlightCacheManager}).
  *
  * <p>{@code app.state.store=memory} (the default: dev, tests and the offline CDS training build) keeps
  * everything in this JVM and never touches Redis. {@code app.state.store=redis} (set by

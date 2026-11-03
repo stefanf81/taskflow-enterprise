@@ -1,29 +1,28 @@
 package com.example.taskflow.appointment;
-import com.example.taskflow.appointment.internal.AppointmentRepository;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
+/**
+ * The appointment module's API for other modules: exactly what {@code review} (booking lookup,
+ * ratings) and {@code notification} (24-hour reminders) call. It hands out {@link AppointmentDetails}
+ * snapshots and ids, never the {@code Appointment} entity (ADR-022).
+ *
+ * <p>Booking, the status lifecycle and the admin/customer listings are not part of it: they are the
+ * package-private {@code AppointmentBookingService}, {@code AppointmentLifecycleService} and
+ * {@code AppointmentQueryService}, used only by this module's controllers.
+ */
 public interface AppointmentService {
-    AppointmentDashboardResponse getAllAppointments(String status, String searchName, int page, int size);
-    AppointmentResponse getAppointmentById(Long id);
-    org.springframework.data.domain.Page<AppointmentResponse> getMyAppointments(String email, int page, int size);
-    void cancelMyAppointment(String publicId, String email);
-    AppointmentCreationResult createAppointment(AppointmentCreateRequest request, String idempotencyKey);
-    AppointmentResponse updateAppointmentStatus(Long id, AppointmentUpdateRequest request);
-    void deleteAppointment(Long id);
-    java.util.List<String> getBusySlots(String barberName, String bookingDate);
 
-    /** Busy slots for booking {@code serviceType} (null/blank = ignore the service's length). */
-    java.util.List<String> getBusySlots(String barberName, String bookingDate, String serviceType);
-    void publicCancelAppointment(String publicId, String email);
     /**
      * Barber name of every listed appointment that is still APPROVED, keyed by appointment id.
      * Other modules (review ratings) reference appointments by id and ask here instead of joining
      * the appointment table themselves.
      */
-    java.util.Map<Long, String> findApprovedBarberNames(java.util.Collection<Long> appointmentIds);
+    Map<Long, String> findApprovedBarberNames(Collection<Long> appointmentIds);
 
     /** Read-only view of the booking with this public id; empty when none exists. */
     Optional<AppointmentDetails> findDetailsByPublicId(String publicId);

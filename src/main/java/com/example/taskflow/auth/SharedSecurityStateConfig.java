@@ -1,7 +1,7 @@
 package com.example.taskflow.auth;
 
-import com.example.taskflow.core.RedisBackoff;
-import com.example.taskflow.core.RedisConnectionRecovery;
+import com.example.taskflow.core.redis.RedisBackoff;
+import com.example.taskflow.core.redis.RedisConnectionRecovery;
 import com.example.taskflow.core.SharedStateStore;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

@@ -4,7 +4,8 @@ import com.example.taskflow.appointment.AppointmentStatus;
 import com.example.taskflow.appointment.Barber;
 
 import com.example.taskflow.catalog.ServiceItem;
-import com.example.taskflow.core.StringTimeConverter;
+import com.example.taskflow.core.EntityTimestampListener;
+import com.example.taskflow.core.Timestamped;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -28,7 +29,8 @@ import java.util.UUID;
     @Index(name = "idx_appointments_barber_id", columnList = "barber_id"),
     @Index(name = "idx_appointments_service_id", columnList = "service_id")
 })
-public class Appointment {
+@EntityListeners(EntityTimestampListener.class)
+public class Appointment implements Timestamped {
 
     /**
      * Length assumed for an appointment that has no service (or a service without a positive
@@ -141,13 +143,18 @@ public class Appointment {
         if (this.bookingEndTime == null) {
             deriveEndTime();
         }
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
     }
 
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+    /** Set by {@link EntityTimestampListener} (before {@link #onCreate}) from the injected Clock. */
+    @Override
+    public void markCreated(LocalDateTime now) {
+        createdAt = now;
+        updatedAt = now;
+    }
+
+    @Override
+    public void markUpdated(LocalDateTime now) {
+        updatedAt = now;
     }
 
     public Appointment() {

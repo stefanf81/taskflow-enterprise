@@ -1,4 +1,5 @@
 package com.example.taskflow.notification;
+import com.example.taskflow.core.SchedulerProperties;
 import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 
 import com.example.taskflow.core.LogSanitizer;
@@ -6,7 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -61,9 +61,18 @@ class NotificationRelayScheduler {
     public NotificationRelayScheduler(NotificationOutboxRepository outboxRepository,
                                       NotificationSender sender,
                                       ObjectProvider<NotificationRelayScheduler> selfProvider,
-                                      @Value("${app.instance.id:}") String instanceId,
+                                      InstanceProperties instance,
                                       Clock clock,
-                                      @Value("${app.schedulers.enabled:true}") boolean schedulersEnabled) {
+                                      SchedulerProperties schedulers) {
+        this(outboxRepository, sender, selfProvider, instance.id(), clock, schedulers.enabled());
+    }
+
+    NotificationRelayScheduler(NotificationOutboxRepository outboxRepository,
+                               NotificationSender sender,
+                               ObjectProvider<NotificationRelayScheduler> selfProvider,
+                               String instanceId,
+                               Clock clock,
+                               boolean schedulersEnabled) {
         this.outboxRepository = outboxRepository;
         this.sender = sender;
         this.selfProvider = selfProvider;

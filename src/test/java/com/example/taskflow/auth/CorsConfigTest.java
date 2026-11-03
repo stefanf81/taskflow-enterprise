@@ -13,7 +13,7 @@ class CorsConfigTest {
 
     @Test
     void testCorsConfigurationSourceWithSpecificOrigin() {
-        CorsConfig config = new CorsConfig("http://localhost:4200,http://127.0.0.1:4200");
+        CorsConfig config = new CorsConfig(new CorsProperties("http://localhost:4200,http://127.0.0.1:4200"));
         CorsConfigurationSource source = config.corsConfigurationSource();
         CorsConfiguration corsConfiguration = source.getCorsConfiguration(new MockHttpServletRequest());
 
@@ -26,7 +26,7 @@ class CorsConfigTest {
 
     @Test
     void exposesNoForbiddenResponseHeader() {
-        CorsConfiguration corsConfiguration = new CorsConfig("http://localhost:4200").corsConfigurationSource()
+        CorsConfiguration corsConfiguration = new CorsConfig(new CorsProperties("http://localhost:4200")).corsConfigurationSource()
                 .getCorsConfiguration(new MockHttpServletRequest());
 
         assertNotNull(corsConfiguration);
@@ -36,7 +36,7 @@ class CorsConfigTest {
 
     @Test
     void wildcardOriginFailsFast() {
-        CorsConfig config = new CorsConfig("*");
+        CorsConfig config = new CorsConfig(new CorsProperties("*"));
         assertThrows(IllegalStateException.class, config::corsConfigurationSource);
     }
 }

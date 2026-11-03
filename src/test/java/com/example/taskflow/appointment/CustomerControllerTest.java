@@ -22,7 +22,10 @@ import static org.mockito.Mockito.*;
 class CustomerControllerTest {
 
     @Mock
-    private AppointmentService appointmentService;
+    private AppointmentQueryService queryService;
+
+    @Mock
+    private AppointmentLifecycleService lifecycleService;
 
     @Mock
     private Authentication authentication;
@@ -31,14 +34,14 @@ class CustomerControllerTest {
 
     @BeforeEach
     void setUp() {
-        customerController = new CustomerController(appointmentService);
+        customerController = new CustomerController(queryService, lifecycleService);
     }
 
     @Test
     void getMyAppointments_shouldReturnPage() {
         when(authentication.getName()).thenReturn("user@test.com");
         Page<AppointmentResponse> page = new PageImpl<>(Collections.emptyList());
-        when(appointmentService.getMyAppointments(eq("user@test.com"), eq(0), eq(10)))
+        when(queryService.getMyAppointments(eq("user@test.com"), eq(0), eq(10)))
                 .thenReturn(page);
 
         ResponseEntity<Page<AppointmentResponse>> result =
@@ -51,7 +54,7 @@ class CustomerControllerTest {
     @Test
     void cancelMyAppointment_shouldSucceed() {
         when(authentication.getName()).thenReturn("user@test.com");
-        doNothing().when(appointmentService).cancelMyAppointment("test-uuid-123", "user@test.com");
+        doNothing().when(lifecycleService).cancelMyAppointment("test-uuid-123", "user@test.com");
 
         ResponseEntity<Void> result = customerController.cancelMyAppointment("test-uuid-123", authentication);
 

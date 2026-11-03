@@ -22,10 +22,12 @@ import org.springframework.security.access.prepost.PreAuthorize;
 @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
 class CustomerController {
 
-    private final AppointmentService appointmentService;
+    private final AppointmentQueryService queryService;
+    private final AppointmentLifecycleService lifecycleService;
 
-    public CustomerController(AppointmentService appointmentService) {
-        this.appointmentService = appointmentService;
+    public CustomerController(AppointmentQueryService queryService, AppointmentLifecycleService lifecycleService) {
+        this.queryService = queryService;
+        this.lifecycleService = lifecycleService;
     }
 
     @GetMapping("/appointments")
@@ -42,7 +44,7 @@ class CustomerController {
         // no-store: the customer's own bookings must not stay in the device HTTP cache after logout
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .body(appointmentService.getMyAppointments(email, page, size));
+                .body(queryService.getMyAppointments(email, page, size));
     }
 
     @DeleteMapping("/appointments/{publicId}")
@@ -55,7 +57,7 @@ class CustomerController {
     })
     public ResponseEntity<Void> cancelMyAppointment(@Parameter(description = "Appointment public UUID") @PathVariable String publicId, Authentication authentication) {
         String email = authentication.getName();
-        appointmentService.cancelMyAppointment(publicId, email);
+        lifecycleService.cancelMyAppointment(publicId, email);
         return ResponseEntity.noContent().build();
     }
 }

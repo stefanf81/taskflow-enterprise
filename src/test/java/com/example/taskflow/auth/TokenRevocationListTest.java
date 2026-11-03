@@ -2,11 +2,25 @@ package com.example.taskflow.auth;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class TokenRevocationListTest {
+
+    @Test
+    void expiriesAreJudgedByTheInjectedTokenClock() {
+        Instant now = Instant.parse("2026-10-12T08:00:00Z");
+        TokenRevocationList list = new TokenRevocationList(null, null, Clock.fixed(now, ZoneOffset.UTC));
+
+        list.revoke("current", now.plusSeconds(60));
+        list.revoke("expired", now.minusSeconds(1));
+
+        assertTrue(list.isRevoked("current"));
+        assertFalse(list.isRevoked("expired"), "already expired by the token clock: nothing to deny");
+    }
 
     @Test
     void revokedTokenIsDeniedUntilItsOwnExpiry() {
@@ -55,7 +69,7 @@ class TokenRevocationListTest {
         list.revoke("jti-1", Instant.now().plusSeconds(60));
         list.revoke("expired", Instant.now().minusSeconds(1));
 
-        org.mockito.Mockito.verify(events).publishEvent(new com.example.taskflow.core.TokenRevokedEvent("jti-1"));
+        org.mockito.Mockito.verify(events).publishEvent(new com.example.taskflow.auth.TokenRevokedEvent("jti-1"));
         org.mockito.Mockito.verifyNoMoreInteractions(events);
     }
 }

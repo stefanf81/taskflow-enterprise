@@ -1,6 +1,5 @@
 package com.example.taskflow.auth;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
@@ -19,9 +18,8 @@ class CorsConfig {
 
     private final String allowedOrigins;
 
-    public CorsConfig(
-            @Value("${app.cors.allowed-origins:http://localhost:4200,http://127.0.0.1:4200}") String allowedOrigins) {
-        this.allowedOrigins = allowedOrigins;
+    public CorsConfig(CorsProperties properties) {
+        this.allowedOrigins = properties.allowedOrigins();
     }
 
     @Bean

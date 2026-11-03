@@ -31,6 +31,10 @@ class AppointmentModuleTest {
     @Autowired
     private AppointmentService appointments;
     @Autowired
+    private AppointmentBookingService booking;
+    @Autowired
+    private AppointmentLifecycleService lifecycle;
+    @Autowired
     private BarberService barbers;
     @Autowired
     private CatalogService catalog;
@@ -57,7 +61,7 @@ class AppointmentModuleTest {
     }
 
     private AppointmentResponse book(String email, LocalDate day, String time) {
-        return appointments.createAppointment(
+        return booking.createAppointment(
                 new AppointmentCreateRequest("Module Test", email, "555-0100", barberName, day, time, serviceName),
                 UUID.randomUUID().toString()).appointment();
     }
@@ -66,7 +70,7 @@ class AppointmentModuleTest {
     void approvingABookingPublishesASnapshotNotTheEntity(PublishedEvents events) {
         AppointmentResponse booked = book("module-approve@example.com", aWorkingDayInTwoWeeks(), "10:00");
 
-        appointments.updateAppointmentStatus(booked.id(), new AppointmentUpdateRequest("APPROVED"));
+        lifecycle.updateAppointmentStatus(booked.id(), new AppointmentUpdateRequest("APPROVED"));
 
         AppointmentDetails details = events.ofType(AppointmentStatusChangedEvent.class)
                 .matching(e -> booked.id().equals(e.getAppointment().id()))
@@ -74,7 +78,7 @@ class AppointmentModuleTest {
         assertEquals(AppointmentStatus.APPROVED, details.status());
         assertEquals("module-approve@example.com", details.customerEmail());
         assertEquals(serviceName, details.serviceType());
-        appointments.deleteAppointment(booked.id());
+        lifecycle.deleteAppointment(booked.id());
     }
 
     @Test
@@ -89,7 +93,7 @@ class AppointmentModuleTest {
     void cancellingPublishesTheCancellationWithWhoDidIt(PublishedEvents events) {
         AppointmentResponse booked = book("module-cancel@example.com", aWorkingDayInTwoWeeks(), "11:00");
 
-        appointments.publicCancelAppointment(booked.publicId(), "module-cancel@example.com");
+        lifecycle.publicCancelAppointment(booked.publicId(), "module-cancel@example.com");
 
         AppointmentCancelledEvent event = events.ofType(AppointmentCancelledEvent.class)
                 .matching(e -> booked.id().equals(e.appointment().id()))

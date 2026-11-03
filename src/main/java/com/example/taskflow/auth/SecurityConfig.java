@@ -68,21 +68,25 @@ class SecurityConfig {
     private final String jwtAudience;
     private final boolean cookieSecure;
 
+    /**
+     * The admin account comes from Spring Boot's own {@code spring.security.user.*} keys. Boot binds
+     * them already (with other defaults: user {@code user}, a random password), so they are read
+     * directly here instead of through a second properties class; the password has no default and a
+     * missing one fails the start.
+     */
     public SecurityConfig(
             @Value("${spring.security.user.name:admin}") String adminUsername,
             @Value("${spring.security.user.password}") String adminPassword,
-            @Value("${app.rsa.private-key:#{null}}") String privateKeyB64,
-             @Value("${app.rsa.public-key:#{null}}") String publicKeyB64,
-             @Value("${app.rsa.require-persistent-keys:false}") boolean requirePersistentKeys,
-            @Value("${app.jwt.issuer:taskflow}") String jwtIssuer,
-            @Value("${app.jwt.audience:taskflow-api}") String jwtAudience,
-            @Value("${app.cookie.secure:true}") boolean cookieSecure) {
+            RsaKeyProperties rsaKeys,
+            JwtProperties jwt,
+            CookieProperties cookie) {
         this.adminUsername = adminUsername;
         this.adminPassword = adminPassword;
-        this.jwtIssuer = jwtIssuer;
-        this.jwtAudience = jwtAudience;
-        this.cookieSecure = cookieSecure;
-        this.keyPair = loadOrGenerateRsaKeyPair(privateKeyB64, publicKeyB64, requirePersistentKeys);
+        this.jwtIssuer = jwt.issuer();
+        this.jwtAudience = jwt.audience();
+        this.cookieSecure = cookie.secure();
+        this.keyPair = loadOrGenerateRsaKeyPair(rsaKeys.privateKey(), rsaKeys.publicKey(),
+                rsaKeys.requirePersistentKeys());
         this.rsaKey = new RSAKey.Builder((RSAPublicKey) keyPair.getPublic())
                 .privateKey((RSAPrivateKey) keyPair.getPrivate())
                 .keyID(UUID.randomUUID().toString())

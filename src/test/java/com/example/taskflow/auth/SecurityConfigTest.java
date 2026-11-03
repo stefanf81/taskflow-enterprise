@@ -29,7 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SecurityConfigTest {
 
     private SecurityConfig createConfig(String admin, String pass, String privKey, String pubKey) {
-        return new SecurityConfig(admin, pass, privKey, pubKey, false, "taskflow", "taskflow-api", false);
+        return new SecurityConfig(admin, pass, new RsaKeyProperties(privKey, pubKey, false),
+                new JwtProperties("taskflow", "taskflow-api", 3600), new CookieProperties(false));
     }
 
     @Test
@@ -69,14 +70,15 @@ class SecurityConfigTest {
     @Test
     void productionRequiresPersistentKeys() {
         assertThrows(IllegalStateException.class, () -> new SecurityConfig(
-                "admin", "pass", null, null, true, "taskflow", "taskflow-api", false));
+                "admin", "pass", new RsaKeyProperties(null, null, true),
+                new JwtProperties("taskflow", "taskflow-api", 3600), new CookieProperties(false)));
     }
 
     @Test
     void productionRejectsInvalidPersistentKeys() {
         assertThrows(IllegalStateException.class, () -> new SecurityConfig(
-                "admin", "pass", "invalid-base64", "invalid-base64", true,
-                "taskflow", "taskflow-api", false));
+                "admin", "pass", new RsaKeyProperties("invalid-base64", "invalid-base64", true),
+                new JwtProperties("taskflow", "taskflow-api", 3600), new CookieProperties(false)));
     }
 
     @Test
@@ -193,16 +195,18 @@ class SecurityConfigTest {
 
     @Test
     void cookieSecureDefaultsToTrueInBothPlaces() throws Exception {
-        // SecurityConfig and AuthController must agree on the fail-safe default.
-        var securityConfigParam = SecurityConfig.class.getConstructors()[0].getParameters();
-        boolean found = false;
-        for (var p : securityConfigParam) {
+        // SecurityConfig and AuthController must agree on the fail-safe default: both read the one
+        // CookieProperties record (no @Value of their own), whose default is Secure.
+        assertTrue(java.util.List.of(SecurityConfig.class.getConstructors()[0].getParameterTypes())
+                .contains(CookieProperties.class));
+        assertTrue(java.util.List.of(AuthController.class.getConstructors()[0].getParameterTypes())
+                .contains(CookieProperties.class));
+        for (var p : SecurityConfig.class.getConstructors()[0].getParameters()) {
             var v = p.getAnnotation(org.springframework.beans.factory.annotation.Value.class);
-            if (v != null && v.value().startsWith("${app.cookie.secure")) {
-                assertEquals("${app.cookie.secure:true}", v.value());
-                found = true;
-            }
+            assertFalse(v != null && v.value().startsWith("${app.cookie.secure"), v == null ? "" : v.value());
         }
-        assertTrue(found);
+        assertTrue(new org.springframework.boot.context.properties.bind.Binder(
+                        new org.springframework.boot.context.properties.source.MapConfigurationPropertySource())
+                .bindOrCreate("app.cookie", CookieProperties.class).secure());
     }
 }

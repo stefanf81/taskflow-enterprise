@@ -1,6 +1,6 @@
 package com.example.taskflow.core;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -23,10 +23,11 @@ import java.time.ZoneId;
  * Tests can override the bean with a fixed clock.
  */
 @Configuration
+@EnableConfigurationProperties(ShopProperties.class)
 class ClockConfig {
 
     @Bean
-    public Clock shopClock(@Value("${app.shop.time-zone:UTC}") String timeZone) {
-        return Clock.system(ZoneId.of(timeZone));
+    public Clock shopClock(ShopProperties shop) {
+        return Clock.system(ZoneId.of(shop.timeZone()));
     }
 }

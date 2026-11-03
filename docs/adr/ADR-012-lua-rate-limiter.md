@@ -19,7 +19,7 @@ Redis is already provisioned for caching (ADR-004 / ADR-011), so the fix must be
 
 ## Decision
 
-Replace the two-step sequence with a single **Lua `EVAL`** executed atomically on Redis's single-threaded engine via `StringRedisTemplate.execute(DefaultRedisScript<Long>)` (`src/main/java/com/example/taskflow/core/RateLimiterConfig.java:38`):
+Replace the two-step sequence with a single **Lua `EVAL`** executed atomically on Redis's single-threaded engine via `StringRedisTemplate.execute(DefaultRedisScript<Long>)` (`src/main/java/com/example/taskflow/core/web/RateLimiterConfig.java:38`):
 
 ```lua
 local c = redis.call('incr', KEYS[1]);

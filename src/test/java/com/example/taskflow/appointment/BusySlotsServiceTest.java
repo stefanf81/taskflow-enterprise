@@ -215,7 +215,7 @@ class BusySlotsServiceTest {
         when(barberRepository.findAllByOrderByIdAsc()).thenThrow(new QueryTimeoutException("timeout"));
 
         assertThrows(QueryTimeoutException.class, () -> busySlotsService.getBusySlots(
-                AppointmentServiceImpl.NO_PREFERENCE_BARBER, TEST_DATE_STR));
+                AppointmentBookingService.NO_PREFERENCE_BARBER, TEST_DATE_STR));
     }
 
     // ── H3: "No Preference" sentinel tests ──────────────────────────────────
@@ -225,7 +225,7 @@ class BusySlotsServiceTest {
         when(barberRepository.findAllByOrderByIdAsc()).thenReturn(Collections.emptyList());
 
         assertEquals(BusySlotsService.ALL_SLOTS, busySlotsService.getBusySlots(
-                AppointmentServiceImpl.NO_PREFERENCE_BARBER, TEST_DATE_STR));
+                AppointmentBookingService.NO_PREFERENCE_BARBER, TEST_DATE_STR));
     }
 
     @Test
@@ -237,7 +237,7 @@ class BusySlotsServiceTest {
                 BusySlotsService.ALL_SLOTS.stream().map(t -> appointment(1, "Alex", t, 30)).toList());
 
         assertEquals(BusySlotsService.ALL_SLOTS, busySlotsService.getBusySlots(
-                AppointmentServiceImpl.NO_PREFERENCE_BARBER, TEST_DATE_STR));
+                AppointmentBookingService.NO_PREFERENCE_BARBER, TEST_DATE_STR));
     }
 
     @Test
@@ -253,7 +253,7 @@ class BusySlotsServiceTest {
                 appointment(3, "Sara", "10:00", 30)));
 
         assertEquals(List.of("10:00"), busySlotsService.getBusySlots(
-                AppointmentServiceImpl.NO_PREFERENCE_BARBER, TEST_DATE_STR));
+                AppointmentBookingService.NO_PREFERENCE_BARBER, TEST_DATE_STR));
     }
 
     @Test
@@ -263,7 +263,7 @@ class BusySlotsServiceTest {
         onTimeOff.add(1L);
 
         assertEquals(BusySlotsService.ALL_SLOTS, busySlotsService.getBusySlots(
-                AppointmentServiceImpl.NO_PREFERENCE_BARBER, TEST_DATE_STR));
+                AppointmentBookingService.NO_PREFERENCE_BARBER, TEST_DATE_STR));
     }
 
     @Test
@@ -275,7 +275,7 @@ class BusySlotsServiceTest {
 
         // Window is [10:00, 14:00): only 10:00, 11:00 and 13:00 are offerable.
         assertEquals(List.of("09:00", "14:00", "15:00", "16:00"), busySlotsService.getBusySlots(
-                AppointmentServiceImpl.NO_PREFERENCE_BARBER, TEST_DATE_STR));
+                AppointmentBookingService.NO_PREFERENCE_BARBER, TEST_DATE_STR));
     }
 
     // ── findConflict: the single rule set behind create / approve / no-preference ───────────

@@ -342,7 +342,7 @@ class AppointmentEventStreamServiceTest {
         service.subscribe("admin", START.plusSeconds(3600), "jti-logged-out");
         service.subscribe("admin", START.plusSeconds(3600), "jti-other-tab");
 
-        service.onTokenRevoked(new com.example.taskflow.core.TokenRevokedEvent("jti-logged-out"));
+        service.onTokenRevoked(new com.example.taskflow.auth.TokenRevokedEvent("jti-logged-out"));
 
         assertTrue(revokedStream.completed, "a logged-out token must not keep receiving events");
         assertFalse(otherStream.completed);

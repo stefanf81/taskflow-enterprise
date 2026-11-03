@@ -35,13 +35,18 @@ import org.springframework.security.access.prepost.PreAuthorize;
 @Validated
 class AppointmentController {
 
-    private final AppointmentService appointmentService;
+    private final AppointmentQueryService queryService;
+    private final AppointmentBookingService bookingService;
+    private final AppointmentLifecycleService lifecycleService;
     private final AppointmentEventStreamService eventStreamService;
     private final Clock clock;
 
-    public AppointmentController(AppointmentService appointmentService, AppointmentEventStreamService eventStreamService,
-                                 Clock clock) {
-        this.appointmentService = appointmentService;
+    public AppointmentController(AppointmentQueryService queryService, AppointmentBookingService bookingService,
+                                 AppointmentLifecycleService lifecycleService,
+                                 AppointmentEventStreamService eventStreamService, Clock clock) {
+        this.queryService = queryService;
+        this.bookingService = bookingService;
+        this.lifecycleService = lifecycleService;
         this.eventStreamService = eventStreamService;
         this.clock = clock;
     }
@@ -63,7 +68,7 @@ class AppointmentController {
             @Parameter(description = "Page size")
             @RequestParam(defaultValue = "10") @Max(100) int size) {
 
-        AppointmentDashboardResponse response = appointmentService.getAllAppointments(status, search, page, size);
+        AppointmentDashboardResponse response = queryService.getAllAppointments(status, search, page, size);
         // Customer names, e-mails and phones: no-store keeps them out of the browser and
         // device HTTP caches, where they would outlive the session.
         return ResponseEntity.ok()
@@ -98,7 +103,7 @@ class AppointmentController {
             @Parameter(description = "The database ID of the appointment")
             @PathVariable Long id) {
 
-        AppointmentResponse appointment = appointmentService.getAppointmentById(id);
+        AppointmentResponse appointment = queryService.getAppointmentById(id);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(appointment);
@@ -135,7 +140,7 @@ class AppointmentController {
             @Size(max = 100, message = "Service type must not exceed 100 characters")
             @RequestParam(required = false) String serviceType) {
 
-        java.util.List<String> busySlots = appointmentService.getBusySlots(barberName, bookingDate, serviceType);
+        java.util.List<String> busySlots = bookingService.getBusySlots(barberName, bookingDate, serviceType);
         // Revalidated on every request: a max-age let the browser or the app's HTTP cache answer
         // the refetch that follows a booking, so the slot just taken still looked free. The ETag
         // keeps an unchanged list at a 304.
@@ -155,7 +160,7 @@ class AppointmentController {
             @Parameter(description = "The public UUID of the appointment")
             @PathVariable String publicId,
             @Valid @RequestBody CancelRequest request) {
-        appointmentService.publicCancelAppointment(publicId, request.email());
+        lifecycleService.publicCancelAppointment(publicId, request.email());
         return ResponseEntity.noContent().build();
     }
 
@@ -173,7 +178,7 @@ class AppointmentController {
             String idempotencyKey,
             @Valid @RequestBody AppointmentCreateRequest request) {
 
-        AppointmentCreationResult result = appointmentService.createAppointment(request, idempotencyKey);
+        AppointmentCreationResult result = bookingService.createAppointment(request, idempotencyKey);
         HttpStatus status = result.replayed() ? HttpStatus.OK : HttpStatus.CREATED;
         return ResponseEntity.status(status).body(result.appointment());
     }
@@ -192,7 +197,7 @@ class AppointmentController {
             @PathVariable Long id,
             @Valid @RequestBody AppointmentUpdateRequest request) {
         
-        AppointmentResponse updatedAppointment = appointmentService.updateAppointmentStatus(id, request);
+        AppointmentResponse updatedAppointment = lifecycleService.updateAppointmentStatus(id, request);
         return ResponseEntity.ok(updatedAppointment);
     }
 
@@ -208,7 +213,7 @@ class AppointmentController {
             @Parameter(description = "The database ID of the appointment to delete")
             @PathVariable Long id) {
         
-        appointmentService.deleteAppointment(id);
+        lifecycleService.deleteAppointment(id);
         return ResponseEntity.noContent().build();
     }
 }

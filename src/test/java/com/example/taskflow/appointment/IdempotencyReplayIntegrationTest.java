@@ -169,7 +169,7 @@ class IdempotencyReplayIntegrationTest {
     @Test
     void sentinelReplay_returnsOriginalResolvedBarber() throws Exception {
         Map<String, Object> request = request("sentinel@example.com",
-                AppointmentServiceImpl.NO_PREFERENCE_BARBER, "10:00");
+                AppointmentBookingService.NO_PREFERENCE_BARBER, "10:00");
         String created = create(request, "sentinel-key");
         String resolvedBarber = objectMapper.readTree(created).get("barberName").asText();
 
@@ -180,7 +180,7 @@ class IdempotencyReplayIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id", is(objectMapper.readTree(created).get("id").asInt())))
                 .andExpect(jsonPath("$.barberName", is(resolvedBarber)))
-                .andExpect(jsonPath("$.barberName", not(AppointmentServiceImpl.NO_PREFERENCE_BARBER)));
+                .andExpect(jsonPath("$.barberName", not(AppointmentBookingService.NO_PREFERENCE_BARBER)));
     }
 
     @Test

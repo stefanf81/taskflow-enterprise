@@ -4,7 +4,7 @@
 
 ## Context
 
-`AppointmentServiceImpl.createAppointment()` (BENCHMARKS.md §41) performed:
+`AppointmentBookingService.createAppointment()` (formerly in `AppointmentServiceImpl`) (BENCHMARKS.md §41) performed:
 
 1. `BusySlotsService.getBusySlots(barber, date)` — reads `findDistinctBookingTimes(barber, date, DENIED)` (43 µs, `@Cacheable("busySlots", sync=true)` 2m) and checks the requested `bookingTime` against the returned list.
 2. `appointmentRepository.save()` — inserts `status=PENDING`.
@@ -46,7 +46,7 @@ Introduce a **partial unique index** that enforces uniqueness only for active st
      ```
      For `DENIED` rows the marker is `NULL`; SQL `NULL <> NULL` semantics mean `UNIQUE(barber, date, time, NULL)` never collides — multiple `DENIED` rows on the same slot coexist. The column is `GENERATED`, so `status` changes (e.g., `PENDING→DENIED` on cancel) automatically update the marker.
 
-**Application second guard:** `AppointmentServiceImpl.java:230` catches `DataIntegrityViolationException` with SQL state `23505` (`unique_violation`) and maps it to `IllegalArgumentException("Slot already booked … just booked")`. The `BusySlotsService` 43 µs cached check remains the cheap first guard; the partial index is the serialization-guaranteed second guard.
+**Application second guard:** `AppointmentBookingService` catches `DataIntegrityViolationException` with SQL state `23505` (`unique_violation`) and maps it to `IllegalArgumentException("Slot already booked … just booked")`. The `BusySlotsService` 43 µs cached check remains the cheap first guard; the partial index is the serialization-guaranteed second guard.
 
 `BusySlotsService.getBusySlots()` (`@Cacheable("busySlots", key="#barberName+'-'+#bookingDate", sync=true)` TTL 2m, `BusySlotsService.java:53`) reads `appointmentRepository.findDistinctBookingTimes(barber, date, DENIED)` — only active statuses are returned.
 

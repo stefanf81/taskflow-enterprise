@@ -1,6 +1,6 @@
 package com.example.taskflow.auth;
 
-import com.example.taskflow.core.RedisBackoff;
+import com.example.taskflow.core.redis.RedisBackoff;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;

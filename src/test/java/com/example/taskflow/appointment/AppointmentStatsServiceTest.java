@@ -56,7 +56,7 @@ class AppointmentStatsServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AppointmentStatsService(cacheManager, CLOCK, catalogService);
+        service = new AppointmentStatsService(cacheManager, CLOCK, catalogService, appointmentRepository);
     }
 
     @Test
@@ -67,7 +67,7 @@ class AppointmentStatsServiceTest {
 
         verify(busySlotsCache).evictIfPresent("Alex the Barber-2026-05-16");
         verify(busySlotsCache).evictIfPresent(
-                AppointmentServiceImpl.NO_PREFERENCE_BARBER + "-2026-05-16");
+                AppointmentBookingService.NO_PREFERENCE_BARBER + "-2026-05-16");
         verify(busySlotsCache, never()).evict(any());
     }
 
@@ -79,7 +79,7 @@ class AppointmentStatsServiceTest {
 
         service.clearAvailabilityCache("Alex the Barber", LocalDate.of(2026, 5, 16));
 
-        String sentinel = AppointmentServiceImpl.NO_PREFERENCE_BARBER;
+        String sentinel = AppointmentBookingService.NO_PREFERENCE_BARBER;
         for (String barber : List.of("Alex the Barber", sentinel)) {
             verify(busySlotsCache).evictIfPresent(barber + "-2026-05-16");
             verify(busySlotsCache).evictIfPresent(barber + "-2026-05-16-90");
@@ -98,7 +98,7 @@ class AppointmentStatsServiceTest {
         assertDoesNotThrow(() -> service.clearAvailabilityCache("Alex the Barber", LocalDate.of(2026, 5, 16)));
 
         verify(busySlotsCache).evictIfPresent("Alex the Barber-2026-05-16");
-        verify(busySlotsCache).evictIfPresent(AppointmentServiceImpl.NO_PREFERENCE_BARBER + "-2026-05-16");
+        verify(busySlotsCache).evictIfPresent(AppointmentBookingService.NO_PREFERENCE_BARBER + "-2026-05-16");
     }
 
     private static ServiceItemResponse service(String name, int minutes) {
@@ -131,7 +131,7 @@ class AppointmentStatsServiceTest {
         when(cacheManager.getCache(AppointmentStatsService.STATS_CACHE)).thenReturn(statsCache);
         when(statsCache.get(eq(AppointmentStatsService.TOTAL_COUNT_KEY), any(Callable.class))).thenReturn(42L);
 
-        assertEquals(42L, service.getTotalCountCached(appointmentRepository));
+        assertEquals(42L, service.getTotalCountCached());
         verify(appointmentRepository, never()).count();
     }
 
@@ -144,8 +144,8 @@ class AppointmentStatsServiceTest {
         when(appointmentRepository.getAppointmentStats(LocalDate.of(2026, 10, 12))).thenReturn(stats);
         when(appointmentRepository.count()).thenReturn(7L);
 
-        assertSame(stats, service.getStatsCached(appointmentRepository));
-        assertEquals(7L, service.getTotalCountCached(appointmentRepository));
+        assertSame(stats, service.getStatsCached());
+        assertEquals(7L, service.getTotalCountCached());
     }
 
     @Test
@@ -156,7 +156,7 @@ class AppointmentStatsServiceTest {
         when(statsCache.get(any(), any(Callable.class))).thenThrow(failure);
 
         assertSame(failure, assertThrows(Cache.ValueRetrievalException.class,
-                () -> service.getStatsCached(appointmentRepository)));
+                () -> service.getStatsCached()));
         verify(appointmentRepository, never()).getAppointmentStats(any());
     }
 

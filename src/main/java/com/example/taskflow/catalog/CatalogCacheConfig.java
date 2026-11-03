@@ -1,6 +1,6 @@
 package com.example.taskflow.catalog;
 
-import com.example.taskflow.core.CacheConfig;
+import com.example.taskflow.core.cache.CacheConfig;
 import org.springframework.boot.cache.autoconfigure.RedisCacheManagerBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

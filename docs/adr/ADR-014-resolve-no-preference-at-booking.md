@@ -4,7 +4,7 @@
 
 ## Context
 
-Both web (`frontend/src/app/app.ts`) and mobile (`mobile/src/features/booking/BookingScreen.tsx`) offer `No Preference (First Available)` as a barber choice. Historically `AppointmentServiceImpl.createAppointment()` persisted that sentinel string verbatim with `barber_id = NULL` and skipped schedule/time-off validation for it.
+Both web (`frontend/src/app/app.ts`) and mobile (`mobile/src/features/booking/BookingScreen.tsx`) offer `No Preference (First Available)` as a barber choice. Historically `AppointmentBookingService.createAppointment()` (formerly in `AppointmentServiceImpl`) persisted that sentinel string verbatim with `barber_id = NULL` and skipped schedule/time-off validation for it.
 
 That broke the anti-double-booking guarantee established by ADR-013:
 
@@ -18,7 +18,7 @@ Result: a sentinel booking at 10:00 and a specific booking for `Alex` at 10:00 c
 Treat `No Preference (First Available)` as an **input-only sentinel**. Resolve it inside the booking transaction to a concrete catalog barber before any validation or persistence:
 
 1. `BusySlotsService.findFirstAvailableBarber(date, time)` (uncached, because assignment must be transaction-fresh) iterates barbers in deterministic id order and returns the first who is scheduled that weekday, whose working window contains the requested time, is not on time off, and has no active booking at that slot.
-2. `AppointmentServiceImpl.resolveBarber()` either resolves the sentinel or looks up the concrete name (unknown names remain a 400).
+2. `AppointmentBookingService.resolveBarber()` either resolves the sentinel or looks up the concrete name (unknown names remain a 400).
 3. The resolved `Barber` entity flows through schedule validation, the in-transaction time-off recheck, the busy-slot check, `barberName`, and the `barber` FK. The sentinel is never persisted.
 4. If no barber can serve the slot the request is rejected with `400 "No barber is available…"` instead of persisting an unprotected row.
 5. Flyway `V26__assign_sentinel_appointments.java` repairs legacy rows: each active sentinel row (in booking order) is assigned the first eligible barber; rows no barber can serve are marked `DENIED` — the same conflict semantics V25 uses for duplicates.

@@ -4,7 +4,6 @@ import com.example.taskflow.core.FixedWindowCounter;
 import com.example.taskflow.core.SharedStateStore;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -48,11 +47,8 @@ class LoginAttemptLimiter {
     }
 
     @Autowired
-    public LoginAttemptLimiter(
-            @Value("${app.rate-limit.login-max-failures:10}") int maxFailures,
-            @Value("${app.rate-limit.login-failure-window-seconds:300}") long windowSeconds,
-            ObjectProvider<RedisLoginFailureCounter> shared) {
-        this(maxFailures, windowSeconds, shared.getIfAvailable());
+    public LoginAttemptLimiter(LoginThrottleProperties properties, ObjectProvider<RedisLoginFailureCounter> shared) {
+        this(properties.loginMaxFailures(), properties.loginFailureWindowSeconds(), shared.getIfAvailable());
     }
 
     LoginAttemptLimiter(int maxFailures, long windowSeconds, RedisLoginFailureCounter shared) {

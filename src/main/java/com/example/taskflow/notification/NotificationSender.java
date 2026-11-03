@@ -5,7 +5,6 @@ import com.example.taskflow.core.LogSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,9 +53,12 @@ class NotificationSender {
      *        genuine customer whose address starts with "invalid" would never be notified.
      */
     @Autowired
-    public NotificationSender(NotificationOutboxRepository outboxRepository,
-                              @Value("${app.notification.simulate-failures:false}") boolean simulateFailures,
+    public NotificationSender(NotificationOutboxRepository outboxRepository, NotificationProperties properties,
                               Clock clock) {
+        this(outboxRepository, properties.simulateFailures(), clock);
+    }
+
+    NotificationSender(NotificationOutboxRepository outboxRepository, boolean simulateFailures, Clock clock) {
         this.outboxRepository = outboxRepository;
         this.simulateFailures = simulateFailures;
         this.clock = clock;

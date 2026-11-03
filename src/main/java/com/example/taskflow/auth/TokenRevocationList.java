@@ -1,11 +1,11 @@
 package com.example.taskflow.auth;
 
-import com.example.taskflow.core.TokenRevokedEvent;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -54,6 +54,8 @@ class TokenRevocationList {
     private final ConcurrentHashMap<String, Instant> pendingSync = new ConcurrentHashMap<>();
     private final ApplicationEventPublisher events;
     private final RedisTokenRevocationStore shared;
+    /** Token expiries are judged by {@link TokenProvider#TOKEN_CLOCK}, like the decoder judges them. */
+    private final Clock clock;
 
     @Autowired
     public TokenRevocationList(ApplicationEventPublisher events,
@@ -62,8 +64,13 @@ class TokenRevocationList {
     }
 
     TokenRevocationList(ApplicationEventPublisher events, RedisTokenRevocationStore shared) {
+        this(events, shared, TokenProvider.TOKEN_CLOCK);
+    }
+
+    TokenRevocationList(ApplicationEventPublisher events, RedisTokenRevocationStore shared, Clock clock) {
         this.events = events;
         this.shared = shared;
+        this.clock = clock;
     }
 
     TokenRevocationList(ApplicationEventPublisher events) {
@@ -78,7 +85,7 @@ class TokenRevocationList {
         if (jti == null || jti.isBlank()) {
             return;
         }
-        Instant now = Instant.now();
+        Instant now = Instant.now(clock);
         if (expiresAt == null || !expiresAt.isAfter(now)) {
             return; // already expired: nothing to deny
         }
@@ -104,7 +111,7 @@ class TokenRevocationList {
         if (jti == null) {
             return false;
         }
-        Instant now = Instant.now();
+        Instant now = Instant.now(clock);
         Instant expiry = revoked.get(jti);
         if (expiry != null) {
             if (expiry.isAfter(now)) {
@@ -145,7 +152,7 @@ class TokenRevocationList {
         if (remote == null) {
             return;
         }
-        Instant now = Instant.now();
+        Instant now = Instant.now(clock);
         if (!remote.expiresAt().isAfter(now)) {
             return;
         }

@@ -270,14 +270,14 @@ class BookingRulesIntegrationTest {
     void noPreferenceNeverAssignsABarberWhoIsAlreadyBooked() throws Exception {
         book("named@example.com", TUE, "10:00");
 
-        ResultActions result = postBooking(request("any@example.com", AppointmentServiceImpl.NO_PREFERENCE_BARBER, TUE, "10:00", CUT));
+        ResultActions result = postBooking(request("any@example.com", AppointmentBookingService.NO_PREFERENCE_BARBER, TUE, "10:00", CUT));
         String assigned = result.andReturn().getResponse().getStatus() == 201
                 ? objectMapper.readTree(result.andReturn().getResponse().getContentAsString()).get("barberName").asText()
                 : null;
         if (assigned != null) {
             assertTrue(!BARBER.equals(assigned), "the busy barber must not be assigned, got " + assigned);
         }
-        postBooking(request("any@example.com", AppointmentServiceImpl.NO_PREFERENCE_BARBER, TUE, "10:30", CUT))
+        postBooking(request("any@example.com", AppointmentBookingService.NO_PREFERENCE_BARBER, TUE, "10:30", CUT))
                 .andExpect(status().isBadRequest());
     }
 
@@ -342,7 +342,7 @@ class BookingRulesIntegrationTest {
 
     @Test
     void sentinelBarberRowsCannotBeApproved() throws Exception {
-        Appointment legacy = new Appointment("Legacy", "legacy@example.com", "555", AppointmentServiceImpl.NO_PREFERENCE_BARBER,
+        Appointment legacy = new Appointment("Legacy", "legacy@example.com", "555", AppointmentBookingService.NO_PREFERENCE_BARBER,
                 TUE, "10:00", CUT);
         legacy.setStatus(AppointmentStatus.DENIED);
         legacy = appointmentRepository.save(legacy);
@@ -771,10 +771,23 @@ class BookingRulesIntegrationTest {
 
     // ── per-email cap (code-review finding 8) ────────────────────────────────
 
-    @Autowired private AppointmentService appointmentService;
+    @Autowired private AppointmentBookingService bookingService;
 
     private void seedActive(String email, LocalDate date, String time) {
         appointmentRepository.save(new Appointment("Cap Customer", email, "555", BARBER, date, time, CUT));
+    }
+
+    /** created_at/updated_at come from the injected Clock (EntityTimestampListener), not the wall clock. */
+    @Test
+    void auditTimestampsComeFromTheInjectedClock() {
+        AppointmentCreationResult created = bookingService.createAppointment(new AppointmentCreateRequest(
+                "Audit Customer", "audit@example.com", "555", BARBER, TUE, "11:00", CUT), null);
+
+        java.time.LocalDateTime expected = java.time.LocalDateTime.ofInstant(NOW, java.time.ZoneId.systemDefault());
+        Appointment row = appointmentRepository.findById(created.appointment().id()).orElseThrow();
+        assertEquals(expected, row.getCreatedAt());
+        assertEquals(expected, row.getUpdatedAt());
+        assertEquals(expected, created.appointment().createdAt());
     }
 
     @Test
@@ -809,7 +822,7 @@ class BookingRulesIntegrationTest {
                 results.add(pool.submit(() -> {
                     start.await();
                     try {
-                        appointmentService.createAppointment(new AppointmentCreateRequest(
+                        bookingService.createAppointment(new AppointmentCreateRequest(
                                 "Cap Customer", email, "555", BARBER, TUE, slot, CUT), null);
                         return true;
                     } catch (IllegalArgumentException rejected) {

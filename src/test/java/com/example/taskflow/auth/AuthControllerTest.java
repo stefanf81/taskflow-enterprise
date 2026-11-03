@@ -51,7 +51,7 @@ class AuthControllerTest {
         loginAttemptLimiter = new LoginAttemptLimiter(3, 300);
         tokenRevocationList = new TokenRevocationList();
         authController = new AuthController(authenticationManager, tokenProvider, userRepository,
-                passwordEncoder, loginAttemptLimiter, tokenRevocationList, false);
+                passwordEncoder, loginAttemptLimiter, tokenRevocationList, new CookieProperties(false));
     }
 
     @Test

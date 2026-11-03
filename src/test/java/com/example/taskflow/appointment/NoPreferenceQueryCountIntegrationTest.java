@@ -84,7 +84,7 @@ class NoPreferenceQueryCountIntegrationTest {
      */
     private void computeLongSlots() {
         cacheManager.getCache(AppointmentStatsService.BUSY_SLOTS_CACHE).clear();
-        busySlotsService.getBusySlots(AppointmentServiceImpl.NO_PREFERENCE_BARBER, MONDAY.toString(), 120);
+        busySlotsService.getBusySlots(AppointmentBookingService.NO_PREFERENCE_BARBER, MONDAY.toString(), 120);
     }
 
     private long statementsDuring(Runnable action) {

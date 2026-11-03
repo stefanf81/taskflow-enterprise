@@ -1,10 +1,10 @@
 package com.example.taskflow.notification;
+import com.example.taskflow.core.SchedulerProperties;
 
 import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,15 +34,20 @@ class NotificationRetentionScheduler {
     @Autowired
     public NotificationRetentionScheduler(NotificationOutboxRepository outboxRepository,
                                           Clock clock,
-                                          @Value("${app.notification.retention-days:30}") int retentionDays,
-                                          @Value("${app.schedulers.enabled:true}") boolean schedulersEnabled) {
+                                          NotificationProperties properties,
+                                          SchedulerProperties schedulers) {
+        this(outboxRepository, clock, properties.retentionDays(), schedulers.enabled());
+    }
+
+    NotificationRetentionScheduler(NotificationOutboxRepository outboxRepository, Clock clock,
+                                   int retentionDays, boolean schedulersEnabled) {
         this.outboxRepository = outboxRepository;
         this.clock = clock;
         this.retentionDays = retentionDays;
         this.schedulersEnabled = schedulersEnabled;
     }
 
-    @Scheduled(cron = "${app.notification.retention-cron:0 30 3 * * *}")
+    @Scheduled(cron = "${app.notification.retention-cron:" + NotificationProperties.DEFAULT_RETENTION_CRON + "}")
     public void scheduledPurge() {
         if (schedulersEnabled) {
             purgeOldSent();

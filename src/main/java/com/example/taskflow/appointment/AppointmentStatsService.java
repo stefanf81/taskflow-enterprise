@@ -16,9 +16,8 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 /**
- * Dedicated service for appointment statistics and availability caching.
- * Extracted from {@link AppointmentServiceImpl} to reduce its dependency count
- * and keep caching concerns isolated.
+ * Dedicated service for appointment statistics and availability caching, kept apart from the
+ * services that read and write appointments so the caching concerns stay isolated.
  *
  * <p><b>Eviction semantics:</b> cache eviction must be applied immediately and
  * not deferred. The production Redis cache uses Boot's default non-locking
@@ -41,14 +40,17 @@ class AppointmentStatsService {
     private final CacheManager cacheManager;
     private final Clock clock;
     private final CatalogService catalogService;
+    private final AppointmentRepository appointmentRepository;
 
-    public AppointmentStatsService(CacheManager cacheManager, Clock clock, CatalogService catalogService) {
+    AppointmentStatsService(CacheManager cacheManager, Clock clock, CatalogService catalogService,
+                            AppointmentRepository appointmentRepository) {
         this.cacheManager = cacheManager;
         this.clock = clock;
         this.catalogService = catalogService;
+        this.appointmentRepository = appointmentRepository;
     }
 
-    public AppointmentStats getStatsCached(AppointmentRepository appointmentRepository) {
+    public AppointmentStats getStatsCached() {
         LocalDate today = LocalDate.now(clock);
         return cachedOrDirect(today, () -> appointmentRepository.getAppointmentStats(today));
     }
@@ -58,7 +60,7 @@ class AppointmentStatsService {
      * whole table on every dashboard request was nearly all of that request's database time; the
      * count changes only with a booking, which evicts it together with the stats.
      */
-    public long getTotalCountCached(AppointmentRepository appointmentRepository) {
+    public long getTotalCountCached() {
         return cachedOrDirect(TOTAL_COUNT_KEY, appointmentRepository::count);
     }
 
@@ -108,7 +110,7 @@ class AppointmentStatsService {
         }
         List<Integer> longDurations = longServiceDurations();
         evictAvailability(cache, barberName + "-" + bookingDate, longDurations);
-        evictAvailability(cache, AppointmentServiceImpl.NO_PREFERENCE_BARBER + "-" + bookingDate, longDurations);
+        evictAvailability(cache, AppointmentBookingService.NO_PREFERENCE_BARBER + "-" + bookingDate, longDurations);
     }
 
     private static void evictAvailability(Cache cache, String key, List<Integer> longDurations) {

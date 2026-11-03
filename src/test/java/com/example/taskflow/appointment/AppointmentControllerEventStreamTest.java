@@ -21,9 +21,12 @@ import static org.mockito.Mockito.when;
 /** BKG-8: the controller hands the access token's expiry to the SSE service. */
 class AppointmentControllerEventStreamTest {
 
-    private final AppointmentService appointmentService = mock(AppointmentService.class);
+    private final AppointmentQueryService queryService = mock(AppointmentQueryService.class);
+    private final AppointmentBookingService bookingService = mock(AppointmentBookingService.class);
+    private final AppointmentLifecycleService lifecycleService = mock(AppointmentLifecycleService.class);
     private final AppointmentEventStreamService streams = mock(AppointmentEventStreamService.class);
-    private final AppointmentController controller = new AppointmentController(appointmentService, streams, java.time.Clock.systemUTC());
+    private final AppointmentController controller = new AppointmentController(queryService, bookingService,
+            lifecycleService, streams, java.time.Clock.systemUTC());
 
     @Test
     void jwtPrincipalPassesItsExpiryAndIdToTheStream() {
@@ -55,8 +58,8 @@ class AppointmentControllerEventStreamTest {
 
     @Test
     void shopInfoReportsTheClockZoneAndIsPubliclyCacheable() {
-        AppointmentController inNewYork = new AppointmentController(appointmentService, streams,
-                java.time.Clock.system(java.time.ZoneId.of("America/New_York")));
+        AppointmentController inNewYork = new AppointmentController(queryService, bookingService, lifecycleService,
+                streams, java.time.Clock.system(java.time.ZoneId.of("America/New_York")));
 
         var response = inNewYork.getShopInfo();
 

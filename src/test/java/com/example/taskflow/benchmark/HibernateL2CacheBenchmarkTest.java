@@ -74,7 +74,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  *
  * @see Barber
  * @see ServiceItem
- * @see com.example.taskflow.core.CacheConfig
+ * @see com.example.taskflow.core.cache.CacheConfig
  */
 @Tag("benchmark")
 @SpringBootTest(properties = {

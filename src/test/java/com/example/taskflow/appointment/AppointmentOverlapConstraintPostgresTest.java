@@ -86,7 +86,8 @@ class AppointmentOverlapConstraintPostgresTest {
         registry.add("spring.jpa.database-platform", () -> "org.hibernate.dialect.PostgreSQLDialect");
     }
 
-    @Autowired private AppointmentService appointmentService;
+    @Autowired private AppointmentBookingService bookingService;
+    @Autowired private AppointmentLifecycleService lifecycleService;
     @Autowired private AppointmentRepository appointmentRepository;
     @Autowired private BarberRepository barberRepository;
     @Autowired private BarberScheduleRepository barberScheduleRepository;
@@ -144,7 +145,7 @@ class AppointmentOverlapConstraintPostgresTest {
         assertTrue(definition.startsWith("EXCLUDE USING gist (barber_name WITH =, tsrange("), definition);
         assertTrue(definition.contains("WHERE"), definition);
 
-        AppointmentResponse created = appointmentService.createAppointment(
+        AppointmentResponse created = bookingService.createAppointment(
                 request("stored@example.com", date, "10:00", LONG), null).appointment();
         assertEquals(LocalTime.of(11, 30),
                 appointmentRepository.findById(created.id()).orElseThrow().getBookingEndTime());
@@ -218,7 +219,7 @@ class AppointmentOverlapConstraintPostgresTest {
                 futures.add(pool.submit(() -> {
                     ready.countDown();
                     start.await();
-                    return appointmentService.createAppointment(request, null);
+                    return bookingService.createAppointment(request, null);
                 }));
             }
             assertTrue(ready.await(10, TimeUnit.SECONDS));
@@ -246,29 +247,29 @@ class AppointmentOverlapConstraintPostgresTest {
     /** The in-transaction check is bypassed (as if it ran before the other booking committed): the constraint decides. */
     @Test
     void anOverlapThatSlipsPastTheCheckIsRejectedByTheConstraintAsASlotCollision() {
-        appointmentService.createAppointment(request("first@example.com", date, "10:00", LONG), null);
+        bookingService.createAppointment(request("first@example.com", date, "10:00", LONG), null);
         doReturn(Optional.empty()).when(busySlotsService)
                 .findConflict(any(), eq(date), eq(LocalTime.of(11, 0)), anyInt(), any());
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> appointmentService.createAppointment(request("second@example.com", date, "11:00", CUT), null));
+                () -> bookingService.createAppointment(request("second@example.com", date, "11:00", CUT), null));
         assertTrue(ex.getMessage().contains("just booked"), ex.getMessage());
         assertEquals(1, appointmentRepository.findActiveForBarberOnDate(BARBER, date).size());
     }
 
     @Test
     void reApprovingADeniedBookingIntoAnOverlapIsAConflict() {
-        long denied = appointmentService.createAppointment(
+        long denied = bookingService.createAppointment(
                 request("denied@example.com", date, "10:00", LONG), null).appointment().id();
-        appointmentService.updateAppointmentStatus(denied, new AppointmentUpdateRequest("DENIED"));
+        lifecycleService.updateAppointmentStatus(denied, new AppointmentUpdateRequest("DENIED"));
         // the slot is free again, so 11:00 can be booked
-        appointmentService.createAppointment(request("taken@example.com", date, "11:00", CUT), null);
+        bookingService.createAppointment(request("taken@example.com", date, "11:00", CUT), null);
 
         // the re-check would refuse it too; bypass it to prove the database refuses the overlap on its own
         doReturn(Optional.empty()).when(busySlotsService)
                 .findConflict(any(), eq(date), eq(LocalTime.of(10, 0)), anyInt(), eq(denied));
         ConflictException ex = assertThrows(ConflictException.class,
-                () -> appointmentService.updateAppointmentStatus(denied, new AppointmentUpdateRequest("APPROVED")));
+                () -> lifecycleService.updateAppointmentStatus(denied, new AppointmentUpdateRequest("APPROVED")));
         assertTrue(ex.getMessage().contains("already booked"), ex.getMessage());
         assertEquals(AppointmentStatus.DENIED, appointmentRepository.findById(denied).orElseThrow().getStatusEnum());
     }

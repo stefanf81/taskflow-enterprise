@@ -1,4 +1,5 @@
 package com.example.taskflow.notification;
+import com.example.taskflow.core.SchedulerProperties;
 import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 
 import com.example.taskflow.appointment.AppointmentDetails;
@@ -8,7 +9,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,7 +34,15 @@ class AppointmentReminderScheduler {
                                         NotificationOutboxRepository notificationOutboxRepository,
                                         ObjectProvider<AppointmentReminderScheduler> selfProvider,
                                         Clock clock,
-                                        @Value("${app.schedulers.enabled:true}") boolean schedulersEnabled) {
+                                        SchedulerProperties schedulers) {
+        this(appointmentService, notificationOutboxRepository, selfProvider, clock, schedulers.enabled());
+    }
+
+    AppointmentReminderScheduler(AppointmentService appointmentService,
+                                 NotificationOutboxRepository notificationOutboxRepository,
+                                 ObjectProvider<AppointmentReminderScheduler> selfProvider,
+                                 Clock clock,
+                                 boolean schedulersEnabled) {
         this.appointmentService = appointmentService;
         this.notificationOutboxRepository = notificationOutboxRepository;
         this.selfProvider = selfProvider;

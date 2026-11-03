@@ -1,11 +1,14 @@
 package com.example.taskflow.auth;
 
+import com.example.taskflow.core.EntityTimestampListener;
+import com.example.taskflow.core.Timestamped;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "app_users")
-public class AppUser {
+@EntityListeners(EntityTimestampListener.class)
+public class AppUser implements Timestamped {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -29,9 +32,9 @@ public class AppUser {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
+    @Override
+    public void markCreated(LocalDateTime now) {
+        createdAt = now;
     }
 
     public AppUser() {}

@@ -38,7 +38,10 @@ class AppointmentCacheInvalidationIntegrationTest {
     private BusySlotsService busySlotsService;
 
     @Autowired
-    private AppointmentService appointmentService;
+    private AppointmentBookingService bookingService;
+
+    @Autowired
+    private AppointmentLifecycleService lifecycleService;
 
     @Autowired
     private BarberService barberService;
@@ -115,15 +118,15 @@ class AppointmentCacheInvalidationIntegrationTest {
 
     private void primeAvailability() {
         busySlotsService.getBusySlots(BARBER, DATE.toString());
-        busySlotsService.getBusySlots(AppointmentServiceImpl.NO_PREFERENCE_BARBER, DATE.toString());
+        busySlotsService.getBusySlots(AppointmentBookingService.NO_PREFERENCE_BARBER, DATE.toString());
         assertNotNull(busySlotsCache.get(BARBER + "-" + DATE));
-        assertNotNull(busySlotsCache.get(AppointmentServiceImpl.NO_PREFERENCE_BARBER + "-" + DATE));
+        assertNotNull(busySlotsCache.get(AppointmentBookingService.NO_PREFERENCE_BARBER + "-" + DATE));
     }
 
     private void assertAvailabilityEvicted() {
         assertNull(busySlotsCache.get(BARBER + "-" + DATE),
                 "concrete busy-slots entry must be evicted");
-        assertNull(busySlotsCache.get(AppointmentServiceImpl.NO_PREFERENCE_BARBER + "-" + DATE),
+        assertNull(busySlotsCache.get(AppointmentBookingService.NO_PREFERENCE_BARBER + "-" + DATE),
                 "First Available aggregate must be evicted");
     }
 
@@ -134,12 +137,12 @@ class AppointmentCacheInvalidationIntegrationTest {
 
     @Test
     void booking_evictsConcreteAndAggregateAndStats() {
-        var created = appointmentService.createAppointment(bookingRequest("10:00"), null);
+        var created = bookingService.createAppointment(bookingRequest("10:00"), null);
         primeAvailability();
-        statsService.getStatsCached(appointmentRepository);
+        statsService.getStatsCached();
         assertNotNull(cacheManager.getCache(AppointmentStatsService.STATS_CACHE).get(LocalDate.now()));
 
-        appointmentService.updateAppointmentStatus(created.appointment().id(),
+        lifecycleService.updateAppointmentStatus(created.appointment().id(),
                 new AppointmentUpdateRequest("APPROVED"));
 
         assertAvailabilityEvicted();
@@ -151,10 +154,10 @@ class AppointmentCacheInvalidationIntegrationTest {
     void aggregateReflectsBookingImmediately() {
         primeAvailability();
 
-        appointmentService.createAppointment(bookingRequest("10:00"), null);
+        bookingService.createAppointment(bookingRequest("10:00"), null);
 
         List<String> aggregate = busySlotsService.getBusySlots(
-                AppointmentServiceImpl.NO_PREFERENCE_BARBER, DATE.toString());
+                AppointmentBookingService.NO_PREFERENCE_BARBER, DATE.toString());
         assertTrue(aggregate.contains("10:00"),
                 "the only barber is now booked, so 10:00 must be busy for First Available");
         assertTrue(busySlotsService.getBusySlots(BARBER, DATE.toString()).contains("10:00"));
@@ -171,10 +174,10 @@ class AppointmentCacheInvalidationIntegrationTest {
         // (CatalogService mutations evict it themselves).
         cacheManager.getCache("services").clear();
         String key = BARBER + "-" + DATE + "-90";
-        String aggregateKey = AppointmentServiceImpl.NO_PREFERENCE_BARBER + "-" + DATE + "-90";
+        String aggregateKey = AppointmentBookingService.NO_PREFERENCE_BARBER + "-" + DATE + "-90";
 
         List<String> before = busySlotsService.getBusySlots(BARBER, DATE.toString(), 90);
-        busySlotsService.getBusySlots(AppointmentServiceImpl.NO_PREFERENCE_BARBER, DATE.toString(), 90);
+        busySlotsService.getBusySlots(AppointmentBookingService.NO_PREFERENCE_BARBER, DATE.toString(), 90);
         assertNotNull(busySlotsCache.get(key), "the 90-minute list must be cached under its own key");
         assertNotNull(busySlotsCache.get(aggregateKey));
         // A different length is a different list, not a hit on the 90-minute entry.
@@ -183,7 +186,7 @@ class AppointmentCacheInvalidationIntegrationTest {
         assertTrue(before.contains("16:00"));
         assertFalse(before.contains("09:00"));
 
-        appointmentService.createAppointment(bookingRequest("10:00"), null);
+        bookingService.createAppointment(bookingRequest("10:00"), null);
 
         assertNull(busySlotsCache.get(key), "a booking must evict the length-aware list");
         assertNull(busySlotsCache.get(aggregateKey), "...and its First Available aggregate");
@@ -193,10 +196,10 @@ class AppointmentCacheInvalidationIntegrationTest {
 
     @Test
     void statusChange_evictsBoth() {
-        var created = appointmentService.createAppointment(bookingRequest("10:00"), null);
+        var created = bookingService.createAppointment(bookingRequest("10:00"), null);
         primeAvailability();
 
-        appointmentService.updateAppointmentStatus(created.appointment().id(),
+        lifecycleService.updateAppointmentStatus(created.appointment().id(),
                 new AppointmentUpdateRequest("DENIED"));
 
         assertAvailabilityEvicted();
@@ -204,20 +207,20 @@ class AppointmentCacheInvalidationIntegrationTest {
 
     @Test
     void delete_evictsBoth() {
-        var created = appointmentService.createAppointment(bookingRequest("10:00"), null);
+        var created = bookingService.createAppointment(bookingRequest("10:00"), null);
         primeAvailability();
 
-        appointmentService.deleteAppointment(created.appointment().id());
+        lifecycleService.deleteAppointment(created.appointment().id());
 
         assertAvailabilityEvicted();
     }
 
     @Test
     void publicCancel_evictsBoth() {
-        var created = appointmentService.createAppointment(bookingRequest("10:00"), null);
+        var created = bookingService.createAppointment(bookingRequest("10:00"), null);
         primeAvailability();
 
-        appointmentService.publicCancelAppointment(created.appointment().publicId(), "john@test.com");
+        lifecycleService.publicCancelAppointment(created.appointment().publicId(), "john@test.com");
 
         assertAvailabilityEvicted();
     }
@@ -226,17 +229,17 @@ class AppointmentCacheInvalidationIntegrationTest {
     void timeOff_evictsBothForEveryDateInRange() {
         LocalDate secondDate = DATE.plusDays(1);
         busySlotsService.getBusySlots(BARBER, DATE.toString());
-        busySlotsService.getBusySlots(AppointmentServiceImpl.NO_PREFERENCE_BARBER, DATE.toString());
+        busySlotsService.getBusySlots(AppointmentBookingService.NO_PREFERENCE_BARBER, DATE.toString());
         busySlotsService.getBusySlots(BARBER, secondDate.toString());
-        busySlotsService.getBusySlots(AppointmentServiceImpl.NO_PREFERENCE_BARBER, secondDate.toString());
+        busySlotsService.getBusySlots(AppointmentBookingService.NO_PREFERENCE_BARBER, secondDate.toString());
 
         Long barberId = barberRepository.findByName(BARBER).orElseThrow().getId();
         barberService.addTimeOff(barberId, new BarberTimeOffRequest(DATE, secondDate, "Vacation"));
 
         assertNull(busySlotsCache.get(BARBER + "-" + DATE));
-        assertNull(busySlotsCache.get(AppointmentServiceImpl.NO_PREFERENCE_BARBER + "-" + DATE));
+        assertNull(busySlotsCache.get(AppointmentBookingService.NO_PREFERENCE_BARBER + "-" + DATE));
         assertNull(busySlotsCache.get(BARBER + "-" + secondDate));
-        assertNull(busySlotsCache.get(AppointmentServiceImpl.NO_PREFERENCE_BARBER + "-" + secondDate));
+        assertNull(busySlotsCache.get(AppointmentBookingService.NO_PREFERENCE_BARBER + "-" + secondDate));
     }
 
     @Test
@@ -262,6 +265,6 @@ class AppointmentCacheInvalidationIntegrationTest {
         }));
 
         assertNotNull(busySlotsCache.get(BARBER + "-" + DATE));
-        assertNotNull(busySlotsCache.get(AppointmentServiceImpl.NO_PREFERENCE_BARBER + "-" + DATE));
+        assertNotNull(busySlotsCache.get(AppointmentBookingService.NO_PREFERENCE_BARBER + "-" + DATE));
     }
 }

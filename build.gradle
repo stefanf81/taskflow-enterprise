@@ -135,6 +135,9 @@ dependencies {
 	implementation libs.spring.boot.starter.actuator
 	implementation libs.spring.boot.starter.cache
 	implementation libs.spring.boot.starter.data.redis
+	// Generates META-INF/spring-configuration-metadata.json for the app.* @ConfigurationProperties
+	// records (IDE completion, and PropertyKeysMetadataTest checks the app.* keys against it).
+	annotationProcessor libs.spring.boot.configuration.processor
 	// Explicit pins ensure dependency tooling and container scanners resolve the patched
 	// Log4j API used by Spring Boot's log4j-to-slf4j bridge.
 	implementation libs.log4j2.api

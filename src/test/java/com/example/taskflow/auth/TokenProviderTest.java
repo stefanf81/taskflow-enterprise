@@ -12,7 +12,9 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -32,7 +34,7 @@ class TokenProviderTest {
 
     @BeforeEach
     void setUp() {
-        tokenProvider = new TokenProvider(encoder, "test-issuer", "test-audience", 3600L);
+        tokenProvider = new TokenProvider(encoder, new JwtProperties("test-issuer", "test-audience", 3600L));
     }
 
     @Test
@@ -59,7 +61,7 @@ class TokenProviderTest {
 
     @Test
     void generateToken_shouldUseCustomIssuerAndAudience() {
-        TokenProvider customProvider = new TokenProvider(encoder, "custom-issuer", "custom-audience", 7200L);
+        TokenProvider customProvider = new TokenProvider(encoder, new JwtProperties("custom-issuer", "custom-audience", 7200L));
 
         GrantedAuthority authority = () -> "ROLE_CUSTOMER";
         when(authentication.getAuthorities()).thenAnswer(invocation -> List.of(authority));
@@ -131,5 +133,29 @@ class TokenProviderTest {
     @Test
     void getTokenLifetimeSeconds_shouldMatchJwtLifetime() {
         assertEquals(3600L, tokenProvider.getTokenLifetimeSeconds());
+    }
+
+    @Test
+    void issuedAtAndExpiryComeFromTheTokenClock() {
+        Instant now = Instant.parse("2026-10-12T08:00:00Z");
+        TokenProvider fixed = new TokenProvider(encoder, new JwtProperties("test-issuer", "test-audience", 3600L),
+                Clock.fixed(now, ZoneOffset.UTC));
+        when(authentication.getAuthorities()).thenAnswer(invocation -> List.of());
+        when(authentication.getName()).thenReturn("user@test.com");
+        when(encoder.encode(any(JwtEncoderParameters.class))).thenReturn(Jwt.withTokenValue("t")
+                .header("alg", "RS256").claim("scope", "").build());
+
+        fixed.generateToken(authentication);
+
+        ArgumentCaptor<JwtEncoderParameters> captor = ArgumentCaptor.forClass(JwtEncoderParameters.class);
+        verify(encoder).encode(captor.capture());
+        assertEquals(now, captor.getValue().getClaims().getIssuedAt());
+        assertEquals(now.plusSeconds(3600), captor.getValue().getClaims().getExpiresAt());
+    }
+
+    /** The decoder checks exp against the system clock, so tokens must not follow a test's shop Clock. */
+    @Test
+    void tokensAreIssuedByTheSystemClockTheDecoderUses() {
+        assertEquals(Clock.systemUTC(), TokenProvider.TOKEN_CLOCK);
     }
 }

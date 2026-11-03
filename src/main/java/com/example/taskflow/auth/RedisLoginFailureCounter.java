@@ -1,6 +1,6 @@
 package com.example.taskflow.auth;
 
-import com.example.taskflow.core.RedisBackoff;
+import com.example.taskflow.core.redis.RedisBackoff;
 import com.example.taskflow.core.SharedStateStore;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;

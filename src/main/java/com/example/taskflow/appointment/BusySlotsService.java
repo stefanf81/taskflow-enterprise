@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 
 /**
  * Barber availability rules and busy-slot calculation.
- * Extracted from AppointmentServiceImpl to prevent self-invocation cache bypass
+ * Extracted from the appointment services to prevent self-invocation cache bypass
  * and comply with ArchUnit rules against field injection.
  *
  * <p>An appointment occupies the half-open interval {@code [start, end)}, where {@code end} is the
@@ -94,7 +94,7 @@ public class BusySlotsService {
 
         // H3: "No Preference" sentinel must aggregate across ALL barbers.
         // A slot is busy (unavailable) only when NO working barber can accept it.
-        if (AppointmentServiceImpl.NO_PREFERENCE_BARBER.equals(barberName)) {
+        if (AppointmentBookingService.NO_PREFERENCE_BARBER.equals(barberName)) {
             return computeNoPreferenceBusySlots(date);
         }
 
@@ -248,7 +248,7 @@ public class BusySlotsService {
             key = "#barberName + '-' + #bookingDate + '-' + #durationMinutes", sync = true)
     public List<String> getBusySlots(String barberName, String bookingDate, int durationMinutes) {
         LocalDate date = parseDate(bookingDate);
-        List<BarberDay> days = AppointmentServiceImpl.NO_PREFERENCE_BARBER.equals(barberName)
+        List<BarberDay> days = AppointmentBookingService.NO_PREFERENCE_BARBER.equals(barberName)
                 ? loadBarberDays(barberRepository.findAllByOrderByIdAsc(), date)
                 : List.of(loadBarberDay(barberRepository.findByName(barberName)
                         .orElseThrow(() -> unknownBarber(barberName)), date));

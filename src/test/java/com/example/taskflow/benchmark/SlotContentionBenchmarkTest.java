@@ -2,7 +2,7 @@ package com.example.taskflow.benchmark;
 
 import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.AppointmentCreateRequest;
-import com.example.taskflow.appointment.AppointmentService;
+import com.example.taskflow.appointment.AppointmentTestAccess;
 import com.example.taskflow.appointment.AppointmentStatus;
 import com.example.taskflow.appointment.AppointmentUpdateRequest;
 import com.example.taskflow.appointment.Barber;
@@ -49,7 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * (PG) / H2 via {@code active_slot_marker} — DENIED slots are excluded and re-bookable.
  *
  * <p>This matches {@code findActiveForBarberOnDate (status IN PENDING, APPROVED)} and
- * {@code AppointmentServiceImpl.createAppointment} catch of 23505 unique_violation.
+ * {@code AppointmentBookingService.createAppointment} catch of 23505 unique_violation.
  *
  * <p>Tests:
  * <ul>
@@ -75,7 +75,8 @@ class SlotContentionBenchmarkTest {
     private static final LocalDate DATE = LocalDate.now().plusDays(7);
 
     @Autowired private AppointmentRepository appointmentRepository;
-    @Autowired private AppointmentService appointmentService;
+    @Autowired private org.springframework.context.ApplicationContext context;
+    private AppointmentTestAccess appointmentService;
     @Autowired private BusySlotsService busySlotsService;
     @Autowired private BarberRepository barberRepository;
     @Autowired private BarberScheduleRepository scheduleRepository;
@@ -89,6 +90,7 @@ class SlotContentionBenchmarkTest {
 
     @BeforeEach
     void setUp() {
+        appointmentService = new AppointmentTestAccess(context);
         // Evict caches that survive across tests (simple ConcurrentHashMap, not DB)
         if (cacheManager.getCache("busySlots") != null) cacheManager.getCache("busySlots").clear();
         if (cacheManager.getCache("appointmentStats") != null) cacheManager.getCache("appointmentStats").clear();

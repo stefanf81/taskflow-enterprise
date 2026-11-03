@@ -8,7 +8,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -45,14 +44,14 @@ class AuthController {
     public AuthController(AuthenticationManager authenticationManager, TokenProvider tokenProvider,
                           UserRepository userRepository, PasswordEncoder passwordEncoder,
                           LoginAttemptLimiter loginAttemptLimiter, TokenRevocationList tokenRevocationList,
-                          @Value("${app.cookie.secure:true}") boolean cookieSecure) {
+                          CookieProperties cookieProperties) {
         this.authenticationManager = authenticationManager;
         this.tokenProvider = tokenProvider;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.loginAttemptLimiter = loginAttemptLimiter;
         this.tokenRevocationList = tokenRevocationList;
-        this.cookieSecure = cookieSecure;
+        this.cookieSecure = cookieProperties.secure();
     }
 
     /**

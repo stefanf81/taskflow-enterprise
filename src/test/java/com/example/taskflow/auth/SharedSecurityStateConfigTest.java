@@ -38,7 +38,7 @@ class SharedSecurityStateConfigTest {
     }
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
-            .withUserConfiguration(UnreachableRedis.class, SharedSecurityStateConfig.class)
+            .withUserConfiguration(UnreachableRedis.class, AuthPropertiesConfig.class, SharedSecurityStateConfig.class)
             .withBean(TokenRevocationList.class)
             .withBean(LoginAttemptLimiter.class)
             .withPropertyValues("app.rate-limit.login-max-failures=2");

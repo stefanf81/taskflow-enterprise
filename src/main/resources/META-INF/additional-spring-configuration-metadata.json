@@ -1,0 +1,22 @@
+{
+  "properties": [
+    {
+      "name": "app.state.store",
+      "type": "java.lang.String",
+      "description": "Where cross-replica state (JWT denylist, failed-login counters, cache-load lease) lives: 'memory' keeps it in this JVM, 'redis' shares it through Redis with the in-memory implementations as fallback. Read by core.SharedStateStore and a @ConditionalOnProperty.",
+      "defaultValue": "memory"
+    },
+    {
+      "name": "app.security.require-strong-admin-password",
+      "type": "java.lang.Boolean",
+      "description": "Refuse to start with a missing, development-default or placeholder admin password (auth.AdminPasswordGuard, created only when this is true).",
+      "defaultValue": false
+    },
+    {
+      "name": "app.logging.async.max-flush-time-ms",
+      "type": "java.lang.Long",
+      "description": "Longest time the async log appender may take to flush on shutdown (read by logback-spring.xml).",
+      "defaultValue": 30000
+    }
+  ]
+}

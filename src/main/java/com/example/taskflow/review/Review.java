@@ -1,5 +1,7 @@
 package com.example.taskflow.review;
 
+import com.example.taskflow.core.EntityTimestampListener;
+import com.example.taskflow.core.Timestamped;
 import jakarta.persistence.*;
 import org.hibernate.annotations.Cache;
 import org.hibernate.annotations.CacheConcurrencyStrategy;
@@ -8,7 +10,8 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "reviews")
 @Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "l2-reviews")
-public class Review {
+@EntityListeners(EntityTimestampListener.class)
+public class Review implements Timestamped {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -27,9 +30,9 @@ public class Review {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
+    @Override
+    public void markCreated(LocalDateTime now) {
+        createdAt = now;
     }
 
     public Review() {}

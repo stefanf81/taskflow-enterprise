@@ -1,6 +1,6 @@
 package com.example.taskflow.auth;
 
-import com.example.taskflow.core.RedisBackoff;
+import com.example.taskflow.core.redis.RedisBackoff;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

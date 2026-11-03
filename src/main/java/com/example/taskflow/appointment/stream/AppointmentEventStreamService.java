@@ -1,13 +1,13 @@
 package com.example.taskflow.appointment.stream;
+import com.example.taskflow.core.SchedulerProperties;
 
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.EventListener;
-import com.example.taskflow.core.TokenRevokedEvent;
+import com.example.taskflow.auth.TokenRevokedEvent;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -94,10 +94,11 @@ public class AppointmentEventStreamService {
     private volatile boolean closing;
 
     @Autowired
-    public AppointmentEventStreamService(
-            @Value("${app.sse.max-connections-per-admin:2}") int maxConnectionsPerAdmin,
-            Clock clock,
-            @Value("${app.schedulers.enabled:true}") boolean schedulersEnabled) {
+    AppointmentEventStreamService(SseProperties properties, Clock clock, SchedulerProperties schedulers) {
+        this(properties.maxConnectionsPerAdmin(), clock, schedulers.enabled());
+    }
+
+    AppointmentEventStreamService(int maxConnectionsPerAdmin, Clock clock, boolean schedulersEnabled) {
         this.maxConnectionsPerAdmin = Math.max(1, maxConnectionsPerAdmin);
         this.clock = clock;
         this.schedulersEnabled = schedulersEnabled;
@@ -246,7 +247,7 @@ public class AppointmentEventStreamService {
     }
 
     /** Scheduler entry point; a no-op when {@code app.schedulers.enabled=false}. */
-    @Scheduled(fixedDelayString = "${app.sse.heartbeat-interval-ms:20000}")
+    @Scheduled(fixedDelayString = "${app.sse.heartbeat-interval-ms:" + SseProperties.DEFAULT_HEARTBEAT_INTERVAL_MS + "}")
     void scheduledHeartbeat() {
         if (schedulersEnabled) {
             sendHeartbeats();

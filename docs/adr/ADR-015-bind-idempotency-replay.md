@@ -4,7 +4,7 @@
 
 ## Context
 
-`POST /api/v1/appointments` is public and accepts an optional `Idempotency-Key` header. `AppointmentServiceImpl.createAppointment()` looked the key up globally and returned the stored appointment whenever any row matched:
+`POST /api/v1/appointments` is public and accepts an optional `Idempotency-Key` header. `AppointmentBookingService.createAppointment()` (formerly in `AppointmentServiceImpl`) looked the key up globally and returned the stored appointment whenever any row matched:
 
 ```java
 Appointment existing = appointmentRepository.findByIdempotencyKey(idempotencyKey);

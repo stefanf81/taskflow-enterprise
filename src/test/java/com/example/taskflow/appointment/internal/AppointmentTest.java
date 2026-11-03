@@ -4,32 +4,47 @@ import com.example.taskflow.appointment.AppointmentStatus;
 import com.example.taskflow.appointment.Barber;
 
 import com.example.taskflow.catalog.ServiceItem;
+import com.example.taskflow.core.EntityTimestampListener;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class AppointmentTest {
 
+    private static final Instant CREATED = Instant.parse("2026-10-12T08:00:00Z");
+    private static final Instant UPDATED = CREATED.plusSeconds(90);
+
     @Test
     void testAppointmentPrePersistAndPreUpdate() {
         Appointment appointment = new Appointment("John", "john@test.com", "123", "Barber", LocalDate.now(), "10:00", "Haircut");
-        
-        // Trigger PrePersist
+
+        // Trigger PrePersist: JPA calls the entity listener first, then the entity's own callback
+        new EntityTimestampListener(Clock.fixed(CREATED, ZoneOffset.UTC)).prePersist(appointment);
         appointment.onCreate();
         assertNotNull(appointment.getPublicId());
         assertNotNull(appointment.getCreatedAt());
         assertNotNull(appointment.getUpdatedAt());
+        // the timestamps come from the injected Clock (kept in the JVM zone, as before)
+        assertEquals(LocalDateTime.ofInstant(CREATED, ZoneId.systemDefault()), appointment.getCreatedAt());
+        assertEquals(appointment.getCreatedAt(), appointment.getUpdatedAt());
 
         // Trigger PreUpdate
         LocalDateTime initialUpdate = appointment.getUpdatedAt();
-        appointment.onUpdate();
+        new EntityTimestampListener(Clock.fixed(UPDATED, ZoneOffset.UTC)).preUpdate(appointment);
         assertNotNull(appointment.getUpdatedAt());
+        assertEquals(initialUpdate.plusSeconds(90), appointment.getUpdatedAt());
+        assertEquals(LocalDateTime.ofInstant(CREATED, ZoneId.systemDefault()), appointment.getCreatedAt(),
+                "an update leaves created_at alone");
 
         // Test getters and setters
         appointment.setId(1L);

@@ -2,7 +2,6 @@ package com.example.taskflow.auth;
 
 import com.example.taskflow.TaskflowApplication;
 import com.example.taskflow.core.RedisTestSupport;
-import com.example.taskflow.core.TokenRevokedEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

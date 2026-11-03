@@ -73,8 +73,8 @@ class BarberServiceImpl implements BarberService {
     public BarberResponse createBarber(BarberRequest request) {
         // The booking flow treats this exact name as "any barber" and never stores it, so a real
         // barber carrying it could be neither booked by name nor approved.
-        if (AppointmentServiceImpl.NO_PREFERENCE_BARBER.equalsIgnoreCase(request.name().trim())) {
-            throw new IllegalArgumentException("'" + AppointmentServiceImpl.NO_PREFERENCE_BARBER
+        if (AppointmentBookingService.NO_PREFERENCE_BARBER.equalsIgnoreCase(request.name().trim())) {
+            throw new IllegalArgumentException("'" + AppointmentBookingService.NO_PREFERENCE_BARBER
                     + "' is reserved and cannot be used as a barber name.");
         }
         Barber saved = barberRepository.save(request.toEntity());

@@ -104,7 +104,7 @@ class BarberServiceImplTest {
 
     @Test
     void createBarber_refusesTheNoPreferenceSentinelAsAName() {
-        for (String name : List.of(AppointmentServiceImpl.NO_PREFERENCE_BARBER,
+        for (String name : List.of(AppointmentBookingService.NO_PREFERENCE_BARBER,
                 "  no preference (first available) ")) {
             IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                     () -> barberService.createBarber(new BarberRequest(name, null, null)));

@@ -66,7 +66,7 @@ class AppointmentIdempotencyTestcontainersTest {
     }
 
     @Autowired
-    private AppointmentService appointmentService;
+    private AppointmentBookingService bookingService;
 
     @Autowired
     private AppointmentRepository appointmentRepository;
@@ -143,7 +143,7 @@ class AppointmentIdempotencyTestcontainersTest {
             futures.add(pool.submit(() -> {
                 ready.countDown();
                 start.await();
-                return appointmentService.createAppointment(request, "race-key");
+                return bookingService.createAppointment(request, "race-key");
             }));
         }
 
