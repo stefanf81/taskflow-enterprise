@@ -6,6 +6,7 @@
     {
       "feature": "Stylist Card & Profiles",
       "webComponent": "frontend/src/app/features/booking/stylist-card/stylist-card.ts",
+      "webProfiles": "frontend/src/app/features/booking/stylist-card/stylist-profiles.ts",
       "mobileComponent": "mobile/src/features/booking/StylistCard.tsx",
       "storeHook": {
         "web": "frontend/src/app/features/booking/public-barber.store.ts",
@@ -15,23 +16,55 @@
     {
       "feature": "Lookbook & Style Showcase",
       "webComponent": "frontend/src/app/features/landing/lookbook/lookbook.ts",
+      "webHandOff": "frontend/src/app/features/booking/lookbook-selection.ts",
       "mobileComponent": "mobile/src/features/landing/LookbookScreen.tsx",
       "mobileSubComponent": "mobile/src/features/landing/LookbookGallery.tsx"
     },
     {
       "feature": "Booking Wizard & Slot Picker",
-      "description": "4-step wizard: Treatment \u2192 Stylist \u2192 Date/Slot \u2192 Contact (aligned across both platforms)",
+      "description": "4-step wizard: Treatment → Stylist → Date/Slot → Contact (aligned across both platforms)",
       "webComponent": "frontend/src/app/features/booking/booking-wizard.ts",
       "webTemplate": "frontend/src/app/features/booking/booking-wizard.html",
       "mobileComponent": "mobile/src/features/booking/BookingScreen.tsx",
+      "webSteps": [
+        "frontend/src/app/features/booking/steps/service-step.ts",
+        "frontend/src/app/features/booking/steps/stylist-step.ts",
+        "frontend/src/app/features/booking/steps/date-time-step.ts",
+        "frontend/src/app/features/booking/steps/contact-step.ts"
+      ],
+      "mobileSteps": [
+        "mobile/src/features/booking/ServiceStep.tsx",
+        "mobile/src/features/booking/StylistStep.tsx",
+        "mobile/src/features/booking/DateTimeStep.tsx",
+        "mobile/src/features/booking/ContactStep.tsx"
+      ],
       "mobileSubComponents": [
+        "mobile/src/features/booking/BookingHeader.tsx",
+        "mobile/src/features/booking/StepNavigation.tsx",
         "mobile/src/features/booking/TimeSlotPicker.tsx",
         "mobile/src/features/booking/ReceiptModal.tsx"
       ],
+      "calendarRules": {
+        "web": "frontend/src/app/features/booking/booking-calendar.ts",
+        "mobile": "mobile/src/features/booking/bookingWizard.ts"
+      },
       "storeHook": {
         "web": "frontend/src/app/features/booking/booking.store.ts",
-        "mobile": "mobile/src/core/appointments/useAppointments.ts"
-      }
+        "mobile": "mobile/src/features/booking/useBookingWizard.ts"
+      },
+      "mobileQueryHooks": ["mobile/src/core/appointments/useAppointments.ts"],
+      "notes": "Web: the wizard shell keeps the WAI-ARIA tabs stepper, focus management, the app-wide banner, the footer navigation and the receipt; each step component reads BookingStore directly. Availability is an httpResource keyed on barber, date and service."
+    },
+    {
+      "feature": "Customer Booking Entry (signed in)",
+      "webComponent": "frontend/src/app/features/customer/customer-booking.ts",
+      "mobileComponent": "mobile/src/features/booking/BookingScreen.tsx",
+      "mobileNavigator": "mobile/src/navigation/CustomerTabNavigator.tsx",
+      "storeHook": {
+        "web": "frontend/src/app/features/booking/booking.store.ts",
+        "mobile": "mobile/src/features/booking/useBookingWizard.ts"
+      },
+      "notes": "Web: route /customer/book hosts the same booking wizard, pre-filled from the session (BookingStore.prefillFromSession). Mobile: the customer tab navigator's booking tab."
     },
     {
       "feature": "Customer Portal & History",
@@ -49,13 +82,32 @@
       "webTemplate": "frontend/src/app/features/admin/admin-dashboard.html",
       "mobileComponent": "mobile/src/features/admin/AdminDashboardScreen.tsx",
       "storeHook": {
-        "web": "frontend/src/app/core/appointments/appointment.store.ts",
+        "web": "frontend/src/app/features/admin/appointment.store.ts",
         "mobile": "mobile/src/core/appointments/useAppointments.ts"
-      }
+      },
+      "webTabs": [
+        "frontend/src/app/features/admin/admin-appointments-tab.ts",
+        "frontend/src/app/features/admin/admin-services-tab.ts",
+        "frontend/src/app/features/admin/admin-schedules-tab.ts",
+        "frontend/src/app/features/admin/admin-notifications-tab.ts"
+      ],
+      "webLiveUpdates": "frontend/src/app/features/admin/admin-events.service.ts"
+    },
+    {
+      "feature": "Admin Appointment List (filter, search, approve/deny/delete)",
+      "webComponent": "frontend/src/app/features/admin/admin-appointments-tab.ts",
+      "webTemplate": "frontend/src/app/features/admin/admin-appointments-tab.html",
+      "mobileComponent": "mobile/src/features/admin/AdminDashboardScreen.tsx",
+      "storeHook": {
+        "web": "frontend/src/app/features/admin/appointment.store.ts",
+        "mobile": "mobile/src/core/appointments/useAppointments.ts"
+      },
+      "notes": "Mobile renders the list on the dashboard screen itself."
     },
     {
       "feature": "Admin Service Catalog Management",
-      "webComponent": "frontend/src/app/features/admin/admin-dashboard.ts",
+      "webComponent": "frontend/src/app/features/admin/admin-services-tab.ts",
+      "webTemplate": "frontend/src/app/features/admin/admin-services-tab.html",
       "mobileComponent": "mobile/src/features/admin/AdminCatalogScreen.tsx",
       "storeHook": {
         "web": "frontend/src/app/core/catalog/service-catalog.store.ts",
@@ -64,7 +116,8 @@
     },
     {
       "feature": "Admin Staff Schedules & Time Off",
-      "webComponent": "frontend/src/app/features/admin/admin-dashboard.ts",
+      "webComponent": "frontend/src/app/features/admin/admin-schedules-tab.ts",
+      "webTemplate": "frontend/src/app/features/admin/admin-schedules-tab.html",
       "mobileComponent": "mobile/src/features/admin/AdminSchedulesScreen.tsx",
       "storeHook": {
         "web": "frontend/src/app/features/admin/barber.store.ts",
@@ -73,7 +126,8 @@
     },
     {
       "feature": "Admin Notification Outbox",
-      "webComponent": "frontend/src/app/features/admin/admin-dashboard.ts",
+      "webComponent": "frontend/src/app/features/admin/admin-notifications-tab.ts",
+      "webTemplate": "frontend/src/app/features/admin/admin-notifications-tab.html",
       "mobileComponent": "mobile/src/features/admin/AdminNotificationsScreen.tsx",
       "storeHook": {
         "web": "frontend/src/app/features/admin/notification.store.ts",
@@ -94,6 +148,7 @@
     {
       "feature": "Auth & Login Modal",
       "webComponent": "frontend/src/app/features/landing/auth-modal/auth-modal.ts",
+      "webSignOut": "frontend/src/app/core/auth/sign-out.ts",
       "mobileComponent": "mobile/src/features/auth/LoginScreen.tsx",
       "mobileRegister": "mobile/src/features/auth/RegisterScreen.tsx",
       "storeHook": {
@@ -102,21 +157,32 @@
       }
     },
     {
+      "feature": "Landing Page",
+      "webComponent": "frontend/src/app/features/landing/landing-page.ts",
+      "webTemplate": "frontend/src/app/features/landing/landing-page.html",
+      "mobileComponent": "mobile/src/features/landing/HomeScreen.tsx",
+      "notes": "Web renders most sections inline in landing-page.html (the wizard, lookbook, FAQ and post-booking actions are deferred blocks); mobile has one component per section (see mobile/src/component-map.json)."
+    },
+    {
       "feature": "FAQ Section",
       "webComponent": "frontend/src/app/features/landing/faq-section/faq-section.ts",
-      "mobileComponent": "mobile/src/features/landing/HomeScreen.tsx",
-      "notes": "FAQ is inline in the HomeScreen on mobile (not a separate component)"
+      "mobileComponent": "mobile/src/features/landing/FaqSection.tsx"
     },
     {
       "feature": "Announcement Bar",
       "webComponent": "frontend/src/app/features/landing/announcement-bar/announcement-bar.ts",
-      "mobileComponent": "mobile/src/features/landing/HomeScreen.tsx",
-      "notes": "Announcement bar is inline in the HomeScreen on mobile (not a separate component)"
+      "mobileComponent": "mobile/src/features/landing/AnnouncementBar.tsx"
     },
     {
       "feature": "Receipt Modal (Booking Confirmation)",
       "webComponent": "frontend/src/app/features/booking/receipt-modal/receipt-modal.ts",
       "mobileComponent": "mobile/src/features/booking/ReceiptModal.tsx"
+    },
+    {
+      "feature": "Flash Messages (alert banners)",
+      "webComponent": "frontend/src/app/core/ui/flash-messages.ts",
+      "mobileComponent": "mobile/src/components/common/useFlashMessage.ts",
+      "notes": "Web: one app-wide service (cleared on sign-in and when a session ends), rendered by the booking wizard, the owner dashboard and the customer portal; the error stays until dismissed. Mobile: one hook per screen."
     }
   ],
   "platformContracts": {

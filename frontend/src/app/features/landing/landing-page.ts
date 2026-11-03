@@ -2,8 +2,8 @@ import { Component, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthState } from '../../core/auth/auth.state';
 import { DashboardPrefetch } from '../../dashboard-loaders';
-import { AppointmentStore } from '../../core/appointments/appointment.store';
 import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
+import { FlashMessages } from '../../core/ui/flash-messages';
 import { AnnouncementBarComponent } from './announcement-bar/announcement-bar';
 import { AuthModalComponent } from './auth-modal/auth-modal';
 import { FaqSectionComponent } from './faq-section/faq-section';
@@ -35,7 +35,7 @@ import { LookbookSelectionBus } from '../booking/lookbook-selection';
 export class LandingPage {
   private readonly authState = inject(AuthState);
   private readonly lookbookSelection = inject(LookbookSelectionBus);
-  private readonly appointmentStore = inject(AppointmentStore);
+  private readonly flash = inject(FlashMessages);
   private readonly catalogStore = inject(ServiceCatalogStore);
   private readonly router = inject(Router);
   private readonly dashboardPrefetch = inject(DashboardPrefetch);
@@ -83,12 +83,9 @@ export class LandingPage {
   }
 
   protected onAuthLoginSuccess(role: string): void {
-    // The banner is shared with the guest forms on this page; a guest's failed cancel or
-    // review must not follow the user into the dashboard as a role="alert".
-    this.appointmentStore.errorMessage.set(null);
-    this.appointmentStore.showSuccess(
-      role === 'ROLE_ADMIN' ? 'Welcome back, Owner!' : 'Welcome back!',
-    );
+    // The sign-in itself already wiped the banner (FlashMessages clears on sessionStarted), so a
+    // guest's failed cancel or review cannot follow the user into the dashboard as a role="alert".
+    this.flash.showSuccess(role === 'ROLE_ADMIN' ? 'Welcome back, Owner!' : 'Welcome back!');
     this.router.navigateByUrl(this.authState.dashboardPathFor(role));
   }
 }

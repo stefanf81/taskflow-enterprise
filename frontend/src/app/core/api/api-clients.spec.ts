@@ -177,16 +177,27 @@ describe('core/api clients', () => {
     });
 
     it('rejects busy slots that are not HH:mm strings', () => {
-      let error: unknown;
-      TestBed.inject(AppointmentsApi)
-        .getBusySlots('Alex', '2026-12-01')
-        .subscribe({ error: (e) => (error = e) });
-
-      httpTesting.expectOne((r) => r.url === '/api/v1/appointments/public/busy-slots').flush([900]);
-
-      expect((error as Error).message).toContain(
+      const api = TestBed.inject(AppointmentsApi);
+      expect(() => api.parseBusySlots([900])).toThrow(
         'Invalid response from GET /api/v1/appointments/public/busy-slots',
       );
+      expect(api.parseBusySlots(['09:00'])).toEqual(['09:00']);
+    });
+
+    it('marks the busy-slots lookup public and sends the service only when chosen', () => {
+      const api = TestBed.inject(AppointmentsApi);
+      const withService = api.busySlotsRequest('Alex', '2026-12-01', 'Classic Haircut');
+      expect(withService.url).toBe('/api/v1/appointments/public/busy-slots');
+      expect(withService.params).toEqual({
+        barberName: 'Alex',
+        bookingDate: '2026-12-01',
+        serviceType: 'Classic Haircut',
+      });
+      expect(withService.context?.get(PUBLIC_REQUEST)).toBe(true);
+      expect(api.busySlotsRequest('Alex', '2026-12-01').params).toEqual({
+        barberName: 'Alex',
+        bookingDate: '2026-12-01',
+      });
     });
 
     it('passes a valid response through unchanged', () => {

@@ -1,0 +1,98 @@
+<div
+  id="step-panel-1"
+  role="tabpanel"
+  aria-labelledby="step-tab-1"
+  class="space-y-4 animate-fadeIn"
+>
+  <!-- Live Search Box inside Step 1 -->
+  <div class="relative w-full">
+    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500">🔍</span>
+    <input
+      type="text"
+      [value]="store.serviceSearchQuery()"
+      (input)="store.serviceSearchQuery.set($any($event.target).value)"
+      placeholder="Search treatments (e.g., fade, trim, shave)..."
+      class="w-full bg-black border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-xs text-zinc-100 placeholder-slate-400 outline-none focus:border-gold-dark transition-all duration-200"
+    />
+  </div>
+
+  <!-- Interactive Category Tabs Pill Selection -->
+  <div class="flex bg-white/5 rounded-xl p-1 border border-white/5" style="margin-bottom: 1.5rem">
+    @for (category of categories; track category.id) {
+      <button
+        type="button"
+        (click)="store.setServiceCategory(category.id)"
+        [class.bg-zinc-950]="store.selectedCategory() === category.id"
+        [class.text-gold]="store.selectedCategory() === category.id"
+        class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
+      >
+        {{ category.label }}
+      </button>
+    }
+  </div>
+
+  @if (store.catalogError()) {
+    <div role="alert" class="text-center text-xs text-rose-400 py-4">
+      <p>{{ store.catalogError() }}</p>
+      <button
+        type="button"
+        class="btn btn-secondary py-2 px-4 text-xs mt-3"
+        (click)="store.retryCatalog()"
+      >
+        Retry
+      </button>
+    </div>
+  }
+
+  <div class="services-list max-h-[380px] overflow-y-auto pr-0.5 space-y-3">
+    @for (service of store.filteredServices(); track service.name) {
+      <button
+        type="button"
+        class="card w-full text-left p-4 border border-white/5 bg-zinc-900/30 hover:border-gold/30 cursor-pointer transition-all"
+        [class.selected-service-item]="store.bookingService() === service.name"
+        (click)="store.selectService(service.name)"
+      >
+        <span class="flex justify-between items-center font-bold">
+          <span class="text-zinc-100 text-base flex items-center gap-1.5">
+            @if (store.bookingService() === service.name) {
+              <span class="text-gold text-sm">👑</span>
+            }
+            {{ service.name }}
+          </span>
+          <span class="text-gold text-lg">${{ service.price }}</span>
+        </span>
+        <span class="block text-[10px] font-bold text-zinc-500 uppercase mt-0.5">
+          ⏱️ Duration: {{ service.durationMinutes }} mins
+        </span>
+        <span class="block text-xs text-zinc-400 leading-relaxed font-light mt-1">
+          {{ service.description }}
+        </span>
+      </button>
+    } @empty {
+      <!-- Same reasoning as the grooming menu on the landing page: the catalog lands after
+           hydration, and an empty scroll area would collapse to nothing and then jump to its
+           full height. Once the catalog has answered, an empty list is a real result. -->
+      @if (store.catalogError()) {
+        <!-- the error and its retry button are rendered above the list -->
+      } @else if (store.catalogLoaded()) {
+        <p class="text-xs text-zinc-400 font-light py-4 text-center">
+          No treatments match this filter.
+        </p>
+      } @else {
+        @for (row of skeletonRows; track row) {
+          <div
+            aria-hidden="true"
+            class="w-full rounded-2xl p-4 border border-white/5 bg-zinc-900/30 animate-pulse"
+          >
+            <div class="flex justify-between items-center">
+              <div class="h-5 w-44 rounded bg-white/10"></div>
+              <div class="h-5 w-14 rounded bg-white/10"></div>
+            </div>
+            <div class="h-2.5 w-28 rounded bg-white/5 mt-1.5"></div>
+            <div class="h-3 w-full rounded bg-white/5 mt-2"></div>
+          </div>
+        }
+      }
+    }
+  </div>
+</div>

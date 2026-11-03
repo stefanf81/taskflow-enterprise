@@ -4,7 +4,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { Router, provideRouter } from '@angular/router';
 import { AdminDashboard, REFRESH_THROTTLE_MS } from './admin-dashboard';
-import { AppointmentStore } from '../../core/appointments/appointment.store';
+import { AppointmentStore } from './appointment.store';
+import { FlashMessages } from '../../core/ui/flash-messages';
 import { AuthState } from '../../core/auth/auth.state';
 import { AdminEventsService } from './admin-events.service';
 import { AppointmentDashboardResponse } from '../../types/api';
@@ -84,7 +85,7 @@ describe('AdminDashboard shell', () => {
 
     expect(navigate).toHaveBeenCalledWith('');
     expect(TestBed.inject(AuthState).isLoggedIn()).toBe(false);
-    expect(TestBed.inject(AppointmentStore).errorMessage()).toBeNull();
+    expect(TestBed.inject(FlashMessages).errorMessage()).toBeNull();
   });
 
   it('stays on the dashboard and shows an error when logout fails', async () => {
@@ -99,7 +100,7 @@ describe('AdminDashboard shell', () => {
 
     expect(navigate).not.toHaveBeenCalled();
     expect(TestBed.inject(AuthState).isLoggedIn()).toBe(true);
-    expect(TestBed.inject(AppointmentStore).errorMessage()).toContain('Could not sign out');
+    expect(TestBed.inject(FlashMessages).errorMessage()).toContain('Could not sign out');
   });
 
   it('shows a retry instead of a board of zeros when the dashboard fails to load', async () => {

@@ -6,7 +6,6 @@ import { provideRouter } from '@angular/router';
 import { CustomerPortal } from './customer-portal';
 import { AppointmentPage } from '../../types/api';
 import { AppointmentsApi } from '../../core/api/appointments-api';
-import { AppointmentStore } from '../../core/appointments/appointment.store';
 import { CustomerStore } from '../../core/customer/customer.store';
 import { AuthState } from '../../core/auth/auth.state';
 
@@ -62,7 +61,6 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         AppointmentsApi,
-        AppointmentStore,
         CustomerStore,
       ],
     }).compileComponents();

@@ -51,8 +51,8 @@ export class CustomerStore {
   readonly totalPages = computed(() => this.page().page.totalPages);
   readonly totalElements = computed(() => this.page().page.totalElements);
 
-  // Load-failure state kept separate from the dismissible action `errorMessage`
-  // on AppointmentStore, so a failed list load never masquerades as "no bookings".
+  // Load-failure state kept separate from the dismissible app-wide banner
+  // (FlashMessages), so a failed list load never masquerades as "no bookings".
   readonly isLoading = this.appointmentsResource.isLoading;
   readonly loadErrorMessage = computed(() =>
     this.appointmentsResource.error() ? 'Could not load your appointments. Please retry.' : null,

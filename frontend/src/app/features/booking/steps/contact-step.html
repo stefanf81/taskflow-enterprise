@@ -1,0 +1,124 @@
+<div
+  id="step-panel-4"
+  role="tabpanel"
+  aria-labelledby="step-tab-4"
+  class="space-y-4 animate-fadeIn"
+>
+  <form
+    method="post"
+    [formRoot]="store.bookingForm"
+    (submit)="$event.preventDefault(); submitted.emit()"
+    class="appointment-form"
+  >
+    <div class="form-group">
+      <label for="customerName">Your Full Name <span class="required">*</span></label>
+      <input
+        type="text"
+        id="customerName"
+        placeholder="e.g., John Doe"
+        class="form-control"
+        [formField]="store.bookingForm.customerName"
+        [attr.aria-invalid]="store.nameError() ? 'true' : null"
+        [attr.aria-describedby]="store.nameError() ? 'customerName-error' : null"
+      />
+      @if (store.nameError(); as nameProblem) {
+        <span id="customerName-error" role="alert" class="text-rose-400 text-[10px] mt-1 block">
+          {{ nameProblem }}
+        </span>
+      }
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="customerEmail">Email Address <span class="required">*</span></label>
+        <input
+          type="email"
+          id="customerEmail"
+          placeholder="e.g., john@example.com"
+          class="form-control"
+          [formField]="store.bookingForm.customerEmail"
+          [attr.aria-invalid]="store.visibleEmailError() ? 'true' : null"
+          [attr.aria-describedby]="store.visibleEmailError() ? 'customerEmail-error' : null"
+        />
+        @if (store.visibleEmailError(); as emailProblem) {
+          <span id="customerEmail-error" role="alert" class="text-rose-400 text-[10px] mt-1 block">
+            {{ emailProblem }}
+          </span>
+        }
+      </div>
+
+      <div class="form-group">
+        <label for="customerPhone">Phone Number <span class="required">*</span></label>
+        <input
+          type="text"
+          id="customerPhone"
+          placeholder="e.g., 555-0199"
+          class="form-control"
+          [formField]="store.bookingForm.customerPhone"
+          [attr.aria-invalid]="store.phoneError() ? 'true' : null"
+          [attr.aria-describedby]="store.phoneError() ? 'customerPhone-error' : null"
+        />
+        @if (store.phoneError(); as phoneProblem) {
+          <span id="customerPhone-error" role="alert" class="text-rose-400 text-[10px] mt-1 block">
+            {{ phoneProblem }}
+          </span>
+        }
+      </div>
+    </div>
+
+    <!-- Real-Time Booking Summary Card -->
+    <div
+      class="booking-summary-card card animate-fadeIn bg-zinc-900/50 border border-white/10 p-5 mt-6 rounded-2xl"
+    >
+      <h3
+        class="text-zinc-100 font-extrabold text-sm border-b border-white/10 pb-3 mb-4 flex items-center gap-1.5"
+      >
+        <span>📋 Reservation Summary</span>
+      </h3>
+      <div class="space-y-3 text-xs text-zinc-400 font-light">
+        <p class="flex justify-between">
+          <span>✂️ Treatment:</span>
+          <strong class="text-zinc-100 font-semibold">{{ store.bookingService() }}</strong>
+        </p>
+        <p class="flex justify-between">
+          <span>⏱️ Duration:</span>
+          <strong class="text-zinc-100 font-semibold"
+            >{{ store.selectedServiceObj()?.durationMinutes }} mins</strong
+          >
+        </p>
+        <p class="flex justify-between">
+          <span>💈 Stylist:</span>
+          <strong class="text-zinc-100 font-semibold">{{ store.bookingBarber() }}</strong>
+        </p>
+        <p class="flex justify-between">
+          <span>📅 Scheduled:</span>
+          <strong class="text-zinc-100 font-semibold">
+            {{ formatLocalDate(store.bookingDate()) }} at
+            {{ formatTime12Hour(store.bookingTime()) }}
+          </strong>
+        </p>
+        @if (store.estimatedEndTime()) {
+          <p class="flex justify-between">
+            <span>⏰ Est. End Time:</span>
+            <strong class="text-gold font-bold">{{
+              formatTime12Hour(store.estimatedEndTime())
+            }}</strong>
+          </p>
+        }
+        <hr class="border-t border-white/10 my-2" />
+        <p class="flex justify-between text-sm font-bold text-zinc-100 pt-1">
+          <span>Total Est. Price:</span>
+          <span class="text-gold">{{ store.formattedTotal() }}</span>
+        </p>
+      </div>
+    </div>
+
+    <button
+      type="submit"
+      class="btn btn-submit login-btn w-full mt-6 py-3 text-sm font-bold tracking-wide uppercase transition-all duration-200"
+      [disabled]="store.isSubmitting()"
+    >
+      {{ store.isSubmitting() ? 'Securing Slot...' : 'Confirm & Request Booking' }}
+    </button>
+  </form>
+</div>

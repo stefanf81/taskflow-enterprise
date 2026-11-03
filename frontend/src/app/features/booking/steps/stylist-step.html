@@ -1,0 +1,50 @@
+<div
+  id="step-panel-2"
+  role="tabpanel"
+  aria-labelledby="step-tab-2"
+  class="space-y-4 animate-fadeIn"
+>
+  @if (store.rosterError()) {
+    <div role="alert" class="text-center text-xs text-rose-400 py-2">
+      <p>{{ store.rosterError() }} You can still choose "No Preference".</p>
+      <button
+        type="button"
+        class="btn btn-secondary py-2 px-4 text-xs mt-3"
+        (click)="store.retryRoster()"
+      >
+        Retry
+      </button>
+    </div>
+  }
+  @for (profile of store.stylistProfiles(); track profile.name) {
+    <app-stylist-card
+      [profile]="profile"
+      [isSelected]="store.bookingBarber() === profile.name"
+      (selected)="store.selectStylist(profile.name)"
+    />
+  }
+
+  <!-- No Preference Option -->
+  <button
+    type="button"
+    class="card w-full text-left p-4 border border-white/5 bg-zinc-900/30 hover:border-gold/30 hover:bg-gold/5 flex items-center gap-4 cursor-pointer transition-all"
+    [class.selected-service-item]="store.bookingBarber() === store.noPreferenceLabel"
+    (click)="store.selectStylist(store.noPreferenceLabel)"
+  >
+    <span
+      class="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-lg font-black text-gold"
+    >
+      🚀
+    </span>
+    <span class="block">
+      <span class="block text-zinc-100 font-extrabold text-sm">No Preference</span>
+      <span class="block text-[11px] font-semibold text-zinc-500 mt-0.5">
+        Select Best First Available Stylist
+      </span>
+      <span class="block text-xs text-zinc-500 font-light leading-relaxed mt-1">
+        Automatically pairs you with the first available professional for maximum scheduling
+        flexibility.
+      </span>
+    </span>
+  </button>
+</div>

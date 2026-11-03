@@ -1,4 +1,4 @@
-import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams, HttpResourceRequest } from '@angular/common/http';
 import { Service, inject } from '@angular/core';
 import { defer, map, Observable } from 'rxjs';
 import {
@@ -64,26 +64,29 @@ export class AppointmentsApi {
     });
   }
 
-  getBusySlots(
+  /**
+   * Resource request for the slots of one barber (or the "No Preference" sentinel, which the
+   * server resolves across all barbers) on one date that cannot be booked. Pair it with
+   * {@link parseBusySlots}.
+   */
+  busySlotsRequest(
     barberName: string,
     bookingDate: string,
     serviceType?: string,
-  ): Observable<string[]> {
-    let params = new HttpParams().set('barberName', barberName).set('bookingDate', bookingDate);
-    // Lets the server also mark slots where a long service would overlap a later booking or
-    // run past closing time (otherwise the booking would be rejected with 400 at submit).
-    if (serviceType) params = params.set('serviceType', serviceType);
-    return this.http
-      .get<string[]>(`${this.base}/public/busy-slots`, {
-        params,
-        context: new HttpContext().set(PUBLIC_REQUEST, true),
-      })
-      .pipe(
-        map((raw) =>
-          parseResponse(busySlotsResponseSchema, raw, 'GET /api/v1/appointments/public/busy-slots'),
-        ),
-      );
+  ): HttpResourceRequest {
+    return {
+      url: `${this.base}/public/busy-slots`,
+      // `serviceType` lets the server also mark slots where a long service would overlap a later
+      // booking or run past closing time (otherwise the booking would be rejected with 400 at
+      // submit).
+      params: { barberName, bookingDate, ...(serviceType ? { serviceType } : {}) },
+      context: new HttpContext().set(PUBLIC_REQUEST, true),
+    };
   }
+
+  /** Validates a busy-slots response (a list of `HH:mm` strings). */
+  readonly parseBusySlots = (raw: unknown): string[] =>
+    parseResponse(busySlotsResponseSchema, raw, 'GET /api/v1/appointments/public/busy-slots');
 
   publicCancelAppointment(publicId: string, email: string): Observable<void> {
     return this.http.put<void>(

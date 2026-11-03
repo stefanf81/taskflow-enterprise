@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { form, required, FormField } from '@angular/forms/signals';
-import { AppointmentStore } from '../../core/appointments/appointment.store';
+import { AppointmentStore } from './appointment.store';
 import { BarberStore } from './barber.store';
 import { formatLocalDate } from '../../core/time-utils';
 

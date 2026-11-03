@@ -24,14 +24,35 @@
       "webComponent": "frontend/src/app/features/booking/booking-wizard.ts",
       "webTemplate": "frontend/src/app/features/booking/booking-wizard.html",
       "mobileComponent": "mobile/src/features/booking/BookingScreen.tsx",
+      "webSteps": [
+        "frontend/src/app/features/booking/steps/service-step.ts",
+        "frontend/src/app/features/booking/steps/stylist-step.ts",
+        "frontend/src/app/features/booking/steps/date-time-step.ts",
+        "frontend/src/app/features/booking/steps/contact-step.ts"
+      ],
+      "mobileSteps": [
+        "mobile/src/features/booking/ServiceStep.tsx",
+        "mobile/src/features/booking/StylistStep.tsx",
+        "mobile/src/features/booking/DateTimeStep.tsx",
+        "mobile/src/features/booking/ContactStep.tsx"
+      ],
       "mobileSubComponents": [
+        "mobile/src/features/booking/BookingHeader.tsx",
+        "mobile/src/features/booking/StepNavigation.tsx",
         "mobile/src/features/booking/TimeSlotPicker.tsx",
         "mobile/src/features/booking/ReceiptModal.tsx"
       ],
+      "calendarRules": {
+        "web": "frontend/src/app/features/booking/booking-calendar.ts",
+        "mobile": "mobile/src/features/booking/bookingWizard.ts"
+      },
       "storeHook": {
         "web": "frontend/src/app/features/booking/booking.store.ts",
-        "mobile": "mobile/src/core/appointments/useAppointments.ts"
-      }
+        "mobile": "mobile/src/features/booking/useBookingWizard.ts"
+      },
+      "mobileQueryHooks": [
+        "mobile/src/core/appointments/useAppointments.ts"
+      ]
     },
     {
       "feature": "Customer Portal & History",
@@ -49,7 +70,7 @@
       "webTemplate": "frontend/src/app/features/admin/admin-dashboard.html",
       "mobileComponent": "mobile/src/features/admin/AdminDashboardScreen.tsx",
       "storeHook": {
-        "web": "frontend/src/app/core/appointments/appointment.store.ts",
+        "web": "frontend/src/app/features/admin/appointment.store.ts",
         "mobile": "mobile/src/core/appointments/useAppointments.ts"
       },
       "webTabs": [
@@ -108,21 +129,42 @@
       }
     },
     {
+      "feature": "Landing Page",
+      "webComponent": "frontend/src/app/features/landing/landing-page.ts",
+      "webTemplate": "frontend/src/app/features/landing/landing-page.html",
+      "mobileComponent": "mobile/src/features/landing/HomeScreen.tsx",
+      "mobileSections": [
+        "mobile/src/features/landing/AnnouncementBar.tsx",
+        "mobile/src/features/landing/HomeHeader.tsx",
+        "mobile/src/features/landing/HeroSection.tsx",
+        "mobile/src/features/landing/HomeSection.tsx",
+        "mobile/src/features/landing/GroomingMenu.tsx",
+        "mobile/src/features/landing/ShopInfo.tsx",
+        "mobile/src/features/landing/MasterStylists.tsx",
+        "mobile/src/features/landing/FaqSection.tsx"
+      ],
+      "notes": "Web renders most sections inline in landing-page.html; mobile has one component per section (the grooming menu card holds GroomingMenu plus the ShopInfo panels)."
+    },
+    {
       "feature": "FAQ Section",
       "webComponent": "frontend/src/app/features/landing/faq-section/faq-section.ts",
-      "mobileComponent": "mobile/src/features/landing/HomeScreen.tsx",
-      "notes": "FAQ is inline in the HomeScreen on mobile (not a separate component)"
+      "mobileComponent": "mobile/src/features/landing/FaqSection.tsx"
     },
     {
       "feature": "Announcement Bar",
       "webComponent": "frontend/src/app/features/landing/announcement-bar/announcement-bar.ts",
-      "mobileComponent": "mobile/src/features/landing/HomeScreen.tsx",
-      "notes": "Announcement bar is inline in the HomeScreen on mobile (not a separate component)"
+      "mobileComponent": "mobile/src/features/landing/AnnouncementBar.tsx"
     },
     {
       "feature": "Receipt Modal (Booking Confirmation)",
       "webComponent": "frontend/src/app/features/booking/receipt-modal/receipt-modal.ts",
       "mobileComponent": "mobile/src/features/booking/ReceiptModal.tsx"
+    },
+    {
+      "feature": "Flash Messages (alert banners)",
+      "webComponent": "frontend/src/app/core/ui/flash-messages.ts",
+      "mobileComponent": "mobile/src/components/common/useFlashMessage.ts",
+      "notes": "Web: one app-wide service, the error stays until dismissed. Mobile: one hook per screen (customer portal, admin dashboard, public actions), success and error both auto-dismiss."
     }
   ],
   "platformContracts": {

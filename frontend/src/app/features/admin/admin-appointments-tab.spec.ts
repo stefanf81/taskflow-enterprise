@@ -4,7 +4,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { AdminAppointmentsTab } from './admin-appointments-tab';
-import { AppointmentStore } from '../../core/appointments/appointment.store';
+import { AppointmentStore } from './appointment.store';
+import { FlashMessages } from '../../core/ui/flash-messages';
 import { AuthState } from '../../core/auth/auth.state';
 import { AppointmentsApi } from '../../core/api/appointments-api';
 import { AppointmentDashboardResponse } from '../../types/api';
@@ -105,8 +106,7 @@ describe('AdminAppointmentsTab', () => {
     );
     reload.flush(mockDashboard);
 
-    const store = TestBed.inject(AppointmentStore);
-    expect(store.successMessage()?.toLowerCase()).toContain('approved');
+    expect(TestBed.inject(FlashMessages).successMessage()?.toLowerCase()).toContain('approved');
   });
 
   it('keeps the rows on screen while a refresh is in flight', () => {
@@ -129,7 +129,7 @@ describe('AdminAppointmentsTab', () => {
     expect(req.request.body).toEqual({ status: 'DENIED' });
     req.error(new ProgressEvent('error'), { status: 500, statusText: 'Server Error' });
 
-    expect(TestBed.inject(AppointmentStore).errorMessage()).toBe('Failed to decline appointment.');
+    expect(TestBed.inject(FlashMessages).errorMessage()).toBe('Failed to decline appointment.');
   });
 
   it('should delete an appointment after confirmation and fail gracefully', () => {
@@ -140,7 +140,7 @@ describe('AdminAppointmentsTab', () => {
     expect(req.request.method).toBe('DELETE');
     req.error(new ProgressEvent('error'), { status: 404, statusText: 'Not Found' });
 
-    expect(TestBed.inject(AppointmentStore).errorMessage()).toBe('Failed to delete booking.');
+    expect(TestBed.inject(FlashMessages).errorMessage()).toBe('Failed to delete booking.');
   });
 
   it('should apply status filters and reset pagination to page 0', () => {
@@ -251,7 +251,7 @@ describe('AdminAppointmentsTab', () => {
           { status: 409, statusText: 'Conflict' },
         );
 
-      expect(TestBed.inject(AppointmentStore).errorMessage()).toBe(
+      expect(TestBed.inject(FlashMessages).errorMessage()).toBe(
         'Cannot approve a cancelled appointment',
       );
     });
@@ -262,7 +262,7 @@ describe('AdminAppointmentsTab', () => {
         .expectOne((r) => r.url.endsWith('/api/v1/appointments/2'))
         .flush(null, { status: 401, statusText: 'Unauthorized' });
 
-      expect(TestBed.inject(AppointmentStore).errorMessage()).toBeNull();
+      expect(TestBed.inject(FlashMessages).errorMessage()).toBeNull();
     });
 
     it('shows a retry instead of an empty list when the load fails (FE-1)', async () => {

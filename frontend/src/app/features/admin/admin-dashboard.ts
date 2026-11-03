@@ -3,7 +3,9 @@ import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { asyncScheduler, throttleTime } from 'rxjs';
 import { Router } from '@angular/router';
-import { AppointmentStore } from '../../core/appointments/appointment.store';
+import { injectSignOut } from '../../core/auth/sign-out';
+import { FlashMessages } from '../../core/ui/flash-messages';
+import { AppointmentStore } from './appointment.store';
 import { AdminEventsService } from './admin-events.service';
 import { AdminAppointmentsTab } from './admin-appointments-tab';
 import { AdminServicesTab } from './admin-services-tab';
@@ -36,11 +38,13 @@ export class AdminDashboard {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly adminEvents = inject(AdminEventsService);
+  private readonly flash = inject(FlashMessages);
+  private readonly signOut = injectSignOut();
 
   readonly stats = this.store.stats;
   protected readonly loadErrorMessage = this.store.loadErrorMessage;
-  protected readonly errorMessage = this.store.errorMessage;
-  protected readonly successMessage = this.store.successMessage;
+  protected readonly errorMessage = this.flash.errorMessage;
+  protected readonly successMessage = this.flash.successMessage;
 
   readonly adminView = signal<'appointments' | 'services' | 'schedules' | 'notifications'>(
     'appointments',
@@ -75,7 +79,7 @@ export class AdminDashboard {
 
   /** Navigates away only once the server confirmed the sign-out; on failure the error banner shows. */
   async onLogout(): Promise<void> {
-    if (await this.store.onLogout()) {
+    if (await this.signOut()) {
       await this.router.navigateByUrl('');
     }
   }

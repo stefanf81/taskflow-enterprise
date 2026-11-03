@@ -1,15 +1,17 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
-import { AppointmentStore } from '../../core/appointments/appointment.store';
-import { isCustomerCancellable, statusLabel } from './appointment-status';
+import { injectSignOut } from '../../core/auth/sign-out';
 import { CustomerStore } from '../../core/customer/customer.store';
+import { FlashMessages } from '../../core/ui/flash-messages';
+import { isCustomerCancellable, statusLabel } from './appointment-status';
 import { formatTime12Hour, formatLocalDate } from '../../core/time-utils';
 
 /**
  * Lazy-loaded Customer dashboard (route: /customer). Extracted from the monolithic
  * App shell so it is no longer part of the initial JS bundle (P1 route-level
- * code splitting). Shares the singleton AppointmentStore/CustomerStore.
+ * code splitting). Its list lives in CustomerStore; action messages use the app-wide banner
+ * (FlashMessages).
  */
 @Component({
   selector: 'app-customer-portal',
@@ -18,12 +20,13 @@ import { formatTime12Hour, formatLocalDate } from '../../core/time-utils';
   templateUrl: './customer-portal.html',
 })
 export class CustomerPortal {
-  private readonly store = inject(AppointmentStore);
+  private readonly flash = inject(FlashMessages);
+  private readonly signOut = injectSignOut();
   readonly customerStore = inject(CustomerStore);
   private readonly router = inject(Router);
 
-  readonly errorMessage = this.store.errorMessage;
-  protected readonly successMessage = this.store.successMessage;
+  readonly errorMessage = this.flash.errorMessage;
+  protected readonly successMessage = this.flash.successMessage;
   readonly cancelErrorMessage = this.customerStore.cancelErrorMessage;
   protected readonly isLoading = this.customerStore.isLoading;
   protected readonly loadErrorMessage = this.customerStore.loadErrorMessage;
@@ -61,7 +64,7 @@ export class CustomerPortal {
 
   /** Navigates away only once the server confirmed the sign-out; on failure the error banner shows. */
   async onLogout(): Promise<void> {
-    if (await this.store.onLogout()) {
+    if (await this.signOut()) {
       await this.router.navigateByUrl('');
     }
   }

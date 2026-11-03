@@ -5,7 +5,7 @@ import { email, form, max, min, required, FormField } from '@angular/forms/signa
 import { AppointmentsApi } from '../../../core/api/appointments-api';
 import { ReviewsApi } from '../../../core/api/reviews-api';
 import { extractApiError } from '../../../core/api/extract-api-error';
-import { AppointmentStore } from '../../../core/appointments/appointment.store';
+import { FlashMessages } from '../../../core/ui/flash-messages';
 import { ReviewStore } from '../../../core/reviews/review.store';
 
 /** Model shape for the "Cancel my booking" Signal Form. */
@@ -240,13 +240,13 @@ interface ReviewFormModel {
 export class PostBookingActionsComponent {
   private readonly appointmentsApi = inject(AppointmentsApi);
   private readonly reviewsApi = inject(ReviewsApi);
-  private readonly appointmentStore = inject(AppointmentStore);
+  private readonly flash = inject(FlashMessages);
   private readonly reviewStore = inject(ReviewStore);
   private readonly destroyRef = inject(DestroyRef);
 
-  // One in-flight flag per form. Both used to share the booking wizard's submitting flag in
-  // AppointmentStore, so a review in flight relabelled the wizard's button and whichever request
-  // finished first re-enabled the other forms while theirs were still pending.
+  // One in-flight flag per form. Both used to share the booking wizard's submitting flag, so a
+  // review in flight relabelled the wizard's button and whichever request finished first
+  // re-enabled the other forms while theirs were still pending.
   protected readonly isCancelling = signal(false);
   protected readonly isReviewing = signal(false);
 
@@ -280,7 +280,7 @@ export class PostBookingActionsComponent {
     const email = this.cancelModel().email.trim();
     if (!publicId || !email) return;
 
-    this.appointmentStore.errorMessage.set(null);
+    this.flash.errorMessage.set(null);
     this.isCancelling.set(true);
     this.appointmentsApi
       .publicCancelAppointment(publicId, email)
@@ -288,13 +288,13 @@ export class PostBookingActionsComponent {
       .subscribe({
         next: () => {
           this.isCancelling.set(false);
-          this.appointmentStore.showSuccess(
+          this.flash.showSuccess(
             '🗑️ Reservation successfully cancelled. Your time slot has been released.',
           );
           this.cancelModel.set({ publicId: '', email: '' });
         },
         error: (err) => {
-          this.appointmentStore.errorMessage.set(
+          this.flash.errorMessage.set(
             extractApiError(err, 'Verification failed. Please check your Booking Code and Email.'),
           );
           this.isCancelling.set(false);
@@ -318,15 +318,13 @@ export class PostBookingActionsComponent {
       .subscribe({
         next: () => {
           this.isReviewing.set(false);
-          this.appointmentStore.showSuccess(
-            'Thank you for your review! We appreciate your feedback.',
-          );
+          this.flash.showSuccess('Thank you for your review! We appreciate your feedback.');
           this.reviewStore.loadRatings();
           this.reviewModel.set({ publicId: '', email: '', rating: 5, comment: '' });
         },
         error: (err) => {
           this.isReviewing.set(false);
-          this.appointmentStore.errorMessage.set(
+          this.flash.errorMessage.set(
             extractApiError(
               err,
               'Failed to submit review. Ensure the code is correct and the appointment is completed.',

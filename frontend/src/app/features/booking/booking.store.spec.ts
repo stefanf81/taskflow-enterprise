@@ -8,6 +8,7 @@ import { ServiceItem, PublicBarber, BarberRating, AppointmentItem } from '../../
 import { toLocalDateString } from '../../core/time-utils';
 import { AuthState } from '../../core/auth/auth.state';
 import { NETWORK_ERROR_MESSAGE } from '../../core/api/extract-api-error';
+import { FlashMessages } from '../../core/ui/flash-messages';
 import { LookbookSelectionBus } from './lookbook-selection';
 
 /** A bookable (non-Sunday, within 90 days, never today) date for tests that run on the real clock. */
@@ -18,15 +19,33 @@ const FUTURE = (() => {
   return toLocalDateString(d);
 })();
 
+/** The next Sunday (1-7 days ahead): inside the booking window, but the shop is closed. */
+const NEXT_SUNDAY = (() => {
+  const d = new Date();
+  d.setDate(d.getDate() + (7 - d.getDay()));
+  return toLocalDateString(d);
+})();
+
 @Component({ standalone: true, template: '' })
 class TestHost {
   readonly store = inject(BookingStore);
 }
 
+/** The app-wide banner the store reports to. */
+const flash = () => TestBed.inject(FlashMessages);
+
 describe('BookingStore', () => {
   let store: BookingStore;
   let httpMock: HttpTestingController;
   let fixture: ComponentFixture<TestHost>;
+
+  const isBusySlotsLookup = (r: { url: string }) => r.url.includes('/public/busy-slots');
+  /** Answers the availability lookup the resource has started (from an effect) and lets it settle. */
+  const answerBusySlots = async (busy: string[] = []) => {
+    TestBed.tick();
+    httpMock.match(isBusySlotsLookup).forEach((req) => req.flush(busy));
+    await fixture.whenStable();
+  };
 
   const mockServices: ServiceItem[] = [
     {
@@ -99,8 +118,8 @@ describe('BookingStore', () => {
   });
 
   afterEach(() => {
-    // Stale-slot rejection refreshes availability; drain that lookup.
-    httpMock.match((req) => req.url.includes('/public/busy-slots')).forEach((req) => req.flush([]));
+    // Drain any availability lookup a test left open.
+    httpMock.match(isBusySlotsLookup).forEach((req) => req.flush([]));
     httpMock.verify();
   });
 
@@ -125,7 +144,7 @@ describe('BookingStore', () => {
     store.selectLookbookStyle('Retired Service', 'hair');
     expect(store.activeStep()).toBe(1);
     expect(store.bookingService()).not.toBe('Retired Service');
-    expect(store.errorMessage()).toContain('Retired Service');
+    expect(flash().errorMessage()).toContain('Retired Service');
   });
 
   it('builds the stylist roster from the public API and joins ratings', () => {
@@ -157,7 +176,7 @@ describe('BookingStore', () => {
     expect(store.filteredServices().length).toBe(1);
   });
 
-  it('enforces the guided wizard step validation rules', () => {
+  it('enforces the guided wizard step validation rules', async () => {
     expect(store.isStepValid(1)).toBe(true);
     store.selectService('');
     expect(store.isStepValid(1)).toBe(false);
@@ -167,10 +186,25 @@ describe('BookingStore', () => {
 
     expect(store.isStepValid(3)).toBe(false);
     store.bookingModel.update((m) => ({ ...m, bookingDate: FUTURE, bookingTime: '10:00' }));
+    // No answer for this date yet.
+    expect(store.isStepValid(3)).toBe(false);
+    await answerBusySlots();
     expect(store.isStepValid(3)).toBe(true);
 
-    store.busySlots.set(['10:00']);
+    store.retrySlots();
+    await answerBusySlots(['10:00']);
     expect(store.isStepValid(3)).toBe(false);
+  });
+
+  it('refuses a closed day and never looks one up, even when it ends up in the model', () => {
+    store.selectBookingDate(NEXT_SUNDAY);
+    expect(store.bookingDate()).toBe('');
+    expect(flash().errorMessage()).toContain('closed on Sundays');
+
+    store.bookingModel.update((m) => ({ ...m, bookingDate: NEXT_SUNDAY }));
+    expect(store.isStepValid(3)).toBe(false);
+    TestBed.tick();
+    httpMock.expectNone(isBusySlotsLookup);
   });
 
   it('validates step 4 from the contact fields', () => {
@@ -204,7 +238,7 @@ describe('BookingStore', () => {
     expect(store.bookingService()).toBe('Classic Haircut');
     expect(store.selectedCategory()).toBe('hair');
     expect(store.activeStep()).toBe(2);
-    expect(store.successMessage()).toContain('Lookbook Style selected');
+    expect(flash().successMessage()).toContain('Lookbook Style selected');
   });
 
   it('applies a lookbook pick made through the bus after the wizard exists', () => {
@@ -220,11 +254,40 @@ describe('BookingStore', () => {
     expect(store.activeStep()).toBe(2);
   });
 
-  it('selects a stylist and refreshes slot availability', async () => {
+  it('selects a stylist and re-checks availability for that stylist', async () => {
+    store.selectBookingDate(FUTURE);
+    await answerBusySlots();
+
     store.selectStylist('Sara the Stylist');
     expect(store.bookingBarber()).toBe('Sara the Stylist');
-    httpMock.match((req) => req.url.includes('/public/busy-slots')).forEach((req) => req.flush([]));
+    expect(store.isCheckingSlots()).toBe(true);
+    TestBed.tick();
+    const lookup = httpMock.expectOne(isBusySlotsLookup);
+    expect(lookup.request.params.get('barberName')).toBe('Sara the Stylist');
+    lookup.flush([]);
     await fixture.whenStable();
+    expect(store.isCheckingSlots()).toBe(false);
+  });
+
+  it('asks for the "No Preference" sentinel as is (the server resolves it)', async () => {
+    store.selectBookingDate(FUTURE);
+    TestBed.tick();
+    const lookup = httpMock.expectOne(isBusySlotsLookup);
+    expect(lookup.request.params.get('barberName')).toBe(store.noPreferenceLabel);
+    expect(lookup.request.params.get('bookingDate')).toBe(FUTURE);
+    lookup.flush([]);
+    await fixture.whenStable();
+  });
+
+  it('does not re-check availability while only contact details change', async () => {
+    store.selectBookingDate(FUTURE);
+    await answerBusySlots();
+
+    store.bookingModel.update((m) => ({ ...m, customerName: 'Jane', customerPhone: '555' }));
+    TestBed.tick();
+
+    httpMock.expectNone(isBusySlotsLookup);
+    expect(store.isCheckingSlots()).toBe(false);
   });
 
   it('submits a booking and opens the receipt on success', async () => {
@@ -237,6 +300,7 @@ describe('BookingStore', () => {
       bookingTime: '10:00',
       serviceType: 'Classic Haircut',
     });
+    await answerBusySlots();
 
     store.submitBooking();
 
@@ -275,7 +339,7 @@ describe('BookingStore', () => {
     expect(store.isSubmitting()).toBe(false);
   });
 
-  it('refuses a stale slot that was taken since the last availability check', () => {
+  it('refuses a stale slot that was taken since the last availability check', async () => {
     store.bookingModel.update((m) => ({
       ...m,
       customerName: 'Jane',
@@ -284,12 +348,16 @@ describe('BookingStore', () => {
       bookingDate: FUTURE,
       bookingTime: '10:00',
     }));
-    store.busySlots.set(['10:00']);
+    await answerBusySlots(['10:00']);
 
     store.submitBooking();
 
-    expect(store.errorMessage()).toBe('That time slot was just taken. Please pick another slot.');
+    expect(flash().errorMessage()).toBe('That time slot was just taken. Please pick another slot.');
     httpMock.expectNone('/api/v1/appointments');
+    // ...and the grid is refreshed.
+    TestBed.tick();
+    httpMock.expectOne(isBusySlotsLookup).flush(['10:00']);
+    await fixture.whenStable();
   });
 
   it('surfaces a submission failure', async () => {
@@ -303,6 +371,7 @@ describe('BookingStore', () => {
       customerPhone: '555',
       bookingDate: FUTURE,
     }));
+    await answerBusySlots();
 
     store.submitBooking();
     httpMock
@@ -310,7 +379,7 @@ describe('BookingStore', () => {
       .flush({ message: 'Slot conflict' }, { status: 409, statusText: 'Conflict' });
     await fixture.whenStable();
 
-    expect(store.errorMessage()).toBe('Slot conflict');
+    expect(flash().errorMessage()).toBe('Slot conflict');
     expect(store.isSubmitting()).toBe(false);
     consoleError.mockRestore();
   });
@@ -336,6 +405,7 @@ describe('BookingStore', () => {
     };
 
     store.bookingModel.set(payload);
+    await answerBusySlots();
     store.submitBooking();
     const first = httpMock.expectOne('/api/v1/appointments');
     const firstKey = first.request.headers.get('Idempotency-Key');
@@ -352,6 +422,7 @@ describe('BookingStore', () => {
 
     // A new booking after success must use a fresh key.
     store.bookingModel.set(payload);
+    await answerBusySlots();
     store.submitBooking();
     const next = httpMock.expectOne('/api/v1/appointments');
     expect(next.request.headers.get('Idempotency-Key')).not.toBe(firstKey);
@@ -371,6 +442,7 @@ describe('BookingStore', () => {
       bookingTime: '10:00',
       serviceType: 'Classic Haircut',
     });
+    await answerBusySlots();
 
     store.submitBooking();
     const first = httpMock.expectOne('/api/v1/appointments');
@@ -379,6 +451,8 @@ describe('BookingStore', () => {
     await fixture.whenStable();
 
     store.bookingModel.update((m) => ({ ...m, serviceType: 'Modern Skin Fade' }));
+    // A different service is a different availability question.
+    await answerBusySlots();
     store.submitBooking();
     const second = httpMock.expectOne('/api/v1/appointments');
     expect(second.request.headers.get('Idempotency-Key')).not.toBe(firstKey);
@@ -398,6 +472,7 @@ describe('BookingStore', () => {
         bookingTime: '10:00',
         serviceType: 'The Executive Package',
       });
+      await answerBusySlots();
 
       store.submitBooking();
       httpMock.expectOne('/api/v1/appointments').flush({
@@ -440,7 +515,7 @@ describe('BookingStore', () => {
 
       store.submitBooking();
 
-      expect(store.errorMessage()).toBe('Invalid email format');
+      expect(flash().errorMessage()).toBe('Invalid email format');
       httpMock.expectNone('/api/v1/appointments');
     });
 
@@ -465,12 +540,13 @@ describe('BookingStore', () => {
         ...contact,
         customerEmail: 'jane@example.com',
       }));
+      await answerBusySlots();
 
       store.submitBooking();
       httpMock.expectOne('/api/v1/appointments').flush({ message }, { status, statusText: 'x' });
       await fixture.whenStable();
 
-      expect(store.errorMessage()).toBe(message);
+      expect(flash().errorMessage()).toBe(message);
       consoleError.mockRestore();
     });
 
@@ -481,12 +557,13 @@ describe('BookingStore', () => {
         ...contact,
         customerEmail: 'jane@example.com',
       }));
+      await answerBusySlots();
 
       store.submitBooking();
       httpMock.expectOne('/api/v1/appointments').error(new ProgressEvent('error'));
       await fixture.whenStable();
 
-      expect(store.errorMessage()).toBe(NETWORK_ERROR_MESSAGE);
+      expect(flash().errorMessage()).toBe(NETWORK_ERROR_MESSAGE);
       consoleError.mockRestore();
     });
   });
@@ -494,14 +571,16 @@ describe('BookingStore', () => {
   describe('busy-slot lookups (FE-11)', () => {
     it('sends the selected service and refreshes when the service changes', async () => {
       store.selectBookingDate(FUTURE);
-      const first = httpMock.expectOne((r) => r.url.includes('/public/busy-slots'));
+      TestBed.tick();
+      const first = httpMock.expectOne(isBusySlotsLookup);
       expect(first.request.params.get('serviceType')).toBe(store.bookingService());
       first.flush([]);
       await fixture.whenStable();
 
       // A longer service may not fit where a shorter one does: availability is re-queried.
       store.selectService('Royal Hot Towel Shave');
-      const second = httpMock.expectOne((r) => r.url.includes('/public/busy-slots'));
+      TestBed.tick();
+      const second = httpMock.expectOne(isBusySlotsLookup);
       expect(second.request.params.get('serviceType')).toBe('Royal Hot Towel Shave');
       second.flush([]);
       await fixture.whenStable();
@@ -512,18 +591,37 @@ describe('BookingStore', () => {
       expect(store.isCheckingSlots()).toBe(true);
       expect(store.isStepValid(3)).toBe(false);
 
-      httpMock.expectOne((r) => r.url.includes('/public/busy-slots')).flush([]);
+      TestBed.tick();
+      httpMock.expectOne(isBusySlotsLookup).flush([]);
       await fixture.whenStable();
 
       expect(store.isCheckingSlots()).toBe(false);
       expect(store.isStepValid(3)).toBe(true);
     });
 
+    it('cancels the lookup for a date the customer has already left', async () => {
+      store.selectBookingDate(FUTURE);
+      TestBed.tick();
+      const stale = httpMock.expectOne(isBusySlotsLookup);
+
+      const later = new Date();
+      later.setDate(later.getDate() + 12);
+      if (later.getDay() === 0) later.setDate(later.getDate() + 1);
+      store.selectBookingDate(toLocalDateString(later));
+      TestBed.tick();
+
+      expect(stale.cancelled).toBe(true);
+      httpMock.expectOne(isBusySlotsLookup).flush(['09:00']);
+      await fixture.whenStable();
+      expect(store.busySlots()).toEqual(['09:00']);
+    });
+
     it('treats a failed lookup as unknown: error shown, step 3 blocked until a retry succeeds', async () => {
       store.activeStep.set(3);
       store.selectBookingDate(FUTURE);
+      TestBed.tick();
       httpMock
-        .expectOne((r) => r.url.includes('/public/busy-slots'))
+        .expectOne(isBusySlotsLookup)
         .flush({ message: 'Unknown barber' }, { status: 400, statusText: 'Bad Request' });
       await fixture.whenStable();
 
@@ -533,8 +631,10 @@ describe('BookingStore', () => {
       store.goToNextStep();
       expect(store.activeStep()).toBe(3);
 
-      store.onBarberOrDateChange(); // the grid's Retry button
-      httpMock.expectOne((r) => r.url.includes('/public/busy-slots')).flush(['11:00']);
+      store.retrySlots(); // the grid's Retry button
+      expect(store.slotsError()).toBeNull(); // while the retry runs
+      TestBed.tick();
+      httpMock.expectOne(isBusySlotsLookup).flush(['11:00']);
       await fixture.whenStable();
 
       expect(store.slotsError()).toBeNull();
@@ -544,8 +644,9 @@ describe('BookingStore', () => {
 
     it('uses a generic message when the lookup fails without a body (503)', async () => {
       store.selectBookingDate(FUTURE);
+      TestBed.tick();
       httpMock
-        .expectOne((r) => r.url.includes('/public/busy-slots'))
+        .expectOne(isBusySlotsLookup)
         .flush(null, { status: 503, statusText: 'Service Unavailable' });
       await fixture.whenStable();
 
@@ -560,14 +661,13 @@ describe('BookingStore', () => {
         customerPhone: '555',
       }));
       store.selectBookingDate(FUTURE);
-      httpMock
-        .expectOne((r) => r.url.includes('/public/busy-slots'))
-        .flush(null, { status: 503, statusText: 'x' });
+      TestBed.tick();
+      httpMock.expectOne(isBusySlotsLookup).flush(null, { status: 503, statusText: 'x' });
       await fixture.whenStable();
 
       store.submitBooking();
 
-      expect(store.errorMessage()).toBe('Could not check availability. Please try again.');
+      expect(flash().errorMessage()).toBe('Could not check availability. Please try again.');
       httpMock.expectNone('/api/v1/appointments');
     });
   });
@@ -576,8 +676,9 @@ describe('BookingStore', () => {
     it('refuses a date beyond the 90-day horizon', () => {
       store.selectBookingDate('2999-01-01');
       expect(store.bookingDate()).toBe('');
-      expect(store.errorMessage()).toContain('90 days');
-      httpMock.expectNone((r) => r.url.includes('/public/busy-slots'));
+      expect(flash().errorMessage()).toContain('90 days');
+      TestBed.tick();
+      httpMock.expectNone(isBusySlotsLookup);
     });
   });
 
@@ -586,7 +687,7 @@ describe('BookingStore', () => {
       TestBed.inject(AuthState).applyRole('ROLE_CUSTOMER', 'jane@example.com');
 
       store.prefillFromSession();
-      expect(store.bookingEmail()).toBe('jane@example.com');
+      expect(store.bookingModel().customerEmail).toBe('jane@example.com');
 
       store.bookingModel.update((m) => ({
         ...m,
@@ -594,8 +695,8 @@ describe('BookingStore', () => {
         customerEmail: 'x@y.co',
       }));
       store.prefillFromSession();
-      expect(store.bookingName()).toBe('Typed Name');
-      expect(store.bookingEmail()).toBe('x@y.co');
+      expect(store.bookingModel().customerName).toBe('Typed Name');
+      expect(store.bookingModel().customerEmail).toBe('x@y.co');
       httpMock.match(() => true);
     });
 
@@ -605,7 +706,7 @@ describe('BookingStore', () => {
 
       store.resetBookingForm();
 
-      expect(store.bookingEmail()).toBe('jane@example.com');
+      expect(store.bookingModel().customerEmail).toBe('jane@example.com');
       httpMock.match(() => true);
     });
 
@@ -618,7 +719,7 @@ describe('BookingStore', () => {
 
       auth.clear();
 
-      expect(store.bookingEmail()).toBe('');
+      expect(store.bookingModel().customerEmail).toBe('');
       expect(store.lastBookedAppointment()).toBeNull();
       expect(store.showReceiptModal()).toBe(false);
       httpMock.match(() => true);
@@ -666,7 +767,7 @@ describe('BookingStore lookbook hand-off', () => {
 
     // Catalog still in flight: the pick waits instead of being rejected as unknown.
     expect(store.activeStep()).toBe(1);
-    expect(store.errorMessage()).toBeFalsy();
+    expect(flash().errorMessage()).toBeFalsy();
 
     httpMock.match((r) => r.url.includes('/api/v1/catalog')).forEach((r) => r.flush(services));
     httpMock.match((r) => r.url === '/api/v1/barbers').forEach((r) => r.flush([]));
@@ -682,6 +783,6 @@ describe('BookingStore lookbook hand-off', () => {
     expect(store.bookingService()).toBe('Modern Skin Fade');
     expect(store.selectedCategory()).toBe('hair');
     expect(store.activeStep()).toBe(2);
-    expect(store.errorMessage()).toBeFalsy();
+    expect(flash().errorMessage()).toBeFalsy();
   });
 });

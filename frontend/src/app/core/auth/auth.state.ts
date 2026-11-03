@@ -116,6 +116,7 @@ export class AuthState {
     this.setPrincipal(role, username);
     this.bootstrapDone.set(true);
     this.sessionNotice.set(null);
+    this.sessionEvents.notifySessionStarted();
   }
 
   private setPrincipal(role: string, username: string): void {

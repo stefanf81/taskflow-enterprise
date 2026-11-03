@@ -17,8 +17,12 @@ describe('BookingWizard accessibility (TODO 4.2, 4.3)', () => {
   const el = () => fixture.nativeElement as HTMLElement;
   const tabs = () => Array.from(el().querySelectorAll<HTMLButtonElement>('[role="tab"]'));
   const tab = (index: number) => tabs()[index] as HTMLButtonElement;
-  const flushBusySlots = (busy: string[] = []) =>
+  /** Answers the availability lookup the resource has started (from an effect) and lets it settle. */
+  const flushBusySlots = async (busy: string[] = []) => {
+    TestBed.tick();
     httpMock.match((r) => r.url.includes('/public/busy-slots')).forEach((r) => r.flush(busy));
+    await fixture.whenStable();
+  };
   const press = (target: HTMLElement, key: string): KeyboardEvent => {
     const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
     target.dispatchEvent(event);
@@ -134,7 +138,7 @@ describe('BookingWizard accessibility (TODO 4.2, 4.3)', () => {
       }
     });
 
-    it('keeps gated steps focusable but aria-disabled, and refuses to activate them', () => {
+    it('keeps gated steps focusable but aria-disabled, and refuses to activate them', async () => {
       // No date/slot yet: step 4 is gated; steps 2 and 3 are reachable (defaults are valid).
       expect(tab(1).hasAttribute('aria-disabled')).toBe(false);
       expect(tab(2).hasAttribute('aria-disabled')).toBe(false);
@@ -160,7 +164,7 @@ describe('BookingWizard accessibility (TODO 4.2, 4.3)', () => {
       expect(tab(0).getAttribute('aria-label')).toBe('Step 1 of 4: Select Treatment, completed');
 
       store.selectBookingDate(TUESDAY);
-      flushBusySlots();
+      await flushBusySlots();
       fixture.detectChanges();
       expect(tab(3).hasAttribute('aria-disabled')).toBe(false);
       tab(3).click();
@@ -169,9 +173,9 @@ describe('BookingWizard accessibility (TODO 4.2, 4.3)', () => {
       expect(el().querySelector('#step-panel-4')).toBeTruthy();
     });
 
-    it('always allows going back, and gates every step after an invalid one', () => {
+    it('always allows going back, and gates every step after an invalid one', async () => {
       store.selectBookingDate(TUESDAY);
-      flushBusySlots();
+      await flushBusySlots();
       store.setStep(4);
       fixture.detectChanges();
       expect(store.activeStep()).toBe(4);
@@ -181,7 +185,7 @@ describe('BookingWizard accessibility (TODO 4.2, 4.3)', () => {
       expect(store.activeStep()).toBe(1);
 
       store.selectService('');
-      flushBusySlots();
+      await flushBusySlots();
       fixture.detectChanges();
       expect(
         tabs()
@@ -205,6 +209,7 @@ describe('BookingWizard accessibility (TODO 4.2, 4.3)', () => {
 
     beforeEach(async () => {
       store.bookingModel.update((m) => ({ ...m, bookingDate: TUESDAY, bookingTime: '15:00' }));
+      await flushBusySlots();
       store.activeStep.set(4);
       await render();
     });
@@ -278,6 +283,7 @@ describe('BookingWizard accessibility (TODO 4.2, 4.3)', () => {
 
       store.resetBookingForm();
       store.bookingModel.update((m) => ({ ...m, bookingDate: TUESDAY, bookingTime: '15:00' }));
+      await flushBusySlots();
       store.activeStep.set(4);
       await render();
 

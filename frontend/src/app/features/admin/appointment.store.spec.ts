@@ -5,9 +5,9 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { AppointmentStore } from './appointment.store';
 import { AppointmentDashboardResponse } from '../../types/api';
-import { AppointmentsApi } from '../api/appointments-api';
-import { AuthApi } from '../api/auth-api';
-import { AuthState } from '../auth/auth.state';
+import { AppointmentsApi } from '../../core/api/appointments-api';
+import { AuthApi } from '../../core/api/auth-api';
+import { AuthState } from '../../core/auth/auth.state';
 
 @Component({ standalone: true, template: '' })
 class TestHost {
@@ -82,11 +82,6 @@ describe('AppointmentStore', () => {
     expect(store.appointments()).toEqual([]);
     expect(store.totalPages()).toBe(1);
     expect(store.totalElements()).toBe(0);
-    expect(store.errorMessage()).toBeNull();
-    expect(store.successMessage()).toBeNull();
-    expect(store.isSubmitting()).toBe(false);
-    expect(store.isCheckingSlots()).toBe(false);
-    expect(store.busySlots()).toEqual([]);
   });
 
   it('does not request the admin listing for a signed-in customer (it would only 403)', () => {
@@ -118,39 +113,6 @@ describe('AppointmentStore', () => {
   it('should expose computed stats with default fallback when not logged in', () => {
     expect(store.stats().total).toBe(0);
     expect(store.stats().pending).toBe(0);
-  });
-
-  it('signs out only after the server confirms (the session stays alive until then)', async () => {
-    authState.applyRole('ROLE_ADMIN', 'admin');
-    fixture.detectChanges();
-    httpMock.match(() => true).forEach((r) => r.flush(mockDashboard));
-    fixture.detectChanges();
-
-    const done = store.onLogout();
-    expect(authState.isLoggedIn()).toBe(true);
-
-    const req = httpMock.expectOne((r) => r.url.includes('/api/v1/auth/logout'));
-    expect(req.request.method).toBe('POST');
-    req.flush(null);
-
-    expect(await done).toBe(true);
-    expect(authState.isLoggedIn()).toBe(false);
-  });
-
-  it('keeps the session and shows an error when logout fails', async () => {
-    authState.applyRole('ROLE_ADMIN', 'admin');
-    fixture.detectChanges();
-    httpMock.match(() => true).forEach((r) => r.flush(mockDashboard));
-
-    const done = store.onLogout();
-    const req = httpMock.expectOne((r) => r.url.includes('/api/v1/auth/logout'));
-    req.error(new ProgressEvent('error'), { status: 500, statusText: 'Server Error' });
-
-    expect(await done).toBe(false);
-    expect(authState.isLoggedIn()).toBe(true);
-    expect(store.errorMessage()).toBe(
-      'Could not sign out. Please check your connection and try again.',
-    );
   });
 
   it('should navigate multiple pages and enforce boundaries using nested metadata', async () => {
@@ -361,14 +323,12 @@ describe('AppointmentStore', () => {
   });
 
   describe('session end (FE-8)', () => {
-    it('resets page, filters, search and banners when the session ends', () => {
+    it('resets page, filter and search when the session ends', () => {
       authState.applyRole('ROLE_ADMIN', 'admin');
       store.currentPage.set(2);
       store.selectedFilter.set('pending');
       store.searchQuery.set('Alice');
       store.searchDebounced.set('Alice');
-      store.errorMessage.set('boom');
-      store.showSuccess('done');
 
       authState.clear();
 
@@ -376,25 +336,24 @@ describe('AppointmentStore', () => {
       expect(store.selectedFilter()).toBe('all');
       expect(store.searchQuery()).toBe('');
       expect(store.searchDebounced()).toBe('');
-      expect(store.errorMessage()).toBeNull();
-      expect(store.successMessage()).toBeNull();
       // The dashboard request that the logged-in state had started is moot now.
       httpMock.match(() => true);
     });
 
-    it('does not erase the message of an action that fails after the session ended', () => {
-      authState.applyRole('ROLE_ADMIN', 'admin');
-      authState.clear();
+    it('drops a pending search debounce so it cannot restore the old query', () => {
+      vi.useFakeTimers();
+      try {
+        authState.applyRole('ROLE_ADMIN', 'admin');
+        store.onSearchChange('Alice');
 
-      store.reportActionError({ status: 409, error: { message: 'Already approved' } }, 'fallback');
-      fixture.detectChanges();
+        authState.clear();
+        vi.advanceTimersByTime(300);
 
-      expect(store.errorMessage()).toBe('Already approved');
-    });
-
-    it('skips the action banner for a 401 (the session-expiry flow explains it)', () => {
-      store.reportActionError({ status: 401 }, 'Failed to approve appointment.');
-      expect(store.errorMessage()).toBeNull();
+        expect(store.searchDebounced()).toBe('');
+        httpMock.match(() => true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

@@ -1,0 +1,152 @@
+<div
+  id="step-panel-3"
+  role="tabpanel"
+  aria-labelledby="step-tab-3"
+  class="space-y-6 animate-fadeIn"
+>
+  <!-- SOTA Quick-Date Carousel Picker Grid -->
+  <div class="form-group">
+    <span
+      id="selectDateLabel"
+      class="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-2"
+      >Select Date <span class="required">*</span></span
+    >
+    <div
+      role="group"
+      aria-labelledby="selectDateLabel"
+      style="
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(75px, 1fr));
+        gap: 0.75rem;
+      "
+    >
+      @for (day of store.upcomingBookingDays(); track day.dateStr) {
+        <button
+          type="button"
+          [attr.aria-label]="'Select date: ' + day.dayName + ' ' + day.dayNum + ' ' + day.monthName"
+          class="card slot-picker-btn"
+          [class.slot-selected]="store.bookingDate() === day.dateStr"
+          (click)="store.selectBookingDate(day.dateStr)"
+          style="padding: 0.75rem 0.5rem; text-align: center; border-radius: var(--radius-md)"
+        >
+          <span class="date-chip-weekday">{{ day.dayName }}</span>
+          <span class="date-chip-day">{{ day.dayNum }}</span>
+          <span class="date-chip-month">{{ day.monthName }}</span>
+        </button>
+      }
+    </div>
+  </div>
+
+  <!-- Interactive Available Slots Grid Picker with SOTA Loader States -->
+  @if (store.isCheckingSlots()) {
+    <div style="text-align: center; padding: 2.5rem" class="animate-fadeIn">
+      <svg
+        class="icon-spin animate-spin"
+        style="
+          width: 2.25rem;
+          height: 2.25rem;
+          color: var(--primary-gold);
+          margin: 0 auto;
+          display: block;
+        "
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <circle
+          class="opacity-25"
+          cx="12"
+          cy="12"
+          r="10"
+          stroke="currentColor"
+          stroke-width="4"
+          style="opacity: 0.25"
+          stroke="rgba(197,160,89,0.2)"
+        ></circle>
+        <path
+          class="opacity-75"
+          fill="currentColor"
+          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+          style="opacity: 0.75"
+        ></path>
+      </svg>
+      <p
+        style="
+          font-size: 0.8rem;
+          color: var(--primary-gold);
+          margin-top: 0.75rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        "
+      >
+        Checking slot availability...
+      </p>
+    </div>
+  } @else if (store.slotsError()) {
+    <div
+      role="alert"
+      class="alert alert-error animate-fadeIn py-4 px-5 rounded-xl text-xs border border-red-500/20 text-center"
+    >
+      <p class="text-rose-400 font-medium leading-normal">{{ store.slotsError() }}</p>
+      <p class="text-zinc-500 font-light mt-1">We can't show available times until this loads.</p>
+      <button
+        type="button"
+        class="btn btn-secondary py-2 px-4 text-xs mt-3"
+        (click)="store.retrySlots()"
+      >
+        Retry
+      </button>
+    </div>
+  } @else if (store.bookingDate()) {
+    <div class="form-group" style="margin-top: 1.5rem">
+      <span
+        id="selectTimeSlotLabel"
+        class="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-2"
+        >Select Time Slot <span class="required">*</span></span
+      >
+      <div
+        role="group"
+        aria-labelledby="selectTimeSlotLabel"
+        class="time-slots-grid animate-fadeIn"
+        style="
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+          gap: 0.75rem;
+          margin-top: 0.5rem;
+        "
+      >
+        @for (slot of store.timeSlots; track slot) {
+          <button
+            type="button"
+            class="btn btn-secondary slot-picker-btn"
+            [class.slot-busy]="store.isSlotUnavailable(slot)"
+            [class.slot-selected]="store.bookingTime() === slot"
+            [disabled]="store.isSlotUnavailable(slot)"
+            (click)="store.selectTimeSlot(slot)"
+            style="
+              padding: 0.65rem 0.5rem;
+              font-size: 0.825rem;
+              text-transform: none;
+              font-weight: 600;
+            "
+          >
+            @if (store.isSlotPast(slot)) {
+              ⏱️ Passed
+            } @else if (store.busySlots().includes(slot)) {
+              🚫 Taken
+            } @else {
+              {{ formatTime12Hour(slot) }}
+            }
+          </button>
+        }
+      </div>
+    </div>
+  } @else {
+    <div
+      class="mt-6 py-10 px-4 text-center text-sm text-zinc-300 bg-zinc-900/40 border border-dashed border-white/10 rounded-lg"
+    >
+      📅 Select an upcoming date above to view available time slots
+    </div>
+  }
+</div>

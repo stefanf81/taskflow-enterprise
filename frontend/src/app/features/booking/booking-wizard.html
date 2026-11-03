@@ -16,7 +16,7 @@
     <div class="absolute left-0 right-0 h-0.5 bg-white/5 z-0 top-1/2 -translate-y-1/2"></div>
     <div
       class="absolute left-0 h-0.5 bg-gold-dark z-10 top-1/2 -translate-y-1/2 transition-all duration-300"
-      [style.width.%]="(activeStep() - 1) * 33.3"
+      [style.width.%]="(store.activeStep() - 1) * 33.3"
     ></div>
 
     <!-- WAI-ARIA tabs, manual activation: arrows/Home/End move focus (onStepKeydown),
@@ -27,20 +27,20 @@
         type="button"
         role="tab"
         [attr.id]="'step-tab-' + step.num"
-        [attr.aria-selected]="activeStep() === step.num"
-        [attr.aria-controls]="activeStep() === step.num ? 'step-panel-' + step.num : null"
-        [attr.aria-disabled]="isStepReachable(step.num) ? null : 'true'"
+        [attr.aria-selected]="store.activeStep() === step.num"
+        [attr.aria-controls]="store.activeStep() === step.num ? 'step-panel-' + step.num : null"
+        [attr.aria-disabled]="store.isStepReachable(step.num) ? null : 'true'"
         [attr.aria-label]="stepTabLabel(step.num)"
-        [attr.tabindex]="activeStep() === step.num ? '0' : '-1'"
-        (click)="setStep(step.num)"
+        [attr.tabindex]="store.activeStep() === step.num ? '0' : '-1'"
+        (click)="store.setStep(step.num)"
         (keydown)="onStepKeydown($event, i)"
         class="wizard-step-node relative z-20 w-9 h-9 rounded-full border bg-zinc-950 text-zinc-500 text-xs font-black flex items-center justify-center transition-all duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
-        [class.cursor-pointer]="isStepReachable(step.num)"
-        [class.cursor-not-allowed]="!isStepReachable(step.num)"
-        [class.active]="activeStep() === step.num"
-        [class.completed]="activeStep() > step.num"
+        [class.cursor-pointer]="store.isStepReachable(step.num)"
+        [class.cursor-not-allowed]="!store.isStepReachable(step.num)"
+        [class.active]="store.activeStep() === step.num"
+        [class.completed]="store.activeStep() > step.num"
       >
-        @if (activeStep() > step.num) {
+        @if (store.activeStep() > step.num) {
           ✓
         } @else {
           {{ step.num }}
@@ -51,11 +51,11 @@
 
   <!-- Active Step Indicator Badge label -->
   <div class="text-center font-bold text-xs text-gold uppercase tracking-wider mb-6">
-    {{ activeStep() }}. {{ activeStepLabel() }}
+    {{ store.activeStep() }}. {{ activeStepLabel() }}
   </div>
 
   <!-- STATUS BANNERS -->
-  @if (errorMessage()) {
+  @if (flash.errorMessage()) {
     <div
       role="alert"
       class="alert alert-error mb-6 animate-fadeIn py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-red-500/20"
@@ -74,11 +74,13 @@
           d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
         />
       </svg>
-      <span class="flex-1 leading-normal text-rose-400 font-medium">{{ errorMessage() }}</span>
+      <span class="flex-1 leading-normal text-rose-400 font-medium">{{
+        flash.errorMessage()
+      }}</span>
       <button
         type="button"
         class="text-base font-bold opacity-60 hover:opacity-100"
-        (click)="errorMessage.set(null)"
+        (click)="flash.errorMessage.set(null)"
         aria-label="Dismiss error"
       >
         &times;
@@ -86,7 +88,7 @@
     </div>
   }
 
-  @if (successMessage()) {
+  @if (flash.successMessage()) {
     <div
       role="status"
       aria-live="polite"
@@ -106,488 +108,26 @@
           d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
         />
       </svg>
-      <span class="flex-1 leading-normal text-emerald-400 font-medium">{{ successMessage() }}</span>
+      <span class="flex-1 leading-normal text-emerald-400 font-medium">{{
+        flash.successMessage()
+      }}</span>
     </div>
   }
 
-  <!-- STEP 1: TREATMENT SELECT -->
-  @if (activeStep() === 1) {
-    <div
-      id="step-panel-1"
-      role="tabpanel"
-      aria-labelledby="step-tab-1"
-      class="space-y-4 animate-fadeIn"
-    >
-      <!-- Live Search Box inside Step 1 -->
-      <div class="relative w-full">
-        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500">🔍</span>
-        <input
-          type="text"
-          [value]="serviceSearchQuery()"
-          (input)="serviceSearchQuery.set($any($event.target).value)"
-          placeholder="Search treatments (e.g., fade, trim, shave)..."
-          class="w-full bg-black border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-xs text-zinc-100 placeholder-slate-400 outline-none focus:border-gold-dark transition-all duration-200"
-        />
-      </div>
-
-      <!-- Interactive Category Tabs Pill Selection -->
-      <div
-        class="flex bg-white/5 rounded-xl p-1 border border-white/5"
-        style="margin-bottom: 1.5rem"
-      >
-        <button
-          type="button"
-          (click)="setServiceCategory('all')"
-          [class.bg-zinc-950]="selectedCategory() === 'all'"
-          [class.text-gold]="selectedCategory() === 'all'"
-          class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
-        >
-          All
-        </button>
-        <button
-          type="button"
-          (click)="setServiceCategory('hair')"
-          [class.bg-zinc-950]="selectedCategory() === 'hair'"
-          [class.text-gold]="selectedCategory() === 'hair'"
-          class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
-        >
-          Hair
-        </button>
-        <button
-          type="button"
-          (click)="setServiceCategory('beard')"
-          [class.bg-zinc-950]="selectedCategory() === 'beard'"
-          [class.text-gold]="selectedCategory() === 'beard'"
-          class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
-        >
-          Beards
-        </button>
-        <button
-          type="button"
-          (click)="setServiceCategory('combo')"
-          [class.bg-zinc-950]="selectedCategory() === 'combo'"
-          [class.text-gold]="selectedCategory() === 'combo'"
-          class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
-        >
-          Combos
-        </button>
-      </div>
-
-      @if (catalogError()) {
-        <div role="alert" class="text-center text-xs text-rose-400 py-4">
-          <p>{{ catalogError() }}</p>
-          <button
-            type="button"
-            class="btn btn-secondary py-2 px-4 text-xs mt-3"
-            (click)="retryCatalog()"
-          >
-            Retry
-          </button>
-        </div>
-      }
-
-      <div class="services-list max-h-[380px] overflow-y-auto pr-0.5 space-y-3">
-        @for (service of filteredServices(); track service.name) {
-          <button
-            type="button"
-            class="card w-full text-left p-4 border border-white/5 bg-zinc-900/30 hover:border-gold/30 cursor-pointer transition-all"
-            [class.selected-service-item]="bookingService() === service.name"
-            (click)="selectService(service.name)"
-          >
-            <span class="flex justify-between items-center font-bold">
-              <span class="text-zinc-100 text-base flex items-center gap-1.5">
-                @if (bookingService() === service.name) {
-                  <span class="text-gold text-sm">👑</span>
-                }
-                {{ service.name }}
-              </span>
-              <span class="text-gold text-lg">${{ service.price }}</span>
-            </span>
-            <span class="block text-[10px] font-bold text-zinc-500 uppercase mt-0.5">
-              ⏱️ Duration: {{ service.durationMinutes }} mins
-            </span>
-            <span class="block text-xs text-zinc-400 leading-relaxed font-light mt-1">
-              {{ service.description }}
-            </span>
-          </button>
-        } @empty {
-          <!-- Same reasoning as the grooming menu on the landing page: the catalog lands after
-               hydration, and an empty scroll area would collapse to nothing and then jump to its
-               full height. Once the catalog has answered, an empty list is a real result. -->
-          @if (catalogError()) {
-            <!-- the error and its retry button are rendered above the list -->
-          } @else if (catalogLoaded()) {
-            <p class="text-xs text-zinc-400 font-light py-4 text-center">
-              No treatments match this filter.
-            </p>
-          } @else {
-            @for (row of skeletonRows; track row) {
-              <div
-                aria-hidden="true"
-                class="w-full rounded-2xl p-4 border border-white/5 bg-zinc-900/30 animate-pulse"
-              >
-                <div class="flex justify-between items-center">
-                  <div class="h-5 w-44 rounded bg-white/10"></div>
-                  <div class="h-5 w-14 rounded bg-white/10"></div>
-                </div>
-                <div class="h-2.5 w-28 rounded bg-white/5 mt-1.5"></div>
-                <div class="h-3 w-full rounded bg-white/5 mt-2"></div>
-              </div>
-            }
-          }
-        }
-      </div>
-    </div>
-  }
-
-  <!-- STEP 2: SELECT STYLIST -->
-  @if (activeStep() === 2) {
-    <div
-      id="step-panel-2"
-      role="tabpanel"
-      aria-labelledby="step-tab-2"
-      class="space-y-4 animate-fadeIn"
-    >
-      @if (rosterError()) {
-        <div role="alert" class="text-center text-xs text-rose-400 py-2">
-          <p>{{ rosterError() }} You can still choose "No Preference".</p>
-          <button
-            type="button"
-            class="btn btn-secondary py-2 px-4 text-xs mt-3"
-            (click)="retryRoster()"
-          >
-            Retry
-          </button>
-        </div>
-      }
-      @for (profile of stylistProfiles(); track profile.name) {
-        <app-stylist-card
-          [profile]="profile"
-          [isSelected]="bookingBarber() === profile.name"
-          (selected)="selectStylist(profile.name)"
-        />
-      }
-
-      <!-- No Preference Option -->
-      <button
-        type="button"
-        class="card w-full text-left p-4 border border-white/5 bg-zinc-900/30 hover:border-gold/30 hover:bg-gold/5 flex items-center gap-4 cursor-pointer transition-all"
-        [class.selected-service-item]="bookingBarber() === 'No Preference (First Available)'"
-        (click)="selectStylist('No Preference (First Available)')"
-      >
-        <span
-          class="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-lg font-black text-gold"
-        >
-          🚀
-        </span>
-        <span class="block">
-          <span class="block text-zinc-100 font-extrabold text-sm">No Preference</span>
-          <span class="block text-[11px] font-semibold text-zinc-500 mt-0.5">
-            Select Best First Available Stylist
-          </span>
-          <span class="block text-xs text-zinc-500 font-light leading-relaxed mt-1">
-            Automatically pairs you with the first available professional for maximum scheduling
-            flexibility.
-          </span>
-        </span>
-      </button>
-    </div>
-  }
-
-  <!-- STEP 3: PICK DATE & AVAILABLE TIME SLOT -->
-  @if (activeStep() === 3) {
-    <div
-      id="step-panel-3"
-      role="tabpanel"
-      aria-labelledby="step-tab-3"
-      class="space-y-6 animate-fadeIn"
-    >
-      <!-- SOTA Quick-Date Carousel Picker Grid -->
-      <div class="form-group">
-        <span
-          id="selectDateLabel"
-          class="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-2"
-          >Select Date <span class="required">*</span></span
-        >
-        <div
-          role="group"
-          aria-labelledby="selectDateLabel"
-          style="
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(75px, 1fr));
-            gap: 0.75rem;
-          "
-        >
-          @for (day of upcomingBookingDays(); track day.dateStr) {
-            <button
-              type="button"
-              [attr.aria-label]="
-                'Select date: ' + day.dayName + ' ' + day.dayNum + ' ' + day.monthName
-              "
-              class="card slot-picker-btn"
-              [class.slot-selected]="bookingDate() === day.dateStr"
-              (click)="selectBookingDate(day.dateStr)"
-              style="padding: 0.75rem 0.5rem; text-align: center; border-radius: var(--radius-md)"
-            >
-              <span class="date-chip-weekday">{{ day.dayName }}</span>
-              <span class="date-chip-day">{{ day.dayNum }}</span>
-              <span class="date-chip-month">{{ day.monthName }}</span>
-            </button>
-          }
-        </div>
-      </div>
-
-      <!-- Interactive Available Slots Grid Picker with SOTA Loader States -->
-      @if (isCheckingSlots()) {
-        <div style="text-align: center; padding: 2.5rem" class="animate-fadeIn">
-          <svg
-            class="icon-spin animate-spin"
-            style="
-              width: 2.25rem;
-              height: 2.25rem;
-              color: var(--primary-gold);
-              margin: 0 auto;
-              display: block;
-            "
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <circle
-              class="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              stroke-width="4"
-              style="opacity: 0.25"
-              stroke="rgba(197,160,89,0.2)"
-            ></circle>
-            <path
-              class="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              style="opacity: 0.75"
-            ></path>
-          </svg>
-          <p
-            style="
-              font-size: 0.8rem;
-              color: var(--primary-gold);
-              margin-top: 0.75rem;
-              font-weight: 700;
-              text-transform: uppercase;
-              letter-spacing: 0.05em;
-            "
-          >
-            Checking slot availability...
-          </p>
-        </div>
-      } @else if (slotsError()) {
-        <div
-          role="alert"
-          class="alert alert-error animate-fadeIn py-4 px-5 rounded-xl text-xs border border-red-500/20 text-center"
-        >
-          <p class="text-rose-400 font-medium leading-normal">{{ slotsError() }}</p>
-          <p class="text-zinc-500 font-light mt-1">
-            We can't show available times until this loads.
-          </p>
-          <button
-            type="button"
-            class="btn btn-secondary py-2 px-4 text-xs mt-3"
-            (click)="retrySlots()"
-          >
-            Retry
-          </button>
-        </div>
-      } @else if (bookingDate()) {
-        <div class="form-group" style="margin-top: 1.5rem">
-          <span
-            id="selectTimeSlotLabel"
-            class="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-2"
-            >Select Time Slot <span class="required">*</span></span
-          >
-          <div
-            role="group"
-            aria-labelledby="selectTimeSlotLabel"
-            class="time-slots-grid animate-fadeIn"
-            style="
-              display: grid;
-              grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
-              gap: 0.75rem;
-              margin-top: 0.5rem;
-            "
-          >
-            @for (slot of timeSlots; track slot) {
-              <button
-                type="button"
-                class="btn btn-secondary slot-picker-btn"
-                [class.slot-busy]="isSlotUnavailable(slot)"
-                [class.slot-selected]="bookingTime() === slot"
-                [disabled]="isSlotUnavailable(slot)"
-                (click)="selectTimeSlot(slot)"
-                style="
-                  padding: 0.65rem 0.5rem;
-                  font-size: 0.825rem;
-                  text-transform: none;
-                  font-weight: 600;
-                "
-              >
-                @if (isSlotPast(slot)) {
-                  ⏱️ Passed
-                } @else if (busySlots().includes(slot)) {
-                  🚫 Taken
-                } @else {
-                  {{ formatTime12Hour(slot) }}
-                }
-              </button>
-            }
-          </div>
-        </div>
-      } @else {
-        <div
-          class="mt-6 py-10 px-4 text-center text-sm text-zinc-300 bg-zinc-900/40 border border-dashed border-white/10 rounded-lg"
-        >
-          📅 Select an upcoming date above to view available time slots
-        </div>
-      }
-    </div>
-  }
-
-  <!-- STEP 4: CUSTOMER CONTACT & CONFIRM -->
-  @if (activeStep() === 4) {
-    <div
-      id="step-panel-4"
-      role="tabpanel"
-      aria-labelledby="step-tab-4"
-      class="space-y-4 animate-fadeIn"
-    >
-      <form
-        method="post"
-        [formRoot]="bookingForm"
-        (submit)="$event.preventDefault(); submitBooking()"
-        class="appointment-form"
-      >
-        <div class="form-group">
-          <label for="customerName">Your Full Name <span class="required">*</span></label>
-          <input
-            type="text"
-            id="customerName"
-            placeholder="e.g., John Doe"
-            class="form-control"
-            [formField]="bookingForm.customerName"
-            [attr.aria-invalid]="nameError() ? 'true' : null"
-            [attr.aria-describedby]="nameError() ? 'customerName-error' : null"
-          />
-          @if (nameError(); as nameProblem) {
-            <span id="customerName-error" role="alert" class="text-rose-400 text-[10px] mt-1 block">
-              {{ nameProblem }}
-            </span>
-          }
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="customerEmail">Email Address <span class="required">*</span></label>
-            <input
-              type="email"
-              id="customerEmail"
-              placeholder="e.g., john@example.com"
-              class="form-control"
-              [formField]="bookingForm.customerEmail"
-              [attr.aria-invalid]="visibleEmailError() ? 'true' : null"
-              [attr.aria-describedby]="visibleEmailError() ? 'customerEmail-error' : null"
-            />
-            @if (visibleEmailError(); as emailProblem) {
-              <span
-                id="customerEmail-error"
-                role="alert"
-                class="text-rose-400 text-[10px] mt-1 block"
-              >
-                {{ emailProblem }}
-              </span>
-            }
-          </div>
-
-          <div class="form-group">
-            <label for="customerPhone">Phone Number <span class="required">*</span></label>
-            <input
-              type="text"
-              id="customerPhone"
-              placeholder="e.g., 555-0199"
-              class="form-control"
-              [formField]="bookingForm.customerPhone"
-              [attr.aria-invalid]="phoneError() ? 'true' : null"
-              [attr.aria-describedby]="phoneError() ? 'customerPhone-error' : null"
-            />
-            @if (phoneError(); as phoneProblem) {
-              <span
-                id="customerPhone-error"
-                role="alert"
-                class="text-rose-400 text-[10px] mt-1 block"
-              >
-                {{ phoneProblem }}
-              </span>
-            }
-          </div>
-        </div>
-
-        <!-- Real-Time Booking Summary Card -->
-        <div
-          class="booking-summary-card card animate-fadeIn bg-zinc-900/50 border border-white/10 p-5 mt-6 rounded-2xl"
-        >
-          <h3
-            class="text-zinc-100 font-extrabold text-sm border-b border-white/10 pb-3 mb-4 flex items-center gap-1.5"
-          >
-            <span>📋 Reservation Summary</span>
-          </h3>
-          <div class="space-y-3 text-xs text-zinc-400 font-light">
-            <p class="flex justify-between">
-              <span>✂️ Treatment:</span>
-              <strong class="text-zinc-100 font-semibold">{{ bookingService() }}</strong>
-            </p>
-            <p class="flex justify-between">
-              <span>⏱️ Duration:</span>
-              <strong class="text-zinc-100 font-semibold"
-                >{{ selectedServiceObj()?.durationMinutes }} mins</strong
-              >
-            </p>
-            <p class="flex justify-between">
-              <span>💈 Stylist:</span>
-              <strong class="text-zinc-100 font-semibold">{{ bookingBarber() }}</strong>
-            </p>
-            <p class="flex justify-between">
-              <span>📅 Scheduled:</span>
-              <strong class="text-zinc-100 font-semibold">
-                {{ formattedBookingDate() }} at
-                {{ formatTime12Hour(bookingTime()) }}
-              </strong>
-            </p>
-            @if (estimatedEndTime()) {
-              <p class="flex justify-between">
-                <span>⏰ Est. End Time:</span>
-                <strong class="text-gold font-bold">{{
-                  formatTime12Hour(estimatedEndTime())
-                }}</strong>
-              </p>
-            }
-            <hr class="border-t border-white/10 my-2" />
-            <p class="flex justify-between text-sm font-bold text-zinc-100 pt-1">
-              <span>Total Est. Price:</span>
-              <span class="text-gold">{{ formattedTotal() }}</span>
-            </p>
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          class="btn btn-submit login-btn w-full mt-6 py-3 text-sm font-bold tracking-wide uppercase transition-all duration-200"
-          [disabled]="isSubmitting()"
-        >
-          {{ isSubmitting() ? 'Securing Slot...' : 'Confirm & Request Booking' }}
-        </button>
-      </form>
-    </div>
+  <!-- One component per step; each renders its own tabpanel (#step-panel-N). -->
+  @switch (store.activeStep()) {
+    @case (1) {
+      <app-booking-service-step />
+    }
+    @case (2) {
+      <app-booking-stylist-step />
+    }
+    @case (3) {
+      <app-booking-date-time-step />
+    }
+    @case (4) {
+      <app-booking-contact-step (submitted)="submitBooking()" />
+    }
   }
 
   <!-- Wizard Step Navigation Controls Footer -->
@@ -597,19 +137,19 @@
     <button
       type="button"
       class="btn btn-secondary text-xs"
-      [disabled]="activeStep() === 1"
-      (click)="goToPrevStep()"
+      [disabled]="store.activeStep() === 1"
+      (click)="store.goToPrevStep()"
       style="padding: 0.5rem 1.25rem"
     >
       &larr; Back
     </button>
 
-    @if (activeStep() < 4) {
+    @if (store.activeStep() < 4) {
       <button
         type="button"
         class="btn btn-submit text-xs"
-        [disabled]="!isStepValid(activeStep())"
-        (click)="goToNextStep()"
+        [disabled]="!store.isStepValid(store.activeStep())"
+        (click)="store.goToNextStep()"
         style="padding: 0.5rem 1.5rem"
       >
         Next &rarr;
@@ -622,12 +162,12 @@
      @defer (when ...) renders it the first time a booking completes (the chunk is prefetched once
      the browser is idle); the inner @if still controls show/hide so closing the modal removes it
      from the DOM. -->
-@defer (when showReceiptModal(); prefetch on idle) {
-  @if (showReceiptModal()) {
+@defer (when store.showReceiptModal(); prefetch on idle) {
+  @if (store.showReceiptModal()) {
     <app-receipt-modal
-      [appointment]="lastBookedAppointment()"
-      [checkoutTotal]="lastBookedTotal()"
-      (closed)="showReceiptModal.set(false)"
+      [appointment]="store.lastBookedAppointment()"
+      [checkoutTotal]="store.lastBookedTotal()"
+      (closed)="store.showReceiptModal.set(false)"
     />
   }
 }

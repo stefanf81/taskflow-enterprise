@@ -1,7 +1,8 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { AppointmentStore } from '../../core/appointments/appointment.store';
 import { AppointmentsApi } from '../../core/api/appointments-api';
+import { FlashMessages } from '../../core/ui/flash-messages';
+import { AppointmentStore } from './appointment.store';
 import { formatTime12Hour, formatLocalDate, isOverdue } from '../../core/time-utils';
 
 /** Owner dashboard · appointments tab (list, filter, search, approve/deny/delete). */
@@ -13,6 +14,7 @@ import { formatTime12Hour, formatLocalDate, isOverdue } from '../../core/time-ut
 export class AdminAppointmentsTab {
   private readonly appointmentsApi = inject(AppointmentsApi);
   private readonly store = inject(AppointmentStore);
+  private readonly flash = inject(FlashMessages);
 
   readonly appointments = this.store.appointments;
   protected readonly searchQuery = this.store.searchQuery;
@@ -49,21 +51,21 @@ export class AdminAppointmentsTab {
   approveAppointment(id: number): void {
     this.appointmentsApi.updateAppointmentStatus(id, 'APPROVED').subscribe({
       next: () => {
-        this.store.showSuccess('Appointment APPROVED! Client notification email dispatched.');
+        this.flash.showSuccess('Appointment APPROVED! Client notification email dispatched.');
         this.loadAppointments();
       },
       // 409 = invalid transition / conflict: the server's message says why.
-      error: (err) => this.store.reportActionError(err, 'Failed to approve appointment.'),
+      error: (err) => this.flash.reportActionError(err, 'Failed to approve appointment.'),
     });
   }
 
   denyAppointment(id: number): void {
     this.appointmentsApi.updateAppointmentStatus(id, 'DENIED').subscribe({
       next: () => {
-        this.store.showSuccess('Appointment DECLINED. Client notification email dispatched.');
+        this.flash.showSuccess('Appointment DECLINED. Client notification email dispatched.');
         this.loadAppointments();
       },
-      error: (err) => this.store.reportActionError(err, 'Failed to decline appointment.'),
+      error: (err) => this.flash.reportActionError(err, 'Failed to decline appointment.'),
     });
   }
 
@@ -72,11 +74,11 @@ export class AdminAppointmentsTab {
 
     this.appointmentsApi.deleteAppointment(id).subscribe({
       next: () => {
-        this.store.showSuccess('Booking permanently deleted.');
+        this.flash.showSuccess('Booking permanently deleted.');
         // If this emptied the last page, AppointmentStore steps back by itself.
         this.loadAppointments();
       },
-      error: (err) => this.store.reportActionError(err, 'Failed to delete booking.'),
+      error: (err) => this.flash.reportActionError(err, 'Failed to delete booking.'),
     });
   }
 

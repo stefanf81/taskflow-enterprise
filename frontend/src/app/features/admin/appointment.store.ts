@@ -1,12 +1,11 @@
 import { Injectable, signal, computed, inject, effect, untracked, DestroyRef } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { AuthState } from '../auth/auth.state';
+import { AuthState } from '../../core/auth/auth.state';
 import { AppointmentDashboardResponse } from '../../types/api';
-import { AppointmentsApi } from '../api/appointments-api';
-import { extractApiError } from '../api/extract-api-error';
-import { refreshResource, safeResourceValue } from '../resource-utils';
-import { SessionEvents } from '../session-events';
+import { AppointmentsApi } from '../../core/api/appointments-api';
+import { refreshResource, safeResourceValue } from '../../core/resource-utils';
+import { SessionEvents } from '../../core/session-events';
 import { appointmentDashboardResponseSchema } from '@taskflow/schemas';
 
 const EMPTY_DASHBOARD: AppointmentDashboardResponse = {
@@ -26,7 +25,10 @@ const EMPTY_DASHBOARD: AppointmentDashboardResponse = {
 };
 
 /**
- * Admin appointment list state.
+ * Owner dashboard: the appointment list (page, status filter, search) and its stats.
+ *
+ * Action messages ("Appointment APPROVED!", "Failed to delete booking.") go to the app-wide
+ * banner, `FlashMessages`; this store only reports its own load failure (`loadErrorMessage`).
  *
  * Fetch orchestration notes (B1):
  * - `httpResource` re-fires automatically whenever the signals read inside its
@@ -51,10 +53,6 @@ export class AppointmentStore {
   private readonly authState = inject(AuthState);
   private readonly destroyRef = inject(DestroyRef);
 
-  // Authentication State — delegates to AuthState (single source of truth).
-  // The JWT is held in an HttpOnly cookie (not readable by JS). The UI auth
-  // state is derived purely from signals, restored on refresh via /auth/me.
-
   // Pagination & Filter States
   readonly currentPage = signal<number>(0);
   readonly pageSize = 50;
@@ -68,7 +66,6 @@ export class AppointmentStore {
   /** Read by the resource request so a refresh can restart an in-flight load. */
   private readonly refreshTick = signal(0);
 
-  // Core Admin Reactive States (Declarative Signals via httpResource)
   private readonly appointmentsResource = httpResource<AppointmentDashboardResponse>(
     () => {
       // The listing is admin-only on the backend: any other signed-in role would just
@@ -96,34 +93,18 @@ export class AppointmentStore {
   readonly totalPages = computed(() => this.dashboard().page.page.totalPages);
   readonly totalElements = computed(() => this.dashboard().page.page.totalElements);
 
-  // Load-failure state kept separate from the dismissible action `errorMessage`,
-  // which is shared with BookingStore and must not carry dashboard load errors.
+  // Load-failure state, kept apart from the dismissible app-wide banner (FlashMessages): a
+  // failed list load must read as "could not load", never as "no bookings".
   readonly isLoading = this.appointmentsResource.isLoading;
   readonly loadErrorMessage = computed(() =>
     this.appointmentsResource.error() ? 'Could not load appointments. Please retry.' : null,
   );
 
-  // Alerts & Loading State (Signals)
-  readonly errorMessage = signal<string | null>(null);
-  readonly successMessage = signal<string | null>(null);
-  readonly isSubmitting = signal<boolean>(false);
-  readonly isCheckingSlots = signal<boolean>(false);
-  readonly busySlots = signal<string[]>([]);
-
   constructor() {
-    this.destroyRef.onDestroy(() => {
-      if (this.searchDebounceTimer) {
-        clearTimeout(this.searchDebounceTimer);
-      }
-      if (this.successTimer) {
-        clearTimeout(this.successTimer);
-      }
-    });
+    this.destroyRef.onDestroy(() => this.cancelSearchDebounce());
 
-    // When an authenticated session ends (logout, 401 expiry) drop everything the
-    // previous user left behind: page, filters, search and banners. Done on the
-    // event (not in an effect) so it runs BEFORE a failed action's error callback
-    // and can never erase the message that action sets afterwards.
+    // When an authenticated session ends (logout, 401 expiry) drop what the previous user left
+    // behind: page, filter and search.
     this.sessionEvents.sessionEnded
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.resetSessionState());
@@ -150,9 +131,7 @@ export class AppointmentStore {
   onSearchChange(value: string): void {
     this.searchQuery.set(value);
     this.currentPage.set(0); // Reset page
-    if (this.searchDebounceTimer) {
-      clearTimeout(this.searchDebounceTimer);
-    }
+    this.cancelSearchDebounce();
     this.searchDebounceTimer = setTimeout(() => {
       this.searchDebounceTimer = null;
       this.searchDebounced.set(value);
@@ -198,62 +177,18 @@ export class AppointmentStore {
     refreshResource(this.appointmentsResource, this.refreshTick);
   }
 
-  /**
-   * Signs out. The session stays alive (and the user stays on the dashboard)
-   * until the server confirms: a failed logout leaves a still-valid HttpOnly
-   * cookie, so pretending to be signed out would be a lie. Resolves `true` once
-   * signed out; `false` after showing an error and keeping the session.
-   */
-  async onLogout(): Promise<boolean> {
-    try {
-      await this.authState.logoutAndWait();
-      return true;
-    } catch (err) {
-      this.errorMessage.set(
-        extractApiError(err, 'Could not sign out. Please check your connection and try again.'),
-      );
-      return false;
-    }
-  }
-
-  /**
-   * Reports a failed admin action. A 401 is skipped: the session-expiry flow
-   * already told the user (and navigated away); a stale "Failed to approve"
-   * banner would just leak onto the landing page's shared alert area.
-   */
-  reportActionError(err: unknown, fallback: string): void {
-    if ((err as { status?: number })?.status === 401) return;
-    this.errorMessage.set(extractApiError(err, fallback));
-  }
-
   private resetSessionState(): void {
-    if (this.searchDebounceTimer) {
-      clearTimeout(this.searchDebounceTimer);
-      this.searchDebounceTimer = null;
-    }
-    if (this.successTimer) {
-      clearTimeout(this.successTimer);
-      this.successTimer = null;
-    }
+    this.cancelSearchDebounce();
     this.currentPage.set(0);
     this.selectedFilter.set('all');
     this.searchQuery.set('');
     this.searchDebounced.set('');
-    this.errorMessage.set(null);
-    this.successMessage.set(null);
   }
 
-  private successTimer: ReturnType<typeof setTimeout> | null = null;
-
-  /** Shows a transient success banner (auto-dismissed after 4.5s). */
-  showSuccess(message: string): void {
-    if (this.successTimer) {
-      clearTimeout(this.successTimer);
+  private cancelSearchDebounce(): void {
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+      this.searchDebounceTimer = null;
     }
-    this.successMessage.set(message);
-    this.successTimer = setTimeout(() => {
-      this.successMessage.set(null);
-      this.successTimer = null;
-    }, 4500);
   }
 }

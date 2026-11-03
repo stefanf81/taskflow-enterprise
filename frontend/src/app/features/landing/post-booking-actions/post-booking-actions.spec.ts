@@ -4,13 +4,13 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { PostBookingActionsComponent } from './post-booking-actions';
-import { AppointmentStore } from '../../../core/appointments/appointment.store';
+import { FlashMessages } from '../../../core/ui/flash-messages';
 
 describe('PostBookingActionsComponent', () => {
   let fixture: ComponentFixture<PostBookingActionsComponent>;
   let component: PostBookingActionsComponent;
   let httpMock: HttpTestingController;
-  let store: AppointmentStore;
+  let flash: FlashMessages;
 
   beforeEach(async () => {
     TestBed.configureTestingModule({
@@ -20,7 +20,7 @@ describe('PostBookingActionsComponent', () => {
     fixture = TestBed.createComponent(PostBookingActionsComponent);
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
-    store = TestBed.inject(AppointmentStore);
+    flash = TestBed.inject(FlashMessages);
     fixture.detectChanges();
 
     // ReviewStore's ratings resource fires eagerly; drain it.
@@ -52,7 +52,7 @@ describe('PostBookingActionsComponent', () => {
     expect(req.request.method).toBe('PUT');
     req.flush(null);
 
-    expect(store.successMessage()).toBe(
+    expect(flash.successMessage()).toBe(
       '🗑️ Reservation successfully cancelled. Your time slot has been released.',
     );
     expect(component.cancelModel().publicId).toBe('');
@@ -87,7 +87,7 @@ describe('PostBookingActionsComponent', () => {
       .expectOne('/api/v1/appointments/public/cancel/bad-id')
       .error(new ProgressEvent('error'), { status: 404, statusText: 'Not Found' });
 
-    expect(store.errorMessage()).toBe(
+    expect(flash.errorMessage()).toBe(
       'Verification failed. Please check your Booking Code and Email.',
     );
   });
@@ -110,7 +110,7 @@ describe('PostBookingActionsComponent', () => {
     });
     req.flush(null);
 
-    expect(store.successMessage()).toBe('Thank you for your review! We appreciate your feedback.');
+    expect(flash.successMessage()).toBe('Thank you for your review! We appreciate your feedback.');
     expect(component.reviewModel().rating).toBe(5);
   });
 
@@ -127,7 +127,7 @@ describe('PostBookingActionsComponent', () => {
       .expectOne('/api/v1/reviews/public/bad-id')
       .error(new ProgressEvent('error'), { status: 400, statusText: 'Bad Request' });
 
-    expect(store.errorMessage()).toBe(
+    expect(flash.errorMessage()).toBe(
       'Failed to submit review. Ensure the code is correct and the appointment is completed.',
     );
   });
@@ -143,7 +143,6 @@ describe('PostBookingActionsComponent', () => {
     fixture.detectChanges();
     expect(button('Submitting...').disabled).toBe(true);
     expect(button('Cancel Reservation').disabled).toBe(false);
-    expect(store.isSubmitting()).toBe(false);
 
     component.cancelModel.set({ publicId: 'c-id', email: 'c@example.com' });
     component.onCancel();

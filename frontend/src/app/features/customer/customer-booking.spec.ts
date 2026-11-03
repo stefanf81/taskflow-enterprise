@@ -67,8 +67,8 @@ describe('CustomerBooking (signed-in booking entry, FE-7)', () => {
   });
 
   it('pre-fills the email from the session and name/phone from the latest booking', async () => {
-    expect(store.bookingEmail()).toBe('jane@example.com');
-    expect(store.bookingName()).toBe('');
+    expect(store.bookingModel().customerEmail).toBe('jane@example.com');
+    expect(store.bookingModel().customerName).toBe('');
 
     httpMock
       .match((r) => r.url.includes('/api/v1/customer/appointments'))
@@ -78,9 +78,9 @@ describe('CustomerBooking (signed-in booking entry, FE-7)', () => {
     await Promise.resolve();
     fixture.detectChanges();
 
-    expect(store.bookingName()).toBe('Jane Smith');
-    expect(store.bookingPhone()).toBe('555-0100');
-    expect(store.bookingEmail()).toBe('jane@example.com');
+    expect(store.bookingModel().customerName).toBe('Jane Smith');
+    expect(store.bookingModel().customerPhone).toBe('555-0100');
+    expect(store.bookingModel().customerEmail).toBe('jane@example.com');
   });
 
   it('never overwrites contact details the customer already typed', async () => {
@@ -94,8 +94,8 @@ describe('CustomerBooking (signed-in booking entry, FE-7)', () => {
     await Promise.resolve();
     fixture.detectChanges();
 
-    expect(store.bookingName()).toBe('Janie');
-    expect(store.bookingEmail()).toBe('j@work.io');
-    expect(store.bookingPhone()).toBe('555-0100');
+    expect(store.bookingModel().customerName).toBe('Janie');
+    expect(store.bookingModel().customerEmail).toBe('j@work.io');
+    expect(store.bookingModel().customerPhone).toBe('555-0100');
   });
 });
