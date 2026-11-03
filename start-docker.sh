@@ -40,7 +40,11 @@ echo "🔨 Building backend JAR on the host..."
 ./gradlew bootJar --no-daemon
 
 echo "🔨 Building frontend production bundle on the host..."
-(cd frontend && npm ci --ignore-scripts --prefer-offline --no-audit --no-fund && npm run build)
+# One install from the root for every workspace (README "Install"). `npm ci` inside frontend/
+# acts as `npm ci --workspace frontend`: it deletes the root node_modules and reinstalls only the
+# frontend, leaving mobile, shared/schemas and the root tooling uninstalled afterwards.
+npm ci --prefer-offline --no-audit --no-fund
+npm --prefix frontend run build
 
 echo "📦 Building images..."
 docker compose build

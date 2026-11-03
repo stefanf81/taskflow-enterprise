@@ -6,7 +6,9 @@
 #   Angular CLI rejects); npm from frontend/package.json "packageManager"
 #   (older npm strips the "libc" markers from the lockfiles). Both follow
 #   Renovate's bumps of those files.
-# - shared/schemas needs its own install: mobile Jest and tsc resolve zod from it.
+# - One root `npm ci` installs every workspace (frontend, mobile, shared/schemas) from the
+#   single lockfile; `npm install` could rewrite the lockfile, and an install run inside a
+#   workspace folder replaces the root node_modules with that workspace's tree only.
 # - The Gradle wrapper works in the base image; the backend toolchain is Java 25,
 #   which Gradle's foojay resolver downloads when the image lacks it.
 set -euo pipefail
@@ -52,6 +54,4 @@ if [ "$(npm -v)" != "$NPM_VERSION" ]; then
   npm install -g --no-audit --no-fund "npm@${NPM_VERSION}"
 fi
 
-for dir in . shared/schemas frontend mobile; do
-  (cd "$dir" && npm install --no-audit --no-fund)
-done
+npm ci --no-audit --no-fund
