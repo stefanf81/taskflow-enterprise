@@ -14,12 +14,14 @@ jest.mock('@react-navigation/native', () => ({
 
 const mockRegisterFn = jest.fn();
 const mockClearErrorFn = jest.fn();
+// The store's shared error, e.g. left behind by a failed login.
+let mockStoreError: string | null = null;
 
 jest.mock('../src/core/auth/useAuthStore', () => ({
   useAuthStore: () => ({
     register: mockRegisterFn,
     clearError: mockClearErrorFn,
-    error: null,
+    error: mockStoreError,
   }),
 }));
 
@@ -29,6 +31,34 @@ describe('RegisterScreen', () => {
   afterEach(() => {
     cleanup();
     jest.clearAllMocks();
+    mockStoreError = null;
+  });
+
+  it('does not greet the visitor with a failed login from the previous screen', async () => {
+    mockStoreError = 'Invalid username or password';
+    await render(<RegisterScreen />);
+    expect(screen.queryByText('Invalid username or password')).toBeNull();
+  });
+
+  it('shows its own registration failure', async () => {
+    mockRegisterFn.mockRejectedValueOnce(new Error('Email already registered'));
+    await render(<RegisterScreen />);
+    await act(async () => {
+      fireEvent.changeText(screen.getByPlaceholderText('e.g. Jane Smith'), 'Jane Smith');
+    });
+    await act(async () => {
+      fireEvent.changeText(screen.getByPlaceholderText('jane.smith@example.com'), 'jane@example.com');
+    });
+    await act(async () => {
+      fireEvent.changeText(screen.getByPlaceholderText('+1 (555) 000-0000'), '+1-555-0000');
+    });
+    await act(async () => {
+      fireEvent.changeText(screen.getByPlaceholderText('••••••••'), 'password123');
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('Create Account'));
+    });
+    expect(screen.getByText('Email already registered')).toBeTruthy();
   });
 
   it('renders registration form', async () => {

@@ -25,11 +25,14 @@ import { colors } from '../../theme/colors';
 export const LoginScreen: React.FC = () => {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { login, error, clearError } = useAuthStore(
-    useShallow((state) => ({ login: state.login, error: state.error, clearError: state.clearError })),
+  const { login, clearError } = useAuthStore(
+    useShallow((state) => ({ login: state.login, clearError: state.clearError })),
   );
 
   const [loading, setLoading] = useState(false);
+  // This form's own failure. The store's `error` is shared with Register, so showing it here
+  // greeted a visitor with the other screen's failure (ADR-006: transient UI state stays local).
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const {
     control,
     handleSubmit,
@@ -41,11 +44,13 @@ export const LoginScreen: React.FC = () => {
 
   const handleLogin = async (credentials: LoginRequest) => {
     clearError();
+    setSubmitError(null);
     setLoading(true);
     try {
       await login(credentials);
       // Navigation is handled by RootNavigator reacting to auth state change
-    } catch {
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : 'Login failed');
       setLoading(false);
     }
   };
@@ -71,7 +76,7 @@ export const LoginScreen: React.FC = () => {
         </View>
 
         <Card style={styles.card} variant="goldBorder">
-          <ErrorMessage message={error || ''} />
+          <ErrorMessage message={submitError || ''} />
 
           <Controller
             control={control}

@@ -27,11 +27,13 @@ import { colors } from '../../theme/colors';
 export const RegisterScreen: React.FC = () => {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { register, error, clearError } = useAuthStore(
-    useShallow((state) => ({ register: state.register, error: state.error, clearError: state.clearError })),
+  const { register, clearError } = useAuthStore(
+    useShallow((state) => ({ register: state.register, clearError: state.clearError })),
   );
 
   const [loading, setLoading] = useState(false);
+  // This form's own failure, not the store's `error` it shares with Login (see LoginScreen).
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const {
     control,
@@ -44,12 +46,14 @@ export const RegisterScreen: React.FC = () => {
 
   const handleRegister = async (data: RegisterRequest) => {
     clearError();
+    setSubmitError(null);
     setLoading(true);
     try {
       await register(data);
       setLoading(false);
       setSuccess(true);
-    } catch {
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : 'Registration failed');
       setLoading(false);
     }
   };
@@ -93,7 +97,7 @@ export const RegisterScreen: React.FC = () => {
             </Card>
           ) : (
             <Card style={styles.card}>
-              <ErrorMessage message={error || ''} />
+              <ErrorMessage message={submitError || ''} />
 
               <Controller
                 control={control}

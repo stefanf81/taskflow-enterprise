@@ -14,12 +14,14 @@ jest.mock('@react-navigation/native', () => ({
 
 const mockLoginFn = jest.fn();
 const mockClearErrorFn = jest.fn();
+// The store's shared error, e.g. left behind by a failed registration.
+let mockStoreError: string | null = null;
 
 jest.mock('../src/core/auth/useAuthStore', () => ({
   useAuthStore: () => ({
     login: mockLoginFn,
     clearError: mockClearErrorFn,
-    error: null,
+    error: mockStoreError,
   }),
 }));
 
@@ -29,6 +31,7 @@ describe('LoginScreen', () => {
   afterEach(() => {
     cleanup();
     jest.clearAllMocks();
+    mockStoreError = null;
   });
 
   it('renders login form', async () => {
@@ -77,6 +80,26 @@ describe('LoginScreen', () => {
     expect(mockLoginFn).not.toHaveBeenCalled();
     expect(screen.getByText('Username is required')).toBeTruthy();
     expect(screen.getByText('Password is required')).toBeTruthy();
+  });
+
+  it('shows its own login failure, never an error another auth screen left in the store', async () => {
+    mockStoreError = 'Email already registered';
+    mockLoginFn.mockRejectedValueOnce(new Error('Invalid username or password'));
+    await render(<LoginScreen />);
+    expect(screen.queryByText('Email already registered')).toBeNull();
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByPlaceholderText('admin or customer@example.com'), 'admin');
+    });
+    await act(async () => {
+      fireEvent.changeText(screen.getByPlaceholderText('••••••••'), 'wrong');
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('Sign In'));
+    });
+
+    expect(screen.getByText('Invalid username or password')).toBeTruthy();
+    expect(screen.queryByText('Email already registered')).toBeNull();
   });
 
   it('navigates to Register when register link is pressed', async () => {
