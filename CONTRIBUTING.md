@@ -111,7 +111,7 @@ Install the browser required by Playwright once per machine:
 ```bash
 ./start-docker.sh        # Builds and starts all services via docker-compose
 ./stop-docker.sh         # Stops all docker-compose services
-./verify.sh              # Runs full-stack verification (auto-starts Docker if needed & cleans up on exit)
+./verify.sh              # Full verification on a fresh stack it starts and always tears down
 ```
 
 ### Testing
@@ -122,9 +122,16 @@ Install the browser required by Playwright once per machine:
 cd frontend && npm test     # Frontend unit tests
 cd frontend && npm run e2e  # Playwright E2E tests (starts its own dev server)
 cd frontend && npm run e2e:docker  # Playwright E2E with auto-spinup and teardown of Docker stack
-./verify.sh                 # Full verification; stops Docker only if it started the stack
-./verify.sh --stop-docker   # Also stop a stack that was already running
+./verify.sh --quick         # Lint, formatting, types, OpenAPI baseline, unit tests, backend check
+./verify.sh                 # Also PostgreSQL tests, the image build and production-ingress Playwright
 ```
+
+Full mode refuses to start while Compose containers exist or the Compose ports are taken
+(stop them with `./stop-docker.sh`), builds a fresh stack, and always tears it down again,
+keeping the named volumes; E2E may change data in them. `--stop-docker` is a compatibility
+no-op. Full mode needs `psql` on `PATH` (macOS: Homebrew `libpq`); Rancher Desktop users see
+docs/agents/gotchas.md for the Testcontainers socket override. Neither mode formats or
+regenerates files. `node --test scripts/verify.test.cjs` tests the script itself.
 
 `./start-docker.sh` builds the backend and frontend locally, builds the images,
 and pulls `hadolint/hadolint` for Dockerfile linting on the first run. It needs
@@ -223,4 +230,5 @@ the mobile test and native build suites.
 
 - Main branch: `main`
 - Create feature branches from `main`
-- PRs require passing CI checks (build, test, lint, OWASP)
+- PRs require the CI gates listed in [docs/ci/README.md](docs/ci/README.md). The OWASP
+  dependency scan is not a PR check; run `./gradlew dependencyCheckAnalyze` explicitly.

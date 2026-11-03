@@ -1,21 +1,31 @@
-# TaskFlow — Engineering Backlog & Unresolved Issues
+# TaskFlow — Audit Findings
 
-This document tracks unresolved security findings, architectural technical debt, performance optimizations, and accessibility/UX gaps identified during project audits.
+Open work is tracked in [GitHub issues](https://github.com/stefanf81/taskflow-enterprise/issues). This file keeps the findings that are
+resolved, with the original problem statement for context, so the reasoning behind the
+current code stays findable. Section numbers are the ones code comments and specs refer to
+(for example "TODO 4.2").
+
+| Former section | Issue | Open item |
+| --- | --- | --- |
+| 1.1 | [#215](https://github.com/stefanf81/taskflow-enterprise/issues/215) | Registering a customer's email exposes and cancels their bookings (P0) |
+| 1.3 | [#216](https://github.com/stefanf81/taskflow-enterprise/issues/216) | Redis runs without authentication |
+| 1.4 | [#217](https://github.com/stefanf81/taskflow-enterprise/issues/217) | The db container receives every secret in .env |
+| 1.7 | [#218](https://github.com/stefanf81/taskflow-enterprise/issues/218) | Remaining gaps in JWT revocation |
+| 1.9 | [#219](https://github.com/stefanf81/taskflow-enterprise/issues/219) | Verify the production trusted-proxy regex |
+| 1.10 | [#220](https://github.com/stefanf81/taskflow-enterprise/issues/220) | The application connects to PostgreSQL as the superuser |
+| 3.2 | [#221](https://github.com/stefanf81/taskflow-enterprise/issues/221) | Run the OWASP dependency check automatically |
+| 3.3 | [#222](https://github.com/stefanf81/taskflow-enterprise/issues/222) | DAST scans only as admin and ignores error responses |
+| 3.7 | [#223](https://github.com/stefanf81/taskflow-enterprise/issues/223) | `/actuator/prometheus` is unauthenticated |
+| 3.8 | [#224](https://github.com/stefanf81/taskflow-enterprise/issues/224) | CSP still allows `style-src 'unsafe-inline'` |
+| 5 | [#225](https://github.com/stefanf81/taskflow-enterprise/issues/225) | Blockers for running more than one backend replica |
+| 5 | [#226](https://github.com/stefanf81/taskflow-enterprise/issues/226) | Mobile release prerequisites |
+| 5 | [#227](https://github.com/stefanf81/taskflow-enterprise/issues/227) | Retired services cannot be viewed |
+| 5 | [#228](https://github.com/stefanf81/taskflow-enterprise/issues/228) | Cache metrics are not bound for the wrapped Redis cache manager |
+| 5 | [#229](https://github.com/stefanf81/taskflow-enterprise/issues/229) | V36 trigram indexes lock `appointments` while they build |
 
 ---
 
 ## 1. Security & Authorization (P0 — High Priority)
-
-### 1.1 Customer Booking Ownership & Self-Registration IDOR
-- **Location:** `src/main/java/com/example/taskflow/auth/AuthController.java:100-115`, `appointment/CustomerController.java:34-43`, `appointment/AppointmentServiceImpl.java:121-137`
-- **Problem:** `POST /api/v1/auth/register` does not verify mailbox ownership. Anyone can register `victim@example.com`, authenticate, and call `GET /api/v1/customer/appointments` to view the victim's full guest booking history (name, phone, dates, services) or `DELETE /api/v1/customer/appointments/{publicId}` to cancel them.
-- **Current State:** Documented by `CustomerOwnershipIntegrationTest.java`, but application logic still binds ownership solely to the self-asserted email string.
-- **Secondary Oracle:** Guest cancellation (`AppointmentServiceImpl.java:460-467`) returns distinct errors — 404 "Appointment booking not found." for an unknown UUID vs 400 "Verification failed..." for an email mismatch — confirming whether a `publicId` exists. The authenticated path (`cancelMyAppointment`, `AppointmentServiceImpl.java:141-148`) already unifies both cases into a single 404.
-- **Remediation:** 
-  1. Introduce a high-entropy, cryptographically secure `manageToken` returned on booking creation (`201 Created`), storing only its hash in the database.
-  2. Require this token for all guest-initiated cancellations and reviews (`PUT /api/v1/appointments/public/cancel/{publicId}`, `POST /api/v1/reviews/public/{publicId}`).
-  3. Require email verification before newly registered accounts can view or claim prior bookings.
-  4. Unify guest-cancel error responses to a single generic message so the endpoint no longer reveals whether a booking UUID exists.
 
 ### 1.2 Production Admin Password Fallback (Resolved)
 - **Resolved:** `AdminPasswordGuard` aborts a `prod` startup when the admin password is unset, `admin-password` or a `CHANGE_ME` placeholder, and `initAdminUser` now re-syncs the stored hash from `SPRING_SECURITY_PASSWORD` on every boot (so a wrong first boot no longer sticks). Disposable stacks opt out with `APP_REQUIRE_STRONG_ADMIN_PASSWORD=false`. The original finding follows for context.
@@ -23,58 +33,23 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Problem:** `spring.security.user.password=${SPRING_SECURITY_PASSWORD:admin-password}` provides a weak default. Unlike persistent RSA keys (`app.rsa.require-persistent-keys=true`), `application-prod.properties` does not fail fast if `SPRING_SECURITY_PASSWORD` is omitted, allowing production instances to bootstrap with `admin` / `admin-password`.
 - **Remediation:** Remove `:admin-password` fallback in `application-prod.properties` (`spring.security.user.password=${SPRING_SECURITY_PASSWORD}`) to abort context initialization if the environment variable is missing.
 
-### 1.3 Datastore Host Interface Exposure & Redis Authentication (Partly resolved)
-- **Done:** `docker-compose.yml` publishes PostgreSQL, Redis and Jaeger on `127.0.0.1` only (the frontend's `4200` is the one port left on all interfaces); `ContainerConfigGuardTest` fails on a new non-loopback datastore port.
-- **Still open:** Redis still has no `--requirepass` (needs `spring.data.redis.password` in `application-prod.properties` and the production secret). The original finding follows for context.
-- **Location:** `docker-compose.yml:42, 159`, `src/main/resources/application-prod.properties:146-149`
-- **Problem:** PostgreSQL (`5432:5432`) and Redis (`6379:6379`) bind to `0.0.0.0` on the host. Redis runs without `--requirepass`, allowing unauthorized network clients to flush rate limits, inspect cached barber contact details, or poison cache entries.
-- **Evidence:** The official `redis` Docker image disables Redis protected mode at build time (docker-library patches `protected-mode` to `0`), so a published port with no `requirepass` has no compensating control.
-- **Remediation:** 
-  1. Remove host `ports:` mapping (or restrict strictly to `127.0.0.1` for local debug workflows).
-  2. Configure `--requirepass ${REDIS_PASSWORD}` in `docker-compose.yml` and set `spring.data.redis.password=${REDIS_PASSWORD}` in `application-prod.properties`.
-
-### 1.4 Database Container Environment Variable Isolation
-- **Location:** `docker-compose.yml:39-40`
-- **Problem:** The `db` service imports the entire `.env` file via `env_file: .env`, unnecessarily injecting `APP_RSA_PRIVATE_KEY` and `SPRING_SECURITY_PASSWORD` into the PostgreSQL container.
-- **Remediation:** Replace `env_file` with explicit environment entries: `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`.
-
 ### 1.5 Rate Limiter Fail-Closed Policy on Authentication Routes (Resolved differently)
 - **Resolved differently:** instead of failing closed (503), the limiter now falls back to a per-JVM in-memory counter with the same limits when Redis errors, and skips Redis for 5 s after a failure. Auth routes therefore stay throttled during an outage and a Redis outage no longer adds a timeout to every request. The compose Redis no longer evicts (`noeviction`), so `rate_limit:*` buckets cannot be dropped under memory pressure; a full Redis rejects the write and the fallback counter applies. The original finding follows for context.
 - **Location:** `src/main/java/com/example/taskflow/core/RateLimiterConfig.java:111-113`
 - **Problem:** `doFilterInternal` catches all Redis execution exceptions and logs a warning, failing open. Under Redis memory eviction (`volatile-lru`) or connection failure, rate limits (20 req/min) on `/api/v1/auth/` routes are bypassed.
 - **Remediation:** Fail closed (HTTP 503 + `Retry-After: 60`) specifically when `isAuthEndpoint` is true, while retaining fail-open behavior for general API routes.
 
-### 1.6 Shell Script Injection Vector in Image Publication Workflow
+### 1.6 Shell Script Injection Vector in Image Publication Workflow (Resolved)
+- **Resolved:** `pushdockerimage.yml` passes `inputs.image_tag` through an environment variable and validates it against `^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$` before use. The original finding follows for context.
 - **Location:** `.github/workflows/pushdockerimage.yml:85`
 - **Problem:** `tag="${{ inputs.image_tag }}"` directly interpolates unvalidated workflow dispatch input into a bash script block.
 - **Remediation:** Pass the input via an environment variable (`env: RAW_TAG: ${{ inputs.image_tag }}`) and add regex validation (`^[A-Za-z0-9._-]{1,128}$`).
-
-### 1.7 Stateless JWT Revocation & Denylist on Logout (Mostly resolved)
-- **Done:** tokens carry a `jti`; `POST /auth/logout` (now `permitAll`) revokes the presented token via `TokenRevocationList`, checked by the `JwtDecoder`. With `app.state.store=redis` (prod) the denylist is shared by all replicas (`revoked:<jti>` with a TTL equal to the token's remaining lifetime) and revocations are announced on a pub/sub channel so other replicas close the token's admin SSE streams. The mobile app calls `/auth/logout` on logout.
-- **Eviction:** the compose Redis runs `--maxmemory-policy noeviction` (was `volatile-lru`, which could evict `revoked:<jti>` because every denylist key has a TTL); a full Redis now rejects the write and the revocation stays pending locally. The production Redis (homelab/TF) must use the same policy.
-- **Still open:** demoting/deleting a user does not revoke their tokens; a revocation made during a Redis outage is kept locally and written once Redis answers, but is lost if that replica restarts first; Redis without persistence forgets revocations on restart. The original finding follows for context.
-- **Location:** `src/main/java/com/example/taskflow/auth/AuthController.java:157-170`, `src/main/java/com/example/taskflow/auth/TokenProvider.java:41-48`
-- **Problem:** `POST /api/v1/auth/logout` only clears the client-side cookie; native mobile clients have no logout endpoint. Issued tokens remain valid until the 1-hour expiration.
-- **Remediation:** Add a unique `jti` claim to issued JWTs. On logout, store the `jti` in Redis with a TTL matching remaining token lifetime, and validate incoming tokens against this denylist in `SecurityConfig`.
 
 ### 1.8 Account-Aware Authentication Throttling (Resolved)
 - **Resolved:** `LoginAttemptLimiter` counts failed logins per username + client IP (10 per 300 s by default, 429 + `Retry-After`, cleared by a successful login) on both `/auth/login` and `/auth/mobile/login`. With `app.state.store=redis` (prod) the counter is a Redis fixed window shared by all replicas (`login_failures:<sha256>`); during a Redis outage a per-JVM counter applies the same limit. The original finding follows for context.
 - **Location:** `src/main/java/com/example/taskflow/core/RateLimiterConfig.java:89-99`, `src/main/java/com/example/taskflow/auth/SecurityConfig.java:226-233`
 - **Problem:** The auth bucket keys solely on the client IP (`rate_limit:<ip>:auth`) and `CustomUserDetailsService` carries no per-account attempt state. A distributed attack (botnet / residential proxies / Tor) stays under the 20 req/min per-IP cap while guessing credentials without bound.
 - **Remediation:** Track failed attempts per account in Redis (e.g. a counter updated from `AuthenticationFailureBadCredentialsEvent`) and apply exponential backoff or a temporary throttle to that account. Do not use permanent lockout — it hands attackers a denial-of-service weapon. Retain the per-IP bucket for volumetric bursts.
-
-### 1.9 Trusted-Proxy Regex Mis-Escaped in Compose (Partly resolved)
-- **Done:** `docker-compose.yml` uses single backslashes (verified to match `172.18.0.3`); `application-prod.properties` no longer has a default, so an unset `APP_TRUSTED_PROXY_REGEX` aborts startup; `frontend/nginx-real-ip.conf` provides an opt-in real-IP include for ingress deployments.
-- **Done:** compose pins `frontend-tier` to `172.30.0.0/24` (and `backend-tier` to `172.30.1.0/24`) and the regex trusts only that /24 (`^172\.30\.0\.\d{1,3}$`) instead of all of 172.16/12, which also covered Docker networks the proxy is not on; `ContainerConfigGuardTest` asserts both.
-- **Still open:** confirm the production value in the separate GitOps repository uses single backslashes, and consider a startup assertion that the compiled regex matches the actual proxy address. The original finding follows for context.
-- **Location:** `docker-compose.yml:86`, `src/main/resources/application-prod.properties:113`
-- **Problem:** The Compose value contains doubled backslashes. YAML applies no escape processing, so the JVM receives a regex whose `\\.` sequences require a literal backslash and matches no IP. Verified with `docker compose config`: the parsed value matches neither `172.18.0.2` nor `127.0.0.1`. Tomcat's `RemoteIpValve` therefore never trusts Nginx's `X-Forwarded-For`, `getRemoteAddr()` returns the Nginx container IP, and every client shares one rate-limit bucket (also corrupting access logs). The inbound-XFF stripping in `frontend/nginx.conf` remains correct; only the trust decision fails.
-- **Remediation:** Use single backslashes in the YAML value (`^172\.([1][6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}$`), keep the scope limited to the actual proxy network, and add a startup or integration assertion that the compiled regex matches the Nginx container address. Apply the same escaping wherever the value is copied — the production value lives in the separate GitOps repository.
-
-### 1.10 Application Connects as the PostgreSQL Superuser (Partly resolved)
-- **Done:** `application-prod.properties` no longer falls back to the well-known password `postgres-password`; an unset `SPRING_DATASOURCE_PASSWORD` aborts startup.
-- **Still open:** the prod profile connects as `postgres`, so any application compromise (SQL injection, deserialisation, SSRF to the JDBC layer) runs with superuser rights (`COPY … TO PROGRAM`, `ALTER SYSTEM`, reading every database).
-- **Remediation:** create a non-superuser owner role for Flyway and a least-privilege runtime role (DML only on the `taskflow` schema), give Flyway its own `spring.flyway.user`/`password`, install `pg_stat_statements` (V37) and `btree_gist` (V35) as the superuser during provisioning instead of from the migration, and set the runtime role in the GitOps repository and `docker-compose.yml`.
 
 ---
 
@@ -137,18 +112,6 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Problem:** Workflows reference third-party actions by mutable release tags (`@v7`, `@v3.5.0`, etc.). If an upstream account or tag is hijacked, malicious code could execute in CI.
 - **Remediation:** Configure Renovate (`helpers:pinGitHubActionDigests`) to pin all actions to full 40-character commit SHAs with trailing version comments (e.g. `actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2`).
 
-### 3.2 Automated OWASP Dependency Check in CI
-- **Location:** `.github/workflows/ci.yml`, `build.gradle:307-310`
-- **Problem:** `build.gradle` configures `dependencyCheck { failBuildOnCVSS = 7.0f }`, but CI only runs `assemble test testcontainersTest jacocoTestReport spotbugsMain`. The CVSS >= 7.0 gate is never verified on pull requests.
-- **Remediation:** Add a step in `ci.yml` invoking `./gradlew dependencyCheckAnalyze` with NVD API caching.
-
-### 3.3 Multi-Identity DAST Scanning & ZAP Rule 100000 Scoping
-- **Location:** `.github/workflows/dast.yml`, `.zap/api-rules.tsv:6`
-- **Problem:** 
-  1. The DAST API scan runs exclusively with an `admin` token, missing role boundary checks and unauthenticated fuzzing.
-  2. Rule `100000` ("Error response code returned") is globally ignored, masking unintended 500 server crashes during fuzzing.
-- **Remediation:** Add dedicated unauthenticated and `ROLE_CUSTOMER` scan jobs to `dast.yml`. Refine rule `100000` to ignore only expected 4xx client errors while alerting on 5xx server errors.
-
 ### 3.4 Container Hardening Documentation Drift in `AGENTS.md` (Resolved)
 - **Resolved:** Aligned `AGENTS.md`, `README.md`, and `SYSTEM-HARDENING.md` to accurately document that `cap_drop: [ALL]` and `read_only: true` apply specifically to application edge containers (`backend` and `frontend`), while data stores (`db`, `redis`, `jaeger`) run with standard defaults. `docs/adr/ADR-012-lua-rate-limiter.md` and the comment in `RateLimiterConfig.java` were updated to reflect `server.forward-headers-strategy=native` and Tomcat's `RemoteIpValve`.
 - **Location:** `AGENTS.md`, `README.md`, `docs/adr/ADR-012-lua-rate-limiter.md`, `RateLimiterConfig.java`
@@ -165,17 +128,8 @@ This document tracks unresolved security findings, architectural technical debt,
 - **Problem:** Entities carry `@Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "...")` annotations, but second-level caching is disabled in Spring Boot properties. The region names match Spring Cache names (`barbers`, `services`), creating a namespace collision risk if 2LC is ever enabled.
 - **Remediation:** Remove the dead `@Cache` annotations or isolate the region names (e.g. `l2-barbers`).
 
-### 3.7 Unauthenticated `/actuator/prometheus`
-- **Location:** `src/main/java/com/example/taskflow/auth/SecurityConfig.java:127-128`, `src/main/resources/application-prod.properties:123`
-- **Problem:** `GET /actuator/prometheus` is `permitAll()` and exposes per-route labels (URI/method/status) plus application metrics. Only `/actuator/health/liveness`, `/actuator/health/readiness`, and this endpoint are unauthenticated; `/actuator/info` and the root health group remain ADMIN-gated.
-- **Remediation:** Confirm the production NetworkPolicy restricts the actuator port to the monitoring namespace (the intended control) or require authentication / a separate management port. Document the dependency so a future Service or port mapping cannot expose it silently.
-
-### 3.8 CSP `style-src 'unsafe-inline'`
-- **Location:** `frontend/Dockerfile` compression stage (build-generated `csp.conf`, which hashes every inline script of `index.html` and `index.csr.html`)
-- **Problem:** The enforced CSP permits inline styles. This is not equivalent to allowing inline script and no CSS-injection path has been demonstrated, but it prevents full style integrity and is a stepping stone if a script vector ever appears.
-- **Remediation:** Audit Angular's inline-style usage (e.g. `[style.*]` bindings, `ngStyle`) and migrate to `style-src-attr` hashes or nonces; keep `style-src` hashed where possible.
-
-### 3.9 H2 Console `permitAll()`
+### 3.9 H2 Console `permitAll()` (Resolved)
+- **Resolved:** the rule is gone. Spring Boot 4 serves the H2 console only with its own dependency, which the project does not include, so there is no console and no `permitAll()` for it (`SecurityConfig`). The original finding follows for context.
 - **Location:** `src/main/java/com/example/taskflow/auth/SecurityConfig.java:120`, `src/main/resources/application.properties:45-47`
 - **Problem:** The H2 console path is unauthenticated. Production disables the console entirely (`application-prod.properties:49`) and dev binds it to localhost with `web-allow-others=false`, so there is no current production impact.
 - **Remediation:** Keep the console disabled in production; if it is ever enabled outside dev, gate it behind ADMIN authentication or remove the `permitAll()` rule.
@@ -219,16 +173,7 @@ This document tracks unresolved security findings, architectural technical debt,
 
 ---
 
-## 5. Known Follow-Ups
+## 5. Resolved Follow-Ups and Accepted Trade-Offs
 
 - **End-time constraint (resolved):** `appointments.booking_end_time` (V35) plus the PostgreSQL `appointments_no_overlap` exclusion constraint close the race between overlapping bookings with different start times; V35 denies pre-existing overlaps (APPROVED first, then lowest id). H2 has no exclusion constraints, so dev/test rely on the in-transaction check. Production needs the `btree_gist` extension (see `db/migration/README.md`).
-- **Per-email booking cap** is serialised per address within one JVM; across replicas it is still best-effort.
-- **Multi-replica state:** the token denylist, login-failure counters and cache single-flight are Redis-backed with `app.state.store=redis` (prod) and degrade to per-JVM during a Redis outage. The rate-limiter fallback stays per JVM by design (up to N × the limit during an outage). Still blocking scale-out: admin SSE appointment events are per replica, and the Hikari pool (25) × replicas must stay under PostgreSQL `max_connections=50` without PgBouncer.
-- **Email ownership (TODO 1.1)** is still unverified: anyone can register a guest's email and see/cancel their bookings.
-- **Mobile:** set the real EAS `projectId` (`eas init`); iOS `NSPinnedCAIdentities` behaviour with intermediates is untested on a device; the Detox E2E suite has not run against these changes.
-- **Retired services** have no admin view (the catalog list is active-only).
-- **`SingleFlightCacheManager`** is covered against a live Redis (`AbstractRedisCacheLoadLockTest`, Redis-gated and Testcontainers), but Micrometer cache metrics for the wrapped Redis manager are still not bound.
-- **Frontend bundle (resolved):** with `zod/mini` (ADR-019) and the background image fix the initial bundle is 515 kB raw / 138 kB transfer including the now-eager landing page (was 461 kB plus a 121 kB landing chunk fetched after boot); the budget is 550 kB warning / 600 kB error (BENCHMARKS.md §58).
 - **Redis outage throughput:** the caches fail open (ADR-018), but cached endpoints stay at ~38% of normal throughput while Redis is down because `SingleFlightCacheManager` serialises loads per key per JVM (deliberately, to avoid a database stampede).
-- **V36 trigram indexes** are built inside the migration transaction, which blocks writes to `appointments` for ~2 s per 180k rows. Fine at the current size; a much larger table would need `CREATE INDEX CONCURRENTLY` outside Flyway's transaction.
-- **JDK 25** was measured and not adopted (5–8% lower throughput on this workload, BENCHMARKS.md §58); re-measure on the next Temurin 25 update.

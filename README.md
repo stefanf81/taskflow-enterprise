@@ -1,405 +1,107 @@
-# TaskFlow Enterprise Suite
+# TaskFlow
 
-**TaskFlow** is a modern, high-performance, full-stack appointment management and luxury salon booking platform.
+TaskFlow is a barbershop booking platform: customers book a service with a barber, the shop
+approves or denies the booking and manages its barbers, schedules and service catalog.
 
-The suite comprises three core components with platform-local contracts and design tokens:
+| Path | What |
+| --- | --- |
+| `src/` | Spring Boot 4.1 / Java 25 backend: a Spring Modulith monolith (`appointment`, `auth`, `catalog`, `notification`, `review`, shared `core`), PostgreSQL + Flyway, Redis caching |
+| `frontend/` | Angular 22 web app (zoneless, signals), Tailwind, prerendered landing page, Nginx config |
+| `mobile/` | React Native / Expo app for Android and iOS |
+| `shared/schemas/` | zod/mini request and response schemas used by both clients (`@taskflow/schemas`) |
+| `api/openapi.json` | Reviewed OpenAPI baseline; both clients' API types are generated from it |
+| `docs/` | Rules by area (`docs/agents/`), ADRs, benchmarks, hardening policy, CI design |
 
-1. **Spring Boot 4.1 Backend (Java 25):** REST API and admin SSE server providing business logic, OpenAPI specs, authentication, PostgreSQL persistence, Flyway migrations, and Redis caching.
-2. **Angular 22 Web Frontend (`frontend/`):** Modern Angular Signals web application with Tailwind CSS gold & obsidian design system.
-3. **React Native + Expo Mobile Application (`mobile/`):** Cross-platform native mobile application for Android (phones & tablets) and iOS (iPhone & iPad).
-4. **Platform-local contracts:** The web and mobile clients each own their TypeScript API types, theme tokens, time utilities, and feature mapping metadata.
+This page gets a checkout running. The rules for changing the code live in
+[AGENTS.md](AGENTS.md) and [docs/agents/](docs/agents/); see [Where to read next](#where-to-read-next).
 
-The web admin dashboard also subscribes to `GET /api/v1/appointments/events` using
-cookie-authenticated Server-Sent Events. Events trigger a refresh of the existing
-paginated REST query; they do not replace REST as the source of truth. The current
-emitter registry is local to a backend instance, so multi-replica production needs
-shared event fanout before relying on real-time updates across replicas.
+## Prerequisites
 
----
+- Git and OpenSSL (for the local JWT key pair).
+- JDK 25. Gradle comes from the checked-in wrapper; without a local JDK 25 the foojay
+  toolchain resolver downloads one. Local Android Detox builds still use JDK 21
+  (`mobile/e2e/README.md`).
+- Node.js 26.13.0 and npm 12.2.1 (`mobile/.nvmrc`, `packageManager` in `frontend/package.json`).
+- For the full stack: Docker Engine 25+ (Compose 2.20.2+, the health checks use
+  `start_interval`) with at least 5 GB for Docker.
+- For native mobile work: Xcode and CocoaPods (macOS) or Android Studio with an SDK and an
+  emulator or device; see `mobile/development-set.md`.
 
-## 🏛 Architecture Overview
-
-```text
-                               ┌──────────────────────────────────┐
-                               │  Spring Boot 4.1 Backend REST    │
-                               │        (Java 25 - Port 8080)     │
-                                │      internal-only in Compose    │
-                               └────────────────┬─────────────────┘
-                                                │
-                                                 │ Reviewed OpenAPI baseline
-                                                 │ (`api/openapi.json`)
-                                                ▼
-                               ┌──────────────────────────────────┐
-                                │     Platform Client Contracts   │
-                                │   • frontend/src/app/types/api.ts│
-                                │   • mobile/src/types/api.ts       │
-                                │   • frontend/src/theme/tokens.json│
-                                │   • mobile/src/theme/tokens.json │
-                               └────────┬─────────────────┬───────┘
-                                        │                 │
-                  ┌─────────────────────┘                 └─────────────────────┐
-                  ▼                                                             ▼
- ┌──────────────────────────────────┐                           ┌──────────────────────────────────┐
- │     Angular 22 Web Frontend      │                           │  React Native Mobile Application │
- │      (frontend/ - Port 4200)     │                           │     (mobile/ - Android & iOS)    │
- └──────────────────────────────────┘                           └──────────────────────────────────┘
-```
-
-**Performance & Reliability Highlights:** Bounded async thread pools (`CallerRunsPolicy`), atomic Redis Lua rate limiting (1 RTT), PostgreSQL partial unique indexing against double-booking, multi-tier Redis and HTTP caching with ETag validation, Micrometer SLO distribution histograms, and container-hardened zero-trust deployments. See **[P0–P2 Structures & Tunings](#p0-p2-structures--tunings)** below and [`BENCHMARKS.md`](BENCHMARKS.md) for full metrics.
-
----
-
-## 📂 Project Structure
-
-```text
-.
-├── src/                          # Spring Boot 4.1 Backend (Java 25 / Gradle)
-│   ├── main/java/com/example/taskflow/
-│   │   ├── appointment/          # Appointment domain, controllers, services
-│   │   ├── auth/                 # RSA-2048 JWT authentication & security config
-│   │   ├── catalog/              # Service catalog management
-│   │   ├── core/                 # Shared configuration, errors, and rate limiting
-│   │   ├── notification/         # Notification outbox relay
-│   │   └── review/               # Barber ratings & review management
-│   └── main/java/db/migration/   # Java-based Flyway migrations
-├── frontend/                     # Angular 22 Web Application (TypeScript / Tailwind CSS)
-│   ├── src/app/                  # Angular components, signals, stores, services
-│   └── nginx.conf                # Production Nginx reverse proxy configuration
-├── mobile/                       # React Native + Expo Cross-Platform Mobile Application
-│   ├── src/
-│   │   ├── api/                  # Axios REST API client
-│   │   ├── components/           # Reusable mobile UI components
-│   │   ├── hooks/                # TanStack Query custom hooks
-│   │   ├── navigation/           # React Navigation (Guest, Customer, Admin tabs)
-│   │   ├── screens/              # HomeScreen, BookingScreen, CatalogScreen, etc.
-│   │   ├── store/                # Zustand store (useAuthStore)
-│   │   └── utils/                # expo-secure-store wrapper
-│   ├── app.json                  # Expo App configuration
-│   └── eas.json                  # EAS Build profiles (Android APK/AAB, iOS IPA)
-├── frontend/src/                 # Web-owned contracts, theme, utilities, and map
-│   ├── app/types/api.ts          # Web API contracts (OpenAPI aligned)
-│   ├── app/core/time-utils.ts         # Web 12h/24h time formatting and date logic
-│   ├── theme/tokens.json         # Web Obsidian & Gold theme tokens
-│   └── component-map.json        # Cross-platform Web ↔ Mobile feature mapping
-├── mobile/src/                   # Mobile-owned contracts, theme, utilities, and map
-│   ├── types/api.ts              # Mobile API contracts (OpenAPI aligned)
-│   ├── utils/time-utils.ts       # Mobile 12h/24h time formatting and date logic
-│   ├── theme/tokens.json         # Mobile Obsidian & Gold theme tokens
-│   └── component-map.json        # Cross-platform Web ↔ Mobile feature mapping
-├── api/openapi.json              # Reviewed, canonical OpenAPI contract baseline
-├── scripts/                      # Workspace utility scripts
-│   ├── check-openapi-contract.js # Compares a live spec with the baseline
-│   └── sync-api-types.js         # Deterministic OpenAPI-to-TypeScript generator
-├── .opencode/skills/             # AI Developer Agent Workflows
-│   └── sync-to-mobile.md         # Angular Web → React Native Mobile sync skill
-├── package.json                  # Root monorepo workspace scripts
-├── docs/                         # Architectural Decision Records (ADRs)
-│   └── adr/
-├── docker-compose.yml            # Local Docker orchestrator (JAVA_TOOL_OPTIONS: UseContainerSupport, HeapDump, GC log, G1GC 50% heap)
-├── Dockerfile                    # backend image: `prod` target (CI, linux/amd64, hardened, no HEALTHCHECK) + `local` target (compose, HEALTHCHECK)
-├── k6/load.js                    # isolated-stack ramping-VUs 0→50→200→0 stress profile
-├── k6/probe.js                   # production-safe one-request/second public API probe
-├── k6/browser.js                 # k6 browser CWV gate (ttfb<800 fcp<1800 lcp<2500, Lookbook wizard)
-├── start-docker.sh               # One-click Docker launcher script
-├── stop-docker.sh                # Docker cleanup script
-├── verify.sh                     # Full-stack quality verification (with auto-docker lifecycle)
-└── ARCHITECTURE.md               # End-to-End Architectural Blueprint
-```
-
-### P0–P2 Structures & Tunings (see `ARCHITECTURE.md` / `docs/BENCHMARKS.md`)
-
-- `core/AsyncConfig.java` — bounded `ThreadPoolTaskExecutor` `core=8 max=64 queue=100 CallerRunsPolicy` (`taskflow-async-` prefix, 30 s graceful) replaces unbounded `@EnableAsync` default.
-- `core/RateLimiterConfig.java` — stateless Redis Lua `EVAL` (`INCR`+`PEXPIRE` 1 RTT, `HIGHEST_PRECEDENCE+20`, skips `/actuator/health/**` and CORS `OPTIONS` preflights); per-JVM `FixedWindowCounter` fallback behind `RedisBackoff` (one probe per back-off interval).
-- `db/migration/V21__fix_double_booking_index.java` — partial unique `idx_appointment_slot_active ON appointments(barber_name, booking_date, booking_time) WHERE status IN ('PENDING','APPROVED')` on Postgres; H2 initially gets a plain 4-column unique fallback. `db/migration/V25__converge_appointment_slot_index.java` later upgrades the H2 fallback to a generated `active_slot_marker INTEGER AS (CASE WHEN status IN ('PENDING','APPROVED') THEN 1 ELSE NULL END)` + `UNIQUE(... marker)`, matching Postgres semantics.
-- `core/CacheConfig.java` + `appointment/BarberServiceImpl.java` / `catalog/CatalogServiceImpl.java` / `appointment/BusySlotsService.java` — Redis-backed `@Cacheable(barbers/publicBarbers/services sync=true, 10 m)` / `busySlots (2 m, sync=true)` with `@CacheEvict(allEntries=true)` on mutations; `GenericJackson2JsonRedisSerializer` explicit allow-list; tiered `Cache-Control` in controllers (`5 m public` catalog/barbers/ratings, `30 s private` busySlots, `no-cache private` admin) + `ShallowEtagHeaderFilter` (GET only, never the SSE stream). The caches fail open while Redis is down or hung (`FailOpenCacheErrorHandler`, `RedisBackoffCacheManager`, prod timeout 250 ms; ADR-018).
-- `frontend/nginx.conf` — upstream `keepalive 64` (`keepalive_timeout 50s` below Tomcat's 60 s, `keepalive_requests 10000`) + split static caching (`js|css` → `Cache-Control "public, immutable, max-age=15552000"` 6 M, `ico|gif|jpe?g|png|svg|woff2?` → `Cache-Control "public, max-age=3600, must-revalidate"`), both HTML shells (prerendered `index.html` for `/`, `index.csr.html` for every other route and for `/` with a session cookie) → `Cache-Control "no-cache"` (ETag revalidation), security headers declared once and merged into the cache blocks with `add_header_inherit merge`; `nginx-main.conf` `worker_processes 2`.
-- `src/main/resources/application-prod.properties` — Micrometer `percentiles-histogram=true` + `slo=50ms,100ms,200ms` (`/actuator/prometheus` histogram buckets; quantiles via `histogram_quantile`), `spring.data.redis.timeout=250ms`, Hikari leak detection off, Hikari `maximum-pool-size=25/minimum-idle=25` (fixed-size) + PgBouncer ceiling comment (`pool×replicas < 100`, `>2 → PgBouncer transaction`).
-- `docker-compose.yml` & `homelab/TF/gitops/apps/taskflow/backend.yaml` `JAVA_TOOL_OPTIONS` — explicit `-XX:+UseContainerSupport` (cgroup-aware, self-documenting), `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/var/log/taskflow`, `-Xlog:gc*:file=/var/log/taskflow/gc.log:time,uptime:filecount=3,filesize=10m` (3×10 MB), plus `UseG1GC`/`MaxGCPauseMillis=100`/`AlwaysPreTouch`/`MaxDirectMemorySize|Metaspace 256m`.
-- `k6/load.js` is the isolated-stack `ramping-vus` profile (`0→50 30 s →200 60 s →0 30 s`, `gracefulRampDown 10 s`, thresholds `http_req_failed rate<0.01`, `p95<500 p99<800`, `checks 1.0`; workload `70% catalog/barbers /20% busySlots /10% health`, `sleep 0.1`); public CI runs `k6/probe.js` at one request/second to remain below the per-IP rate limiter. `k6/browser.js` uses one Chromium VU for Lookbook→stylist→slot→form and CWV thresholds `ttfb<800 fcp<1800 lcp<2500`.
-- `mobile/src/query/queryClient.ts` (`staleTime 60_000` was 0, `gcTime 5*60_000`, `retry:1` exponential `retryDelay` `min(1000*2^attempt,30000)`, `refetchOnWindowFocus:false`) + `mobile/src/api/client.ts` (`timeout 10000` was 15000, fail-fast < JPA 5 s+Hikari 20 s); `mobile/src/features/landing/LookbookGallery.tsx` — `FlatList scrollEnabled={false}` inside `ScrollView` → `LOOKBOOK_DATA.map` + `View` + `Card` (parent `ScrollView` owns scroll; `FlashList` >50 items).
-
----
-
-## 🧰 New Laptop Setup
-
-This repository contains three independently runnable clients/services. The
-following setup is the shortest supported path after cloning the repository.
-
-### Install prerequisites
-
-- Git
-- OpenJDK 25 (LTS). Gradle is supplied by the checked-in Gradle 9.8.2 wrapper, so a
-  separate Gradle installation is not needed; if no JDK 25 is installed, the
-  foojay toolchain resolver downloads one. Local Android Detox builds still use
-  JDK 21 (`mobile/e2e/README.md`).
-- Node.js 26.13.0 and npm 12.2.1. Mobile pins Node in `mobile/.nvmrc`; the
-  frontend declares its npm version in `frontend/package.json`.
-- Docker Desktop with a running daemon and at least 5 GB available to Docker
-  for the full Compose stack. Docker Engine 25 or later (Compose 2.20.2 or later):
-  the Compose health checks use `start_interval`, which older engines refuse.
-- OpenSSL for generating the local JWT key pair.
-
-For native mobile development, install the additional iOS or Android tools in
-`mobile/development-set.md`. iOS requires macOS, Xcode, and CocoaPods. Android
-requires Android Studio, the Android SDK, and an emulator or device.
-
-### Clone and install JavaScript dependencies
+## Install
 
 ```bash
 git clone <repo-url>
 cd <repo-directory>
-
 npm ci
-npm run sync:api-types:check
 ```
 
-The repository is an npm workspaces monorepo (`frontend`, `mobile`, `shared/schemas`)
-with one lockfile at the root, so a single `npm ci` installs all three. Use `npm ci`,
-not `npm install`, to honor the checked-in lockfile. To install only one app, run
-`npm ci --workspace frontend --workspace shared/schemas` (or `--workspace mobile`).
+`frontend`, `mobile` and `shared/schemas` are npm workspaces with one lockfile at the root,
+so this single `npm ci` installs all three. Always use `npm ci`, never `npm install`. To
+install one app only: `npm ci --workspace frontend --workspace shared/schemas` (or
+`--workspace mobile`).
 
-### Configure Docker Compose
+For the Docker stack, create `.env` and fill in the placeholders, including the Base64 DER
+RSA key pair described in the file (Compose runs the backend with the `prod` profile,
+which requires persistent keys). Never commit `.env` or the keys.
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and replace the database and security placeholders. Compose runs
-the backend with the `prod` profile and therefore requires a persistent RSA
-key pair. Generate the required single-line Base64-encoded DER values from the
-repository root as documented in `.env.example`, then paste them into `.env`.
-Do not commit `.env` or the key files.
+## Run
 
-Compose builds the Dockerfile's `local` target for the host architecture (arm64
-on Apple Silicon, amd64 on an Intel/AMD machine), so no emulation is involved.
-The production image is the `prod` target, which the workflows build for
-`linux/amd64`; build it locally with
-`docker build --platform linux/amd64 --target prod .` (without `--platform`,
-Apple Silicon would produce an arm64 image the amd64 cluster cannot run).
-
-### Choose a development mode
-
-For backend and web development without Docker:
+Backend and web without Docker (H2 database, throwaway JWT keys):
 
 ```bash
-# Terminal 1, repository root
-./gradlew bootRun
-
-# Terminal 2, repository root
-cd frontend
-npm start
+./gradlew bootRun              # terminal 1: API on http://localhost:8080
+(cd frontend && npm start)     # terminal 2: web on http://localhost:4200, proxies /api
 ```
 
-The backend uses H2 and ephemeral JWT keys in this mode. The web application is
-available at `http://localhost:4200` and proxies API calls to port 8080.
+Default development credentials are `admin` / `admin-password`.
 
-For the full PostgreSQL, Redis, backend, and Nginx stack:
+Full stack (PostgreSQL, Redis, backend and Nginx) in Docker:
 
 ```bash
-./start-docker.sh
+./start-docker.sh              # web on http://localhost:4200
+./stop-docker.sh               # stops the stack, keeps the volumes
 ```
 
-The first run also pulls `hadolint/hadolint` for Dockerfile linting. Open the
-web application at `http://localhost:4200`; stop the stack with
-`./stop-docker.sh`. Compose volumes are preserved when the containers stop.
-
-### Validate the checkout
-
-```bash
-./gradlew test                 # H2-backed tests; Docker is not required
-./gradlew testcontainersTest   # PostgreSQL parity tests; Docker is required
-./gradlew containerConfigTest  # Dockerfile/compose/nginx/workflow guards; no Docker
-npm run lint:all
-npm run test:all
-npm run sync:api-types:check
-```
-
-Install Playwright Chromium before frontend E2E tests:
-
-```bash
-(cd frontend && npx playwright install chromium)
-# Linux workstations may use:
-# (cd frontend && npx playwright install --with-deps chromium)
-```
-
----
-
-## 🚀 Workspace Commands
-
-| Command                        | Description                                                                                                          |
-| :----------------------------- | :------------------------------------------------------------------------------------------------------------------- |
-| `npm run sync:api-types`       | Generates both platform API type files from the reviewed `api/openapi.json` baseline                                 |
-| `npm run sync:api-types:check` | Fails if either generated platform API type file is stale                                                            |
-| `npm run api:spec:update`      | Authenticates to a running local backend and refreshes the reviewed OpenAPI baseline after an intentional API change |
-| `npm run api:spec:check`       | Validates the checked-in OpenAPI baseline is canonical JSON                                                          |
-| `npm run test:all`             | Executes test suites across both Angular Web (`frontend/`) and React Native Mobile (`mobile/`)                       |
-| `npm run lint:all`             | Performs TypeScript static type checks across both projects                                                          |
-| `./start-docker.sh`            | Launches PostgreSQL, Redis, Spring Boot backend, and Nginx frontend in health-checked Docker stack                   |
-| `./stop-docker.sh`             | Safely tears down local Docker stack                                                                                 |
-| `./verify.sh`                  | Full-stack end-to-end verification check                                                                             |
-
----
-
-## 🚀 Quick Start Guide
-
-### 1. Run via Docker Compose (Full Stack)
-
-```bash
-# Run the New Laptop Setup environment step first.
-./start-docker.sh
-```
-
-This launches the PostgreSQL database, Redis cache, Spring Boot backend, and Nginx frontend in health-checked isolated Docker networks.
-
-- **Web UI:** `http://localhost:4200` — hashed `js|css` served `immutable, max-age=15552000` (6 M), other assets `public`, `index.html` `no-cache` (revalidated by ETag).
-- **API via Nginx:** `http://localhost:4200/api` — tiered `Cache-Control` (`public max-age=300` catalog/barbers, `no-cache` busySlots/ratings, `no-store` admin and customer lists) + `ETag` `304` on GETs, HTTP/1.1 upstream proxying with `keepalive 64` connection reuse.
-- **Prometheus Metrics:** Internal Kubernetes backend endpoint at `/actuator/prometheus`; the request is unauthenticated so VictoriaMetrics can scrape it, while the production NetworkPolicy limits access to the `monitoring` namespace. Other Actuator endpoints require ADMIN authentication. `application-prod.properties` exposes Micrometer histogram buckets (`percentiles-histogram` + `sla 50/100/200ms`); compute `p50/p95/p99` with `histogram_quantile` (see `BENCHMARKS.md §46/§58`). Health probes remain at `/actuator/health/liveness` & `/readiness` (the Dockerfile's `local` target has a `wget` `HEALTHCHECK`; the `prod` target relies on K8s probes).
-- **Stop Application Stack:** `./stop-docker.sh`
-- **Full-Stack Automated Verification:** `./verify.sh` (requires no existing Compose containers or occupied Compose ports; builds a fresh stack and always tears it down, preserving named volumes). `--stop-docker` remains a compatibility no-op, not permission to take over an existing stack.
-- **Quick Verification:** `./verify.sh --quick` runs workspace lint/format/type checks, OpenAPI baseline and generated-type validation, frontend/mobile coverage and backend `check`. Full mode additionally runs PostgreSQL tests and production-ingress Playwright. Neither mode formats or regenerates source files. Live OpenAPI drift remains a separate CI check; knip remains a maintenance audit. Full-mode E2E may modify data in the preserved volumes. Run `node --test scripts/verify.test.cjs` for the lightweight orchestration regression suite.
-- **Rancher Desktop on macOS:** Full verification automatically sets `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock` when the Docker endpoint is `~/.rd/docker.sock`, unless you already set an override. This changes only the socket mounted into Ryuk, not the host connection, and leaves cleanup enabled. For a direct Gradle run use `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock ./gradlew testcontainersTest --no-build-cache`.
-- **PostgreSQL client prerequisite:** Full verification needs `psql` on `PATH` for the migration-preparation script tests. On macOS, install Homebrew `libpq` and add its `bin` directory to `PATH` (for one run: `PATH="$(brew --prefix libpq)/bin:$PATH" ./verify.sh`). Quick mode does not need `psql` or Docker.
-- **Load Gate (P2):** `k6/load.js` ramping `0→50→200→0` (`p95<500 ms`, `p99<800 ms`, `checks 1.0`) is run against an isolated stack; `.github/workflows/k6.yml` runs the one-request/second public `k6/probe.js` instead, preserving production availability and cache-header checks without tripping the per-IP rate limiter. Browser CWV gate via `k6/browser.js` (`ttfb<800 fcp<1800 lcp<2500`).
-
----
-
-### 2. Run Mobile Application (`mobile/`)
+Mobile (Expo Go is not supported: `expo-secure-store` is a native module):
 
 ```bash
 cd mobile
-
-# Create mobile/.env from mobile/.env.example and adjust the API URL if needed
-cp .env.example .env
-
-# Dependencies are already installed by the single `npm ci` at the repository root.
-
-# Generate the native project on first run; Expo Go is not supported because
-# expo-secure-store is a native module.
-npx expo prebuild --platform ios   # macOS/iOS only
-npx expo prebuild --platform android # Android only
-
-# Start Expo Metro Bundler
-npm start
-
-# Run on Android Emulator or physical device
-npm run android
-
-# Run on iOS Simulator or physical device
-npm run ios
-
-# Run Jest test suite
-npm test
+cp .env.example .env           # adjust the API URL if needed
+npx expo prebuild --platform android   # or ios, on macOS; first run only
+npm run android                # or: npm run ios
 ```
 
-- **Query Tuning (P1-4):** `mobile/src/query/queryClient.ts` uses `staleTime 60_000` / `gcTime 5*60_000` with exponential `retryDelay` (`retry:1`, `refetchOnWindowFocus:false`) — cuts catalog/barbers refetch ~50% on tab navigation vs `staleTime 0`. `mobile/src/api/client.ts` `timeout 10000` (was 15000, fail-fast < server JPA 5 s + Hikari 20 s). `LookbookGallery` uses `LOOKBOOK_DATA.map` (not `FlatList scrollEnabled={false}`) so parent `ScrollView` owns scrolling; upgrade to `FlashList` when catalogue >50.
-
----
-
-### 3. Run Backend Locally (Spring Boot)
+## Check a change
 
 ```bash
-./gradlew bootRun
+./gradlew check                # backend tests (H2), coverage, SpotBugs, container guards
+npm run lint:all               # ESLint, tsc, Prettier, component maps, dependency tree
+npm run test:all               # frontend and mobile unit tests
+npm run sync:api-types:check   # generated API types match api/openapi.json
+./verify.sh --quick            # all of the above in one go; drop --quick for the full stack
 ```
 
-- Uses the default embedded H2 development configuration.
-- Listens on `http://localhost:8080`.
+`./gradlew testcontainersTest` runs the PostgreSQL tests and needs Docker. Playwright needs
+a browser once: `(cd frontend && npx playwright install chromium)`. CONTRIBUTING.md
+explains what `./verify.sh` does in full mode and the API contract workflow.
 
----
+## Where to read next
 
-### 4. Run Web Frontend Locally (Angular 22)
+- [AGENTS.md](AGENTS.md): the short list of rules that are easy to break, with commands.
+- [docs/agents/](docs/agents/): the rules and their reasons by area (backend, domain,
+  security, frontend, mobile, contracts, infrastructure, CI, gotchas).
+- [CONTRIBUTING.md](CONTRIBUTING.md): workflow, tests, API contract changes, dependency updates.
+- [ARCHITECTURE.md](ARCHITECTURE.md): system overview and request flow.
+- [docs/adr/](docs/adr/README.md): architecture decisions (ADR-001…).
+- [docs/BENCHMARKS.md](docs/BENCHMARKS.md) and [docs/SYSTEM-HARDENING.md](docs/SYSTEM-HARDENING.md):
+  measurements and the hardening policy.
+- [docs/ci/](docs/ci/README.md): the CI workflows and why they are built that way.
+- [frontend/README.md](frontend/README.md), [mobile/README.md](mobile/README.md): per-app notes.
+- Open work is tracked in [GitHub issues](https://github.com/stefanf81/taskflow-enterprise/issues);
+  [docs/TODO.md](docs/TODO.md) keeps the resolved findings.
 
-```bash
-(cd frontend && npm start)   # after `npm ci` at the repository root
-```
-
-- Dev server runs on `http://localhost:4200` and proxies `/api` requests to `http://localhost:8080`.
-
----
-
-## 🛡️ Security & Container Hardening
-
-- **Numeric UIDs:** Backend containers run as unprivileged numeric user `10001:10001` complying with strict Kubernetes Pod Security Standards (PSS).
-- **Zero-Trust Networks:** Docker Compose isolates PostgreSQL and Redis on `backend-tier`. Nginx lives on `frontend-tier`. Only Spring Boot bridges both.
-- **Single Public Ingress:** Docker Compose exposes only Nginx. The backend is reachable internally at `backend:8080` and receives normalized forwarding headers from Nginx.
-- **Read-Only Filesystems:** Application containers (`backend` and `frontend`) run with `read_only: true` with ephemeral directories mounted as `tmpfs` (`/tmp`, `/var/cache/nginx`).
-- **Dropped Kernel Capabilities:** Application containers explicitly execute with `cap_drop: [ALL]` and `no-new-privileges:true` (datastores `db`, `redis`, and `jaeger` retain default runtime privileges).
-- **Graceful Shutdown:** Spring Boot drains requests for up to 30 seconds (`server.shutdown=graceful`, `spring.lifecycle.timeout-per-shutdown-phase=30s`). The backend Compose service waits 40 seconds before Docker escalates SIGTERM to SIGKILL.
-- **Container Lifecycle:** Services use `restart: "no"` in `docker-compose.yml` to prevent lingering background containers. `npm run e2e:docker` stops the stack it starts; `./verify.sh` refuses existing containers and cleans up its own stack, including partial startup failures. It preserves named volumes and reports teardown failures.
-- **Hardware Token Security:** Mobile app stores JWT tokens in **iOS Keychain** & **Android Keystore** via `expo-secure-store`.
-- **HttpOnly Cookies:** Web app uses `HttpOnly`, `SameSite=Strict` cookies with double-submit CSRF token protection.
-- **Native Mobile Auth:** Mobile uses `POST /api/v1/auth/mobile/login` and sends the SecureStore token as an `Authorization: Bearer` header; it does not depend on native cookie persistence.
-- **Admin SSE Auth:** The web admin event stream uses the existing HttpOnly `access_token` cookie. The JWT is never read by JavaScript or passed in an SSE URL.
-- **Tiered Cache-Control & ETag (P1-3):** `GET /api/v1/catalog` / `barbers` / `appointments/public/shop` → `Cache-Control: public, max-age=300` (5 m, aligns with 10 m `@Cacheable` + `304` via `ShallowEtagHeaderFilter` GET-only); `busySlots` → `no-cache, private` and `reviews/public/barber-ratings` → `no-cache, public` (revalidated every time, ETag `304`, so a refetch after a booking or review sees the change); admin `GET /appointments` / `barbers/admin` and `customer/appointments` → `no-store` (personal data never lands in a browser or device HTTP cache). Nginx additionally serves hashed `js|css` as `public, immutable, max-age=15552000` (6 M) for `outputHashing:all` bundles.
-- **Observability Histograms (P1-5):** `application-prod.properties` configures `percentiles-histogram=true` + `slo=50ms,100ms,200ms`. Prometheus scrapes `/actuator/prometheus` for `http_server_requests_seconds_bucket{le}` — use `histogram_quantile(0.95, …)` for SLOs and alerts (the client-side `{quantile}` series were dropped in BENCHMARKS.md §58). Spring Security's per-filter observations are off (`management.observations.enable.spring.security=false`, +25–33% throughput); OTel tracing remains at 10% sampling.
-- **Mobile Query Tuning (P1-4):** `mobile/src/query/queryClient.ts` sets `staleTime 60_000` (was 0, cuts catalog/barbers refetch ~50% on tab nav), `gcTime 5*60_000` (retain across nav), exponential `retryDelay` with `retry:1`, `refetchOnWindowFocus:false`; `mobile/src/api/client.ts` `timeout 10000` (< JPA 5 s + Hikari 20 s, fail-fast). `LookbookGallery` virtualization fix (`FlatList`+`scrollEnabled=false` → plain `map`) prevents windowing defeat.
-- **Container Diagnostics (P1-2):** `JAVA_TOOL_OPTIONS` carries explicit `-XX:+UseContainerSupport` (cgroup-aware, self-documenting), `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/var/log/taskflow` (0% until OOM, on the `backend-diagnostics` volume), `-Xlog:gc*:file=/var/log/taskflow/gc.log:time,uptime:filecount=3,filesize=10m` (3×10 MB rotation, ~0.7% overhead). the Dockerfile's `local` target has a `HEALTHCHECK` (`wget /actuator/health/liveness`); the `prod` target omits it — K8s `livenessProbe`/`readinessProbe` in `homelab/TF` is the source of truth.
-- **PgBouncer Ceiling (P2):** `application-prod.properties` documents Hikari `maximum-pool-size=25/minimum-idle=25` (fixed-size) knee curve (`10→3015 RPS`, `25→4128 RPS`, `50→4257 RPS`). The deployment intentionally runs one replica; distributed SSE and PgBouncer transaction pooling are prerequisites for scale-out.
-
----
-
-## 📦 Dependency Updates
-
-Renovate runs daily and can also be started manually from GitHub Actions with
-optional dry-run, log-level, and cache controls. Patch, pin, and digest updates
-automerge only after the protected `main` branch's required CI checks succeed
-and a 3-day release quarantine soak window expires; minor, major, and weekly
-lock-file-maintenance updates remain reviewable pull requests. Security fixes
-from vulnerability alerts bypass the release quarantine.
-
-Version-coupled stacks are grouped into cohesive PRs to maintain toolchain and
-runtime stability:
-
-- Angular framework, CLI/build tooling, RxJS, and TypeScript.
-- Tailwind CSS and PostCSS plugin.
-- Zod validation schemas across web, mobile, and shared workspaces.
-- Spring Boot plugin and dependency BOM.
-- Coordinated Java dependencies: Flyway, Hibernate, Netty, Log4j, Jackson (including BOMs), Tomcat Embed, OpenTelemetry, Testcontainers, Byte Buddy, and SLF4J.
-- React Navigation and React Native test tooling.
-- GitHub Actions workflow actions.
-- PostgreSQL container images (pinned to major version 18).
-
-Expo owns the compatibility matrix for native modules. Renovate excludes only
-the explicitly named Expo, React, React Native, and native test dependencies in
-`mobile/package.json` (and keeps `@types/react` aligned to React 19); it does
-not automatically discover every SDK-compatible native module. Add a new native
-module with `npx expo install <package>`, then run `npx expo install --check`.
-When upgrading Expo SDK, first select the target `expo` version, then run
-`npx expo install --fix` and `npx expo-doctor`. See
-[CI documentation](docs/ci/overview.md) for the required checks and
-Renovate authentication details.
-
----
-
-## 📚 Documentation & ADRs
-
-- [ARCHITECTURE.md](ARCHITECTURE.md) — Detailed end-to-end data flow and architectural analysis
-- [AGENTS.md](AGENTS.md) — Short agent instructions; detail in [docs/agents/](docs/agents/)
-- [BENCHMARKS.md](docs/BENCHMARKS.md) — Exhaustive performance benchmarks, JVM tuning, and load profiles
-- [CONTRIBUTING.md](CONTRIBUTING.md) — Development setup, quality gates, and contribution workflow
-- [SYSTEM-HARDENING.md](docs/SYSTEM-HARDENING.md) — Zero-trust security & container hardening policy
-- [docs/TODO.md](docs/TODO.md) — Prioritized engineering backlog and security audit tracking
-- [docs/ci/](docs/ci/README.md) — CI/CD design rationale and workflow audit history
-- [frontend/README.md](frontend/README.md) — Angular 22 Signals frontend architecture & design system
-- [mobile/README.md](mobile/README.md) — React Native / Expo cross-platform mobile client
-- [mobile/development-set.md](mobile/development-set.md) — Mobile development setup, testing, and release workflow
-- [mobile/e2e/README.md](mobile/e2e/README.md) — Detox native dual-platform E2E testing
-- [mobile/vendor/README.md](mobile/vendor/README.md) — Vendored dependency security patches (lockfileVersion 3)
-- [docs/adr/README.md](docs/adr/README.md) — Architecture Decision Records (ADRs) — full index
-  - `ADR-001` — Virtual Threads — Enabled Explicitly
-  - `ADR-002` — ParallelGC vs G1GC (Superseded)
-  - `ADR-003` — Denormalized Customer Name
-  - `ADR-004` — Redis for Distributed Caching
-  - `ADR-005` — JWT in HttpOnly Cookie
-  - `ADR-006` — Migration to React Native & Expo Mobile Application
-  - `ADR-007` — Dedicated Mobile Bearer Authentication
-  - `ADR-008` — Reviewed OpenAPI Contract Baseline
-  - `ADR-009` — Admin Appointment Updates via Server-Sent Events
-  - `ADR-010` — Bounded Async Executor
-  - `ADR-011` — Reference Data Caching (Barbers & Services)
-  - `ADR-012` — Lua-Atomic Rate Limiter
-  - `ADR-013` — Partial Unique Slot Index (Anti Double-Booking)
-  - `ADR-014` — Resolve "No Preference" Bookings to a Concrete Barber
-  - `ADR-015` — Bind Idempotency-Key Replays to the Original Request
-  - `ADR-016` — glibc Allocator Tuning on Ubuntu Base (MALLOC_ARENA_MAX)
-  - `ADR-017` — Full-App CDS Training and Production Image Slimming
-  - `ADR-020` — Java 25 LTS with an AOT Cache Instead of the CDS Archive
+Production manifests live in a separate GitOps repository (`homelab/TF/gitops/apps/taskflow/`).
