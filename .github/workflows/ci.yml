@@ -555,47 +555,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Java
-        uses: actions/setup-java@v6
+      # Restores ci.yml's `backend` Gradle cache read-only (that job owns the
+      # writes; `backend-integration` writes only its own entry, from `main`
+      # pushes; the Android workflow keeps its own writable caching).
+      - name: Build backend JAR
+        uses: ./.github/actions/build-backend-jar
         with:
-          distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
-
-      # Within this workflow, `backend` owns the shared Gradle cache writes
-      # (`backend-integration` writes only its own entry, from `main` pushes).
-      # The Android workflow retains its own writable caching. Read-only
-      # packaging avoids competing saves of shared entries.
-      #
-      # GRADLE_BUILD_ACTION_CACHE_KEY_JOB restores the newest `backend` entry
-      # (wrapper, dependencies, build cache). setup-gradle keys Gradle User
-      # Home by job id, and a read-only job never writes its own, so this job
-      # kept restoring a frozen `package` entry: a Gradle 9.8.0 wrapper (the
-      # 9.8.1 distribution was downloaded every run), stale dependencies and
-      # an empty build cache, so `compileJava` ran (Build JAR 45-49 s vs 18 s
-      # for the same `assemble` in `backend`, run 39180950242). Gradle's own
-      # integration tests use this variable the same way
-      # (gradle/actions .github/workflows/integ-test-restore-gradle-home.yml).
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-        env:
-          GRADLE_BUILD_ACTION_CACHE_KEY_JOB: backend
-        with:
-          cache-read-only: true
-
-      - name: Build JAR
-        run: |
-          ./gradlew \
-            --parallel \
-            --build-cache \
-            assemble \
-            --stacktrace
-
-      - name: Upload Backend JAR
-        uses: actions/upload-artifact@v7
-        with:
-          name: backend-jar
-          path: build/libs/*.jar
-          compression-level: 0
+          artifact-name: backend-jar
           # Intra-run hand-off (~95 MB per run) to contract/e2e/docker-backend;
           # nothing downloads it after the run, so keep it short.
           retention-days: 3

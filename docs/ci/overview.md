@@ -148,7 +148,7 @@ Runs Playwright E2E tests against a real, running backend and database.
 
 - **Decoupled dependencies (`needs: [changes, package, frontend]`)**:
   The E2E job depends on the packaged backend JAR and the production frontend bundle — not on the test suite — so Playwright starts as soon as the artifacts exist while unit/integration tests run concurrently in the `Backend build` and `Backend integration` jobs (whose results the required `Backend` gate mirrors).
-- **Overlapped Backend Startup:** `start-backend` runs with `wait: "false"` right after the JAR download (before Node setup, which it does not need), so JVM startup (~11–18s) overlaps Node setup, the frontend `npm ci`, the bundle download, the image build, and the Playwright browser restore. The `wait-backend` composite then polls `/actuator/health/liveness` every second before the ingress container starts.
+- **Overlapped Backend Startup:** `start-backend` runs with `wait: "false"` right after the JAR download (before Node setup, which it does not need), so JVM startup (~11–18s) overlaps Node setup, the frontend `npm ci`, the bundle download, the image build, and the Playwright browser restore. The `wait-backend` composite then polls `/actuator/health/readiness` every second before the ingress container starts.
 - **Cached Install:** the job's `npm-ci` call sets `cache-node-modules: "true"`. On an exact-match hit it restores `frontend/node_modules` and `shared/schemas/node_modules` and skips the npm self-upgrade and `npm ci` (~11 s). The key covers OS, architecture, Node and npm versions, install flags, the lockfiles, both `package.json` files (npm 12 `allowScripts`), the `.npmrc` files and the action itself, so any change that would alter the installed tree misses.
 - **Parallel Playwright Workers:** `playwright.config.ts` runs `fullyParallel` with 2 workers. All workers share one client IP, and the suite makes ~32 `/api/v1/auth/*` requests, past production's 20/min per-IP limit. The job therefore sets `APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE=200`, as `verify.sh` and `npm run e2e:docker` already do. The limiter stays enabled. Measured locally on a replica of this stack: 34.6s → 22.3s, with 0 throttled requests (BENCHMARKS.md §53).
 - **Fast Service Readiness:** The PostgreSQL and Redis service containers use `--health-interval 2s --health-timeout 2s --health-retries 30`, so GitHub's `Initialize containers` phase detects readiness within seconds instead of waiting out a 10-second health interval — the E2E job's largest fixed cost.
@@ -165,7 +165,7 @@ Runs Playwright E2E tests against a real, running backend and database.
 Runs authenticated OWASP ZAP API and web scans against a disposable full-stack environment.
 
 - **Dynamic Environment Provisioning:** Provisions PostgreSQL and Redis service containers on the runner to provide a fully clean integration environment.
-- **Standalone Build:** Builds the backend with `./gradlew bootJar` (matching the production artifact) and boots it with `SPRING_PROFILES_ACTIVE=prod`, then waits for the `/actuator/health/liveness` endpoint to be healthy before scanning.
+- **Standalone Build:** Builds the backend with `./gradlew bootJar` (matching the production artifact) and boots it with `SPRING_PROFILES_ACTIVE=prod`, then waits for the `/actuator/health/readiness` endpoint (UP only after the admin account sync) before scanning.
 - **Pinned Scanner Image:** Both scans run the ZAP Docker image directly (`docker run ghcr.io/zaproxy/zaproxy:${ZAP_VERSION}` with `zap-api-scan.py` / `zap-full-scan.py`) instead of `zaproxy/action-api-scan` / `action-full-scan`, whose default image is the mutable `:stable` tag. `ZAP_VERSION` holds a release tag plus digest and is kept current by a dedicated regex manager in `.github/renovate.json` (numbered releases only). Every non-zero ZAP exit code (1 = FAIL alerts, 2 = WARN alerts only, 3 = scan error) fails the scan step, as `fail_action: true` did.
 - **Authenticated API Scan:** Scans with the canonical `api/openapi.json` definition and a bearer token issued by the disposable backend. This enumerates documented public and protected API operations without exposing a production credential.
 - **Production Ingress Scan:** Builds and runs the production frontend Nginx image with the same read-only filesystem and capability restrictions used by Compose, then scans `http://localhost:4200` through its API proxy with headless browser AJAX spidering (`-j`) to discover dynamic Angular SPA routes.
@@ -416,11 +416,14 @@ the same implementation is not copied across workflows (and cannot drift):
   (`package-path`, `shared-schemas`, `ignore-scripts` inputs). Opt-in
   `cache-node-modules` restores an exact-match `node_modules` cache and skips
   the install on a hit (used by the E2E job).
+- `build-backend-jar` — JDK + read-only Gradle cache (the `backend` job's entry),
+  builds the JAR and uploads it; used by `package`, `dast.yml`,
+  `pushdockerimage.yml` and the mobile E2E backend.
 - `start-backend` — generates disposable RSA keys, launches the JAR (`jar-path`
-  must match exactly one file), and waits for `/actuator/health/liveness`,
+  must match exactly one file), and waits for `/actuator/health/readiness`,
   exposing the PID as an output. `wait: "false"` returns right after launch, so
   callers can overlap JVM startup with other setup.
-- `wait-backend` — polls `/actuator/health/liveness` once a second for a
+- `wait-backend` — polls `/actuator/health/readiness` once a second for a
   launched PID, failing fast with the application log if the process exits
   (used by `start-backend` and by `e2e` after a `wait: "false"` launch).
 - `prepull-buildkit` — pre-pulls the BuildKit image with bounded retries and

@@ -1,7 +1,7 @@
 name: Start Spring Boot
 description: >-
   Generate a disposable RSA key pair, launch the packaged JAR, and (unless
-  `wait` is false) wait for the liveness endpoint. Intended for the prod
+  `wait` is false) wait for the readiness endpoint. Intended for the prod
   profile, which requires persistent keys.
 inputs:
   jar-path:
@@ -21,7 +21,7 @@ inputs:
     required: false
     default: ""
   wait-timeout-seconds:
-    description: Maximum seconds to wait for the liveness endpoint.
+    description: Maximum seconds to wait for the readiness endpoint.
     required: false
     default: "180"
   java-options:
@@ -36,7 +36,7 @@ inputs:
     default: ""
   wait:
     description: >-
-      Wait for the liveness endpoint before returning. Set to "false" to
+      Wait for the readiness endpoint before returning. Set to "false" to
       overlap JVM startup with other setup, then call ./.github/actions/wait-backend
       with the `pid` output before using the backend.
     required: false
@@ -119,7 +119,7 @@ runs:
           printf '%s\n' "$pid" > "$PID_FILE"
         fi
 
-    - name: Wait for liveness
+    - name: Wait for readiness
       if: inputs.wait == 'true'
       uses: ./.github/actions/wait-backend
       with:

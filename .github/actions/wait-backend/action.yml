@@ -1,6 +1,6 @@
 name: Wait for Spring Boot
 description: >-
-  Poll the liveness endpoint of a backend launched by start-backend until it
+  Poll the readiness endpoint of a backend launched by start-backend until it
   responds, failing fast (with the application log) if the process exits.
 inputs:
   pid:
@@ -11,13 +11,13 @@ inputs:
     required: false
     default: spring.log
   wait-timeout-seconds:
-    description: Maximum seconds to wait for the liveness endpoint.
+    description: Maximum seconds to wait for the readiness endpoint.
     required: false
     default: "180"
 runs:
   using: composite
   steps:
-    - name: Wait for liveness
+    - name: Wait for readiness
       shell: bash
       working-directory: ${{ github.workspace }}
       env:
@@ -26,7 +26,10 @@ runs:
         WAIT_TIMEOUT: ${{ inputs.wait-timeout-seconds }}
       run: |
         set -euo pipefail
-        url=http://localhost:8080/actuator/health/liveness
+        # Readiness, not liveness (like the compose healthcheck and the image smoke test):
+        # liveness is UP once the context has refreshed, before the CommandLineRunner that
+        # syncs the admin account, so a job that logs in right away could get a 401.
+        url=http://localhost:8080/actuator/health/readiness
         echo "Waiting for Spring Boot..."
 
         deadline=$(( SECONDS + WAIT_TIMEOUT ))
