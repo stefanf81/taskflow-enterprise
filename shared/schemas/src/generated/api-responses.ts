@@ -94,6 +94,12 @@ export const notificationOutboxResponseContract = object({
   type: optional(string()),
 });
 
+export const openingHoursResponseContract = object({
+  closes: string(),
+  dayOfWeek: number(),
+  opens: string(),
+});
+
 export const publicBarberResponseContract = object({
   id: number(),
   name: string(),
@@ -110,12 +116,6 @@ export const serviceItemResponseContract = object({
   id: number(),
   name: string(),
   price: number(),
-});
-
-export const openingHoursResponseContract = object({
-  closes: string(),
-  dayOfWeek: number(),
-  opens: string(),
 });
 
 export const shopInfoResponseContract = object({

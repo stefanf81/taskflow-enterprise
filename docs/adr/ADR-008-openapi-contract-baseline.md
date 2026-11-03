@@ -22,6 +22,10 @@ CI packages and starts the backend, authenticates, verifies the live document ag
 
 `npm run sync:api-types` also writes `shared/schemas/src/generated/api-responses.ts`, a structural zod/mini schema for every response DTO. The hand-written response validators stay authoritative at runtime; a parity spec in the frontend compares their field sets and optionality with the generated contracts. Which response fields may be absent is part of the document: the backend marks every response record component `required` unless it is JSpecify `@Nullable` (Jackson omits nulls globally). A third-party generator (Orval, Hey API, Kubb) was not adopted: the repository already has a dependency-free generator for the types, the contract surface is about 15 DTOs, and the validators need rules OpenAPI cannot express.
 
+## Addendum: one generated copy, error bodies and security
+
+The TypeScript types used to be generated twice, into each client, differing only in quote style. They are now generated once into `shared/schemas/src/generated/api-types.ts` and re-exported by both clients, and the set of response DTOs is derived from the operations' 2xx responses instead of a hand-kept list. The document also states what it used to leave out: error bodies are `ErrorResponse` (springdoc had reused the success type for declared 4xx codes), content types are `application/json` instead of `*/*`, and the security schemes and public operations are documented, checked against the real filter chain by `OpenApiSecurityDocumentationTest`, so the baseline now shows security changes too.
+
 ## Consequences
 
 Backend endpoint and DTO changes require these steps in the same change:

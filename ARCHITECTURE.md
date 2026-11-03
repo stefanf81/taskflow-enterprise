@@ -239,8 +239,8 @@ To prevent architectural drift between the Web Frontend (`frontend/`) and Mobile
                                 ▼
  ┌─────────────────────────────────────────────────────────────┐
   │             Platform Client Contracts                      │
-  │  • frontend/src/app/types/api.ts (Web DTO Contracts)       │
-  │  • mobile/src/types/api.ts        (Mobile DTO Contracts)    │
+  │  • shared/schemas/src/generated/  (DTO types + contracts)   │
+  │  • shared/domain/                 (shared booking rules)    │
   │  • frontend/src/theme/tokens.json / mobile/src/theme/...   │
   │  • frontend/src/app/core/time-utils.ts / mobile/src/utils/...   │
  └──────────────┬──────────────────────────────┬───────────────┘
@@ -255,9 +255,9 @@ To prevent architectural drift between the Web Frontend (`frontend/`) and Mobile
 
 ### Components of the Sync Framework:
 1. **Reviewed OpenAPI Contract**: `scripts/check-openapi-contract.js` authenticates to the local development backend, canonicalizes `/v3/api-docs`, and writes or compares `api/openapi.json`. CI performs the same authenticated comparison and rejects unreviewed API changes.
-2. **API Contract Generator (`scripts/sync-api-types.js`)**: Deterministically generates `frontend/src/app/types/api.ts` and `mobile/src/types/api.ts` from the reviewed baseline. `npm run sync:api-types:check` rejects stale generated files.
+2. **API Contract Generator (`scripts/sync-api-types.js`)**: Deterministically generates the DTO types (`shared/schemas/src/generated/api-types.ts`, re-exported by `frontend/src/app/types/api.ts` and `mobile/src/types/api.ts`) and the response contracts from the reviewed baseline. `npm run sync:api-types:check` rejects stale generated files.
 3. **Design Tokens**: `frontend/src/theme/tokens.json` and `mobile/src/theme/tokens.json` keep platform build inputs local while preserving the same Gold & Obsidian palette. They are consumed by `frontend/src/styles.css` (`@theme`) and `mobile/src/theme/colors.ts`.
-4. **Pure Business Utilities**: `frontend/src/app/core/time-utils.ts` and `mobile/src/utils/time-utils.ts` each contain the client-local 12h/24h time formatting and `isOverdue` calculations.
+4. **Shared Business Rules**: `shared/domain` (`@taskflow/domain`) holds the time helpers and booking rules both clients apply (opening days, booking window, who may cancel); `frontend/src/app/core/time-utils.ts` and `mobile/src/utils/time-utils.ts` re-export them next to their platform-specific formatting.
 5. **Feature Mapping Matrix**: `frontend/src/component-map.json` and `mobile/src/component-map.json` map feature domains (e.g. Stylist Cards, Booking Wizard, Customer Portal, Admin Dashboard) between Angular Web components/stores and React Native screens/hooks.
 6. **Opencode AI Skill (`.opencode/skills/sync-to-mobile.md`)**: Instructs AI agents on framework translation rules (Angular Signals $\rightarrow$ TanStack Query / Zustand; Angular HTML $\rightarrow$ React Native JSX components).
 

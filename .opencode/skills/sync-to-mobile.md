@@ -21,7 +21,7 @@ Refer to `frontend/src/component-map.json` or `mobile/src/component-map.json` to
 * **Angular Signals & Stores (`*.store.ts`)**:
   * Angular 22 uses `signal()`, `computed()`, and RxJS stores.
   * Map these to React Native **TanStack Query** custom hooks (`use*.ts` in the matching `mobile/src/features/<feature>/` or `mobile/src/core/<domain>/` folder) for server state, or **Zustand** (`mobile/src/core/auth/useAuthStore.ts`) for client state.
-* API contracts are generated into `frontend/src/app/types/api.ts` and `mobile/src/types/api.ts` from the reviewed `api/openapi.json` baseline. For backend contract changes: run `npm run api:spec:update`, `npm run sync:api-types`, and `npm run sync:api-types:check` from the repository root.
+* API contracts are generated once into `shared/schemas/src/generated/` from the reviewed `api/openapi.json` baseline; `frontend/src/app/types/api.ts` and `mobile/src/types/api.ts` re-export them. Booking rules both apps apply live in `shared/domain` (`@taskflow/domain`): port a rule by using it, never by copying it. For backend contract changes: run `npm run api:spec:update`, `npm run sync:api-types`, and `npm run sync:api-types:check` from the repository root.
 
 ### 2. UI Component Structure
 * **Angular HTML Templates (`*.html` or inline)**:

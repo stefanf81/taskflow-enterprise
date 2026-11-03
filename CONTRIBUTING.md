@@ -149,7 +149,7 @@ The reviewed `api/openapi.json` file is the API compatibility baseline. When a b
 ```bash
 ./gradlew bootRun                  # In a separate terminal; OpenAPI docs require admin auth
 npm run api:spec:update            # Refresh the reviewed baseline from the live backend
-npm run sync:api-types             # Regenerate web and mobile API types
+npm run sync:api-types             # Regenerate the shared API types and response contracts
 npm run sync:api-types:check       # Confirm generated files are committed and current
 ```
 

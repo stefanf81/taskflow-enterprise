@@ -14,7 +14,7 @@ matching file before changing that area.
 | `mobile/` | React Native / Expo, React Navigation, TanStack Query, Zustand | [mobile](docs/agents/mobile.md) |
 | `shared/schemas/` | zod/mini request and response schemas used by both clients (`@taskflow/schemas`) | [contracts](docs/agents/contracts.md) |
 | `shared/domain/` | Booking rules and time helpers both clients apply (`@taskflow/domain`) | [contracts](docs/agents/contracts.md) |
-| `api/openapi.json` | Reviewed OpenAPI baseline; both clients' `types/api.ts` are generated from it | [contracts](docs/agents/contracts.md) |
+| `api/openapi.json` | Reviewed OpenAPI baseline (with error bodies and security); the shared API types are generated from it | [contracts](docs/agents/contracts.md) |
 | `Dockerfile`, `docker-compose.yml`, `frontend/nginx*.conf` | One Dockerfile, two targets (`prod`, `local`) | [infrastructure](docs/agents/infrastructure.md) |
 | `.github/` | Workflows and composite actions | [ci](docs/agents/ci.md) |
 | `docs/adr/` | Architecture decisions (ADR-001…) | |
@@ -95,7 +95,8 @@ Dependencies
 - `frontend`, `mobile`, `shared/schemas` and `shared/domain` are npm workspaces with one root `package-lock.json` (always `npm ci`, not `npm install`). `overrides`, `allowScripts` and the vendored patch tarballs (`file:mobile/vendor/…`) only work in the root `package.json`. Hoisting must not change which version a tool sees: `npm run check:dependency-tree` (in `lint:all` and after every CI install) fails on any dependency resolved outside its declared range; the root pins `jsdom` for the frontend's vitest. Never hand-edit or merge lockfiles: `npm ci` does not check ranges. New versions need to age 3 days like Renovate's hold; see CONTRIBUTING.
 
 Contracts
-- After any backend DTO or endpoint change: start the backend, `npm run api:spec:update`, `npm run sync:api-types`, commit the baseline and the generated files (both `types/api.ts` and `shared/schemas/src/generated/api-responses.ts`), update the matching hand-written response schema in `shared/schemas` (a parity spec fails otherwise), then run `npm run sync:api-types:check`.
+- After any backend DTO or endpoint change: start the backend, `npm run api:spec:update`, `npm run sync:api-types`, commit the baseline and the generated files (`shared/schemas/src/generated/`; the clients' `types/api.ts` only re-export them), update the matching hand-written response schema in `shared/schemas` (a parity spec fails otherwise), then run `npm run sync:api-types:check`.
+- A new public endpoint also goes into `OpenApiSecurityConfig.PUBLIC_OPERATIONS` (`OpenApiSecurityDocumentationTest` checks it against the filter chain).
 - Rules both clients apply (opening days, booking window, who may cancel, time helpers) live once in `shared/domain`; the shop's values come from `/public/shop` (`ShopClock` / `useShopInfo`). Never hard-code them in a client.
 - Porting a feature between web and mobile: look it up in `frontend/src/component-map.json` / `mobile/src/component-map.json` and follow `.opencode/skills/sync-to-mobile.md`. Finish with `npm run lint:all` and `npm run test:all`.
 

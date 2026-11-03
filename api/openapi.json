@@ -321,6 +321,41 @@
         },
         "type": "object"
       },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "timestamp": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "validationErrors": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "error",
+          "message",
+          "path",
+          "status",
+          "timestamp"
+        ],
+        "type": "object"
+      },
       "LoginRequest": {
         "properties": {
           "password": {
@@ -666,6 +701,35 @@
           }
         },
         "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "message"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "bearerFormat": "JWT",
+        "description": "Token returned by POST /api/v1/auth/mobile/login (mobile).",
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "cookieAuth": {
+        "description": "HttpOnly JWT cookie set by POST /api/v1/auth/login (web).",
+        "in": "cookie",
+        "name": "access_token",
+        "type": "apiKey"
       }
     }
   },
@@ -725,7 +789,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AppointmentDashboardResponse"
                 }
@@ -735,9 +799,9 @@
           },
           "400": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AppointmentDashboardResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -776,7 +840,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AppointmentResponse"
                 }
@@ -786,7 +850,7 @@
           },
           "201": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AppointmentResponse"
                 }
@@ -796,9 +860,9 @@
           },
           "400": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AppointmentResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -806,15 +870,16 @@
           },
           "409": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AppointmentResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
             "description": "Idempotency-Key already used for a different request"
           }
         },
+        "security": [],
         "summary": "Create/Book a new appointment (Guest Access)",
         "tags": [
           "Barber Appointment Management System"
@@ -841,9 +906,23 @@
             "description": "Appointment cancelled (or already cancelled)"
           },
           "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
             "description": "A declined appointment cannot be cancelled"
           },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
             "description": "Appointment was not found"
           }
         },
@@ -869,7 +948,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AppointmentResponse"
                 }
@@ -879,9 +958,9 @@
           },
           "404": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AppointmentResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -920,7 +999,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AppointmentResponse"
                 }
@@ -930,9 +1009,9 @@
           },
           "400": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AppointmentResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -940,9 +1019,9 @@
           },
           "404": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AppointmentResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -950,9 +1029,9 @@
           },
           "409": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AppointmentResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1027,7 +1106,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "items": {
                     "type": "string"
@@ -1040,12 +1119,9 @@
           },
           "400": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1053,18 +1129,16 @@
           },
           "503": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
             "description": "Availability temporarily cannot be computed (database busy); retry shortly"
           }
         },
+        "security": [],
         "summary": "Get a list of busy time slots for a specific barber on a specific date (Guest Access)",
         "tags": [
           "Barber Appointment Management System"
@@ -1100,12 +1174,27 @@
             "description": "Appointment cancelled (or already cancelled)"
           },
           "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
             "description": "Invalid or mismatched email, declined booking, or booking already started"
           },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
             "description": "Appointment with given public ID not found"
           }
         },
+        "security": [],
         "summary": "Cancel an appointment securely as a guest by verifying the booking email (Guest Access)",
         "tags": [
           "Barber Appointment Management System"
@@ -1118,7 +1207,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ShopInfoResponse"
                 }
@@ -1127,6 +1216,7 @@
             "description": "Shop time zone, booking window and opening hours returned"
           }
         },
+        "security": [],
         "summary": "Get the shop's time zone, booking window and opening hours, which decide what is bookable (Guest Access)",
         "tags": [
           "Barber Appointment Management System"
@@ -1139,7 +1229,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CsrfToken"
                 }
@@ -1148,6 +1238,7 @@
             "description": "CSRF token returned (also set in XSRF-TOKEN cookie)"
           }
         },
+        "security": [],
         "summary": "Get CSRF token for authenticated state-changing requests",
         "tags": [
           "Authentication Portal"
@@ -1170,7 +1261,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LoginResponse"
                 }
@@ -1180,15 +1271,16 @@
           },
           "401": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LoginResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
             "description": "Invalid username or password"
           }
         },
+        "security": [],
         "summary": "Authenticate user and issue an HttpOnly JWT cookie",
         "tags": [
           "Authentication Portal"
@@ -1203,6 +1295,7 @@
             "description": "JWT cookie cleared — session ended"
           }
         },
+        "security": [],
         "summary": "Clear the HttpOnly JWT cookie",
         "tags": [
           "Authentication Portal"
@@ -1215,7 +1308,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LoginResponse"
                 }
@@ -1224,13 +1317,6 @@
             "description": "Authenticated user's role returned"
           },
           "401": {
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoginResponse"
-                }
-              }
-            },
             "description": "No valid cookie or bearer token present"
           }
         },
@@ -1256,7 +1342,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MobileLoginResponse"
                 }
@@ -1266,15 +1352,16 @@
           },
           "401": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MobileLoginResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
             "description": "Invalid username or password"
           }
         },
+        "security": [],
         "summary": "Authenticate a native client and issue a bearer token",
         "tags": [
           "Authentication Portal"
@@ -1297,7 +1384,7 @@
         "responses": {
           "201": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RegisterResponse"
                 }
@@ -1307,15 +1394,16 @@
           },
           "400": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RegisterResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
             "description": "Email already registered or invalid input"
           }
         },
+        "security": [],
         "summary": "Register a new customer account",
         "tags": [
           "Authentication Portal"
@@ -1328,7 +1416,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "items": {
                     "$ref": "#/components/schemas/PublicBarberResponse"
@@ -1340,6 +1428,7 @@
             "description": "List of all barbers returned"
           }
         },
+        "security": [],
         "summary": "Get all barbers",
         "tags": [
           "Barber Management"
@@ -1360,7 +1449,7 @@
         "responses": {
           "201": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BarberResponse"
                 }
@@ -1370,9 +1459,9 @@
           },
           "400": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BarberResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1403,7 +1492,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "items": {
                     "$ref": "#/components/schemas/BarberTimeOffResponse"
@@ -1416,12 +1505,9 @@
           },
           "404": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/BarberTimeOffResponse"
-                  },
-                  "type": "array"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1460,7 +1546,7 @@
         "responses": {
           "201": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BarberTimeOffResponse"
                 }
@@ -1470,9 +1556,9 @@
           },
           "400": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BarberTimeOffResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1480,9 +1566,9 @@
           },
           "404": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BarberTimeOffResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1501,7 +1587,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "items": {
                     "$ref": "#/components/schemas/BarberResponse"
@@ -1525,7 +1611,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "items": {
                     "$ref": "#/components/schemas/ServiceItemResponse"
@@ -1537,6 +1623,7 @@
             "description": "List of all services returned"
           }
         },
+        "security": [],
         "summary": "Get all services (Public Access)",
         "tags": [
           "Service Catalog"
@@ -1557,7 +1644,7 @@
         "responses": {
           "201": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ServiceItemResponse"
                 }
@@ -1567,9 +1654,9 @@
           },
           "400": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ServiceItemResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1602,6 +1689,13 @@
             "description": "Service deleted successfully"
           },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
             "description": "Service not found"
           }
         },
@@ -1627,7 +1721,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ServiceItemResponse"
                 }
@@ -1637,15 +1731,16 @@
           },
           "404": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ServiceItemResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
             "description": "Service not found"
           }
         },
+        "security": [],
         "summary": "Get a specific service by ID",
         "tags": [
           "Service Catalog"
@@ -1678,7 +1773,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ServiceItemResponse"
                 }
@@ -1688,9 +1783,9 @@
           },
           "400": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ServiceItemResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1698,9 +1793,9 @@
           },
           "404": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ServiceItemResponse"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
@@ -1744,7 +1839,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PagedModelAppointmentResponse"
                 }
@@ -1753,13 +1848,6 @@
             "description": "Paginated appointments returned"
           },
           "401": {
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/PagedModelAppointmentResponse"
-                }
-              }
-            },
             "description": "Not authenticated"
           }
         },
@@ -1788,12 +1876,26 @@
             "description": "Appointment cancelled (or already cancelled)"
           },
           "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
             "description": "Declined booking, or booking already started"
           },
           "401": {
             "description": "Not authenticated"
           },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
             "description": "Appointment not found or not owned by user"
           }
         },
@@ -1809,7 +1911,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "items": {
                     "$ref": "#/components/schemas/NotificationOutboxResponse"
@@ -1856,12 +1958,27 @@
             "description": "Review submitted successfully"
           },
           "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
             "description": "Invalid review data, appointment not completed, or duplicate review"
           },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
             "description": "Appointment with given public ID not found"
           }
         },
+        "security": [],
         "summary": "Submit a review for a completed appointment",
         "tags": [
           "Client Reviews"
@@ -1874,7 +1991,7 @@
         "responses": {
           "200": {
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "items": {
                     "$ref": "#/components/schemas/BarberRatingResponse"
@@ -1886,6 +2003,7 @@
             "description": "Aggregated barber ratings returned"
           }
         },
+        "security": [],
         "summary": "Get aggregated ratings for all barbers",
         "tags": [
           "Client Reviews"
@@ -1893,6 +2011,14 @@
       }
     }
   },
+  "security": [
+    {
+      "cookieAuth": []
+    },
+    {
+      "bearerAuth": []
+    }
+  ],
   "servers": [
     {
       "description": "Generated server url",

@@ -7,7 +7,7 @@ This directory contains utility, benchmarking, and CI/CD security automation scr
 | Script | Runtime | Description |
 | :--- | :--- | :--- |
 | `check-openapi-contract.js` | Node.js | Fetches `/v3/api-docs` from a running backend, canonicalizes key ordering, and validates or writes the canonical `api/openapi.json` contract baseline. |
-| `sync-api-types.js` | Node.js | Deterministically generates TypeScript API interfaces for Web (`frontend/src/app/types/api.ts`) and Mobile (`mobile/src/types/api.ts`) from `api/openapi.json`. |
+| `sync-api-types.js` | Node.js | Deterministically generates the API DTO types (`shared/schemas/src/generated/api-types.ts`, re-exported by both clients' `types/api.ts`) and the response contracts (`api-responses.ts`) from `api/openapi.json`. |
 | `prepare-nuclei-sarif.py` | Python 3 | Ingests raw Nuclei scanner output and formats it into strict GitHub Code Scanning SARIF format with deterministic run metadata and error handling. |
 | `test_nuclei_sarif.py` | Python 3 | Unit tests covering `prepare-nuclei-sarif.py` SARIF translation logic. |
 | `zap2sarif.py` | Python 3 | Parses OWASP ZAP DAST API and Web JSON reports and converts them to SARIF format for GitHub Advanced Security ingestion. |

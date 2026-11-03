@@ -1,5 +1,7 @@
 package com.example.taskflow.core.web;
 
+import org.jspecify.annotations.Nullable;
+
 import java.time.Instant;
 import java.util.List;
 
@@ -10,7 +12,8 @@ record ErrorResponse(
     String error,
     String message,
     String path,
-    List<ValidationError> validationErrors
+    /** Only for a failed request-body validation (400); absent otherwise. */
+    @Nullable List<ValidationError> validationErrors
 ) {
     public ErrorResponse(Instant timestamp, int status, String error, String message, String path) {
         this(timestamp, status, error, message, path, null);

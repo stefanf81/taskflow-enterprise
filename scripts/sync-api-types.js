@@ -3,11 +3,16 @@
  * TaskFlow OpenAPI to TypeScript Contract Synchronizer
  *
  * Reads the reviewed OpenAPI baseline (api/openapi.json, refreshed by `npm run api:spec:update`) and
- * generates TypeScript interface definitions in both platform clients, plus structural zod/mini schemas
- * for the response DTOs (shared/schemas/src/generated/api-responses.ts). The hand-written
- * response schemas stay the runtime validators (they add enums, lengths, defaults); a parity
- * test compares their fields with the generated ones, so a response field added by the backend
- * cannot be silently stripped by a validator.
+ * generates, once, into the shared workspace package:
+ * - shared/schemas/src/generated/api-types.ts: TypeScript interfaces for every schema. Both clients
+ *   re-export them from their own `types/api.ts` (frontend/src/app/types, mobile/src/types).
+ * - shared/schemas/src/generated/api-responses.ts: structural zod/mini contracts for the response
+ *   DTOs. The hand-written response schemas stay the runtime validators (they add enums, lengths,
+ *   defaults); a parity test compares their fields with these, so a response field added by the
+ *   backend cannot be silently stripped by a validator.
+ *
+ * The response DTOs are the schemas reachable from any operation's 2xx response, so a new endpoint
+ * needs no list to be edited here.
  *
  * Usage: node scripts/sync-api-types.js [--check] [openapi_file]
  *
@@ -19,31 +24,51 @@ const fs = require('fs');
 const path = require('path');
 
 const DEFAULT_SPEC = path.resolve(__dirname, '../api/openapi.json');
-const TARGET_FILES = [
-  path.resolve(__dirname, '../frontend/src/app/types/api.ts'),
-  path.resolve(__dirname, '../mobile/src/types/api.ts'),
-];
+const TYPES_FILE = path.resolve(__dirname, '../shared/schemas/src/generated/api-types.ts');
 const RESPONSE_CONTRACT_FILE = path.resolve(__dirname, '../shared/schemas/src/generated/api-responses.ts');
+
+/**
+ * Framework types some endpoints return (the CSRF token, the SSE emitter). They are not DTOs the
+ * clients parse, so they get neither a contract nor the "every field is present" rule.
+ */
+const FRAMEWORK_SCHEMAS = new Set(['CsrfToken', 'SseEmitter']);
+
+/** Response DTOs: component schemas reachable from any operation's 2xx response bodies. */
+function responseSchemaNames(spec) {
+  const schemas = spec.components.schemas;
+  const names = new Set();
+  const queue = [];
+  for (const operations of Object.values(spec.paths || {})) {
+    for (const operation of Object.values(operations)) {
+      for (const [code, response] of Object.entries(operation.responses || {})) {
+        if (!code.startsWith('2')) continue;
+        for (const media of Object.values(response.content || {})) queue.push(media.schema);
+      }
+    }
+  }
+  while (queue.length > 0) {
+    const schema = queue.pop();
+    if (!schema) continue;
+    if (schema.$ref) {
+      const name = schema.$ref.split('/').pop();
+      if (!FRAMEWORK_SCHEMAS.has(name) && !names.has(name) && schemas[name]) {
+        names.add(name);
+        queue.push(schemas[name]);
+      }
+      continue;
+    }
+    if (schema.items) queue.push(schema.items);
+    Object.values(schema.properties || {}).forEach((property) => queue.push(property));
+  }
+  return names;
+}
 
 // ---------------------------------------------------------------------------
 // JSON Schema → TypeScript type mapping
 // ---------------------------------------------------------------------------
-const RESPONSE_SCHEMAS = new Set([
-  'AppointmentDashboardResponse',
-  'AppointmentResponse',
-  'AppointmentStats',
-  'BarberRatingResponse',
-  'BarberResponse',
-  'BarberTimeOffResponse',
-  'LoginResponse',
-  'MobileLoginResponse',
-  'NotificationOutboxResponse',
-  'PagedModelAppointmentResponse',
-  'PageMetadata',
-  'PublicBarberResponse',
-  'RegisterResponse',
-  'ServiceItemResponse',
-]);
+// Response DTO fields are all typed as present: the hand-written validators turn an omitted
+// nullable field into its empty value ("omitted means empty"), and the apps use the parsed value.
+let RESPONSE_SCHEMAS = new Set();
 
 function mapSchemaType(schema, schemas, schemaName) {
   if (!schema) return 'unknown';
@@ -123,8 +148,8 @@ function generateTypesFromSchemas(schemas) {
   const lines = [];
 
   lines.push('/**');
-  lines.push(' * Single Source of Truth API Contracts for TaskFlow.');
-  lines.push(' * Auto-generated from Backend OpenAPI schema (GET /v3/api-docs).');
+  lines.push(' * API DTO types of TaskFlow, generated from the reviewed baseline api/openapi.json.');
+  lines.push(' * Both clients re-export them from their own types/api.ts.');
   lines.push(' *');
   lines.push(' * DO NOT EDIT MANUALLY — run `npm run sync:api-types` to regenerate.');
   lines.push(' */');
@@ -155,8 +180,6 @@ function generateTypesFromSchemas(schemas) {
 // ---------------------------------------------------------------------------
 // JSON Schema → zod/mini response contracts
 // ---------------------------------------------------------------------------
-// Response DTOs that get a generated contract: the TypeScript response set plus ShopInfoResponse.
-const ZOD_RESPONSE_SCHEMAS = [...RESPONSE_SCHEMAS, 'ShopInfoResponse'].sort();
 
 // Which fields can be absent comes from the spec: the backend marks every response record component
 // `required` unless it is annotated @Nullable (OpenApiResponseNullabilityConfig), because Jackson
@@ -186,7 +209,7 @@ function zodExpression(schema, used, deps) {
   }
 }
 
-function generateResponseContracts(schemas) {
+function generateResponseContracts(schemas, responseNames) {
   const used = new Set();
   const blocks = new Map();
   const order = [];
@@ -217,7 +240,7 @@ function generateResponseContracts(schemas) {
     blocks.set(name, `${doc}export const ${contractName(name)} = object({\n${fields.join('\n')}\n});\n`);
     order.push(name);
   };
-  ZOD_RESPONSE_SCHEMAS.forEach(visit);
+  [...responseNames].sort().forEach(visit);
 
   const importNames = ['array', 'boolean', 'number', 'object', 'optional', 'string', 'unknown', 'zEnum']
     .filter((n) => used.has(n))
@@ -239,9 +262,21 @@ function generateResponseContracts(schemas) {
   ].join('\n').replace(/\n+$/, '\n');
 }
 
-function formatForTarget(generated, targetFile) {
-  // Mobile has no Prettier config and therefore uses its default double quotes.
-  return targetFile.includes('/mobile/') ? generated.replace(/'([^']*)'/g, '"$1"') : generated;
+/** shared/schemas quotes strings with double quotes, like the rest of the package. */
+function toDoubleQuotes(generated) {
+  return generated.replace(/'([^']*)'/g, '"$1"');
+}
+
+function writeOrCheck(file, content, check, label) {
+  if (check) {
+    if (!fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== content) {
+      throw new Error(`${label} are stale: ${file}`);
+    }
+    return;
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, content, 'utf8');
+  console.log(`✨ ${label} → ${file}`);
 }
 
 async function main() {
@@ -261,30 +296,10 @@ async function main() {
     const schemaCount = Object.keys(schemas).length;
     console.log(`✅ OpenAPI Spec (${spec.info?.title || 'unknown'} ${spec.info?.version || ''}) retrieved — ${schemaCount} schemas.`);
 
-    const generated = generateTypesFromSchemas(schemas);
-    for (const targetFile of TARGET_FILES) {
-      const targetGenerated = formatForTarget(generated, targetFile);
-      if (check) {
-        if (!fs.existsSync(targetFile) || fs.readFileSync(targetFile, 'utf8') !== targetGenerated) {
-          throw new Error(`Generated API types are stale: ${targetFile}`);
-        }
-        continue;
-      }
-
-      fs.writeFileSync(targetFile, targetGenerated, 'utf8');
-      console.log(`✨ Generated TypeScript types → ${targetFile}`);
-    }
-
-    const contracts = generateResponseContracts(schemas);
-    if (check) {
-      if (!fs.existsSync(RESPONSE_CONTRACT_FILE) || fs.readFileSync(RESPONSE_CONTRACT_FILE, 'utf8') !== contracts) {
-        throw new Error(`Generated response contracts are stale: ${RESPONSE_CONTRACT_FILE}`);
-      }
-    } else {
-      fs.mkdirSync(path.dirname(RESPONSE_CONTRACT_FILE), { recursive: true });
-      fs.writeFileSync(RESPONSE_CONTRACT_FILE, contracts, 'utf8');
-      console.log(`✨ Generated response contracts → ${RESPONSE_CONTRACT_FILE}`);
-    }
+    RESPONSE_SCHEMAS = responseSchemaNames(spec);
+    writeOrCheck(TYPES_FILE, toDoubleQuotes(generateTypesFromSchemas(schemas)), check, 'Generated API types');
+    writeOrCheck(RESPONSE_CONTRACT_FILE, generateResponseContracts(schemas, RESPONSE_SCHEMAS), check,
+      'Generated response contracts');
   } catch (err) {
     const rawMessage = err && err.message ? String(err.message) : String(err);
     const safeMessage = rawMessage.replace(/\n|\r/g, '');
