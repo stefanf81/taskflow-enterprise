@@ -1,11 +1,11 @@
 import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { AppState } from 'react-native';
+import { BookingScreen } from '../src/features/booking/BookingScreen';
 import {
-  BookingScreen,
   getPostBookingDestination,
   NO_PREFERENCE_BARBER,
-} from '../src/features/booking/BookingScreen';
+} from '../src/features/booking/bookingWizard';
 import { freezeDate, moveClockTo, restoreClock } from '../test/fakeClock';
 
 // ==================== Mock navigation ====================
@@ -527,23 +527,80 @@ describe('BookingScreen wizard behaviour', () => {
 
   // ---- MOB-3 ----
   it('passes the No Preference sentinel through to the busy-slots query', async () => {
-    await render(<BookingScreen />);
+    const { getByText } = await render(<BookingScreen />);
+    await fireEvent.press(getByText('Continue to Stylist'));
+    await fireEvent.press(getByText('Continue'));
     // Before: effectiveBarber was '' which disabled the query and showed every slot free.
-    expect(mockUseBusySlots).toHaveBeenCalledWith(NO_PREFERENCE_BARBER, '2026-08-12', expect.anything());
-    expect(mockUseBusySlots).not.toHaveBeenCalledWith('', expect.anything(), expect.anything());
+    expect(mockUseBusySlots).toHaveBeenLastCalledWith(
+      NO_PREFERENCE_BARBER, '2026-08-12', expect.anything(), { enabled: true },
+    );
+    expect(mockUseBusySlots).not.toHaveBeenCalledWith('', expect.anything(), expect.anything(), expect.anything());
   });
 
   it('passes the selected service so slots a long service cannot fit are marked busy', async () => {
-    await render(<BookingScreen />);
+    const { getByText } = await render(<BookingScreen />);
+    await fireEvent.press(getByText('Continue to Stylist'));
+    await fireEvent.press(getByText('Continue'));
     // The default service is pre-selected; its name reaches the busy-slots query.
-    expect(mockUseBusySlots).toHaveBeenLastCalledWith(NO_PREFERENCE_BARBER, '2026-08-12', 'Classic Haircut');
+    expect(mockUseBusySlots).toHaveBeenLastCalledWith(
+      NO_PREFERENCE_BARBER, '2026-08-12', 'Classic Haircut', { enabled: true },
+    );
   });
 
   it('queries the chosen barber once one is selected', async () => {
     const { getByText } = await render(<BookingScreen />);
     await fireEvent.press(getByText('Continue to Stylist'));
     await fireEvent.press(getByText('Alex the Barber'));
-    expect(mockUseBusySlots).toHaveBeenLastCalledWith('Alex the Barber', '2026-08-12', expect.anything());
+    await fireEvent.press(getByText('Continue'));
+    expect(mockUseBusySlots).toHaveBeenLastCalledWith(
+      'Alex the Barber', '2026-08-12', expect.anything(), { enabled: true },
+    );
+  });
+
+  it('does not look up busy slots before the date/time step', async () => {
+    const { getByText } = await render(<BookingScreen />);
+    await fireEvent.press(getByText('Beard Trim'));
+    await fireEvent.press(getByText('Royal Shave'));
+    await fireEvent.press(getByText('Continue to Stylist'));
+    await fireEvent.press(getByText('Alex the Barber'));
+    // Steps 1 and 2 render the query disabled: no request per service or barber tap.
+    expect(mockUseBusySlots.mock.calls.length).toBeGreaterThan(0);
+    expect(mockUseBusySlots.mock.calls.every(([, , , options]) => options.enabled === false)).toBe(true);
+
+    await fireEvent.press(getByText('Continue'));
+    expect(mockUseBusySlots).toHaveBeenLastCalledWith(
+      'Alex the Barber', '2026-08-12', 'Royal Shave', { enabled: true },
+    );
+    // Back on step 2 the lookup is idle again.
+    await fireEvent.press(getByText('Back'));
+    expect(mockUseBusySlots).toHaveBeenLastCalledWith(
+      'Alex the Barber', '2026-08-12', 'Royal Shave', { enabled: false },
+    );
+  });
+
+  it('selects no service and queries nothing until the catalog has loaded', async () => {
+    mockCatalogData = [];
+    const { getByText, getAllByText, rerender } = await render(<BookingScreen />);
+    // No hard-coded fallback treatment: Continue is refused instead of booking an unknown service.
+    await fireEvent.press(getByText('Continue to Stylist'));
+    expect(getByText('Please select a treatment.')).toBeTruthy();
+    expect(getByText('1. Select Treatment')).toBeTruthy();
+    expect(mockUseBusySlots).not.toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), 'Classic Haircut', expect.anything(),
+    );
+    expect(mockUseBusySlots).toHaveBeenLastCalledWith(
+      NO_PREFERENCE_BARBER, '2026-08-12', '', { enabled: false },
+    );
+
+    // The catalog arrives: its first service is selected and the wizard moves on.
+    mockCatalogData = null;
+    await rerender(<BookingScreen />);
+    await fireEvent.press(getByText('Continue to Stylist'));
+    expect(getAllByText('2. Choose Your Stylist').length).toBe(2);
+    await fireEvent.press(getByText('Continue'));
+    expect(mockUseBusySlots).toHaveBeenLastCalledWith(
+      NO_PREFERENCE_BARBER, '2026-08-12', 'Classic Haircut', { enabled: true },
+    );
   });
 
   it('shows the server message and a retry when busy slots cannot be loaded', async () => {
@@ -586,19 +643,19 @@ describe('BookingScreen wizard behaviour', () => {
     moveClockTo('2026-08-12T12:30:00Z');
     mockShopTimeZone = 'Asia/Tokyo';
     await render(<BookingScreen />);
-    expect(mockUseBusySlots).toHaveBeenCalledWith(NO_PREFERENCE_BARBER, '2026-08-13', expect.anything());
+    expect(mockUseBusySlots).toHaveBeenCalledWith(NO_PREFERENCE_BARBER, '2026-08-13', expect.anything(), expect.anything());
   });
 
   it('defaults to the next bookable day when no slot is left today', async () => {
     moveClockTo('2026-08-12T18:00:00');
     await render(<BookingScreen />);
-    expect(mockUseBusySlots).toHaveBeenCalledWith(NO_PREFERENCE_BARBER, '2026-08-13', expect.anything());
+    expect(mockUseBusySlots).toHaveBeenCalledWith(NO_PREFERENCE_BARBER, '2026-08-13', expect.anything(), expect.anything());
   });
 
   it('skips Sunday when it is the next bookable day', async () => {
     moveClockTo('2026-08-15T18:00:00'); // Saturday evening
     await render(<BookingScreen />);
-    expect(mockUseBusySlots).toHaveBeenCalledWith(NO_PREFERENCE_BARBER, '2026-08-17', expect.anything());
+    expect(mockUseBusySlots).toHaveBeenCalledWith(NO_PREFERENCE_BARBER, '2026-08-17', expect.anything(), expect.anything());
   });
 
   it('re-validates the selection when the day rolls over', async () => {
@@ -606,7 +663,7 @@ describe('BookingScreen wizard behaviour', () => {
     const { handlers, restore } = captureAppStateHandlers();
     try {
       await render(<BookingScreen />);
-      expect(mockUseBusySlots).toHaveBeenLastCalledWith(NO_PREFERENCE_BARBER, '2026-08-13', expect.anything());
+      expect(mockUseBusySlots).toHaveBeenLastCalledWith(NO_PREFERENCE_BARBER, '2026-08-13', expect.anything(), expect.anything());
 
       moveClockTo('2026-08-13T00:05:00');
       mockUseBusySlots.mockClear();
@@ -614,7 +671,7 @@ describe('BookingScreen wizard behaviour', () => {
         handlers.forEach((h) => h('active'));
       });
       // Day list re-based on the new date; the previous (now past) date is gone.
-      expect(mockUseBusySlots).toHaveBeenLastCalledWith(NO_PREFERENCE_BARBER, '2026-08-13', expect.anything());
+      expect(mockUseBusySlots).toHaveBeenLastCalledWith(NO_PREFERENCE_BARBER, '2026-08-13', expect.anything(), expect.anything());
     } finally {
       restore();
     }
@@ -683,7 +740,7 @@ describe('BookingScreen wizard behaviour', () => {
       mockReceiptProps?.onClose();
     });
     await fireEvent.press(getByText('Continue to Stylist'));
-    expect(mockUseBusySlots).toHaveBeenLastCalledWith(NO_PREFERENCE_BARBER, '2026-08-12', expect.anything());
+    expect(mockUseBusySlots).toHaveBeenLastCalledWith(NO_PREFERENCE_BARBER, '2026-08-12', expect.anything(), expect.anything());
     await fireEvent.press(getByText('Continue'));
     await fireEvent.press(getByText('Continue'));
     expect(queryByDisplayValue('John Smith')).toBeNull();

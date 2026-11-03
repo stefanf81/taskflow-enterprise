@@ -7,7 +7,8 @@ import { transformSync } from '@babel/core';
  * silently skips every function it cannot prove follows the Rules of React. A ref read or written
  * during render once made it skip BookingScreen and HomeScreen, the two largest screens, with no
  * warning anywhere (BENCHMARKS.md §61). This compiles every source file with the compiler's
- * logger and fails on any function it gave up on.
+ * logger and fails on any function it gave up on, and on a component or hook file in which it
+ * compiled nothing at all.
  */
 
 const root = path.resolve(__dirname, '..');
@@ -23,6 +24,18 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
+// Files that hold no function the compiler can memoise. Every other .tsx file and every use*.ts
+// hook file must compile at least one function: a component the compiler does not recognise
+// (an anonymous default export, a wrapper it cannot see through) is skipped without any error.
+const NOTHING_TO_COMPILE: Record<string, string> = {
+  'src/components/common/ErrorBoundary.tsx': 'class component',
+  'src/core/auth/useAuthStore.ts': 'a Zustand store, not a hook body',
+};
+
+const expectsCompiledFunction = (relative: string) =>
+  !(relative in NOTHING_TO_COMPILE) &&
+  (relative.endsWith('.tsx') || /(^|\/)use[A-Z][^/]*\.ts$/.test(relative));
+
 interface CompilerEvent {
   kind: string;
   fnLoc?: { start?: { line?: number } } | null;
@@ -33,9 +46,11 @@ describe('React Compiler coverage', () => {
   it('compiles every component and hook in src/ without bailing out', () => {
     const files = [...sourceFiles(path.join(root, 'src')), path.join(root, 'App.tsx')];
     const failures: string[] = [];
+    const notCompiled: string[] = [];
     let compiled = 0;
 
     for (const file of files) {
+      const compiledBefore = compiled;
       transformSync(fs.readFileSync(file, 'utf8'), {
         filename: file,
         babelrc: false,
@@ -61,9 +76,14 @@ describe('React Compiler coverage', () => {
           ],
         ],
       });
+      const relative = path.relative(root, file).split(path.sep).join('/');
+      if (compiled === compiledBefore && expectsCompiledFunction(relative)) {
+        notCompiled.push(relative);
+      }
     }
 
     expect(failures).toEqual([]);
+    expect(notCompiled).toEqual([]);
     // Guards the check itself: a misconfigured plugin would compile nothing and report nothing.
     expect(compiled).toBeGreaterThan(40);
   }, 60000);

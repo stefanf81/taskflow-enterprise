@@ -5,7 +5,7 @@ import { colors } from '../../theme/colors';
 interface TimeSlotPickerProps {
   slots: readonly string[];
   selectedSlot: string;
-  busySlots?: string[];
+  busySlots?: readonly string[];
   /** Slots whose start time has already passed (not bookable, shown disabled). */
   pastSlots?: readonly string[];
   onSelectSlot: (slot: string) => void;

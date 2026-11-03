@@ -242,6 +242,22 @@ describe('Hooks', () => {
 
       expect(mockGetBusySlotsFn).not.toHaveBeenCalled();
     });
+
+    it('stays idle while the caller disables it, and fetches once enabled', async () => {
+      mockGetBusySlotsFn.mockResolvedValue(['10:00']);
+      const { rerender } = await renderHook(
+        ({ enabled }: { enabled: boolean }) =>
+          useBusySlots('Alex', '2026-08-01', 'Classic Haircut', { enabled }),
+        { wrapper: createWrapper(), initialProps: { enabled: false } },
+      );
+
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+      expect(mockGetBusySlotsFn).not.toHaveBeenCalled();
+
+      await rerender({ enabled: true });
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+      expect(mockGetBusySlotsFn).toHaveBeenCalledWith('Alex', '2026-08-01', 'Classic Haircut', { signal: expect.any(AbortSignal) });
+    });
   });
 
   describe('useCreateAppointment', () => {

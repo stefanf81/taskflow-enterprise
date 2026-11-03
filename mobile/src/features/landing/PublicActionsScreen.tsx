@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
+import { useFlashMessage } from '../../components/common/useFlashMessage';
 import { PublicCancelModal } from './PublicCancelModal';
 import { PublicReviewModal } from './PublicReviewModal';
 import { RootStackParamList } from '../../types/navigation';
@@ -17,20 +18,8 @@ export const PublicActionsScreen: React.FC = () => {
 
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (toastTimer.current) clearTimeout(toastTimer.current);
-    };
-  }, []);
-
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToastMessage(null), 4000);
-  };
+  // Success toast after a modal action (shorter than the portals' banners).
+  const { successMessage: toastMessage, showSuccess: showToast } = useFlashMessage(4000);
 
   return (
     <SafeAreaView style={styles.safeArea}>

@@ -142,37 +142,40 @@ openssl x509 -in intermediate.pem -pubkey -noout \
 mobile/
 ├── assets/                  # App icons, splash screens
 ├── e2e/                     # Detox E2E test suite (booking.e2e.test.ts, jest.config.js, README.md)
+├── metro/                   # Metro resolver rules (zod locales, workspace block list)
 ├── plugins/                 # Expo config plugins (withTaskflowTlsPinning.js — native SSL/TLS cert pinning)
 ├── src/
-│   ├── api/                 # Axios REST API client layers
-│   │   ├── client.ts
-│   │   ├── auth.ts
-│   │   ├── appointments.ts
-│   │   ├── catalog.ts
-│   │   ├── barbers.ts
-│   │   ├── notifications.ts
-│   │   ├── reviews.ts
-│   │   ├── customer.ts
-│   │   └── contracts.ts     # Runtime zod validation at the transport boundary
-│   ├── components/          # Reusable UI components
-│   │   ├── common/          # Button, Card, Input, Modal, Badge, LoadingIndicator, EmptyState, ErrorMessage, ErrorBoundary, ErrorState
-│   │   ├── booking/         # StylistCard, TimeSlotPicker, ReceiptModal, PublicCancelModal, PublicReviewModal
-│   │   └── lookbook/        # LookbookGallery
-│   ├── hooks/               # TanStack Query custom hooks
-│   ├── navigation/          # React Navigation Navigators (Guest, Customer, Admin, Root)
-│   ├── query/                # TanStack Query client (queryClient.ts)
-│   ├── screens/             # HomeScreen, BookingScreen, CatalogScreen, LookbookScreen, LoginScreen, RegisterScreen, PublicActionsScreen, CustomerPortalScreen, AdminDashboardScreen, AdminCatalogScreen, AdminSchedulesScreen, AdminNotificationsScreen
-│   ├── store/               # Zustand state store (useAuthStore)
+│   ├── api/                 # Transport only: client.ts (Axios), contracts.ts (zod at the boundary), publicEndpoints.ts
+│   ├── components/common/   # Shared UI kit: Button, Card, Input, Modal, Badge, ErrorState, …, useFlashMessage
+│   ├── core/                # API call + hook (or store) shared by several features
+│   │   ├── appointments/    # appointments.ts, useAppointments.ts
+│   │   ├── auth/            # auth.ts, useAuthStore.ts (Zustand)
+│   │   ├── barbers/         # barbers.ts, useBarbers.ts
+│   │   └── catalog/         # catalog.ts, useCatalog.ts
+│   ├── features/            # One folder per feature: its screens, modals, hooks and API calls
+│   │   ├── admin/           # AdminDashboard/Catalog/Schedules/Notifications screens, useNotifications
+│   │   ├── auth/            # LoginScreen, RegisterScreen
+│   │   ├── booking/         # BookingScreen = useBookingWizard + bookingWizard.ts (pure rules) + BookingHeader,
+│   │   │                    #   ServiceStep, StylistStep, DateTimeStep, ContactStep, StepNavigation;
+│   │   │                    #   TimeSlotPicker, ReceiptModal, StylistCard, idempotency.ts, useNow, useShopTimeZone
+│   │   ├── customer/        # CustomerPortalScreen, useCustomer
+│   │   └── landing/         # HomeScreen = AnnouncementBar, HomeHeader, HeroSection, GroomingMenu, ShopInfo,
+│   │                        #   MasterStylists, FaqSection (HomeSection titles them); CatalogScreen, LookbookScreen,
+│   │                        #   LookbookGallery, PublicActionsScreen, PublicCancel/ReviewModal, useReviews
+│   ├── navigation/          # React Navigation navigators (Guest, Customer, Admin tabs inside the Root stack)
+│   ├── query/               # TanStack Query client (queryClient.ts) and shared booking query keys (queryKeys.ts)
 │   ├── theme/               # Gold & Obsidian palette, tokens, and colors
-│   ├── types/               # TypeScript API models & Navigation ParamLists
-│   └── utils/               # Secure storage (expo-secure-store), time utilities, idempotency keys
-├── __tests__/               # Jest & React Native Testing Library unit test suites (49 suites)
+│   ├── types/               # Generated API types (api.ts) and navigation param lists
+│   ├── utils/               # Secure storage (expo-secure-store), time utilities, error and session helpers
+│   └── component-map.json   # Web ↔ mobile file mapping (checked by `npm run check:component-map` at the root)
+├── __tests__/               # Jest & React Native Testing Library suites
+├── test/                    # Jest setup and mocks; test/security holds the node:test suites (npm run test:security)
+├── vendor/                  # Vendored security-patch tarballs (see vendor/README.md)
 ├── .detoxrc.js              # Detox dual-platform E2E configuration (Android APK & iOS App)
 ├── App.tsx                  # Application entry point
 ├── app.json                 # Expo configuration
 ├── eas.json                 # EAS Build configuration (Android APK/AAB, iOS IPA)
 ├── metro.config.js          # Metro config: watches only ../shared, resolves node_modules from mobile/
-├── metro/                   # Metro resolver rule that keeps zod's unused locales out of the bundle
 └── package.json
 ```
 
@@ -181,7 +184,7 @@ mobile/
 TaskFlow Mobile enforces a dual-layered testing strategy combining Unit/Component tests with End-to-End (E2E) automation:
 
 ### 1. Unit & Component Tests (Jest + RNTL)
-* **Coverage:** 49 unit & component test suites (**100% PASS**).
+* **Coverage:** 58 unit & component test suites (**100% PASS**).
 * **Thresholds:** Enforced in `jest.config.js` (**>70%** across branches, functions, lines, and statements).
 * **Stack:** `jest-expo` + `@testing-library/react-native` v14 + `test-renderer`.
 

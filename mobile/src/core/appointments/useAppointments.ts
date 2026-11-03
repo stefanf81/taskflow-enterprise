@@ -15,13 +15,22 @@ export const useAppointments = (filter?: string, search?: string, page = 0, size
   });
 };
 
-export const useBusySlots = (barberName: string, bookingDate: string, serviceType?: string) => {
+/**
+ * `enabled: false` keeps the query idle while its caller does not show the slots yet (the booking
+ * wizard before its date/time step), so a selection change there does not fire a request.
+ */
+export const useBusySlots = (
+  barberName: string,
+  bookingDate: string,
+  serviceType?: string,
+  { enabled = true }: { enabled?: boolean } = {},
+) => {
   return useQuery({
     queryKey: queryKeys.busySlots.forDay(barberName, bookingDate, serviceType ?? ''),
     // No placeholderData: another barber's or day's busy slots must never be shown as this one's.
     queryFn: ({ signal }) =>
       appointmentsApi.getBusySlots(barberName, bookingDate, serviceType, { signal }),
-    enabled: !!barberName && barberName.length > 0 && !!bookingDate,
+    enabled: enabled && !!barberName && !!bookingDate,
     staleTime: 5000,
     refetchOnWindowFocus: true,
   });

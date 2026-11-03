@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import { LoadingIndicator } from '../../components/common/LoadingIndicator';
 import { EmptyState } from '../../components/common/EmptyState';
 import { ErrorState } from '../../components/common/ErrorState';
 import { ErrorMessage } from '../../components/common/ErrorMessage';
+import { useFlashMessage } from '../../components/common/useFlashMessage';
 import {
   useAppointments,
   useUpdateAppointmentStatus,
@@ -35,8 +36,6 @@ export const AdminDashboardScreen: React.FC = () => {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Debounce the search term before it reaches the query hook so the admin
   // dashboard does not fire a backend request on every keystroke.
@@ -51,25 +50,9 @@ export const AdminDashboardScreen: React.FC = () => {
   const deleteMutation = useDeleteAppointment();
   const { logout } = useAuthStore(useShallow((state) => ({ logout: state.logout })));
 
-  // Auto-dismiss success/error messages
-  const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    return () => {
-      if (successTimer.current) clearTimeout(successTimer.current);
-    };
-  }, []);
-
-  const showSuccess = (msg: string) => {
-    setSuccessMsg(msg);
-    if (successTimer.current) clearTimeout(successTimer.current);
-    successTimer.current = setTimeout(() => setSuccessMsg(null), 4500);
-  };
-
-  const showError = (msg: string) => {
-    setErrorMsg(msg);
-    if (successTimer.current) clearTimeout(successTimer.current);
-    successTimer.current = setTimeout(() => setErrorMsg(null), 4500);
-  };
+  // Auto-dismissing success/error banners
+  const { successMessage, errorMessage, showSuccess, showError, dismissSuccess } =
+    useFlashMessage();
 
   const handleLogout = async () => {
     try {
@@ -145,12 +128,12 @@ export const AdminDashboardScreen: React.FC = () => {
         </View>
 
         {/* ===== ALERT BANNERS ===== */}
-        <ErrorMessage message={errorMsg || ''} />
-        {successMsg && (
+        <ErrorMessage message={errorMessage || ''} />
+        {successMessage && (
           <View style={styles.successBanner}>
             <Ionicons name="checkmark-circle-outline" size={18} color={colors.status.approved} />
-            <Text style={styles.successText}>{successMsg}</Text>
-            <TouchableOpacity onPress={() => setSuccessMsg(null)}>
+            <Text style={styles.successText}>{successMessage}</Text>
+            <TouchableOpacity onPress={dismissSuccess}>
               <Text style={styles.dismissBtn}>×</Text>
             </TouchableOpacity>
           </View>
