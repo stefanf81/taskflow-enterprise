@@ -20,10 +20,17 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
         aria-modal="true"
         aria-labelledby="receiptModalTitle"
         cdkTrapFocus
+        cdkTrapFocusAutoCapture
         class="login-card modal-card animate-fadeIn p-8 rounded-3xl border border-white/10 shadow-2xl shadow-black/50"
         style="max-width: 480px"
       >
-        <button type="button" cdkFocusInitial class="modal-close" (click)="closed.emit()">
+        <button
+          type="button"
+          cdkFocusInitial
+          class="modal-close"
+          aria-label="Close"
+          (click)="closed.emit()"
+        >
           &times;
         </button>
         <div class="login-header text-center mb-6">

@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
@@ -195,6 +197,25 @@ describe('AuthModalComponent', () => {
     component.closeModal();
     overlay().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(closed).toBe(2);
+  });
+
+  // jsdom has no layout, so the CDK never treats an element as focusable there; assert the
+  // trap is configured to capture (and later restore) focus instead of observing the move.
+  it('captures focus into the dialog and closes on Escape from inside it', () => {
+    const trap = fixture.debugElement.query(By.directive(CdkTrapFocus)).injector.get(CdkTrapFocus);
+    expect(trap.autoCapture).toBe(true);
+    expect(
+      (fixture.nativeElement.querySelector('.modal-close') as HTMLButtonElement).getAttribute(
+        'aria-label',
+      ),
+    ).toBe('Close');
+
+    let closed = 0;
+    component.closed.subscribe(() => closed++);
+    (fixture.nativeElement.querySelector('#username') as HTMLInputElement).dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    expect(closed).toBe(1);
   });
 
   describe('login failures map to actionable copy (FE-10)', () => {

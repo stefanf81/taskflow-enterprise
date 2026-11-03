@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ReceiptModalComponent } from './receipt-modal';
 import { AppointmentItem } from '../../../types/api';
@@ -69,6 +71,20 @@ describe('ReceiptModalComponent', () => {
     let closed = 0;
     component.closed.subscribe(() => closed++);
     overlay().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(closed).toBe(1);
+  });
+
+  // jsdom has no layout, so the CDK never treats an element as focusable there; assert the
+  // trap is configured to capture (and later restore) focus instead of observing the move.
+  it('captures focus into the dialog and closes on Escape from inside it', () => {
+    const trap = fixture.debugElement.query(By.directive(CdkTrapFocus)).injector.get(CdkTrapFocus);
+    expect(trap.autoCapture).toBe(true);
+    const close = fixture.nativeElement.querySelector('.modal-close') as HTMLButtonElement;
+    expect(close.getAttribute('aria-label')).toBe('Close');
+
+    let closed = 0;
+    component.closed.subscribe(() => closed++);
+    close.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(closed).toBe(1);
   });
 

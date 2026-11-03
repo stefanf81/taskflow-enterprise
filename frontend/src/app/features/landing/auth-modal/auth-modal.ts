@@ -39,9 +39,12 @@ interface AuthFormModel {
         aria-modal="true"
         aria-labelledby="authModalTitle"
         cdkTrapFocus
+        cdkTrapFocusAutoCapture
         class="login-card modal-card animate-fadeIn p-8 rounded-3xl border border-white/10 shadow-2xl shadow-black/50"
       >
-        <button type="button" class="modal-close" (click)="closeModal()">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" (click)="closeModal()">
+          &times;
+        </button>
         <div class="login-header text-center mb-6">
           <svg
             xmlns="http://www.w3.org/2000/svg"
