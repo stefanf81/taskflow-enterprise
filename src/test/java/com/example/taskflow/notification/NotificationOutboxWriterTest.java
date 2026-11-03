@@ -11,11 +11,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,13 +30,17 @@ class NotificationOutboxWriterTest {
     @Mock
     private NotificationOutboxRepository outboxRepository;
 
-    @InjectMocks
+    /** 2026-03-02T23:30Z is already 2026-03-03 in the shop's zone (UTC+1). */
+    private static final Clock SHOP_CLOCK =
+            Clock.fixed(Instant.parse("2026-03-02T23:30:00Z"), ZoneId.of("Europe/Berlin"));
+
     private NotificationOutboxWriter writer;
 
     private Appointment appointment;
 
     @BeforeEach
     void setUp() {
+        writer = new NotificationOutboxWriter(outboxRepository, SHOP_CLOCK);
         appointment = new Appointment("John Doe", "john@test.com", "123", "Barber Alex",
                 LocalDate.now(), "10:00", "Haircut");
         appointment.setId(1L);
@@ -55,6 +62,21 @@ class NotificationOutboxWriterTest {
         assertEquals("PENDING", enqueued.getStatus());
         assertEquals(0, enqueued.getRetryCount());
         assertTrue(enqueued.getMessage().contains("APPROVED"));
+    }
+
+    @Test
+    void sentAtUsesTheShopClockNotTheJvmZone() {
+        when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
+        LocalDateTime shopNow = LocalDateTime.of(2026, 3, 3, 0, 30);
+
+        appointment.setStatus("APPROVED");
+        writer.handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, AppointmentDetailsFixtures.of(appointment)));
+        assertEquals(shopNow, captureSaved().getSentAt());
+
+        clearInvocations(outboxRepository);
+        appointment.setStatus("CANCELLED");
+        writer.handleAppointmentCancelled(new AppointmentCancelledEvent(AppointmentDetailsFixtures.of(appointment), CancelledBy.GUEST));
+        assertEquals(shopNow, captureSaved().getSentAt());
     }
 
     @Test

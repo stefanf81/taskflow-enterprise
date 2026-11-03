@@ -18,6 +18,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -313,7 +314,7 @@ abstract class AbstractDataMigrationsTest {
                     "Classic Haircut");
             appointment.setStatus("DENIED");
             NotificationOutboxRepository repository = Mockito.mock(NotificationOutboxRepository.class);
-            new NotificationOutboxWriter(repository)
+            new NotificationOutboxWriter(repository, Clock.systemUTC())
                     .handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, AppointmentDetailsFixtures.of(appointment)));
             ArgumentCaptor<NotificationOutbox> expected = ArgumentCaptor.forClass(NotificationOutbox.class);
             Mockito.verify(repository).save(expected.capture());
@@ -565,7 +566,7 @@ abstract class AbstractDataMigrationsTest {
                     LocalDate.parse(future), "10:00", "Long Treatment");
             appointment.setStatus("DENIED");
             NotificationOutboxRepository repository = Mockito.mock(NotificationOutboxRepository.class);
-            new NotificationOutboxWriter(repository)
+            new NotificationOutboxWriter(repository, Clock.systemUTC())
                     .handleAppointmentStatusChanged(new AppointmentStatusChangedEvent(this, AppointmentDetailsFixtures.of(appointment)));
             ArgumentCaptor<NotificationOutbox> expected = ArgumentCaptor.forClass(NotificationOutbox.class);
             Mockito.verify(repository).save(expected.capture());

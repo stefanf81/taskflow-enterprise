@@ -10,7 +10,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 /**
  * C3: Enqueues a PENDING notification row whenever an appointment status changes.
@@ -25,9 +27,11 @@ public class NotificationOutboxWriter {
 
     private static final Logger logger = LoggerFactory.getLogger(NotificationOutboxWriter.class);
     private final NotificationOutboxRepository outboxRepository;
+    private final Clock clock;
 
-    public NotificationOutboxWriter(NotificationOutboxRepository outboxRepository) {
+    public NotificationOutboxWriter(NotificationOutboxRepository outboxRepository, Clock clock) {
         this.outboxRepository = outboxRepository;
+        this.clock = clock;
     }
 
     /**
@@ -42,14 +46,14 @@ public class NotificationOutboxWriter {
                     safe(appointment.customerEmail()),
                     "EMAIL",
                     buildStatusChangeMessage(appointment),
-                    LocalDateTime.now(),
+                    now(),
                     "PENDING");
             outboxRepository.save(outbox);
         } catch (Exception e) {
             String safeMsg = LogSanitizer.safeMessage(e);
             logger.error("Failed to enqueue status-change notification: {}", safeMsg);
-            // Rethrow so the async error handler sees this and the transaction
-            // rolls back — the NotificationRelayScheduler will retry from its own sweep.
+            // Rethrow so the caller's transaction rolls back (the listener runs synchronously
+            // inside it); no booking or status change commits without its notification row.
             throw new RuntimeException("Failed to enqueue notification", e);
         }
     }
@@ -67,13 +71,22 @@ public class NotificationOutboxWriter {
                     safe(appointment.customerEmail()),
                     "EMAIL",
                     buildCancellationMessage(appointment, event.cancelledBy()),
-                    LocalDateTime.now(),
+                    now(),
                     "PENDING");
             outboxRepository.save(outbox);
         } catch (Exception e) {
             logger.error("Failed to enqueue cancellation notification: {}", LogSanitizer.safeMessage(e));
             throw new RuntimeException("Failed to enqueue notification", e);
         }
+    }
+
+    /**
+     * The shop-zone {@link Clock}, like the relay, reminder and retention schedulers that read and
+     * write the same {@code sent_at} column; the JVM zone would skew ordering and the retention
+     * cutoff by the zone offset whenever {@code APP_SHOP_TIME_ZONE} is not the container's zone.
+     */
+    private LocalDateTime now() {
+        return LocalDateTime.now(clock).truncatedTo(ChronoUnit.MILLIS);
     }
 
     private static String safe(String value) {

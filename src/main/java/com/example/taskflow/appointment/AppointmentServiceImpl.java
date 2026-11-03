@@ -107,7 +107,11 @@ class AppointmentServiceImpl implements AppointmentService {
     @Override
     @Transactional(readOnly = true)
     public AppointmentDashboardResponse getAllAppointments(String status, String searchName, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("bookingDate").ascending().and(Sort.by("bookingTime").ascending()));
+        // Several barbers share a slot, so (date, time) alone is not a total order: id breaks the tie
+        // so LIMIT/OFFSET pages neither repeat nor skip rows.
+        Pageable pageable = PageRequest.of(page, size, Sort.by("bookingDate").ascending()
+                .and(Sort.by("bookingTime").ascending())
+                .and(Sort.by("id").ascending()));
 
         List<Specification<Appointment>> filters = new ArrayList<>();
         String statusFilter = status == null ? "" : status.trim();
@@ -174,8 +178,10 @@ class AppointmentServiceImpl implements AppointmentService {
     @Override
     @Transactional(readOnly = true)
     public org.springframework.data.domain.Page<AppointmentResponse> getMyAppointments(String email, int page, int size) {
-        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(
-                page, size, org.springframework.data.domain.Sort.by("bookingDate").descending());
+        // Newest first, with a unique tiebreaker so pages stay stable when bookings share a date/time.
+        Pageable pageable = PageRequest.of(page, size, Sort.by("bookingDate").descending()
+                .and(Sort.by("bookingTime").descending())
+                .and(Sort.by("id").descending()));
         return appointmentRepository.findByCustomerEmailIgnoreCase(email, pageable)
                 .map(AppointmentResponse::fromEntity);
     }
