@@ -1,4 +1,5 @@
-import { useAuthStore } from '../src/core/auth/useAuthStore';
+import { ACCOUNT_UNREADABLE_MESSAGE, useAuthStore } from '../src/core/auth/useAuthStore';
+import { ApiContractError } from '../src/api/contracts';
 import { authApi } from '../src/core/auth/auth';
 import { storage } from '../src/utils/storage';
 import { queryClient } from '../src/query/queryClient';
@@ -309,6 +310,21 @@ describe('useAuthStore', () => {
       expect(useAuthStore.getState().isAuthenticated).toBe(false);
       expect(useAuthStore.getState().role).toBeNull();
       expect(useAuthStore.getState().sessionNotice).toBe(SESSION_EXPIRED_MESSAGE);
+    });
+
+    it('signs out instead of offering an endless retry when /me answers with an unreadable account', async () => {
+      (storage.getToken as jest.Mock).mockResolvedValueOnce('stored-jwt');
+      (authApi.me as jest.Mock).mockRejectedValueOnce(
+        new ApiContractError('GET /api/v1/auth/me', 'role: Invalid option'),
+      );
+      useAuthStore.setState({ isAuthenticated: true, username: 'admin', role: 'ROLE_ADMIN' });
+
+      await useAuthStore.getState().checkAuth();
+
+      expect(storage.clearSession).toHaveBeenCalled();
+      expect(useAuthStore.getState().isOffline).toBe(false);
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+      expect(useAuthStore.getState().sessionNotice).toBe(ACCOUNT_UNREADABLE_MESSAGE);
     });
 
     it('preserves credentials and exposes retry state when /me is offline', async () => {

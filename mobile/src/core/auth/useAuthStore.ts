@@ -6,6 +6,11 @@ import { LoginRequest, LoginResponse, RegisterRequest } from '../../types/api';
 import { queryClient } from '../../query/queryClient';
 import { getApiErrorMessage, getHttpStatus } from '../../utils/errors';
 import { SESSION_EXPIRED_MESSAGE, computeExpiryMs, isTokenExpired } from '../../utils/session';
+import { ApiContractError } from '../../api/contracts';
+
+/** Shown when /me answered with an account this build cannot read (e.g. a role it does not know). */
+export const ACCOUNT_UNREADABLE_MESSAGE =
+  'This version of the app could not load your account. Please sign in again, or update the app if this keeps happening.';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -168,6 +173,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       return;
     }
 
+    let unreadableAccount = false;
     try {
       const res = await authApi.me();
       if (res.username && res.role) {
@@ -186,7 +192,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
     } catch (error: unknown) {
       const status = getHttpStatus(error);
-      if (status !== 401 && status !== 403) {
+      // The server answered, but with a body the shared contract rejects (a new role, a renamed
+      // field). That is not "offline": every Retry gets the same answer, so the user would be
+      // stuck on the Retry screen for good. Sign out instead, like the unknown-role guard in
+      // RootNavigator, so the app stays usable as a guest.
+      unreadableAccount = error instanceof ApiContractError;
+      if (!unreadableAccount && status !== 401 && status !== 403) {
         // A timeout/offline/DNS failure does not prove the bearer token is
         // invalid. Preserve it and let the user retry when connectivity returns.
         set({
@@ -209,7 +220,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       ...SIGNED_OUT,
       isBootstrapping: false,
       error: null,
-      sessionNotice: SESSION_EXPIRED_MESSAGE,
+      sessionNotice: unreadableAccount ? ACCOUNT_UNREADABLE_MESSAGE : SESSION_EXPIRED_MESSAGE,
     });
   },
 
