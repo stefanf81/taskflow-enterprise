@@ -83,6 +83,9 @@ export class LandingPage {
   }
 
   protected onAuthLoginSuccess(role: string): void {
+    // The banner is shared with the guest forms on this page; a guest's failed cancel or
+    // review must not follow the user into the dashboard as a role="alert".
+    this.appointmentStore.errorMessage.set(null);
     this.appointmentStore.showSuccess(
       role === 'ROLE_ADMIN' ? 'Welcome back, Owner!' : 'Welcome back!',
     );

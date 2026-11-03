@@ -113,9 +113,9 @@ interface ReviewFormModel {
             <button
               type="submit"
               class="btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-600 hover:text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all w-full sm:w-auto"
-              [disabled]="isSubmitting()"
+              [disabled]="isCancelling()"
             >
-              {{ isSubmitting() ? 'Cancelling...' : 'Cancel Reservation' }}
+              {{ isCancelling() ? 'Cancelling...' : 'Cancel Reservation' }}
             </button>
           </div>
         </form>
@@ -227,9 +227,9 @@ interface ReviewFormModel {
             <button
               type="submit"
               class="btn btn-submit text-xs font-bold px-5 py-2.5 rounded-xl transition-all w-full sm:w-auto"
-              [disabled]="isSubmitting()"
+              [disabled]="isReviewing()"
             >
-              {{ isSubmitting() ? 'Submitting...' : 'Submit Review' }}
+              {{ isReviewing() ? 'Submitting...' : 'Submit Review' }}
             </button>
           </div>
         </form>
@@ -244,7 +244,11 @@ export class PostBookingActionsComponent {
   private readonly reviewStore = inject(ReviewStore);
   private readonly destroyRef = inject(DestroyRef);
 
-  protected readonly isSubmitting = this.appointmentStore.isSubmitting;
+  // One in-flight flag per form. Both used to share the booking wizard's submitting flag in
+  // AppointmentStore, so a review in flight relabelled the wizard's button and whichever request
+  // finished first re-enabled the other forms while theirs were still pending.
+  protected readonly isCancelling = signal(false);
+  protected readonly isReviewing = signal(false);
 
   // Two independent Signal Forms, each with its own validation rules and
   // lifecycle: a cancellation form (publicId + email both required) and a
@@ -277,13 +281,13 @@ export class PostBookingActionsComponent {
     if (!publicId || !email) return;
 
     this.appointmentStore.errorMessage.set(null);
-    this.appointmentStore.isSubmitting.set(true);
+    this.isCancelling.set(true);
     this.appointmentsApi
       .publicCancelAppointment(publicId, email)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
-          this.appointmentStore.isSubmitting.set(false);
+          this.isCancelling.set(false);
           this.appointmentStore.showSuccess(
             '🗑️ Reservation successfully cancelled. Your time slot has been released.',
           );
@@ -293,7 +297,7 @@ export class PostBookingActionsComponent {
           this.appointmentStore.errorMessage.set(
             extractApiError(err, 'Verification failed. Please check your Booking Code and Email.'),
           );
-          this.appointmentStore.isSubmitting.set(false);
+          this.isCancelling.set(false);
         },
       });
   }
@@ -303,7 +307,7 @@ export class PostBookingActionsComponent {
     const email = this.reviewModel().email.trim();
     if (!publicId || !email) return;
 
-    this.appointmentStore.isSubmitting.set(true);
+    this.isReviewing.set(true);
     this.reviewsApi
       .submitReview(publicId, {
         rating: this.reviewModel().rating,
@@ -313,7 +317,7 @@ export class PostBookingActionsComponent {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
-          this.appointmentStore.isSubmitting.set(false);
+          this.isReviewing.set(false);
           this.appointmentStore.showSuccess(
             'Thank you for your review! We appreciate your feedback.',
           );
@@ -321,7 +325,7 @@ export class PostBookingActionsComponent {
           this.reviewModel.set({ publicId: '', email: '', rating: 5, comment: '' });
         },
         error: (err) => {
-          this.appointmentStore.isSubmitting.set(false);
+          this.isReviewing.set(false);
           this.appointmentStore.errorMessage.set(
             extractApiError(
               err,

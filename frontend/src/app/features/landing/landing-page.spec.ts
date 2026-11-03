@@ -7,6 +7,7 @@ import { LandingPage } from './landing-page';
 import { AuthState, SESSION_EXPIRED_MESSAGE } from '../../core/auth/auth.state';
 import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
 import { DashboardPrefetch } from '../../dashboard-loaders';
+import { AppointmentStore } from '../../core/appointments/appointment.store';
 // Imported for its side effect only: the wizard is behind `@defer`, whose dynamic import would
 // otherwise have to be transformed mid-test, taking longer than the settle loop below waits.
 import '../booking/booking-wizard';
@@ -76,6 +77,19 @@ describe('LandingPage', () => {
     expect(compiled.querySelector('nav')?.textContent).toContain('TaskFlow');
     expect(compiled.querySelector('header')?.textContent).toContain('Luxury Barber');
     expect(compiled.querySelector('app-booking-wizard')).toBeTruthy();
+  });
+
+  it('drops a guest form error when the visitor signs in', () => {
+    const store = TestBed.inject(AppointmentStore);
+    store.errorMessage.set('Verification failed. Please check your Booking Code and Email.');
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+
+    fixture.componentInstance['onAuthLoginSuccess']('ROLE_ADMIN');
+
+    expect(navigate).toHaveBeenCalledWith('/admin');
+
+    expect(store.errorMessage()).toBeNull();
+    expect(store.successMessage()).toBe('Welcome back, Owner!');
   });
 
   it('opens the owner portal login modal only when triggered', () => {

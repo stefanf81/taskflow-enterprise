@@ -131,4 +131,33 @@ describe('PostBookingActionsComponent', () => {
       'Failed to submit review. Ensure the code is correct and the appointment is completed.',
     );
   });
+
+  it('keeps each form busy only for its own request, never the booking wizard', () => {
+    const button = (label: string): HTMLButtonElement =>
+      Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button')).find((b) =>
+        b.textContent?.includes(label),
+      )!;
+
+    component.reviewModel.set({ publicId: 'r-id', email: 'r@example.com', rating: 5, comment: '' });
+    component.onReview();
+    fixture.detectChanges();
+    expect(button('Submitting...').disabled).toBe(true);
+    expect(button('Cancel Reservation').disabled).toBe(false);
+    expect(store.isSubmitting()).toBe(false);
+
+    component.cancelModel.set({ publicId: 'c-id', email: 'c@example.com' });
+    component.onCancel();
+    httpMock.expectOne('/api/v1/appointments/public/cancel/c-id').flush(null);
+    fixture.detectChanges();
+    // The finished cancel must not re-enable the review that is still in flight.
+    expect(button('Submitting...').disabled).toBe(true);
+
+    httpMock.expectOne('/api/v1/reviews/public/r-id').flush(null);
+    fixture.detectChanges();
+    expect(button('Submit Review').disabled).toBe(false);
+    // A successful review reloads the public ratings.
+    httpMock
+      .match((req) => req.url.includes('/api/v1/reviews/public/barber-ratings'))
+      .forEach((req) => req.flush([]));
+  });
 });
