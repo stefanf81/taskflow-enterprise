@@ -76,11 +76,12 @@ public interface AppointmentRepository
     }
 
     /**
-     * PENDING/APPROVED appointments of one barber on one date, with the service
-     * (duration) fetched so overlap checks do not issue a query per row.
+     * PENDING/APPROVED appointments of one barber on one date. The availability queries do not
+     * fetch {@code a.service}: since V35 the overlap checks read {@code bookingEndTime}, so the
+     * join only added work to every busy-slots and booking request.
      */
     @Query("""
-        SELECT a FROM Appointment a LEFT JOIN FETCH a.service
+        SELECT a FROM Appointment a
         WHERE a.barberName = :barberName
           AND a.bookingDate = :bookingDate
           AND a.status IN (com.example.taskflow.appointment.AppointmentStatus.PENDING,
@@ -92,7 +93,7 @@ public interface AppointmentRepository
 
     /** PENDING/APPROVED appointments of every barber on one date (used by "No Preference"). */
     @Query("""
-        SELECT a FROM Appointment a LEFT JOIN FETCH a.service
+        SELECT a FROM Appointment a
         WHERE a.bookingDate = :bookingDate
           AND a.status IN (com.example.taskflow.appointment.AppointmentStatus.PENDING,
                            com.example.taskflow.appointment.AppointmentStatus.APPROVED)
@@ -102,7 +103,7 @@ public interface AppointmentRepository
 
     /** PENDING/APPROVED appointments of one barber within an inclusive date range. */
     @Query("""
-        SELECT a FROM Appointment a LEFT JOIN FETCH a.service
+        SELECT a FROM Appointment a
         WHERE a.barberName = :barberName
           AND a.bookingDate >= :startDate
           AND a.bookingDate <= :endDate

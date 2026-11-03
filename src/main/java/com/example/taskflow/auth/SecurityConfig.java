@@ -44,7 +44,6 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
-import javax.sql.DataSource;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.util.List;
@@ -65,7 +64,6 @@ class SecurityConfig {
     private final String adminPassword;
     private final KeyPair keyPair;
     private final RSAKey rsaKey;
-    private final DataSource dataSource;
     private final String jwtIssuer;
     private final String jwtAudience;
     private final boolean cookieSecure;
@@ -78,11 +76,9 @@ class SecurityConfig {
              @Value("${app.rsa.require-persistent-keys:false}") boolean requirePersistentKeys,
             @Value("${app.jwt.issuer:taskflow}") String jwtIssuer,
             @Value("${app.jwt.audience:taskflow-api}") String jwtAudience,
-            @Value("${app.cookie.secure:true}") boolean cookieSecure,
-            DataSource dataSource) {
+            @Value("${app.cookie.secure:true}") boolean cookieSecure) {
         this.adminUsername = adminUsername;
         this.adminPassword = adminPassword;
-        this.dataSource = dataSource;
         this.jwtIssuer = jwtIssuer;
         this.jwtAudience = jwtAudience;
         this.cookieSecure = cookieSecure;

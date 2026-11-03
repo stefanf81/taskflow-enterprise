@@ -6,12 +6,6 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
-import javax.sql.DataSource;
-import java.io.PrintWriter;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
-import java.util.logging.Logger;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.util.Base64;
@@ -34,22 +28,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SecurityConfigTest {
 
-    private DataSource dummyDataSource() {
-        return new DataSource() {
-            @Override public Connection getConnection() throws SQLException { return null; }
-            @Override public Connection getConnection(String username, String password) throws SQLException { return null; }
-            @Override public <T> T unwrap(Class<T> iface) throws SQLException { return null; }
-            @Override public boolean isWrapperFor(Class<?> iface) throws SQLException { return false; }
-            @Override public PrintWriter getLogWriter() throws SQLException { return null; }
-            @Override public void setLogWriter(PrintWriter out) throws SQLException {}
-            @Override public void setLoginTimeout(int seconds) throws SQLException {}
-            @Override public int getLoginTimeout() throws SQLException { return 0; }
-            @Override public Logger getParentLogger() throws SQLFeatureNotSupportedException { return null; }
-        };
-    }
-
     private SecurityConfig createConfig(String admin, String pass, String privKey, String pubKey) {
-        return new SecurityConfig(admin, pass, privKey, pubKey, false, "taskflow", "taskflow-api", false, dummyDataSource());
+        return new SecurityConfig(admin, pass, privKey, pubKey, false, "taskflow", "taskflow-api", false);
     }
 
     @Test
@@ -89,14 +69,14 @@ class SecurityConfigTest {
     @Test
     void productionRequiresPersistentKeys() {
         assertThrows(IllegalStateException.class, () -> new SecurityConfig(
-                "admin", "pass", null, null, true, "taskflow", "taskflow-api", false, dummyDataSource()));
+                "admin", "pass", null, null, true, "taskflow", "taskflow-api", false));
     }
 
     @Test
     void productionRejectsInvalidPersistentKeys() {
         assertThrows(IllegalStateException.class, () -> new SecurityConfig(
                 "admin", "pass", "invalid-base64", "invalid-base64", true,
-                "taskflow", "taskflow-api", false, dummyDataSource()));
+                "taskflow", "taskflow-api", false));
     }
 
     @Test
