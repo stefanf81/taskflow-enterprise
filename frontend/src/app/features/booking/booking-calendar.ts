@@ -4,14 +4,11 @@
  *
  * Every function takes "now" as an argument (the shop's wall clock, see `ShopClock`) instead of
  * reading the clock, so `BookingStore` decides when time moves on and the rules are testable
- * without fake timers. The shop facts (closed weekdays, the 90-day window in
- * `MAX_BOOKING_DAYS_AHEAD`) are constants today; they are parameters with defaults so they can
- * later come from the backend.
+ * without fake timers. The shop facts (opening days, booking window) are a `ShopRules` argument,
+ * which `ShopClock.rules()` reads from the backend.
  */
-import { MAX_BOOKING_DAYS_AHEAD, isSlotInPast, toLocalDateString } from '../../core/time-utils';
-
-/** Weekdays the shop is closed, numbered like `Date.getDay()` (0 = Sunday). */
-export const SHOP_CLOSED_WEEKDAYS: readonly number[] = [0];
+import { type ShopRules, isOpenOn } from '@taskflow/domain';
+import { isSlotInPast, toLocalDateString } from '../../core/time-utils';
 
 /** How many bookable days the date carousel shows. */
 export const CAROUSEL_DAY_COUNT = 7;
@@ -28,15 +25,9 @@ export interface BookingDay {
   monthName: string;
 }
 
-/** Whether the shop is closed on `dateStr` (`YYYY-MM-DD`). */
-export function isClosedDay(
-  dateStr: string,
-  closedWeekdays: readonly number[] = SHOP_CLOSED_WEEKDAYS,
-): boolean {
-  if (!dateStr) return false;
-  // A date-only string parses as UTC midnight, so its UTC weekday is the calendar date's own in
-  // every visitor time zone.
-  return closedWeekdays.includes(new Date(dateStr).getUTCDay());
+/** Whether the shop is closed on `dateStr` (`YYYY-MM-DD`): no barber works that weekday. */
+export function isClosedDay(dateStr: string, rules: ShopRules): boolean {
+  return !!dateStr && !isOpenOn(dateStr, rules);
 }
 
 /** Whether every slot of `dateStr` has already started at `now`. */
@@ -51,17 +42,18 @@ export function isDayOver(dateStr: string, now: Date, slots: readonly string[]):
 export function upcomingBookingDays(
   now: Date,
   slots: readonly string[],
-  closedWeekdays: readonly number[] = SHOP_CLOSED_WEEKDAYS,
+  rules: ShopRules,
 ): BookingDay[] {
   const days: BookingDay[] = [];
-  const lookahead = Math.min(CAROUSEL_LOOKAHEAD_DAYS, MAX_BOOKING_DAYS_AHEAD);
+  // Offsets 0..maxAdvanceDays are inside the booking window.
+  const lookahead = Math.min(CAROUSEL_LOOKAHEAD_DAYS, rules.maxAdvanceDays + 1);
   for (let offset = 0; days.length < CAROUSEL_DAY_COUNT && offset < lookahead; offset++) {
     const date = new Date(now);
     date.setDate(now.getDate() + offset);
     // Local components on purpose: `now` is the shop's wall clock, and `toISOString()` would
     // shift the day in US/EU time zones.
     const dateStr = toLocalDateString(date);
-    if (closedWeekdays.includes(date.getDay())) continue;
+    if (!isOpenOn(dateStr, rules)) continue;
     if (offset === 0 && isDayOver(dateStr, now, slots)) continue;
     days.push({
       dateStr,

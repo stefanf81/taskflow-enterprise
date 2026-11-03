@@ -6,6 +6,7 @@ on:
     paths:
       - "mobile/**"
       - "shared/schemas/**"
+      - "shared/domain/**"
       - "api/**"
       - "scripts/sync-api-types.js"
       - "package.json"
@@ -92,6 +93,7 @@ jobs:
             mobile:
               - 'mobile/**'
               - 'shared/schemas/**'
+              - 'shared/domain/**'
               - 'api/**'
               - 'scripts/sync-api-types.js'
               - 'package.json'

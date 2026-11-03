@@ -21,19 +21,17 @@ import { useCustomerAppointments, useCancelCustomerAppointment } from './useCust
 import { useAuthStore } from '../../core/auth/useAuthStore';
 import { useShallow } from 'zustand/react/shallow';
 import { colors } from '../../theme/colors';
-import { formatTime12Hour } from '../../utils/time-utils';
+import { isCustomerCancellable } from '@taskflow/domain';
+import { useShopInfo } from '../../core/shop/useShopInfo';
+import { formatTime12Hour, shopWallClock } from '../../utils/time-utils';
 import { getApiErrorMessage } from '../../utils/errors';
-
-// DENIED and CANCELLED bookings are final: nothing left to cancel.
-const canCancelStatus = (status: string) => {
-  const normalized = status.toUpperCase();
-  return normalized !== 'DENIED' && normalized !== 'CANCELLED';
-};
 
 export const CustomerPortalScreen: React.FC = () => {
   const [page, setPage] = useState(0);
   const { data, isLoading, isError, refetch } = useCustomerAppointments(page, 10);
   const cancelMutation = useCancelCustomerAppointment();
+  // Only an upcoming PENDING or APPROVED booking can be cancelled, the rule the server applies.
+  const { timeZone: shopTimeZone } = useShopInfo();
   const { username, logout } = useAuthStore(
     useShallow((state) => ({ username: state.username, logout: state.logout })),
   );
@@ -141,7 +139,7 @@ export const CustomerPortalScreen: React.FC = () => {
                   </Text>
                 </View>
 
-                {canCancelStatus(item.status) && (
+                {isCustomerCancellable(item, shopWallClock(shopTimeZone)) && (
                   <Button
                     title="Cancel Booking"
                     variant="outline"

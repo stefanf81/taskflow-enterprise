@@ -64,6 +64,25 @@ class BarberServiceImplTest {
     }
 
     @Test
+    void openingHoursAreTheWeekdaysAnyoneWorksWithHhMmTimes() {
+        when(scheduleRepository.findWeekdayHours()).thenReturn(List.of(
+                weekday(1, LocalTime.of(9, 0), LocalTime.of(17, 30)),
+                weekday(6, LocalTime.of(10, 0), LocalTime.of(16, 0))));
+
+        assertEquals(List.of(new OpeningHoursResponse(1, "09:00", "17:30"),
+                        new OpeningHoursResponse(6, "10:00", "16:00")),
+                barberService.getOpeningHours());
+    }
+
+    private static BarberScheduleRepository.WeekdayHours weekday(int day, LocalTime opens, LocalTime closes) {
+        return new BarberScheduleRepository.WeekdayHours() {
+            @Override public Integer getDayOfWeek() { return day; }
+            @Override public LocalTime getOpens() { return opens; }
+            @Override public LocalTime getCloses() { return closes; }
+        };
+    }
+
+    @Test
     void getPublicBarbers_shouldReturnOnlyPublicFields() {
         PublicBarberResponse projected = new PublicBarberResponse(1L, "Alex");
         when(barberRepository.findAllPublicProjectedBy()).thenReturn(List.of(projected));

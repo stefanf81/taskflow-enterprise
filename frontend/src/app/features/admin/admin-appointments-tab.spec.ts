@@ -7,6 +7,7 @@ import { AdminAppointmentsTab } from './admin-appointments-tab';
 import { AppointmentStore } from './appointment.store';
 import { FlashMessages } from '../../core/ui/flash-messages';
 import { AuthState } from '../../core/auth/auth.state';
+import { ShopClock } from '../../core/shop-clock';
 import { AppointmentsApi } from '../../core/api/appointments-api';
 import { AppointmentDashboardResponse } from '../../types/api';
 
@@ -69,6 +70,7 @@ describe('AdminAppointmentsTab', () => {
         provideRouter([]),
         AppointmentsApi,
         AppointmentStore,
+        { provide: ShopClock, useValue: { now: () => new Date() } },
       ],
     }).compileComponents();
 

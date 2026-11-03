@@ -13,6 +13,7 @@ matching file before changing that area.
 | `frontend/` | Angular 22 (zoneless, signals), Tailwind, prerendered landing page | [frontend](docs/agents/frontend.md) |
 | `mobile/` | React Native / Expo, React Navigation, TanStack Query, Zustand | [mobile](docs/agents/mobile.md) |
 | `shared/schemas/` | zod/mini request and response schemas used by both clients (`@taskflow/schemas`) | [contracts](docs/agents/contracts.md) |
+| `shared/domain/` | Booking rules and time helpers both clients apply (`@taskflow/domain`) | [contracts](docs/agents/contracts.md) |
 | `api/openapi.json` | Reviewed OpenAPI baseline; both clients' `types/api.ts` are generated from it | [contracts](docs/agents/contracts.md) |
 | `Dockerfile`, `docker-compose.yml`, `frontend/nginx*.conf` | One Dockerfile, two targets (`prod`, `local`) | [infrastructure](docs/agents/infrastructure.md) |
 | `.github/` | Workflows and composite actions | [ci](docs/agents/ci.md) |
@@ -42,7 +43,7 @@ npm start | npm test | npm run lint | npm run build | npm run e2e
 npm start | npm test | npm run lint
 
 # Whole repo (root)
-npm ci                          # installs every npm workspace (frontend, mobile, shared/schemas)
+npm ci                          # installs every npm workspace (frontend, mobile, shared/*)
 npm run lint:all                # frontend ESLint + tsc + Prettier, mobile tsc
 npm run test:all                # frontend + mobile unit tests
 npm run api:spec:update         # refresh api/openapi.json from a running local backend
@@ -91,10 +92,11 @@ Mobile
 - Subscribe to the auth store with per-field selectors, never the whole store. No bulk Prettier runs (mobile has no `.prettierrc`).
 
 Dependencies
-- `frontend`, `mobile` and `shared/schemas` are npm workspaces with one root `package-lock.json` (always `npm ci`, not `npm install`). `overrides`, `allowScripts` and the vendored patch tarballs (`file:mobile/vendor/…`) only work in the root `package.json`. Hoisting must not change which version a tool sees: `npm run check:dependency-tree` (in `lint:all` and after every CI install) fails on any dependency resolved outside its declared range; the root pins `jsdom` for the frontend's vitest. Never hand-edit or merge lockfiles: `npm ci` does not check ranges. New versions need to age 3 days like Renovate's hold; see CONTRIBUTING.
+- `frontend`, `mobile`, `shared/schemas` and `shared/domain` are npm workspaces with one root `package-lock.json` (always `npm ci`, not `npm install`). `overrides`, `allowScripts` and the vendored patch tarballs (`file:mobile/vendor/…`) only work in the root `package.json`. Hoisting must not change which version a tool sees: `npm run check:dependency-tree` (in `lint:all` and after every CI install) fails on any dependency resolved outside its declared range; the root pins `jsdom` for the frontend's vitest. Never hand-edit or merge lockfiles: `npm ci` does not check ranges. New versions need to age 3 days like Renovate's hold; see CONTRIBUTING.
 
 Contracts
 - After any backend DTO or endpoint change: start the backend, `npm run api:spec:update`, `npm run sync:api-types`, commit the baseline and the generated files (both `types/api.ts` and `shared/schemas/src/generated/api-responses.ts`), update the matching hand-written response schema in `shared/schemas` (a parity spec fails otherwise), then run `npm run sync:api-types:check`.
+- Rules both clients apply (opening days, booking window, who may cancel, time helpers) live once in `shared/domain`; the shop's values come from `/public/shop` (`ShopClock` / `useShopInfo`). Never hard-code them in a client.
 - Porting a feature between web and mobile: look it up in `frontend/src/component-map.json` / `mobile/src/component-map.json` and follow `.opencode/skills/sync-to-mobile.md`. Finish with `npm run lint:all` and `npm run test:all`.
 
 ## Writing to this file

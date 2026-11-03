@@ -5,8 +5,6 @@ import {
   formatLocalDate,
   formatMinutesToTimeString,
   formatTime12Hour,
-  MAX_BOOKING_DAYS_AHEAD,
-  isBookableDate,
   isOverdue,
   isSlotInPast,
   msUntilNextLocalMidnight,
@@ -14,6 +12,10 @@ import {
   shopWallClock,
   toLocalDateString,
 } from './time-utils';
+import { DEFAULT_SHOP_RULES, isWithinBookingWindow } from '@taskflow/domain';
+
+const isBookableDate = (date: string, now: Date) =>
+  isWithinBookingWindow(date, now, DEFAULT_SHOP_RULES);
 
 describe('time-utils', () => {
   describe('formatTime12Hour', () => {
@@ -105,8 +107,8 @@ describe('time-utils', () => {
       expect(toLocalDateString(new Date(2026, 11, 31, 0, 1))).toBe('2026-12-31');
     });
 
-    it('states the 90-day horizon in one place', () => {
-      expect(MAX_BOOKING_DAYS_AHEAD).toBe(90);
+    it("defaults to the server's 90-day horizon until /public/shop has answered", () => {
+      expect(DEFAULT_SHOP_RULES.maxAdvanceDays).toBe(90);
     });
 
     it('accepts today through day 90 and nothing outside that window', () => {

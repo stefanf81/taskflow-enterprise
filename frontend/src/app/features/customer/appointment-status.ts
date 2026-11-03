@@ -12,7 +12,5 @@ export function statusLabel(status: string): string {
   return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
 }
 
-/** Whether a customer may still cancel a booking in this state. */
-export function isCustomerCancellable(status: string): boolean {
-  return status === 'PENDING' || status === 'APPROVED';
-}
+// Whether a customer may still cancel a booking is a shared rule: isCustomerCancellable in
+// @taskflow/domain (also used by the mobile app).

@@ -29,11 +29,18 @@
           >
         </div>
         <div class="flex items-center gap-4">
-          <span
-            class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-          >
-            ● Shop Open
-          </span>
+          @if (openNow() !== null) {
+            <span
+              class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border"
+              [class]="
+                openNow()
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : 'bg-zinc-800/60 text-zinc-400 border-white/10'
+              "
+            >
+              {{ openNow() ? '● Shop Open' : '● Closed Now' }}
+            </span>
+          }
           <button
             (click)="showAdminLoginModal.set(true)"
             class="text-xs font-bold text-zinc-400 hover:text-gold tracking-wide uppercase transition-colors"
@@ -145,17 +152,18 @@
                 ⏰ Operating Hours
               </h3>
               <div class="space-y-2 text-xs text-zinc-400 font-light">
-                <p class="flex justify-between">
-                  <span>Monday - Friday</span>
-                  <span class="font-medium text-zinc-300">09:00 AM - 06:00 PM</span>
-                </p>
-                <p class="flex justify-between">
-                  <span>Saturday</span>
-                  <span class="font-medium text-zinc-300">10:00 AM - 04:00 PM</span>
-                </p>
-                <p class="flex justify-between text-rose-500 font-semibold">
-                  <span>Sunday</span> <span>CLOSED</span>
-                </p>
+                @for (row of openingHours(); track row.days) {
+                  @if (row.hours) {
+                    <p class="flex justify-between">
+                      <span>{{ row.days }}</span>
+                      <span class="font-medium text-zinc-300">{{ row.hours }}</span>
+                    </p>
+                  } @else {
+                    <p class="flex justify-between text-rose-500 font-semibold">
+                      <span>{{ row.days }}</span> <span>CLOSED</span>
+                    </p>
+                  }
+                }
               </div>
             </div>
 

@@ -119,6 +119,12 @@ export interface NotificationOutboxResponse {
   type: string;
 }
 
+export interface OpeningHoursResponse {
+  closes: string;
+  dayOfWeek: number;
+  opens: string;
+}
+
 export interface PagedModelAppointmentResponse {
   content: AppointmentResponse[];
   page: PageMetadata;
@@ -171,6 +177,8 @@ export interface ServiceItemResponse {
 }
 
 export interface ShopInfoResponse {
+  maxAdvanceDays: number;
+  openingHours: OpeningHoursResponse[];
   timeZone: string;
 }
 

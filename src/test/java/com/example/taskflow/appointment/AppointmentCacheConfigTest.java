@@ -58,6 +58,18 @@ class AppointmentCacheConfigTest {
     }
 
     @Test
+    void openingHoursRoundTripWithoutTypeIds() {
+        RedisCacheConfiguration openingHours = AppointmentCacheConfig.openingHoursCache();
+        List<OpeningHoursResponse> value = List.of(new OpeningHoursResponse(1, "09:00", "17:00"));
+
+        ByteBuffer stored = openingHours.getValueSerializationPair().write(value);
+        String json = StandardCharsets.UTF_8.decode(stored.duplicate()).toString();
+
+        assertFalse(json.contains("@class"), json);
+        assertEquals(value, openingHours.getValueSerializationPair().read(stored));
+    }
+
+    @Test
     void registersEveryAppointmentCacheWithItsTtlAndNoNullValues() {
         RedisCacheManager.RedisCacheManagerBuilder builder =
                 RedisCacheManager.builder(mock(RedisCacheWriter.class));
@@ -66,6 +78,7 @@ class AppointmentCacheConfigTest {
         Map<String, Duration> expected = Map.of(
                 "barbers", Duration.ofMinutes(10),
                 "publicBarbers", Duration.ofMinutes(10),
+                "openingHours", Duration.ofMinutes(10),
                 "busySlots", Duration.ofMinutes(2),
                 "appointmentStats", Duration.ofMinutes(5));
         assertEquals(expected.keySet(), builder.getConfiguredCaches());

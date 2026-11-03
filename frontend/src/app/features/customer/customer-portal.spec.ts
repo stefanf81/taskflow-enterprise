@@ -8,6 +8,7 @@ import { AppointmentPage } from '../../types/api';
 import { AppointmentsApi } from '../../core/api/appointments-api';
 import { CustomerStore } from '../../core/customer/customer.store';
 import { AuthState } from '../../core/auth/auth.state';
+import { ShopClock } from '../../core/shop-clock';
 
 /**
  * TE1: Component-level QA suite for the Customer dashboard.
@@ -62,6 +63,8 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
         provideRouter([]),
         AppointmentsApi,
         CustomerStore,
+        // Mid-July 2026 on the shop's clock: the fixture's August bookings are still upcoming.
+        { provide: ShopClock, useValue: { now: () => new Date(2026, 6, 15, 12, 0) } },
       ],
     }).compileComponents();
 
@@ -190,6 +193,12 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
     it('still offers cancel for pending and approved bookings', () => {
       fixture.detectChanges();
       expect(cancelButtons()).toHaveLength(2);
+    });
+
+    it('offers no cancel once a booking has started, as the server refuses it then', () => {
+      TestBed.inject(ShopClock).now = () => new Date(2026, 7, 2, 18, 0);
+      fixture.detectChanges();
+      expect(cancelButtons()).toHaveLength(0);
     });
 
     it('links to the booking flow from the header', () => {

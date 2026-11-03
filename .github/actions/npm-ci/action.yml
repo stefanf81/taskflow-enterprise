@@ -11,7 +11,9 @@ inputs:
       workspace and the root tooling.
     required: true
   shared-schemas:
-    description: Also install the shared/schemas workspace (the web and mobile apps import it).
+    description: >-
+      Also install the shared workspaces (shared/schemas and shared/domain), which the web and
+      mobile apps import.
     required: false
     default: "true"
   ignore-scripts:
@@ -47,7 +49,7 @@ runs:
         # package.json carries npm 12's `allowScripts` (which install scripts
         # run) and is not reflected in the lockfile; this file carries the
         # `npm ci` arguments. Hash both so a policy or flag change misses.
-        INPUTS_HASH: ${{ hashFiles('package-lock.json', 'package.json', format('{0}/package.json', inputs.package-path), 'shared/schemas/package.json', '.npmrc', '.github/actions/npm-ci/action.yml') }}
+        INPUTS_HASH: ${{ hashFiles('package-lock.json', 'package.json', format('{0}/package.json', inputs.package-path), 'shared/schemas/package.json', 'shared/domain/package.json', '.npmrc', '.github/actions/npm-ci/action.yml') }}
       run: |
         set -euo pipefail
         declared="$(node -p "require('./frontend/package.json').packageManager || 'npm'")"
@@ -64,6 +66,7 @@ runs:
           node_modules
           ${{ inputs.package-path }}/node_modules
           shared/schemas/node_modules
+          shared/domain/node_modules
         key: ${{ steps.nm-key.outputs.key }}
 
     # Only on a node_modules miss: on a hit nothing is downloaded, so the
@@ -120,8 +123,8 @@ runs:
           # Only the requested workspace(s): `npm ci` reads the one root lockfile but installs
           # just their dependency trees.
           args+=(--workspace "$PACKAGE_PATH")
-          if [[ "$SHARED_SCHEMAS" == "true" && "$PACKAGE_PATH" != "shared/schemas" ]]; then
-            args+=(--workspace shared/schemas)
+          if [[ "$SHARED_SCHEMAS" == "true" && "$PACKAGE_PATH" != shared/* ]]; then
+            args+=(--workspace shared/schemas --workspace shared/domain)
           fi
         fi
         if [[ "$IGNORE_SCRIPTS" == "true" ]]; then
@@ -150,8 +153,8 @@ runs:
         ws=()
         if [[ "$PACKAGE_PATH" != "." ]]; then
           ws+=(--workspace "$PACKAGE_PATH")
-          if [[ "$SHARED_SCHEMAS" == "true" && "$PACKAGE_PATH" != "shared/schemas" ]]; then
-            ws+=(--workspace shared/schemas)
+          if [[ "$SHARED_SCHEMAS" == "true" && "$PACKAGE_PATH" != shared/* ]]; then
+            ws+=(--workspace shared/schemas --workspace shared/domain)
           fi
         fi
         node scripts/check-dependency-tree.js "${ws[@]}"
@@ -164,6 +167,7 @@ runs:
           node_modules
           ${{ inputs.package-path }}/node_modules
           shared/schemas/node_modules
+          shared/domain/node_modules
         key: ${{ steps.nm-key.outputs.key }}
 
     - name: Save npm download cache

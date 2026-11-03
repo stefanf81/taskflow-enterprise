@@ -25,8 +25,9 @@ class AppointmentControllerEventStreamTest {
     private final AppointmentBookingService bookingService = mock(AppointmentBookingService.class);
     private final AppointmentLifecycleService lifecycleService = mock(AppointmentLifecycleService.class);
     private final AppointmentEventStreamService streams = mock(AppointmentEventStreamService.class);
+    private final BarberService barberService = mock(BarberService.class);
     private final AppointmentController controller = new AppointmentController(queryService, bookingService,
-            lifecycleService, streams, java.time.Clock.systemUTC());
+            lifecycleService, streams, barberService, BookingProperties.defaults(), java.time.Clock.systemUTC());
 
     @Test
     void jwtPrincipalPassesItsExpiryAndIdToTheStream() {
@@ -57,13 +58,18 @@ class AppointmentControllerEventStreamTest {
     }
 
     @Test
-    void shopInfoReportsTheClockZoneAndIsPubliclyCacheable() {
+    void shopInfoReportsTheClockZoneWindowAndHoursAndIsPubliclyCacheable() {
+        List<OpeningHoursResponse> hours = List.of(new OpeningHoursResponse(1, "09:00", "17:00"));
+        when(barberService.getOpeningHours()).thenReturn(hours);
+        BookingProperties window = new BookingProperties(30, 5, "09:00", "17:00", List.of(1));
         AppointmentController inNewYork = new AppointmentController(queryService, bookingService, lifecycleService,
-                streams, java.time.Clock.system(java.time.ZoneId.of("America/New_York")));
+                streams, barberService, window, java.time.Clock.system(java.time.ZoneId.of("America/New_York")));
 
         var response = inNewYork.getShopInfo();
 
         assertEquals("America/New_York", response.getBody().timeZone());
+        assertEquals(30, response.getBody().maxAdvanceDays());
+        assertEquals(hours, response.getBody().openingHours());
         assertEquals("max-age=300, public", response.getHeaders().getCacheControl());
     }
 }

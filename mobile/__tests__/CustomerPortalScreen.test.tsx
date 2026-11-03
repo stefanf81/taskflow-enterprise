@@ -3,6 +3,7 @@ import { render, fireEvent, waitFor, screen } from '@testing-library/react-nativ
 import { Alert } from 'react-native';
 import { CustomerPortalScreen } from '../src/features/customer/CustomerPortalScreen';
 import type { AppointmentPage } from '../src/types/api';
+import { freezeDate, moveClockTo, restoreClock } from '../test/fakeClock';
 
 // ==================== Controllable mocks ====================
 let mockIsLoading: boolean;
@@ -13,6 +14,15 @@ let mockCancelMutate: jest.Mock;
 let mockLogout: jest.Mock;
 let mockUsername: string;
 let mockHookArgs: unknown[];
+
+// The shop info (time zone, window, hours) as the server's defaults: no query client needed.
+jest.mock('../src/core/shop/useShopInfo', () => ({
+  useShopInfo: () => ({
+    timeZone: null,
+    rules: jest.requireActual('@taskflow/domain').DEFAULT_SHOP_RULES,
+    loaded: false,
+  }),
+}));
 
 jest.mock('../src/features/customer/useCustomer', () => ({
   useCustomerAppointments: (...args: unknown[]) => {
@@ -53,6 +63,16 @@ function buildData(overrides: Partial<AppointmentPage> = {}): AppointmentPage {
 }
 
 describe('CustomerPortalScreen', () => {
+  // Mid-July 2026: the fixture's August bookings are still upcoming, so they can be cancelled.
+  beforeEach(() => freezeDate('2026-07-15T12:00:00'));
+  afterEach(() => restoreClock());
+
+  it('offers no cancel once a booking has started, as the server refuses it then', async () => {
+    moveClockTo('2026-08-02T12:00:00');
+    await render(<CustomerPortalScreen />);
+    expect(screen.queryByText('Cancel Booking')).toBeNull();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockIsLoading = false;

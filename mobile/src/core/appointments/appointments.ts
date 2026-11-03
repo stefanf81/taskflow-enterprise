@@ -13,6 +13,7 @@ import {
   appointmentUpdateSchema,
   busySlotsResponseSchema,
   shopInfoResponseSchema,
+  type ShopInfoResponse,
 } from '@taskflow/schemas';
 
 export const appointmentsApi = {
@@ -64,14 +65,17 @@ export const appointmentsApi = {
     );
   },
 
-  /** The shop's IANA time zone: what the server counts as past or bookable is decided in it. */
-  getShopTimeZone: async ({ signal }: RequestOptions = {}): Promise<string> => {
+  /**
+   * The shop's time zone, booking window and opening hours: what the server counts as past,
+   * bookable or closed is decided by them.
+   */
+  getShopInfo: async ({ signal }: RequestOptions = {}): Promise<ShopInfoResponse> => {
     const response = await apiClient.get<unknown>('/api/v1/appointments/public/shop', { signal });
     return parseContract(
       shopInfoResponseSchema,
       response.data,
       'GET /api/v1/appointments/public/shop',
-    ).timeZone;
+    );
   },
 
   getBusySlots: async (

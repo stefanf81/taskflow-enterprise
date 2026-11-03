@@ -37,8 +37,8 @@ ephemeral signing keys by default.
 
 ### JavaScript Dependencies
 
-Run these commands from the repository root. `frontend`, `mobile` and `shared/schemas`
-are npm workspaces with a single root `package-lock.json`, so one `npm ci` installs
+Run these commands from the repository root. `frontend`, `mobile`, `shared/schemas` and
+`shared/domain` are npm workspaces with a single root `package-lock.json`, so one `npm ci` installs
 all of them (dependencies are hoisted to the root `node_modules`).
 
 ```bash
@@ -221,6 +221,7 @@ the mobile test and native build suites.
 - `frontend/` — Angular 22 SPA (TypeScript, Tailwind CSS)
 - `mobile/` — React Native / Expo application (TypeScript)
 - `shared/schemas/` — Shared Zod validation schemas (`@taskflow/schemas`)
+- `shared/domain/` — Booking rules and time helpers shared by both clients (`@taskflow/domain`)
 - `api/` — Canonical OpenAPI contract baseline (`api/openapi.json`)
 - `scripts/` — Monorepo utility, benchmarking, and contract scripts
 - `docs/adr/` — Architecture Decision Records

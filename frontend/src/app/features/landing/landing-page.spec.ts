@@ -11,6 +11,7 @@ import { FlashMessages } from '../../core/ui/flash-messages';
 // Imported for its side effect only: the wizard is behind `@defer`, whose dynamic import would
 // otherwise have to be transformed mid-test, taking longer than the settle loop below waits.
 import '../booking/booking-wizard';
+import { DEFAULT_SHOP_RULES } from '@taskflow/domain';
 
 describe('LandingPage', () => {
   let fixture: ComponentFixture<LandingPage>;
@@ -50,7 +51,12 @@ describe('LandingPage', () => {
     // The shop's zone is the machine's own, so the wizard's clock is unchanged in these specs.
     httpMock
       .match((r) => r.url.includes('/public/shop'))
-      .forEach((r) => r.flush({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
+      .forEach((r) =>
+        r.flush({
+          ...DEFAULT_SHOP_RULES,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      );
   }
 
   /**
@@ -71,6 +77,15 @@ describe('LandingPage', () => {
     await new Promise((resolve) => setTimeout(resolve));
     fixture.detectChanges();
   }
+
+  it('shows the opening hours and open/closed badge from the shop info', () => {
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    // DEFAULT_SHOP_RULES were flushed for /public/shop: Monday-Saturday 09:00-17:00.
+    expect(text).toContain('Monday - Saturday');
+    expect(text).toContain('9:00 AM - 5:00 PM');
+    expect(text).toMatch(/Sunday\s*CLOSED/);
+    expect(text).toMatch(/● (Shop Open|Closed Now)/);
+  });
 
   it('renders the public navigation, hero and booking wizard', () => {
     const compiled = fixture.nativeElement as HTMLElement;

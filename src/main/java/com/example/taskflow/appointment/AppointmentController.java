@@ -39,15 +39,20 @@ class AppointmentController {
     private final AppointmentBookingService bookingService;
     private final AppointmentLifecycleService lifecycleService;
     private final AppointmentEventStreamService eventStreamService;
+    private final BarberService barberService;
+    private final BookingProperties bookingProperties;
     private final Clock clock;
 
     public AppointmentController(AppointmentQueryService queryService, AppointmentBookingService bookingService,
                                  AppointmentLifecycleService lifecycleService,
-                                 AppointmentEventStreamService eventStreamService, Clock clock) {
+                                 AppointmentEventStreamService eventStreamService, BarberService barberService,
+                                 BookingProperties bookingProperties, Clock clock) {
         this.queryService = queryService;
         this.bookingService = bookingService;
         this.lifecycleService = lifecycleService;
         this.eventStreamService = eventStreamService;
+        this.barberService = barberService;
+        this.bookingProperties = bookingProperties;
         this.clock = clock;
     }
 
@@ -110,13 +115,15 @@ class AppointmentController {
     }
 
     @GetMapping("/public/shop")
-    @Operation(summary = "Get the shop's time zone, which decides what counts as past or bookable (Guest Access)")
-    @ApiResponse(responseCode = "200", description = "Shop time zone returned")
+    @Operation(summary = "Get the shop's time zone, booking window and opening hours, which decide what is bookable (Guest Access)")
+    @ApiResponse(responseCode = "200", description = "Shop time zone, booking window and opening hours returned")
     public ResponseEntity<ShopInfoResponse> getShopInfo() {
-        // Changes only with a deployment: same 5 m public tier as the catalog.
+        // The zone and window change only with a deployment, the hours only when a barber is added
+        // (10 m cache, evicted then): same 5 m public tier as the catalog.
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
-                .body(new ShopInfoResponse(clock.getZone().getId()));
+                .body(new ShopInfoResponse(clock.getZone().getId(), bookingProperties.maxAdvanceDays(),
+                        barberService.getOpeningHours()));
     }
 
     @GetMapping("/public/busy-slots")

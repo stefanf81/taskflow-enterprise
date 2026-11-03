@@ -10,6 +10,7 @@ import { AuthState } from '../../core/auth/auth.state';
 import { NETWORK_ERROR_MESSAGE } from '../../core/api/extract-api-error';
 import { FlashMessages } from '../../core/ui/flash-messages';
 import { LookbookSelectionBus } from './lookbook-selection';
+import { DEFAULT_SHOP_RULES } from '@taskflow/domain';
 
 /** A bookable (non-Sunday, within 90 days, never today) date for tests that run on the real clock. */
 const FUTURE = (() => {
@@ -112,7 +113,12 @@ describe('BookingStore', () => {
     // The shop's zone is the machine's own, so the wizard's clock is unchanged in these specs.
     httpMock
       .match((r) => r.url.includes('/public/shop'))
-      .forEach((r) => r.flush({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
+      .forEach((r) =>
+        r.flush({
+          ...DEFAULT_SHOP_RULES,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      );
     await fixture.whenStable();
     fixture.detectChanges();
   });
@@ -199,7 +205,7 @@ describe('BookingStore', () => {
   it('refuses a closed day and never looks one up, even when it ends up in the model', () => {
     store.selectBookingDate(NEXT_SUNDAY);
     expect(store.bookingDate()).toBe('');
-    expect(flash().errorMessage()).toContain('closed on Sundays');
+    expect(flash().errorMessage()).toBe('We are closed on Sunday. Please pick another day.');
 
     store.bookingModel.update((m) => ({ ...m, bookingDate: NEXT_SUNDAY }));
     expect(store.isStepValid(3)).toBe(false);
@@ -776,7 +782,12 @@ describe('BookingStore lookbook hand-off', () => {
       .forEach((r) => r.flush([]));
     httpMock
       .match((r) => r.url.includes('/public/shop'))
-      .forEach((r) => r.flush({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
+      .forEach((r) =>
+        r.flush({
+          ...DEFAULT_SHOP_RULES,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      );
     await fixture.whenStable();
     fixture.detectChanges();
 

@@ -417,6 +417,26 @@
         ],
         "type": "object"
       },
+      "OpeningHoursResponse": {
+        "properties": {
+          "closes": {
+            "type": "string"
+          },
+          "dayOfWeek": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "opens": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "closes",
+          "dayOfWeek",
+          "opens"
+        ],
+        "type": "object"
+      },
       "PagedModelAppointmentResponse": {
         "properties": {
           "content": {
@@ -617,11 +637,23 @@
       },
       "ShopInfoResponse": {
         "properties": {
+          "maxAdvanceDays": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "openingHours": {
+            "items": {
+              "$ref": "#/components/schemas/OpeningHoursResponse"
+            },
+            "type": "array"
+          },
           "timeZone": {
             "type": "string"
           }
         },
         "required": [
+          "maxAdvanceDays",
+          "openingHours",
           "timeZone"
         ],
         "type": "object"
@@ -1092,10 +1124,10 @@
                 }
               }
             },
-            "description": "Shop time zone returned"
+            "description": "Shop time zone, booking window and opening hours returned"
           }
         },
-        "summary": "Get the shop's time zone, which decides what counts as past or bookable (Guest Access)",
+        "summary": "Get the shop's time zone, booking window and opening hours, which decide what is bookable (Guest Access)",
         "tags": [
           "Barber Appointment Management System"
         ]

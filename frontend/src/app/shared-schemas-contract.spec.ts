@@ -24,6 +24,7 @@ const VALIDATOR_FOR_CONTRACT: Record<keyof typeof contracts, keyof typeof valida
   loginResponseContract: 'loginResponseSchema',
   mobileLoginResponseContract: 'mobileLoginResponseSchema',
   notificationOutboxResponseContract: 'notificationOutboxResponseSchema',
+  openingHoursResponseContract: 'openingHoursSchema',
   pageMetadataContract: 'pageMetadataSchema',
   pagedModelAppointmentResponseContract: 'pagedAppointmentResponseSchema',
   publicBarberResponseContract: 'publicBarberResponseSchema',

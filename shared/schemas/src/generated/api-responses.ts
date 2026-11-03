@@ -112,6 +112,14 @@ export const serviceItemResponseContract = object({
   price: number(),
 });
 
+export const openingHoursResponseContract = object({
+  closes: string(),
+  dayOfWeek: number(),
+  opens: string(),
+});
+
 export const shopInfoResponseContract = object({
+  maxAdvanceDays: number(),
+  openingHours: array(openingHoursResponseContract),
   timeZone: string(),
 });

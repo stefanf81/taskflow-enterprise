@@ -9,6 +9,7 @@ approves or denies the booking and manages its barbers, schedules and service ca
 | `frontend/` | Angular 22 web app (zoneless, signals), Tailwind, prerendered landing page, Nginx config |
 | `mobile/` | React Native / Expo app for Android and iOS |
 | `shared/schemas/` | zod/mini request and response schemas used by both clients (`@taskflow/schemas`) |
+| `shared/domain/` | Booking rules and time helpers both clients apply (`@taskflow/domain`) |
 | `api/openapi.json` | Reviewed OpenAPI baseline; both clients' API types are generated from it |
 | `docs/` | Rules by area (`docs/agents/`), ADRs, benchmarks, hardening policy, CI design |
 
@@ -35,8 +36,8 @@ cd <repo-directory>
 npm ci
 ```
 
-`frontend`, `mobile` and `shared/schemas` are npm workspaces with one lockfile at the root,
-so this single `npm ci` installs all three. Always use `npm ci`, never `npm install`. To
+`frontend`, `mobile`, `shared/schemas` and `shared/domain` are npm workspaces with one lockfile at
+the root, so this single `npm ci` installs all of them. Always use `npm ci`, never `npm install`. To
 install one app only: `npm ci --workspace frontend --workspace shared/schemas` (or
 `--workspace mobile`).
 

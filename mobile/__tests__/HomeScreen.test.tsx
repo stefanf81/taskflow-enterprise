@@ -17,6 +17,15 @@ const mockRefetchBarbers = jest.fn();
 const mockRefetchServices = jest.fn();
 
 // Mock hooks
+// The shop info (time zone, window, hours) as the server's defaults: no query client needed.
+jest.mock('../src/core/shop/useShopInfo', () => ({
+  useShopInfo: () => ({
+    timeZone: null,
+    rules: jest.requireActual('@taskflow/domain').DEFAULT_SHOP_RULES,
+    loaded: false,
+  }),
+}));
+
 jest.mock('../src/features/landing/useReviews', () => ({
   useBarberRatings: () => ({ data: [], isError: mockRatingsError }),
 }));

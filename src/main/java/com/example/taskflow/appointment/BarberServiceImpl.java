@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -68,8 +69,20 @@ class BarberServiceImpl implements BarberService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    @Cacheable(value = AppointmentCacheConfig.OPENING_HOURS_CACHE, sync = true)
+    public List<OpeningHoursResponse> getOpeningHours() {
+        DateTimeFormatter hhmm = DateTimeFormatter.ofPattern("HH:mm");
+        return scheduleRepository.findWeekdayHours().stream()
+                .map(day -> new OpeningHoursResponse(day.getDayOfWeek(),
+                        day.getOpens().format(hhmm), day.getCloses().format(hhmm)))
+                .toList();
+    }
+
+    @Override
     @Transactional
-    @CacheEvict(value = {"barbers", "publicBarbers"}, allEntries = true)
+    // A new barber brings a schedule, so the shop's opening hours may change with it.
+    @CacheEvict(value = {"barbers", "publicBarbers", AppointmentCacheConfig.OPENING_HOURS_CACHE}, allEntries = true)
     public BarberResponse createBarber(BarberRequest request) {
         // The booking flow treats this exact name as "any barber" and never stores it, so a real
         // barber carrying it could be neither booked by name nor approved.

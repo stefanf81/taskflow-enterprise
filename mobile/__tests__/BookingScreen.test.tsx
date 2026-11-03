@@ -63,8 +63,12 @@ jest.mock('../src/core/catalog/useCatalog', () => ({
 }));
 
 let mockShopTimeZone: string | null = null;
-jest.mock('../src/features/booking/useShopTimeZone', () => ({
-  useShopTimeZone: () => mockShopTimeZone,
+jest.mock('../src/core/shop/useShopInfo', () => ({
+  useShopInfo: () => ({
+    timeZone: mockShopTimeZone,
+    rules: jest.requireActual('@taskflow/domain').DEFAULT_SHOP_RULES,
+    loaded: mockShopTimeZone !== null,
+  }),
 }));
 
 jest.mock('../src/core/barbers/useBarbers', () => ({

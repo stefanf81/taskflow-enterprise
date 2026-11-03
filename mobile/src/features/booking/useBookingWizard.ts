@@ -18,7 +18,7 @@ import {
 } from '../../utils/time-utils';
 import { getApiErrorMessage, getHttpStatus } from '../../utils/errors';
 import { useNow } from './useNow';
-import { useShopTimeZone } from './useShopTimeZone';
+import { useShopInfo } from '../../core/shop/useShopInfo';
 import { AttemptKey, resolveAttemptKey } from './idempotency';
 import {
   BookingStep,
@@ -69,12 +69,13 @@ export function useBookingWizard() {
   // to the foreground, so past slots disable themselves and a midnight
   // rollover re-bases the day list without a dedicated timer.
   // Dates and the past-slot rule follow the shop's time zone, as the server's do.
-  const shopTimeZone = useShopTimeZone();
+  const { timeZone: shopTimeZone, rules: shopRules } = useShopInfo();
   const now = useNow(60_000, shopTimeZone);
   const todayKey = toLocalDateString(now);
   // Rebuilt from todayKey only. Reading `now` here while depending on todayKey made React
   // Compiler give up on the whole screen.
-  const upcomingDays = useMemo(() => getBookingDays(todayKey), [todayKey]);
+  // The opening days and booking window come from the shop info (server defaults until loaded).
+  const upcomingDays = useMemo(() => getBookingDays(todayKey, shopRules), [todayKey, shopRules]);
   const upcomingDates = useMemo(() => upcomingDays.map((d) => d.dateStr), [upcomingDays]);
 
   // API-driven roster (mirrors the web PublicBarberStore): no hardcoded names
@@ -98,10 +99,10 @@ export function useBookingWizard() {
     route.params?.preselectedService || (services[0]?.name ?? ''),
   );
   const [selectedDate, setSelectedDate] = useState<string>(
-    () => getDefaultSlot(upcomingDates, now).date,
+    () => getDefaultSlot(upcomingDates, now, shopRules).date,
   );
   const [selectedTime, setSelectedTime] = useState<string>(
-    () => getDefaultSlot(upcomingDates, now).time,
+    () => getDefaultSlot(upcomingDates, now, shopRules).time,
   );
   const [contact, setContact] = useState<ContactDetails>(EMPTY_CONTACT);
 
@@ -172,19 +173,21 @@ export function useBookingWizard() {
       { date: selectedDate, time: selectedTime },
       upcomingDates,
       now,
+      DEFAULT_TIME_SLOTS,
+      shopRules,
     );
     if (next && (next.date !== selectedDate || next.time !== selectedTime)) {
       setSelectedDate(next.date);
       setSelectedTime(next.time);
     }
-  }, [now, upcomingDates, selectedDate, selectedTime]);
+  }, [now, upcomingDates, selectedDate, selectedTime, shopRules]);
 
   // Reset every wizard field to its starting value. The idempotency key is
   // deliberately NOT touched here: it is already cleared on success/409, and
   // keeping it across a blur preserves replay semantics for an ambiguous
   // timeout followed by an identical re-submission.
   const resetWizard = () => {
-    const first = getDefaultSlot(upcomingDates, shopWallClock(shopTimeZone));
+    const first = getDefaultSlot(upcomingDates, shopWallClock(shopTimeZone), shopRules);
     setStep(1);
     setSelectedBarber(NO_PREFERENCE_BARBER);
     setSelectedService(services[0]?.name ?? '');
@@ -241,6 +244,7 @@ export function useBookingWizard() {
       selectedTime,
       shopWallClock(shopTimeZone),
       availability,
+      shopRules,
     );
   };
 
@@ -266,7 +270,12 @@ export function useBookingWizard() {
     }
 
     // The slot may have passed while the contact form was being filled in.
-    const slotError = getSlotValidationError(selectedDate, selectedTime, shopWallClock(shopTimeZone));
+    const slotError = getSlotValidationError(
+      selectedDate,
+      selectedTime,
+      shopWallClock(shopTimeZone),
+      shopRules,
+    );
     if (slotError) {
       setError(slotError);
       setStep(DATE_TIME_STEP);

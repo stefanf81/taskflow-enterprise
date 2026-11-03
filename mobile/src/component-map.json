@@ -165,6 +165,14 @@
       "webComponent": "frontend/src/app/core/ui/flash-messages.ts",
       "mobileComponent": "mobile/src/components/common/useFlashMessage.ts",
       "notes": "Web: one app-wide service, the error stays until dismissed. Mobile: one hook per screen (customer portal, admin dashboard, public actions), success and error both auto-dismiss."
+    },
+    {
+      "feature": "Shop Clock & Rules",
+      "notes": "Time zone, booking window and opening hours from GET /api/v1/appointments/public/shop; the rules themselves (opening days, window, cancellable bookings, time helpers) live in shared/domain (@taskflow/domain).",
+      "storeHook": {
+        "web": "frontend/src/app/core/shop-clock.ts",
+        "mobile": "mobile/src/core/shop/useShopInfo.ts"
+      }
     }
   ],
   "platformContracts": {

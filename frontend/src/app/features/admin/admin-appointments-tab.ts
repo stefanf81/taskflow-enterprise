@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { AppointmentsApi } from '../../core/api/appointments-api';
 import { FlashMessages } from '../../core/ui/flash-messages';
 import { AppointmentStore } from './appointment.store';
+import { ShopClock } from '../../core/shop-clock';
 import { formatTime12Hour, formatLocalDate, isOverdue } from '../../core/time-utils';
 
 /** Owner dashboard · appointments tab (list, filter, search, approve/deny/delete). */
@@ -15,6 +16,7 @@ export class AdminAppointmentsTab {
   private readonly appointmentsApi = inject(AppointmentsApi);
   private readonly store = inject(AppointmentStore);
   private readonly flash = inject(FlashMessages);
+  private readonly shopClock = inject(ShopClock);
 
   readonly appointments = this.store.appointments;
   protected readonly searchQuery = this.store.searchQuery;
@@ -83,7 +85,8 @@ export class AdminAppointmentsTab {
   }
 
   isOverdue(appt: { bookingDate?: string } | string): boolean {
-    return isOverdue(appt);
+    // "Before today" in the shop's calendar, as the server's OVERDUE filter decides it.
+    return isOverdue(appt, this.shopClock.now());
   }
 
   formatTime12Hour(time24: string): string {

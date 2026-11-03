@@ -13,7 +13,7 @@ const mockCreateAppointmentFn = jest.fn();
 const mockUpdateAppointmentStatusFn = jest.fn();
 const mockDeleteAppointmentFn = jest.fn();
 const mockPublicCancelAppointmentFn = jest.fn();
-const mockGetShopTimeZoneFn = jest.fn();
+const mockGetShopInfoFn = jest.fn();
 
 jest.mock('../src/core/appointments/appointments', () => ({
   appointmentsApi: {
@@ -23,7 +23,7 @@ jest.mock('../src/core/appointments/appointments', () => ({
     updateAppointmentStatus: (...args: unknown[]) => mockUpdateAppointmentStatusFn(...args),
     deleteAppointment: (...args: unknown[]) => mockDeleteAppointmentFn(...args),
     publicCancelAppointment: (...args: unknown[]) => mockPublicCancelAppointmentFn(...args),
-    getShopTimeZone: (...args: unknown[]) => mockGetShopTimeZoneFn(...args),
+    getShopInfo: (...args: unknown[]) => mockGetShopInfoFn(...args),
   },
 }));
 
@@ -94,7 +94,8 @@ function createWrapper() {
 }
 
 import { useAppointments, useBusySlots, useCreateAppointment, useUpdateAppointmentStatus, useDeleteAppointment, usePublicCancelAppointment } from '../src/core/appointments/useAppointments';
-import { useShopTimeZone } from '../src/features/booking/useShopTimeZone';
+import { useShopInfo } from '../src/core/shop/useShopInfo';
+import { DEFAULT_SHOP_RULES } from '@taskflow/domain';
 import { usePublicBarbers, useAdminBarbers, useBarberTimeOff, useAddTimeOff } from '../src/core/barbers/useBarbers';
 import { useCatalog } from '../src/core/catalog/useCatalog';
 import { useCustomerAppointments, useCancelCustomerAppointment } from '../src/features/customer/useCustomer';
@@ -202,25 +203,31 @@ describe('Hooks', () => {
     });
   });
 
-  describe('useShopTimeZone', () => {
-    it('is null until the shop zone is known, then the zone', async () => {
-      mockGetShopTimeZoneFn.mockResolvedValueOnce('Europe/Berlin');
+  describe('useShopInfo', () => {
+    const openingHours = [{ dayOfWeek: 2, opens: '10:00', closes: '18:00' }];
 
-      const { result } = await renderHook(() => useShopTimeZone(), { wrapper: createWrapper() });
-      expect(result.current).toBeNull();
+    it('uses the server defaults until the shop info is known, then the server values', async () => {
+      mockGetShopInfoFn.mockResolvedValueOnce({ timeZone: 'Europe/Berlin', maxAdvanceDays: 30, openingHours });
+
+      const { result } = await renderHook(() => useShopInfo(), { wrapper: createWrapper() });
+      expect(result.current).toEqual({ timeZone: null, rules: DEFAULT_SHOP_RULES, loaded: false });
 
       await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
 
-      expect(result.current).toBe('Europe/Berlin');
+      expect(result.current).toEqual({
+        timeZone: 'Europe/Berlin',
+        rules: { maxAdvanceDays: 30, openingHours },
+        loaded: true,
+      });
     });
 
-    it('stays null (phone clock) when the zone cannot be loaded', async () => {
-      mockGetShopTimeZoneFn.mockRejectedValue(new Error('offline'));
+    it('keeps the phone clock and the defaults when the shop info cannot be loaded', async () => {
+      mockGetShopInfoFn.mockRejectedValue(new Error('offline'));
 
-      const { result } = await renderHook(() => useShopTimeZone(), { wrapper: createWrapper() });
+      const { result } = await renderHook(() => useShopInfo(), { wrapper: createWrapper() });
       await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
 
-      expect(result.current).toBeNull();
+      expect(result.current).toEqual({ timeZone: null, rules: DEFAULT_SHOP_RULES, loaded: false });
     });
   });
 

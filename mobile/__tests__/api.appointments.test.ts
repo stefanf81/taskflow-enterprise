@@ -109,17 +109,30 @@ describe('appointmentsApi', () => {
     });
   });
 
-  describe('getShopTimeZone', () => {
-    it('reads the shop zone from the public endpoint', async () => {
-      mockedGet.mockResolvedValueOnce({ data: { timeZone: 'America/New_York' } });
+  describe('getShopInfo', () => {
+    const shopInfo = {
+      timeZone: 'America/New_York',
+      maxAdvanceDays: 90,
+      openingHours: [{ dayOfWeek: 1, opens: '09:00', closes: '17:00' }],
+    };
+
+    it('reads the shop zone, booking window and hours from the public endpoint', async () => {
+      mockedGet.mockResolvedValueOnce({ data: shopInfo });
       const { signal } = new AbortController();
-      await expect(appointmentsApi.getShopTimeZone({ signal })).resolves.toBe('America/New_York');
+      await expect(appointmentsApi.getShopInfo({ signal })).resolves.toEqual(shopInfo);
       expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments/public/shop', { signal });
     });
 
     it('rejects a response without a zone', async () => {
-      mockedGet.mockResolvedValueOnce({ data: {} });
-      await expect(appointmentsApi.getShopTimeZone()).rejects.toThrow(/Contract violation/);
+      mockedGet.mockResolvedValueOnce({ data: { ...shopInfo, timeZone: undefined } });
+      await expect(appointmentsApi.getShopInfo()).rejects.toThrow(/Contract violation/);
+    });
+
+    it('rejects opening hours that are not HH:mm', async () => {
+      mockedGet.mockResolvedValueOnce({
+        data: { ...shopInfo, openingHours: [{ dayOfWeek: 1, opens: '9am', closes: '17:00' }] },
+      });
+      await expect(appointmentsApi.getShopInfo()).rejects.toThrow(/Contract violation/);
     });
   });
 

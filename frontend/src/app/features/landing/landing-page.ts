@@ -1,9 +1,11 @@
-import { Component, effect, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthState } from '../../core/auth/auth.state';
 import { DashboardPrefetch } from '../../dashboard-loaders';
 import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
 import { FlashMessages } from '../../core/ui/flash-messages';
+import { ShopClock } from '../../core/shop-clock';
+import { isOpenAt, openingHoursRows } from '@taskflow/domain';
 import { AnnouncementBarComponent } from './announcement-bar/announcement-bar';
 import { AuthModalComponent } from './auth-modal/auth-modal';
 import { FaqSectionComponent } from './faq-section/faq-section';
@@ -39,6 +41,17 @@ export class LandingPage {
   private readonly catalogStore = inject(ServiceCatalogStore);
   private readonly router = inject(Router);
   private readonly dashboardPrefetch = inject(DashboardPrefetch);
+  private readonly shopClock = inject(ShopClock);
+
+  /**
+   * The week's hours from the barbers' schedules (`/public/shop`). The prerendered page shows the
+   * server's defaults, which the browser replaces once the real hours have loaded.
+   */
+  protected readonly openingHours = computed(() => openingHoursRows(this.shopClock.rules()));
+  /** Open right now in the shop's time zone; null until the real hours are known (and prerendering). */
+  protected readonly openNow = computed(() =>
+    this.shopClock.loaded() ? isOpenAt(this.shopClock.now(), this.shopClock.rules()) : null,
+  );
 
   protected readonly isLoggedIn = this.authState.isLoggedIn;
   readonly showAdminLoginModal = signal(false);

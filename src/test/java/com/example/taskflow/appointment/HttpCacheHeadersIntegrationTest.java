@@ -12,6 +12,7 @@ import com.example.taskflow.review.internal.ReviewRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.cache.CacheManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -36,6 +37,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -63,6 +65,7 @@ class HttpCacheHeadersIntegrationTest {
     @Autowired private BarberTimeOffRepository barberTimeOffRepository;
     @Autowired private ServiceItemRepository serviceItemRepository;
     @Autowired private ReviewRepository reviewRepository;
+    @Autowired private CacheManager cacheManager;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private Barber barber;
@@ -141,6 +144,21 @@ class HttpCacheHeadersIntegrationTest {
                     .andExpect(status().isOk())
                     .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "max-age=300, public"));
         }
+    }
+
+    @Test
+    void shopInfoDerivesItsHoursFromTheSchedulesAndStatesTheBookingWindow() throws Exception {
+        // Schedules are written straight to the repository here, which (unlike createBarber) does
+        // not evict the cached hours another test in this context may have loaded.
+        cacheManager.getCache(AppointmentCacheConfig.OPENING_HOURS_CACHE).clear();
+
+        mockMvc.perform(get("/api/v1/appointments/public/shop"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maxAdvanceDays").value(90))
+                .andExpect(jsonPath("$.openingHours.length()").value(1))
+                .andExpect(jsonPath("$.openingHours[0].dayOfWeek").value(DATE.getDayOfWeek().getValue()))
+                .andExpect(jsonPath("$.openingHours[0].opens").value("09:00"))
+                .andExpect(jsonPath("$.openingHours[0].closes").value("17:00"));
     }
 
     @Test

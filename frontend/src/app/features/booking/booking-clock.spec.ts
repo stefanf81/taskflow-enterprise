@@ -10,6 +10,7 @@ import {
 import { FlashMessages } from '../../core/ui/flash-messages';
 import { BookingStore } from './booking.store';
 import { BookingWizard } from './booking-wizard';
+import { DEFAULT_SHOP_RULES } from '@taskflow/domain';
 
 /** Monday 2026-10-12, 14:30 local time. */
 const MONDAY_AFTERNOON = new Date(2026, 9, 12, 14, 30);
@@ -50,7 +51,12 @@ describe('BookingStore clock (FE-5)', () => {
     // The shop's zone is the machine's own, so the wizard's clock is unchanged in these specs.
     httpMock
       .match((r) => r.url.includes('/public/shop'))
-      .forEach((r) => r.flush({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
+      .forEach((r) =>
+        r.flush({
+          ...DEFAULT_SHOP_RULES,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      );
     await fixture.whenStable();
     store.refreshToday();
   });
@@ -290,7 +296,12 @@ describe('BookingWizard UI (FE-5, FE-10, FE-11, FE-1)', () => {
     // The shop's zone is the machine's own, so the wizard's clock is unchanged in these specs.
     httpMock
       .match((r) => r.url.includes('/public/shop'))
-      .forEach((r) => r.flush({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
+      .forEach((r) =>
+        r.flush({
+          ...DEFAULT_SHOP_RULES,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      );
     await fixture.whenStable();
     fixture.detectChanges();
   });
@@ -391,7 +402,7 @@ describe('BookingStore clock in the shop time zone', () => {
 
       httpMock
         .expectOne((r) => r.url === '/api/v1/appointments/public/shop')
-        .flush({ timeZone: 'Asia/Tokyo' });
+        .flush({ ...DEFAULT_SHOP_RULES, timeZone: 'Asia/Tokyo' });
       await fixture.whenStable();
       expect(store.today()).toBe('2026-10-13');
 

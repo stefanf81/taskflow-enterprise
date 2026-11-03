@@ -5,6 +5,7 @@ import { email, form, max, min, required, FormField } from '@angular/forms/signa
 import { AppointmentsApi } from '../../../core/api/appointments-api';
 import { ReviewsApi } from '../../../core/api/reviews-api';
 import { extractApiError } from '../../../core/api/extract-api-error';
+import { normalizePublicId } from '@taskflow/domain';
 import { FlashMessages } from '../../../core/ui/flash-messages';
 import { ReviewStore } from '../../../core/reviews/review.store';
 
@@ -276,7 +277,7 @@ export class PostBookingActionsComponent {
   });
 
   onCancel(): void {
-    const publicId = this.cancelModel().publicId.trim().toLowerCase();
+    const publicId = normalizePublicId(this.cancelModel().publicId);
     const email = this.cancelModel().email.trim();
     if (!publicId || !email) return;
 
@@ -303,7 +304,7 @@ export class PostBookingActionsComponent {
   }
 
   onReview(): void {
-    const publicId = this.reviewModel().publicId.trim().toLowerCase();
+    const publicId = normalizePublicId(this.reviewModel().publicId);
     const email = this.reviewModel().email.trim();
     if (!publicId || !email) return;
 

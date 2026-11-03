@@ -1,3 +1,4 @@
+import { DEFAULT_SHOP_RULES, type ShopRules } from '@taskflow/domain';
 import { AppointmentCreateRequest, ServiceItem } from '../../types/api';
 import {
   DEFAULT_TIME_SLOTS,
@@ -16,7 +17,7 @@ import {
  */
 
 /** Input-only sentinel (ADR-014): the backend resolves it to a concrete barber. */
-export const NO_PREFERENCE_BARBER = 'No Preference (First Available)';
+export { NO_PREFERENCE_BARBER } from '@taskflow/domain';
 
 /** Treatment → Stylist → Date/Slot → Contact. */
 export type BookingStep = 1 | 2 | 3 | 4;
@@ -61,17 +62,24 @@ export function filterServices(
  * The days offered for the shop-calendar date `todayKey` (`YYYY-MM-DD`). The list only depends on
  * the date, not on the minute, so it is built from the key, at noon (clear of DST shifts).
  */
-export function getBookingDays(todayKey: string): UpcomingDay[] {
+export function getBookingDays(
+  todayKey: string,
+  rules: ShopRules = DEFAULT_SHOP_RULES,
+): UpcomingDay[] {
   const [year = 0, month = 1, day = 1] = todayKey.split('-').map(Number);
-  return getUpcomingDays(new Date(year, month - 1, day, 12));
+  return getUpcomingDays(new Date(year, month - 1, day, 12), 7, rules);
 }
 
 /**
  * The first bookable slot of `dates`; when none is left, the first offered day and slot (the
  * date/time step then explains why it cannot be booked).
  */
-export function getDefaultSlot(dates: readonly string[], now: Date): SlotSelection {
-  const first = getFirstSelectableSlot(dates, now);
+export function getDefaultSlot(
+  dates: readonly string[],
+  now: Date,
+  rules: ShopRules = DEFAULT_SHOP_RULES,
+): SlotSelection {
+  const first = getFirstSelectableSlot(dates, now, DEFAULT_TIME_SLOTS, rules);
   return {
     date: first?.date ?? dates[0] ?? '',
     time: first?.time ?? DEFAULT_TIME_SLOTS[0] ?? '',
@@ -100,8 +108,9 @@ export function getDateTimeStepError(
   time: string,
   now: Date,
   availability: SlotAvailability,
+  rules: ShopRules = DEFAULT_SHOP_RULES,
 ): string | null {
-  const slotError = getSlotValidationError(date, time, now);
+  const slotError = getSlotValidationError(date, time, now, rules);
   if (slotError) return slotError;
   if (availability.isChecking) return 'Still checking availability. Please wait a moment.';
   if (availability.isFailed) return 'Could not check availability. Retry before continuing.';

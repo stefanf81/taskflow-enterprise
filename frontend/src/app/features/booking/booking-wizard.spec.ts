@@ -4,6 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { BookingStore } from './booking.store';
 import { BookingWizard } from './booking-wizard';
+import { DEFAULT_SHOP_RULES } from '@taskflow/domain';
 
 /** Monday 2026-10-12, 14:30 local time; 2026-10-13 is a bookable Tuesday. */
 const MONDAY_AFTERNOON = new Date(2026, 9, 12, 14, 30);
@@ -67,7 +68,12 @@ describe('BookingWizard accessibility (TODO 4.2, 4.3)', () => {
     // The shop's zone is the machine's own, so the wizard's clock is unchanged in these specs.
     httpMock
       .match((r) => r.url.includes('/public/shop'))
-      .forEach((r) => r.flush({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
+      .forEach((r) =>
+        r.flush({
+          ...DEFAULT_SHOP_RULES,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      );
     await render();
   });
 

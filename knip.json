@@ -19,6 +19,7 @@
       "ignoreDependencies": ["@babel/core", "expo-doctor"],
       "ignoreBinaries": ["eas"]
     },
+    "shared/domain": {},
     "shared/schemas": {}
   }
 }

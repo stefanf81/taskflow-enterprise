@@ -7,18 +7,26 @@ import {
   toLocalDateString,
   getUpcomingDays,
   DEFAULT_TIME_SLOTS,
-  MAX_BOOKING_DAYS_AHEAD,
-  OUTSIDE_WINDOW_MESSAGE,
   PAST_SLOT_MESSAGE,
   getFirstSelectableSlot,
-  getLastBookableDate,
   getSelectableSlots,
   getSlotValidationError,
   isSlotInPast,
-  isWithinBookingWindow,
   resolveBookableSelection,
   shopWallClock,
 } from '../src/utils/time-utils';
+import {
+  DEFAULT_SHOP_RULES,
+  bookingWindowMessage,
+  isWithinBookingWindow as isWithinWindow,
+  lastBookableDate,
+  type ShopRules,
+} from '@taskflow/domain';
+
+const getLastBookableDate = (now: Date) => lastBookableDate(now, DEFAULT_SHOP_RULES);
+const isWithinBookingWindow = (date: string, now: Date) =>
+  isWithinWindow(date, now, DEFAULT_SHOP_RULES);
+const OUTSIDE_WINDOW_MESSAGE = bookingWindowMessage(DEFAULT_SHOP_RULES);
 
 describe('time-utils', () => {
   // ==================== DEFAULT_TIME_SLOTS ====================
@@ -219,8 +227,21 @@ describe('booking-window helpers (MOB-4)', () => {
   // Wednesday 2026-08-12, local time.
   const at = (hh: number, mm = 0, day = 12) => new Date(2026, 7, day, hh, mm, 0, 0);
 
-  it('MAX_BOOKING_DAYS_AHEAD matches the server rule', () => {
-    expect(MAX_BOOKING_DAYS_AHEAD).toBe(90);
+  it("defaults to the server's 90-day rule until the shop info has loaded", () => {
+    expect(DEFAULT_SHOP_RULES.maxAdvanceDays).toBe(90);
+  });
+
+  it("follows the shop's own window and opening days", () => {
+    const rules: ShopRules = {
+      maxAdvanceDays: 3,
+      openingHours: [{ dayOfWeek: 4, opens: '09:00', closes: '17:00' }], // Thursdays only
+    };
+    // Wed 12 Aug: the next Thursday is the 13th, the window ends on the 15th.
+    expect(getUpcomingDays(at(10), 7, rules).map((d) => d.dateStr)).toEqual(['2026-08-13']);
+    expect(getSlotValidationError('2026-08-16', '09:00', at(10), rules)).toBe(
+      'Bookings can be made at most 3 days ahead.',
+    );
+    expect(getSelectableSlots('2026-08-15', at(10), DEFAULT_TIME_SLOTS, rules)).toHaveLength(7);
   });
 
   describe('isSlotInPast', () => {

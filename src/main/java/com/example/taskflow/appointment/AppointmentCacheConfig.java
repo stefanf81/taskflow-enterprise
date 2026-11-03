@@ -16,6 +16,7 @@ class AppointmentCacheConfig {
 
     static final String BARBERS_CACHE = "barbers";
     static final String PUBLIC_BARBERS_CACHE = "publicBarbers";
+    static final String OPENING_HOURS_CACHE = "openingHours";
 
     static RedisCacheConfiguration barbersCache() {
         return CacheConfig.listCache(Duration.ofMinutes(10), BarberResponse.class);
@@ -23,6 +24,11 @@ class AppointmentCacheConfig {
 
     static RedisCacheConfiguration publicBarbersCache() {
         return CacheConfig.listCache(Duration.ofMinutes(10), PublicBarberResponse.class);
+    }
+
+    /** Changes only when a barber is added (evicted then), like the barber lists. */
+    static RedisCacheConfiguration openingHoursCache() {
+        return CacheConfig.listCache(Duration.ofMinutes(10), OpeningHoursResponse.class);
     }
 
     static RedisCacheConfiguration busySlotsCache() {
@@ -38,6 +44,7 @@ class AppointmentCacheConfig {
         return builder -> builder
                 .withCacheConfiguration(BARBERS_CACHE, barbersCache())
                 .withCacheConfiguration(PUBLIC_BARBERS_CACHE, publicBarbersCache())
+                .withCacheConfiguration(OPENING_HOURS_CACHE, openingHoursCache())
                 .withCacheConfiguration(AppointmentStatsService.BUSY_SLOTS_CACHE, busySlotsCache())
                 .withCacheConfiguration(AppointmentStatsService.STATS_CACHE, statsCache());
     }

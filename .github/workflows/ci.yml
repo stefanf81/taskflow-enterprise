@@ -748,6 +748,14 @@ jobs:
       - name: Lint (ESLint + strict type check)
         run: npm run lint
 
+      # The booking rules both clients share (@taskflow/domain): its own strict type check and tests.
+      - name: Shared domain rules
+        if: env.RUN_TESTS == 'true'
+        working-directory: shared/domain
+        run: |
+          npm run typecheck
+          npm test
+
       - name: Cache Angular Build
         uses: actions/cache@v6
         with:

@@ -12,12 +12,11 @@ import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { form, required } from '@angular/forms/signals';
 import { appointmentCreateSchema } from '@taskflow/schemas';
+import { NO_PREFERENCE_BARBER, closedDaysMessage, isWithinBookingWindow } from '@taskflow/domain';
 import { AppointmentItem } from '../../types/api';
 import {
   DEFAULT_TIME_SLOTS,
-  MAX_BOOKING_DAYS_AHEAD,
   computeEstimatedEndTime,
-  isBookableDate,
   isSlotInPast,
   msUntilNextLocalMidnight,
   toLocalDateString,
@@ -63,7 +62,7 @@ const WIZARD_STEP_COUNT = WIZARD_STEPS.length;
  * The "No Preference" choice. It is sent as the barber name; the server resolves it to a real
  * barber (for availability: across all barbers; for a booking: inside the booking transaction).
  */
-export const NO_PREFERENCE_LABEL = 'No Preference (First Available)';
+export const NO_PREFERENCE_LABEL = NO_PREFERENCE_BARBER;
 
 const NO_CONTACT = { customerName: '', customerEmail: '', customerPhone: '' };
 
@@ -152,8 +151,10 @@ export class BookingStore {
    */
   readonly now = signal<Date>(this.shopClock.now());
   readonly today = computed(() => toLocalDateString(this.now()));
+  /** Booking window and opening days, from the backend (`ShopClock`). */
+  readonly shopRules = this.shopClock.rules;
   readonly upcomingBookingDays = computed(() =>
-    calendar.upcomingBookingDays(this.now(), this.timeSlots),
+    calendar.upcomingBookingDays(this.now(), this.timeSlots, this.shopRules()),
   );
 
   /** Read by the availability request so a retry can restart a lookup already in flight. */
@@ -169,7 +170,12 @@ export class BookingStore {
       const barberName = this.bookingBarber();
       const bookingDate = this.bookingDate();
       // Nothing to look up yet, a closed day (never selectable), or the backend-less prerender.
-      if (this.prerendering || !barberName || !bookingDate || calendar.isClosedDay(bookingDate)) {
+      if (
+        this.prerendering ||
+        !barberName ||
+        !bookingDate ||
+        calendar.isClosedDay(bookingDate, this.shopRules())
+      ) {
         return undefined;
       }
       this.slotsRefreshTick();
@@ -367,8 +373,8 @@ export class BookingStore {
       return (
         !!m.bookingDate &&
         !!m.bookingTime &&
-        isBookableDate(m.bookingDate, this.now()) &&
-        !calendar.isClosedDay(m.bookingDate) &&
+        isWithinBookingWindow(m.bookingDate, this.now(), this.shopRules()) &&
+        !calendar.isClosedDay(m.bookingDate, this.shopRules()) &&
         !this.isSlotUnavailable(m.bookingTime) &&
         // Never validate against a stale or missing availability answer: while a lookup is
         // running there is no answer for this selection yet, and after a failed lookup
@@ -439,7 +445,7 @@ export class BookingStore {
   private revalidateSelection(): void {
     const m = this.bookingModel();
     const now = this.now();
-    if (m.bookingDate && !isBookableDate(m.bookingDate, now)) {
+    if (m.bookingDate && !isWithinBookingWindow(m.bookingDate, now, this.shopRules())) {
       // Clearing the date also drops its availability lookup (the resource goes idle).
       this.bookingModel.update((model) => ({ ...model, bookingDate: '' }));
       this.flash.errorMessage.set(
@@ -498,15 +504,16 @@ export class BookingStore {
 
   selectBookingDate(dateStr: string): void {
     this.refreshToday();
-    if (!isBookableDate(dateStr, this.now())) {
+    const rules = this.shopRules();
+    if (!isWithinBookingWindow(dateStr, this.now(), rules)) {
       this.flash.errorMessage.set(
-        `Please pick a date from today up to ${MAX_BOOKING_DAYS_AHEAD} days ahead.`,
+        `Please pick a date from today up to ${rules.maxAdvanceDays} days ahead.`,
       );
       return;
     }
-    if (calendar.isClosedDay(dateStr)) {
+    if (calendar.isClosedDay(dateStr, rules)) {
       this.flash.errorMessage.set(
-        'Our shop is closed on Sundays. Please select a Monday through Saturday slot!',
+        `${closedDaysMessage(rules) ?? 'We are closed that day.'} Please pick another day.`,
       );
       this.bookingModel.update((m) => ({ ...m, bookingDate: '' }));
       return;

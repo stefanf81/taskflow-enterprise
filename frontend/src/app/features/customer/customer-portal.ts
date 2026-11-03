@@ -4,7 +4,9 @@ import { Router, RouterLink } from '@angular/router';
 import { injectSignOut } from '../../core/auth/sign-out';
 import { CustomerStore } from '../../core/customer/customer.store';
 import { FlashMessages } from '../../core/ui/flash-messages';
-import { isCustomerCancellable, statusLabel } from './appointment-status';
+import { isCustomerCancellable } from '@taskflow/domain';
+import { ShopClock } from '../../core/shop-clock';
+import { statusLabel } from './appointment-status';
 import { formatTime12Hour, formatLocalDate } from '../../core/time-utils';
 
 /**
@@ -23,6 +25,7 @@ export class CustomerPortal {
   private readonly flash = inject(FlashMessages);
   private readonly signOut = injectSignOut();
   readonly customerStore = inject(CustomerStore);
+  private readonly shopClock = inject(ShopClock);
   private readonly router = inject(Router);
 
   readonly errorMessage = this.flash.errorMessage;
@@ -49,9 +52,16 @@ export class CustomerPortal {
     return statusLabel(status);
   }
 
-  /** Cancelled and denied bookings are final: no Cancel button. */
-  protected isCancellable(status: string): boolean {
-    return isCustomerCancellable(status);
+  /**
+   * Only an upcoming PENDING or APPROVED booking gets a Cancel button, the rule the server applies
+   * (denied and cancelled bookings are final; one that has started can no longer be cancelled).
+   */
+  protected isCancellable(appt: {
+    status: string;
+    bookingDate: string;
+    bookingTime: string;
+  }): boolean {
+    return isCustomerCancellable(appt, this.shopClock.now());
   }
 
   formatTime12Hour(time24: string): string {

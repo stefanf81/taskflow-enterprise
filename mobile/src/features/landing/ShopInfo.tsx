@@ -1,27 +1,35 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../../theme/colors';
+import { openingHoursRows } from '@taskflow/domain';
+import { useShopInfo } from '../../core/shop/useShopInfo';
 
-// Static shop details under the grooming menu: opening hours, retail products and a testimonial.
+// Shop details under the grooming menu: the opening hours (from the shop info), retail products
+// and a testimonial.
 
 /** Weekly opening hours (hand-written for now; meant to come from the backend's shop info). */
-export const OperatingHours: React.FC = () => (
-  <View style={styles.hoursCard}>
-    <Text style={styles.cardLabel}>Operating Hours</Text>
-    <View style={styles.row}>
-      <Text style={styles.hoursDay}>Monday - Friday</Text>
-      <Text style={styles.hoursTime}>09:00 AM - 06:00 PM</Text>
+/** The week's hours from the barbers' schedules (server defaults until the shop info loads). */
+export const OperatingHours: React.FC = () => {
+  const { rules } = useShopInfo();
+  return (
+    <View style={styles.hoursCard}>
+      <Text style={styles.cardLabel}>Operating Hours</Text>
+      {openingHoursRows(rules).map((row) =>
+        row.hours ? (
+          <View key={row.days} style={styles.row}>
+            <Text style={styles.hoursDay}>{row.days}</Text>
+            <Text style={styles.hoursTime}>{row.hours}</Text>
+          </View>
+        ) : (
+          <View key={row.days} style={styles.row}>
+            <Text style={[styles.hoursDay, styles.closedDay]}>{row.days}</Text>
+            <Text style={[styles.hoursTime, styles.closedDay]}>CLOSED</Text>
+          </View>
+        ),
+      )}
     </View>
-    <View style={styles.row}>
-      <Text style={styles.hoursDay}>Saturday</Text>
-      <Text style={styles.hoursTime}>10:00 AM - 04:00 PM</Text>
-    </View>
-    <View style={styles.row}>
-      <Text style={[styles.hoursDay, styles.closedDay]}>Sunday</Text>
-      <Text style={[styles.hoursTime, styles.closedDay]}>CLOSED</Text>
-    </View>
-  </View>
-);
+  );
+};
 
 export const ArtisanalProducts: React.FC = () => (
   <View style={styles.productsCard}>
