@@ -144,39 +144,24 @@ does not produce an arm64 image.
 
 ### API Contract Changes
 
-The reviewed `api/openapi.json` file is the API compatibility baseline. When a backend endpoint or DTO changes intentionally:
+`api/openapi.json` is the reviewed API baseline. After an intentional endpoint or DTO change:
 
 ```bash
-./gradlew bootRun                  # In a separate terminal; OpenAPI docs require admin auth
-npm run api:spec:update            # Refresh the reviewed baseline from the live backend
-npm run sync:api-types             # Regenerate the shared API types and response contracts
-npm run sync:api-types:check       # Confirm generated files are committed and current
+./gradlew bootRun                  # in a separate terminal; the OpenAPI docs need admin auth
+npm run api:spec:update            # refresh the baseline from the live backend
+npm run sync:api-types             # regenerate the shared API types and response contracts
+npm run sync:api-types:check       # confirm the generated files are committed and current
 ```
 
-CI authenticates to the development backend, compares its live OpenAPI document with this baseline, and fails on unreviewed API changes. Commit the updated baseline and generated type files together.
+CI compares the live document with the baseline and fails on unreviewed changes. The rules
+(hand-written validators, `@Nullable` response fields, public operations in the security
+documentation) are in [docs/agents/contracts.md](docs/agents/contracts.md).
 
 ### Admin SSE Changes
 
-The admin dashboard receives appointment invalidation events from
-`GET /api/v1/appointments/events`. When changing appointment mutations or stream
-behavior:
-
-- Keep event payloads immutable and free of customer PII.
-- Publish mutation signals inside the transaction, but deliver them only with
-  `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)`.
-- Keep the REST appointment query authoritative; SSE should trigger a reload rather
-  than maintain a second appointment state model.
-- Preserve cookie authentication. Never put the JWT in an `EventSource` URL.
-- Test the stream through Nginx because buffering and idle timeouts affect delivery.
-- Remember that the current emitter registry is single-instance. Add shared fanout
-  and replay before enabling multiple backend replicas.
-
-Run the focused tests while developing:
-
-```bash
-./gradlew test --tests '*AppointmentEventStreamServiceTest'
-cd frontend && npm test -- --include src/app/admin-events.service.spec.ts
-```
+The rules for the admin event stream (no customer data, after-commit delivery, cookie
+authentication, testing through Nginx) and its focused tests are in
+[docs/agents/backend.md](docs/agents/backend.md) ("Admin SSE").
 
 ### Code Quality
 
