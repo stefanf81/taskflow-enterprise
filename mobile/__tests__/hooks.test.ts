@@ -265,6 +265,26 @@ describe('Hooks', () => {
         'attempt-key-1',
       );
     });
+
+    it("refreshes the signed-in customer's bookings, not only the admin list and the slots", async () => {
+      mockCreateAppointmentFn.mockResolvedValueOnce({ id: 1 });
+      const { result } = await renderHook(() => useCreateAppointment(), { wrapper: createWrapper() });
+      const invalidateQueries = jest.spyOn(lastQueryClient!, 'invalidateQueries');
+
+      await act(async () => {
+        await result.current.mutateAsync({
+          data: {
+            customerName: 'John', customerEmail: 'j@ex.com', customerPhone: '+1',
+            barberName: 'Alex', bookingDate: '2026-08-01', bookingTime: '10:00', serviceType: 'Haircut',
+          },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['customerAppointments'] });
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['appointments'] });
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['busySlots'] });
+    });
   });
 
   describe('useUpdateAppointmentStatus', () => {
@@ -410,11 +430,18 @@ describe('Hooks', () => {
 
       const { result } = await renderHook(() => useCancelCustomerAppointment(), { wrapper: createWrapper() });
 
+      const invalidateQueries = jest.spyOn(lastQueryClient!, 'invalidateQueries');
+
       await act(async () => {
         await result.current.mutateAsync(3);
+        await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
       expect(mockCustomerCancelAppointmentFn).toHaveBeenCalledWith(3);
+      // The freed slot must show as available again, and the admin list changed too.
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['customerAppointments'] });
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['busySlots'] });
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['appointments'] });
     });
   });
 

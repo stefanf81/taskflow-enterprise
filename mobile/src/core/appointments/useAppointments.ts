@@ -1,10 +1,11 @@
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { appointmentsApi } from './appointments';
 import { AppointmentCreateRequest, AppointmentUpdateRequest } from '../../types/api';
+import { invalidateBookingQueries, queryKeys } from '../../query/queryKeys';
 
 export const useAppointments = (filter?: string, search?: string, page = 0, size = 10) => {
   return useQuery({
-    queryKey: ['appointments', filter, search, page, size],
+    queryKey: queryKeys.appointments.list(filter, search, page, size),
     queryFn: ({ signal }) =>
       appointmentsApi.getAllAppointments(filter, search, page, size, { signal }),
     staleTime: 10000,
@@ -16,7 +17,7 @@ export const useAppointments = (filter?: string, search?: string, page = 0, size
 
 export const useBusySlots = (barberName: string, bookingDate: string, serviceType?: string) => {
   return useQuery({
-    queryKey: ['busySlots', barberName, bookingDate, serviceType ?? ''],
+    queryKey: queryKeys.busySlots.forDay(barberName, bookingDate, serviceType ?? ''),
     // No placeholderData: another barber's or day's busy slots must never be shown as this one's.
     queryFn: ({ signal }) =>
       appointmentsApi.getBusySlots(barberName, bookingDate, serviceType, { signal }),
@@ -36,10 +37,7 @@ export const useCreateAppointment = () => {
       data: AppointmentCreateRequest;
       idempotencyKey?: string;
     }) => appointmentsApi.createAppointment(data, idempotencyKey),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
-      queryClient.invalidateQueries({ queryKey: ['busySlots'] });
-    },
+    onSuccess: () => invalidateBookingQueries(queryClient),
   });
 };
 
@@ -48,10 +46,7 @@ export const useUpdateAppointmentStatus = () => {
   return useMutation({
     mutationFn: ({ id, status }: { id: number; status: AppointmentUpdateRequest['status'] }) =>
       appointmentsApi.updateAppointmentStatus(id, status),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
-      queryClient.invalidateQueries({ queryKey: ['busySlots'] });
-    },
+    onSuccess: () => invalidateBookingQueries(queryClient),
   });
 };
 
@@ -59,10 +54,7 @@ export const useDeleteAppointment = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => appointmentsApi.deleteAppointment(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
-      queryClient.invalidateQueries({ queryKey: ['busySlots'] });
-    },
+    onSuccess: () => invalidateBookingQueries(queryClient),
   });
 };
 
@@ -71,8 +63,6 @@ export const usePublicCancelAppointment = () => {
   return useMutation({
     mutationFn: ({ publicId, email }: { publicId: string; email: string }) =>
       appointmentsApi.publicCancelAppointment(publicId, email),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['busySlots'] });
-    },
+    onSuccess: () => invalidateBookingQueries(queryClient),
   });
 };

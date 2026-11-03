@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { barbersApi } from './barbers';
 import { BarberTimeOffRequest } from '../../types/api';
+import { invalidateBookingQueries } from '../../query/queryKeys';
 
 export const usePublicBarbers = () => {
   return useQuery({
@@ -36,7 +37,8 @@ export const useAddTimeOff = () => {
     }) => barbersApi.addTimeOff(barberId, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['barberTimeOff', variables.barberId] });
-      queryClient.invalidateQueries({ queryKey: ['busySlots'] });
+      // The server cancels the bookings that fall inside the time off.
+      invalidateBookingQueries(queryClient);
     },
   });
 };
