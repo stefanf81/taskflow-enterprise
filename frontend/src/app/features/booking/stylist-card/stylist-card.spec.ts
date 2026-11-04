@@ -41,8 +41,15 @@ describe('StylistCard', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Top Rated');
   });
 
-  it('exposes an accessible selection label', () => {
-    expect(card().getAttribute('aria-label')).toBe('Select stylist: Alex the Barber');
+  it('is named by its visible text and exposes the selection state', () => {
+    // An aria-label that left out the title or specialty would fail WCAG 2.5.3
+    // (label in name); the avatar initial is decorative.
+    expect(card().hasAttribute('aria-label')).toBe(false);
+    expect(card().querySelector('[aria-hidden="true"]')?.textContent?.trim()).toBe('A');
+    expect(card().getAttribute('aria-pressed')).toBe('false');
+    fixture.componentRef.setInput('isSelected', true);
+    fixture.detectChanges();
+    expect(card().getAttribute('aria-pressed')).toBe('true');
   });
 
   it('applies the selected class only when isSelected is true', () => {

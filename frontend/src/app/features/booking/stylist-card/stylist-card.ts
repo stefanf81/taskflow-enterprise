@@ -16,13 +16,16 @@ export interface StylistProfile {
   template: `
     <button
       type="button"
-      [attr.aria-label]="'Select stylist: ' + profile().name"
+      [attr.aria-pressed]="isSelected()"
       class="card w-full text-left p-4 border border-white/5 bg-zinc-900/30 hover:border-gold/30 hover:bg-gold/5 flex items-center gap-4 cursor-pointer transition-all"
       [class.selected-service-item]="isSelected()"
       (click)="selected.emit()"
     >
-      <!-- Initial Avatar Circle -->
+      <!-- Initial Avatar Circle (decorative: the name below says it). The button's accessible
+           name comes from its visible text; an aria-label that omits the title and specialty
+           fails WCAG 2.5.3 (axe label-content-name-mismatch). -->
       <span
+        aria-hidden="true"
         class="w-12 h-12 rounded-full bg-gradient-to-r from-gold to-gold-dark flex items-center justify-center text-sm font-black text-black"
       >
         {{ profile().name.charAt(0) }}

@@ -112,20 +112,15 @@ export default async function () {
     scenario = 'wizard-step2-stylist';
     console.log('--- 3. Wizard — Stylist selection ---');
 
-    // Stylist cards are <app-stylist-card> buttons carrying an aria-label.
+    // Stylist cards are <app-stylist-card> buttons named by their visible text.
     const stylistCard = page
-      .locator('#step-panel-2 button[aria-label^="Select stylist:"]')
+      .locator('#step-panel-2 app-stylist-card button')
       .first();
     await stylistCard.waitFor({ state: 'visible', timeout: 10000 });
     await stylistCard.click();
-    check(
-      await page
-        .locator('#step-panel-2 button[aria-label^="Select stylist:"]')
-        .count(),
-      {
-        '3.1 a stylist is available for selection': (c) => c >= 1,
-      },
-    );
+    check(await page.locator('#step-panel-2 app-stylist-card button').count(), {
+      '3.1 a stylist is available for selection': (c) => c >= 1,
+    });
 
     // Advance to step 3 only after the selected stylist has rendered.
     await page.locator('.wizard-footer-controls button.btn-submit').click();
@@ -140,9 +135,7 @@ export default async function () {
     console.log('--- 4. Wizard — Date & time slot ---');
 
     // Click first available date in the carousel.
-    const dateBtns = page.locator(
-      '#step-panel-3 button[aria-label^="Select date"]',
-    );
+    const dateBtns = page.locator('#step-panel-3 button.date-chip-btn');
     await dateBtns.first().waitFor({ state: 'visible', timeout: 10000 });
     const dateCount = await dateBtns.count();
     check(dateCount, {

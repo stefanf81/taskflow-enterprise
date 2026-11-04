@@ -23,8 +23,8 @@
       @for (day of store.upcomingBookingDays(); track day.dateStr) {
         <button
           type="button"
-          [attr.aria-label]="'Select date: ' + day.dayName + ' ' + day.dayNum + ' ' + day.monthName"
-          class="card slot-picker-btn"
+          [attr.aria-pressed]="store.bookingDate() === day.dateStr"
+          class="card slot-picker-btn date-chip-btn"
           [class.slot-selected]="store.bookingDate() === day.dateStr"
           (click)="store.selectBookingDate(day.dateStr)"
           style="padding: 0.75rem 0.5rem; text-align: center; border-radius: var(--radius-md)"
