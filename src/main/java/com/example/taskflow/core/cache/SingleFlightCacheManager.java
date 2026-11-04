@@ -133,6 +133,11 @@ class SingleFlightCacheManager implements CacheManager {
             this.maxWaitNanos = maxWaitNanos;
         }
 
+        /** The decorated cache (the back-off cache around the Redis cache), for the cache metrics. */
+        Cache getDelegate() {
+            return delegate;
+        }
+
         @Override
         public <T> T get(Object key, Callable<T> valueLoader) {
             ValueWrapper hit = delegate.get(key);

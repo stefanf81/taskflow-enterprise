@@ -73,6 +73,11 @@ final class RedisBackoffCacheManager implements CacheManager {
             return delegate.getName();
         }
 
+        /** The decorated cache (the Redis cache), for the cache metrics. */
+        Cache getDelegate() {
+            return delegate;
+        }
+
         @Override
         public Object getNativeCache() {
             return delegate.getNativeCache();
