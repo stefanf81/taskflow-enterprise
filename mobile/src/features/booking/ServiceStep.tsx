@@ -2,6 +2,9 @@ import React from 'react';
 import { ScrollView, View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from '../../components/common/Button';
+import { EmptyState } from '../../components/common/EmptyState';
+import { ErrorState } from '../../components/common/ErrorState';
+import { LoadingIndicator } from '../../components/common/LoadingIndicator';
 import { ServiceItem } from '../../types/api';
 import { colors } from '../../theme/colors';
 import { filterServices } from './bookingWizard';
@@ -19,6 +22,11 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 interface ServiceStepProps {
   services: readonly ServiceItem[];
+  /** The catalog request is in flight and nothing is cached yet. */
+  isLoading: boolean;
+  /** The catalog request failed and there is nothing to show. */
+  loadFailed: boolean;
+  onRetry: () => void;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
   category: string;
@@ -31,6 +39,9 @@ interface ServiceStepProps {
 /** Step 1: search and filter the catalog, then pick one treatment. */
 export const ServiceStep: React.FC<ServiceStepProps> = ({
   services,
+  isLoading,
+  loadFailed,
+  onRetry,
   searchQuery,
   onSearchQueryChange,
   category,
@@ -40,6 +51,14 @@ export const ServiceStep: React.FC<ServiceStepProps> = ({
   onContinue,
 }) => {
   const filteredServices = filterServices(services, category, searchQuery);
+
+  // Without a catalog there is nothing to search or pick, and Continue would only fail validation.
+  if (loadFailed) {
+    return <ErrorState message="Couldn't load the service catalog." onRetry={onRetry} />;
+  }
+  if (isLoading) {
+    return <LoadingIndicator message="Fetching catalog..." />;
+  }
 
   return (
     <View>
@@ -73,6 +92,13 @@ export const ServiceStep: React.FC<ServiceStepProps> = ({
       </ScrollView>
 
       <Text style={wizardStyles.label}>Choose Service</Text>
+      {filteredServices.length === 0 && (
+        <EmptyState
+          icon="search-outline"
+          title="No Services Found"
+          message="Try adjusting your category filter or search query."
+        />
+      )}
       {filteredServices.map((svc) => {
         const isSel = selectedService === svc.name;
         return (

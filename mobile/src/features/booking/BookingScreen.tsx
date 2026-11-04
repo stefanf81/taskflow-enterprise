@@ -45,6 +45,9 @@ export const BookingScreen: React.FC = () => {
         {wizard.step === 1 && (
           <ServiceStep
             services={wizard.services}
+            isLoading={wizard.catalogLoading}
+            loadFailed={wizard.catalogFailed}
+            onRetry={wizard.retryCatalog}
             searchQuery={wizard.serviceSearchQuery}
             onSearchQueryChange={wizard.setServiceSearchQuery}
             category={wizard.selectedCategory}

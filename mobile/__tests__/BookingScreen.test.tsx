@@ -47,6 +47,8 @@ let mockBusySlotsData: string[];
 let mockBusySlotsLoading: boolean;
 let mockBusySlotsError: unknown;
 let mockCatalogData: any[] | null;
+let mockCatalogStatus: { isLoading: boolean; isError: boolean };
+const mockRefetchCatalog = jest.fn();
 
 // Backend category values (V5__create_service_catalog.sql): hair | beard | combo
 const DEFAULT_CATALOG = [
@@ -58,7 +60,11 @@ const DEFAULT_CATALOG = [
 
 jest.mock('../src/core/catalog/useCatalog', () => ({
   useCatalog: () => ({
-    data: mockCatalogData ?? DEFAULT_CATALOG,
+    // Like react-query: no data while the first request is in flight or after it failed.
+    data: mockCatalogStatus.isLoading || mockCatalogStatus.isError ? undefined : (mockCatalogData ?? DEFAULT_CATALOG),
+    isLoading: mockCatalogStatus.isLoading,
+    isError: mockCatalogStatus.isError,
+    refetch: mockRefetchCatalog,
   }),
 }));
 
@@ -133,6 +139,7 @@ describe('BookingScreen', () => {
     mockBusySlotsLoading = false;
     mockShopTimeZone = null;
     mockCatalogData = null;
+    mockCatalogStatus = { isLoading: false, isError: false };
     mockRouteNames = ['Home', 'Booking', 'Catalog', 'Lookbook'];
     mockReceiptProps = null;
     // Call methods on the EXISTING mockMutateAsync reference (created by
@@ -515,6 +522,7 @@ describe('BookingScreen wizard behaviour', () => {
     mockBusySlotsData = [];
     mockBusySlotsLoading = false;
     mockCatalogData = null;
+    mockCatalogStatus = { isLoading: false, isError: false };
     mockRouteNames = ['Home', 'Booking', 'Catalog', 'Lookbook'];
     mockReceiptProps = null;
     mockMutateAsync.mockResolvedValue({
@@ -580,6 +588,31 @@ describe('BookingScreen wizard behaviour', () => {
     expect(mockUseBusySlots).toHaveBeenLastCalledWith(
       'Alex the Barber', '2026-08-12', 'Royal Shave', { enabled: false },
     );
+  });
+
+  it('shows a loading state instead of an empty list while the catalog loads', async () => {
+    mockCatalogStatus = { isLoading: true, isError: false };
+    const { getByText, queryByText } = await render(<BookingScreen />);
+    expect(getByText('Fetching catalog...')).toBeTruthy();
+    expect(queryByText('Continue to Stylist')).toBeNull();
+    expect(queryByText('No Services Found')).toBeNull();
+  });
+
+  it('shows an error with a retry when the catalog cannot be loaded', async () => {
+    mockCatalogStatus = { isLoading: false, isError: true };
+    const { getByText, queryByText } = await render(<BookingScreen />);
+    expect(getByText("Couldn't load the service catalog.")).toBeTruthy();
+    expect(queryByText('Continue to Stylist')).toBeNull();
+
+    await fireEvent.press(getByText('Retry'));
+    expect(mockRefetchCatalog).toHaveBeenCalledTimes(1);
+  });
+
+  it('says so when no treatment matches the search', async () => {
+    const { getByPlaceholderText, getByText, queryByText } = await render(<BookingScreen />);
+    expect(queryByText('No Services Found')).toBeNull();
+    await fireEvent.changeText(getByPlaceholderText(/Search treatments/), 'zzz-no-such-service');
+    expect(getByText('No Services Found')).toBeTruthy();
   });
 
   it('selects no service and queries nothing until the catalog has loaded', async () => {

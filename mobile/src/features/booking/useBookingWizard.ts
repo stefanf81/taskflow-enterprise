@@ -61,7 +61,12 @@ export function useBookingWizard() {
   const route = useRoute<BookingRouteProp>();
   const navigation = useNavigation<BookingNavProp>();
 
-  const { data: services = [] } = useCatalog();
+  const {
+    data: services = [],
+    isLoading: catalogLoading,
+    isError: catalogError,
+    refetch: refetchCatalog,
+  } = useCatalog();
   const { data: apiBarbers = [] } = usePublicBarbers();
   const createMutation = useCreateAppointment();
 
@@ -322,6 +327,12 @@ export function useBookingWizard() {
 
     // Step 1: treatment
     services,
+    catalogLoading,
+    // A failed background refetch keeps the services already shown; only an empty catalog is an error.
+    catalogFailed: catalogError && services.length === 0,
+    retryCatalog: () => {
+      refetchCatalog();
+    },
     serviceSearchQuery,
     setServiceSearchQuery,
     selectedCategory,
