@@ -6,6 +6,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
@@ -94,7 +96,14 @@ class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder,
+                                                   MetricsProperties metrics, Environment environment) throws Exception {
+        MetricsScrapeAuthorization prometheusAccess = new MetricsScrapeAuthorization(metrics.scrapeToken());
+        if (!prometheusAccess.protectsTheEndpoint() && environment.acceptsProfiles(Profiles.of("prod"))) {
+            logger.warn("/actuator/prometheus is unauthenticated: app.metrics.scrape-token (APP_METRICS_SCRAPE_TOKEN) "
+                    + "is not set, so only the network keeps the metrics internal");
+        }
+
         JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
         grantedAuthoritiesConverter.setAuthorityPrefix("");
         grantedAuthoritiesConverter.setAuthoritiesClaimName("scope");
@@ -157,12 +166,15 @@ class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").permitAll()
                 .requestMatchers("/api/v1/auth/me").authenticated()
                 // Liveness/readiness probes must stay reachable unauthenticated
-                // for Kubernetes/docker healthchecks. VictoriaMetrics scrapes
-                // Prometheus metrics without application credentials; production
-                // NetworkPolicy restricts this port to the monitoring namespace.
+                // for Kubernetes/docker healthchecks. The Prometheus scrape is open
+                // while app.metrics.scrape-token is unset (then only the production
+                // NetworkPolicy, which limits this port to the monitoring namespace,
+                // keeps it internal) and bearer-token only once it is set.
                 // All other Actuator endpoints remain administrator-only.
                 .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness").permitAll()
-                .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
+                // Open unless app.metrics.scrape-token is set, then bearer-token only (see
+                // MetricsScrapeAuthorization). HEAD is not listed: it falls to the ADMIN rule below.
+                .requestMatchers(HttpMethod.GET, "/actuator/prometheus").access(prometheusAccess)
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments/public/busy-slots").permitAll()
                 .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/public/busy-slots").permitAll()
@@ -241,6 +253,10 @@ class SecurityConfig {
     public BearerTokenResolver cookieBearerTokenResolver() {
         DefaultBearerTokenResolver headerResolver = new DefaultBearerTokenResolver();
         return request -> {
+            // The scrape token is no JWT: let MetricsScrapeAuthorization read it from the header.
+            if (MetricsScrapeAuthorization.SCRAPE.matches(request)) {
+                return null;
+            }
             jakarta.servlet.http.Cookie[] cookies = request.getCookies();
             if (cookies != null) {
                 for (jakarta.servlet.http.Cookie cookie : cookies) {

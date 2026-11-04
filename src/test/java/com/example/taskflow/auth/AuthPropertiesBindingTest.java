@@ -26,6 +26,8 @@ class AuthPropertiesBindingTest {
                     .isEqualTo("http://localhost:4200,http://127.0.0.1:4200");
             assertThat(context.getBean(LoginThrottleProperties.class))
                     .isEqualTo(new LoginThrottleProperties(10, 300));
+            // No scrape token: /actuator/prometheus stays open (MetricsScrapeAuthorization).
+            assertThat(context.getBean(MetricsProperties.class)).isEqualTo(new MetricsProperties(""));
         });
     }
 
@@ -35,7 +37,8 @@ class AuthPropertiesBindingTest {
                         "app.jwt.issuer=issuer", "app.jwt.audience=audience", "app.jwt.lifetime-seconds=60",
                         "app.rsa.private-key=private", "app.rsa.public-key=public", "app.rsa.require-persistent-keys=true",
                         "app.cookie.secure=false", "app.cors.allowed-origins=https://shop.example",
-                        "app.rate-limit.login-max-failures=3", "app.rate-limit.login-failure-window-seconds=30")
+                        "app.rate-limit.login-max-failures=3", "app.rate-limit.login-failure-window-seconds=30",
+                        "app.metrics.scrape-token=token")
                 .run(context -> {
                     assertThat(context.getBean(JwtProperties.class)).isEqualTo(new JwtProperties("issuer", "audience", 60));
                     assertThat(context.getBean(RsaKeyProperties.class))
@@ -43,6 +46,7 @@ class AuthPropertiesBindingTest {
                     assertThat(context.getBean(CookieProperties.class).secure()).isFalse();
                     assertThat(context.getBean(CorsProperties.class).allowedOrigins()).isEqualTo("https://shop.example");
                     assertThat(context.getBean(LoginThrottleProperties.class)).isEqualTo(new LoginThrottleProperties(3, 30));
+                    assertThat(context.getBean(MetricsProperties.class)).isEqualTo(new MetricsProperties("token"));
                 });
     }
 
