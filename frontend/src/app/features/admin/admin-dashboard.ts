@@ -52,15 +52,16 @@ export class AdminDashboard {
 
   constructor() {
     // Every event, and every catch-up after the stream reconnects, refetches the list.
-    // store.refresh() restarts a load already in flight instead of dropping the update. A burst
-    // (time off cancelling many bookings sends one event each) is coalesced: the first event
-    // refreshes at once, the rest of the burst in one trailing refresh per window.
+    // store.refreshWhenIdle() lets a load already in flight finish and then loads once more, so a
+    // steady stream of events never keeps cancelling it. A burst (time off cancelling many
+    // bookings sends one event each) is coalesced: the first event refreshes at once, the rest
+    // of the burst in one trailing refresh per window.
     this.adminEvents.appointmentChanges
       .pipe(
         throttleTime(REFRESH_THROTTLE_MS, asyncScheduler, { leading: true, trailing: true }),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe(() => this.store.refresh());
+      .subscribe(() => this.store.refreshWhenIdle());
     this.adminEvents.connect();
     this.destroyRef.onDestroy(() => this.adminEvents.close());
   }

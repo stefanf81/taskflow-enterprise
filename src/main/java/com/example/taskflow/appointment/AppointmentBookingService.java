@@ -248,7 +248,8 @@ class AppointmentBookingService {
             // it to a concrete, available barber BEFORE persisting so the partial
             // unique slot index and the per-barber availability queries both see the
             // booking. The resolver applies the same rules as a named barber.
-            Barber resolvedBarber = resolveBarber(request, durationMinutes);
+            ResolvedBarber resolved = resolveBarber(request, durationMinutes);
+            Barber resolvedBarber = resolved.barber();
             String effectiveBarberName = resolvedBarber.getName();
 
             // Authoritative, in-transaction availability check (time off, schedule, service
@@ -259,10 +260,15 @@ class AppointmentBookingService {
             // constraint for overlapping intervals with different start times (services
             // longer than the grid step). H2 has no exclusion constraints; there this check
             // is the only guard against such overlaps.
-            busySlotsService.findConflict(resolvedBarber, bookingDate, bookingTime, durationMinutes, null)
-                    .ifPresent(message -> {
-                        throw new IllegalArgumentException(message);
-                    });
+            // A "No Preference" barber was picked by these same rules in this transaction, so the
+            // check is not repeated (three more queries); a second read could not close the race
+            // the constraints above guard anyway.
+            if (!resolved.availabilityChecked()) {
+                busySlotsService.findConflict(resolvedBarber, bookingDate, bookingTime, durationMinutes, null)
+                        .ifPresent(message -> {
+                            throw new IllegalArgumentException(message);
+                        });
+            }
 
             // BKG-2: bound the number of upcoming bookings one e-mail address can hold.
             long upcoming = appointmentRepository.countUpcoming(request.customerEmail().trim(), today,
@@ -393,19 +399,30 @@ class AppointmentBookingService {
     }
 
     /**
+     * The barber a booking is placed with.
+     *
+     * @param availabilityChecked whether the booking rules already accepted this barber for the
+     *                            requested slot (the "No Preference" resolution evaluates them)
+     */
+    private record ResolvedBarber(Barber barber, boolean availabilityChecked) {
+    }
+
+    /**
      * Resolves the requested barber name to a catalog entity. The
      * {@link #NO_PREFERENCE_BARBER} sentinel is resolved to the first barber who
      * can take the booking (schedule, time off, service length, overlap); unknown
      * concrete names are rejected with a 400.
      */
-    private Barber resolveBarber(AppointmentCreateRequest request, int durationMinutes) {
+    private ResolvedBarber resolveBarber(AppointmentCreateRequest request, int durationMinutes) {
         if (NO_PREFERENCE_BARBER.equals(request.barberName())) {
             return busySlotsService.findFirstAvailableBarber(
                             request.bookingDate(), request.bookingTime(), durationMinutes)
+                    .map(barber -> new ResolvedBarber(barber, true))
                     .orElseThrow(() -> new IllegalArgumentException(
                             "No barber is available for the selected time. Please choose another time or barber."));
         }
         return barberRepository.findByName(request.barberName())
+                .map(barber -> new ResolvedBarber(barber, false))
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Unknown barber: '" + LogSanitizer.stripNewlines(request.barberName())
                                 + "'. Please select a barber from the list."));
@@ -427,17 +444,28 @@ class AppointmentBookingService {
         if (serviceType == null || serviceType.isBlank()) {
             return busySlotsService.getBusySlots(barberName, bookingDate);
         }
-        ServiceItem service = catalogService.findServiceByName(serviceType.trim())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Unknown service: '" + LogSanitizer.stripNewlines(serviceType)
-                                + "'. Please select a service from the catalog."));
-        int duration = service.getDurationMinutes() != null && service.getDurationMinutes() > 0
-                ? service.getDurationMinutes() : BusySlotsService.DEFAULT_DURATION_MINUTES;
+        int duration = bookableServiceDuration(serviceType.trim());
         // Services that fit in one grid step get the same answer from the cached path; only
         // longer ones need the length-aware computation (cached per duration).
         return duration > BusySlotsService.DEFAULT_DURATION_MINUTES
                 ? busySlotsService.getBusySlots(barberName, bookingDate, duration)
                 : busySlotsService.getBusySlots(barberName, bookingDate);
+    }
+
+    /**
+     * Duration of an active catalog service, read from the cached catalog list (the same active
+     * services {@code findServiceByName} returns). A database lookup here ran on every busy-slots
+     * request, so even a warm cache could not keep that public endpoint off the database.
+     */
+    private int bookableServiceDuration(String serviceName) {
+        Integer minutes = catalogService.getAllServices().stream()
+                .filter(service -> service.name().equals(serviceName))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Unknown service: '" + LogSanitizer.stripNewlines(serviceName)
+                                + "'. Please select a service from the catalog."))
+                .durationMinutes();
+        return minutes != null && minutes > 0 ? minutes : BusySlotsService.DEFAULT_DURATION_MINUTES;
     }
 
     /**

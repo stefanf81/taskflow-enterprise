@@ -4,6 +4,7 @@ import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
 
 import com.example.taskflow.catalog.ServiceItem;
+import com.example.taskflow.catalog.ServiceItemResponse;
 import com.example.taskflow.core.ConflictException;
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,9 @@ class AppointmentBookingServiceTest extends AppointmentServiceTestSupport {
                 request(AppointmentBookingService.NO_PREFERENCE_BARBER, TOMORROW, "10:00"), null);
 
         assertEquals("Alex the Barber", result.appointment().barberName());
+        // the resolution already applied the booking rules: the per-barber re-check is not repeated
+        verify(appointmentRepository).findActiveOnDate(TOMORROW);
+        verify(appointmentRepository, never()).findActiveForBarberOnDate(any(), any());
     }
 
     @Test
@@ -104,13 +108,15 @@ class AppointmentBookingServiceTest extends AppointmentServiceTestSupport {
         Appointment existing = appointment(50, AppointmentStatus.APPROVED, TOMORROW, "10:00");
         existing.setService(new ServiceItem("Luxury", BigDecimal.TEN, 120, "combo", ""));
         when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW)).thenReturn(List.of(existing));
+        when(appointmentRepository.findActiveOnDate(TOMORROW)).thenReturn(List.of(existing));
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> bookingService.createAppointment(request("Alex the Barber", TOMORROW, "11:00"), null));
         assertTrue(ex.getMessage().contains("already booked"));
         // sentinel resolution applies the same rule: the only barber is busy
-        assertThrows(IllegalArgumentException.class, () -> bookingService.createAppointment(
+        IllegalArgumentException sentinel = assertThrows(IllegalArgumentException.class, () -> bookingService.createAppointment(
                 request(AppointmentBookingService.NO_PREFERENCE_BARBER, TOMORROW, "11:00"), null));
+        assertTrue(sentinel.getMessage().contains("No barber is available"), sentinel.getMessage());
         verify(appointmentRepository, never()).save(any(Appointment.class));
     }
 
@@ -356,6 +362,26 @@ class AppointmentBookingServiceTest extends AppointmentServiceTestSupport {
         assertThrows(IllegalArgumentException.class, () -> bookingService.getBusySlots("Alex the Barber", "invalid-date"));
         when(barberRepository.findByName("Ghost")).thenReturn(Optional.empty());
         assertThrows(IllegalArgumentException.class, () -> bookingService.getBusySlots("Ghost", TOMORROW.toString()));
+    }
+
+    /** The service's length comes from the cached catalog list, never from a per-request lookup. */
+    @Test
+    void testGetBusySlots_ServiceLengthComesFromTheCachedCatalog() {
+        when(catalogService.getAllServices()).thenReturn(List.of(
+                new ServiceItemResponse(1L, "Haircut", new BigDecimal("25.00"), 30, "hair", null),
+                new ServiceItemResponse(2L, "Luxury", BigDecimal.TEN, 120, "combo", null)));
+        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW))
+                .thenReturn(List.of(appointment(1, AppointmentStatus.PENDING, TOMORROW, "11:00")));
+
+        assertEquals(List.of("11:00"),
+                bookingService.getBusySlots("Alex the Barber", TOMORROW.toString(), "Haircut"));
+        // 120 minutes from 10:00 run into the 11:00 booking, from 16:00 past the 17:00 closing time
+        assertEquals(List.of("10:00", "11:00", "16:00"),
+                bookingService.getBusySlots("Alex the Barber", TOMORROW.toString(), " Luxury "));
+        IllegalArgumentException unknown = assertThrows(IllegalArgumentException.class,
+                () -> bookingService.getBusySlots("Alex the Barber", TOMORROW.toString(), "Phantom"));
+        assertTrue(unknown.getMessage().contains("Unknown service"));
+        verify(catalogService, never()).findServiceByName(any());
     }
 
     @Test

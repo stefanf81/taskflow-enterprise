@@ -11,10 +11,12 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Pageable;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.stream.LongStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -66,12 +68,56 @@ class NotificationRelaySchedulerTest {
 
         relay.relay();
 
-        // Claim query is evaluated against the shop clock so rows in backoff are skipped.
-        verify(outboxRepository).findClaimableForUpdate(eq(10), eq(NOW), any(Pageable.class));
+        // Claim query is evaluated against the shop clock so rows in backoff are skipped. A short
+        // batch means the backlog is drained: no second claim.
+        verify(outboxRepository, times(1)).findClaimableForUpdate(eq(10), eq(NOW), any(Pageable.class));
         verify(sender).process(new NotificationSender.Claim(1L, "test-instance", NOW));
         verify(sender).process(new NotificationSender.Claim(2L, "test-instance", NOW));
         assertEquals("PROCESSING", pending.getStatus());
         assertEquals("test-instance", pending.getClaimedBy());
+    }
+
+    /** A burst larger than one batch goes out in one run instead of one batch per 30 s. */
+    @Test
+    void relayDrainsABacklogInConsecutiveBatches() {
+        when(outboxRepository.findClaimableForUpdate(anyInt(), any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(pendingRows(0, NotificationRelayScheduler.CLAIM_BATCH_SIZE),
+                        pendingRows(100, NotificationRelayScheduler.CLAIM_BATCH_SIZE),
+                        pendingRows(200, 20));
+        when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(outboxRepository.findStaleProcessing(any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(List.of());
+
+        relay.relay();
+
+        verify(outboxRepository, times(3)).findClaimableForUpdate(anyInt(), any(LocalDateTime.class), any(Pageable.class));
+        verify(sender, times(120)).process(any(NotificationSender.Claim.class));
+        verify(outboxRepository, times(1)).findStaleProcessing(any(LocalDateTime.class), any(Pageable.class));
+    }
+
+    @Test
+    void relayStopsClaimingOnceTheDrainBudgetIsUsedUp() {
+        NotificationRelayScheduler noBudget = new NotificationRelayScheduler(outboxRepository, sender, selfProvider,
+                "test-instance", Clock.fixed(NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC), true, Duration.ZERO);
+        when(outboxRepository.findClaimableForUpdate(anyInt(), any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(pendingRows(0, NotificationRelayScheduler.CLAIM_BATCH_SIZE));
+        when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(outboxRepository.findStaleProcessing(any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(List.of());
+
+        noBudget.relay();
+
+        // the full batch is still sent; the rest waits for the next run
+        verify(outboxRepository, times(1)).findClaimableForUpdate(anyInt(), any(LocalDateTime.class), any(Pageable.class));
+        verify(sender, times(NotificationRelayScheduler.CLAIM_BATCH_SIZE)).process(any(NotificationSender.Claim.class));
+    }
+
+    private static List<NotificationOutbox> pendingRows(long firstId, int count) {
+        return LongStream.range(firstId, firstId + count).mapToObj(id -> {
+            NotificationOutbox row = new NotificationOutbox("r" + id + "@x.com", "EMAIL", "m", NOW, "PENDING");
+            row.setId(id);
+            return row;
+        }).toList();
     }
 
     @Test

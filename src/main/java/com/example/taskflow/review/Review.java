@@ -21,6 +21,17 @@ public class Review implements Timestamped {
     @Column(name = "appointment_id", nullable = false, unique = true)
     private Long appointmentId;
 
+    /** Barber of the reviewed appointment, copied when the review is written (V38). */
+    @Column(name = "barber_name", nullable = false, length = 100)
+    private String barberName;
+
+    /**
+     * Whether the reviewed appointment is still APPROVED, i.e. whether the review counts towards the
+     * barber's rating. Kept current from the appointment events by {@link ReviewRatingInputsListener}.
+     */
+    @Column(nullable = false)
+    private boolean counted;
+
     @Column(nullable = false)
     private Integer rating;
 
@@ -37,8 +48,11 @@ public class Review implements Timestamped {
 
     public Review() {}
 
-    public Review(Long appointmentId, Integer rating, String comment) {
+    /** A review counts from the start: only APPROVED appointments can be reviewed. */
+    public Review(Long appointmentId, String barberName, Integer rating, String comment) {
         this.appointmentId = appointmentId;
+        this.barberName = barberName;
+        this.counted = true;
         this.rating = rating;
         this.comment = comment;
     }

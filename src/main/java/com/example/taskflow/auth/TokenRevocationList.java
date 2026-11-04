@@ -29,14 +29,20 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p><b>Redis failures</b> never reject tokens wholesale and never throw out of the decoder: lookups
  * fall back to the local map only (revocations made on this replica keep working; ones made on other
  * replicas are not seen until Redis answers again). A revocation that could not be written is kept in
- * a bounded pending map and written (and announced) on the next successful Redis call. If this
- * replica restarts before that, the revocation is lost — the same gap as the old in-memory list.
+ * a bounded pending map and written (and announced) on the next successful Redis call.
+ *
+ * <p><b>Durability.</b> Every revocation is also written to PostgreSQL ({@link PersistentTokenRevocations},
+ * V39), and {@link TokenRevocationRestorer} loads the unexpired ones back ({@link #restore}) at startup
+ * and every minute: into the local map and, in Redis mode, into Redis. A revocation made during a Redis
+ * outage therefore survives a restart of this replica, and one Redis forgot (restart without
+ * persistence) is denied again within a minute.
  *
  * <p><b>Admin event streams.</b> A revocation publishes {@link TokenRevokedEvent} locally; in Redis
  * mode it is also announced on a pub/sub channel and other replicas re-publish it locally (see
  * {@link #onRemoteRevocation}), so streams opened with the token close on every replica.
  *
- * <p>It does not react to a user being demoted or deleted.
+ * <p>Revoking every token of an account (demoted, deleted, password changed) is not done here but
+ * through the account's token version ({@link AccountTokenCheck}).
  */
 @Component
 class TokenRevocationList {
@@ -54,13 +60,16 @@ class TokenRevocationList {
     private final ConcurrentHashMap<String, Instant> pendingSync = new ConcurrentHashMap<>();
     private final ApplicationEventPublisher events;
     private final RedisTokenRevocationStore shared;
+    /** Durable copy of every revocation, or {@code null} (unit tests). */
+    private final PersistentTokenRevocations persistent;
     /** Token expiries are judged by {@link TokenProvider#TOKEN_CLOCK}, like the decoder judges them. */
     private final Clock clock;
 
     @Autowired
     public TokenRevocationList(ApplicationEventPublisher events,
-                               ObjectProvider<RedisTokenRevocationStore> shared) {
-        this(events, shared.getIfAvailable());
+                               ObjectProvider<RedisTokenRevocationStore> shared,
+                               ObjectProvider<PersistentTokenRevocations> persistent) {
+        this(events, shared.getIfAvailable(), persistent.getIfAvailable(), TokenProvider.TOKEN_CLOCK);
     }
 
     TokenRevocationList(ApplicationEventPublisher events, RedisTokenRevocationStore shared) {
@@ -68,8 +77,14 @@ class TokenRevocationList {
     }
 
     TokenRevocationList(ApplicationEventPublisher events, RedisTokenRevocationStore shared, Clock clock) {
+        this(events, shared, null, clock);
+    }
+
+    TokenRevocationList(ApplicationEventPublisher events, RedisTokenRevocationStore shared,
+                        PersistentTokenRevocations persistent, Clock clock) {
         this.events = events;
         this.shared = shared;
+        this.persistent = persistent;
         this.clock = clock;
     }
 
@@ -91,6 +106,9 @@ class TokenRevocationList {
         }
         revoked.values().removeIf(expiry -> !expiry.isAfter(now));
         revoked.put(jti, expiresAt);
+        if (persistent != null) {
+            persistent.save(jti, expiresAt);
+        }
         if (shared != null) {
             flushPending(now);
             if (shared.write(jti, expiresAt, now)) {
@@ -158,6 +176,31 @@ class TokenRevocationList {
         }
         cacheLocally(remote.jti(), remote.expiresAt(), now);
         publishLocally(remote.jti());
+    }
+
+    /**
+     * Applies revocations loaded from the durable copy: cached locally and, in Redis mode, written to
+     * Redis again (an unchanged key just gets the same TTL). Not announced: streams opened with these
+     * tokens were closed when they were revoked. Stops writing to Redis at the first failure; the
+     * local map still gets every entry.
+     *
+     * @return the number of unexpired revocations applied
+     */
+    int restore(Iterable<RevokedToken> revocations) {
+        Instant now = Instant.now(clock);
+        boolean redisUp = shared != null && shared.isAvailable();
+        int applied = 0;
+        for (RevokedToken revocation : revocations) {
+            if (revocation.getJti() == null || !revocation.getExpiresAt().isAfter(now)) {
+                continue;
+            }
+            cacheLocally(revocation.getJti(), revocation.getExpiresAt(), now);
+            if (redisUp) {
+                redisUp = shared.write(revocation.getJti(), revocation.getExpiresAt(), now);
+            }
+            applied++;
+        }
+        return applied;
     }
 
     /** Number of revocations not yet written to Redis (for tests and diagnostics). */

@@ -1,5 +1,6 @@
-# Angular runtime component styles require this CSP source expression.
-10055	IGNORE	(Angular component styles require style-src unsafe-inline)
+# The CSP is pinned by e2e/csp.spec.ts (hashed scripts and styles, no unsafe-inline since #224).
+# Re-enable this rule once a DAST run confirms it reports nothing for the current policy.
+10055	IGNORE	(CSP is pinned by e2e/csp.spec.ts)
 # Fingerprinted static bundles may contain build timestamps; they do not expose server time or data.
 10096	IGNORE	(Static bundle timestamp false positive)
 # Angular reads the double-submit XSRF-TOKEN cookie, so it intentionally cannot be HttpOnly.

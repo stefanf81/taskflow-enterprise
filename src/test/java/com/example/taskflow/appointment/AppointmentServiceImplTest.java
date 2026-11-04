@@ -73,26 +73,6 @@ class AppointmentServiceImplTest extends AppointmentServiceTestSupport {
     }
 
     @Test
-    void approvedBarberNamesAreLookedUpInBoundedChunks() {
-        List<Long> ids = java.util.stream.LongStream.rangeClosed(1, 1100).boxed().toList();
-        when(appointmentRepository.findBarberNamesByIdsAndStatus(any(), eq(AppointmentStatus.APPROVED)))
-                .thenAnswer(inv -> {
-                    java.util.Collection<Long> chunk = inv.getArgument(0);
-                    return chunk.stream().filter(id -> id % 2 == 0).map(id -> (AppointmentRepository.IdAndBarberName)
-                            new AppointmentRepository.IdAndBarberName() {
-                                @Override public Long getId() { return id; }
-                                @Override public String getBarberName() { return "Alex"; }
-                            }).toList();
-                });
-
-        java.util.Map<Long, String> names = appointmentService.findApprovedBarberNames(ids);
-
-        assertEquals(550, names.size());
-        assertEquals("Alex", names.get(2L));
-        verify(appointmentRepository, times(3)).findBarberNamesByIdsAndStatus(any(), eq(AppointmentStatus.APPROVED));
-    }
-
-    @Test
     void testFindDetailsByPublicId() {
         Appointment appt = appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00");
         when(appointmentRepository.findByPublicId("public-1")).thenReturn(appt);

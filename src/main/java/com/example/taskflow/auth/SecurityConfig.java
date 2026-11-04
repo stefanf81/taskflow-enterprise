@@ -308,7 +308,8 @@ class SecurityConfig {
     }
 
     @Bean
-    public org.springframework.boot.CommandLineRunner initAdminUser(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public org.springframework.boot.CommandLineRunner initAdminUser(UserRepository userRepository, PasswordEncoder passwordEncoder,
+                                                                    AccountTokenCheck accounts) {
         return args -> {
             java.util.Optional<AppUser> existing = userRepository.findByEmailIgnoreCase(adminUsername);
             if (existing.isEmpty()) {
@@ -330,7 +331,9 @@ class SecurityConfig {
                 AppUser admin = existing.get();
                 admin.setPasswordHash(passwordEncoder.encode(adminPassword));
                 userRepository.save(admin);
-                logger.info("Admin password re-synchronised from configuration.");
+                // Tokens issued under the old password must not outlive the change (#218).
+                accounts.revokeAllTokens(adminUsername);
+                logger.info("Admin password re-synchronised from configuration; its earlier tokens are revoked.");
             }
         };
     }
@@ -352,7 +355,7 @@ class SecurityConfig {
     }
 
     @Bean
-    public JwtDecoder jwtDecoder(TokenRevocationList revocationList) {
+    public JwtDecoder jwtDecoder(TokenRevocationList revocationList, AccountTokenCheck accounts) {
         try {
             NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(this.rsaKey.toRSAPublicKey()).build();
             // A3: validate issuer + audience (expiry is enforced by the default
@@ -366,10 +369,14 @@ class SecurityConfig {
                     ? OAuth2TokenValidatorResult.failure(
                             new OAuth2Error("invalid_token", "The token has been revoked.", null))
                     : OAuth2TokenValidatorResult.success();
+            // Tokens of a deleted or demoted account, or of an account whose tokens were all
+            // revoked (token version raised), are rejected too (AccountTokenCheck, #218).
+            OAuth2TokenValidator<Jwt> accountUnchanged = accounts::validate;
             decoder.setJwtValidator(new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(
                     JwtValidators.createDefaultWithIssuer(jwtIssuer),
                     audienceValidator,
-                    notRevoked));
+                    notRevoked,
+                    accountUnchanged));
             // The stale-cookie filter and the bearer-token filter both decode the cookie's token;
             // within one request the second decode reuses the first (validated) result.
             return new RequestScopedJwtDecoder(decoder);

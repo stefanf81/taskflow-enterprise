@@ -345,3 +345,30 @@ html {
   background-position: center;
   background-repeat: no-repeat;
 }
+
+/* Former inline styles (the CSP has style-src 'self', no 'unsafe-inline', #224). They sit here,
+   after .btn, .card and .modal-card, because those unlayered rules beat Tailwind's utilities. */
+.date-chip-btn {
+  padding: 0.75rem 0.5rem;
+  text-align: center;
+  border-radius: var(--radius-md);
+}
+
+.time-slot-btn {
+  padding: 0.65rem 0.5rem;
+  font-size: 0.825rem;
+  font-weight: 600;
+  text-transform: none;
+}
+
+.wizard-back-btn {
+  padding: 0.5rem 1.25rem;
+}
+
+.wizard-next-btn {
+  padding: 0.5rem 1.5rem;
+}
+
+.receipt-modal-card {
+  max-width: 480px;
+}

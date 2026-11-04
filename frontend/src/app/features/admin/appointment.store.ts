@@ -39,10 +39,14 @@ const EMPTY_DASHBOARD: AppointmentDashboardResponse = {
  *   reads the separate `searchDebounced` signal, so typing does not trigger a
  *   request per keystroke and the 300ms coalescing window actually works.
  * - `refresh()` is reserved for cases where no reactive signal changed but the
- *   server data may have (approve/deny/delete success, Sync DB button, SSE event).
+ *   server data may have (approve/deny/delete success, Sync DB button, Retry).
  *   It never drops a refresh: `reload()` is a no-op while a load is in flight, so
  *   `refresh()` falls back to bumping a counter the request function reads, which
  *   restarts the load.
+ * - `refreshWhenIdle()` is for changes other people make (the SSE stream). It lets a load
+ *   in flight finish and follows it with exactly one more: restarting on every event kept
+ *   cancelling the list under a steady stream of events whenever a load took longer than
+ *   the gap between them, and a cancelled request may still have run its queries.
  * - Reading `resource.value()` THROWS while the resource is in the error state, so
  *   every list the UI reads is derived from a safe view (`safeResourceValue`).
  */
@@ -65,6 +69,9 @@ export class AppointmentStore {
 
   /** Read by the resource request so a refresh can restart an in-flight load. */
   private readonly refreshTick = signal(0);
+
+  /** A change arrived while a load was running: load once more when it settles. */
+  private refreshPending = false;
 
   private readonly appointmentsResource = httpResource<AppointmentDashboardResponse>(
     () => {
@@ -120,6 +127,15 @@ export class AppointmentStore {
       if (page > 0 && page >= totalPages) {
         this.currentPage.set(Math.max(0, totalPages - 1));
       }
+    });
+
+    // The follow-up load of refreshWhenIdle(), once the load it waited for has settled (or
+    // dropped when the listing went idle, i.e. the admin signed out).
+    effect(() => {
+      const status = this.appointmentsResource.status();
+      if (!this.refreshPending || status === 'loading' || status === 'reloading') return;
+      this.refreshPending = false;
+      if (status !== 'idle') untracked(() => this.refresh());
     });
   }
 
@@ -177,7 +193,20 @@ export class AppointmentStore {
     refreshResource(this.appointmentsResource, this.refreshTick);
   }
 
+  /**
+   * Refetch for a change made elsewhere: at once when nothing is loading, otherwise once the
+   * running load has settled. Any number of calls during one load cost one extra request.
+   */
+  refreshWhenIdle(): void {
+    if (this.appointmentsResource.isLoading()) {
+      this.refreshPending = true;
+      return;
+    }
+    this.refresh();
+  }
+
   private resetSessionState(): void {
+    this.refreshPending = false;
     this.cancelSearchDebounce();
     this.currentPage.set(0);
     this.selectedFilter.set('all');

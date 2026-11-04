@@ -16,6 +16,9 @@ import { ServiceStep } from './steps/service-step';
 import { StylistStep } from './steps/stylist-step';
 import { BookingStore, WIZARD_STEPS } from './booking.store';
 
+/** Progress bar width per step (Tailwind classes, written out so the class scanner finds them). */
+const STEP_PROGRESS_WIDTHS = ['w-0', 'w-1/3', 'w-2/3', 'w-full'] as const;
+
 /**
  * Shell of the 4-step guest booking wizard: the stepper, the app-wide banner, the footer
  * navigation and the receipt.
@@ -38,6 +41,13 @@ export class BookingWizard {
   private readonly stepTabs = viewChildren<ElementRef<HTMLButtonElement>>('stepTab');
 
   protected readonly steps = WIZARD_STEPS.map((label, index) => ({ num: index + 1, label }));
+  /**
+   * Width of the step progress bar as a class: a `[style.width.%]` binding is written into the
+   * prerendered HTML as a `style` attribute, which the CSP (`style-src 'self'`) refuses.
+   */
+  protected readonly progressWidthClass = computed(
+    () => STEP_PROGRESS_WIDTHS[this.store.activeStep() - 1] ?? 'w-0',
+  );
   protected readonly activeStepLabel = computed(
     () => WIZARD_STEPS[this.store.activeStep() - 1] ?? '',
   );

@@ -8,8 +8,9 @@ import org.springframework.test.context.TestPropertySource;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Boots review with the modules it may depend on. Reviews reference their appointment by id, so the
- * rating query joins the appointment table in JPQL; bootstrapping validates that query.
+ * Boots review with the modules it may depend on. Reviews reference their appointment by id and carry
+ * its barber and a "still approved" flag (V38), so the rating query reads the review table alone;
+ * bootstrapping validates that query and the listener on the appointment events.
  */
 @ApplicationModuleTest(mode = ApplicationModuleTest.BootstrapMode.ALL_DEPENDENCIES)
 @TestPropertySource(properties = {"app.rate-limit.enabled=false", "app.schedulers.enabled=false"})
@@ -19,7 +20,7 @@ class ReviewModuleTest {
     private ReviewService reviews;
 
     @Test
-    void barberRatingsAreComputedAcrossTheAppointmentJoin() {
+    void barberRatingsAreComputedFromTheReviews() {
         assertNotNull(reviews.getBarberRatings());
     }
 }

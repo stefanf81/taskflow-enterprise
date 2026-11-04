@@ -9,17 +9,13 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
- * The cross-module {@link AppointmentService}: booking lookup and ratings for {@code review},
- * reminder selection and claiming for {@code notification}. Everything the controllers need lives
- * in {@link AppointmentBookingService}, {@link AppointmentLifecycleService} and
+ * The cross-module {@link AppointmentService}: booking lookup for {@code review}, reminder selection
+ * and claiming for {@code notification}. Everything the controllers need lives in
+ * {@link AppointmentBookingService}, {@link AppointmentLifecycleService} and
  * {@link AppointmentQueryService}.
  */
 @Service
@@ -27,27 +23,10 @@ class AppointmentServiceImpl implements AppointmentService {
 
     private static final Logger logger = LoggerFactory.getLogger(AppointmentServiceImpl.class);
 
-    /** Ids per IN query; Hibernate pads IN lists to powers of two, so few plans are cached. */
-    private static final int ID_LOOKUP_CHUNK = 512;
-
     private final AppointmentRepository appointmentRepository;
 
     AppointmentServiceImpl(AppointmentRepository appointmentRepository) {
         this.appointmentRepository = appointmentRepository;
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public Map<Long, String> findApprovedBarberNames(Collection<Long> appointmentIds) {
-        Map<Long, String> names = new HashMap<>();
-        List<Long> ids = List.copyOf(new LinkedHashSet<>(appointmentIds));
-        for (int from = 0; from < ids.size(); from += ID_LOOKUP_CHUNK) {
-            List<Long> chunk = ids.subList(from, Math.min(from + ID_LOOKUP_CHUNK, ids.size()));
-            for (var row : appointmentRepository.findBarberNamesByIdsAndStatus(chunk, AppointmentStatus.APPROVED)) {
-                names.put(row.getId(), row.getBarberName());
-            }
-        }
-        return names;
     }
 
     @Override

@@ -5,6 +5,8 @@ import com.example.taskflow.appointment.AppointmentDetails;
 import com.example.taskflow.appointment.AppointmentService;
 import com.example.taskflow.appointment.AppointmentStatus;
 import com.example.taskflow.core.ResourceNotFoundException;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,9 +16,8 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
 
 @Service
 class ReviewServiceImpl implements ReviewService {
@@ -28,36 +29,31 @@ class ReviewServiceImpl implements ReviewService {
 
     private final ReviewRepository reviewRepository;
     private final AppointmentService appointmentService;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
-    public ReviewServiceImpl(ReviewRepository reviewRepository, AppointmentService appointmentService, Clock clock) {
+    public ReviewServiceImpl(ReviewRepository reviewRepository, AppointmentService appointmentService,
+                             ApplicationEventPublisher eventPublisher, Clock clock) {
         this.reviewRepository = reviewRepository;
         this.appointmentService = appointmentService;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
+    /**
+     * Only reviews whose appointment is still APPROVED count: one attached to a booking that was later
+     * denied or cancelled no longer reflects a service that was delivered. Each review carries its
+     * barber and that flag (V38, kept current by {@link ReviewRatingInputsListener}), so this is one
+     * GROUP BY, cached until a counted review changes.
+     */
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = ReviewCacheConfig.BARBER_RATINGS_CACHE,
+            key = "'" + ReviewCacheConfig.ALL_RATINGS_KEY + "'", sync = true)
     public List<BarberRatingResponse> getBarberRatings() {
-        // Reviews reference their appointment by id. Only reviews whose appointment is still
-        // APPROVED count: one attached to a booking that was later denied or cancelled no longer
-        // reflects a service that was delivered. The appointment module answers which those are.
-        List<ReviewRepository.AppointmentRating> ratings = reviewRepository.findAllRatings();
-        Map<Long, String> barberByAppointment = appointmentService.findApprovedBarberNames(
-                ratings.stream().map(ReviewRepository.AppointmentRating::getAppointmentId).toList());
-
-        Map<String, long[]> sumAndCount = new TreeMap<>();
-        for (ReviewRepository.AppointmentRating rating : ratings) {
-            String barber = barberByAppointment.get(rating.getAppointmentId());
-            if (barber == null || rating.getRating() == null) {
-                continue;
-            }
-            long[] totals = sumAndCount.computeIfAbsent(barber, ignored -> new long[2]);
-            totals[0] += rating.getRating();
-            totals[1]++;
-        }
-        return sumAndCount.entrySet().stream()
-                .map(e -> new BarberRatingResponse(e.getKey(), (double) e.getValue()[0] / e.getValue()[1], e.getValue()[1]))
+        // Sorted here rather than in SQL: Java's String order on every database and collation.
+        return reviewRepository.findCountedRatingsPerBarber().stream()
+                .sorted(Comparator.comparing(BarberRatingResponse::barberName))
                 .toList();
     }
 
@@ -100,9 +96,10 @@ class ReviewServiceImpl implements ReviewService {
             throw new IllegalArgumentException(ALREADY_REVIEWED);
         }
 
-        Review review = new Review(appointment.id(), request.rating(), request.comment());
+        Review review = new Review(appointment.id(), appointment.barberName(), request.rating(), request.comment());
         try {
             reviewRepository.save(review);
+            eventPublisher.publishEvent(new BarberRatingsChangedEvent());
         } catch (DataIntegrityViolationException ex) {
             // A concurrent request raced past the existsByAppointmentId check and the unique
             // appointment_id constraint (V8) rejected this insert. Decide from the SQLSTATE of

@@ -75,10 +75,9 @@ interface ReviewFormModel {
               <span
                 id="cancelBookingId-error"
                 class="text-rose-400 text-[10px]"
-                [style.display]="
-                  cancelForm.publicId().invalid() && cancelForm.publicId().touched()
-                    ? 'block'
-                    : 'none'
+                [class.block]="cancelForm.publicId().invalid() && cancelForm.publicId().touched()"
+                [class.hidden]="
+                  !(cancelForm.publicId().invalid() && cancelForm.publicId().touched())
                 "
               >
                 Booking ID is required.
@@ -102,9 +101,8 @@ interface ReviewFormModel {
               <span
                 id="cancelEmail-error"
                 class="text-rose-400 text-[10px]"
-                [style.display]="
-                  cancelForm.email().invalid() && cancelForm.email().touched() ? 'block' : 'none'
-                "
+                [class.block]="cancelForm.email().invalid() && cancelForm.email().touched()"
+                [class.hidden]="!(cancelForm.email().invalid() && cancelForm.email().touched())"
               >
                 Valid email is required.
               </span>
@@ -152,10 +150,9 @@ interface ReviewFormModel {
               <span
                 id="reviewPublicId-error"
                 class="text-rose-400 text-[10px]"
-                [style.display]="
-                  reviewForm.publicId().invalid() && reviewForm.publicId().touched()
-                    ? 'block'
-                    : 'none'
+                [class.block]="reviewForm.publicId().invalid() && reviewForm.publicId().touched()"
+                [class.hidden]="
+                  !(reviewForm.publicId().invalid() && reviewForm.publicId().touched())
                 "
               >
                 Booking ID is required.
@@ -179,9 +176,8 @@ interface ReviewFormModel {
               <span
                 id="reviewEmail-error"
                 class="text-rose-400 text-[10px]"
-                [style.display]="
-                  reviewForm.email().invalid() && reviewForm.email().touched() ? 'block' : 'none'
-                "
+                [class.block]="reviewForm.email().invalid() && reviewForm.email().touched()"
+                [class.hidden]="!(reviewForm.email().invalid() && reviewForm.email().touched())"
               >
                 Valid email is required.
               </span>
@@ -203,9 +199,8 @@ interface ReviewFormModel {
               <span
                 id="reviewRating-error"
                 class="text-rose-400 text-[10px]"
-                [style.display]="
-                  reviewForm.rating().invalid() && reviewForm.rating().touched() ? 'block' : 'none'
-                "
+                [class.block]="reviewForm.rating().invalid() && reviewForm.rating().touched()"
+                [class.hidden]="!(reviewForm.rating().invalid() && reviewForm.rating().touched())"
               >
                 Rating between 1 and 5 is required.
               </span>

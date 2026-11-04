@@ -204,4 +204,32 @@ class TokenRevocationListRedisTest {
         assertEquals("revoked:abc", RedisTokenRevocationStore.key("abc"));
         assertTrue(RedisTokenRevocationStore.key("j".repeat(5_000)).length() < 100);
     }
+
+    /** #218: stored revocations are written back to Redis (it may have lost them), without an announcement. */
+    @Test
+    void restoreWritesStoredRevocationsBackToRedis() {
+        list.restore(java.util.List.of(new RevokedToken("jti-9", Instant.now().plusSeconds(600))));
+
+        verify(values).set(eq("revoked:jti-9"), eq("1"), any(Duration.class));
+        verify(redis, never()).convertAndSend(anyString(), anyString());
+        verify(events, never()).publishEvent(any());
+        assertTrue(list.isRevoked("jti-9"));
+    }
+
+    /** While Redis fails, restored revocations still deny on this replica through the local map. */
+    @Test
+    void restoreStopsWritingToRedisAtTheFirstFailureButKeepsEveryEntryLocally() {
+        org.mockito.Mockito.doThrow(new RedisConnectionFailureException("down"))
+                .when(values).set(anyString(), anyString(), any(Duration.class));
+
+        int applied = list.restore(java.util.List.of(
+                new RevokedToken("a", Instant.now().plusSeconds(600)),
+                new RevokedToken("b", Instant.now().plusSeconds(600))));
+
+        assertEquals(2, applied);
+        verify(values, times(1)).set(anyString(), anyString(), any(Duration.class));
+        redisLookupFails();
+        assertTrue(list.isRevoked("a"));
+        assertTrue(list.isRevoked("b"));
+    }
 }

@@ -21,8 +21,7 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
         aria-labelledby="receiptModalTitle"
         cdkTrapFocus
         cdkTrapFocusAutoCapture
-        class="login-card modal-card animate-fadeIn p-8 rounded-3xl border border-white/10 shadow-2xl shadow-black/50"
-        style="max-width: 480px"
+        class="login-card modal-card receipt-modal-card animate-fadeIn p-8 rounded-3xl border border-white/10 shadow-2xl shadow-black/50"
       >
         <button
           type="button"

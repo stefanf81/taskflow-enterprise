@@ -24,30 +24,23 @@ class AvailabilityCacheEvictionListenerTest {
 
     @Test
     void singleDate_shouldEvictConcreteAndSentinelAndStats() {
-        listener.onAvailabilityChanged(AvailabilityChangedEvent.single("Alex", LocalDate.of(2026, 5, 16)));
+        LocalDate date = LocalDate.of(2026, 5, 16);
+        listener.onAvailabilityChanged(AvailabilityChangedEvent.single("Alex", date));
 
-        verify(statsService).clearAvailabilityCache("Alex", LocalDate.of(2026, 5, 16));
+        verify(statsService).clearAvailabilityCache("Alex", date, date);
         verify(statsService).clearStatsCache();
         verify(statsService, never()).clearAllBusySlotsCache();
     }
 
+    /** The whole range goes over in one call, which reads the catalog once and clamps it to the booking window. */
     @Test
-    void range_shouldEvictEveryDateInclusive() {
+    void range_isHandedOverInOneCall() {
         listener.onAvailabilityChanged(
-                AvailabilityChangedEvent.range("Alex", LocalDate.of(2026, 5, 16), LocalDate.of(2026, 5, 18)));
+                AvailabilityChangedEvent.range("Alex", LocalDate.of(2026, 5, 16), LocalDate.of(2026, 8, 18)));
 
-        verify(statsService).clearAvailabilityCache("Alex", LocalDate.of(2026, 5, 16));
-        verify(statsService).clearAvailabilityCache("Alex", LocalDate.of(2026, 5, 17));
-        verify(statsService).clearAvailabilityCache("Alex", LocalDate.of(2026, 5, 18));
-        verify(statsService, times(3)).clearAvailabilityCache(anyString(), any(LocalDate.class));
-    }
-
-    @Test
-    void range_shouldCapAt366Days() {
-        LocalDate start = LocalDate.of(2026, 1, 1);
-        listener.onAvailabilityChanged(AvailabilityChangedEvent.range("Alex", start, start.plusDays(399)));
-
-        verify(statsService, times(366)).clearAvailabilityCache(anyString(), any(LocalDate.class));
+        verify(statsService).clearAvailabilityCache("Alex", LocalDate.of(2026, 5, 16), LocalDate.of(2026, 8, 18));
+        verify(statsService, times(1)).clearAvailabilityCache(anyString(), any(LocalDate.class), any(LocalDate.class));
+        verify(statsService).clearStatsCache();
     }
 
     @Test
@@ -56,13 +49,13 @@ class AvailabilityCacheEvictionListenerTest {
 
         verify(statsService).clearAllBusySlotsCache();
         verify(statsService).clearStatsCache();
-        verify(statsService, never()).clearAvailabilityCache(anyString(), any(LocalDate.class));
+        verify(statsService, never()).clearAvailabilityCache(anyString(), any(LocalDate.class), any(LocalDate.class));
     }
 
     @Test
     void evictionFailure_shouldBeSwallowed() {
         doThrow(new IllegalStateException("Redis down"))
-                .when(statsService).clearAvailabilityCache(anyString(), any(LocalDate.class));
+                .when(statsService).clearAvailabilityCache(anyString(), any(LocalDate.class), any(LocalDate.class));
 
         assertDoesNotThrow(() -> listener.onAvailabilityChanged(
                 AvailabilityChangedEvent.single("Alex", LocalDate.of(2026, 5, 16))));

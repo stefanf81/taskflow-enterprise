@@ -231,6 +231,19 @@ class NotificationOutboxIntegrationTest {
         assertEquals(row.getId(), claims.get(0).id());
     }
 
+    /** More than one claim batch is delivered by a single run (the real claim query, locks and sender). */
+    @Test
+    void oneRunDeliversABacklogLargerThanOneBatch() {
+        int backlog = NotificationRelayScheduler.CLAIM_BATCH_SIZE * 2 + 20;
+        for (int i = 0; i < backlog; i++) {
+            enqueue("burst" + i + "@x.test", "PENDING");
+        }
+
+        relay.relay();
+
+        assertEquals(backlog, outbox.findAll().stream().filter(row -> "SENT".equals(row.getStatus())).count());
+    }
+
     @Test
     void healthyRowsAreDeliveredOnceAndNotClaimedAgain() {
         NotificationOutbox row = enqueue("ok@x.test", "PENDING");

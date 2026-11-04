@@ -63,18 +63,6 @@ public interface AppointmentRepository
     @Query("SELECT a FROM Appointment a WHERE a.id = :id")
     java.util.Optional<Appointment> findByIdForUpdate(@Param("id") Long id);
 
-    /** Barber of each listed appointment that has the given status (for the review ratings). */
-    @Query("SELECT a.id AS id, a.barberName AS barberName FROM Appointment a "
-            + "WHERE a.id IN :ids AND a.status = :status")
-    List<IdAndBarberName> findBarberNamesByIdsAndStatus(@Param("ids") java.util.Collection<Long> ids,
-                                                         @Param("status") AppointmentStatus status);
-
-    interface IdAndBarberName {
-        Long getId();
-
-        String getBarberName();
-    }
-
     /**
      * PENDING/APPROVED appointments of one barber on one date. The availability queries do not
      * fetch {@code a.service}: since V35 the overlap checks read {@code bookingEndTime}, so the
