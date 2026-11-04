@@ -415,6 +415,20 @@ class ContainerConfigGuardTest {
         }
     }
 
+    /**
+     * https://github.com/stefanf81/taskflow-enterprise/issues/218: Redis keeps the token denylist across
+     * a restart (append-only file on the redisdata volume); the backend's PostgreSQL copy only closes
+     * the remaining window.
+     */
+    @Test
+    void compose_persists_redis_with_an_append_only_file() throws Exception {
+        String yml = Files.readString(Path.of("docker-compose.yml"));
+        String redis = composeService(yml, "redis");
+        assertTrue(redis.contains("- \"--appendonly\"\n      - \"yes\""), "Redis must run with --appendonly yes");
+        assertTrue(redis.contains("- \"--appendfsync\"\n      - \"everysec\""), "Redis must fsync the AOF every second");
+        assertTrue(redis.contains("- redisdata:/data"), "the AOF must live on the redisdata volume");
+    }
+
     /** One top-level service of docker-compose.yml: from its "  name:" line to the next service. */
     private static String composeService(String yml, String name) {
         String opening = "\n  " + name + ":\n";

@@ -272,6 +272,66 @@ describe('AppointmentStore', () => {
     });
   });
 
+  describe('refreshWhenIdle never cancels a running load', () => {
+    const isListing = (r: { url: string }) => r.url.includes('/api/v1/appointments');
+    /** Runs the resource effects; whenStable would wait for the follow-up request itself. */
+    const settle = async () => {
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+    };
+
+    it('lets the load in flight finish, then loads exactly once more', async () => {
+      authState.applyRole('ROLE_ADMIN', 'admin');
+      fixture.detectChanges();
+      const first = httpMock.expectOne(isListing);
+
+      // a burst of events while the first load is still running
+      store.refreshWhenIdle();
+      store.refreshWhenIdle();
+      store.refreshWhenIdle();
+      await settle();
+      expect(first.cancelled).toBe(false);
+      expect(httpMock.match(isListing)).toHaveLength(0);
+
+      first.flush(mockDashboard);
+      await settle();
+
+      const followUp = httpMock.expectOne(isListing);
+      followUp.flush(mockDashboard);
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(store.stats().total).toBe(6);
+    });
+
+    it('also follows a failed load with one more attempt', async () => {
+      authState.applyRole('ROLE_ADMIN', 'admin');
+      fixture.detectChanges();
+      const first = httpMock.expectOne(isListing);
+
+      store.refreshWhenIdle();
+      first.error(new ProgressEvent('error'), { status: 500, statusText: 'Server Error' });
+      await settle();
+
+      httpMock.expectOne(isListing).flush(mockDashboard);
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(store.loadErrorMessage()).toBeNull();
+    });
+
+    it('refetches at once when nothing is loading', async () => {
+      authState.applyRole('ROLE_ADMIN', 'admin');
+      fixture.detectChanges();
+      httpMock.expectOne(isListing).flush(mockDashboard);
+      await fixture.whenStable();
+
+      store.refreshWhenIdle();
+      fixture.detectChanges();
+
+      httpMock.expectOne(isListing).flush(mockDashboard);
+    });
+  });
+
   describe('page clamping (FE-8)', () => {
     /** Lets resource effects run without waiting on requests that are intentionally left open. */
     const settle = async () => {

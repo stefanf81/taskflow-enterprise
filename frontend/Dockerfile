@@ -35,6 +35,18 @@ COPY dist/frontend/browser/ ./
 # order: the build fails if a script appears, disappears or changes kind, so the served
 # hashes cannot drift from the assets and nothing unreviewed is authorized. Update EXPECTED
 # (and e2e/csp.spec.ts, which re-hashes the served pages) when Angular changes what it inlines.
+# Styles follow the same rule (style-src without 'unsafe-inline', issue #224): templates carry no
+# style attributes (a prerendered or static `style="..."` would be refused; bindings that only run
+# in the browser go through the CSSOM, which CSP does not restrict). The inline <style> elements
+# Angular and the CDK create at runtime are hashed from the chunks that carry their text:
+#   - cdk-visually-hidden: the CDK component stylesheet behind cdkTrapFocus (sign-in, receipt);
+#   - forms-validity-keyframes: Signal Forms' `@keyframes ng-valid/ng-invalid` probe (found by its
+#     text, any `textContent=`...`` literal: Forms 22.2.4 renamed the method that writes it);
+#   - the empty <style> the CDK's MediaMatcher appends and then fills through insertRule (CSSOM),
+#     authorized by the hash of the empty string, which allows no CSS text at all.
+# The inventory (kinds plus the number of createElement(`style`) sites, 4 today: those two, the
+# shared component-style host and the unused ShadowDom renderer) is pinned like the scripts': a new
+# runtime stylesheet fails the build.
 # All forms use HttpClient, never native navigation: form-action 'none' also protects the
 # prerendered forms before hydration. Enforce Trusted Types with only the AOT/lazy-load policies.
 RUN awk -v dir=/tmp/inline-scripts ' \
@@ -68,6 +80,49 @@ RUN awk -v dir=/tmp/inline-scripts ' \
         | while read -r f; do \
             printf "'sha384-%s'\n" "$(openssl dgst -sha384 -binary < "$f" | openssl base64 -A)"; \
         done | sort -u | tr '\n' ' ')" \
+    && awk -v dir=/tmp/component-styles ' \
+        BEGIN { RS = sprintf("%c", 1); system("mkdir -p " dir); } \
+        function sheet(text, kind) { \
+            if (index(text, "\\") > 0 || index(text, "${") > 0) kind = "escaped"; \
+            f = dir "/" (++n); printf "%s", text > f; close(f); \
+            print FILENAME, kind, f; \
+        } \
+        { \
+            rest = $0; \
+            while ((i = index(rest, "createElement(`style`)")) > 0) { rest = substr(rest, i + 1); elements++; } \
+            rest = $0; \
+            while ((i = index(rest, "styles:[")) > 0) { \
+                rest = substr(rest, i + 8); \
+                if (substr(rest, 1, 1) != "`") { print FILENAME, "not-a-template-literal", "-"; continue; } \
+                rest = substr(rest, 2); k = index(rest, "`"); \
+                body = substr(rest, 1, k - 1); rest = substr(rest, k + 1); \
+                if (substr(rest, 1, 1) != "]") sheet(body, "several-sheets"); \
+                else if (index(body, ".cdk-visually-hidden {") == 1) sheet(body, "cdk-visually-hidden"); \
+                else sheet(body, "unknown"); \
+            } \
+            rest = $0; \
+            while ((i = index(rest, "textContent=`")) > 0) { \
+                rest = substr(rest, i + 13); k = index(rest, "`"); \
+                body = substr(rest, 1, k - 1); rest = substr(rest, k + 1); \
+                if (index(body, "@keyframes ng-valid {}") > 0) sheet(body, "forms-validity-keyframes"); \
+            } \
+        } \
+        END { print "-", "style-elements:" (elements + 0), "-"; }' ./*.js > /tmp/component-styles.txt \
+    && STYLE_INVENTORY="$(cut -d' ' -f2 /tmp/component-styles.txt | sort -u | tr '\n' ',')" \
+    && EXPECTED_STYLES='cdk-visually-hidden,forms-validity-keyframes,style-elements:4,' \
+    && if [ "${STYLE_INVENTORY}" != "${EXPECTED_STYLES}" ]; then \
+        echo "Unexpected runtime stylesheet inventory (kinds, sorted; style-elements = createElement(\`style\`) sites):" >&2; \
+        echo "  found:    ${STYLE_INVENTORY}" >&2; \
+        echo "  expected: ${EXPECTED_STYLES}" >&2; \
+        echo "Angular or a library now injects another inline <style> at runtime, which style-src refuses unless" >&2; \
+        echo "it is hashed: review it, then update EXPECTED_STYLES in frontend/Dockerfile and e2e/csp.spec.ts." >&2; \
+        exit 1; \
+    fi \
+    && : > /tmp/component-styles/empty \
+    && STYLE_HASHES="$( (awk '$3 != "-" { print $3 }' /tmp/component-styles.txt; echo /tmp/component-styles/empty) \
+        | while read -r f; do \
+            printf "'sha384-%s'\n" "$(openssl dgst -sha384 -binary < "$f" | openssl base64 -A)"; \
+        done | sort -u | tr '\n' ' ')" \
     && printf 'add_header Content-Security-Policy "default-src %s; base-uri %s; form-action %s; frame-ancestors %s; object-src %s; script-src %s %s; style-src %s %s; font-src %s data:; img-src %s data:; connect-src %s; require-trusted-types-for %s; trusted-types angular angular#bundler;" always;\n' \
         "'self'" \
         "'self'" \
@@ -77,7 +132,7 @@ RUN awk -v dir=/tmp/inline-scripts ' \
         "'self'" \
         "${SCRIPT_HASHES% }" \
         "'self'" \
-        "'unsafe-inline'" \
+        "${STYLE_HASHES% }" \
         "'self'" \
         "'self'" \
         "'self'" \

@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -47,8 +48,15 @@ class NotificationRelayScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(NotificationRelayScheduler.class);
     private static final int MAX_RETRIES = OutboxBackoff.MAX_ATTEMPTS;
-    private static final int CLAIM_BATCH_SIZE = 50;
+    static final int CLAIM_BATCH_SIZE = 50;
     static final int CLAIM_STALE_MINUTES = 5;
+    /**
+     * How long one run keeps claiming further batches while they come back full. One batch per
+     * 30 s capped delivery below 100 mails a minute, so a burst (time off cancelling many
+     * bookings, the reminder sweep) queued for minutes. Far below the stale-claim window, since
+     * every batch is sent right after its own claim, and below the 30 s graceful-shutdown phase.
+     */
+    static final Duration DRAIN_BUDGET = Duration.ofSeconds(20);
 
     private final NotificationOutboxRepository outboxRepository;
     private final NotificationSender sender;
@@ -56,6 +64,7 @@ class NotificationRelayScheduler {
     private final String instanceId;
     private final Clock clock;
     private final boolean schedulersEnabled;
+    private final long drainBudgetNanos;
 
     @Autowired
     public NotificationRelayScheduler(NotificationOutboxRepository outboxRepository,
@@ -73,6 +82,16 @@ class NotificationRelayScheduler {
                                String instanceId,
                                Clock clock,
                                boolean schedulersEnabled) {
+        this(outboxRepository, sender, selfProvider, instanceId, clock, schedulersEnabled, DRAIN_BUDGET);
+    }
+
+    NotificationRelayScheduler(NotificationOutboxRepository outboxRepository,
+                               NotificationSender sender,
+                               ObjectProvider<NotificationRelayScheduler> selfProvider,
+                               String instanceId,
+                               Clock clock,
+                               boolean schedulersEnabled,
+                               Duration drainBudget) {
         this.outboxRepository = outboxRepository;
         this.sender = sender;
         this.selfProvider = selfProvider;
@@ -81,6 +100,7 @@ class NotificationRelayScheduler {
                 : "relay-" + UUID.randomUUID();
         this.clock = clock;
         this.schedulersEnabled = schedulersEnabled;
+        this.drainBudgetNanos = drainBudget.toNanos();
     }
 
     /** Scheduler entry point; a no-op when {@code app.schedulers.enabled=false} (default for the test task). */
@@ -92,11 +112,21 @@ class NotificationRelayScheduler {
         relay();
     }
 
+    /**
+     * Claims and sends batches until one comes back short (the backlog is drained) or
+     * {@link #DRAIN_BUDGET} has passed. Every claimed row leaves the claimable set (SENT, FAILED
+     * behind its backoff, or PROCESSING until reclaimed), so the loop cannot spin on the same rows.
+     */
     public void relay() {
         NotificationRelayScheduler self = selfProvider.getIfAvailable();
+        long deadline = System.nanoTime() + drainBudgetNanos;
 
-        List<NotificationSender.Claim> claims = self != null ? self.claimBatch() : claimBatch();
-        if (!claims.isEmpty()) {
+        List<NotificationSender.Claim> claims;
+        do {
+            claims = self != null ? self.claimBatch() : claimBatch();
+            if (claims.isEmpty()) {
+                break;
+            }
             logger.info("Notification relay claimed {} outbox entr{} via {}", claims.size(),
                     claims.size() == 1 ? "y" : "ies", instanceId);
             for (NotificationSender.Claim claim : claims) {
@@ -107,7 +137,7 @@ class NotificationRelayScheduler {
                     logger.error("Relay failed to process outbox id={}: {}", claim.id(), safeMsg);
                 }
             }
-        }
+        } while (claims.size() >= CLAIM_BATCH_SIZE && System.nanoTime() - deadline < 0);
 
         // Always reclaim stale PROCESSING rows, even when nothing was claimable
         // this cycle, so rows abandoned by a crashed instance are recovered.

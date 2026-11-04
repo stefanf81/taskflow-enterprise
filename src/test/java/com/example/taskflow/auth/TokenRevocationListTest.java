@@ -72,4 +72,33 @@ class TokenRevocationListTest {
         org.mockito.Mockito.verify(events).publishEvent(new com.example.taskflow.auth.TokenRevokedEvent("jti-1"));
         org.mockito.Mockito.verifyNoMoreInteractions(events);
     }
+
+    /** #218: every revocation also goes to the durable copy; a failing copy does not fail the logout. */
+    @Test
+    void revocationsAreAlsoStoredDurably() {
+        PersistentTokenRevocations persistent = org.mockito.Mockito.mock(PersistentTokenRevocations.class);
+        Instant now = Instant.parse("2026-10-12T08:00:00Z");
+        TokenRevocationList list = new TokenRevocationList(null, null, persistent, Clock.fixed(now, ZoneOffset.UTC));
+
+        list.revoke("jti-1", now.plusSeconds(60));
+        list.revoke("expired", now.minusSeconds(1));
+
+        org.mockito.Mockito.verify(persistent).save("jti-1", now.plusSeconds(60));
+        org.mockito.Mockito.verifyNoMoreInteractions(persistent);
+    }
+
+    /** #218: a restarted replica (empty map) denies the stored revocations again, expired ones skipped. */
+    @Test
+    void restoredRevocationsAreDeniedAgain() {
+        Instant now = Instant.parse("2026-10-12T08:00:00Z");
+        TokenRevocationList list = new TokenRevocationList(null, null, Clock.fixed(now, ZoneOffset.UTC));
+
+        int applied = list.restore(java.util.List.of(
+                new RevokedToken("live", now.plusSeconds(300)),
+                new RevokedToken("dead", now.minusSeconds(1))));
+
+        assertEquals(1, applied);
+        assertTrue(list.isRevoked("live"));
+        assertFalse(list.isRevoked("dead"));
+    }
 }

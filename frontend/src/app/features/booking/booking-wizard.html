@@ -16,7 +16,7 @@
     <div class="absolute left-0 right-0 h-0.5 bg-white/5 z-0 top-1/2 -translate-y-1/2"></div>
     <div
       class="absolute left-0 h-0.5 bg-gold-dark z-10 top-1/2 -translate-y-1/2 transition-all duration-300"
-      [style.width.%]="(store.activeStep() - 1) * 33.3"
+      [class]="progressWidthClass()"
     ></div>
 
     <!-- WAI-ARIA tabs, manual activation: arrows/Home/End move focus (onStepKeydown),
@@ -136,10 +136,9 @@
   >
     <button
       type="button"
-      class="btn btn-secondary text-xs"
+      class="btn btn-secondary text-xs wizard-back-btn"
       [disabled]="store.activeStep() === 1"
       (click)="store.goToPrevStep()"
-      style="padding: 0.5rem 1.25rem"
     >
       &larr; Back
     </button>
@@ -147,10 +146,9 @@
     @if (store.activeStep() < 4) {
       <button
         type="button"
-        class="btn btn-submit text-xs"
+        class="btn btn-submit text-xs wizard-next-btn"
         [disabled]="!store.isStepValid(store.activeStep())"
         (click)="store.goToNextStep()"
-        style="padding: 0.5rem 1.5rem"
       >
         Next &rarr;
       </button>

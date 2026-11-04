@@ -80,6 +80,9 @@ test.describe('Content-Security-Policy (nginx image)', () => {
     expect(csp).toContain("require-trusted-types-for 'script'");
     expect(csp).toContain('trusted-types angular angular#bundler;');
     expect(csp).toContain("form-action 'none'");
+    // Only hashed <style> elements (the runtime stylesheets pinned in frontend/Dockerfile).
+    expect(csp).toMatch(/style-src 'self'( 'sha384-[^']+')+;/);
+    expect(csp).not.toContain("'unsafe-inline'");
     expect(response?.headers()['content-security-policy-report-only']).toBeUndefined();
 
     await expect(page.locator('#cancelEmail')).toBeAttached();
@@ -107,6 +110,44 @@ test.describe('Content-Security-Policy (nginx image)', () => {
         }
       }),
     ).toBe(true);
+  });
+
+  test('style-src without unsafe-inline: no violation, and the CDK stylesheet still applies', async ({
+    page,
+  }) => {
+    // Every refused style (a prerendered style attribute, an unhashed <style>) fires
+    // securitypolicyviolation; collect them from before the first script runs.
+    await page.addInitScript(() => {
+      const violations: string[] = [];
+      (window as unknown as { __cspViolations: string[] }).__cspViolations = violations;
+      document.addEventListener('securitypolicyviolation', (event) =>
+        violations.push(`${event.effectiveDirective} ${event.blockedURI} ${event.sample}`),
+      );
+    });
+    const violations = () =>
+      page.evaluate(() => (window as unknown as { __cspViolations: string[] }).__cspViolations);
+
+    await page.goto('/');
+    await expect(page.locator('h1').first()).toBeVisible();
+    // The booking wizard (prerendered, then hydrated) through its first steps.
+    await page.locator('.services-list .card').first().click();
+    await page.locator('.wizard-next-btn').click();
+    await expect(page.locator('#step-panel-2')).toBeVisible();
+
+    // The sign-in dialog uses cdkTrapFocus, whose .cdk-visually-hidden stylesheet the CDK injects as
+    // an inline <style> at runtime; the Dockerfile authorizes it by hash. Applied, the focus-trap
+    // anchors are positioned out of the flow.
+    await page.getByRole('button', { name: 'Owner Portal' }).click();
+    const anchor = page.locator('.cdk-focus-trap-anchor').first();
+    await expect(anchor).toBeAttached();
+    expect(await anchor.evaluate((element) => getComputedStyle(element).position)).toBe('absolute');
+
+    await page.locator('#username').fill('admin');
+    await page.locator('#password').fill('admin-password');
+    await page.locator('.modal-card button[type="submit"]').click();
+    await expect(page.locator('h1')).toContainText('TaskFlow Owner Panel');
+
+    expect(await violations()).toEqual([]);
   });
 
   test('never leaks verification emails through native forms, even without JavaScript', async ({

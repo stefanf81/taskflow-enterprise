@@ -59,7 +59,7 @@ Default dev/test credentials are `admin` / `admin-password`; `.env` (from `.env.
 ## Rules that are easy to break
 
 Backend
-- Flyway only, `ddl-auto=validate` everywhere. Never edit a released migration; there is deliberately no V16.
+- Flyway only, `ddl-auto=validate` everywhere. Never edit a released migration; there is deliberately no V16. A migration that changes the status or barber of reviewed appointments must also update `reviews.counted`/`barber_name` (V38).
 - Authorization is deny-by-default: a new endpoint needs an explicit `SecurityConfig` rule, a `HEAD` twin for every `GET`, `@PreAuthorize` if admin-only, and a case in `SecurityAuthorizationIntegrationTest`.
 - Module boundaries are checked by `ModularityTest`: declare a new cross-module dependency in the module's `package-info.java` (`allowedDependencies`), pass other modules `AppointmentDetails`-style snapshots instead of entities, and keep controllers/`*Impl` classes package-private (ADR-022).
 - Inject the `Clock`; never call no-arg `now()` (`ArchitectureTest` enforces it). Raw SQL inserts into `appointments` must supply `booking_end_time`.

@@ -52,22 +52,26 @@ class AppointmentStatsServiceTest {
     private static final java.time.Clock CLOCK = java.time.Clock.fixed(
             java.time.Instant.parse("2026-10-11T23:30:00Z"), java.time.ZoneId.of("Asia/Tokyo"));
 
+    /** A bookable day: four days after the clock's "today" (2026-10-12 in Tokyo). */
+    private static final LocalDate DAY = LocalDate.of(2026, 10, 16);
+
     private AppointmentStatsService service;
 
     @BeforeEach
     void setUp() {
-        service = new AppointmentStatsService(cacheManager, CLOCK, catalogService, appointmentRepository);
+        service = new AppointmentStatsService(cacheManager, CLOCK, catalogService, appointmentRepository,
+                BookingProperties.defaults());
     }
 
     @Test
     void clearAvailabilityCache_shouldEvictConcreteAndSentinelWithImmediatePrimitive() {
         when(cacheManager.getCache(AppointmentStatsService.BUSY_SLOTS_CACHE)).thenReturn(busySlotsCache);
 
-        service.clearAvailabilityCache("Alex the Barber", LocalDate.of(2026, 5, 16));
+        service.clearAvailabilityCache("Alex the Barber", DAY, DAY);
 
-        verify(busySlotsCache).evictIfPresent("Alex the Barber-2026-05-16");
+        verify(busySlotsCache).evictIfPresent("Alex the Barber-2026-10-16");
         verify(busySlotsCache).evictIfPresent(
-                AppointmentBookingService.NO_PREFERENCE_BARBER + "-2026-05-16");
+                AppointmentBookingService.NO_PREFERENCE_BARBER + "-2026-10-16");
         verify(busySlotsCache, never()).evict(any());
     }
 
@@ -77,17 +81,17 @@ class AppointmentStatsServiceTest {
         when(catalogService.getAllServices()).thenReturn(List.of(
                 service("Cut", 45), service("Fade", 90), service("Package", 120), service("Fade 2", 90)));
 
-        service.clearAvailabilityCache("Alex the Barber", LocalDate.of(2026, 5, 16));
+        service.clearAvailabilityCache("Alex the Barber", DAY, DAY);
 
         String sentinel = AppointmentBookingService.NO_PREFERENCE_BARBER;
         for (String barber : List.of("Alex the Barber", sentinel)) {
-            verify(busySlotsCache).evictIfPresent(barber + "-2026-05-16");
-            verify(busySlotsCache).evictIfPresent(barber + "-2026-05-16-90");
-            verify(busySlotsCache).evictIfPresent(barber + "-2026-05-16-120");
+            verify(busySlotsCache).evictIfPresent(barber + "-2026-10-16");
+            verify(busySlotsCache).evictIfPresent(barber + "-2026-10-16-90");
+            verify(busySlotsCache).evictIfPresent(barber + "-2026-10-16-120");
         }
         // 45 minutes uses the start-minute list, and a duration shared by two services is evicted once.
-        verify(busySlotsCache, never()).evictIfPresent("Alex the Barber-2026-05-16-45");
-        verify(busySlotsCache, times(4)).evictIfPresent(contains("-2026-05-16-"));
+        verify(busySlotsCache, never()).evictIfPresent("Alex the Barber-2026-10-16-45");
+        verify(busySlotsCache, times(4)).evictIfPresent(contains("-2026-10-16-"));
     }
 
     @Test
@@ -95,10 +99,64 @@ class AppointmentStatsServiceTest {
         when(cacheManager.getCache(AppointmentStatsService.BUSY_SLOTS_CACHE)).thenReturn(busySlotsCache);
         when(catalogService.getAllServices()).thenThrow(new RedisConnectionFailureException("down"));
 
-        assertDoesNotThrow(() -> service.clearAvailabilityCache("Alex the Barber", LocalDate.of(2026, 5, 16)));
+        assertDoesNotThrow(() -> service.clearAvailabilityCache("Alex the Barber", DAY, DAY));
 
-        verify(busySlotsCache).evictIfPresent("Alex the Barber-2026-05-16");
-        verify(busySlotsCache).evictIfPresent(AppointmentBookingService.NO_PREFERENCE_BARBER + "-2026-05-16");
+        verify(busySlotsCache).evictIfPresent("Alex the Barber-2026-10-16");
+        verify(busySlotsCache).evictIfPresent(AppointmentBookingService.NO_PREFERENCE_BARBER + "-2026-10-16");
+    }
+
+    /** A short range: every date key by key, with the catalog read once for the whole range. */
+    @Test
+    void clearAvailabilityCache_readsTheCatalogOncePerRange() {
+        when(cacheManager.getCache(AppointmentStatsService.BUSY_SLOTS_CACHE)).thenReturn(busySlotsCache);
+        when(catalogService.getAllServices()).thenReturn(List.of(service("Fade", 90)));
+
+        service.clearAvailabilityCache("Alex the Barber", DAY, DAY.plusDays(2));
+
+        verify(catalogService, times(1)).getAllServices();
+        for (String date : List.of("2026-10-16", "2026-10-17", "2026-10-18")) {
+            verify(busySlotsCache).evictIfPresent("Alex the Barber-" + date);
+            verify(busySlotsCache).evictIfPresent("Alex the Barber-" + date + "-90");
+        }
+        verify(busySlotsCache, times(12)).evictIfPresent(any());
+        verify(busySlotsCache, never()).invalidate();
+    }
+
+    /** Busy slots of a date outside the booking window never reach the cache, so nothing is evicted there. */
+    @Test
+    void clearAvailabilityCache_skipsDatesOutsideTheBookingWindow() {
+        when(cacheManager.getCache(AppointmentStatsService.BUSY_SLOTS_CACHE)).thenReturn(busySlotsCache);
+        LocalDate today = LocalDate.of(2026, 10, 12);
+        LocalDate lastBookable = today.plusDays(BookingProperties.defaults().maxAdvanceDays());
+
+        service.clearAvailabilityCache("Alex the Barber", today.minusDays(30), today.minusDays(1));
+        service.clearAvailabilityCache("Alex the Barber", lastBookable.plusDays(1), lastBookable.plusDays(5));
+        verifyNoInteractions(busySlotsCache, catalogService);
+
+        // a range reaching into the window keeps only its bookable dates
+        service.clearAvailabilityCache("Alex the Barber", today.minusDays(3), today);
+        verify(busySlotsCache).evictIfPresent("Alex the Barber-2026-10-12");
+        verify(busySlotsCache).evictIfPresent(AppointmentBookingService.NO_PREFERENCE_BARBER + "-2026-10-12");
+        verify(busySlotsCache, times(2)).evictIfPresent(any());
+    }
+
+    /** A long time off clears the cache with one scan instead of hundreds of single deletes. */
+    @Test
+    void clearAvailabilityCache_invalidatesTheCacheForALongRange() {
+        when(cacheManager.getCache(AppointmentStatsService.BUSY_SLOTS_CACHE)).thenReturn(busySlotsCache);
+
+        service.clearAvailabilityCache("Alex the Barber", DAY,
+                DAY.plusDays(AppointmentStatsService.MAX_DATES_EVICTED_BY_KEY));
+
+        verify(busySlotsCache).invalidate();
+        verify(busySlotsCache, never()).evictIfPresent(any());
+        verifyNoInteractions(catalogService);
+
+        // exactly the limit is still evicted key by key
+        service.clearAvailabilityCache("Alex the Barber", DAY,
+                DAY.plusDays(AppointmentStatsService.MAX_DATES_EVICTED_BY_KEY - 1));
+        verify(busySlotsCache, times(1)).invalidate();
+        verify(busySlotsCache, times(2 * AppointmentStatsService.MAX_DATES_EVICTED_BY_KEY)).evictIfPresent(any());
     }
 
     private static ServiceItemResponse service(String name, int minutes) {
@@ -164,7 +222,7 @@ class AppointmentStatsServiceTest {
     void missingCache_shouldBeTolerated() {
         when(cacheManager.getCache(anyString())).thenReturn(null);
 
-        assertDoesNotThrow(() -> service.clearAvailabilityCache("Alex", LocalDate.now()));
+        assertDoesNotThrow(() -> service.clearAvailabilityCache("Alex", DAY, DAY));
         assertDoesNotThrow(service::clearAllBusySlotsCache);
         assertDoesNotThrow(service::clearStatsCache);
     }

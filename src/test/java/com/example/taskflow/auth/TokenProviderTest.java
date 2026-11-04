@@ -153,6 +153,23 @@ class TokenProviderTest {
         assertEquals(now.plusSeconds(3600), captor.getValue().getClaims().getExpiresAt());
     }
 
+    /** The account's token version goes into the token, so raising it revokes this token too (#218). */
+    @Test
+    void theAccountsTokenVersionIsCopiedIntoTheToken() {
+        TokenProvider versioned = new TokenProvider(encoder, new JwtProperties("test-issuer", "test-audience", 3600L),
+                TokenProvider.TOKEN_CLOCK, username -> "user@test.com".equals(username) ? 7 : 0);
+        when(authentication.getAuthorities()).thenAnswer(invocation -> List.of());
+        when(authentication.getName()).thenReturn("user@test.com");
+        when(encoder.encode(any(JwtEncoderParameters.class))).thenReturn(Jwt.withTokenValue("t")
+                .header("alg", "RS256").claim("scope", "").build());
+
+        versioned.generateToken(authentication);
+
+        ArgumentCaptor<JwtEncoderParameters> captor = ArgumentCaptor.forClass(JwtEncoderParameters.class);
+        verify(encoder).encode(captor.capture());
+        assertEquals(7, ((Number) captor.getValue().getClaims().getClaim(AccountTokenCheck.VERSION_CLAIM)).intValue());
+    }
+
     /** The decoder checks exp against the system clock, so tokens must not follow a test's shop Clock. */
     @Test
     void tokensAreIssuedByTheSystemClockTheDecoderUses() {

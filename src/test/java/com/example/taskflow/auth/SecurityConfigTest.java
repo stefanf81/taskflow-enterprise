@@ -28,6 +28,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SecurityConfigTest {
 
+    private final AccountTokenCheck accounts = mock(AccountTokenCheck.class);
+
     private SecurityConfig createConfig(String admin, String pass, String privKey, String pubKey) {
         return new SecurityConfig(admin, pass, new RsaKeyProperties(privKey, pubKey, false),
                 new JwtProperties("taskflow", "taskflow-api", 3600), new CookieProperties(false));
@@ -44,7 +46,7 @@ class SecurityConfigTest {
 
         SecurityConfig config = createConfig("admin", "pass", privBase64, pubBase64);
 
-        assertNotNull(config.jwtDecoder(new TokenRevocationList()));
+        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class)));
         assertNotNull(config.jwkSource());
         assertNotNull(config.jwtEncoder(config.jwkSource()));
     }
@@ -52,19 +54,19 @@ class SecurityConfigTest {
     @Test
     void testLoadRsaKeyInvalid() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "invalid-base64", "invalid-base64");
-        assertNotNull(config.jwtDecoder(new TokenRevocationList())); // Should fallback to ephemeral keys
+        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class))); // Should fallback to ephemeral keys
     }
 
     @Test
     void testLoadRsaKeyBlank() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "", "   ");
-        assertNotNull(config.jwtDecoder(new TokenRevocationList()));
+        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class)));
     }
 
     @Test
     void testLoadRsaKeyPartiallyBlank() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "valid-fake-base", "");
-        assertNotNull(config.jwtDecoder(new TokenRevocationList()));
+        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class)));
     }
 
     @Test
@@ -89,7 +91,7 @@ class SecurityConfigTest {
         rsaKeyField.setAccessible(true);
         rsaKeyField.set(config, null);
 
-        assertThrows(IllegalStateException.class, () -> config.jwtDecoder(new TokenRevocationList()));
+        assertThrows(IllegalStateException.class, () -> config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class)));
     }
 
     @Test
@@ -141,7 +143,7 @@ class SecurityConfigTest {
         when(users.findByEmailIgnoreCase("admin")).thenReturn(Optional.empty());
         BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
-        config.initAdminUser(users, encoder).run();
+        config.initAdminUser(users, encoder, accounts).run();
 
         org.mockito.ArgumentCaptor<AppUser> saved = org.mockito.ArgumentCaptor.forClass(AppUser.class);
         verify(users).save(saved.capture());
@@ -159,11 +161,13 @@ class SecurityConfigTest {
         UserRepository users = mock(UserRepository.class);
         when(users.findByEmailIgnoreCase("admin")).thenReturn(Optional.of(existing));
 
-        config.initAdminUser(users, encoder).run();
+        config.initAdminUser(users, encoder, accounts).run();
 
         verify(users).save(existing);
         assertTrue(encoder.matches("new-strong-pass", existing.getPasswordHash()));
         assertFalse(encoder.matches("admin-password", existing.getPasswordHash()));
+        // tokens issued under the old password are revoked with it (#218)
+        verify(accounts).revokeAllTokens("admin");
     }
 
     @Test
@@ -174,9 +178,10 @@ class SecurityConfigTest {
         UserRepository users = mock(UserRepository.class);
         when(users.findByEmailIgnoreCase("admin")).thenReturn(Optional.of(existing));
 
-        config.initAdminUser(users, encoder).run();
+        config.initAdminUser(users, encoder, accounts).run();
 
         verify(users, never()).save(any());
+        verify(accounts, never()).revokeAllTokens(any());
     }
 
     @Test
@@ -187,7 +192,7 @@ class SecurityConfigTest {
         UserRepository users = mock(UserRepository.class);
         when(users.findByEmailIgnoreCase("admin")).thenReturn(Optional.of(customer));
 
-        config.initAdminUser(users, encoder).run();
+        config.initAdminUser(users, encoder, accounts).run();
 
         verify(users, never()).save(any());
         assertTrue(encoder.matches("customer-chosen", customer.getPasswordHash()));

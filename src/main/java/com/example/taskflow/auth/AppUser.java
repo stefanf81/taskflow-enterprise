@@ -29,6 +29,10 @@ public class AppUser implements Timestamped {
     @Column(nullable = false, length = 50)
     private String role; // "ROLE_ADMIN", "ROLE_CUSTOMER"
 
+    /** Copied into every access token; raising it revokes all of them (V39, {@link AccountTokenCheck}). */
+    @Column(name = "token_version", nullable = false)
+    private int tokenVersion;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -51,4 +55,5 @@ public class AppUser implements Timestamped {
     public String getPasswordHash() { return passwordHash; }
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
     public String getRole() { return role; }
+    public int getTokenVersion() { return tokenVersion; }
 }

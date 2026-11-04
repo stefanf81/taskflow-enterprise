@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.function.ToIntFunction;
 import java.util.stream.Collectors;
 
 @Component
@@ -30,18 +31,30 @@ class TokenProvider {
     private final String issuer;
     private final String audience;
     private final Clock clock;
+    /** The account's current token version ({@link AccountTokenCheck}), copied into the token. */
+    private final ToIntFunction<String> tokenVersion;
 
     @Autowired
-    public TokenProvider(JwtEncoder encoder, JwtProperties jwt) {
+    public TokenProvider(JwtEncoder encoder, JwtProperties jwt, AccountTokenCheck accounts) {
+        this(encoder, jwt, TOKEN_CLOCK, accounts::tokenVersion);
+    }
+
+    /** Tokens of version 0, the default of every account. */
+    TokenProvider(JwtEncoder encoder, JwtProperties jwt) {
         this(encoder, jwt, TOKEN_CLOCK);
     }
 
     TokenProvider(JwtEncoder encoder, JwtProperties jwt, Clock clock) {
+        this(encoder, jwt, clock, username -> 0);
+    }
+
+    TokenProvider(JwtEncoder encoder, JwtProperties jwt, Clock clock, ToIntFunction<String> tokenVersion) {
         this.encoder = encoder;
         this.issuer = jwt.issuer();
         this.audience = jwt.audience();
         this.tokenLifetimeSeconds = jwt.lifetimeSeconds();
         this.clock = clock;
+        this.tokenVersion = tokenVersion;
     }
 
     public String generateToken(Authentication authentication) {
@@ -60,6 +73,8 @@ class TokenProvider {
                 // Unique id so a single token can be denied at logout (TokenRevocationList).
                 .id(java.util.UUID.randomUUID().toString())
                 .claim("scope", scope)
+                // Raising the account's version revokes this token with all others of the account.
+                .claim(AccountTokenCheck.VERSION_CLAIM, tokenVersion.applyAsInt(authentication.getName()))
                 .build();
 
         return this.encoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();

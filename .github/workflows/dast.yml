@@ -37,7 +37,7 @@ env:
   # The ZAP image is run directly instead of through zaproxy/action-api-scan /
   # action-full-scan: those wrappers default to the mutable `:stable` tag.
   # zap-image: tracked by the dedicated regex manager in .github/renovate.json
-  ZAP_VERSION: "2.17.0@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238"
+  ZAP_VERSION: "2.17.0@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af"
 
 defaults:
   run:

@@ -7,8 +7,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.time.LocalDate;
-
 /**
  * Invalidates availability caches only after the mutating transaction has
  * committed.
@@ -29,9 +27,6 @@ class AvailabilityCacheEvictionListener {
 
     private static final Logger logger = LoggerFactory.getLogger(AvailabilityCacheEvictionListener.class);
 
-    /** Same safety cap as the previous in-service eviction loop. */
-    private static final int MAX_EVICT_DAYS = 366;
-
     private final AppointmentStatsService statsService;
 
     public AvailabilityCacheEvictionListener(AppointmentStatsService statsService) {
@@ -47,22 +42,11 @@ class AvailabilityCacheEvictionListener {
                 return;
             }
 
-            LocalDate date = event.startDate();
-            if (date == null || event.endDate() == null) {
+            if (event.startDate() == null || event.endDate() == null) {
                 return;
             }
-            int count = 0;
-            while (!date.isAfter(event.endDate()) && count < MAX_EVICT_DAYS) {
-                statsService.clearAvailabilityCache(event.barberName(), date);
-                date = date.plusDays(1);
-                count++;
-            }
-            if (!date.isAfter(event.endDate())) {
-                logger.warn(
-                        "Availability cache eviction for barber {} capped at {} days (range exceeded the limit).",
-                        LogSanitizer.mask(event.barberName()),
-                        MAX_EVICT_DAYS);
-            }
+            // Clamped to the booking window, and a long range clears the whole cache (see there).
+            statsService.clearAvailabilityCache(event.barberName(), event.startDate(), event.endDate());
             statsService.clearStatsCache();
         } catch (RuntimeException ex) {
             logger.error(

@@ -230,6 +230,14 @@ services:
       - "noeviction"
       - "--stop-writes-on-bgsave-error" # Don't reject writes if persistence fails
       - "no"                     # Cache/rate-limiter can lose data safely
+      # Append-only file on the redisdata volume: a Redis restart keeps the token denylist
+      # (revoked:<jti>), losing at most the last second. The backend also keeps every
+      # revocation in PostgreSQL and writes it back within a minute (issue #218); this only
+      # shortens that window. Mirror it in the production Redis (homelab/TF).
+      - "--appendonly"
+      - "yes"
+      - "--appendfsync"
+      - "everysec"
       # The official image turns protected-mode off, so without a password any client that
       # reaches the port could flush the rate-limit counters, read cached barber contact
       # details or poison the cache and the token denylist. The backend gets the same value

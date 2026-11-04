@@ -134,7 +134,8 @@ describe('AdminDashboard shell', () => {
     try {
       const adminEvents = TestBed.inject(AdminEventsService);
       const store = TestBed.inject(AppointmentStore);
-      const refresh = vi.spyOn(store, 'refresh');
+      // SSE ticks never cancel a load in flight (see AppointmentStore.refreshWhenIdle).
+      const refresh = vi.spyOn(store, 'refreshWhenIdle');
 
       adminEvents['appointmentChangesSubject'].next();
       expect(refresh).toHaveBeenCalledTimes(1);

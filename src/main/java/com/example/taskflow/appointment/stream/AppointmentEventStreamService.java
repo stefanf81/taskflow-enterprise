@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.EventListener;
+import com.example.taskflow.auth.AccountTokensRevokedEvent;
 import com.example.taskflow.auth.TokenRevokedEvent;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -55,10 +56,12 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p><b>Token expiry.</b> The stream outlives the request that authenticated it, so the controller
  * passes the access token's expiry when subscribing; every heartbeat completes connections whose token
- * has expired (the client reconnects and is re-authenticated). A role removal or account deletion is
- * <em>not</em> observable here without a database lookup per heartbeat; such a connection stays open
- * until its token expires, the 30-minute stream timeout elapses or the client reconnects. A
- * <em>revoked</em> token (logout) is observable: {@link TokenRevokedEvent} closes its streams.
+ * has expired (the client reconnects and is re-authenticated). A <em>revoked</em> token (logout) is
+ * observable: {@link TokenRevokedEvent} closes its streams, and {@link AccountTokensRevokedEvent} (every
+ * token of the account revoked) closes all streams of that account on this replica. A role removal or
+ * account deletion made straight in the database is not observable here without a database lookup per
+ * heartbeat; such a connection stays open until its token expires, the 30-minute stream timeout elapses
+ * or the client reconnects (the reconnect is then refused: the decoder checks the account).
  *
  * <p><b>Shutdown.</b> A stream is an async request that never ends by itself, and Tomcat's graceful
  * shutdown waits for every open request: one open dashboard held every shutdown for the whole
@@ -293,6 +296,24 @@ public class AppointmentEventStreamService {
                     remove(adminName, subscription.emitter());
                     subscription.emitter().complete();
                 }
+            }
+        });
+    }
+
+    /** Closes every stream of an account whose tokens were all revoked (its token version was raised). */
+    @EventListener
+    void onAccountTokensRevoked(AccountTokensRevokedEvent event) {
+        if (event.username() == null) {
+            return;
+        }
+        emittersByAdmin.forEach((adminName, subscriptions) -> {
+            if (!adminName.equalsIgnoreCase(event.username())) {
+                return;
+            }
+            for (Subscription subscription : subscriptions) {
+                logger.debug("Closing dashboard event stream: every token of the account revoked");
+                remove(adminName, subscription.emitter());
+                subscription.emitter().complete();
             }
         });
     }

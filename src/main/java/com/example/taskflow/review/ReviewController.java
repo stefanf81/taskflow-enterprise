@@ -28,9 +28,9 @@ class ReviewController {
     @Operation(summary = "Get aggregated ratings for all barbers")
     @ApiResponse(responseCode = "200", description = "Aggregated barber ratings returned")
     public ResponseEntity<List<BarberRatingResponse>> getBarberRatings() {
-        // Both clients reload the ratings right after the visitor submits a review, and the
-        // aggregate is not cached server-side: no-cache lets that reload see the new review,
-        // while the ETag keeps an unchanged list at a 304.
+        // Both clients reload the ratings right after the visitor submits a review. The server-side
+        // cache is evicted when that review commits, so no-cache lets the reload see it, while the
+        // ETag keeps an unchanged list at a 304.
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noCache().cachePublic())
                 .body(reviewService.getBarberRatings());

@@ -43,11 +43,12 @@ export default function () {
     url = `${BASE_URL}/api/v1/barbers`;
     trend = barbersTrend;
   } else if (r < 0.9) {
-    // busySlots requires barberName + bookingDate; use seeded values
+    // busySlots requires barberName + bookingDate; use seeded values. Both clients also send the
+    // service (its length decides which slots fit), so the load test does too.
     const date = new Date();
     date.setDate(date.getDate() + 1);
     const iso = date.toISOString().slice(0, 10);
-    url = `${BASE_URL}/api/v1/appointments/public/busy-slots?barberName=${encodeURIComponent('Alex the Barber')}&bookingDate=${iso}`;
+    url = `${BASE_URL}/api/v1/appointments/public/busy-slots?barberName=${encodeURIComponent('Alex the Barber')}&bookingDate=${iso}&serviceType=${encodeURIComponent('Classic Haircut')}`;
     trend = busySlotsTrend;
   } else {
     url = `${BASE_URL}/api/v1/reviews/public/barber-ratings`;

@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.concurrent.Callable;
 
@@ -34,6 +35,8 @@ class AppointmentStatsService {
     static final String STATS_CACHE = "appointmentStats";
     /** Key of the total row count in {@link #STATS_CACHE}, next to the per-date stats keys. */
     static final String TOTAL_COUNT_KEY = "total-count";
+    /** Most dates whose availability is evicted key by key; a longer range invalidates the cache. */
+    static final int MAX_DATES_EVICTED_BY_KEY = 7;
 
     private static final Logger log = LoggerFactory.getLogger(AppointmentStatsService.class);
 
@@ -41,13 +44,15 @@ class AppointmentStatsService {
     private final Clock clock;
     private final CatalogService catalogService;
     private final AppointmentRepository appointmentRepository;
+    private final BookingProperties bookingProperties;
 
     AppointmentStatsService(CacheManager cacheManager, Clock clock, CatalogService catalogService,
-                            AppointmentRepository appointmentRepository) {
+                            AppointmentRepository appointmentRepository, BookingProperties bookingProperties) {
         this.cacheManager = cacheManager;
         this.clock = clock;
         this.catalogService = catalogService;
         this.appointmentRepository = appointmentRepository;
+        this.bookingProperties = bookingProperties;
     }
 
     public AppointmentStats getStatsCached() {
@@ -99,18 +104,38 @@ class AppointmentStatsService {
 
     /**
      * Evicts availability for one concrete barber and the "No Preference (First
-     * Available)" aggregate on the same date. The aggregate spans every barber,
-     * so any single-barber availability change makes it stale. The length-aware lists
+     * Available)" aggregate on every date of an inclusive range. The aggregate spans every
+     * barber, so any single-barber availability change makes it stale. The length-aware lists
      * ({@code <barber>-<date>-<minutes>}, for services longer than one grid step) go with them.
+     *
+     * <p>Only dates inside the booking window can have entries: busy slots of any other date are
+     * answered without the cache ({@code AppointmentBookingService#busyOutsideBookingWindow}), so
+     * the range is clamped to today .. today + {@code max-advance-days} first. More than
+     * {@link #MAX_DATES_EVICTED_BY_KEY} remaining dates (a long time off) clear the whole cache
+     * with one scan instead: key by key, 90 days cost up to 450 sequential Redis round trips
+     * before the admin's request could answer. The catalog's durations are read once per call.
      */
-    public void clearAvailabilityCache(String barberName, LocalDate bookingDate) {
+    public void clearAvailabilityCache(String barberName, LocalDate firstDate, LocalDate lastDate) {
         Cache cache = cacheManager.getCache(BUSY_SLOTS_CACHE);
         if (cache == null) {
             return;
         }
+        LocalDate today = LocalDate.now(clock);
+        LocalDate lastBookable = today.plusDays(bookingProperties.maxAdvanceDays());
+        LocalDate first = firstDate.isBefore(today) ? today : firstDate;
+        LocalDate last = lastDate.isAfter(lastBookable) ? lastBookable : lastDate;
+        if (last.isBefore(first)) {
+            return;
+        }
+        if (ChronoUnit.DAYS.between(first, last) + 1 > MAX_DATES_EVICTED_BY_KEY) {
+            cache.invalidate();
+            return;
+        }
         List<Integer> longDurations = longServiceDurations();
-        evictAvailability(cache, barberName + "-" + bookingDate, longDurations);
-        evictAvailability(cache, AppointmentBookingService.NO_PREFERENCE_BARBER + "-" + bookingDate, longDurations);
+        for (LocalDate date = first; !date.isAfter(last); date = date.plusDays(1)) {
+            evictAvailability(cache, barberName + "-" + date, longDurations);
+            evictAvailability(cache, AppointmentBookingService.NO_PREFERENCE_BARBER + "-" + date, longDurations);
+        }
     }
 
     private static void evictAvailability(Cache cache, String key, List<Integer> longDurations) {

@@ -352,6 +352,27 @@ class AppointmentEventStreamServiceTest {
         assertEquals(2, otherStream.sends.get());
     }
 
+    /** #218: every token of the account revoked (version raised) closes all of its streams, nobody else's. */
+    @Test
+    void revokingAllTokensOfAnAccountClosesItsStreams() {
+        TestEmitter aliceFirst = new TestEmitter();
+        TestEmitter aliceSecond = new TestEmitter();
+        TestEmitter bob = new TestEmitter();
+        AppointmentEventStreamService service = serviceWith(2, Runnable::run,
+                new MutableTestClock(START), List.of(aliceFirst, aliceSecond, bob));
+        service.subscribe("alice", START.plusSeconds(3600), "jti-a1");
+        service.subscribe("alice", START.plusSeconds(3600), "jti-a2");
+        service.subscribe("bob", START.plusSeconds(3600), "jti-b");
+
+        service.onAccountTokensRevoked(new com.example.taskflow.auth.AccountTokensRevokedEvent("ALICE"));
+
+        assertTrue(aliceFirst.completed);
+        assertTrue(aliceSecond.completed);
+        assertFalse(bob.completed);
+        assertEquals(0, service.connectionCount("alice"));
+        assertEquals(1, service.connectionCount("bob"));
+    }
+
     @Test
     void contextCloseCompletesEveryStreamAndRefusesNewOnes() {
         TestEmitter alice = new TestEmitter();

@@ -15,7 +15,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.sql.SQLException;
 import java.time.Clock;
@@ -52,12 +54,15 @@ class ReviewServiceImplTest {
     @Mock
     private AppointmentService appointmentService;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private ReviewServiceImpl service;
 
     @BeforeEach
     void setUp() {
         Clock clock = Clock.fixed(Instant.parse("2031-03-10T21:00:00Z"), SHOP_ZONE);
-        service = new ReviewServiceImpl(reviewRepository, appointmentService, clock);
+        service = new ReviewServiceImpl(reviewRepository, appointmentService, eventPublisher, clock);
     }
 
     private AppointmentDetails appointment(LocalDate date, String time, String status) {
@@ -79,6 +84,8 @@ class ReviewServiceImplTest {
         service.submitReview(PUBLIC_ID, request(5, "  jane@example.com "));
 
         verify(reviewRepository).save(any(Review.class));
+        // the cached ratings are evicted once this transaction commits
+        verify(eventPublisher).publishEvent(any(BarberRatingsChangedEvent.class));
     }
 
     @Test
@@ -204,6 +211,7 @@ class ReviewServiceImplTest {
         // On PostgreSQL the transaction is aborted after the failed INSERT; any further statement
         // fails with "current transaction is aborted". Exactly one existence check (the pre-check).
         verify(reviewRepository, org.mockito.Mockito.times(1)).existsByAppointmentId(7L);
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
@@ -249,35 +257,27 @@ class ReviewServiceImplTest {
 
         ArgumentCaptor<Review> saved = ArgumentCaptor.forClass(Review.class);
         verify(reviewRepository).save(saved.capture());
-        assertTrue(saved.getValue() != null);
-    }
-
-    private static ReviewRepository.AppointmentRating rating(long appointmentId, int value) {
-        return new ReviewRepository.AppointmentRating() {
-            @Override public Long getAppointmentId() { return appointmentId; }
-            @Override public Integer getRating() { return value; }
-        };
+        assertEquals(4, ReflectionTestUtils.getField(saved.getValue(), "rating"));
+        assertEquals("nice fade", ReflectionTestUtils.getField(saved.getValue(), "comment"));
+        // the rating inputs (V38): the appointment's barber, counted from the start
+        assertEquals("Alex", ReflectionTestUtils.getField(saved.getValue(), "barberName"));
+        assertEquals(true, ReflectionTestUtils.getField(saved.getValue(), "counted"));
     }
 
     @Test
-    void barberRatingsCountOnlyReviewsWhoseAppointmentIsStillApproved() {
-        when(reviewRepository.findAllRatings()).thenReturn(List.of(
-                rating(1, 5), rating(2, 3), rating(3, 4), rating(4, 1)));
-        // appointment 4 was denied after its review: the appointment module does not return it
-        when(appointmentService.findApprovedBarberNames(List.of(1L, 2L, 3L, 4L)))
-                .thenReturn(java.util.Map.of(1L, "Sara", 2L, "Alex", 3L, "Alex"));
-
-        List<BarberRatingResponse> ratings = service.getBarberRatings();
+    void barberRatingsAreTheCountedAggregateInNameOrder() {
+        when(reviewRepository.findCountedRatingsPerBarber()).thenReturn(List.of(
+                new BarberRatingResponse("Sara", 5.0, 1L),
+                new BarberRatingResponse("Alex", 3.5, 2L)));
 
         assertEquals(List.of(
                 new BarberRatingResponse("Alex", 3.5, 2L),
-                new BarberRatingResponse("Sara", 5.0, 1L)), ratings);
+                new BarberRatingResponse("Sara", 5.0, 1L)), service.getBarberRatings());
     }
 
     @Test
     void noReviewsMeansNoRatings() {
-        when(reviewRepository.findAllRatings()).thenReturn(List.of());
-        when(appointmentService.findApprovedBarberNames(List.of())).thenReturn(java.util.Map.of());
+        when(reviewRepository.findCountedRatingsPerBarber()).thenReturn(List.of());
 
         assertTrue(service.getBarberRatings().isEmpty());
     }
