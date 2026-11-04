@@ -899,6 +899,10 @@ jobs:
       SPRING_DATASOURCE_PASSWORD: taskflow
       SPRING_DATA_REDIS_HOST: localhost
       SPRING_DATA_REDIS_PORT: 6379
+      # The service container cannot take command arguments, so this Redis has no password; the
+      # prod profile requires REDIS_PASSWORD to be set, and empty means "no authentication".
+      # The production-image smoke test below runs Redis with --requirepass.
+      REDIS_PASSWORD: ""
       # Same headroom as verify.sh and `npm run e2e:docker`: all Playwright
       # workers share one client IP and the suite makes ~32 auth requests,
       # past production's 20/min. At 20, 12 csrf/me calls were throttled, and
@@ -1187,8 +1191,9 @@ jobs:
             -e POSTGRES_DB=taskflow -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=smoke \
             "$POSTGRES_IMAGE" > /dev/null &
           db_pid=$!
+          # With a password, like production: the prod profile has no default for REDIS_PASSWORD.
           docker run --detach --name smoke-redis --network taskflow-smoke --network-alias redis \
-            "$REDIS_IMAGE" > /dev/null &
+            "$REDIS_IMAGE" redis-server --requirepass smoke > /dev/null &
           redis_pid=$!
           wait "$db_pid"
           wait "$redis_pid"
@@ -1276,6 +1281,7 @@ jobs:
             -e SPRING_PROFILES_ACTIVE=prod \
             -e MANAGEMENT_TRACING_EXPORT_OTLP_ENABLED=false \
             -e SPRING_DATASOURCE_PASSWORD=smoke \
+            -e REDIS_PASSWORD=smoke \
             -e APP_RSA_PRIVATE_KEY -e APP_RSA_PUBLIC_KEY \
             -e APP_CORS_ALLOWED_ORIGINS=http://localhost:4200 \
             -e 'APP_TRUSTED_PROXY_REGEX=^127\.0\.0\.1$' \

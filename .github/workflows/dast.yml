@@ -130,6 +130,9 @@ jobs:
       SPRING_DATASOURCE_PASSWORD: taskflow
       SPRING_DATA_REDIS_HOST: localhost
       SPRING_DATA_REDIS_PORT: 6379
+      # Unauthenticated service container (no command arguments possible): empty on purpose,
+      # see the same variable in ci.yml's e2e job.
+      REDIS_PASSWORD: ""
       SPRING_SECURITY_PASSWORD: admin-password
       FAIL_ON_FINDINGS: ${{ inputs.fail_on_findings != false }}
       SCAN_SCOPE: ${{ inputs.scan_scope || 'all' }}
@@ -373,6 +376,9 @@ jobs:
       SPRING_DATASOURCE_PASSWORD: taskflow
       SPRING_DATA_REDIS_HOST: localhost
       SPRING_DATA_REDIS_PORT: 6379
+      # Unauthenticated service container (no command arguments possible): empty on purpose,
+      # see the same variable in ci.yml's e2e job.
+      REDIS_PASSWORD: ""
       SPRING_SECURITY_PASSWORD: admin-password
       FAIL_ON_FINDINGS: ${{ inputs.fail_on_findings != false }}
       ENABLE_AJAX_SPIDER: ${{ inputs.enable_ajax_spider != false }}

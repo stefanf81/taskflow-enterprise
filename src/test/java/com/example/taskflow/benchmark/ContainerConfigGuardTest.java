@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -412,6 +413,58 @@ class ContainerConfigGuardTest {
             assertTrue(port.startsWith("- \"127.0.0.1:") || port.equals("- \"4200:8080\""),
                     "only the frontend may be published beyond loopback, found " + port);
         }
+    }
+
+    /** One top-level service of docker-compose.yml: from its "  name:" line to the next service. */
+    private static String composeService(String yml, String name) {
+        String opening = "\n  " + name + ":\n";
+        int start = yml.indexOf(opening);
+        assertTrue(start >= 0, "missing compose service: " + name);
+        Matcher next = Pattern.compile("\\n  [a-z][\\w-]*:\\n|\\nvolumes:\\n|\\nnetworks:\\n")
+                .matcher(yml).region(start + opening.length(), yml.length());
+        return yml.substring(start, next.find() ? next.start() : yml.length());
+    }
+
+    /**
+     * https://github.com/stefanf81/taskflow-enterprise/issues/217: {@code env_file: .env} also handed the
+     * database the JWT private key, the admin password and every other application secret.
+     */
+    @Test
+    void compose_gives_the_database_only_its_own_variables() throws Exception {
+        String db = composeService(Files.readString(Path.of("docker-compose.yml")), "db");
+        assertTrue(db.lines().map(String::strip).filter(line -> !line.startsWith("#"))
+                        .noneMatch(line -> line.startsWith("env_file")),
+                "the db service must not import the whole .env");
+        List<String> variables = db.lines().map(String::strip)
+                .filter(line -> line.startsWith("- ") && line.matches("- [A-Z][A-Z0-9_]*=.*"))
+                .map(line -> line.substring(2, line.indexOf('='))).toList();
+        assertEquals(List.of("POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD"), variables,
+                "the db service needs exactly the variables the postgres image reads");
+    }
+
+    /**
+     * https://github.com/stefanf81/taskflow-enterprise/issues/216: the official image runs with
+     * protected-mode off, so without a password anything that reaches the port can flush the
+     * rate-limit counters or forge entries in the token denylist and the caches. The backend reads the
+     * same value as REDIS_PASSWORD from .env.
+     */
+    @Test
+    void compose_protects_redis_with_the_password_the_backend_sends() throws Exception {
+        String yml = Files.readString(Path.of("docker-compose.yml"));
+        String redis = composeService(yml, "redis");
+        assertTrue(redis.contains("- \"--requirepass\"\n      - \"${REDIS_PASSWORD}\""),
+                "Redis must start with --requirepass ${REDIS_PASSWORD}");
+        assertTrue(redis.contains("- REDISCLI_AUTH=${REDIS_PASSWORD}"),
+                "redis-cli (the healthcheck) authenticates through REDISCLI_AUTH");
+        assertTrue(redis.contains("redis-cli ping | grep -q PONG"),
+                "the healthcheck must see PONG: redis-cli exits 0 on a NOAUTH reply");
+        assertTrue(composeService(yml, "backend").contains("env_file:\n      - .env"),
+                "the backend reads REDIS_PASSWORD from .env");
+        assertTrue(Files.readString(Path.of(".env.example")).lines().anyMatch(line -> line.startsWith("REDIS_PASSWORD=")),
+                ".env.example must list REDIS_PASSWORD");
+        assertTrue(Files.readString(Path.of("src/main/resources/application-prod.properties"))
+                        .contains("spring.data.redis.password=${REDIS_PASSWORD}"),
+                "the prod profile must send the password, without a default");
     }
 
     private static int indexOf(List<String> instructions, java.util.function.Predicate<String> match) {

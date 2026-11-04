@@ -59,7 +59,7 @@ docker run -d --name cds-bench-db --network "$NET" --network-alias db \
   -e POSTGRES_DB=taskflow -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=cds-bench \
   "$PG_IMAGE" >/dev/null
 docker run -d --name cds-bench-redis --network "$NET" --network-alias redis \
-  "$REDIS_IMAGE" >/dev/null
+  "$REDIS_IMAGE" redis-server --requirepass cds-bench >/dev/null
 for _ in $(seq 1 60); do
   docker exec cds-bench-db pg_isready -U postgres -d taskflow >/dev/null 2>&1 && break
   sleep 1
@@ -77,6 +77,7 @@ boot() {
     --cap-drop ALL --security-opt no-new-privileges:true \
     -e SPRING_PROFILES_ACTIVE=prod \
     -e SPRING_DATASOURCE_PASSWORD=cds-bench \
+    -e REDIS_PASSWORD=cds-bench \
     -e SPRING_SECURITY_PASSWORD=cds-bench-password \
     -e APP_CORS_ALLOWED_ORIGINS=http://localhost:4200 \
     -e APP_TRUSTED_PROXY_REGEX='^127\.0\.0\.1$' \

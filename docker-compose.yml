@@ -42,8 +42,13 @@ services:
       - "-c"
       # Parity with production (application-prod.properties: one replica, pool 25 of 50).
       - "max_connections=50"
-    env_file:
-      - .env
+    # Only what the image reads. env_file: .env also handed this container the JWT private key,
+    # the admin password and every other application secret it has no use for. The values come
+    # from the same .env through Compose interpolation.
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     # Docker's 10 s default often cuts the shutdown checkpoint short (postgres image docs);
     # a SIGKILLed server replays WAL on the next start and delays service_healthy.
     stop_grace_period: 60s
@@ -225,8 +230,18 @@ services:
       - "noeviction"
       - "--stop-writes-on-bgsave-error" # Don't reject writes if persistence fails
       - "no"                     # Cache/rate-limiter can lose data safely
-    # Loopback only: the backend uses backend-tier. Redis has no requirepass and the
-    # official image turns protected-mode off, so a 0.0.0.0 binding exposed it to the LAN.
+      # The official image turns protected-mode off, so without a password any client that
+      # reaches the port could flush the rate-limit counters, read cached barber contact
+      # details or poison the cache and the token denylist. The backend gets the same value
+      # as REDIS_PASSWORD (prod profile, no default) through env_file: .env.
+      - "--requirepass"
+      - "${REDIS_PASSWORD}"
+    # redis-cli reads REDISCLI_AUTH, so the healthcheck and `docker compose exec redis
+    # redis-cli` authenticate without the password on a command line.
+    environment:
+      - REDISCLI_AUTH=${REDIS_PASSWORD}
+    # Loopback only: the backend uses backend-tier, and the host port is for local tools.
+    # The password does not replace this binding: the Redis protocol is plaintext.
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -241,7 +256,8 @@ services:
         reservations:
           memory: 256M
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # PONG, not just a zero exit: redis-cli exits 0 on a NOAUTH error reply too.
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5

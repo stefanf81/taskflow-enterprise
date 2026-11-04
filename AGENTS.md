@@ -67,7 +67,7 @@ Backend
 - A response DTO field that can be null must be JSpecify `@Nullable` (Jackson omits nulls; the OpenAPI `required` lists and the client contracts are derived from it).
 - Cache TTLs, `Cache-Control` and the `ShallowEtagHeaderFilter` must stay aligned; caches fail open (Redis errors never fail a request).
 - No customer data in logs or traces; responses carrying personal data send `no-store` (a client's HTTP cache keeps `no-cache` on disk).
-- Prod fails fast without `APP_TRUSTED_PROXY_REGEX` and `APP_CORS_ALLOWED_ORIGINS`.
+- Prod fails fast without `APP_TRUSTED_PROXY_REGEX`, `APP_CORS_ALLOWED_ORIGINS` and `REDIS_PASSWORD` (empty = no Redis auth, only for disposable CI Redis).
 
 Containers
 - JVM heap/GC sizing belongs to the deployment's `JAVA_TOOL_OPTIONS`, never to the image `CMD`.
