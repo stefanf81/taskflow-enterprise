@@ -27,8 +27,14 @@ const rules: readonly Rule[] = [
   { methods: ['get'], test: (p) => p === '/api/v1/appointments/public/shop' },
   { methods: ['put'], test: (p) => /^\/api\/v1\/appointments\/public\/cancel\/[^/]+$/.test(p) },
   { methods: ['post'], test: (p) => p === '/api/v1/appointments' },
-  // Reference data
-  { methods: ['get'], test: (p) => p === '/api/v1/catalog' || p.startsWith('/api/v1/catalog/') },
+  // Reference data. /catalog/retired is the one admin-only path under the public catalog prefix
+  // (SecurityConfig lists it before the permitAll rule): it must carry the token.
+  {
+    methods: ['get'],
+    test: (p) =>
+      p === '/api/v1/catalog' ||
+      (p.startsWith('/api/v1/catalog/') && p !== '/api/v1/catalog/retired'),
+  },
   { methods: ['get'], test: (p) => p === '/api/v1/barbers' },
   // Guest reviews (any method)
   { methods: null, test: (p) => p.startsWith('/api/v1/reviews/public/') },

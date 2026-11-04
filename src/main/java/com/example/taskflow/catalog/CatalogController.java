@@ -37,6 +37,19 @@ class CatalogController {
                 .body(catalogService.getAllServices());
     }
 
+    @GetMapping("/retired")
+    @Operation(summary = "Get the retired services (Admin Access)",
+            description = "Services that still have appointments were retired instead of deleted. They are not "
+                    + "bookable and are not in the public list until restored.")
+    @ApiResponse(responseCode = "200", description = "List of retired services returned")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<ServiceItemResponse>> getRetiredServices() {
+        // Admin-only and changes on every retire/restore: revalidate, never share with a CDN.
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noCache().cachePrivate())
+                .body(catalogService.getRetiredServices());
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get a specific service by ID")
     @ApiResponses(value = {
@@ -68,6 +81,17 @@ class CatalogController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ServiceItemResponse> updateService(@Parameter(description = "Service database ID") @PathVariable Long id, @Valid @RequestBody ServiceItemRequest request) {
         return ResponseEntity.ok(catalogService.updateService(id, request));
+    }
+
+    @PostMapping("/{id}/restore")
+    @Operation(summary = "Restore a retired service (Admin Access)")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Service is active again"),
+            @ApiResponse(responseCode = "404", description = "Service not found")
+    })
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ServiceItemResponse> restoreService(@Parameter(description = "Service database ID") @PathVariable Long id) {
+        return ResponseEntity.ok(catalogService.restoreService(id));
     }
 
     @DeleteMapping("/{id}")

@@ -1,7 +1,8 @@
 <div class="space-y-6 animate-fadeIn">
   <h3 class="text-white font-bold text-lg">Service Catalog</h3>
   <p class="text-xs text-zinc-400 font-light">
-    Read-only view of the grooming services offered for booking.
+    The grooming services offered for booking. Services that were deleted but still have bookings
+    are retired and listed below, where they can be restored.
   </p>
 
   @if (catalogStore.isLoading()) {
@@ -45,4 +46,70 @@
       }
     </div>
   }
+
+  <section class="space-y-4 pt-2" aria-labelledby="retired-services-heading">
+    <h3 id="retired-services-heading" class="text-white font-bold text-lg">Retired services</h3>
+
+    @if (retiredStore.actionSuccessMessage(); as message) {
+      <div
+        role="status"
+        class="alert alert-success py-3 px-4 rounded-xl text-xs border border-emerald-500/10"
+      >
+        {{ message }}
+      </div>
+    }
+    @if (retiredStore.actionErrorMessage(); as message) {
+      <div
+        role="alert"
+        class="alert alert-error py-3 px-4 rounded-xl text-xs border border-red-500/20"
+      >
+        {{ message }}
+      </div>
+    }
+
+    @if (retiredStore.isLoading()) {
+      <p class="text-xs text-zinc-500 font-light">Loading retired services&hellip;</p>
+    } @else if (retiredStore.errorMessage()) {
+      <div role="alert" class="text-xs text-rose-400">
+        <p>{{ retiredStore.errorMessage() }}</p>
+        <button
+          type="button"
+          class="btn btn-secondary py-2 px-4 text-xs mt-3"
+          (click)="retiredStore.loadRetired()"
+        >
+          Retry
+        </button>
+      </div>
+    } @else if (retiredStore.services().length === 0) {
+      <p class="text-xs text-zinc-500 font-light">No retired services.</p>
+    } @else {
+      <div class="grid md:grid-cols-2 gap-4">
+        @for (service of retiredStore.services(); track service.id) {
+          <div class="p-4 rounded-xl border border-white/5 bg-zinc-900/30 opacity-90">
+            <div class="flex justify-between items-start gap-2">
+              <div>
+                <p class="text-sm font-bold text-zinc-200">{{ service.name }}</p>
+                <p class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mt-1">
+                  {{ service.category }}
+                </p>
+              </div>
+              <p class="text-sm font-bold text-zinc-400 whitespace-nowrap">${{ service.price }}</p>
+            </div>
+            <p class="text-[11px] text-zinc-400 mt-2 font-light">
+              ⏱️ Duration: {{ service.durationMinutes }} mins
+            </p>
+            <button
+              type="button"
+              class="btn btn-secondary py-2 px-4 text-xs mt-3"
+              [disabled]="retiredStore.restoringId() !== null"
+              (click)="retiredStore.restore(service)"
+            >
+              {{ retiredStore.restoringId() === service.id ? 'Restoring…' : 'Restore' }}
+              <span class="sr-only"> {{ service.name }}</span>
+            </button>
+          </div>
+        }
+      </div>
+    }
+  </section>
 </div>

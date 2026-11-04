@@ -103,6 +103,29 @@ class CatalogServiceImpl implements CatalogService {
         repository.delete(item);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<ServiceItemResponse> getRetiredServices() {
+        return repository.findRetiredProjectedBy();
+    }
+
+    /**
+     * Reactivates a retired service. Its name cannot clash with an active one: V32 keeps
+     * {@code lower(name)} unique across active and retired rows alike.
+     */
+    @Override
+    @CacheEvict(value = "services", allEntries = true)
+    public ServiceItemResponse restoreService(Long id) {
+        ServiceItem item = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Service not found with id: " + id));
+        if (!item.isActive()) {
+            item.setActive(true);
+            item = repository.save(item);
+            logger.info("Service id={} restored", id);
+        }
+        return ServiceItemResponse.fromEntity(item);
+    }
+
     /**
      * Public module API for cross-module lookups by display name. Delegates to
      * the module-private repository so callers never depend on

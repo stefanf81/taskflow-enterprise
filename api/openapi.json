@@ -1808,6 +1808,74 @@
         ]
       }
     },
+    "/api/v1/catalog/{id}/restore": {
+      "post": {
+        "operationId": "restoreService",
+        "parameters": [
+          {
+            "description": "Service database ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceItemResponse"
+                }
+              }
+            },
+            "description": "Service is active again"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service not found"
+          }
+        },
+        "summary": "Restore a retired service (Admin Access)",
+        "tags": [
+          "Service Catalog"
+        ]
+      }
+    },
+    "/api/v1/catalog/retired": {
+      "get": {
+        "description": "Services that still have appointments were retired instead of deleted. They are not bookable and are not in the public list until restored.",
+        "operationId": "getRetiredServices",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ServiceItemResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "List of retired services returned"
+          }
+        },
+        "summary": "Get the retired services (Admin Access)",
+        "tags": [
+          "Service Catalog"
+        ]
+      }
+    },
     "/api/v1/customer/appointments": {
       "get": {
         "operationId": "getMyAppointments",

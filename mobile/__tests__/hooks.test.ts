@@ -42,9 +42,13 @@ jest.mock('../src/core/barbers/barbers', () => ({
 }));
 
 const mockGetAllServicesFn = jest.fn();
+const mockGetRetiredServicesFn = jest.fn();
+const mockRestoreServiceFn = jest.fn();
 jest.mock('../src/core/catalog/catalog', () => ({
   catalogApi: {
     getAllServices: (...args: unknown[]) => mockGetAllServicesFn(...args),
+    getRetiredServices: (...args: unknown[]) => mockGetRetiredServicesFn(...args),
+    restoreService: (...args: unknown[]) => mockRestoreServiceFn(...args),
   },
 }));
 
@@ -97,7 +101,7 @@ import { useAppointments, useBusySlots, useCreateAppointment, useUpdateAppointme
 import { useShopInfo } from '../src/core/shop/useShopInfo';
 import { DEFAULT_SHOP_RULES } from '@taskflow/domain';
 import { usePublicBarbers, useAdminBarbers, useBarberTimeOff, useAddTimeOff } from '../src/core/barbers/useBarbers';
-import { useCatalog } from '../src/core/catalog/useCatalog';
+import { useCatalog, useRestoreService, useRetiredServices } from '../src/core/catalog/useCatalog';
 import { useCustomerAppointments, useCancelCustomerAppointment } from '../src/features/customer/useCustomer';
 import { useNotifications } from '../src/features/admin/useNotifications';
 import { useBarberRatings, useSubmitReview } from '../src/features/landing/useReviews';
@@ -429,6 +433,39 @@ describe('Hooks', () => {
       await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
 
       expect(mockGetAllServicesFn).toHaveBeenCalled();
+    });
+  });
+
+  describe('retired services', () => {
+    it('stays idle until enabled, then fetches the retired list', async () => {
+      mockGetRetiredServicesFn.mockResolvedValue([]);
+
+      const { rerender } = await renderHook(
+        ({ enabled }: { enabled: boolean }) => useRetiredServices({ enabled }),
+        { wrapper: createWrapper(), initialProps: { enabled: false } },
+      );
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+      expect(mockGetRetiredServicesFn).not.toHaveBeenCalled();
+
+      await rerender({ enabled: true });
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+      expect(mockGetRetiredServicesFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('restoring refreshes the public menu and the retired list', async () => {
+      mockRestoreServiceFn.mockResolvedValueOnce({ id: 7, name: 'Old Fade' });
+
+      const { result } = await renderHook(() => useRestoreService(), { wrapper: createWrapper() });
+      const invalidateQueries = jest.spyOn(lastQueryClient!, 'invalidateQueries');
+
+      await act(async () => {
+        await result.current.mutateAsync(7);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(mockRestoreServiceFn).toHaveBeenCalledWith(7);
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['catalog'] });
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['retiredServices'] });
     });
   });
 

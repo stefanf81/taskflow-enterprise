@@ -11,6 +11,12 @@ public interface CatalogService {
     ServiceItemResponse updateService(Long id, ServiceItemRequest request);
     void deleteService(Long id);
 
+    /** Services that were retired instead of deleted because appointments still reference them. */
+    List<ServiceItemResponse> getRetiredServices();
+
+    /** Makes a retired service bookable again; a service that is already active is returned as is. */
+    ServiceItemResponse restoreService(Long id);
+
     /**
      * Looks up a {@link ServiceItem} by its unique display name.
      *

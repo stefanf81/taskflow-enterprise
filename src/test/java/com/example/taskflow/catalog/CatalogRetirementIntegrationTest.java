@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,6 +30,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -155,6 +157,51 @@ class CatalogRetirementIntegrationTest {
                 .andExpect(jsonPath("$.name", is("retire me")));
         assertTrue(catalogService.findServiceByName("retire me").isPresent());
         mockMvc.perform(get("/api/v1/catalog")).andExpect(jsonPath("$", hasSize(1)));
+    }
+
+    @Test
+    void adminCanListAndRestoreRetiredServices() throws Exception {
+        long id = create("Restore Me");
+        long other = create("Stay Active");
+        Appointment appointment = new Appointment("Old Customer", "old@x.test", "555", "Alex the Barber",
+                LocalDate.of(2031, 5, 5), "10:00", "Restore Me");
+        appointment.setService(serviceItemRepository.findById(id).orElseThrow());
+        appointmentRepository.save(appointment);
+
+        mockMvc.perform(get("/api/v1/catalog/retired").header("Authorization", adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+
+        mockMvc.perform(delete("/api/v1/catalog/" + id).header("Authorization", adminToken))
+                .andExpect(status().isNoContent());
+
+        // Only the retired one, with the same shape as the public list; revalidated by the browser.
+        mockMvc.perform(get("/api/v1/catalog/retired").header("Authorization", adminToken))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", containsString("no-cache")))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id", is((int) id)))
+                .andExpect(jsonPath("$[0].name", is("Restore Me")));
+        mockMvc.perform(get("/api/v1/catalog")).andExpect(jsonPath("$", hasSize(1)));
+
+        mockMvc.perform(post("/api/v1/catalog/" + id + "/restore").header("Authorization", adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is((int) id)))
+                .andExpect(jsonPath("$.name", is("Restore Me")));
+
+        // Bookable and public again, gone from the retired list, history untouched.
+        mockMvc.perform(get("/api/v1/catalog")).andExpect(jsonPath("$", hasSize(2)));
+        mockMvc.perform(get("/api/v1/catalog/" + id)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/catalog/retired").header("Authorization", adminToken))
+                .andExpect(jsonPath("$", hasSize(0)));
+        assertTrue(catalogService.findServiceByName("Restore Me").isPresent());
+        assertEquals(1, appointmentRepository.count());
+
+        // Restoring an active service is harmless; an unknown id is a 404.
+        mockMvc.perform(post("/api/v1/catalog/" + other + "/restore").header("Authorization", adminToken))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/catalog/999999/restore").header("Authorization", adminToken))
+                .andExpect(status().isNotFound());
     }
 
     @Test

@@ -46,4 +46,15 @@ public interface ServiceItemRepository extends JpaRepository<ServiceItem, Long> 
             ORDER BY s.name
             """)
     List<ServiceItemResponse> findAllProjectedBy();
+
+    /** The retired counterpart of {@link #findAllProjectedBy()}, for the admin catalog. */
+    @Query("""
+            SELECT new com.example.taskflow.catalog.ServiceItemResponse(
+                s.id, s.name, s.price, s.durationMinutes, s.category, s.description
+            )
+            FROM ServiceItem s
+            WHERE s.active = false
+            ORDER BY s.name
+            """)
+    List<ServiceItemResponse> findRetiredProjectedBy();
 }

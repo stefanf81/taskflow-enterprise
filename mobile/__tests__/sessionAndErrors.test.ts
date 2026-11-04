@@ -102,6 +102,9 @@ describe('api/publicEndpoints', () => {
     ['put', '/api/v1/appointments/public/cancel/a/b'],
     ['post', '/api/v1/catalog'],
     ['delete', '/api/v1/catalog/1'],
+    // Admin-only, although it sits under the public GET /api/v1/catalog/ prefix.
+    ['get', '/api/v1/catalog/retired'],
+    ['post', '/api/v1/catalog/1/restore'],
     ['get', '/api/v1/barbers/admin'],
     ['get', '/api/v1/barbers/1/time-off'],
     ['post', '/api/v1/barbers/1/time-off'],

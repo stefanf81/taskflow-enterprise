@@ -186,6 +186,46 @@ class CatalogServiceImplTest {
     }
 
     @Test
+    void restoreReactivatesARetiredService() {
+        ServiceItem retired = new ServiceItem("Old Cut", BigDecimal.TEN, 30, "Hair", null);
+        retired.setId(9L);
+        retired.setActive(false);
+        when(repository.findById(9L)).thenReturn(Optional.of(retired));
+        when(repository.save(retired)).thenReturn(retired);
+
+        ServiceItemResponse result = catalogService.restoreService(9L);
+
+        assertEquals(9L, result.id());
+        assertTrue(retired.isActive());
+        verify(repository).save(retired);
+    }
+
+    @Test
+    void restoreLeavesAnActiveServiceAlone() {
+        when(repository.findById(1L)).thenReturn(Optional.of(item1));
+
+        ServiceItemResponse result = catalogService.restoreService(1L);
+
+        assertEquals("Haircut", result.name());
+        verify(repository, never()).save(any(ServiceItem.class));
+    }
+
+    @Test
+    void restoreOfAnUnknownServiceIs404() {
+        when(repository.findById(3L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> catalogService.restoreService(3L));
+    }
+
+    @Test
+    void retiredServicesComeFromTheRetiredProjection() {
+        ServiceItemResponse retired = new ServiceItemResponse(9L, "Old Cut", BigDecimal.TEN, 30, "Hair", null);
+        when(repository.findRetiredProjectedBy()).thenReturn(List.of(retired));
+
+        assertEquals(List.of(retired), catalogService.getRetiredServices());
+    }
+
+    @Test
     void updateRejectsANameTakenByAnotherServiceWith409() {
         when(repository.findById(1L)).thenReturn(Optional.of(item1));
         when(repository.existsByNameIgnoreCaseAndIdNot("New Haircut", 1L)).thenReturn(true);

@@ -144,6 +144,11 @@ class SecurityAuthorizationIntegrationTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(delete("/api/v1/catalog/1").header("Authorization", customerToken))
                 .andExpect(status().isForbidden());
+        // The retired list sits under the public GET /api/v1/catalog/** rule: its own rule must win.
+        mockMvc.perform(get("/api/v1/catalog/retired").header("Authorization", customerToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/catalog/1/restore").header("Authorization", customerToken))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -215,17 +220,23 @@ class SecurityAuthorizationIntegrationTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(head("/api/v1/barbers/1/time-off").header("Authorization", customerToken))
                 .andExpect(status().isForbidden());
+        mockMvc.perform(head("/api/v1/catalog/retired").header("Authorization", customerToken))
+                .andExpect(status().isForbidden());
     }
 
     @Test
     void head_shouldRequireAuthenticationForAnonymous() throws Exception {
         mockMvc.perform(head("/api/v1/appointments")).andExpect(status().isUnauthorized());
         mockMvc.perform(head("/api/v1/barbers/admin")).andExpect(status().isUnauthorized());
+        mockMvc.perform(head("/api/v1/catalog/retired")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/catalog/retired")).andExpect(status().isUnauthorized());
     }
 
     @Test
     void head_shouldWorkForAdminsAndOnPublicEndpoints() throws Exception {
         mockMvc.perform(head("/api/v1/barbers/admin").header("Authorization", adminToken))
+                .andExpect(status().isOk());
+        mockMvc.perform(head("/api/v1/catalog/retired").header("Authorization", adminToken))
                 .andExpect(status().isOk());
         // 404 (no such appointment), not 401/403: the admin passes authorization.
         mockMvc.perform(head("/api/v1/appointments/999999").header("Authorization", adminToken))

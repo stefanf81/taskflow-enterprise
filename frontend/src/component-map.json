@@ -112,7 +112,8 @@
       "storeHook": {
         "web": "frontend/src/app/core/catalog/service-catalog.store.ts",
         "mobile": "mobile/src/core/catalog/useCatalog.ts"
-      }
+      },
+      "notes": "The retired list and Restore live in features/admin/retired-services.store.ts (web) and the useRetiredServices/useRestoreService hooks (mobile)."
     },
     {
       "feature": "Admin Staff Schedules & Time Off",
