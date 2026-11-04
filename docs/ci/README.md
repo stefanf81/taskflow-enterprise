@@ -63,6 +63,7 @@ Reusable workflow step logic is encapsulated in local composite actions to preve
 - **[`start-backend`](../../.github/actions/start-backend/action.yml):** Generates ephemeral RSA key pairs, launches `backend-jar`, and polls `/actuator/health/readiness`. Supports non-blocking launch (`wait: "false"`) to overlap JVM startup with Node setup.
 - **[`wait-backend`](../../.github/actions/wait-backend/action.yml):** High-speed readiness poller checking `/actuator/health/readiness` every 1 second, failing fast with application log output if the process crashes.
 - **[`prepull-buildkit`](../../.github/actions/prepull-buildkit/action.yml):** Configures Docker Buildx with a pre-pulled BuildKit daemon for jobs requiring GitHub Actions cache export (`type=gha`) or multi-platform builds.
+- **[`install-trivy`](../../.github/actions/install-trivy/action.yml):** Installs the Trivy CLI (`TRIVY_VERSION`) from its GitHub release, checked against the release's checksums file. Every `trivy-action` step runs with `skip-setup-trivy: true`, because the action's own setup downloads from `get.trivy.dev`, which stopped resolving on 2026-11-03.
 - **[`upload-sarif`](../../.github/actions/upload-sarif/action.yml):** Standardized wrapper around `github/codeql-action/upload-sarif` with stable category assignment and optional `wait-for-processing` controls.
 - **[`require-job-results`](../../.github/actions/require-job-results/action.yml):** Backs the branch protection aggregator gates, verifying that all required jobs passed and no upstream job silently failed.
 

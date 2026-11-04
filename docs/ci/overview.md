@@ -433,6 +433,12 @@ the same implementation is not copied across workflows (and cannot drift):
   attestations): `Build Docker (frontend)` and `pushdockerimage.yml`. It costs
   ~7–10 s per job, so `e2e` and `Build Docker (backend)` use the default
   `docker` builder instead.
+- `install-trivy` — installs the Trivy CLI (`TRIVY_VERSION`) from its GitHub
+  release, checked against the release's checksums file, and puts it on
+  `PATH`. Every `trivy-action` step runs with `skip-setup-trivy: true`: the
+  action's own setup (`aquasecurity/setup-trivy`) downloads the tarball from
+  `get.trivy.dev`, which stopped resolving on 2026-11-03 (NXDOMAIN), and both
+  image scans failed with curl exit 6 (run 41793496294).
 - `upload-sarif` — uploads a SARIF file to Code Scanning under a stable category.
   Optional `wait-for-processing` (default `"true"`); `gitleaks.yml` (the
   scanner's exit code is its gate) and the report-only Trivy FS uploads in

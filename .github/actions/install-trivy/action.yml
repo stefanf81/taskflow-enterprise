@@ -1,0 +1,49 @@
+name: Install Trivy
+description: >-
+  Install the Trivy CLI from its GitHub release and put it on PATH, for
+  trivy-action steps that run with `skip-setup-trivy: true`. The tarball is
+  checked against the release's own checksums file, as the upstream install
+  script does. trivy-action's built-in setup (aquasecurity/setup-trivy) downloads
+  the tarball from get.trivy.dev instead; that host stopped resolving on
+  2026-11-03 (NXDOMAIN, trivy.dev zone serial 2026110301) and every image scan
+  failed with curl exit 6 (run 41793496294). The GitHub release
+  serves the same tarball.
+inputs:
+  version:
+    description: Trivy release tag (`vX.Y.Z`, the workflows' TRIVY_VERSION).
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Install Trivy
+      shell: bash
+      env:
+        TRIVY_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        version="${TRIVY_VERSION#v}"
+        case "$(uname -m)" in
+          x86_64) arch=64bit ;;
+          aarch64 | arm64) arch=ARM64 ;;
+          *) echo "::error::Unsupported runner architecture $(uname -m)"; exit 1 ;;
+        esac
+        archive="trivy_${version}_Linux-${arch}.tar.gz"
+        checksums="trivy_${version}_checksums.txt"
+        base="https://github.com/aquasecurity/trivy/releases/download/v${version}"
+        work="${RUNNER_TEMP}/trivy-download"
+        bin="${RUNNER_TEMP}/trivy-bin"
+        mkdir -p "$work" "$bin"
+
+        curl -fsSL --retry 3 -o "${work}/${archive}" "${base}/${archive}"
+        curl -fsSL --retry 3 -o "${work}/${checksums}" "${base}/${checksums}"
+        line="$(awk -v f="$archive" '$2 == f' "${work}/${checksums}")"
+        if [[ -z "$line" ]]; then
+          echo "::error::${checksums} lists no checksum for ${archive}"
+          exit 1
+        fi
+        (cd "$work" && sha256sum --check --strict <<< "$line")
+
+        tar -xzf "${work}/${archive}" -C "$bin" trivy
+        rm -rf "$work"
+        echo "$bin" >> "$GITHUB_PATH"
+        "${bin}/trivy" --version

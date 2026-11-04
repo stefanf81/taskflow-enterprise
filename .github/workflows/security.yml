@@ -161,13 +161,15 @@ jobs:
       # Filesystem Scans
       #
       # All components are scanned sequentially in this one job (no matrix).
-      # The first scan seeds trivy-action's binary
-      # (`trivy-binary-<version>-<os>-<arch>`) and vulnerability-DB
-      # (`cache-trivy-<date>`) caches; the remaining scans hit them and skip
-      # their save attempts. The former 4-leg matrix raced to save those same
-      # keys every night, so three legs logged "Cache save failed". One job
-      # also means one checkout and one Trivy/DB download. Wall clock is
-      # unchanged: the nightly run is bounded by the CodeQL java-kotlin leg.
+      # Trivy is installed once, from its GitHub release, by
+      # ./.github/actions/install-trivy (both scans skip trivy-action's own
+      # setup, whose download host get.trivy.dev no longer resolves). The
+      # first scan seeds the vulnerability-DB cache (`cache-trivy-<date>`);
+      # the second hits it and skips its save attempt. The former 4-leg
+      # matrix raced to save those same keys every night, so three legs
+      # logged "Cache save failed". One job also means one checkout and one
+      # Trivy/DB download. Wall clock is unchanged: the nightly run is
+      # bounded by the CodeQL java-kotlin leg.
       #
       # Each scan uploads under its own category and output file — GitHub
       # Code Scanning rejects multiple SARIF uploads from the same tool with
@@ -200,10 +202,18 @@ jobs:
       # below keeps the newest default-branch entry per family and version.
       #####################################################
 
+      - name: Install Trivy
+        uses: ./.github/actions/install-trivy
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+
       - name: Trivy FS (Backend)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: ${{ env.TRIVY_VERSION }}
+          # Installed by the step above (get.trivy.dev, setup-trivy's
+          # download host, no longer resolves).
+          skip-setup-trivy: true
           scan-type: fs
           scanners: vuln
           scan-ref: .
@@ -237,6 +247,8 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: ${{ env.TRIVY_VERSION }}
+          # Installed before the Backend scan.
+          skip-setup-trivy: true
           scan-type: fs
           scanners: vuln
           scan-ref: package-lock.json

@@ -1319,6 +1319,11 @@ jobs:
           restore-keys: |
             trivy-java-db-${{ env.TRIVY_VERSION }}-
 
+      - name: Install Trivy
+        uses: ./.github/actions/install-trivy
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+
       # NOTE ON SEVERITY GATING (intentional asymmetry):
       # This is the HARD GATE — exit-code: 1 with severity HIGH,CRITICAL
       # fails the build. This scan targets the actual image that gets
@@ -1330,6 +1335,9 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: ${{ env.TRIVY_VERSION }}
+          # Installed by the step above (get.trivy.dev, setup-trivy's
+          # download host, no longer resolves).
+          skip-setup-trivy: true
 
           image-ref: ${{ steps.images.outputs.image }}:${{ env.IMAGE_TAG }}
 
@@ -1518,6 +1526,11 @@ jobs:
           build-args: |
             APK_BUST=${{ github.run_id }}-${{ github.run_attempt }}
 
+      - name: Install Trivy
+        uses: ./.github/actions/install-trivy
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+
       # HARD GATE — see the severity-gating note in `docker-backend`. No DB
       # cache: the nginx image needs no Java DB, and a restored vulnerability
       # DB is stale on almost every run (see the cache note in `docker-backend`).
@@ -1525,6 +1538,9 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: ${{ env.TRIVY_VERSION }}
+          # Installed by the step above (get.trivy.dev, setup-trivy's
+          # download host, no longer resolves).
+          skip-setup-trivy: true
 
           image-ref: ${{ steps.images.outputs.image }}:${{ env.IMAGE_TAG }}
 
