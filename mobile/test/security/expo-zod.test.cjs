@@ -1,16 +1,13 @@
 const assert = require('node:assert/strict');
+const { readdirSync, readFileSync } = require('node:fs');
 const { createRequire } = require('node:module');
+const { dirname, join, relative } = require('node:path');
 const { test } = require('node:test');
 
-// Expo CLI 58 still requests Zod 3. Keep its scoped override on the app's
-// patched Zod and exercise the CLI consumers before updating either package.
-const cliRequire = createRequire(require.resolve('@expo/cli/package.json'));
-const { PluginSchema, DevToolsPluginOutputSchema } = cliRequire(
-  './build/src/start/server/DevToolsPlugin.schema.js',
-);
-const { createMCPDevToolsExtensionSchema } = cliRequire(
-  './build/src/start/server/createMCPDevToolsExtensionSchema.js',
-);
+// Expo CLI 58 still declares Zod 3. Keep its scoped override on the app's
+// patched Zod for as long as that declaration installs a copy.
+const cliPackageJson = require.resolve('@expo/cli/package.json');
+const cliRequire = createRequire(cliPackageJson);
 
 test('Expo CLI resolves the same patched Zod as the app', () => {
   assert.equal(cliRequire.resolve('zod'), require.resolve('zod'));
@@ -26,45 +23,21 @@ test('Expo CLI resolves the same patched Zod as the app', () => {
   }
 });
 
-test('Expo plugin validation accepts valid plugins and rejects invalid metadata', () => {
-  const plugin = PluginSchema.parse({
-    packageName: 'test-plugin',
-    packageRoot: '/test-plugin',
-    cliExtensions: {
-      description: 'Test commands',
-      entryPoint: './commands.js',
-      commands: [{
-        name: 'inspect',
-        title: 'Inspect',
-        environments: ['cli', 'mcp'],
-        parameters: [
-          { name: 'label', type: 'text' },
-          { name: 'count', type: 'number' },
-          { name: 'enabled', type: 'confirm' },
-        ],
-      }],
-    },
-  });
-  assert.equal(PluginSchema.safeParse({ packageName: '' }).success, false);
-  const schema = createMCPDevToolsExtensionSchema(plugin);
-  assert.deepEqual(schema.parse({
-    command: 'inspect', label: 'test', count: 2, enabled: true,
-  }), { command: 'inspect', label: 'test', count: 2, enabled: true });
-  for (const input of [
-    { command: 'unknown' },
-    { command: 'inspect', count: 'two' },
-    { command: 'inspect', unexpected: true },
-  ]) {
-    assert.equal(schema.safeParse(input).success, false);
+// Up to @expo/cli 58.1.18 the DevTools plugin schemas were Zod 3 schemas running on
+// the overridden Zod 4, and this file exercised them. Since 58.1.19 they are plain
+// JSON Schema objects and the CLI no longer loads Zod. If a release imports Zod
+// again, restore those behaviour tests from git history before taking it.
+test('Expo CLI does not load Zod at runtime', () => {
+  const buildDir = join(dirname(cliPackageJson), 'build');
+  const zodImport = /\brequire\(\s*["']zod(?:\/[^"']*)?["']\s*\)|\bimport\(\s*["']zod(?:\/[^"']*)?["']\s*\)|\bfrom\s*["']zod(?:\/[^"']*)?["']/;
+  const offenders = [];
+  let scanned = 0;
+  for (const entry of readdirSync(buildDir, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile() || !/\.[cm]?js$/.test(entry.name)) continue;
+    const file = join(entry.parentPath, entry.name);
+    scanned++;
+    if (zodImport.test(readFileSync(file, 'utf8'))) offenders.push(relative(buildDir, file));
   }
-});
-
-test('Expo output validation retains text, image and audio support', () => {
-  const output = [
-    { type: 'text', text: 'Ready', level: 'info' },
-    { type: 'image', url: 'https://example.com/image.png' },
-    { type: 'audio', url: 'https://example.com/audio.mp3' },
-  ];
-  assert.deepEqual(DevToolsPluginOutputSchema.parse(output), output);
-  assert.equal(DevToolsPluginOutputSchema.safeParse([{ type: 'invalid' }]).success, false);
+  assert.ok(scanned > 100, `only ${scanned} files under ${buildDir}; has the CLI layout changed?`);
+  assert.deepEqual(offenders, [], 'Expo CLI imports Zod again; restore its behaviour tests');
 });
