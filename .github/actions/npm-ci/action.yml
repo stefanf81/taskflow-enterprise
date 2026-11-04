@@ -12,8 +12,8 @@ inputs:
     required: true
   shared-schemas:
     description: >-
-      Also install the shared workspaces (shared/schemas and shared/domain), which the web and
-      mobile apps import.
+      Also install the shared/schemas workspace (the web and mobile apps import it). shared/domain
+      needs no install of its own: it has no runtime dependencies, and the app's install links it.
     required: false
     default: "true"
   ignore-scripts:
@@ -66,7 +66,6 @@ runs:
           node_modules
           ${{ inputs.package-path }}/node_modules
           shared/schemas/node_modules
-          shared/domain/node_modules
         key: ${{ steps.nm-key.outputs.key }}
 
     # Only on a node_modules miss: on a hit nothing is downloaded, so the
@@ -123,8 +122,8 @@ runs:
           # Only the requested workspace(s): `npm ci` reads the one root lockfile but installs
           # just their dependency trees.
           args+=(--workspace "$PACKAGE_PATH")
-          if [[ "$SHARED_SCHEMAS" == "true" && "$PACKAGE_PATH" != shared/* ]]; then
-            args+=(--workspace shared/schemas --workspace shared/domain)
+          if [[ "$SHARED_SCHEMAS" == "true" && "$PACKAGE_PATH" != "shared/schemas" ]]; then
+            args+=(--workspace shared/schemas)
           fi
         fi
         if [[ "$IGNORE_SCRIPTS" == "true" ]]; then
@@ -153,8 +152,8 @@ runs:
         ws=()
         if [[ "$PACKAGE_PATH" != "." ]]; then
           ws+=(--workspace "$PACKAGE_PATH")
-          if [[ "$SHARED_SCHEMAS" == "true" && "$PACKAGE_PATH" != shared/* ]]; then
-            ws+=(--workspace shared/schemas --workspace shared/domain)
+          if [[ "$SHARED_SCHEMAS" == "true" && "$PACKAGE_PATH" != "shared/schemas" ]]; then
+            ws+=(--workspace shared/schemas)
           fi
         fi
         node scripts/check-dependency-tree.js "${ws[@]}"
@@ -167,7 +166,6 @@ runs:
           node_modules
           ${{ inputs.package-path }}/node_modules
           shared/schemas/node_modules
-          shared/domain/node_modules
         key: ${{ steps.nm-key.outputs.key }}
 
     - name: Save npm download cache

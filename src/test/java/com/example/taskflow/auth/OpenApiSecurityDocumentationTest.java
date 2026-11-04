@@ -9,6 +9,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.ArrayList;
@@ -31,9 +32,15 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * and only the filter chain's own refusal (401/403 without a body) counts as "needs
  * authentication". A handler's 400, 404 or a failed login's 401 (with a JSON body) means the
  * request got through.
+ *
+ * <p>{@code csrf()} replaces the {@code CsrfFilter}'s cookie repository with a session-based test
+ * repository for good, so this test throws its context away afterwards: sharing it, the next class
+ * found no {@code XSRF-TOKEN} cookie on {@code GET /api/v1/auth/csrf}
+ * ({@code SecurityAuthorizationIntegrationTest.cookieLogout_requiresTheActualDoubleSubmitHeader}).
  */
 @SpringBootTest(properties = {"app.rate-limit.enabled=false"})
 @AutoConfigureMockMvc
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class OpenApiSecurityDocumentationTest {
 
     @Autowired

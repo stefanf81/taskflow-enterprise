@@ -2,15 +2,11 @@
   "name": "@taskflow/domain",
   "version": "1.0.0",
   "private": true,
-  "description": "Booking rules and time helpers shared by the web and mobile clients. Plain TypeScript, no dependencies.",
+  "description": "Booking rules and time helpers shared by the web and mobile clients. Plain TypeScript, no dependencies. Its tests and type check run on the frontend workspace's vitest and TypeScript (hoisted to the root); declaring them here would install vitest, without its vite peer, into every mobile install.",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
-  },
-  "devDependencies": {
-    "typescript": "~6.0.3",
-    "vitest": "^5.0.3"
   }
 }
