@@ -54,7 +54,7 @@ env:
 
   # Keep in sync with renovate.yml's RENOVATEBOT_VERSION.
   # renovate-image: tracked by the dedicated regex manager in .github/renovate.json
-  RENOVATEBOT_VERSION: "44.198.3@sha256:bf344aa39d5b592ec728e1db5c3e1d940a5093a89a4598073efcb18d592d121c"
+  RENOVATEBOT_VERSION: "44.222.0@sha256:a8cb8222b49d15da701436954b7463427d535eae2203b294655c9a29675c47d1"
 
 defaults:
   run:
@@ -864,7 +864,7 @@ jobs:
     # pinned PostgreSQL and Redis images, so Renovate updates one place.
     services:
       postgres:
-        image: &postgres-image postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+        image: &postgres-image postgres:18.6-alpine@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395
 
         env:
           POSTGRES_DB: taskflow
@@ -881,7 +881,7 @@ jobs:
           --health-retries 30
 
       redis:
-        image: &redis-image redis:8.10.3-alpine@sha256:21090af93f8324db2f0f0f4f38a7c60369d47d917e000c3423d89d2ae2883537
+        image: &redis-image redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
 
         ports:
           - 6379:6379
