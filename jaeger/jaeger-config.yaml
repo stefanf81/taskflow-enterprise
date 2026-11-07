@@ -1,5 +1,5 @@
 # Jaeger v2 all-in-one configuration
-# Based on https://github.com/jaegertracing/jaeger/blob/v2.22.0/cmd/jaeger/internal/all-in-one.yaml
+# Based on https://github.com/jaegertracing/jaeger/blob/v2.23.0/cmd/jaeger/internal/all-in-one.yaml
 #
 # JAEGER_LISTEN_HOST env var controls which interface to bind to.
 # In Docker, set JAEGER_LISTEN_HOST=0.0.0.0 so the container listens on all interfaces.
