@@ -20,7 +20,9 @@ const VALIDATOR_FOR_CONTRACT: Record<keyof typeof contracts, keyof typeof valida
   appointmentStatsContract: 'appointmentStatsSchema',
   barberRatingResponseContract: 'barberRatingResponseSchema',
   barberResponseContract: 'barberResponseSchema',
+  barberScheduleResponseContract: 'barberScheduleResponseSchema',
   barberTimeOffResponseContract: 'barberTimeOffResponseSchema',
+  calendarExportResponseContract: 'calendarExportResponseSchema',
   loginResponseContract: 'loginResponseSchema',
   mobileLoginResponseContract: 'mobileLoginResponseSchema',
   notificationOutboxResponseContract: 'notificationOutboxResponseSchema',
@@ -29,6 +31,8 @@ const VALIDATOR_FOR_CONTRACT: Record<keyof typeof contracts, keyof typeof valida
   pagedModelAppointmentResponseContract: 'pagedAppointmentResponseSchema',
   publicBarberResponseContract: 'publicBarberResponseSchema',
   registerResponseContract: 'registerResponseSchema',
+  scheduleDayContract: 'scheduleDaySchema',
+  schedulePreviewResponseContract: 'schedulePreviewResponseSchema',
   serviceItemResponseContract: 'serviceItemResponseSchema',
   shopInfoResponseContract: 'shopInfoResponseSchema',
 };

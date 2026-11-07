@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import {
   Observable,
   catchError,
+  finalize,
   firstValueFrom,
   map,
   of,
@@ -15,9 +16,21 @@ import {
 import { LoginResponse } from '../../types/api';
 import { AuthApi } from '../api/auth-api';
 import { SessionEvents } from '../session-events';
+import { hasRenewableSession } from './session-hint';
 
 /** Notice shown (in the login modal) after a protected request found the session dead. */
 export const SESSION_EXPIRED_MESSAGE = 'Your session expired. Please sign in again.';
+
+/**
+ * Raised by {@link AuthState.renewSession} when a sign-in or sign-out in this tab overtook the
+ * renewal: its answer, success or rejection, is about a session that no longer exists here.
+ */
+export class SessionChangedError extends Error {
+  constructor() {
+    super('The session changed while it was being renewed.');
+    this.name = 'SessionChangedError';
+  }
+}
 
 /**
  * A1.2 — Single source of truth for the authenticated UI role.
@@ -86,6 +99,13 @@ export class AuthState {
     if (!this.bootstrap$) {
       const version = ++this.bootstrapVersion;
       this.bootstrap$ = this.authApi.me().pipe(
+        // The access cookie expires long before the refresh session: a browser that can renew
+        // is restored instead of being shown the guest page.
+        catchError((err: unknown) =>
+          statusOf(err) === 401 && hasRenewableSession()
+            ? this.renewSession()
+            : throwError(() => err),
+        ),
         tap({
           next: (me: LoginResponse) => {
             if (version !== this.bootstrapVersion) return;
@@ -105,6 +125,47 @@ export class AuthState {
       );
     }
     return this.bootstrap$;
+  }
+
+  private renewal: { epoch: number; result$: Observable<LoginResponse> } | null = null;
+
+  /**
+   * Renews the session with the HttpOnly refresh cookie: new access and refresh cookies, and the
+   * principal restored like a bootstrap would (no "signed in" announcement, the session simply
+   * continues). Single flight per tab and session ({@link SessionEvents.epoch}); another tab
+   * renewing at the same moment is covered by the server's short reuse grace. A 403 means the
+   * boot-time CSRF cookie has not arrived yet: fetch it and retry once. When a sign-in or
+   * sign-out overtakes it, the renewal fails with {@link SessionChangedError} instead: neither
+   * its principal nor its rejection may touch the session that replaced it.
+   */
+  renewSession(): Observable<LoginResponse> {
+    const epoch = this.sessionEvents.epoch();
+    if (this.renewal && this.renewal.epoch === epoch) return this.renewal.result$;
+
+    const overtaken = () => this.sessionEvents.epoch() !== epoch;
+    const renewal = {
+      epoch,
+      result$: this.authApi.renew().pipe(
+        catchError((err: unknown) =>
+          statusOf(err) === 403
+            ? this.authApi.fetchCsrfToken().pipe(switchMap(() => this.authApi.renew()))
+            : throwError(() => err),
+        ),
+        catchError((err: unknown) =>
+          throwError(() => (overtaken() ? new SessionChangedError() : err)),
+        ),
+        switchMap((me: LoginResponse) =>
+          overtaken() ? throwError(() => new SessionChangedError()) : of(me),
+        ),
+        tap((me: LoginResponse) => this.setPrincipal(me.role, me.username)),
+        finalize(() => {
+          if (this.renewal === renewal) this.renewal = null;
+        }),
+        shareReplay(1),
+      ),
+    };
+    this.renewal = renewal;
+    return renewal.result$;
   }
 
   /** Records a successful login (or an explicit session restore). */

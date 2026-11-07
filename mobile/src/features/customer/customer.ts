@@ -1,7 +1,17 @@
 import { apiClient, RequestOptions } from '../../api/client';
-import { AppointmentPage } from '../../types/api';
-import { parseContract } from '../../api/contracts';
-import { pagedAppointmentResponseSchema } from '@taskflow/schemas';
+import {
+  AppointmentItem,
+  AppointmentPage,
+  CalendarExportResponse,
+  RescheduleRequest,
+} from '../../types/api';
+import { parseContract, parseRequest } from '../../api/contracts';
+import {
+  appointmentResponseSchema,
+  calendarExportResponseSchema,
+  pagedAppointmentResponseSchema,
+  rescheduleRequestSchema,
+} from '@taskflow/schemas';
 
 export const customerApi = {
   getAppointments: async (
@@ -21,6 +31,37 @@ export const customerApi = {
   },
 
   cancelAppointment: async (publicId: string): Promise<void> => {
-    await apiClient.delete(`/api/v1/customer/appointments/${publicId}`);
+    await apiClient.delete(`/api/v1/customer/appointments/${encodeURIComponent(publicId)}`);
+  },
+
+  exportCalendar: async (publicId: string): Promise<CalendarExportResponse> => {
+    const response = await apiClient.get<CalendarExportResponse>(
+      `/api/v1/customer/appointments/${encodeURIComponent(publicId)}/calendar`,
+    );
+    return parseContract(
+      calendarExportResponseSchema,
+      response.data,
+      'GET /api/v1/customer/appointments/{publicId}/calendar',
+    );
+  },
+
+  rescheduleAppointment: async (
+    publicId: string,
+    data: RescheduleRequest,
+  ): Promise<AppointmentItem> => {
+    const payload = parseRequest(
+      rescheduleRequestSchema,
+      data,
+      'PUT /api/v1/customer/appointments/{publicId}/reschedule',
+    );
+    const response = await apiClient.put<AppointmentItem>(
+      `/api/v1/customer/appointments/${encodeURIComponent(publicId)}/reschedule`,
+      payload,
+    );
+    return parseContract(
+      appointmentResponseSchema,
+      response.data,
+      'PUT /api/v1/customer/appointments/{publicId}/reschedule',
+    );
   },
 };

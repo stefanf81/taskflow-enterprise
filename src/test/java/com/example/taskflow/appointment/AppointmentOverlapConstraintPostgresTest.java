@@ -188,13 +188,16 @@ class AppointmentOverlapConstraintPostgresTest {
     private void insert(Connection c, String start, String end) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("INSERT INTO appointments (customer_name, customer_email, "
                 + "customer_phone, barber_name, booking_date, booking_time, booking_end_time, service_type, status, "
-                + "public_id, created_at, updated_at) VALUES ('Raw', 'raw@example.com', '1', ?, ?, "
-                + "CAST(? AS TIME), CAST(? AS TIME), 'Raw', 'PENDING', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")) {
+                + "public_id, created_at, updated_at, creation_request_fingerprint) VALUES ('Raw', 'raw@example.com', '1', ?, ?, "
+                + "CAST(? AS TIME), CAST(? AS TIME), 'Raw', 'PENDING', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)")) {
             ps.setString(1, BARBER);
             ps.setObject(2, date);
             ps.setString(3, start);
             ps.setString(4, end);
             ps.setString(5, UUID.randomUUID().toString());
+            ps.setString(6, com.example.taskflow.appointment.internal.CreationRequestFingerprint.of(
+                    new com.example.taskflow.appointment.internal.Appointment("Raw", "raw@example.com", "1",
+                            BARBER, date, start, "Raw")));
             ps.executeUpdate();
         }
     }

@@ -2,10 +2,16 @@
 <configuration>
     <springProperty scope="context" name="asyncMaxFlushTime" source="app.logging.async.max-flush-time-ms"
                     defaultValue="30000"/>
+    <!-- Empty (the default) keeps the plain pattern below in every profile. Set
+         logging.structured.format.console (ecs, logstash, gelf) to switch the console to JSON. -->
+    <springProperty scope="context" name="structuredFormat" source="logging.structured.format.console"
+                    defaultValue=""/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
+        <encoder class="com.example.taskflow.core.logging.ConsoleLogEncoder">
+            <format>${structuredFormat:-}</format>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId:-},%X{spanId:-}] %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
         </encoder>
     </appender>
 

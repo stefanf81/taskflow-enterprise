@@ -5,6 +5,9 @@ import {
   AppointmentCreateRequest,
   AppointmentItem,
   AppointmentUpdateRequest,
+  CalendarExportResponse,
+  GuestRescheduleRequest,
+  RescheduleRequest,
 } from '../../types/api';
 import { PUBLIC_REQUEST } from '../http/public-request.token';
 import { parseRequest, parseResponse } from './request-validation';
@@ -13,6 +16,10 @@ import {
   appointmentResponseSchema,
   appointmentUpdateSchema,
   busySlotsResponseSchema,
+  calendarExportRequestSchema,
+  calendarExportResponseSchema,
+  guestRescheduleRequestSchema,
+  rescheduleRequestSchema,
 } from '@taskflow/schemas';
 
 /** Appointment lifecycle endpoints (`/api/v1/appointments`, `/api/v1/customer`). */
@@ -88,6 +95,51 @@ export class AppointmentsApi {
   readonly parseBusySlots = (raw: unknown): string[] =>
     parseResponse(busySlotsResponseSchema, raw, 'GET /api/v1/appointments/public/busy-slots');
 
+  /**
+   * Resource request for the start times a signed-in customer's booking cannot move to on
+   * `bookingDate`: its own barber and booked length, the booking itself not counted (the
+   * create-time {@link busySlotsRequest} counts it and reads the length from today's catalog).
+   * Pair it with {@link parseRescheduleAvailability}.
+   */
+  customerRescheduleAvailabilityRequest(
+    publicId: string,
+    bookingDate: string,
+  ): HttpResourceRequest {
+    return {
+      url: `${this.customerBase}/${encodeURIComponent(publicId)}/availability`,
+      params: { bookingDate },
+    };
+  }
+
+  /**
+   * The same answer for a guest, who proves the booking with its email. A POST, so the email
+   * stays out of the URL (and out of access logs); it is not validated here, the server answers
+   * a malformed one with 400 and a wrong one with 404.
+   */
+  publicRescheduleAvailabilityRequest(
+    publicId: string,
+    email: string,
+    bookingDate: string,
+  ): HttpResourceRequest {
+    return {
+      url: `${this.base}/public/reschedule/${encodeURIComponent(publicId)}/availability`,
+      method: 'POST',
+      body: { email, bookingDate },
+      context: new HttpContext().set(PUBLIC_REQUEST, true),
+    };
+  }
+
+  /** Validates a reschedule-availability response (`HH:mm` strings) of the guest or customer endpoint. */
+  parseRescheduleAvailability(raw: unknown, guest: boolean): string[] {
+    return parseResponse(
+      busySlotsResponseSchema,
+      raw,
+      guest
+        ? 'POST /api/v1/appointments/public/reschedule/{publicId}/availability'
+        : 'GET /api/v1/customer/appointments/{publicId}/availability',
+    );
+  }
+
   publicCancelAppointment(publicId: string, email: string): Observable<void> {
     return this.http.put<void>(
       `${this.base}/public/cancel/${encodeURIComponent(publicId)}`,
@@ -118,5 +170,87 @@ export class AppointmentsApi {
 
   cancelCustomerAppointment(publicId: string): Observable<void> {
     return this.http.delete<void>(`${this.customerBase}/${encodeURIComponent(publicId)}`);
+  }
+
+  exportPublicCalendar(publicId: string, email: string): Observable<CalendarExportResponse> {
+    return defer(() => {
+      const validated = parseRequest(calendarExportRequestSchema, { email });
+      return this.http
+        .post<CalendarExportResponse>(
+          `${this.base}/public/calendar/${encodeURIComponent(publicId)}`,
+          validated,
+          { context: new HttpContext().set(PUBLIC_REQUEST, true) },
+        )
+        .pipe(
+          map((raw) =>
+            parseResponse(
+              calendarExportResponseSchema,
+              raw,
+              'POST /api/v1/appointments/public/calendar/{publicId}',
+            ),
+          ),
+        );
+    });
+  }
+
+  exportCustomerCalendar(publicId: string): Observable<CalendarExportResponse> {
+    return this.http
+      .get<CalendarExportResponse>(`${this.customerBase}/${encodeURIComponent(publicId)}/calendar`)
+      .pipe(
+        map((raw) =>
+          parseResponse(
+            calendarExportResponseSchema,
+            raw,
+            'GET /api/v1/customer/appointments/{publicId}/calendar',
+          ),
+        ),
+      );
+  }
+
+  publicRescheduleAppointment(
+    publicId: string,
+    request: GuestRescheduleRequest,
+  ): Observable<AppointmentItem> {
+    return defer(() => {
+      const validated = parseRequest(guestRescheduleRequestSchema, request);
+      return this.http
+        .put<AppointmentItem>(
+          `${this.base}/public/reschedule/${encodeURIComponent(publicId)}`,
+          validated,
+          { context: new HttpContext().set(PUBLIC_REQUEST, true) },
+        )
+        .pipe(
+          map((raw) =>
+            parseResponse(
+              appointmentResponseSchema,
+              raw,
+              'PUT /api/v1/appointments/public/reschedule/{publicId}',
+            ),
+          ),
+        );
+    });
+  }
+
+  rescheduleCustomerAppointment(
+    publicId: string,
+    request: RescheduleRequest,
+  ): Observable<AppointmentItem> {
+    return defer(() => {
+      const validated = parseRequest(rescheduleRequestSchema, request);
+      return this.http
+        .put<AppointmentItem>(
+          `${this.customerBase}/${encodeURIComponent(publicId)}/reschedule`,
+          validated,
+        )
+        .pipe(
+          map((raw) =>
+            parseResponse(
+              appointmentResponseSchema,
+              raw,
+              'PUT /api/v1/customer/appointments/{publicId}/reschedule',
+            ),
+          ),
+        );
+    });
   }
 }

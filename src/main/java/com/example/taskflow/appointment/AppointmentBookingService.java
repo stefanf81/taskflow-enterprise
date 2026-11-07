@@ -2,6 +2,7 @@ package com.example.taskflow.appointment;
 import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
+import com.example.taskflow.appointment.internal.CreationRequestFingerprint;
 import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
 
 import com.example.taskflow.catalog.CatalogService;
@@ -244,6 +245,12 @@ class AppointmentBookingService {
             int durationMinutes = service.getDurationMinutes() != null && service.getDurationMinutes() > 0
                     ? service.getDurationMinutes() : BusySlotsService.DEFAULT_DURATION_MINUTES;
 
+            // Roster/time-off writes take the barber's exclusive lock. Take our shared lock
+            // before ANY schedule inputs are loaded (including No Preference resolution).
+            if (NO_PREFERENCE_BARBER.equals(request.barberName())) {
+                barberRepository.findAllForBooking();
+            }
+
             // H2: "No Preference (First Available)" is an input-only sentinel. Resolve
             // it to a concrete, available barber BEFORE persisting so the partial
             // unique slot index and the per-barber availability queries both see the
@@ -351,51 +358,24 @@ class AppointmentBookingService {
     }
 
     /**
-     * Compares a replay request against the persisted appointment. The customer
-     * email, date, time and service must all match. The barber name is compared
-     * exactly, except that a replayed {@link #NO_PREFERENCE_BARBER} request is a
-     * wildcard: the sentinel is resolved to a concrete barber before persisting,
-     * so the stored name can never equal the sentinel.
+     * Compares the complete canonical creation payload to its immutable fingerprint. Moving the
+     * appointment must never bind the key to its new slot. The No Preference input retains the
+     * historical wildcard behavior: it is compared using the originally assigned real barber
+     * (rescheduling never changes barber or service).
      */
     private static boolean isSameReplayRequest(Appointment existing, AppointmentCreateRequest request) {
         if (existing == null || request == null) {
             return false;
         }
-        if (!sameEmail(existing.getCustomerEmail(), request.customerEmail())) {
-            return false;
+        String fingerprint = existing.getCreationRequestFingerprint();
+        // Unsaved test fixtures/legacy in-memory objects have no fingerprint yet; real rows are
+        // backfilled by V41. Never derive a persisted row's binding after a move.
+        if (fingerprint == null) {
+            fingerprint = CreationRequestFingerprint.of(existing);
         }
-        if (existing.getBookingDate() == null || !existing.getBookingDate().equals(request.bookingDate())) {
-            return false;
-        }
-        if (!sameBookingTime(existing.getBookingTime(), request.bookingTime())) {
-            return false;
-        }
-        String requestedService = request.serviceType() == null ? null : request.serviceType().trim();
-        if (existing.getServiceType() == null || !existing.getServiceType().equals(requestedService)) {
-            return false;
-        }
-        if (NO_PREFERENCE_BARBER.equals(request.barberName())) {
-            return true;
-        }
-        String requestedBarber = request.barberName() == null ? null : request.barberName().trim();
-        return existing.getBarberName() != null && existing.getBarberName().equals(requestedBarber);
-    }
-
-    private static boolean sameEmail(String left, String right) {
-        return left != null && right != null && left.trim().equalsIgnoreCase(right.trim());
-    }
-
-    private static boolean sameBookingTime(String left, String right) {
-        if (left == null || right == null) {
-            return false;
-        }
-        return normalizeToHhMm(left).equals(normalizeToHhMm(right));
-    }
-
-    /** Booking times are HH:mm in the API; the TIME column can render HH:mm:ss. */
-    private static String normalizeToHhMm(String time) {
-        String trimmed = time.trim();
-        return trimmed.length() > 5 ? trimmed.substring(0, 5) : trimmed;
+        String barber = NO_PREFERENCE_BARBER.equals(request.barberName())
+                ? existing.getBarberName() : request.barberName();
+        return fingerprint.equals(CreationRequestFingerprint.of(request, barber));
     }
 
     /**
@@ -422,6 +402,7 @@ class AppointmentBookingService {
                             "No barber is available for the selected time. Please choose another time or barber."));
         }
         return barberRepository.findByName(request.barberName())
+                .flatMap(barber -> barberRepository.findByIdForBooking(barber.getId()))
                 .map(barber -> new ResolvedBarber(barber, false))
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Unknown barber: '" + LogSanitizer.stripNewlines(request.barberName())

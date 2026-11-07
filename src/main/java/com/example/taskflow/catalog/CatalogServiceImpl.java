@@ -4,8 +4,8 @@ import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,9 +21,11 @@ class CatalogServiceImpl implements CatalogService {
     private static final Logger logger = LoggerFactory.getLogger(CatalogServiceImpl.class);
 
     private final ServiceItemRepository repository;
+    private final ApplicationEventPublisher events;
 
-    public CatalogServiceImpl(ServiceItemRepository repository) {
+    public CatalogServiceImpl(ServiceItemRepository repository, ApplicationEventPublisher events) {
         this.repository = repository;
+        this.events = events;
     }
 
     @Override
@@ -48,7 +50,6 @@ class CatalogServiceImpl implements CatalogService {
      * so a retired name is not lost forever.
      */
     @Override
-    @CacheEvict(value = "services", allEntries = true)
     public ServiceItemResponse createService(ServiceItemRequest request) {
         String name = request.name().trim();
         Optional<ServiceItem> sameName = repository.findByNameIgnoreCase(name);
@@ -59,16 +60,17 @@ class CatalogServiceImpl implements CatalogService {
             }
             apply(existing, name, request);
             existing.setActive(true);
+            events.publishEvent(new CatalogChangedEvent(true));
             return ServiceItemResponse.fromEntity(repository.save(existing));
         }
 
         ServiceItem item = new ServiceItem();
         apply(item, name, request);
+        events.publishEvent(new CatalogChangedEvent(true));
         return ServiceItemResponse.fromEntity(repository.save(item));
     }
 
     @Override
-    @CacheEvict(value = "services", allEntries = true)
     public ServiceItemResponse updateService(Long id, ServiceItemRequest request) {
         ServiceItem item = repository.findById(id)
                 .filter(ServiceItem::isActive)
@@ -78,7 +80,10 @@ class CatalogServiceImpl implements CatalogService {
         if (repository.existsByNameIgnoreCaseAndIdNot(name, id)) {
             throw nameConflict(name);
         }
+        boolean availabilityChanged = !java.util.Objects.equals(item.getDurationMinutes(), request.durationMinutes())
+                || !item.getName().equals(name);
         apply(item, name, request);
+        events.publishEvent(new CatalogChangedEvent(availabilityChanged));
 
         return ServiceItemResponse.fromEntity(repository.save(item));
     }
@@ -88,7 +93,6 @@ class CatalogServiceImpl implements CatalogService {
      * because {@code fk_appointment_service} forbids removing history. Either way the caller sees 204.
      */
     @Override
-    @CacheEvict(value = "services", allEntries = true)
     public void deleteService(Long id) {
         ServiceItem item = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Service not found with id: " + id));
@@ -96,11 +100,13 @@ class CatalogServiceImpl implements CatalogService {
             if (item.isActive()) {
                 item.setActive(false);
                 repository.save(item);
+                events.publishEvent(new CatalogChangedEvent(true));
                 logger.info("Service id={} has appointments; retired instead of deleted", id);
             }
             return;
         }
         repository.delete(item);
+        events.publishEvent(new CatalogChangedEvent(true));
     }
 
     @Override
@@ -114,13 +120,13 @@ class CatalogServiceImpl implements CatalogService {
      * {@code lower(name)} unique across active and retired rows alike.
      */
     @Override
-    @CacheEvict(value = "services", allEntries = true)
     public ServiceItemResponse restoreService(Long id) {
         ServiceItem item = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Service not found with id: " + id));
         if (!item.isActive()) {
             item.setActive(true);
             item = repository.save(item);
+            events.publishEvent(new CatalogChangedEvent(true));
             logger.info("Service id={} restored", id);
         }
         return ServiceItemResponse.fromEntity(item);

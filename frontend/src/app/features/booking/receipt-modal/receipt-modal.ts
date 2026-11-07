@@ -1,6 +1,11 @@
-import { Component, input, output } from '@angular/core';
+import { Component, DestroyRef, inject, input, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { A11yModule } from '@angular/cdk/a11y';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { finalize } from 'rxjs';
+import { AppointmentsApi } from '../../../core/api/appointments-api';
+import { extractApiError } from '../../../core/api/extract-api-error';
+import { downloadTextFile, ICS_MIME_TYPE } from '../../../core/download';
 import { AppointmentItem } from '../../../types/api';
 import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
 
@@ -100,26 +105,67 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
         <div class="text-center text-[11px] text-zinc-500 leading-relaxed font-light mb-6">
           <p class="font-bold text-zinc-300 mb-1">📝 What happens next?</p>
           <p>
-            The shop owner will review your slot request. Once approved, you will automatically
-            receive a simulated SMTP email notification confirming your reservation details.
+            The shop owner will review your slot request and confirm it. Keep your booking code:
+            with your email address it lets you cancel, reschedule or review this booking.
           </p>
         </div>
 
-        <button
-          type="button"
-          class="btn btn-submit w-full py-3 font-bold tracking-wide uppercase"
-          (click)="closed.emit()"
-        >
-          Got It, Thanks!
-        </button>
+        <div class="space-y-2.5">
+          <button
+            type="button"
+            class="btn btn-secondary w-full py-2.5 text-xs font-bold tracking-wide uppercase"
+            [disabled]="exportingCalendar() || !appointment()"
+            (click)="downloadCalendar()"
+          >
+            {{ exportingCalendar() ? 'Exporting Calendar…' : '📅 Download .ics Calendar' }}
+          </button>
+          @if (calendarError(); as message) {
+            <p role="alert" class="text-center text-[11px] text-rose-400">{{ message }}</p>
+          }
+          <button
+            type="button"
+            class="btn btn-submit w-full py-3 font-bold tracking-wide uppercase"
+            (click)="closed.emit()"
+          >
+            Got It, Thanks!
+          </button>
+        </div>
       </div>
     </div>
   `,
 })
 export class ReceiptModalComponent {
+  private readonly appointmentsApi = inject(AppointmentsApi);
+  private readonly destroyRef = inject(DestroyRef);
   readonly appointment = input<AppointmentItem | null>(null);
   readonly checkoutTotal = input(0);
   readonly closed = output<void>();
+  protected readonly exportingCalendar = signal(false);
+  protected readonly calendarError = signal<string | null>(null);
+
+  protected downloadCalendar(): void {
+    const appt = this.appointment();
+    if (!appt || this.exportingCalendar()) return;
+    this.exportingCalendar.set(true);
+    this.calendarError.set(null);
+    this.appointmentsApi
+      .exportPublicCalendar(appt.publicId, appt.customerEmail)
+      .pipe(
+        finalize(() => this.exportingCalendar.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: ({ content, filename }) => {
+          if (!downloadTextFile(content, filename, ICS_MIME_TYPE)) {
+            this.calendarError.set('This browser cannot save the calendar file.');
+          }
+        },
+        error: (err: unknown) =>
+          this.calendarError.set(
+            extractApiError(err, 'The calendar file could not be created. Please try again.'),
+          ),
+      });
+  }
 
   protected onBackdropClick(event: MouseEvent): void {
     if (event.target === event.currentTarget) {

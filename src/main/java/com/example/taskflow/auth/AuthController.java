@@ -8,12 +8,14 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.CacheControl;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.Authentication;
@@ -33,18 +35,24 @@ import java.util.Locale;
 @Tag(name = "Authentication Portal", description = "Endpoints for user authentication")
 class AuthController {
 
+    /** HttpOnly, path-scoped to /api/v1/auth: only renewal and logout ever receive it. */
+    static final String REFRESH_COOKIE = "refresh_token";
+    /** Readable by the SPA, no credential: tells it (and nginx) that this browser can renew. */
+    static final String SESSION_HINT_COOKIE = "taskflow_session";
+
     private final AuthenticationManager authenticationManager;
     private final TokenProvider tokenProvider;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final LoginAttemptLimiter loginAttemptLimiter;
     private final TokenRevocationList tokenRevocationList;
+    private final RefreshSessionService refreshSessions;
     private final boolean cookieSecure;
 
     public AuthController(AuthenticationManager authenticationManager, TokenProvider tokenProvider,
                           UserRepository userRepository, PasswordEncoder passwordEncoder,
                           LoginAttemptLimiter loginAttemptLimiter, TokenRevocationList tokenRevocationList,
-                          CookieProperties cookieProperties) {
+                          CookieProperties cookieProperties, RefreshSessionService refreshSessions) {
         this.authenticationManager = authenticationManager;
         this.tokenProvider = tokenProvider;
         this.userRepository = userRepository;
@@ -52,6 +60,7 @@ class AuthController {
         this.loginAttemptLimiter = loginAttemptLimiter;
         this.tokenRevocationList = tokenRevocationList;
         this.cookieSecure = cookieProperties.secure();
+        this.refreshSessions = refreshSessions;
     }
 
     /**
@@ -83,10 +92,11 @@ class AuthController {
                                                           HttpServletResponse response) {
         Authentication authentication = authenticate(loginRequest);
 
-        String jwt = tokenProvider.generateToken(authentication);
+        RefreshSessionService.Issued session = refreshSessions.create(authentication);
         String role = extractRole(authentication);
 
-        addAuthCookie(response, jwt);
+        addAuthCookie(response, issueAccessToken(authentication, session));
+        addRefreshCookie(response, session);
 
         return ResponseEntity.ok(new LoginResponse(authentication.getName(), role));
     }
@@ -100,18 +110,58 @@ class AuthController {
     public ResponseEntity<MobileLoginResponse> authenticateMobileUser(
             @Valid @RequestBody LoginRequest loginRequest) {
         Authentication authentication = authenticate(loginRequest);
+        RefreshSessionService.Issued session = refreshSessions.create(authentication);
 
         MobileLoginResponse response = new MobileLoginResponse(
-                tokenProvider.generateToken(authentication),
+                issueAccessToken(authentication, session),
                 "Bearer",
                 tokenProvider.getTokenLifetimeSeconds(),
                 authentication.getName(),
-                extractRole(authentication)
+                extractRole(authentication),
+                session.refreshToken()
         );
 
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(response);
+    }
+
+    @PostMapping("/refresh")
+    @Operation(summary = "Rotate the browser session credential (requires CSRF)")
+    @ApiResponses({@ApiResponse(responseCode = "200", description = "Session renewed"),
+            @ApiResponse(responseCode = "401", description = "Session expired or revoked"),
+            @ApiResponse(responseCode = "403", description = "CSRF token missing or invalid")})
+    public ResponseEntity<LoginResponse> refresh(
+            @CookieValue(name = REFRESH_COOKIE, required = false) String secret,
+            HttpServletResponse response) {
+        java.util.Optional<RefreshSessionService.Issued> renewed = refreshSessions.rotate(secret);
+        if (renewed.isEmpty()) {
+            // A dead credential: drop it and the hint, so the SPA stops trying to renew.
+            clearRefreshCookies(response);
+            throw new BadCredentialsException("Session expired or revoked.");
+        }
+        RefreshSessionService.Issued session = renewed.get();
+        addAuthCookie(response, issueAccessToken(session.authentication(), session));
+        addRefreshCookie(response, session);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(new LoginResponse(session.username(), session.role()));
+    }
+
+    @PostMapping("/mobile/refresh")
+    @Operation(summary = "Rotate a native client's one-use refresh credential")
+    @ApiResponses({@ApiResponse(responseCode = "200", description = "Session renewed"),
+            @ApiResponse(responseCode = "401", description = "Session expired or revoked")})
+    public ResponseEntity<MobileLoginResponse> refreshMobile(@Valid @RequestBody RefreshRequest request) {
+        RefreshSessionService.Issued session = refreshSessions.rotate(request.refreshToken())
+                .orElseThrow(() -> new BadCredentialsException("Session expired or revoked."));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new MobileLoginResponse(
+                issueAccessToken(session.authentication(), session),
+                "Bearer", tokenProvider.getTokenLifetimeSeconds(), session.username(), session.role(), session.refreshToken()));
+    }
+
+    /** Access tokens name their session family, so logout or reuse detection can revoke them. */
+    private String issueAccessToken(Authentication authentication, RefreshSessionService.Issued session) {
+        return tokenProvider.generateToken(authentication, session.id(), session.tokenVersion());
     }
 
     @PostMapping("/register")
@@ -209,16 +259,27 @@ class AuthController {
     @PostMapping("/logout")
     @Operation(summary = "Clear the HttpOnly JWT cookie")
     @ApiResponse(responseCode = "204", description = "JWT cookie cleared — session ended")
-    public ResponseEntity<Void> logout(@Parameter(hidden = true) Authentication authentication,
+    public ResponseEntity<Void> logout(@Parameter(hidden = true) @Nullable Authentication authentication,
+                                       @CookieValue(name = REFRESH_COOKIE, required = false) String refreshCookie,
+                                       @RequestBody(required = false) @Nullable RefreshRequest request,
                                        HttpServletResponse response) {
         // Deny the presented token for the rest of its lifetime. Without this a
         // copied cookie or mobile bearer token stays usable for up to an hour
-        // after the user "logged out". Anonymous callers (already expired) just
-        // get the cookie cleared.
+        // after the user "logged out". Anonymous callers (already expired) still
+        // revoke the refresh credential they present and get the cookies cleared.
         if (authentication instanceof JwtAuthenticationToken jwtAuthentication) {
             tokenRevocationList.revoke(jwtAuthentication.getToken().getId(),
                     jwtAuthentication.getToken().getExpiresAt());
+            String sessionId = jwtAuthentication.getToken().getClaimAsString(RefreshSessionService.SESSION_CLAIM);
+            if (sessionId != null) {
+                refreshSessions.revokeSession(sessionId);
+            }
         }
+        refreshSessions.revoke(refreshCookie);
+        if (request != null) {
+            refreshSessions.revoke(request.refreshToken());
+        }
+        clearRefreshCookies(response);
         ResponseCookie cookie = ResponseCookie.from("access_token", "")
                 .httpOnly(true)
                 .secure(cookieSecure)
@@ -239,5 +300,31 @@ class AuthController {
                 .maxAge(Duration.ofSeconds(tokenProvider.getTokenLifetimeSeconds()))
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    /**
+     * The HttpOnly credential (only the auth endpoints receive it) plus a readable hint cookie
+     * that carries nothing but "this browser can renew": the SPA cannot see the credential, and
+     * without the hint every guest page load would probe the refresh endpoint.
+     */
+    private void addRefreshCookie(HttpServletResponse response, RefreshSessionService.Issued session) {
+        Duration remaining = Duration.between(java.time.Instant.now(TokenProvider.TOKEN_CLOCK), session.expiresAt());
+        response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from(REFRESH_COOKIE, session.refreshToken())
+                .httpOnly(true).secure(cookieSecure).sameSite("Strict").path("/api/v1/auth")
+                .maxAge(remaining)
+                .build().toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from(SESSION_HINT_COOKIE, "1")
+                .httpOnly(false).secure(cookieSecure).sameSite("Strict").path("/")
+                .maxAge(remaining)
+                .build().toString());
+    }
+
+    private void clearRefreshCookies(HttpServletResponse response) {
+        response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from(REFRESH_COOKIE, "")
+                .httpOnly(true).secure(cookieSecure).sameSite("Strict").path("/api/v1/auth").maxAge(0)
+                .build().toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from(SESSION_HINT_COOKIE, "")
+                .httpOnly(false).secure(cookieSecure).sameSite("Strict").path("/").maxAge(0)
+                .build().toString());
     }
 }

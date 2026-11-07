@@ -44,7 +44,7 @@ class P1AndP2BenchmarkTest {
     @Test
     void p1_3_cacheControl_headers() throws Exception {
         System.out.println("\n" + "=".repeat(80));
-        System.out.println("  ▸ P1-3 CACHE-CONTROL HEADERS (5m public / no-cache revalidated)");
+        System.out.println("  ▸ P1-3 CACHE-CONTROL HEADERS (public and private, revalidated with the ETag)");
         System.out.println("=".repeat(80));
 
         // Seed
@@ -70,8 +70,9 @@ class P1AndP2BenchmarkTest {
         System.out.println("  BusySlots Cache-Control: " + busyCC);
         System.out.printf("  4 GETs elapsed: %d µs (%.2f ms) avg %.1f µs/req%n", elapsedUs, elapsedUs/1000.0, elapsedUs/4.0);
 
-        assertNotNull(catalogCC); assertTrue(catalogCC.contains("max-age=300") && catalogCC.contains("public"), "catalog 5m public");
-        assertNotNull(barbersCC); assertTrue(barbersCC.contains("max-age=300"), "barbers 5m");
+        // Admins edit the catalog and the roster from both clients: public, but revalidated (§44 update).
+        assertNotNull(catalogCC); assertEquals("no-cache, public", catalogCC, "catalog public, revalidated (ETag 304)");
+        assertNotNull(barbersCC); assertEquals("no-cache, public", barbersCC, "barbers public, revalidated (ETag 304)");
         assertNotNull(ratingsCC); assertEquals("no-cache, public", ratingsCC, "ratings revalidated (ETag 304)");
         assertNotNull(busyCC); assertEquals("no-cache, private", busyCC, "busySlots revalidated (ETag 304)");
 
@@ -173,6 +174,10 @@ class P1AndP2BenchmarkTest {
         System.out.printf("  Parse latency: %d µs%n", us);
 
         assertTrue(hasRamp && hasThresh, "load.js must have ramping-vus and p95<500");
+        assertTrue(ls.contains("scenarios: OPEN_MODEL ? openArrival : closedRamp"),
+                "the open arrival model replaces the closed ramp instead of running on top of it");
+        assertTrue(ls.contains("LOCAL_HOSTS") && ls.contains("ALLOW_REMOTE_LOAD"),
+                "load.js must refuse a non-local BASE_URL unless explicitly allowed");
         assertTrue(cwvTight, "browser.js must be tightened to CWV good thresholds");
         assertTrue(productionSafeProbe, "probe.js must stay below the per-IP rate limit and use public endpoints");
 
@@ -190,7 +195,7 @@ class P1AndP2BenchmarkTest {
         System.out.println("\n" + "=".repeat(80));
         System.out.println("  ▸ P2 LOOKBOOK VIRTUALIZATION (FlatList scrollEnabled false → View map)");
         System.out.println("=".repeat(80));
-        Path gallery = Path.of("mobile/src/components/lookbook/LookbookGallery.tsx");
+        Path gallery = Path.of("mobile/src/features/landing/LookbookGallery.tsx");
         String g = Files.readString(gallery);
         long t0 = System.nanoTime();
         boolean noFlatList = !g.contains("<FlatList") && !g.contains("scrollEnabled={false}");

@@ -20,6 +20,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.LongSupplier;
 
 /**
  * Drains the transactional outbox: claims PENDING entries and re-attempts
@@ -54,7 +55,8 @@ class NotificationRelayScheduler {
      * How long one run keeps claiming further batches while they come back full. One batch per
      * 30 s capped delivery below 100 mails a minute, so a burst (time off cancelling many
      * bookings, the reminder sweep) queued for minutes. Far below the stale-claim window, since
-     * every batch is sent right after its own claim, and below the 30 s graceful-shutdown phase.
+     * every batch is sent right after its own claim. It bounds starts, not an in-flight SMTP call;
+     * that call is bounded by transport timeouts. Unstarted claims are released without an attempt.
      */
     static final Duration DRAIN_BUDGET = Duration.ofSeconds(20);
 
@@ -65,6 +67,7 @@ class NotificationRelayScheduler {
     private final Clock clock;
     private final boolean schedulersEnabled;
     private final long drainBudgetNanos;
+    private final LongSupplier nanoTime;
 
     @Autowired
     public NotificationRelayScheduler(NotificationOutboxRepository outboxRepository,
@@ -90,8 +93,19 @@ class NotificationRelayScheduler {
                                ObjectProvider<NotificationRelayScheduler> selfProvider,
                                String instanceId,
                                Clock clock,
+                                boolean schedulersEnabled,
+                                Duration drainBudget) {
+        this(outboxRepository, sender, selfProvider, instanceId, clock, schedulersEnabled, drainBudget, System::nanoTime);
+    }
+
+    NotificationRelayScheduler(NotificationOutboxRepository outboxRepository,
+                               NotificationSender sender,
+                               ObjectProvider<NotificationRelayScheduler> selfProvider,
+                               String instanceId,
+                               Clock clock,
                                boolean schedulersEnabled,
-                               Duration drainBudget) {
+                               Duration drainBudget,
+                               LongSupplier nanoTime) {
         this.outboxRepository = outboxRepository;
         this.sender = sender;
         this.selfProvider = selfProvider;
@@ -101,6 +115,7 @@ class NotificationRelayScheduler {
         this.clock = clock;
         this.schedulersEnabled = schedulersEnabled;
         this.drainBudgetNanos = drainBudget.toNanos();
+        this.nanoTime = nanoTime;
     }
 
     /** Scheduler entry point; a no-op when {@code app.schedulers.enabled=false} (default for the test task). */
@@ -119,17 +134,27 @@ class NotificationRelayScheduler {
      */
     public void relay() {
         NotificationRelayScheduler self = selfProvider.getIfAvailable();
-        long deadline = System.nanoTime() + drainBudgetNanos;
+        long startedAt = nanoTime.getAsLong();
 
         List<NotificationSender.Claim> claims;
-        do {
+        while (hasBudget(startedAt)) {
             claims = self != null ? self.claimBatch() : claimBatch();
             if (claims.isEmpty()) {
                 break;
             }
             logger.info("Notification relay claimed {} outbox entr{} via {}", claims.size(),
                     claims.size() == 1 ? "y" : "ies", instanceId);
-            for (NotificationSender.Claim claim : claims) {
+            for (int index = 0; index < claims.size(); index++) {
+                if (!hasBudget(startedAt)) {
+                    List<NotificationSender.Claim> unstarted = claims.subList(index, claims.size());
+                    if (self != null) {
+                        self.releaseUnstartedClaims(unstarted);
+                    } else {
+                        releaseUnstartedClaims(unstarted);
+                    }
+                    break;
+                }
+                NotificationSender.Claim claim = claims.get(index);
                 try {
                     sender.process(claim);
                 } catch (Exception e) {
@@ -137,7 +162,10 @@ class NotificationRelayScheduler {
                     logger.error("Relay failed to process outbox id={}: {}", claim.id(), safeMsg);
                 }
             }
-        } while (claims.size() >= CLAIM_BATCH_SIZE && System.nanoTime() - deadline < 0);
+            if (claims.size() < CLAIM_BATCH_SIZE) {
+                break;
+            }
+        }
 
         // Always reclaim stale PROCESSING rows, even when nothing was claimable
         // this cycle, so rows abandoned by a crashed instance are recovered.
@@ -145,6 +173,17 @@ class NotificationRelayScheduler {
             self.reclaimStaleClaims();
         } else {
             reclaimStaleClaims();
+        }
+    }
+
+    private boolean hasBudget(long startedAt) {
+        return nanoTime.getAsLong() - startedAt < drainBudgetNanos;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void releaseUnstartedClaims(List<NotificationSender.Claim> claims) {
+        for (NotificationSender.Claim claim : claims) {
+            outboxRepository.releaseIfClaimed(claim.id(), claim.claimedBy(), claim.claimedAt());
         }
     }
 

@@ -9,6 +9,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -31,7 +32,8 @@ class AuthCookieTest {
 
     @Test
     void loginSetsHttpOnlySecureStrictCookieAndNoTokenInBody() throws Exception {
-        when(tokenProvider.generateToken(any())).thenReturn("test-jwt");
+        // Logins name their refresh session in the token (ADR-023).
+        when(tokenProvider.generateToken(any(), any(), anyInt())).thenReturn("test-jwt");
 
         mockMvc.perform(post("/api/v1/auth/login")
                         .with(csrf())
@@ -46,12 +48,15 @@ class AuthCookieTest {
                 // profile (application-prod.properties) sets it true.
                 .andExpect(cookie().secure("access_token", false))
                 .andExpect(cookie().path("access_token", "/"))
-                .andExpect(cookie().value("access_token", "test-jwt"));
+                .andExpect(cookie().value("access_token", "test-jwt"))
+                .andExpect(cookie().httpOnly("refresh_token", true))
+                .andExpect(cookie().path("refresh_token", "/api/v1/auth"))
+                .andExpect(cookie().httpOnly("taskflow_session", false));
     }
 
     @Test
     void mobileLoginReturnsNoStoreBearerResponseAndNoCookie() throws Exception {
-        when(tokenProvider.generateToken(any())).thenReturn("mobile-test-jwt");
+        when(tokenProvider.generateToken(any(), any(), anyInt())).thenReturn("mobile-test-jwt");
         when(tokenProvider.getTokenLifetimeSeconds()).thenReturn(3600L);
 
         mockMvc.perform(post("/api/v1/auth/mobile/login")
@@ -63,7 +68,9 @@ class AuthCookieTest {
                 .andExpect(jsonPath("$.expiresIn").value(3600))
                 .andExpect(jsonPath("$.username").value("admin"))
                 .andExpect(jsonPath("$.role").value("ROLE_ADMIN"))
+                .andExpect(jsonPath("$.refreshToken").isString())
                 .andExpect(cookie().doesNotExist("access_token"))
+                .andExpect(cookie().doesNotExist("refresh_token"))
                 .andExpect(result -> org.junit.jupiter.api.Assertions.assertEquals(
                         "no-store", result.getResponse().getHeader("Cache-Control")));
     }

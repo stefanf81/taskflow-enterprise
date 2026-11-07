@@ -46,7 +46,7 @@ class SecurityConfigTest {
 
         SecurityConfig config = createConfig("admin", "pass", privBase64, pubBase64);
 
-        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class)));
+        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
         assertNotNull(config.jwkSource());
         assertNotNull(config.jwtEncoder(config.jwkSource()));
     }
@@ -54,19 +54,19 @@ class SecurityConfigTest {
     @Test
     void testLoadRsaKeyInvalid() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "invalid-base64", "invalid-base64");
-        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class))); // Should fallback to ephemeral keys
+        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class))); // Should fallback to ephemeral keys
     }
 
     @Test
     void testLoadRsaKeyBlank() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "", "   ");
-        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class)));
+        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
     }
 
     @Test
     void testLoadRsaKeyPartiallyBlank() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "valid-fake-base", "");
-        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class)));
+        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
     }
 
     @Test
@@ -91,7 +91,7 @@ class SecurityConfigTest {
         rsaKeyField.setAccessible(true);
         rsaKeyField.set(config, null);
 
-        assertThrows(IllegalStateException.class, () -> config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class)));
+        assertThrows(IllegalStateException.class, () -> config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
     }
 
     @Test
@@ -115,6 +115,32 @@ class SecurityConfigTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer native-token");
         request.setCookies(new jakarta.servlet.http.Cookie("access_token", "web-token"));
+
+        assertFalse(config.bearerOnlyRequestMatcher().matches(request));
+    }
+
+    @Test
+    void aRefreshCookieIsAnAmbientCredentialButUnrelatedCookiesAreNot() {
+        SecurityConfig config = createConfig("admin", "pass", null, null);
+        MockHttpServletRequest withRefresh = new MockHttpServletRequest("POST", "/api/v1/auth/logout");
+        withRefresh.addHeader("Authorization", "Bearer native-token");
+        withRefresh.setCookies(new jakarta.servlet.http.Cookie("refresh_token", "r".repeat(43)));
+        assertFalse(config.bearerOnlyRequestMatcher().matches(withRefresh));
+
+        // A cookie a native HTTP stack picked up (or an analytics cookie) authenticates nothing.
+        MockHttpServletRequest withOther = new MockHttpServletRequest("POST", "/api/v1/appointments/5");
+        withOther.addHeader("Authorization", "Bearer native-token");
+        withOther.setCookies(new jakarta.servlet.http.Cookie("XSRF-TOKEN", "x"),
+                new jakarta.servlet.http.Cookie("theme", "dark"));
+        assertTrue(config.bearerOnlyRequestMatcher().matches(withOther));
+    }
+
+    @Test
+    void browserRefreshStaysCsrfProtectedEvenWithABearerHeader() {
+        SecurityConfig config = createConfig("admin", "pass", null, null);
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/refresh");
+        request.setServletPath("/api/v1/auth/refresh");
+        request.addHeader("Authorization", "Bearer native-token");
 
         assertFalse(config.bearerOnlyRequestMatcher().matches(request));
     }

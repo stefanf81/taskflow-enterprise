@@ -295,9 +295,10 @@ describe('storage', () => {
 
   // ==================== clearSession ====================
   describe('clearSession', () => {
-    it('removes token, expiry and user data', async () => {
+    it('removes token, refresh token, expiry and user data', async () => {
       await storage.clearSession();
       expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_auth_token');
+      expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_refresh_token');
       expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_token_expires_at');
       expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_user_data');
     });
@@ -307,7 +308,164 @@ describe('storage', () => {
         if (key === 'taskflow_auth_token') throw new Error('fail');
       });
       await expect(storage.clearSession()).rejects.toThrow('Secure credential removal failed.');
-      expect(mockDeleteItemAsync).toHaveBeenCalledTimes(3);
+      expect(mockDeleteItemAsync).toHaveBeenCalledTimes(4);
+    });
+
+    it('erases the refresh token from SecureStore, not just from memory', async () => {
+      await storage.setRefreshToken('r'.repeat(43));
+      await storage.clearSession();
+      expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_refresh_token');
+      mockGetItemAsync.mockResolvedValue(null);
+      await expect(storage.getRefreshToken()).resolves.toBeNull();
+      expect(mockGetItemAsync).toHaveBeenCalledWith('taskflow_refresh_token');
+    });
+  });
+
+  // ==================== refresh token ====================
+  describe('refresh token', () => {
+    it('persists the refresh token in SecureStore and serves it from memory afterwards', async () => {
+      await storage.setRefreshToken('a'.repeat(43));
+      expect(mockSetItemAsync).toHaveBeenCalledWith('taskflow_refresh_token', 'a'.repeat(43));
+      mockGetItemAsync.mockClear();
+      await expect(storage.getRefreshToken()).resolves.toBe('a'.repeat(43));
+      expect(mockGetItemAsync).not.toHaveBeenCalled();
+    });
+
+    it('refuses to fall back to plaintext memory when SecureStore cannot store it', async () => {
+      mockSetItemAsync.mockRejectedValueOnce(new Error('locked'));
+      await expect(storage.setRefreshToken('b'.repeat(43))).rejects.toThrow(
+        'Secure credential storage is unavailable.',
+      );
+    });
+
+    it('fails closed (never "no refresh token") when SecureStore cannot read it', async () => {
+      mockGetItemAsync.mockRejectedValueOnce(new Error('locked'));
+      await expect(storage.getRefreshToken()).rejects.toThrow(
+        'Secure credential storage is unavailable.',
+      );
+      // Not cached: the next read asks SecureStore again.
+      mockGetItemAsync.mockResolvedValue('c'.repeat(43));
+      await expect(storage.getRefreshToken()).resolves.toBe('c'.repeat(43));
+    });
+
+    it('does not cache a refresh-token read that a logout overtook', async () => {
+      let finishRead!: (value: string) => void;
+      mockGetItemAsync.mockImplementationOnce(
+        () => new Promise<string>((resolve) => (finishRead = resolve)),
+      );
+      const inFlight = storage.getRefreshToken();
+      await storage.clearSession();
+      finishRead('d'.repeat(43));
+      await expect(inFlight).resolves.toBe('d'.repeat(43));
+
+      mockGetItemAsync.mockResolvedValue(null);
+      await expect(storage.getRefreshToken()).resolves.toBeNull();
+    });
+  });
+
+  // ==================== session batches ====================
+  describe('session batches', () => {
+    /** SecureStore as a map, so the final state of interleaved batches can be checked. */
+    const useDisk = () => {
+      const disk = new Map<string, string>();
+      mockSetItemAsync.mockImplementation(async (key: string, value: string) => {
+        disk.set(key, value);
+      });
+      mockGetItemAsync.mockImplementation(async (key: string) => disk.get(key) ?? null);
+      mockDeleteItemAsync.mockImplementation(async (key: string) => {
+        disk.delete(key);
+      });
+      return disk;
+    };
+    const rotation = { token: 'renewed', expiresAt: 1_786_000_000_000, refreshToken: 'n'.repeat(43) };
+
+    it('starts a sign-in with a new epoch at once and stores all of it', async () => {
+      const disk = useDisk();
+      const before = storage.getSessionEpoch();
+
+      const started = storage.startSession({
+        token: 'login',
+        expiresAt: 1_786_000_000_000,
+        refreshToken: 'a'.repeat(43),
+        user: { username: 'jane', role: 'ROLE_CUSTOMER' },
+      });
+      expect(storage.getSessionEpoch()).toBe(before + 1);
+      await started;
+
+      expect(disk.get('taskflow_auth_token')).toBe('login');
+      expect(disk.get('taskflow_token_expires_at')).toBe('1786000000000');
+      expect(disk.get('taskflow_refresh_token')).toBe('a'.repeat(43));
+      expect(JSON.parse(disk.get('taskflow_user_data')!)).toEqual({
+        username: 'jane',
+        role: 'ROLE_CUSTOMER',
+      });
+    });
+
+    it('drops an earlier refresh token when the new sign-in has none', async () => {
+      const disk = useDisk();
+      await storage.setRefreshToken('o'.repeat(43));
+
+      await storage.startSession({ token: 'login', expiresAt: 1, user: {} });
+
+      expect(disk.has('taskflow_refresh_token')).toBe(false);
+      await expect(storage.getRefreshToken()).resolves.toBeNull();
+    });
+
+    it("stores a renewal for its own session, the server's new refresh token first", async () => {
+      const disk = useDisk();
+
+      await expect(storage.rotateSession(storage.getSessionEpoch(), rotation)).resolves.toBe(true);
+
+      expect(mockSetItemAsync.mock.calls.map(([key]) => key)).toEqual([
+        'taskflow_refresh_token',
+        'taskflow_auth_token',
+        'taskflow_token_expires_at',
+      ]);
+      expect(disk.get('taskflow_auth_token')).toBe('renewed');
+      await expect(storage.getRefreshToken()).resolves.toBe('n'.repeat(43));
+    });
+
+    it('stores nothing from a renewal of a session a sign-out already ended', async () => {
+      useDisk();
+      const epoch = storage.getSessionEpoch();
+      const signedOut = storage.clearSession();
+
+      await expect(storage.rotateSession(epoch, rotation)).resolves.toBe(false);
+      await signedOut;
+      expect(mockSetItemAsync).not.toHaveBeenCalled();
+    });
+
+    it('lets a sign-out requested during a rotation run after it, so nothing survives', async () => {
+      const disk = useDisk();
+      let releaseTokenWrite: (() => void) | undefined;
+      mockSetItemAsync.mockImplementation(async (key: string, value: string) => {
+        if (key === 'taskflow_auth_token') {
+          await new Promise<void>((resolve) => (releaseTokenWrite = resolve));
+        }
+        disk.set(key, value);
+      });
+
+      const rotating = storage.rotateSession(storage.getSessionEpoch(), rotation);
+      // Halfway: the refresh token is written, the access token write is still pending.
+      for (let i = 0; i < 100 && !releaseTokenWrite; i++) await Promise.resolve();
+      expect(disk.get('taskflow_refresh_token')).toBe('n'.repeat(43));
+      const signedOut = storage.clearSession();
+      releaseTokenWrite!();
+      await expect(rotating).resolves.toBe(true);
+      await signedOut;
+
+      expect(disk.size).toBe(0);
+      await expect(storage.getToken()).resolves.toBeNull();
+      await expect(storage.getRefreshToken()).resolves.toBeNull();
+    });
+
+    it('makes reads wait for a sign-out requested before them', async () => {
+      useDisk();
+      await storage.setToken('session-token');
+
+      const signedOut = storage.clearSession();
+      await expect(storage.getToken()).resolves.toBeNull();
+      await signedOut;
     });
   });
 });

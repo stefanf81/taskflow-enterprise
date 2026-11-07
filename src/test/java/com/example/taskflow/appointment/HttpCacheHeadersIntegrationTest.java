@@ -137,12 +137,21 @@ class HttpCacheHeadersIntegrationTest {
                 .andExpect(status().isNotModified());
     }
 
+    /**
+     * Admins edit the catalog, the barbers and their schedules from both clients, which refetch
+     * these lists right afterwards: public, but revalidated (ETag 304) instead of a max-age that
+     * would let the browser or native HTTP cache answer that refetch with the old list.
+     */
     @Test
-    void referenceDataKeepsItsFiveMinutePublicTier() throws Exception {
+    void adminEditableReferenceDataIsPublicButRevalidated() throws Exception {
         for (String path : new String[] {"/api/v1/catalog", "/api/v1/barbers", "/api/v1/appointments/public/shop"}) {
-            mockMvc.perform(get(path))
+            String etag = mockMvc.perform(get(path))
                     .andExpect(status().isOk())
-                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "max-age=300, public"));
+                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-cache, public"))
+                    .andReturn().getResponse().getHeader(HttpHeaders.ETAG);
+            assertNotNull(etag, path + " must keep its ETag");
+            mockMvc.perform(get(path).header(HttpHeaders.IF_NONE_MATCH, etag))
+                    .andExpect(status().isNotModified());
         }
     }
 

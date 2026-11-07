@@ -1,5 +1,6 @@
 import { authApi } from '../src/core/auth/auth';
 import { ApiContractError } from '../src/api/contracts';
+import { storage } from '../src/utils/storage';
 import { http, HttpResponse } from 'msw';
 import { server } from '../test/mocks/server';
 
@@ -81,6 +82,23 @@ describe('authApi', () => {
     );
     await expect(authApi.logout()).resolves.toBeUndefined();
     expect(called).toBe(true);
+  });
+
+  it('still signs out server-side when the Keychain cannot read the refresh token', async () => {
+    jest
+      .spyOn(storage, 'getRefreshToken')
+      .mockRejectedValueOnce(new Error('Secure credential storage is unavailable.'));
+    let body: string | undefined;
+    server.use(
+      http.post('*/api/v1/auth/logout', async ({ request }) => {
+        body = await request.text();
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    await expect(authApi.logout()).resolves.toBeUndefined();
+    // Without the refresh token; a valid bearer token alone revokes its refresh session.
+    expect(JSON.parse(body || 'null')).toBeNull();
   });
 
   it('surfaces a failing logout call so callers can ignore it explicitly', async () => {

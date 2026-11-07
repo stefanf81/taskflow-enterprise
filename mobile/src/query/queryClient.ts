@@ -3,7 +3,7 @@ import * as Network from 'expo-network';
 import { focusManager, onlineManager, QueryClient } from '@tanstack/react-query';
 import { ApiContractError } from '../api/contracts';
 import { getHttpStatus, getRetryAfterSeconds } from '../utils/errors';
-import { SessionExpiredError } from '../utils/session';
+import { SessionChangedError, SessionExpiredError } from '../utils/session';
 
 // TanStack Query has no notion of React Native's app lifecycle by default:
 // without this, `refetchInterval` keeps polling while the app is backgrounded.
@@ -52,7 +52,13 @@ const MAX_RETRY_AFTER_MS = 10_000;
  */
 export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
   if (failureCount >= MAX_QUERY_RETRIES) return false;
-  if (error instanceof ApiContractError || error instanceof SessionExpiredError) return false;
+  if (
+    error instanceof ApiContractError ||
+    error instanceof SessionExpiredError ||
+    error instanceof SessionChangedError
+  ) {
+    return false;
+  }
   const status = getHttpStatus(error);
   if (status === undefined || status === 408) return true;
   const retryAfter = getRetryAfterSeconds(error);

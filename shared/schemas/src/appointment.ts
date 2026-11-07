@@ -1,8 +1,10 @@
 import {
   array,
+  boolean,
   email,
   enum as zEnum,
   gte,
+  int,
   lte,
   maxLength,
   minLength,
@@ -164,3 +166,85 @@ export type BarberTimeOffResponse = zInfer<typeof barberTimeOffResponseSchema>;
 
 /** GET /api/v1/barbers/{id}/time-off response. */
 export const barberTimeOffResponseListSchema = array(barberTimeOffResponseSchema);
+
+export const calendarExportRequestSchema = object({
+  email: string().check(
+    trim(),
+    minLength(1, "Customer email is required"),
+    email("Invalid email format"),
+    maxLength(100),
+  ),
+});
+
+export type CalendarExportRequest = zInfer<typeof calendarExportRequestSchema>;
+
+export const calendarExportResponseSchema = object({
+  content: string().check(minLength(1)),
+  filename: string().check(minLength(1)),
+});
+
+export type CalendarExportResponse = zInfer<typeof calendarExportResponseSchema>;
+
+export const rescheduleRequestSchema = object({
+  bookingDate: dateSchema,
+  bookingTime: timeSchema,
+});
+
+export type RescheduleRequest = zInfer<typeof rescheduleRequestSchema>;
+
+export const guestRescheduleRequestSchema = object({
+  email: string().check(
+    trim(),
+    minLength(1, "Customer email is required"),
+    email("Invalid email format"),
+    maxLength(100),
+  ),
+  bookingDate: dateSchema,
+  bookingTime: timeSchema,
+});
+
+export type GuestRescheduleRequest = zInfer<typeof guestRescheduleRequestSchema>;
+
+/** POST /api/v1/appointments/public/reschedule/{publicId}/availability: the guest proves the booking. */
+export const rescheduleAvailabilityRequestSchema = object({
+  email: string().check(
+    trim(),
+    minLength(1, "Customer email is required"),
+    email("Invalid email format"),
+    maxLength(100),
+  ),
+  bookingDate: dateSchema,
+});
+
+export type RescheduleAvailabilityRequest = zInfer<typeof rescheduleAvailabilityRequestSchema>;
+
+export const scheduleDaySchema = object({
+  dayOfWeek: int().check(gte(1), lte(7)),
+  opens: timeSchema,
+  closes: timeSchema,
+});
+
+export type ScheduleDay = zInfer<typeof scheduleDaySchema>;
+
+export const barberScheduleResponseSchema = object({
+  days: array(scheduleDaySchema),
+  revision: string().check(minLength(1)),
+});
+
+export type BarberScheduleResponse = zInfer<typeof barberScheduleResponseSchema>;
+
+export const scheduleChangeRequestSchema = object({
+  days: array(scheduleDaySchema),
+  expectedRevision: string().check(trim(), minLength(1), maxLength(64)),
+  expectedConflicts: optional(string().check(maxLength(64))),
+  cancelConflictingAppointments: boolean(),
+});
+
+export type ScheduleChangeRequest = zInfer<typeof scheduleChangeRequestSchema>;
+
+export const schedulePreviewResponseSchema = object({
+  conflictCount: int().check(gte(0)),
+  conflictsRevision: string().check(minLength(1)),
+});
+
+export type SchedulePreviewResponse = zInfer<typeof schedulePreviewResponseSchema>;

@@ -1,6 +1,6 @@
 import { queryClient, queryRetryDelay, shouldRetryQuery } from '../src/query/queryClient';
 import { ApiContractError } from '../src/api/contracts';
-import { SessionExpiredError } from '../src/utils/session';
+import { SessionChangedError, SessionExpiredError } from '../src/utils/session';
 
 const httpError = (status: number, headers: Record<string, string> = {}) =>
   Object.assign(new Error(`HTTP ${status}`), { response: { status, data: null, headers } });
@@ -43,9 +43,10 @@ describe('shouldRetryQuery', () => {
     }
   });
 
-  it('never retries a contract violation or an expired session', () => {
+  it('never retries a contract violation, an expired session or a replaced one', () => {
     expect(shouldRetryQuery(0, new ApiContractError('GET /x', 'id: required'))).toBe(false);
     expect(shouldRetryQuery(0, new SessionExpiredError())).toBe(false);
+    expect(shouldRetryQuery(0, new SessionChangedError())).toBe(false);
   });
 
   it('retries 429 only after a short Retry-After', () => {

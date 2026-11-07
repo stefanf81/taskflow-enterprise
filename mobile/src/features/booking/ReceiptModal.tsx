@@ -1,10 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Share } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
+import { ErrorMessage } from '../../components/common/ErrorMessage';
+import { appointmentsApi } from '../../core/appointments/appointments';
+import { shareCalendarFile } from '../../core/calendar/shareCalendarFile';
 import { AppointmentItem } from '../../types/api';
 import { colors } from '../../theme/colors';
+import { getApiErrorMessage } from '../../utils/errors';
 
 interface ReceiptModalProps {
   visible: boolean;
@@ -21,6 +25,9 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   onClose,
   onOpenPublicActions,
 }) => {
+  const [exportingCalendar, setExportingCalendar] = useState(false);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
+
   const handleShare = async () => {
     if (!appointment) return;
     try {
@@ -30,6 +37,28 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     } catch {
       // ignore
     }
+  };
+
+  // The .ics goes to the share sheet as a file, so a calendar app can import the event.
+  const handleExportCalendar = () => {
+    if (!appointment || exportingCalendar) return;
+    setExportingCalendar(true);
+    setCalendarError(null);
+    void appointmentsApi
+      .exportPublicCalendar(appointment.publicId, appointment.customerEmail)
+      .then(({ content, filename }) => shareCalendarFile(content, filename))
+      .then(
+        (shared) => {
+          setExportingCalendar(false);
+          if (!shared) setCalendarError('This device cannot share the calendar file.');
+        },
+        (err: unknown) => {
+          setExportingCalendar(false);
+          setCalendarError(
+            getApiErrorMessage(err, 'The calendar file could not be created. Please try again.'),
+          );
+        },
+      );
   };
 
   if (!appointment) return null;
@@ -81,6 +110,15 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
         </View>
 
         <View style={styles.actions}>
+          <ErrorMessage message={calendarError || ''} />
+          <Button
+            title="Add to Calendar (.ics)"
+            variant="outline"
+            loading={exportingCalendar}
+            icon={<Ionicons name="calendar-outline" size={16} color={colors.gold.main} />}
+            onPress={handleExportCalendar}
+            style={styles.btn}
+          />
           <Button
             title="Share Booking Details"
             variant="outline"

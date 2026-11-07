@@ -33,7 +33,7 @@ describe('PostBookingActionsComponent', () => {
 
   it('never defaults sensitive native forms to GET and prevents native submission', () => {
     const forms = (fixture.nativeElement as HTMLElement).querySelectorAll('form');
-    expect(forms).toHaveLength(2);
+    expect(forms).toHaveLength(3);
     for (const form of forms) {
       expect(form.method).toBe('post');
       const event = new Event('submit', { bubbles: true, cancelable: true });
@@ -41,7 +41,114 @@ describe('PostBookingActionsComponent', () => {
       expect(event.defaultPrevented).toBe(true);
     }
     httpMock.expectNone((req) => req.url.includes('/appointments/public/cancel/'));
+    httpMock.expectNone((req) => req.url.includes('/appointments/public/reschedule/'));
     httpMock.expectNone((req) => req.url.includes('/reviews/public/'));
+  });
+
+  describe('guest reschedule', () => {
+    const moved = {
+      id: 7,
+      publicId: 'abc-1',
+      customerName: 'Jane',
+      customerEmail: 'jane@example.com',
+      customerPhone: '555',
+      barberName: 'Alex',
+      bookingDate: '2030-05-16',
+      bookingTime: '10:00',
+      serviceType: 'Classic Haircut',
+      status: 'PENDING',
+      createdAt: '2030-05-01T00:00:00',
+      updatedAt: '2030-05-02T00:00:00',
+    };
+    /** Opens the picker; returns its request for the booking's availability. */
+    const openPicker = () => {
+      component.rescheduleModel.set({ publicId: '  ABC-1 ', email: 'jane@example.com' });
+      component.onChooseNewTime();
+      fixture.detectChanges();
+      // The picker reads the shop's days and hours, and what this booking can move to.
+      httpMock
+        .match((req) => req.url.includes('/api/v1/appointments/public/shop'))
+        .forEach((req) => req.flush(null, { status: 503, statusText: 'x' }));
+      return httpMock.expectOne('/api/v1/appointments/public/reschedule/abc-1/availability');
+    };
+    const picker = () =>
+      (fixture.nativeElement as HTMLElement).querySelector('app-reschedule-picker');
+
+    it("checks the booking's own availability with its code and email", () => {
+      const availability = openPicker();
+      expect(availability.request.method).toBe('POST');
+      expect(availability.request.body).toEqual({
+        email: 'jane@example.com',
+        bookingDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      });
+      availability.flush([]);
+    });
+
+    it('explains in the picker when the code and email do not match a booking', async () => {
+      openPicker().flush(
+        { message: 'Appointment not found or unauthorized.' },
+        { status: 404, statusText: 'Not Found' },
+      );
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(picker()?.querySelector('[role="alert"]')?.textContent).toContain(
+        'Appointment not found or unauthorized.',
+      );
+    });
+
+    it('closes the picker when the code is edited, so it never moves another booking', () => {
+      openPicker().flush([]);
+      component.rescheduleModel.set({ publicId: 'other-2', email: 'jane@example.com' });
+      fixture.detectChanges();
+
+      expect(picker()).toBeNull();
+      component.onReschedule({ bookingDate: '2030-05-16', bookingTime: '10:00' });
+      httpMock.expectNone((req) => req.url.includes('/appointments/public/reschedule/'));
+    });
+
+    it('asks for the code and email before offering new times', () => {
+      component.onChooseNewTime();
+      fixture.detectChanges();
+
+      expect(flash.errorMessage()).toBe('Enter your Booking Code and the email you booked with.');
+      expect(fixture.nativeElement.querySelector('app-reschedule-picker')).toBeNull();
+    });
+
+    it('moves the booking after verifying the code and email', () => {
+      openPicker().flush([]);
+      expect(picker()).not.toBeNull();
+
+      component.onReschedule({ bookingDate: '2030-05-16', bookingTime: '10:00' });
+      const req = httpMock.expectOne('/api/v1/appointments/public/reschedule/abc-1');
+      expect(req.request.method).toBe('PUT');
+      expect(req.request.body).toEqual({
+        email: 'jane@example.com',
+        bookingDate: '2030-05-16',
+        bookingTime: '10:00',
+      });
+      req.flush(moved);
+      fixture.detectChanges();
+
+      expect(flash.successMessage()).toContain('Booking moved to May 16, 2030 at 10:00 AM');
+      expect(component.rescheduleModel().publicId).toBe('');
+      expect(fixture.nativeElement.querySelector('app-reschedule-picker')).toBeNull();
+    });
+
+    it('keeps the picker open and explains a refused move', () => {
+      openPicker().flush([]);
+      component.onReschedule({ bookingDate: '2030-05-16', bookingTime: '10:00' });
+      httpMock
+        .expectOne('/api/v1/appointments/public/reschedule/abc-1')
+        .flush(
+          { message: 'The selected slot is already booked or unavailable.' },
+          { status: 409, statusText: 'Conflict' },
+        );
+      fixture.detectChanges();
+
+      expect(flash.errorMessage()).toBe('The selected slot is already booked or unavailable.');
+      expect(fixture.nativeElement.querySelector('app-reschedule-picker')).not.toBeNull();
+    });
   });
 
   it('cancels a reservation after verifying the booking code and email', () => {

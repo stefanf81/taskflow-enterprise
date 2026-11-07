@@ -86,7 +86,7 @@ abstract class AppointmentServiceTestSupport {
     void setUpServices() {
         busySlotsService = new BusySlotsService(barberRepository, barberScheduleRepository, barberTimeOffRepository, appointmentRepository);
         bookingService = bookingService(CLOCK);
-        lifecycleService = new AppointmentLifecycleService(appointmentRepository, changes(CLOCK), busySlotsService, CLOCK);
+        lifecycleService = new AppointmentLifecycleService(appointmentRepository, changes(CLOCK), busySlotsService, barberRepository, CLOCK);
         queryService = new AppointmentQueryService(appointmentRepository, statsService, CLOCK);
         appointmentService = new AppointmentServiceImpl(appointmentRepository);
 
@@ -100,6 +100,7 @@ abstract class AppointmentServiceTestSupport {
         haircut = new ServiceItem("Haircut", new BigDecimal("25.00"), 30, "hair", "");
 
         lenient().when(barberRepository.findByName("Alex the Barber")).thenReturn(Optional.of(alex));
+        lenient().when(barberRepository.findByIdForBooking(7L)).thenReturn(Optional.of(alex));
         lenient().when(barberRepository.findAllByOrderByIdAsc()).thenReturn(List.of(alex));
         lenient().when(barberScheduleRepository.findForBarbersOnDay(any(), any())).thenReturn(List.of(schedule));
         lenient().when(barberTimeOffRepository.findBarberIdsOnTimeOff(any(), any())).thenReturn(Collections.emptyList());

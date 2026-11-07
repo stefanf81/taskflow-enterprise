@@ -53,11 +53,76 @@ describe('BarberStore', () => {
     httpMock
       .match((req) => req.url.includes('/api/v1/barbers/1/time-off'))
       .forEach((req) => req.flush(mockTimeOffs));
+    flushSchedules();
     fixture.detectChanges();
   });
 
+  /** The selected barber's weekly hours load alongside the time off. */
+  const flushSchedules = () =>
+    httpMock
+      .match((req) => /\/api\/v1\/barbers\/\d+\/schedule$/.test(req.url))
+      .forEach((req) => req.flush({ days: mockSchedule, revision: 'rev-1' }));
+
+  const mockSchedule = [{ dayOfWeek: 1, opens: '09:00', closes: '17:00' }];
+
   afterEach(() => {
+    flushSchedules();
     httpMock.verify();
+  });
+
+  describe('weekly hours', () => {
+    const change = {
+      days: [{ dayOfWeek: 1, opens: '09:00', closes: '15:00' }],
+      expectedRevision: 'rev-1',
+      cancelConflictingAppointments: false,
+    };
+
+    it('loads the selected barber’s weekly hours with their revision', () => {
+      expect(store.schedule()).toEqual({ days: mockSchedule, revision: 'rev-1' });
+    });
+
+    it('previews a change and reports nothing on success', async () => {
+      const pending = store.previewSchedule(1, change);
+      const req = httpMock.expectOne('/api/v1/barbers/1/schedule/preview');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual(change);
+      req.flush({ conflictCount: 2, conflictsRevision: 'c-1' });
+
+      await expect(pending).resolves.toEqual({ conflictCount: 2, conflictsRevision: 'c-1' });
+      expect(store.isSaving()).toBe(false);
+    });
+
+    it('applies a saved schedule and tells the public readers the hours changed', async () => {
+      const saved = { days: change.days, revision: 'rev-2' };
+      const pending = store.updateSchedule(1, {
+        ...change,
+        expectedConflicts: 'c-1',
+        cancelConflictingAppointments: true,
+      });
+      httpMock.expectOne('/api/v1/barbers/1/schedule').flush(saved);
+
+      await expect(pending).resolves.toEqual(saved);
+      expect(store.schedule()).toEqual(saved);
+      expect(store.actionSuccessMessage()).toBe('Weekly schedule updated.');
+    });
+
+    it('reloads the hours when the server says they changed meanwhile (409)', async () => {
+      const pending = store.updateSchedule(1, change);
+      httpMock
+        .expectOne('/api/v1/barbers/1/schedule')
+        .flush(
+          { message: 'The schedule changed. Reload it before saving.' },
+          { status: 409, statusText: 'Conflict' },
+        );
+
+      await expect(pending).resolves.toBeNull();
+      expect(store.actionErrorMessage()).toBe('The schedule changed. Reload it before saving.');
+      fixture.detectChanges();
+      const reload = httpMock.expectOne(
+        (req) => req.url === '/api/v1/barbers/1/schedule' && req.method === 'GET',
+      );
+      reload.flush({ days: [], revision: 'rev-3' });
+    });
   });
 
   it('should initialize with barbers, auto-select first, and load time-offs', () => {
@@ -81,6 +146,7 @@ describe('BarberStore', () => {
     const req = httpMock.expectOne((r) => r.url.includes('/api/v1/barbers/2/time-off'));
     expect(req.request.method).toBe('GET');
     req.flush(mockTimeOffs);
+    flushSchedules();
 
     await fixture.whenStable();
     fixture.detectChanges();

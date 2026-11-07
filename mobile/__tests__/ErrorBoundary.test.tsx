@@ -50,4 +50,15 @@ describe('ErrorBoundary Component', () => {
     );
     expect(consoleSpy).toHaveBeenCalled();
   });
+
+  it('tells the onError hook (telemetry) that a render failed', async () => {
+    const onError = jest.fn();
+    await render(
+      <ErrorBoundary onError={onError}>
+        <Thrower shouldThrow />
+      </ErrorBoundary>
+    );
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
+  });
 });

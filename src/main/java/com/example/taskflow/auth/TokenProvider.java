@@ -58,6 +58,11 @@ class TokenProvider {
     }
 
     public String generateToken(Authentication authentication) {
+        return generateToken(authentication, null, tokenVersion.applyAsInt(authentication.getName()));
+    }
+
+    String generateToken(Authentication authentication, @org.jspecify.annotations.Nullable String sessionId,
+                         int version) {
         Instant now = Instant.now(clock);
 
         String scope = authentication.getAuthorities().stream()
@@ -74,7 +79,8 @@ class TokenProvider {
                 .id(java.util.UUID.randomUUID().toString())
                 .claim("scope", scope)
                 // Raising the account's version revokes this token with all others of the account.
-                .claim(AccountTokenCheck.VERSION_CLAIM, tokenVersion.applyAsInt(authentication.getName()))
+                .claim(AccountTokenCheck.VERSION_CLAIM, version)
+                .claims(values -> { if (sessionId != null) values.put(RefreshSessionService.SESSION_CLAIM, sessionId); })
                 .build();
 
         return this.encoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();

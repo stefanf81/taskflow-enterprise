@@ -50,6 +50,16 @@ describe('utils/errors', () => {
     expect(getApiErrorMessage({}, 'fallback')).toBe('fallback');
     expect(getApiErrorMessage(undefined, 'fallback')).toBe('fallback');
   });
+
+  it('reads RFC 9457 problem details but never shows a bare reason phrase', () => {
+    expect(
+      getApiErrorMessage(http(409, { title: 'Conflict', detail: 'Slot taken', message: 'old' }), 'x'),
+    ).toBe('Slot taken');
+    // The edge's own problem body (nginx) carries only the generic title.
+    expect(
+      getApiErrorMessage(http(413, { type: 'about:blank', title: 'Content Too Large', status: 413 }), 'fallback'),
+    ).toBe('fallback');
+  });
 });
 
 describe('utils/session', () => {
@@ -83,6 +93,7 @@ describe('api/publicEndpoints', () => {
     ['post', '/api/v1/appointments/'],
     ['get', '/api/v1/appointments/public/busy-slots?barberName=A&bookingDate=2026-08-12'],
     ['put', '/api/v1/appointments/public/cancel/abc'],
+    ['post', '/api/v1/appointments/public/reschedule/abc/availability'],
     ['get', '/api/v1/catalog'],
     ['get', '/api/v1/catalog/5'],
     ['get', '/api/v1/barbers'],
@@ -100,6 +111,8 @@ describe('api/publicEndpoints', () => {
     ['delete', '/api/v1/appointments/5'],
     ['get', '/api/v1/appointments/public/cancel/abc'],
     ['put', '/api/v1/appointments/public/cancel/a/b'],
+    ['get', '/api/v1/appointments/public/reschedule/abc/availability'],
+    ['get', '/api/v1/customer/appointments/abc/availability'],
     ['post', '/api/v1/catalog'],
     ['delete', '/api/v1/catalog/1'],
     // Admin-only, although it sits under the public GET /api/v1/catalog/ prefix.

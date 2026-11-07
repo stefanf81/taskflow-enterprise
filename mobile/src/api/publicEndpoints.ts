@@ -20,13 +20,23 @@ const rules: readonly Rule[] = [
     test: (p) =>
       p === '/api/v1/auth/login' ||
       p === '/api/v1/auth/mobile/login' ||
+      p === '/api/v1/auth/refresh' ||
+      p === '/api/v1/auth/mobile/refresh' ||
       p === '/api/v1/auth/register',
   },
   // Guest booking flow
   { methods: ['get'], test: (p) => p === '/api/v1/appointments/public/busy-slots' },
   { methods: ['get'], test: (p) => p === '/api/v1/appointments/public/shop' },
-  { methods: ['put'], test: (p) => /^\/api\/v1\/appointments\/public\/cancel\/[^/]+$/.test(p) },
-  { methods: ['post'], test: (p) => p === '/api/v1/appointments' },
+  {
+    methods: ['put'],
+    test: (p) => /^\/api\/v1\/appointments\/public\/(?:cancel|reschedule)\/[^/]+$/.test(p),
+  },
+  { methods: ['post'], test: (p) => /^\/api\/v1\/appointments\/public\/calendar\/[^/]+$/.test(p) },
+  {
+    methods: ['post'],
+    test: (p) => /^\/api\/v1\/appointments\/public\/reschedule\/[^/]+\/availability$/.test(p),
+  },
+  { methods: ['post'], test: (p) => p === '/api/v1/appointments' || p === '/api/v1/telemetry' },
   // Reference data. /catalog/retired is the one admin-only path under the public catalog prefix
   // (SecurityConfig lists it before the permitAll rule): it must carry the token.
   {

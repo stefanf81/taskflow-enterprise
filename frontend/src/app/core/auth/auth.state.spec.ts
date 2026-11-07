@@ -1,5 +1,9 @@
 import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import {
+  HttpTestingController,
+  TestRequest,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -180,6 +184,20 @@ describe('AuthState (HTTP + interceptor)', () => {
       expect(authState.sessionNotice()).toBeNull();
     });
 
+    it('ignores a 401 for a request sent before the current sign-in', () => {
+      authState.applyRole('ROLE_ADMIN', 'admin');
+      TestBed.inject(HttpClient)
+        .get('/api/v1/appointments')
+        .subscribe({ error: () => undefined });
+      authState.applyRole('ROLE_CUSTOMER', 'jane@example.com');
+
+      httpTesting.expectOne('/api/v1/appointments').flush(null, { status: 401, statusText: 'x' });
+
+      expect(unauthorizedCalls).toBe(0);
+      expect(authState.isLoggedIn()).toBe(true);
+      expect(authState.username()).toBe('jane@example.com');
+    });
+
     it('ignores a stray 401 when nobody is signed in', () => {
       sessionEvents.notifyUnauthorized();
 
@@ -288,5 +306,216 @@ describe('AuthState (HTTP + interceptor)', () => {
     authState.applyRole('ROLE_CUSTOMER', 'jane@example.com');
     authState.clear();
     expect(sessionEndedCalls).toBe(1);
+  });
+
+  describe('session renewal with the refresh cookie (ADR-023)', () => {
+    const setHint = () => (document.cookie = 'taskflow_session=1; path=/');
+    const dropHint = () => (document.cookie = 'taskflow_session=; max-age=0; path=/');
+    let sessionStartedCalls: number;
+
+    beforeEach(() => {
+      sessionStartedCalls = 0;
+      sessionEvents.sessionStarted.subscribe(() => sessionStartedCalls++);
+    });
+
+    afterEach(() => dropHint());
+
+    it('restores a browser whose access cookie expired instead of showing the guest page', () => {
+      setHint();
+      const results: string[] = [];
+      authState.bootstrap().subscribe({ next: (role) => results.push(role) });
+
+      httpTesting
+        .expectOne('/api/v1/auth/me')
+        .flush(null, { status: 401, statusText: 'Unauthorized' });
+      const renew = httpTesting.expectOne('/api/v1/auth/refresh');
+      expect(renew.request.method).toBe('POST');
+      renew.flush({ username: 'jane@example.com', role: 'ROLE_CUSTOMER' });
+
+      expect(results).toEqual(['ROLE_CUSTOMER']);
+      expect(authState.isLoggedIn()).toBe(true);
+      expect(authState.username()).toBe('jane@example.com');
+      // The session continued; nobody signed in.
+      expect(sessionStartedCalls).toBe(0);
+    });
+
+    it('stays a guest when the renewal at boot is refused', () => {
+      setHint();
+      authState.bootstrap().subscribe({ error: () => undefined });
+
+      httpTesting.expectOne('/api/v1/auth/me').flush(null, { status: 401, statusText: 'x' });
+      httpTesting.expectOne('/api/v1/auth/refresh').flush(null, { status: 401, statusText: 'x' });
+
+      expect(authState.isLoggedIn()).toBe(false);
+      expect(authState.isBootstrapDone()).toBe(true);
+      expect(unauthorizedCalls).toBe(0);
+    });
+
+    it('renews once and replays a protected request that hit an expired access cookie', () => {
+      authState.applyRole('ROLE_ADMIN', 'admin');
+      setHint();
+      const bodies: unknown[] = [];
+      TestBed.inject(HttpClient)
+        .get('/api/v1/appointments')
+        .subscribe({ next: (body) => bodies.push(body) });
+
+      httpTesting.expectOne('/api/v1/appointments').flush(null, { status: 401, statusText: 'x' });
+      httpTesting
+        .expectOne('/api/v1/auth/refresh')
+        .flush({ username: 'admin', role: 'ROLE_ADMIN' });
+      httpTesting.expectOne('/api/v1/appointments').flush({ content: [] });
+
+      expect(bodies).toEqual([{ content: [] }]);
+      expect(unauthorizedCalls).toBe(0);
+      expect(authState.isLoggedIn()).toBe(true);
+    });
+
+    it('shares one renewal between concurrent 401s', () => {
+      authState.applyRole('ROLE_ADMIN', 'admin');
+      setHint();
+      const http = TestBed.inject(HttpClient);
+      http.get('/api/v1/appointments').subscribe();
+      http.get('/api/v1/notifications').subscribe();
+
+      httpTesting.expectOne('/api/v1/appointments').flush(null, { status: 401, statusText: 'x' });
+      httpTesting.expectOne('/api/v1/notifications').flush(null, { status: 401, statusText: 'x' });
+      httpTesting
+        .expectOne('/api/v1/auth/refresh')
+        .flush({ username: 'admin', role: 'ROLE_ADMIN' });
+      httpTesting.expectOne('/api/v1/appointments').flush([]);
+      httpTesting.expectOne('/api/v1/notifications').flush([]);
+
+      expect(unauthorizedCalls).toBe(0);
+    });
+
+    it('refetches the CSRF token once when the renewal is refused with 403', () => {
+      authState.applyRole('ROLE_ADMIN', 'admin');
+      setHint();
+      TestBed.inject(HttpClient).get('/api/v1/appointments').subscribe();
+
+      httpTesting.expectOne('/api/v1/appointments').flush(null, { status: 401, statusText: 'x' });
+      httpTesting.expectOne('/api/v1/auth/refresh').flush(null, { status: 403, statusText: 'x' });
+      httpTesting.expectOne('/api/v1/auth/csrf').flush({ token: 't' });
+      httpTesting
+        .expectOne('/api/v1/auth/refresh')
+        .flush({ username: 'admin', role: 'ROLE_ADMIN' });
+      httpTesting.expectOne('/api/v1/appointments').flush([]);
+
+      expect(unauthorizedCalls).toBe(0);
+    });
+
+    it('ends the session when the renewal is rejected', () => {
+      authState.applyRole('ROLE_ADMIN', 'admin');
+      setHint();
+      TestBed.inject(HttpClient)
+        .get('/api/v1/appointments')
+        .subscribe({ error: () => undefined });
+
+      httpTesting.expectOne('/api/v1/appointments').flush(null, { status: 401, statusText: 'x' });
+      httpTesting.expectOne('/api/v1/auth/refresh').flush(null, { status: 401, statusText: 'x' });
+
+      expect(unauthorizedCalls).toBe(1);
+      expect(authState.sessionNotice()).toBe(SESSION_EXPIRED_MESSAGE);
+    });
+
+    it.each([
+      [
+        'a server error',
+        (req: TestRequest) => req.flush(null, { status: 503, statusText: 'x' }),
+        503,
+      ],
+      ['a network failure', (req: TestRequest) => req.error(new ProgressEvent('error')), 0],
+    ])('keeps the session when the renewal fails with %s', (_cause, fail, status) => {
+      authState.applyRole('ROLE_ADMIN', 'admin');
+      setHint();
+      const errors: unknown[] = [];
+      TestBed.inject(HttpClient)
+        .get('/api/v1/appointments')
+        .subscribe({ error: (err) => errors.push(err) });
+
+      httpTesting.expectOne('/api/v1/appointments').flush(null, { status: 401, statusText: 'x' });
+      fail(httpTesting.expectOne('/api/v1/auth/refresh'));
+
+      expect(unauthorizedCalls).toBe(0);
+      expect(authState.isLoggedIn()).toBe(true);
+      expect(authState.sessionNotice()).toBeNull();
+      // The caller learns why (offline, server down) instead of a misleading 401.
+      expect(errors).toEqual([expect.objectContaining({ status })]);
+    });
+
+    it('neither applies nor replays a renewal that a logout overtook', async () => {
+      authState.applyRole('ROLE_ADMIN', 'admin');
+      setHint();
+      const results: string[] = [];
+      TestBed.inject(HttpClient)
+        .get('/api/v1/appointments')
+        .subscribe({
+          next: () => results.push('replayed'),
+          error: (err) => results.push(`error ${err.status}`),
+        });
+      httpTesting.expectOne('/api/v1/appointments').flush(null, { status: 401, statusText: 'x' });
+      const renew = httpTesting.expectOne('/api/v1/auth/refresh');
+
+      const done = authState.logoutAndWait();
+      httpTesting.expectOne('/api/v1/auth/logout').flush(null);
+      await done;
+      renew.flush({ username: 'admin', role: 'ROLE_ADMIN' });
+
+      httpTesting.expectNone('/api/v1/appointments');
+      expect(results).toEqual(['error 401']);
+      expect(authState.isLoggedIn()).toBe(false);
+      expect(unauthorizedCalls).toBe(0);
+    });
+
+    it('does not let an outdated renewal rejection end a newer login', () => {
+      authState.applyRole('ROLE_ADMIN', 'admin');
+      setHint();
+      TestBed.inject(HttpClient)
+        .get('/api/v1/appointments')
+        .subscribe({ error: () => undefined });
+      httpTesting.expectOne('/api/v1/appointments').flush(null, { status: 401, statusText: 'x' });
+      const renew = httpTesting.expectOne('/api/v1/auth/refresh');
+
+      authState.applyRole('ROLE_CUSTOMER', 'jane@example.com');
+      renew.flush(null, { status: 401, statusText: 'x' });
+
+      expect(unauthorizedCalls).toBe(0);
+      expect(authState.isLoggedIn()).toBe(true);
+      expect(authState.username()).toBe('jane@example.com');
+    });
+
+    it('does not let an outdated renewal success replace a newer login or replay', () => {
+      authState.applyRole('ROLE_ADMIN', 'admin');
+      setHint();
+      TestBed.inject(HttpClient)
+        .get('/api/v1/appointments')
+        .subscribe({ error: () => undefined });
+      httpTesting.expectOne('/api/v1/appointments').flush(null, { status: 401, statusText: 'x' });
+      const renew = httpTesting.expectOne('/api/v1/auth/refresh');
+
+      authState.applyRole('ROLE_CUSTOMER', 'jane@example.com');
+      renew.flush({ username: 'admin', role: 'ROLE_ADMIN' });
+
+      httpTesting.expectNone('/api/v1/appointments');
+      expect(authState.role()).toBe('ROLE_CUSTOMER');
+      expect(authState.username()).toBe('jane@example.com');
+    });
+
+    it('ends the session when the replay after a renewal is rejected again', () => {
+      authState.applyRole('ROLE_ADMIN', 'admin');
+      setHint();
+      TestBed.inject(HttpClient)
+        .get('/api/v1/appointments')
+        .subscribe({ error: () => undefined });
+
+      httpTesting.expectOne('/api/v1/appointments').flush(null, { status: 401, statusText: 'x' });
+      httpTesting
+        .expectOne('/api/v1/auth/refresh')
+        .flush({ username: 'admin', role: 'ROLE_ADMIN' });
+      httpTesting.expectOne('/api/v1/appointments').flush(null, { status: 401, statusText: 'x' });
+
+      expect(unauthorizedCalls).toBe(1);
+      httpTesting.expectNone('/api/v1/auth/refresh');
+    });
   });
 });

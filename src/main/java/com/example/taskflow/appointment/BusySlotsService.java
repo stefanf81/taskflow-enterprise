@@ -123,6 +123,20 @@ public class BusySlotsService {
     }
 
     /**
+     * Grid slots on {@code date} that an existing booking cannot move to: {@link #evaluate} for its
+     * own barber and booked length, with the booking itself ignored (it may move within its own
+     * interval). Not the create-time answer, which counts the booking as busy and takes the length
+     * from the current catalog. Uncached: the answer belongs to one booking.
+     */
+    public List<String> busySlotsForMove(Barber barber, LocalDate date, int durationMinutes,
+                                         Long appointmentId) {
+        BarberDay day = loadBarberDay(barber, date);
+        return ALL_SLOTS.stream()
+                .filter(slot -> evaluate(day, LocalTime.parse(slot), durationMinutes, appointmentId).isPresent())
+                .toList();
+    }
+
+    /**
      * The booking rules as a pure function of preloaded data: time off, schedule, working window,
      * service length vs. closing time, then overlap with the barber's active appointments (each with
      * its own stored end time). Checked in that order, so the reason reported is the first that applies.

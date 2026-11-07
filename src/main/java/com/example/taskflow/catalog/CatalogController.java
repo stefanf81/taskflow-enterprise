@@ -12,7 +12,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
@@ -30,10 +29,10 @@ class CatalogController {
     @Operation(summary = "Get all services (Public Access)")
     @ApiResponse(responseCode = "200", description = "List of all services returned")
     public ResponseEntity<List<ServiceItemResponse>> getAllServices() {
-        // 5m public, aligns with @Cacheable("services") TTL 10m — allows CDN/browser cache
-        // without revalidating every request, while still bounded by server cache.
+        // Both clients refresh this list after admin writes. Their application caches cannot
+        // invalidate a still-fresh browser/native HTTP cache; revalidate it using the ETag.
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
+                .cacheControl(CacheControl.noCache().cachePublic())
                 .body(catalogService.getAllServices());
     }
 

@@ -26,3 +26,15 @@ export class SessionExpiredError extends Error {
     this.name = 'SessionExpiredError';
   }
 }
+
+/**
+ * Raised instead of the outcome of a request or session renewal that a sign-in or sign-out
+ * overtook (see storage.getSessionEpoch): the outcome is about credentials that are gone, so it
+ * must neither end, renew nor borrow the session that replaced them. Never retried.
+ */
+export class SessionChangedError extends Error {
+  constructor() {
+    super('You signed in or out while this was loading. Please try again.');
+    this.name = 'SessionChangedError';
+  }
+}

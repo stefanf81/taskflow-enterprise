@@ -10,7 +10,6 @@ import com.example.taskflow.core.LogSanitizer;
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -82,7 +81,6 @@ class BarberServiceImpl implements BarberService {
     @Override
     @Transactional
     // A new barber brings a schedule, so the shop's opening hours may change with it.
-    @CacheEvict(value = {"barbers", "publicBarbers", AppointmentCacheConfig.OPENING_HOURS_CACHE}, allEntries = true)
     public BarberResponse createBarber(BarberRequest request) {
         // The booking flow treats this exact name as "any barber" and never stores it, so a real
         // barber carrying it could be neither booked by name nor approved.
@@ -104,6 +102,7 @@ class BarberServiceImpl implements BarberService {
             schedules.add(schedule);
         }
         scheduleRepository.saveAll(schedules);
+        eventPublisher.publishEvent(new BarberRosterChangedEvent());
         // A new barber can serve every date, so the "First Available" aggregate
         // is stale for every date. Invalidate the whole availability cache
         // (after commit, via the listener) rather than enumerating dates.
@@ -122,7 +121,7 @@ class BarberServiceImpl implements BarberService {
     @Override
     @Transactional
     public BarberTimeOffResponse addTimeOff(Long barberId, BarberTimeOffRequest request) {
-        Barber barber = barberRepository.findById(barberId)
+        Barber barber = barberRepository.findByIdForUpdate(barberId)
                 .orElseThrow(() -> new ResourceNotFoundException("Barber not found with id: " + barberId));
         if (!request.isDateRangeValid()) {
             throw new IllegalArgumentException("End date must not be before start date.");

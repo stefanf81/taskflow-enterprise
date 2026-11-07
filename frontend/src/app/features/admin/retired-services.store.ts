@@ -69,12 +69,12 @@ export class RetiredServicesStore {
       .restoreService(service.id)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => {
+        next: (restored) => {
           this.restoringId.set(null);
-          this.actionSuccessMessage.set(`${service.name} is bookable again.`);
+          this.actionSuccessMessage.set(`${restored.name} is bookable again.`);
           // It left this list and joined the public menu.
           this.loadRetired();
-          this.catalogStore.loadServices();
+          this.catalogStore.upsertService(restored);
         },
         error: (err) => {
           this.restoringId.set(null);

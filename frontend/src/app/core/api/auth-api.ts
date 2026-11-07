@@ -17,6 +17,19 @@ export class AuthApi {
   private readonly http = inject(HttpClient);
   private readonly base = '/api/v1/auth';
 
+  /**
+   * Rotates the HttpOnly refresh_token cookie and issues a fresh access_token cookie. Marked
+   * PUBLIC_REQUEST: its 401 means "no session to renew", which the caller handles itself.
+   * AuthState.renewSession() is the single-flight entry point.
+   */
+  renew(): Observable<LoginResponse> {
+    return this.http
+      .post<LoginResponse>(`${this.base}/refresh`, null, {
+        context: new HttpContext().set(PUBLIC_REQUEST, true),
+      })
+      .pipe(map((raw) => parseResponse(loginResponseSchema, raw, 'POST /api/v1/auth/refresh')));
+  }
+
   register(request: RegisterRequest): Observable<RegisterResponse> {
     return defer(() => {
       const validated = parseRequest(registerSchema, request);
@@ -69,10 +82,8 @@ export class AuthApi {
   // permitAll (a dead session can still sign out) but still needs the CSRF header. Marked
   // PUBLIC_REQUEST so a 401 here never triggers the "session expired" flow mid-logout.
   logout(): Observable<void> {
-    return this.http.post<void>(
-      `${this.base}/logout`,
-      {},
-      { context: new HttpContext().set(PUBLIC_REQUEST, true) },
-    );
+    return this.http.post<void>(`${this.base}/logout`, null, {
+      context: new HttpContext().set(PUBLIC_REQUEST, true),
+    });
   }
 }

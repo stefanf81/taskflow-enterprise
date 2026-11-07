@@ -1,4 +1,4 @@
-import { Component, signal, inject, DestroyRef } from '@angular/core';
+import { Component, signal, inject, linkedSignal, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { email, form, max, min, required, FormField } from '@angular/forms/signals';
@@ -7,7 +7,9 @@ import { ReviewsApi } from '../../../core/api/reviews-api';
 import { extractApiError } from '../../../core/api/extract-api-error';
 import { normalizePublicId } from '@taskflow/domain';
 import { FlashMessages } from '../../../core/ui/flash-messages';
+import { ReschedulePicker, RescheduleSelection } from '../../../core/ui/reschedule-picker';
 import { ReviewStore } from '../../../core/reviews/review.store';
+import { formatLocalDate, formatTime12Hour } from '../../../core/time-utils';
 
 /** Model shape for the "Cancel my booking" Signal Form. */
 interface CancelFormModel {
@@ -41,7 +43,7 @@ interface ReviewFormModel {
 @Component({
   selector: 'app-post-booking-actions',
   standalone: true,
-  imports: [CommonModule, FormField],
+  imports: [CommonModule, FormField, ReschedulePicker],
   template: `
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
       <!-- Interactive secure self-service cancellation portal -->
@@ -118,6 +120,75 @@ interface ReviewFormModel {
             </button>
           </div>
         </form>
+      </section>
+
+      <!-- Self-service reschedule: verified like the cancellation, the booking keeps its code. -->
+      <section
+        class="card bg-zinc-950 border border-white/10 rounded-3xl p-8 md:order-last md:col-span-2"
+      >
+        <h2 class="text-lg font-black text-zinc-100 tracking-tight mb-2 flex items-center gap-2">
+          <span class="text-gold">🔁</span> Reschedule a Booking
+        </h2>
+        <p class="text-xs text-zinc-400 font-light leading-relaxed mb-6">
+          Need another time? Provide your Booking ID and Email, then pick a new slot. Your booking
+          keeps its code, its barber and its service, and the shop confirms the new time again.
+        </p>
+
+        <form
+          method="post"
+          (submit)="$event.preventDefault(); onChooseNewTime()"
+          class="grid grid-cols-1 sm:grid-cols-2 gap-4"
+        >
+          <div class="form-group flex flex-col gap-1.5">
+            <label
+              for="rescheduleBookingId"
+              class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
+              >Booking ID <span class="required">*</span></label
+            >
+            <input
+              type="text"
+              id="rescheduleBookingId"
+              [formField]="rescheduleForm.publicId"
+              placeholder="e.g., 8f8d9b..."
+              class="form-control"
+              [attr.aria-invalid]="rescheduleForm.publicId().invalid() ? 'true' : null"
+            />
+          </div>
+          <div class="form-group flex flex-col gap-1.5">
+            <label
+              for="rescheduleEmail"
+              class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
+              >Verification Email <span class="required">*</span></label
+            >
+            <input
+              type="email"
+              id="rescheduleEmail"
+              [formField]="rescheduleForm.email"
+              placeholder="e.g., john@example.com"
+              class="form-control"
+              [attr.aria-invalid]="rescheduleForm.email().invalid() ? 'true' : null"
+            />
+          </div>
+          @if (!rescheduleTarget()) {
+            <div class="sm:col-span-2 flex justify-end">
+              <button
+                type="submit"
+                class="btn btn-secondary text-xs font-bold px-5 py-2.5 rounded-xl w-full sm:w-auto"
+              >
+                Choose a new time
+              </button>
+            </div>
+          }
+        </form>
+        @if (rescheduleTarget(); as target) {
+          <app-reschedule-picker
+            [publicId]="target.publicId"
+            [email]="target.email"
+            [saving]="isRescheduling()"
+            (confirmed)="onReschedule($event)"
+            (cancelled)="rescheduleTarget.set(null)"
+          />
+        }
       </section>
 
       <!-- Interactive secure self-service review portal -->
@@ -256,6 +327,23 @@ export class PostBookingActionsComponent {
     email(f.email);
   });
 
+  protected readonly isRescheduling = signal(false);
+  readonly rescheduleModel = signal<CancelFormModel>({ publicId: '', email: '' });
+  protected readonly rescheduleForm = form(this.rescheduleModel, (f) => {
+    required(f.publicId);
+    required(f.email);
+    email(f.email);
+  });
+  /**
+   * The booking the open slot picker moves (normalized code, trimmed email), or null while it is
+   * closed. Fixed when the picker opens, so its availability and the save name the same booking;
+   * editing either field closes the picker.
+   */
+  protected readonly rescheduleTarget = linkedSignal<CancelFormModel, CancelFormModel | null>({
+    source: this.rescheduleModel,
+    computation: () => null,
+  });
+
   readonly reviewModel = signal<ReviewFormModel>({
     publicId: '',
     email: '',
@@ -294,6 +382,47 @@ export class PostBookingActionsComponent {
             extractApiError(err, 'Verification failed. Please check your Booking Code and Email.'),
           );
           this.isCancelling.set(false);
+        },
+      });
+  }
+
+  onChooseNewTime(): void {
+    const publicId = normalizePublicId(this.rescheduleModel().publicId);
+    const email = this.rescheduleModel().email.trim();
+    if (!publicId || !email || this.rescheduleForm().invalid()) {
+      this.flash.errorMessage.set('Enter your Booking Code and the email you booked with.');
+      return;
+    }
+    this.flash.errorMessage.set(null);
+    this.rescheduleTarget.set({ publicId, email });
+  }
+
+  onReschedule(slot: RescheduleSelection): void {
+    const target = this.rescheduleTarget();
+    if (!target || this.isRescheduling()) return;
+
+    this.flash.errorMessage.set(null);
+    this.isRescheduling.set(true);
+    this.appointmentsApi
+      .publicRescheduleAppointment(target.publicId, { email: target.email, ...slot })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (moved) => {
+          this.isRescheduling.set(false);
+          // Also closes the picker (see rescheduleTarget).
+          this.rescheduleModel.set({ publicId: '', email: '' });
+          this.flash.showSuccess(
+            `🔁 Booking moved to ${formatLocalDate(moved.bookingDate)} at ${formatTime12Hour(moved.bookingTime)}. The shop will confirm it again.`,
+          );
+        },
+        error: (err) => {
+          this.isRescheduling.set(false);
+          this.flash.errorMessage.set(
+            extractApiError(
+              err,
+              'The booking could not be moved. Check your Booking Code and Email, or pick another time.',
+            ),
+          );
         },
       });
   }

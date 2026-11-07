@@ -1,12 +1,26 @@
 import { apiClient, RequestOptions } from '../../api/client';
-import { Barber, BarberTimeOff, BarberTimeOffRequest, PublicBarber } from '../../types/api';
+import {
+  Barber,
+  BarberRequest,
+  BarberScheduleResponse,
+  BarberTimeOff,
+  BarberTimeOffRequest,
+  PublicBarber,
+  ScheduleChangeRequest,
+  SchedulePreviewResponse,
+} from '../../types/api';
 import { parseContract, parseRequest } from '../../api/contracts';
 import {
   barberResponseListSchema,
+  barberResponseSchema,
+  barberScheduleResponseSchema,
+  barberSchema,
   barberTimeOffResponseListSchema,
   barberTimeOffResponseSchema,
   barberTimeOffSchema,
   publicBarberResponseListSchema,
+  scheduleChangeRequestSchema,
+  schedulePreviewResponseSchema,
 } from '@taskflow/schemas';
 
 export const barbersApi = {
@@ -52,6 +66,67 @@ export const barbersApi = {
       barberTimeOffResponseSchema,
       response.data,
       'POST /api/v1/barbers/{id}/time-off',
+    );
+  },
+
+  createBarber: async (data: BarberRequest): Promise<Barber> => {
+    const payload = parseRequest(barberSchema, data, 'POST /api/v1/barbers');
+    const response = await apiClient.post<Barber>('/api/v1/barbers', payload);
+    return parseContract(barberResponseSchema, response.data, 'POST /api/v1/barbers');
+  },
+
+  getSchedule: async (
+    barberId: number,
+    { signal }: RequestOptions = {},
+  ): Promise<BarberScheduleResponse> => {
+    const response = await apiClient.get<BarberScheduleResponse>(
+      `/api/v1/barbers/${barberId}/schedule`,
+      { signal },
+    );
+    return parseContract(
+      barberScheduleResponseSchema,
+      response.data,
+      'GET /api/v1/barbers/{id}/schedule',
+    );
+  },
+
+  previewSchedule: async (
+    barberId: number,
+    data: ScheduleChangeRequest,
+  ): Promise<SchedulePreviewResponse> => {
+    const payload = parseRequest(
+      scheduleChangeRequestSchema,
+      data,
+      'POST /api/v1/barbers/{id}/schedule/preview',
+    );
+    const response = await apiClient.post<SchedulePreviewResponse>(
+      `/api/v1/barbers/${barberId}/schedule/preview`,
+      payload,
+    );
+    return parseContract(
+      schedulePreviewResponseSchema,
+      response.data,
+      'POST /api/v1/barbers/{id}/schedule/preview',
+    );
+  },
+
+  updateSchedule: async (
+    barberId: number,
+    data: ScheduleChangeRequest,
+  ): Promise<BarberScheduleResponse> => {
+    const payload = parseRequest(
+      scheduleChangeRequestSchema,
+      data,
+      'PUT /api/v1/barbers/{id}/schedule',
+    );
+    const response = await apiClient.put<BarberScheduleResponse>(
+      `/api/v1/barbers/${barberId}/schedule`,
+      payload,
+    );
+    return parseContract(
+      barberScheduleResponseSchema,
+      response.data,
+      'PUT /api/v1/barbers/{id}/schedule',
     );
   },
 };

@@ -15,7 +15,7 @@ class NotificationPropertiesBindingTest {
     void defaultsAreTheFormerValueDefaults() {
         runner.run(context -> {
             assertThat(context.getBean(NotificationProperties.class))
-                    .isEqualTo(new NotificationProperties(30, "0 30 3 * * *", false));
+                    .isEqualTo(new NotificationProperties(30, "0 30 3 * * *", false, NotificationProperties.Gateway.SIMULATED));
             assertThat(context.getBean(InstanceProperties.class).id()).isNull();
         });
     }
@@ -26,7 +26,7 @@ class NotificationPropertiesBindingTest {
                         "app.notification.simulate-failures=true", "app.instance.id=replica-1")
                 .run(context -> {
                     assertThat(context.getBean(NotificationProperties.class))
-                            .isEqualTo(new NotificationProperties(7, "0 0 1 * * *", true));
+                            .isEqualTo(new NotificationProperties(7, "0 0 1 * * *", true, NotificationProperties.Gateway.SIMULATED));
                     assertThat(context.getBean(InstanceProperties.class).id()).isEqualTo("replica-1");
                 });
     }

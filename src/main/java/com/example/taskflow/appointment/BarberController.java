@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
@@ -34,9 +33,11 @@ class BarberController {
     @Operation(summary = "Get all barbers")
     @ApiResponse(responseCode = "200", description = "List of all barbers returned")
     public ResponseEntity<List<PublicBarberResponse>> getAllBarbers() {
-        // Public barbers: 5m public cache, pairs with @Cacheable("publicBarbers") 10m
+        // Admins add barbers from both clients, which then refetch this list; a still-fresh
+        // browser/native HTTP cache would answer that refetch. Revalidate with the ETag instead
+        // (304); the server-side @Cacheable("publicBarbers") still serves the body.
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
+                .cacheControl(CacheControl.noCache().cachePublic())
                 .body(barberService.getPublicBarbers());
     }
 

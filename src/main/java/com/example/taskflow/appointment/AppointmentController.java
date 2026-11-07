@@ -25,7 +25,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.concurrent.TimeUnit;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.access.prepost.PreAuthorize;
 
@@ -118,10 +117,11 @@ class AppointmentController {
     @Operation(summary = "Get the shop's time zone, booking window and opening hours, which decide what is bookable (Guest Access)")
     @ApiResponse(responseCode = "200", description = "Shop time zone, booking window and opening hours returned")
     public ResponseEntity<ShopInfoResponse> getShopInfo() {
-        // The zone and window change only with a deployment, the hours only when a barber is added
-        // (10 m cache, evicted then): same 5 m public tier as the catalog.
+        // The zone and window change only with a deployment, but the hours change whenever an admin
+        // adds a barber or edits a weekly schedule, after which both clients refetch this. Revalidate
+        // with the ETag (304) like the catalog; the server-side openingHours cache serves the body.
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
+                .cacheControl(CacheControl.noCache().cachePublic())
                 .body(new ShopInfoResponse(clock.getZone().getId(), bookingProperties.maxAdvanceDays(),
                         barberService.getOpeningHours()));
     }

@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Configuration;
         CookieProperties.class,
         CorsProperties.class,
         LoginThrottleProperties.class,
-        MetricsProperties.class})
+        MetricsProperties.class,
+        RefreshProperties.class})
 class AuthPropertiesConfig {
 }

@@ -1,6 +1,7 @@
 package com.example.taskflow.appointment;
 import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
+import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
 
 import com.example.taskflow.core.ConflictException;
@@ -28,15 +29,18 @@ class AppointmentLifecycleService {
     private final AppointmentRepository appointmentRepository;
     private final AppointmentChangePublisher changes;
     private final BusySlotsService busySlotsService;
+    private final BarberRepository barberRepository;
     private final Clock clock;
 
     AppointmentLifecycleService(AppointmentRepository appointmentRepository,
                                 AppointmentChangePublisher changes,
                                 BusySlotsService busySlotsService,
+                                BarberRepository barberRepository,
                                 Clock clock) {
         this.appointmentRepository = appointmentRepository;
         this.changes = changes;
         this.busySlotsService = busySlotsService;
+        this.barberRepository = barberRepository;
         this.clock = clock;
     }
 
@@ -122,6 +126,8 @@ class AppointmentLifecycleService {
             throw new ConflictException("This appointment has no assigned barber and cannot be approved. "
                     + "Deny or cancel it instead.");
         }
+        barber = barberRepository.findByIdForBooking(barber.getId())
+                .orElseThrow(() -> new ConflictException("The assigned barber is no longer available."));
         LocalTime start = LocalTime.parse(item.getBookingTime());
         if (!LocalDateTime.of(item.getBookingDate(), start).isAfter(LocalDateTime.now(clock))) {
             throw new ConflictException("A past appointment cannot be approved.");

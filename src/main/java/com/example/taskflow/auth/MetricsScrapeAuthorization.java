@@ -19,7 +19,7 @@ import java.util.function.Supplier;
  * configured (the network keeps it internal), otherwise only a request carrying that token as a
  * bearer credential (https://github.com/stefanf81/taskflow-enterprise/issues/223).
  *
- * <p>The scrape token is not a JWT, so {@link SecurityConfig#cookieBearerTokenResolver()} skips this
+ * <p>The scrape token is not a JWT, so {@link SecurityConfig#cookieBearerTokenResolver} skips this
  * path ({@link #SCRAPE}): the resource server would otherwise try to decode it and answer 401. Both
  * sides are hashed before they are compared, so the comparison takes the same time for any input.
  */

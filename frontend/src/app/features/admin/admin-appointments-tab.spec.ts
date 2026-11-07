@@ -134,15 +134,15 @@ describe('AdminAppointmentsTab', () => {
     expect(TestBed.inject(FlashMessages).errorMessage()).toBe('Failed to decline appointment.');
   });
 
-  it('should delete an appointment after confirmation and fail gracefully', () => {
+  it('should cancel an appointment after confirmation and fail gracefully', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    component.deleteAppointment(1);
+    component.cancelAppointment(1);
     const req = httpMock.expectOne((r) => r.url.endsWith('/api/v1/appointments/1'));
     expect(req.request.method).toBe('DELETE');
     req.error(new ProgressEvent('error'), { status: 404, statusText: 'Not Found' });
 
-    expect(TestBed.inject(FlashMessages).errorMessage()).toBe('Failed to delete booking.');
+    expect(TestBed.inject(FlashMessages).errorMessage()).toBe('Failed to cancel booking.');
   });
 
   it('should apply status filters and reset pagination to page 0', () => {
@@ -219,8 +219,16 @@ describe('AdminAppointmentsTab', () => {
         (b) => (b as HTMLElement).textContent?.trim() ?? '',
       );
 
-    it('filters by CANCELLED', () => {
+    it('filters by DENIED and CANCELLED', () => {
+      expect(buttonLabels()).toContain('Denied');
       expect(buttonLabels()).toContain('Cancelled');
+
+      component.setFilter('denied');
+      fixture.detectChanges();
+
+      httpMock
+        .expectOne((r) => r.url.includes('/api/v1/appointments') && r.url.includes('status=DENIED'))
+        .flush(mockDashboard);
 
       component.setFilter('cancelled');
       fixture.detectChanges();
@@ -232,7 +240,7 @@ describe('AdminAppointmentsTab', () => {
         .flush(mockDashboard);
     });
 
-    it('shows a Cancelled badge and no approve/deny actions for a cancelled booking', async () => {
+    it('shows a Cancelled badge and no approve/deny/cancel actions for a cancelled booking', async () => {
       await reloadWith(withStatus('CANCELLED'));
 
       const el = fixture.nativeElement as HTMLElement;
@@ -240,8 +248,7 @@ describe('AdminAppointmentsTab', () => {
       const labels = buttonLabels();
       expect(labels).not.toContain('Approve');
       expect(labels).not.toContain('Deny');
-      // Deleting the record stays possible.
-      expect(el.querySelector('.btn-delete')).toBeTruthy();
+      expect(el.querySelector('.btn-delete')).toBeNull();
     });
 
     it('shows the server message when a status change is rejected (409)', () => {

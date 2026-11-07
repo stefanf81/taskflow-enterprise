@@ -1,20 +1,34 @@
 let mockGetToken: jest.Mock;
 let mockGetTokenExpiry: jest.Mock;
 let mockClearSession: jest.Mock;
+let mockGetRefreshToken: jest.Mock;
+let mockRotateSession: jest.Mock;
+// The session epoch: like the real storage, clearSession ends it at once.
+let mockEpoch = 0;
 const mockSessionEnded = jest.fn();
 
 jest.mock('../src/utils/storage', () => {
   const getToken = jest.fn();
   const getTokenExpiry = jest.fn();
   const clearSession = jest.fn();
+  const getRefreshToken = jest.fn();
+  const rotateSession = jest.fn();
   mockGetToken = getToken;
   mockGetTokenExpiry = getTokenExpiry;
   mockClearSession = clearSession;
+  mockGetRefreshToken = getRefreshToken;
+  mockRotateSession = rotateSession;
   return {
     storage: {
       getToken: (...args: unknown[]) => getToken(...args),
       getTokenExpiry: (...args: unknown[]) => getTokenExpiry(...args),
-      clearSession: (...args: unknown[]) => clearSession(...args),
+      clearSession: (...args: unknown[]) => {
+        mockEpoch++;
+        return clearSession(...args);
+      },
+      getRefreshToken: (...args: unknown[]) => getRefreshToken(...args),
+      rotateSession: (...args: unknown[]) => rotateSession(...args),
+      getSessionEpoch: () => mockEpoch,
     },
   };
 });
@@ -22,12 +36,18 @@ jest.mock('../src/utils/storage', () => {
 let capturedCreateConfig: Record<string, unknown>;
 let mockRequestUse: jest.Mock;
 let mockResponseUse: jest.Mock;
+let mockPost: jest.Mock;
+let mockRequest: jest.Mock;
 
 jest.mock('axios', () => {
   const requestUse = jest.fn();
   const responseUse = jest.fn();
+  const post = jest.fn();
+  const request = jest.fn();
   mockRequestUse = requestUse;
   mockResponseUse = responseUse;
+  mockPost = post;
+  mockRequest = request;
 
   const instance: Record<string, unknown> = {
     defaults: {},
@@ -35,6 +55,8 @@ jest.mock('axios', () => {
       request: { use: requestUse },
       response: { use: responseUse },
     },
+    post: (...args: unknown[]) => post(...args),
+    request: (...args: unknown[]) => request(...args),
   };
 
   return {
@@ -46,9 +68,9 @@ jest.mock('axios', () => {
   };
 });
 
-import { setSessionEndedHandler } from '../src/api/client';
+import { renewSession, setSessionEndedHandler } from '../src/api/client';
 import { queryClient } from '../src/query/queryClient';
-import { SessionExpiredError } from '../src/utils/session';
+import { SessionChangedError, SessionExpiredError } from '../src/utils/session';
 
 describe('mobile api client', () => {
   let requestHandler: (config: any) => Promise<any>;
@@ -61,12 +83,34 @@ describe('mobile api client', () => {
     responseErrorHandler = mockResponseUse.mock.calls[0][1];
   });
 
+  const REFRESH = 'r'.repeat(43);
+  const ROTATED = 's'.repeat(43);
+  const renewed = {
+    data: {
+      accessToken: 'renewed-jwt',
+      tokenType: 'Bearer',
+      expiresIn: 3600,
+      username: 'customer@example.com',
+      role: 'ROLE_CUSTOMER',
+      refreshToken: ROTATED,
+    },
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
     setSessionEndedHandler(() => mockSessionEnded());
     mockGetTokenExpiry.mockResolvedValue(null);
     mockClearSession.mockResolvedValue(undefined);
+    mockGetRefreshToken.mockResolvedValue(null);
+    mockEpoch = 0;
+    // Like the real storage: a renewal's credentials are stored only for its own session.
+    mockRotateSession.mockImplementation(async (epoch: number) => epoch === mockEpoch);
   });
+
+  const expired = () => {
+    mockGetToken.mockResolvedValue('expired-jwt');
+    mockGetTokenExpiry.mockResolvedValue(Date.now() - 1000);
+  };
 
   it('does not enable native cookie credentials', () => {
     expect(capturedCreateConfig.withCredentials).toBe(false);
@@ -186,13 +230,143 @@ describe('mobile api client', () => {
       const error = new Error('Config error');
       await expect(requestErrorHandler(error)).rejects.toBe(error);
     });
+
+    it('renews an expired token with the stored refresh token instead of ending the session', async () => {
+      expired();
+      mockGetRefreshToken.mockResolvedValue(REFRESH);
+      mockPost.mockResolvedValueOnce(renewed);
+      const config = { headers: {} as Record<string, string>, url: '/api/v1/appointments', method: 'get' };
+
+      await expect(requestHandler(config)).resolves.toBe(config);
+
+      expect(mockPost).toHaveBeenCalledWith('/api/v1/auth/mobile/refresh', { refreshToken: REFRESH });
+      expect(config.headers.Authorization).toBe('Bearer renewed-jwt');
+      expect(mockRotateSession).toHaveBeenCalledWith(0, {
+        token: 'renewed-jwt',
+        expiresAt: expect.any(Number),
+        refreshToken: ROTATED,
+      });
+      expect(mockClearSession).not.toHaveBeenCalled();
+    });
+
+    it('remembers the session a request was sent under', async () => {
+      mockGetToken.mockResolvedValue('valid-jwt');
+      const config = { headers: {}, url: '/api/v1/appointments', method: 'get' } as Record<string, unknown>;
+
+      await requestHandler(config);
+      expect(config.sessionEpoch).toBe(0);
+    });
+
+    it('never sends a request (or its replay) with the credentials of the session that replaced its own', async () => {
+      mockGetToken.mockResolvedValue('next-user-jwt');
+      const replay = {
+        headers: {} as Record<string, string>,
+        url: '/api/v1/customer/appointments',
+        method: 'get',
+        sessionEpoch: 0,
+      };
+      mockEpoch = 1; // signed out and in again since the request was first sent
+
+      await expect(requestHandler(replay)).rejects.toBeInstanceOf(SessionChangedError);
+      expect(replay.headers.Authorization).toBeUndefined();
+    });
+
+    it('refuses a request whose session changed while its token was being read', async () => {
+      mockGetToken.mockImplementationOnce(async () => {
+        mockEpoch++;
+        return 'next-user-jwt';
+      });
+      const config = { headers: {} as Record<string, string>, url: '/api/v1/appointments', method: 'get' };
+
+      await expect(requestHandler(config)).rejects.toBeInstanceOf(SessionChangedError);
+      expect(config.headers.Authorization).toBeUndefined();
+    });
+
+    it('ends the session when the server rejects the refresh token', async () => {
+      mockGetToken.mockResolvedValue('expired-jwt');
+      mockGetTokenExpiry.mockResolvedValue(Date.now() - 1000);
+      mockGetRefreshToken.mockResolvedValue(REFRESH);
+      mockPost.mockRejectedValueOnce({ response: { status: 401 } });
+
+      await expect(
+        requestHandler({ headers: {}, url: '/api/v1/appointments', method: 'get' }),
+      ).rejects.toEqual({ response: { status: 401 } });
+      expect(mockClearSession).toHaveBeenCalledTimes(1);
+      expect(mockSessionEnded).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the session when renewal fails for lack of a network', async () => {
+      expired();
+      mockGetRefreshToken.mockResolvedValue(REFRESH);
+      mockPost.mockRejectedValueOnce(new Error('Network Error'));
+
+      await expect(
+        requestHandler({ headers: {}, url: '/api/v1/appointments', method: 'get' }),
+      ).rejects.toThrow('Network Error');
+      expect(mockClearSession).not.toHaveBeenCalled();
+      expect(mockRotateSession).not.toHaveBeenCalled();
+    });
+
+    it('keeps the session when the Keychain cannot read the refresh token', async () => {
+      expired();
+      mockGetRefreshToken.mockRejectedValue(new Error('Secure credential storage is unavailable.'));
+
+      await expect(
+        requestHandler({ headers: {}, url: '/api/v1/appointments', method: 'get' }),
+      ).rejects.toThrow('Secure credential storage is unavailable.');
+      expect(mockPost).not.toHaveBeenCalled();
+      expect(mockClearSession).not.toHaveBeenCalled();
+      expect(mockSessionEnded).not.toHaveBeenCalled();
+    });
+
+    it('stops a renewal when a logout happens while the refresh token is read', async () => {
+      expired();
+      mockGetRefreshToken.mockImplementationOnce(async () => {
+        mockEpoch++;
+        return REFRESH;
+      });
+
+      await expect(
+        requestHandler({ headers: {}, url: '/api/v1/appointments', method: 'get' }),
+      ).rejects.toBeInstanceOf(SessionChangedError);
+      expect(mockPost).not.toHaveBeenCalled();
+      expect(mockRotateSession).not.toHaveBeenCalled();
+      expect(mockClearSession).not.toHaveBeenCalled();
+    });
+
+    it('stores nothing from a renewal that a logout overtook, and does not send the request', async () => {
+      expired();
+      mockGetRefreshToken.mockResolvedValue(REFRESH);
+      mockPost.mockImplementationOnce(async () => {
+        mockEpoch++;
+        return renewed;
+      });
+      const config = { headers: {} as Record<string, string>, url: '/api/v1/appointments', method: 'get' };
+
+      await expect(requestHandler(config)).rejects.toBeInstanceOf(SessionChangedError);
+      expect(mockRotateSession).toHaveBeenCalledWith(0, expect.anything());
+      await expect(mockRotateSession.mock.results[0]!.value).resolves.toBe(false);
+      expect(config.headers.Authorization).toBeUndefined();
+      expect(mockClearSession).not.toHaveBeenCalled();
+    });
+
+    it('shares one renewal per session', async () => {
+      mockGetRefreshToken.mockResolvedValue(REFRESH);
+      mockPost.mockResolvedValueOnce(renewed);
+
+      await expect(Promise.all([renewSession(), renewSession()])).resolves.toEqual([
+        'renewed-jwt',
+        'renewed-jwt',
+      ]);
+      expect(mockPost).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('response interceptor', () => {
     it('clears credentials when a protected request returns 401', async () => {
       const error = {
         response: { status: 401 },
-        config: { url: '/api/v1/appointments', method: 'get' },
+        config: { url: '/api/v1/appointments', method: 'get', sessionEpoch: 0 },
       };
 
       await expect(responseErrorHandler(error)).rejects.toBe(error);
@@ -200,8 +374,90 @@ describe('mobile api client', () => {
       expect(mockSessionEnded).toHaveBeenCalledTimes(1);
     });
 
+    it('ignores a 401 for a request sent before the current sign-in', async () => {
+      mockGetRefreshToken.mockResolvedValue(REFRESH);
+      mockEpoch = 1;
+      const error = {
+        response: { status: 401 },
+        config: {
+          url: '/api/v1/appointments',
+          method: 'get',
+          headers: { Authorization: 'Bearer previous-user-jwt' },
+          sessionEpoch: 0,
+        },
+      };
+
+      await expect(responseErrorHandler(error)).rejects.toBe(error);
+      expect(mockPost).not.toHaveBeenCalled();
+      expect(mockClearSession).not.toHaveBeenCalled();
+      expect(mockSessionEnded).not.toHaveBeenCalled();
+    });
+
+    it('does not let a late rejection of an overtaken renewal end the new sign-in', async () => {
+      mockGetRefreshToken.mockResolvedValue(REFRESH);
+      mockPost.mockImplementationOnce(async () => {
+        mockEpoch++; // a new sign-in while the old refresh token was being rejected
+        throw { response: { status: 401 } };
+      });
+      const error = {
+        response: { status: 401 },
+        config: {
+          url: '/api/v1/appointments',
+          method: 'get',
+          headers: { Authorization: 'Bearer previous-user-jwt' },
+          sessionEpoch: 0,
+        },
+      };
+
+      await expect(responseErrorHandler(error)).rejects.toBe(error);
+      expect(mockClearSession).not.toHaveBeenCalled();
+      expect(mockSessionEnded).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it('ends the session when the renewal after a 401 is rejected, reporting the 401', async () => {
+      mockGetRefreshToken.mockResolvedValue(REFRESH);
+      mockPost.mockRejectedValueOnce({ response: { status: 401 } });
+      const error = {
+        response: { status: 401 },
+        config: {
+          url: '/api/v1/auth/me',
+          method: 'get',
+          headers: { Authorization: 'Bearer revoked-jwt' },
+          sessionEpoch: 0,
+        },
+      };
+
+      await expect(responseErrorHandler(error)).rejects.toBe(error);
+      expect(mockClearSession).toHaveBeenCalledTimes(1);
+      expect(mockSessionEnded).toHaveBeenCalledTimes(1);
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it('keeps the session when the refresh token cannot be read', async () => {
+      mockGetRefreshToken.mockRejectedValue(new Error('Secure credential storage is unavailable.'));
+      const error = {
+        response: { status: 401 },
+        config: {
+          url: '/api/v1/appointments',
+          method: 'get',
+          headers: { Authorization: 'Bearer jwt' },
+          sessionEpoch: 0,
+        },
+      };
+
+      await expect(responseErrorHandler(error)).rejects.toThrow(
+        'Secure credential storage is unavailable.',
+      );
+      expect(mockClearSession).not.toHaveBeenCalled();
+      expect(mockSessionEnded).not.toHaveBeenCalled();
+    });
+
     it('clears credentials when /auth/me rejects the stored token', async () => {
-      const error = { response: { status: 401 }, config: { url: '/api/v1/auth/me' } };
+      const error = {
+        response: { status: 401 },
+        config: { url: '/api/v1/auth/me', sessionEpoch: 0 },
+      };
 
       await expect(responseErrorHandler(error)).rejects.toBe(error);
       expect(mockClearSession).toHaveBeenCalledTimes(1);
@@ -239,6 +495,57 @@ describe('mobile api client', () => {
       await expect(responseErrorHandler(error)).rejects.toBe(error);
       expect(mockClearSession).not.toHaveBeenCalled();
       expect(mockSessionEnded).not.toHaveBeenCalled();
+    });
+
+    it('renews and replays a rejected request of any method that presented a bearer token', async () => {
+      mockGetRefreshToken.mockResolvedValue(REFRESH);
+      mockPost.mockResolvedValueOnce(renewed);
+      mockRequest.mockResolvedValueOnce({ status: 204 });
+      const config = {
+        url: '/api/v1/appointments/5',
+        method: 'delete',
+        headers: { Authorization: 'Bearer revoked-jwt' },
+        sessionEpoch: 0,
+      };
+
+      await expect(responseErrorHandler({ response: { status: 401 }, config })).resolves.toEqual({
+        status: 204,
+      });
+      // The replay keeps the epoch it was first sent under (see the request interceptor).
+      expect(mockRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionRetried: true, sessionEpoch: 0 }),
+      );
+      expect(mockClearSession).not.toHaveBeenCalled();
+    });
+
+    it('never renews a request that went out without a bearer token', async () => {
+      mockGetRefreshToken.mockResolvedValue(REFRESH);
+      const error = {
+        response: { status: 401 },
+        config: { url: '/api/v1/customer/appointments', method: 'get', headers: {}, sessionEpoch: 0 },
+      };
+
+      await expect(responseErrorHandler(error)).rejects.toBe(error);
+      expect(mockPost).not.toHaveBeenCalled();
+      expect(mockClearSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('ends the session when the replay after a renewal is rejected again', async () => {
+      mockGetRefreshToken.mockResolvedValue(REFRESH);
+      const error = {
+        response: { status: 401 },
+        config: {
+          url: '/api/v1/appointments',
+          method: 'get',
+          headers: { Authorization: 'Bearer renewed-jwt' },
+          sessionRetried: true,
+          sessionEpoch: 0,
+        },
+      };
+
+      await expect(responseErrorHandler(error)).rejects.toBe(error);
+      expect(mockPost).not.toHaveBeenCalled();
+      expect(mockClearSession).toHaveBeenCalledTimes(1);
     });
   });
 });

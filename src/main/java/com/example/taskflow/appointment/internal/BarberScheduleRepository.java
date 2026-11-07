@@ -15,6 +15,8 @@ import java.util.Optional;
 public interface BarberScheduleRepository extends JpaRepository<BarberSchedule, Long> {
     Optional<BarberSchedule> findByBarberIdAndDayOfWeek(Long barberId, Integer dayOfWeek);
 
+    List<BarberSchedule> findByBarberIdOrderByDayOfWeek(Long barberId);
+
     /**
      * The schedule rows of the given barbers for one weekday (at most one per barber, V6 unique key),
      * with the barber fetched so callers can key them by barber id without further queries.

@@ -145,16 +145,25 @@ export default async function () {
     let timeSlotPicked = false;
     if (dateCount > 0) {
       await dateBtns.first().click();
-      await page.waitForTimeout(SLOT_LOAD_MS); // Wait for busy-slots API
+      // The carousel only offers bookable days, so the busy-slots answer ends in either the slot
+      // grid or the step's error alert ("Checking slot availability..." until then). Wait for
+      // one of them instead of a fixed pause, which counted an empty grid on a slow network.
+      await page
+        .locator('.time-slots-grid button.slot-picker-btn, #step-panel-3 [role="alert"]')
+        .first()
+        .waitFor({ state: 'visible', timeout: SLOT_LOAD_MS + 10000 })
+        .catch(() => undefined);
 
       // Time-slot buttons live in the dedicated grid; date buttons share the
       // `slot-picker-btn` class, so scope to the grid to avoid clicking a date.
       const slotBtns = page.locator(
         '.time-slots-grid button.slot-picker-btn:not([disabled])',
       );
+      const totalSlotBtns = await page.locator('.time-slots-grid button.slot-picker-btn').count();
+      const slotError = await page.locator('#step-panel-3 [role="alert"]').count();
       const slotCount = await slotBtns.count();
-      check(slotCount >= 0, {
-        '4.2 time-slot buttons rendered': () => true,
+      check(totalSlotBtns, {
+        '4.2 time-slot grid rendered without error': (c) => c > 0 && slotError === 0,
       });
 
       if (slotCount > 0) {

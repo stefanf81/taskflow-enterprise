@@ -1,15 +1,25 @@
 import React from 'react';
-import { render, fireEvent, waitFor, screen } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, screen, act } from '@testing-library/react-native';
 import { Alert } from 'react-native';
+import { freezeDate, moveClockTo, restoreClock } from '../test/fakeClock';
 
 // ==================== Controllable mocks ====================
 const mockRefetch = jest.fn();
 let mockIsLoading: boolean;
 let mockIsError: boolean;
+let mockIsFetching: boolean;
+let mockIsPlaceholderData: boolean;
+let mockIsFocused: boolean;
+let mockTimeZone: string | null;
 let mockAppointmentsData: any;
 let mockUpdateMutate: jest.Mock;
 let mockDeleteMutate: jest.Mock;
 let mockHookArgs: any[] | null;
+
+jest.mock('@react-navigation/native', () => ({ useIsFocused: () => mockIsFocused }));
+jest.mock('../src/core/shop/useShopInfo', () => ({
+  useShopInfo: () => ({ timeZone: mockTimeZone }),
+}));
 
 jest.mock('../src/core/appointments/useAppointments', () => ({
   useAppointments: (...args: any[]) => {
@@ -18,11 +28,14 @@ jest.mock('../src/core/appointments/useAppointments', () => ({
       data: mockAppointmentsData,
       isLoading: mockIsLoading,
       isError: mockIsError,
+      isSuccess: !mockIsLoading && !mockIsError,
+      isFetching: mockIsFetching,
+      isPlaceholderData: mockIsPlaceholderData,
       refetch: mockRefetch,
     };
   },
-  useUpdateAppointmentStatus: () => ({ mutate: mockUpdateMutate, isPending: false }),
-  useDeleteAppointment: () => ({ mutate: mockDeleteMutate, isPending: false }),
+  useUpdateAppointmentStatus: () => ({ mutateAsync: mockUpdateMutate }),
+  useDeleteAppointment: () => ({ mutateAsync: mockDeleteMutate }),
 }));
 
 const mockLogout = jest.fn();
@@ -56,14 +69,21 @@ function buildData(overrides: Partial<any> = {}) {
 
 describe('AdminDashboardScreen', () => {
   beforeEach(() => {
+    freezeDate('2026-07-15T12:00:00Z');
     jest.clearAllMocks();
     mockIsLoading = false;
     mockIsError = false;
+    mockIsFetching = false;
+    mockIsPlaceholderData = false;
+    mockIsFocused = true;
+    mockTimeZone = null;
     mockAppointmentsData = buildData();
-    mockUpdateMutate = jest.fn();
-    mockDeleteMutate = jest.fn();
+    mockUpdateMutate = jest.fn().mockResolvedValue(undefined);
+    mockDeleteMutate = jest.fn().mockResolvedValue(undefined);
+    mockRefetch.mockResolvedValue({ isSuccess: true });
     mockHookArgs = null;
   });
+  afterEach(() => restoreClock());
 
   // ============ RENDERING ============
   it('renders admin control center header', async () => {
@@ -88,7 +108,7 @@ describe('AdminDashboardScreen', () => {
     await render(<AdminDashboardScreen />);
     expect(screen.getByText('Approve')).toBeTruthy();
     expect(screen.getByText('Decline')).toBeTruthy();
-    expect(screen.getByText('Delete')).toBeTruthy();
+    expect(screen.getByText('Cancel')).toBeTruthy();
   });
 
   it('renders filter chips', async () => {
@@ -199,23 +219,14 @@ describe('AdminDashboardScreen', () => {
   it('calls updateStatus mutate with APPROVED on approve press', async () => {
     await render(<AdminDashboardScreen />);
     await fireEvent.press(screen.getByText('Approve'));
-    expect(mockUpdateMutate).toHaveBeenCalledWith(
-      { id: 1, status: 'APPROVED' },
-      expect.objectContaining({
-        onSuccess: expect.any(Function),
-        onError: expect.any(Function),
-      }),
-    );
+    expect(mockUpdateMutate).toHaveBeenCalledWith({ id: 1, status: 'APPROVED' });
   });
 
   it('shows success banner after approve succeeds', async () => {
-    mockUpdateMutate.mockImplementation((_args, { onSuccess }) => {
-      onSuccess();
-    });
     await render(<AdminDashboardScreen />);
     await fireEvent.press(screen.getByText('Approve'));
     await waitFor(() => {
-      expect(screen.getByText(/Appointment APPROVED/i)).toBeTruthy();
+      expect(screen.getByText('Appointment APPROVED! Client notification email queued.')).toBeTruthy();
     });
     // The mutation hooks invalidate ['appointments']; the screen does not refetch on top.
     expect(mockRefetch).not.toHaveBeenCalled();
@@ -224,19 +235,10 @@ describe('AdminDashboardScreen', () => {
   it('calls updateStatus mutate with DENIED on decline press', async () => {
     await render(<AdminDashboardScreen />);
     await fireEvent.press(screen.getByText('Decline'));
-    expect(mockUpdateMutate).toHaveBeenCalledWith(
-      { id: 1, status: 'DENIED' },
-      expect.objectContaining({
-        onSuccess: expect.any(Function),
-        onError: expect.any(Function),
-      }),
-    );
+    expect(mockUpdateMutate).toHaveBeenCalledWith({ id: 1, status: 'DENIED' });
   });
 
   it('shows success banner after decline succeeds', async () => {
-    mockUpdateMutate.mockImplementation((_args, { onSuccess }) => {
-      onSuccess();
-    });
     await render(<AdminDashboardScreen />);
     await fireEvent.press(screen.getByText('Decline'));
     await waitFor(() => {
@@ -246,9 +248,7 @@ describe('AdminDashboardScreen', () => {
   });
 
   it('shows error banner when approve fails', async () => {
-    mockUpdateMutate.mockImplementation((_args, { onError }) => {
-      onError();
-    });
+    mockUpdateMutate.mockRejectedValue(undefined);
     await render(<AdminDashboardScreen />);
     await fireEvent.press(screen.getByText('Approve'));
     await waitFor(() => {
@@ -257,9 +257,7 @@ describe('AdminDashboardScreen', () => {
   });
 
   it('shows error banner when decline fails', async () => {
-    mockUpdateMutate.mockImplementation((_args, { onError }) => {
-      onError();
-    });
+    mockUpdateMutate.mockRejectedValue(undefined);
     await render(<AdminDashboardScreen />);
     await fireEvent.press(screen.getByText('Decline'));
     await waitFor(() => {
@@ -267,69 +265,58 @@ describe('AdminDashboardScreen', () => {
     });
   });
 
-  it('shows alert on delete press and calls delete mutate on confirm', async () => {
+  it('confirms cancellation rather than permanent deletion', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
-      const deleteBtn = buttons?.find((b: any) => b.text === 'Delete');
+      const deleteBtn = buttons?.find((b: any) => b.text === 'Cancel Booking');
       if (deleteBtn?.onPress) deleteBtn.onPress();
     });
 
     await render(<AdminDashboardScreen />);
-    await fireEvent.press(screen.getByText('Delete'));
+    await fireEvent.press(screen.getByText('Cancel'));
 
     expect(alertSpy).toHaveBeenCalledWith(
-      'Delete Booking',
-      'Are you sure you want to permanently delete this booking?',
+      'Cancel Booking',
+      'Are you sure you want to cancel this booking?',
       expect.arrayContaining([
-        expect.objectContaining({ text: 'Cancel', style: 'cancel' }),
-        expect.objectContaining({ text: 'Delete', style: 'destructive' }),
+        expect.objectContaining({ text: 'Keep Booking', style: 'cancel' }),
+        expect.objectContaining({ text: 'Cancel Booking', style: 'destructive' }),
       ]),
     );
 
-    expect(mockDeleteMutate).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({
-        onSuccess: expect.any(Function),
-        onError: expect.any(Function),
-      }),
-    );
+    expect(mockDeleteMutate).toHaveBeenCalledWith(1);
 
     alertSpy.mockRestore();
   });
 
-  it('shows success banner after delete succeeds', async () => {
+  it('shows success banner after cancellation succeeds', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
-      const deleteBtn = buttons?.find((b: any) => b.text === 'Delete');
+      const deleteBtn = buttons?.find((b: any) => b.text === 'Cancel Booking');
       if (deleteBtn?.onPress) deleteBtn.onPress();
-    });
-    mockDeleteMutate.mockImplementation((_id, { onSuccess }) => {
-      onSuccess();
     });
 
     await render(<AdminDashboardScreen />);
-    await fireEvent.press(screen.getByText('Delete'));
+    await fireEvent.press(screen.getByText('Cancel'));
 
     await waitFor(() => {
-      expect(screen.getByText('Booking permanently deleted.')).toBeTruthy();
+      expect(screen.getByText('Booking cancelled.')).toBeTruthy();
     });
     expect(mockRefetch).not.toHaveBeenCalled();
 
     alertSpy.mockRestore();
   });
 
-  it('shows error banner when delete fails', async () => {
+  it('shows error banner when cancellation fails', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
-      const deleteBtn = buttons?.find((b: any) => b.text === 'Delete');
+      const deleteBtn = buttons?.find((b: any) => b.text === 'Cancel Booking');
       if (deleteBtn?.onPress) deleteBtn.onPress();
     });
-    mockDeleteMutate.mockImplementation((_id, { onError }) => {
-      onError();
-    });
+    mockDeleteMutate.mockRejectedValue(undefined);
 
     await render(<AdminDashboardScreen />);
-    await fireEvent.press(screen.getByText('Delete'));
+    await fireEvent.press(screen.getByText('Cancel'));
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to delete booking.')).toBeTruthy();
+      expect(screen.getByText('Failed to cancel booking.')).toBeTruthy();
     });
 
     alertSpy.mockRestore();
@@ -344,7 +331,7 @@ describe('AdminDashboardScreen', () => {
     await render(<AdminDashboardScreen />);
     expect(screen.queryByText('Approve')).toBeNull();
     expect(screen.getByText('Decline')).toBeTruthy();
-    expect(screen.getByText('Delete')).toBeTruthy();
+    expect(screen.getByText('Cancel')).toBeTruthy();
   });
 
   it('hides Decline button for already-denied appointments', async () => {
@@ -355,7 +342,7 @@ describe('AdminDashboardScreen', () => {
     await render(<AdminDashboardScreen />);
     expect(screen.getByText('Approve')).toBeTruthy();
     expect(screen.queryByText('Decline')).toBeNull();
-    expect(screen.getByText('Delete')).toBeTruthy();
+    expect(screen.queryByText('Cancel')).toBeNull();
   });
 
   // ============ OVERDUE ============
@@ -411,13 +398,13 @@ describe('AdminDashboardScreen', () => {
     await render(<AdminDashboardScreen />);
     await fireEvent.press(screen.getByText('Next'));
     expect(screen.getByText('Page 2 of 3')).toBeTruthy();
-    expect(mockHookArgs).toEqual(['all', '', 1, 10]);
+    expect(mockHookArgs).toEqual(['all', '', 1, 10, { subscribed: true }]);
     await fireEvent.press(screen.getByText('Next'));
     expect(screen.getByText('Page 3 of 3')).toBeTruthy();
-    expect(mockHookArgs).toEqual(['all', '', 2, 10]);
+    expect(mockHookArgs).toEqual(['all', '', 2, 10, { subscribed: true }]);
     expect(screen.getByText('Next').parent?.props.accessibilityState.disabled).toBe(true);
     await fireEvent.press(screen.getByText('Next'));
-    expect(mockHookArgs).toEqual(['all', '', 2, 10]);
+    expect(mockHookArgs).toEqual(['all', '', 2, 10, { subscribed: true }]);
   });
 
   it('navigates previous page on Prev press', async () => {
@@ -436,7 +423,7 @@ describe('AdminDashboardScreen', () => {
     await fireEvent.press(screen.getByText('Next'));
     await fireEvent.press(screen.getByText('Prev'));
     expect(screen.getByText('Page 1 of 3')).toBeTruthy();
-    expect(mockHookArgs).toEqual(['all', '', 0, 10]);
+    expect(mockHookArgs).toEqual(['all', '', 0, 10, { subscribed: true }]);
   });
 
   it('disables Prev on first page', async () => {
@@ -475,9 +462,6 @@ describe('AdminDashboardScreen', () => {
 
   // ============ SUCCESS BANNER ============
   it('dismisses success banner on press X', async () => {
-    mockUpdateMutate.mockImplementation((_args, { onSuccess }) => {
-      onSuccess();
-    });
     await render(<AdminDashboardScreen />);
     await fireEvent.press(screen.getByText('Approve'));
     await waitFor(() => {
@@ -539,18 +523,100 @@ describe('AdminDashboardScreen', () => {
     expect(screen.getAllByText('CANCELLED').length).toBeGreaterThanOrEqual(2); // chip + badge
     expect(screen.queryByText('Approve')).toBeNull();
     expect(screen.queryByText('Decline')).toBeNull();
-    expect(screen.getByText('Delete')).toBeTruthy();
+    expect(screen.queryByText('Cancel')).toBeNull();
   });
 
   // ============ SERVER MESSAGES (409 etc.) ============
   it('surfaces the server message when a status change conflicts (409)', async () => {
-    mockUpdateMutate.mockImplementation((_args, { onError }) => {
-      onError({ response: { status: 409, data: { message: 'Appointment was cancelled by the customer' } } });
-    });
+    mockUpdateMutate.mockRejectedValue({ response: { status: 409, data: { message: 'Appointment was cancelled by the customer' } } });
     await render(<AdminDashboardScreen />);
     await fireEvent.press(screen.getByText('Approve'));
     await waitFor(() => {
       expect(screen.getByText('Appointment was cancelled by the customer')).toBeTruthy();
     });
+  });
+
+  it('subscribes to the list only while the tab is focused', async () => {
+    const { rerender } = await render(<AdminDashboardScreen />);
+    expect(mockHookArgs?.[4]).toEqual({ subscribed: true });
+    mockIsFocused = false;
+    await rerender(<AdminDashboardScreen />);
+    expect(mockHookArgs?.[4]).toEqual({ subscribed: false });
+  });
+
+  it('waits for a successful refetch before reporting sync success', async () => {
+    let finish!: () => void;
+    mockRefetch.mockReturnValueOnce(new Promise<void>((resolve) => { finish = resolve; }));
+    await render(<AdminDashboardScreen />);
+    await fireEvent.press(screen.getByLabelText('Sync'));
+    expect(screen.queryByText('Database synced.')).toBeNull();
+    await fireEvent.press(screen.getByLabelText('Sync'));
+    expect(mockRefetch).toHaveBeenCalledTimes(1);
+    await act(async () => { finish(); });
+    expect(mockRefetch).toHaveBeenCalledWith({ throwOnError: true });
+    expect(screen.getByText('Database synced.')).toBeTruthy();
+  });
+
+  it('reports sync failure without claiming success', async () => {
+    mockRefetch.mockRejectedValueOnce(new Error('Connection lost'));
+    await render(<AdminDashboardScreen />);
+    await fireEvent.press(screen.getByLabelText('Sync'));
+    expect(screen.getByText('Connection lost')).toBeTruthy();
+    expect(screen.queryByText('Database synced.')).toBeNull();
+  });
+
+  it('locks all actions of a writing row without disabling other rows', async () => {
+    let finish!: () => void;
+    mockUpdateMutate.mockReturnValueOnce(new Promise<void>((resolve) => { finish = resolve; }));
+    mockAppointmentsData.page.content.push({ ...defaultAppointment, id: 2, publicId: 'TF-0002' });
+    await render(<AdminDashboardScreen />);
+    await fireEvent.press(screen.getAllByLabelText('Approve')[0]!);
+    expect(screen.getAllByLabelText('Approve')[0]!.props.accessibilityState.disabled).toBe(true);
+    expect(screen.getAllByLabelText('Decline')[0]!.props.accessibilityState.disabled).toBe(true);
+    expect(screen.getAllByLabelText('Cancel')[0]!.props.accessibilityState.disabled).toBe(true);
+    expect(screen.getAllByLabelText('Approve')[1]!.props.accessibilityState.disabled).toBe(false);
+    await fireEvent.press(screen.getAllByLabelText('Decline')[0]!);
+    expect(mockUpdateMutate).toHaveBeenCalledTimes(1);
+    await act(async () => { finish(); });
+    expect(screen.getAllByLabelText('Approve')[0]!.props.accessibilityState.disabled).toBe(false);
+  });
+
+  it('uses the shop calendar rather than the device date for overdue badges', async () => {
+    moveClockTo('2026-07-15T23:30:00Z');
+    mockTimeZone = 'Pacific/Kiritimati'; // July 16 at the shop, regardless of the device zone.
+    mockAppointmentsData.page.content = [{ ...defaultAppointment, bookingDate: '2026-07-15' }];
+    await render(<AdminDashboardScreen />);
+    expect(screen.getAllByText('OVERDUE')).toHaveLength(2); // filter + badge
+  });
+
+  it('clamps only a resolved page, including an empty result with zero total pages', async () => {
+    mockAppointmentsData.page.page.totalPages = 3;
+    const { rerender } = await render(<AdminDashboardScreen />);
+    await fireEvent.press(screen.getByText('Next'));
+    mockAppointmentsData = buildData({
+      page: { content: [], page: { number: 1, size: 10, totalElements: 0, totalPages: 0 } },
+    });
+    mockIsPlaceholderData = true;
+    await rerender(<AdminDashboardScreen />);
+    expect(mockHookArgs?.[2]).toBe(1);
+    mockIsPlaceholderData = false;
+    mockIsFetching = true;
+    await rerender(<AdminDashboardScreen />);
+    expect(mockHookArgs?.[2]).toBe(1);
+    mockIsFetching = false;
+    await rerender(<AdminDashboardScreen />);
+    expect(mockHookArgs?.[2]).toBe(0);
+  });
+
+  it('offers a first-page escape when an empty page still reports more pages', async () => {
+    mockAppointmentsData.page.page.totalPages = 3;
+    const { rerender } = await render(<AdminDashboardScreen />);
+    await fireEvent.press(screen.getByText('Next'));
+    mockAppointmentsData = buildData({
+      page: { content: [], page: { number: 1, size: 10, totalElements: 20, totalPages: 3 } },
+    });
+    await rerender(<AdminDashboardScreen />);
+    await fireEvent.press(screen.getByText('Back to first page'));
+    expect(mockHookArgs?.[2]).toBe(0);
   });
 });

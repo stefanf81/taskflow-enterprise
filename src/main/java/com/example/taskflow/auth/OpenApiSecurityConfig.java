@@ -42,17 +42,23 @@ class OpenApiSecurityConfig {
             "GET /api/v1/auth/csrf",
             "POST /api/v1/auth/login",
             "POST /api/v1/auth/mobile/login",
+            "POST /api/v1/auth/refresh",
+            "POST /api/v1/auth/mobile/refresh",
             "POST /api/v1/auth/register",
             "POST /api/v1/auth/logout",
             "GET /api/v1/appointments/public/busy-slots",
             "GET /api/v1/appointments/public/shop",
             "PUT /api/v1/appointments/public/cancel/{publicId}",
+            "PUT /api/v1/appointments/public/reschedule/{publicId}",
+            "POST /api/v1/appointments/public/reschedule/{publicId}/availability",
+            "POST /api/v1/appointments/public/calendar/{publicId}",
             "POST /api/v1/appointments",
             "GET /api/v1/catalog",
             "GET /api/v1/catalog/{id}",
             "GET /api/v1/barbers",
             "GET /api/v1/reviews/public/barber-ratings",
-            "POST /api/v1/reviews/public/{publicId}");
+            "POST /api/v1/reviews/public/{publicId}",
+            "POST /api/v1/telemetry");
 
     @Bean
     OpenApiCustomizer securityRequirements() {

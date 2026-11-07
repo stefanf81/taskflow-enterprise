@@ -6,6 +6,7 @@ import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { useFlashMessage } from '../../components/common/useFlashMessage';
 import { PublicCancelModal } from './PublicCancelModal';
+import { PublicRescheduleModal } from './PublicRescheduleModal';
 import { PublicReviewModal } from './PublicReviewModal';
 import { RootStackParamList } from '../../types/navigation';
 import { colors } from '../../theme/colors';
@@ -17,6 +18,7 @@ export const PublicActionsScreen: React.FC = () => {
   const initialPublicId = route.params?.publicId || '';
 
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   // Success toast after a modal action (shorter than the portals' banners).
   const { successMessage: toastMessage, showSuccess: showToast } = useFlashMessage(4000);
@@ -37,11 +39,25 @@ export const PublicActionsScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Action 1: Cancel Booking */}
+        {/* Action 1: Reschedule Booking */}
+        <Card style={styles.actionCard}>
+          <Text style={styles.actionTitle}>Reschedule Appointment</Text>
+          <Text style={styles.actionDesc}>
+            Need another time? Provide your Public Reference ID and Email, then pick a new slot. The shop confirms it again.
+          </Text>
+          <Button
+            title="Reschedule an Appointment"
+            variant="primary"
+            onPress={() => setShowRescheduleModal(true)}
+            style={styles.actionBtn}
+          />
+        </Card>
+
+        {/* Action 2: Cancel Booking */}
         <Card style={styles.actionCard}>
           <Text style={styles.actionTitle}>Cancel Appointment</Text>
           <Text style={styles.actionDesc}>
-            Need to reschedule or cancel your visit? Provide your Public Reference ID and Email to remove your booking.
+            Can't make it at all? Provide your Public Reference ID and Email to remove your booking.
           </Text>
           <Button
             title="Cancel an Appointment"
@@ -51,7 +67,7 @@ export const PublicActionsScreen: React.FC = () => {
           />
         </Card>
 
-        {/* Action 2: Leave a Review */}
+        {/* Action 3: Leave a Review */}
         <Card style={styles.actionCard}>
           <Text style={styles.actionTitle}>Leave a Review & Rating</Text>
           <Text style={styles.actionDesc}>
@@ -72,6 +88,13 @@ export const PublicActionsScreen: React.FC = () => {
         initialPublicId={initialPublicId}
         onClose={() => setShowCancelModal(false)}
         onSuccess={() => showToast('Appointment cancelled successfully.')}
+      />
+
+      <PublicRescheduleModal
+        visible={showRescheduleModal}
+        initialPublicId={initialPublicId}
+        onClose={() => setShowRescheduleModal(false)}
+        onSuccess={showToast}
       />
 
       <PublicReviewModal

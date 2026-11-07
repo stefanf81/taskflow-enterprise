@@ -34,6 +34,11 @@ jest.mock('../src/utils/storage', () => ({
     removeTokenExpiry: jest.fn(),
     setUserData: jest.fn(),
     removeUserData: jest.fn(),
+    setRefreshToken: jest.fn(),
+    getRefreshToken: jest.fn(),
+    removeRefreshToken: jest.fn(),
+    startSession: jest.fn(),
+    getSessionEpoch: jest.fn(() => 0),
     clearSession: jest.fn(),
   },
 }));
@@ -96,25 +101,31 @@ describe('useAuthStore', () => {
         expect(state.isAuthenticated).toBe(true);
         expect(state.username).toBe('admin');
         expect(state.role).toBe('ROLE_ADMIN');
-        expect(storage.setToken).toHaveBeenCalledWith('admin-jwt');
-        expect(storage.setTokenExpiry).toHaveBeenCalledWith(
-          new Date('2026-08-12T10:00:00Z').getTime() + 3600 * 1000,
-        );
-        expect(storage.setUserData).toHaveBeenCalledWith({ username: 'admin', role: 'ROLE_ADMIN' });
+        // One batch that starts a new session epoch (see storage.startSession).
+        expect(storage.startSession).toHaveBeenCalledWith({
+          token: 'admin-jwt',
+          expiresAt: new Date('2026-08-12T10:00:00Z').getTime() + 3600 * 1000,
+          refreshToken: undefined,
+          user: { username: 'admin', role: 'ROLE_ADMIN' },
+        });
+        expect(storage.setToken).not.toHaveBeenCalled();
       } finally {
         restoreClock();
       }
     });
 
-    it('stores a customer bearer token after customer login', async () => {
-      (authApi.login as jest.Mock).mockResolvedValueOnce(
-        mobileLoginResponse('customer1', 'ROLE_CUSTOMER'),
-      );
+    it('stores a customer bearer token and its refresh token after customer login', async () => {
+      (authApi.login as jest.Mock).mockResolvedValueOnce({
+        ...mobileLoginResponse('customer1', 'ROLE_CUSTOMER'),
+        refreshToken: 'r'.repeat(43),
+      });
 
       await useAuthStore.getState().login({ username: 'customer1', password: 'password' });
 
       expect(useAuthStore.getState().role).toBe('ROLE_CUSTOMER');
-      expect(storage.setToken).toHaveBeenCalledWith('customer1-jwt');
+      expect(storage.startSession).toHaveBeenCalledWith(
+        expect.objectContaining({ token: 'customer1-jwt', refreshToken: 'r'.repeat(43) }),
+      );
     });
 
     it('clears a previous session notice on login', async () => {
@@ -347,6 +358,24 @@ describe('useAuthStore', () => {
 
       expect(useAuthStore.getState().isOffline).toBe(true);
       expect(useAuthStore.getState().error).toMatch(/Secure credential storage is unavailable/);
+    });
+
+    it('keeps an expired sign-in whose refresh token cannot be read, and offers a retry', async () => {
+      (storage.getToken as jest.Mock).mockResolvedValueOnce('expired-jwt');
+      (storage.getTokenExpiry as jest.Mock).mockResolvedValueOnce(Date.now() - 60_000);
+      (storage.getRefreshToken as jest.Mock).mockRejectedValueOnce(
+        new Error('Secure credential storage is unavailable.'),
+      );
+
+      await useAuthStore.getState().checkAuth();
+
+      expect(storage.clearSession).not.toHaveBeenCalled();
+      expect(authApi.me).not.toHaveBeenCalled();
+      const state = useAuthStore.getState();
+      expect(state.storageUnavailable).toBe(true);
+      expect(state.isOffline).toBe(true);
+      expect(state.isBootstrapping).toBe(false);
+      expect(state.sessionNotice).toBeNull();
     });
 
     it('flags unreadable storage so the UI can offer a way out, and clears the flag once it reads again', async () => {

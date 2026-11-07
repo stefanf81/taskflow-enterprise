@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { form, required, FormField } from '@angular/forms/signals';
+import { AdminWeeklySchedule } from './admin-weekly-schedule';
 import { AppointmentStore } from './appointment.store';
 import { BarberStore } from './barber.store';
 import { formatLocalDate } from '../../core/time-utils';
@@ -11,10 +12,10 @@ interface TimeOffFormModel {
   reason: string;
 }
 
-/** Owner dashboard · barber schedules and time-off tab (Signal Forms). */
+/** Owner dashboard · barbers, their weekly hours and time off (Signal Forms). */
 @Component({
   selector: 'app-admin-schedules-tab',
-  imports: [CommonModule, FormField],
+  imports: [CommonModule, FormField, AdminWeeklySchedule],
   templateUrl: './admin-schedules-tab.html',
 })
 export class AdminSchedulesTab {
@@ -34,6 +35,28 @@ export class AdminSchedulesTab {
     required(f.startDate);
     required(f.endDate);
   });
+  protected readonly newBarberName = signal('');
+  protected readonly newBarberEmail = signal('');
+  protected readonly newBarberPhone = signal('');
+
+  async createBarber(): Promise<void> {
+    const name = this.newBarberName().trim();
+    if (!name) {
+      this.barberStore.actionErrorMessage.set('Barber name is required.');
+      return;
+    }
+    this.barberStore.actionSuccessMessage.set(null);
+    const created = await this.barberStore.createBarber({
+      name,
+      email: this.newBarberEmail().trim(),
+      phone: this.newBarberPhone().trim(),
+    });
+    if (created) {
+      this.newBarberName.set('');
+      this.newBarberEmail.set('');
+      this.newBarberPhone.set('');
+    }
+  }
 
   protected selectAdminBarber(id: number): void {
     this.barberStore.selectBarber(id);
@@ -63,7 +86,10 @@ export class AdminSchedulesTab {
   protected retryLoad(): void {
     this.barberStore.loadBarbers();
     const barberId = this.selectedBarberId();
-    if (barberId) this.barberStore.loadTimeOffs(barberId);
+    if (barberId) {
+      this.barberStore.loadTimeOffs(barberId);
+      this.barberStore.loadSchedule();
+    }
   }
 
   protected formatLocalDate(dateStr: string): string {

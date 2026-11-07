@@ -33,6 +33,21 @@ jest.mock('../src/core/catalog/useCatalog', () => ({
     isPending: mockRestorePending,
     variables: undefined,
   }),
+  useCreateService: () => ({
+    mutate: jest.fn(),
+    isPending: false,
+    variables: undefined,
+  }),
+  useUpdateService: () => ({
+    mutate: jest.fn(),
+    isPending: false,
+    variables: undefined,
+  }),
+  useRetireService: () => ({
+    mutate: jest.fn(),
+    isPending: false,
+    variables: undefined,
+  }),
 }));
 
 describe('AdminCatalogScreen', () => {

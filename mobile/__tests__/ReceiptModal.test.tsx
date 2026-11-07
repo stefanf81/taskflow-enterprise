@@ -1,6 +1,19 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, screen } from '@testing-library/react-native';
 import { ReceiptModal } from '../src/features/booking/ReceiptModal';
+
+const mockExportPublicCalendar = jest.fn();
+const mockShareCalendarFile = jest.fn();
+
+jest.mock('../src/core/appointments/appointments', () => ({
+  appointmentsApi: {
+    exportPublicCalendar: (...args: unknown[]) => mockExportPublicCalendar(...args),
+  },
+}));
+
+jest.mock('../src/core/calendar/shareCalendarFile', () => ({
+  shareCalendarFile: (...args: unknown[]) => mockShareCalendarFile(...args),
+}));
 
 const mockAppointment = {
   id: 1,
@@ -64,5 +77,34 @@ describe('ReceiptModal Component', () => {
       />
     );
     expect(getByText('Manage / Review Booking')).toBeTruthy();
+  });
+
+  it('verifies the guest with the booking email and shares the .ics file', async () => {
+    mockExportPublicCalendar.mockResolvedValueOnce({
+      content: 'BEGIN:VCALENDAR',
+      filename: 'appointment-TF-0001.ics',
+    });
+    mockShareCalendarFile.mockResolvedValueOnce(true);
+    await render(<ReceiptModal visible={true} appointment={mockAppointment} onClose={() => {}} />);
+
+    await fireEvent.press(screen.getByText('Add to Calendar (.ics)'));
+
+    expect(mockExportPublicCalendar).toHaveBeenCalledWith('TF-0001', 'john@example.com');
+    await waitFor(() =>
+      expect(mockShareCalendarFile).toHaveBeenCalledWith('BEGIN:VCALENDAR', 'appointment-TF-0001.ics'),
+    );
+  });
+
+  it('says so when the calendar file cannot be created instead of failing silently', async () => {
+    mockExportPublicCalendar.mockRejectedValueOnce({
+      response: { status: 404, data: { message: 'Appointment not found or unauthorized.' } },
+    });
+    await render(<ReceiptModal visible={true} appointment={mockAppointment} onClose={() => {}} />);
+
+    await fireEvent.press(screen.getByText('Add to Calendar (.ics)'));
+
+    await waitFor(() =>
+      expect(screen.getByText('Appointment not found or unauthorized.')).toBeTruthy(),
+    );
   });
 });

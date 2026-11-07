@@ -52,6 +52,14 @@ const SIGNED_OUT = {
   storageUnavailable: false,
 } as const;
 
+/** The saved sign-in could not be read: nothing is erased, the user may retry or reset. */
+const STORAGE_UNAVAILABLE = {
+  isBootstrapping: false,
+  isOffline: true,
+  storageUnavailable: true,
+  error: 'Secure credential storage is unavailable. Please try again.',
+} as const;
+
 export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isBootstrapping: true,
@@ -66,9 +74,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ error: null, sessionNotice: null });
     try {
       const res = await authApi.login(credentials);
-      await storage.setToken(res.accessToken);
-      await storage.setTokenExpiry(computeExpiryMs(res.expiresIn));
-      await storage.setUserData({ username: res.username, role: res.role });
+      await storage.startSession({
+        token: res.accessToken,
+        expiresAt: computeExpiryMs(res.expiresIn),
+        refreshToken: res.refreshToken,
+        user: { username: res.username, role: res.role },
+      });
 
       set({
         isAuthenticated: true,
@@ -141,12 +152,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       token = await storage.getToken();
     } catch {
-      set({
-        isBootstrapping: false,
-        isOffline: true,
-        storageUnavailable: true,
-        error: 'Secure credential storage is unavailable. Please try again.',
-      });
+      set(STORAGE_UNAVAILABLE);
       return;
     }
     set({ storageUnavailable: false });
@@ -156,8 +162,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
 
     // Drop a token that is already past its stored expiry without a round
-    // trip, and tell the user why they are signed out.
-    if (isTokenExpired(await storage.getTokenExpiry())) {
+    // trip when no refresh token is stored, and tell the user why they are signed out.
+    // An unreadable refresh token proves nothing: keep the session and offer a retry.
+    let expiredForGood: boolean;
+    try {
+      expiredForGood =
+        isTokenExpired(await storage.getTokenExpiry()) && !(await storage.getRefreshToken());
+    } catch {
+      set(STORAGE_UNAVAILABLE);
+      return;
+    }
+    if (expiredForGood) {
       try {
         await storage.clearSession();
       } catch {

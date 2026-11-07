@@ -1,6 +1,8 @@
 package com.example.taskflow.migration;
 
 import com.example.taskflow.appointment.internal.Appointment;
+import com.example.taskflow.appointment.internal.CreationRequestFingerprint;
+import com.example.taskflow.appointment.internal.StringTimeConverter;
 import com.example.taskflow.appointment.AppointmentStatusChangedEvent;
 import com.example.taskflow.testsupport.AppointmentDetailsFixtures;
 import com.example.taskflow.notification.NotificationOutbox;
@@ -22,6 +24,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -32,8 +35,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Real-engine (H2, PostgreSQL mode) tests of the data-integrity migrations: the dev/seed vs
  * production Flyway layout (DATA-2), V30 seed cleanup, V31 outbox backoff column, V32 catalog
  * integrity (DATA-6), V33 denial notices (DATA-10), V34 index cleanup (DATA-11), V26's slot
- * collision handling against the schema V25 really produces, and V35's end-time backfill and
- * overlap repair (plus, on PostgreSQL, its exclusion constraint).
+ * collision handling against the schema V25 really produces, V35's end-time backfill and
+ * overlap repair (plus, on PostgreSQL, its exclusion constraint), and V41's creation-request
+ * fingerprints.
  *
  * <p>The PostgreSQL-specific branches (the expression index in V32, the partial index in V25) are
  * exercised by the {@code DataMigrationsPostgresTest} subclass ({@code testcontainersTest}).
@@ -585,6 +589,68 @@ abstract class AbstractDataMigrationsTest {
                                 + "'ffffffff-0000-0000-0000-00000000000a', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", future));
                 assertEquals("23P01", ex.getSQLState());
             }
+        }
+    }
+
+    // ------------------------------------------------------------------ V41 creation-request fingerprint
+
+    /**
+     * V41 streams the existing bookings in 500-row batches and freezes each creation request with its
+     * own copy of the canonical form. Every row, the last partial batch included, must get exactly what
+     * {@link CreationRequestFingerprint} computes for the stored booking: an {@code Idempotency-Key}
+     * replay of a booking made before V41 is compared with it.
+     */
+    @Test
+    void v41FingerprintsEveryExistingBookingExactlyAsTheApplicationDoes() throws Exception {
+        String url = newUrl();
+        flyway(url, DEV_MIGRATION).target("34").load().migrate();
+        LocalDate first = LocalDate.now().plusDays(1);
+        int bulk = 1_201; // two full batches and a remainder
+        try (Connection c = open(url)) {
+            // Padding, case, quotes and the canonical form's own separators.
+            insertAppointment(c, "Padded", "  Jane.Doe@Example.COM ", "1", " Alex the Barber ", null,
+                    first.toString(), "09:00", " Classic Haircut  ", "PENDING", "eeeeeeee-4141-0000-0000-000000000001");
+            insertAppointment(c, "Quoted", "o'connor@x.test", "1", "Sara the Stylist", null,
+                    first.toString(), "13:00", "O'Brien's Cut | 2:1", "APPROVED", "eeeeeeee-4141-0000-0000-000000000002");
+            try (PreparedStatement ps = c.prepareStatement("INSERT INTO appointments (customer_name, customer_email, "
+                    + "customer_phone, barber_name, booking_date, booking_time, service_type, status, public_id, "
+                    + "created_at, updated_at) VALUES (?, ?, '1', 'Marcus Master Blade', CAST(? AS DATE), "
+                    + "CAST('10:00' AS TIME), 'Free text', 'PENDING', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")) {
+                for (int i = 0; i < bulk; i++) {
+                    ps.setString(1, "Bulk " + i);
+                    ps.setString(2, "bulk" + i + "@x.test");
+                    ps.setString(3, first.plusDays(i).toString());
+                    ps.setString(4, String.format(Locale.ROOT, "eeeeeeee-4242-0000-0000-%012d", i));
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+            }
+        }
+
+        flyway(url, DEV_MIGRATION).load().migrate();
+
+        StringTimeConverter time = new StringTimeConverter();
+        int checked = 0;
+        try (Connection c = open(url);
+             Statement st = c.createStatement();
+             ResultSet rs = st.executeQuery("SELECT customer_name, customer_email, customer_phone, barber_name, "
+                     + "booking_date, booking_time, service_type, creation_request_fingerprint FROM appointments")) {
+            while (rs.next()) {
+                // The booking as the application loads it.
+                Appointment stored = new Appointment(rs.getString(1), rs.getString(2), rs.getString(3),
+                        rs.getString(4), rs.getDate(5).toLocalDate(), time.convertToEntityAttribute(rs.getTime(6)),
+                        rs.getString(7));
+                assertEquals(CreationRequestFingerprint.of(stored), rs.getString(8), rs.getString(1));
+                checked++;
+            }
+        }
+        assertEquals(bulk + 2, checked);
+        try (Connection c = open(url)) {
+            assertEquals(CreationRequestFingerprint.of(new Appointment("Jane", "jane.doe@example.com", "1",
+                            "Alex the Barber", first, "09:00", "Classic Haircut")),
+                    singleString(c, "SELECT creation_request_fingerprint FROM appointments WHERE customer_name = ?",
+                            "Padded"),
+                    "a replay of the original request, typed without the padding, still matches");
         }
     }
 

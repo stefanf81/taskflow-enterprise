@@ -5,6 +5,142 @@
     are retired and listed below, where they can be restored.
   </p>
 
+  <button
+    type="button"
+    class="btn btn-primary py-2 px-4 text-xs"
+    [disabled]="pending()"
+    (click)="openEditor()"
+  >
+    Create service
+  </button>
+
+  @if (actionSuccess(); as message) {
+    <div role="status" class="alert alert-success py-3 px-4 rounded-xl text-xs">{{ message }}</div>
+  }
+  @if (actionError(); as message) {
+    <div role="alert" class="alert alert-error py-3 px-4 rounded-xl text-xs">{{ message }}</div>
+  }
+
+  @if (editorOpen()) {
+    <form
+      class="space-y-4 rounded-xl border border-white/10 p-4"
+      novalidate
+      (submit)="save($event)"
+      aria-labelledby="service-editor-heading"
+    >
+      <h4 id="service-editor-heading" class="text-white font-bold">
+        {{ editingId() === null ? 'Create service' : 'Edit service' }}
+      </h4>
+      <fieldset class="space-y-4" [disabled]="pending()">
+        <div>
+          <label for="service-name" class="block text-xs text-zinc-300 mb-1">Service name</label>
+          <input
+            id="service-name"
+            class="input w-full"
+            required
+            maxlength="100"
+            [value]="draft().name"
+            (input)="updateDraft('name', $any($event.target).value)"
+          />
+        </div>
+        <div>
+          <label for="service-price" class="block text-xs text-zinc-300 mb-1">Price</label>
+          <input
+            id="service-price"
+            class="input w-full"
+            type="number"
+            required
+            min="0.01"
+            max="99999999.99"
+            step="0.01"
+            [value]="draft().price"
+            (input)="updateDraft('price', $any($event.target).value)"
+          />
+        </div>
+        <div>
+          <label for="service-duration" class="block text-xs text-zinc-300 mb-1"
+            >Duration (minutes)</label
+          >
+          <input
+            id="service-duration"
+            class="input w-full"
+            type="number"
+            required
+            min="1"
+            max="2147483647"
+            step="1"
+            [value]="draft().durationMinutes"
+            (input)="updateDraft('durationMinutes', $any($event.target).value)"
+          />
+        </div>
+        <div>
+          <label for="service-category" class="block text-xs text-zinc-300 mb-1">Category</label>
+          <input
+            id="service-category"
+            class="input w-full"
+            required
+            maxlength="50"
+            [value]="draft().category"
+            (input)="updateDraft('category', $any($event.target).value)"
+          />
+        </div>
+        <div>
+          <label for="service-description" class="block text-xs text-zinc-300 mb-1"
+            >Description (optional)</label
+          >
+          <textarea
+            id="service-description"
+            class="input w-full"
+            maxlength="500"
+            [value]="draft().description"
+            (input)="updateDraft('description', $any($event.target).value)"
+          ></textarea>
+        </div>
+        <div class="flex gap-3">
+          <button class="btn btn-primary py-2 px-4 text-xs" type="submit">
+            {{ isSaving() ? 'Saving…' : 'Save service' }}
+          </button>
+          <button
+            class="btn btn-secondary py-2 px-4 text-xs"
+            type="button"
+            (click)="editorOpen.set(false)"
+          >
+            Cancel
+          </button>
+        </div>
+      </fieldset>
+    </form>
+  }
+
+  @if (retiring(); as service) {
+    <section
+      class="space-y-3 rounded-xl border border-rose-400/20 p-4"
+      aria-labelledby="retire-heading"
+    >
+      <h4 id="retire-heading" class="text-white font-bold">Retire {{ service.name }}?</h4>
+      <p class="text-xs text-zinc-400">
+        It will leave the booking menu. Services with existing bookings are kept in the retired list
+        and can be restored; otherwise they are deleted.
+      </p>
+      <button
+        type="button"
+        class="btn btn-secondary py-2 px-4 text-xs"
+        [disabled]="pending()"
+        (click)="confirmRetire()"
+      >
+        {{ isSaving() ? 'Retiring…' : 'Confirm retire' }}
+      </button>
+      <button
+        type="button"
+        class="btn btn-secondary py-2 px-4 text-xs"
+        [disabled]="pending()"
+        (click)="retiring.set(null)"
+      >
+        Cancel
+      </button>
+    </section>
+  }
+
   @if (catalogStore.isLoading()) {
     <div class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20">
       <span class="text-3xl block mb-2">⏳</span>
@@ -14,13 +150,20 @@
     <div class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20">
       <span class="text-3xl block mb-2">⚠️</span>
       <h3 class="text-white font-bold text-sm">{{ catalogStore.errorMessage() }}</h3>
+      <button
+        type="button"
+        class="btn btn-secondary py-2 px-4 text-xs mt-3"
+        (click)="catalogStore.loadServices()"
+      >
+        Retry
+      </button>
     </div>
   } @else if (catalogStore.services().length === 0) {
     <div class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20">
       <span class="text-3xl block mb-2">📦</span>
       <h3 class="text-white font-bold text-sm">No services in the catalog yet</h3>
       <p class="text-xs text-zinc-500 font-light mt-1">
-        Services added to the backend catalog will appear here.
+        Create a service to make it available for booking.
       </p>
     </div>
   } @else {
@@ -42,6 +185,24 @@
           <p class="text-xs text-zinc-500 mt-1.5 font-light leading-relaxed">
             {{ service.description }}
           </p>
+          <div class="flex gap-3 mt-3">
+            <button
+              type="button"
+              class="btn btn-secondary py-2 px-4 text-xs"
+              [disabled]="pending()"
+              (click)="openEditor(service)"
+            >
+              Edit<span class="sr-only"> {{ service.name }}</span>
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary py-2 px-4 text-xs"
+              [disabled]="pending()"
+              (click)="editorOpen.set(false); retiring.set(service); actionError.set(null)"
+            >
+              Retire<span class="sr-only"> {{ service.name }}</span>
+            </button>
+          </div>
         </div>
       }
     </div>
@@ -101,7 +262,7 @@
             <button
               type="button"
               class="btn btn-secondary py-2 px-4 text-xs mt-3"
-              [disabled]="retiredStore.restoringId() !== null"
+              [disabled]="pending()"
               (click)="retiredStore.restore(service)"
             >
               {{ retiredStore.restoringId() === service.id ? 'Restoring…' : 'Restore' }}

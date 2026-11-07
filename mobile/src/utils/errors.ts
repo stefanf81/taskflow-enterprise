@@ -1,11 +1,12 @@
 import { ApiContractError } from '../api/contracts';
+import { apiErrorMessage } from '@taskflow/schemas';
 
 /** Helpers for turning Axios/transport failures into user-visible messages. */
 
 interface HttpErrorShape {
   response?: {
     status?: number;
-    data?: { message?: unknown } | null;
+    data?: unknown;
     headers?: Record<string, unknown> | null;
   };
 }
@@ -63,8 +64,8 @@ export function getApiErrorMessage(err: unknown, fallback: string): string {
       : 'Too many attempts, try again later';
   }
 
-  const serverMessage = http?.response?.data?.message;
-  if (typeof serverMessage === 'string' && serverMessage.trim()) {
+  const serverMessage = apiErrorMessage(http?.response?.data);
+  if (serverMessage) {
     return serverMessage;
   }
 

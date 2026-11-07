@@ -108,7 +108,7 @@ The **TaskFlow Enterprise** stack is fully optimized across every layer. Below i
 *   **Bounded Async Executor (P0-1 §38)**:
      *   `AsyncConfig` replaces Spring's unbounded `ThreadPoolTaskExecutor` default (core=8, max=`Integer.MAX_VALUE`, queue=`Integer.MAX_VALUE`) with **core=8 max=64 queue=100 keepAlive=60s** `CallerRunsPolicy` (`taskflow-async-` prefix, `waitForTasksToCompleteOnShutdown=true` 30s). Benchmark: 148 tasks/sec burst, 319 ms avg, peak 8 threads, p99 <5s — backpressure prevents OOM (§38).
 *   **HTTP Cache-Control Headers (P1-3 §44)**:
-     *   `CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic()` for `GET /api/v1/catalog` / `GET /api/v1/barbers` / `GET /api/v1/appointments/public/shop` (5m public, aligns with `@Cacheable` TTL 10m, ETag `ShallowEtagHeaderFilter` 304), `noCache()` (revalidated every time, ETag 304) for `GET /api/v1/reviews/public/barber-ratings` (public) and `GET /api/v1/appointments/public/busy-slots` (private), and `noStore()` for the responses with personal data: admin `GET /api/v1/appointments` (+ `/{id}`), `GET /api/v1/barbers/admin` and `GET /api/v1/customer/appointments`.
+     *   `CacheControl.noCache().cachePublic()` for `GET /api/v1/catalog` / `GET /api/v1/barbers` / `GET /api/v1/appointments/public/shop` (was 5m public until admins could edit them from the clients, see §44's 2026-11 update; `@Cacheable` TTL 10m, ETag `ShallowEtagHeaderFilter` 304), `noCache()` (revalidated every time, ETag 304) for `GET /api/v1/reviews/public/barber-ratings` (public) and `GET /api/v1/appointments/public/busy-slots` (private), and `noStore()` for the responses with personal data: admin `GET /api/v1/appointments` (+ `/{id}`), `GET /api/v1/barbers/admin` and `GET /api/v1/customer/appointments`.
 
 ### 📦 3. Serialization & Caching (Jackson 3.x & Redis)
 *   **Jackson 3.x Library**:
@@ -1296,6 +1296,8 @@ BusySlots Cache-Control: no-cache, private
 
 Catalog, public barbers and shop info keep `public, max-age=300`: no client edits them (catalog and barber mutations exist only as admin API calls, and the server evicts its own cache on them), so a visitor seeing a change up to 5 minutes late is acceptable.
 
+**Update (2026-11, admin editing in both clients):** that premise no longer holds. Admins now create, edit and retire services, add barbers and edit weekly hours from the web dashboard and the mobile app, and both refetch these lists right after the write; a `max-age=300` let the browser or native HTTP cache answer that refetch with the old list. `GET /api/v1/catalog`, `/barbers` and `/appointments/public/shop` are now `public, no-cache` (an ETag `304` per use; the 10 m `@Cacheable` still serves the body), and the server caches are invalidated after commit (`CatalogChangedEvent`, `BarberRosterChangedEvent`) instead of by a pre-commit `@CacheEvict`. `HttpCacheHeadersIntegrationTest.adminEditableReferenceDataIsPublicButRevalidated` pins the tier.
+
 **Update (§58):** `ShallowEtagHeaderFilter` buffers the whole response to hash it, and it also wrapped the admin SSE stream (`GET /api/v1/appointments/events`): the stream sent nothing, not even headers, until it ended 30 minutes later. The filter now skips that path and `Accept: text/event-stream`; `AppointmentEventStreamHttpIntegrationTest` reads the stream over a real socket.
 
 ---
@@ -1321,6 +1323,7 @@ Catalog, public barbers and shop info keep `public, max-age=300`: no client edit
 * `gcTime 5m` retains data when the user switches tabs and returns within 5m — no loading spinner on back-navigation.
 * Every `queryFn` passes TanStack's `signal` to axios, so a query that is unmounted or superseded (next page, new search term) aborts its request instead of finishing it in the background; paginated lists keep the previous page (`placeholderData: keepPreviousData`) instead of flashing a spinner.
 * `timeout 10s` vs old 15s: user sees an error boundary 5s sooner on flaky mobile networks, while the 10s ceiling still sits above the server's ~9s worst case (5s JPA + 4s Hikari), so most failures surface as a server-side timeout response rather than a client-side abort.
+* **Correction (2026-11):** the ~9 s figure is the worst case of *one* query (pool wait + query timeout), not a whole-request deadline. A request that runs several queries, waits on Redis or on a row lock can take longer than the client's 10 s; nginx's `proxy_read_timeout 30s` bounds silence between reads, not the request.
 
 **Verification:** `P1AndP2BenchmarkTest.p1_4_mobile_tuning` asserts `queryClient.ts` contains `staleTime: 60_000`, `gcTime: 5 * 60_000`, `retryDelay`, and `client.ts` contains `timeout: 10000` and no `timeout: 15000`.
 
@@ -1418,6 +1421,8 @@ Workload mix (per-iteration `Math.random()`): **70% `GET /api/v1/catalog` `/barb
 Each iteration records per-endpoint `Trend` (`catalog_duration`, `barbers_duration`, `busySlots_duration`) and `sleep(0.1)` pacing (~10 RPS per VU).
 
 **Execution:** Run `k6/load.js` only against an isolated stack with rate limiting disabled or an explicit load-test allowance. Its 200 VUs share the load generator's source IP, so running it against production would correctly trigger the production 100 requests/minute per-IP limiter rather than measure application capacity.
+
+**Update (2026-11):** `load.js` now refuses a `BASE_URL` whose host is not `localhost`, `127.0.0.1`, `[::1]` or `host.docker.internal` unless `ALLOW_REMOTE_LOAD=true`. `OPEN_MODEL=true` replaces the closed ramp with a `ramping-arrival-rate` scenario (50 → 200 → 500 requests/s, up to 300 VUs): arrivals keep coming whatever the latency, so a slow server cannot lower its own load, and starts k6 could not make count as `dropped_iterations` (threshold `count<10`). The per-endpoint trends have thresholds too (`catalog`/`barbers` p95 < 250 ms, `busySlots` < 500 ms, `barberRatings` < 300 ms).
 
 **Production CI:** `.github/workflows/k6.yml` runs `k6/probe.js`, a 60-second, 1 request/second probe of the cacheable public API endpoints. It preserves the latency, availability, and `Cache-Control` gates without tripping abuse protection. Actuator endpoints are intentionally not part of the public probe because the edge proxy does not expose them.
 

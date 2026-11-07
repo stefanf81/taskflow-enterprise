@@ -194,7 +194,7 @@ class BarberServiceImplTest {
         Barber barber = new Barber();
         barber.setId(1L);
         barber.setName("Alex the Barber");
-        when(barberRepository.findById(1L)).thenReturn(Optional.of(barber));
+        when(barberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(barber));
 
         BarberTimeOffRequest request = new BarberTimeOffRequest(LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
         BarberTimeOff saved = new BarberTimeOff();
@@ -219,7 +219,7 @@ class BarberServiceImplTest {
 
     @Test
     void addTimeOff_shouldThrowWhenBarberNotFound() {
-        when(barberRepository.findById(99L)).thenReturn(Optional.empty());
+        when(barberRepository.findByIdForUpdate(99L)).thenReturn(Optional.empty());
 
         BarberTimeOffRequest request = new BarberTimeOffRequest(LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
 
@@ -230,7 +230,7 @@ class BarberServiceImplTest {
     void addTimeOff_shouldThrowWhenDateRangeInvalid() {
         Barber barber = new Barber();
         barber.setId(1L);
-        when(barberRepository.findById(1L)).thenReturn(Optional.of(barber));
+        when(barberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(barber));
 
         BarberTimeOffRequest request = new BarberTimeOffRequest(LocalDate.of(2026, 7, 25), LocalDate.of(2026, 7, 22), "Bad range");
 
@@ -251,7 +251,7 @@ class BarberServiceImplTest {
         Barber barber = new Barber();
         barber.setId(1L);
         barber.setName("Alex the Barber");
-        when(barberRepository.findById(1L)).thenReturn(Optional.of(barber));
+        when(barberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(barber));
         BarberTimeOff saved = new BarberTimeOff();
         saved.setId(1L);
         saved.setStartDate(LocalDate.of(2026, 7, 21));
@@ -283,7 +283,7 @@ class BarberServiceImplTest {
         Barber barber = new Barber();
         barber.setId(1L);
         barber.setName("Alex the Barber");
-        when(barberRepository.findById(1L)).thenReturn(Optional.of(barber));
+        when(barberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(barber));
         when(timeOffRepository.save(any(BarberTimeOff.class))).thenAnswer(inv -> inv.getArgument(0));
 
         // The clock reads Monday 2026-07-20 08:00. The range starts last week: only [today, end] is queried.
@@ -306,7 +306,7 @@ class BarberServiceImplTest {
         Barber barber = new Barber();
         barber.setId(1L);
         barber.setName("Alex the Barber");
-        when(barberRepository.findById(1L)).thenReturn(Optional.of(barber));
+        when(barberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(barber));
         when(timeOffRepository.save(any(BarberTimeOff.class))).thenAnswer(inv -> inv.getArgument(0));
 
         barberService.addTimeOff(1L, new BarberTimeOffRequest(

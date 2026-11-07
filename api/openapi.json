@@ -247,6 +247,24 @@
         ],
         "type": "object"
       },
+      "BarberScheduleResponse": {
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/ScheduleDay"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "days",
+          "revision"
+        ],
+        "type": "object"
+      },
       "BarberTimeOffRequest": {
         "properties": {
           "endDate": {
@@ -294,6 +312,35 @@
         ],
         "type": "object"
       },
+      "CalendarExportRequest": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "type": "object"
+      },
+      "CalendarExportResponse": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "filename"
+        ],
+        "type": "object"
+      },
       "CancelRequest": {
         "properties": {
           "email": {
@@ -305,6 +352,46 @@
         "required": [
           "email"
         ],
+        "type": "object"
+      },
+      "ClientTelemetryEvent": {
+        "properties": {
+          "name": {
+            "enum": [
+              "LCP",
+              "FCP",
+              "CLS",
+              "INP",
+              "SCREEN_LOAD",
+              "JS_ERROR",
+              "UNHANDLED_REJECTION",
+              "RENDER_ERROR"
+            ],
+            "type": "string"
+          },
+          "platform": {
+            "enum": [
+              "WEB",
+              "MOBILE"
+            ],
+            "type": "string"
+          },
+          "route": {
+            "enum": [
+              "LANDING",
+              "BOOKING",
+              "CUSTOMER",
+              "ADMIN",
+              "AUTH",
+              "OTHER"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "format": "double",
+            "type": "number"
+          }
+        },
         "type": "object"
       },
       "CsrfToken": {
@@ -323,7 +410,13 @@
       },
       "ErrorResponse": {
         "properties": {
+          "detail": {
+            "type": "string"
+          },
           "error": {
+            "type": "string"
+          },
+          "instance": {
             "type": "string"
           },
           "message": {
@@ -340,6 +433,12 @@
             "format": "date-time",
             "type": "string"
           },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
           "validationErrors": {
             "items": {
               "$ref": "#/components/schemas/ValidationError"
@@ -348,11 +447,40 @@
           }
         },
         "required": [
+          "detail",
           "error",
+          "instance",
           "message",
           "path",
           "status",
-          "timestamp"
+          "timestamp",
+          "title",
+          "type"
+        ],
+        "type": "object"
+      },
+      "GuestRescheduleRequest": {
+        "properties": {
+          "bookingDate": {
+            "format": "date",
+            "type": "string"
+          },
+          "bookingTime": {
+            "minLength": 1,
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string"
+          }
+        },
+        "required": [
+          "bookingDate",
+          "bookingTime",
+          "email"
         ],
         "type": "object"
       },
@@ -396,6 +524,9 @@
           "expiresIn": {
             "format": "int64",
             "type": "integer"
+          },
+          "refreshToken": {
+            "type": "string"
           },
           "role": {
             "type": "string"
@@ -533,6 +664,19 @@
         ],
         "type": "object"
       },
+      "RefreshRequest": {
+        "properties": {
+          "refreshToken": {
+            "minLength": 1,
+            "pattern": "[A-Za-z0-9_-]{43}",
+            "type": "string"
+          }
+        },
+        "required": [
+          "refreshToken"
+        ],
+        "type": "object"
+      },
       "RegisterRequest": {
         "properties": {
           "email": {
@@ -577,6 +721,43 @@
         ],
         "type": "object"
       },
+      "RescheduleAvailabilityRequest": {
+        "properties": {
+          "bookingDate": {
+            "format": "date",
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string"
+          }
+        },
+        "required": [
+          "bookingDate",
+          "email"
+        ],
+        "type": "object"
+      },
+      "RescheduleRequest": {
+        "properties": {
+          "bookingDate": {
+            "format": "date",
+            "type": "string"
+          },
+          "bookingTime": {
+            "minLength": 1,
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bookingDate",
+          "bookingTime"
+        ],
+        "type": "object"
+      },
       "ReviewRequest": {
         "properties": {
           "comment": {
@@ -600,6 +781,76 @@
         "required": [
           "customerEmail",
           "rating"
+        ],
+        "type": "object"
+      },
+      "ScheduleChangeRequest": {
+        "properties": {
+          "cancelConflictingAppointments": {
+            "type": "boolean"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/ScheduleDay"
+            },
+            "maxItems": 7,
+            "minItems": 0,
+            "type": "array"
+          },
+          "expectedConflicts": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string"
+          },
+          "expectedRevision": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string"
+          }
+        },
+        "required": [
+          "days",
+          "expectedRevision"
+        ],
+        "type": "object"
+      },
+      "ScheduleDay": {
+        "properties": {
+          "closes": {
+            "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+            "type": "string"
+          },
+          "dayOfWeek": {
+            "format": "int32",
+            "maximum": 7,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "opens": {
+            "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "closes",
+          "dayOfWeek",
+          "opens"
+        ],
+        "type": "object"
+      },
+      "SchedulePreviewResponse": {
+        "properties": {
+          "conflictCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "conflictsRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "conflictCount",
+          "conflictsRevision"
         ],
         "type": "object"
       },
@@ -1145,6 +1396,78 @@
         ]
       }
     },
+    "/api/v1/appointments/public/calendar/{publicId}": {
+      "post": {
+        "operationId": "guestCalendar",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarExportResponse"
+                }
+              }
+            },
+            "description": "Calendar content and suggested .ics filename"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid email"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Booking not found or verification failed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Declined or cancelled booking"
+          }
+        },
+        "security": [],
+        "summary": "Export a guest appointment as an iCalendar file after email verification",
+        "tags": [
+          "appointment-self-service-controller"
+        ]
+      }
+    },
     "/api/v1/appointments/public/cancel/{publicId}": {
       "put": {
         "operationId": "publicCancelAppointment",
@@ -1198,6 +1521,153 @@
         "summary": "Cancel an appointment securely as a guest by verifying the booking email (Guest Access)",
         "tags": [
           "Barber Appointment Management System"
+        ]
+      }
+    },
+    "/api/v1/appointments/public/reschedule/{publicId}": {
+      "put": {
+        "operationId": "guestReschedule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuestRescheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            },
+            "description": "Appointment moved; approval is pending again"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid slot or outside booking window"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Booking not found or verification failed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Booking cannot move, slot unavailable, or concurrent change"
+          }
+        },
+        "security": [],
+        "summary": "Reschedule a guest booking after email verification (same barber and service)",
+        "tags": [
+          "appointment-self-service-controller"
+        ]
+      }
+    },
+    "/api/v1/appointments/public/reschedule/{publicId}/availability": {
+      "post": {
+        "operationId": "guestRescheduleAvailability",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RescheduleAvailabilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Start times the booking cannot move to"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid email or date"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Booking not found or verification failed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Booking cannot be rescheduled"
+          }
+        },
+        "security": [],
+        "summary": "Busy start times of a day for moving a guest booking, after email verification (its own barber and booked length; the booking itself does not count)",
+        "tags": [
+          "appointment-self-service-controller"
         ]
       }
     },
@@ -1290,6 +1760,25 @@
     "/api/v1/auth/logout": {
       "post": {
         "operationId": "logout",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "refresh_token",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "204": {
             "description": "JWT cookie cleared — session ended"
@@ -1363,6 +1852,100 @@
         },
         "security": [],
         "summary": "Authenticate a native client and issue a bearer token",
+        "tags": [
+          "Authentication Portal"
+        ]
+      }
+    },
+    "/api/v1/auth/mobile/refresh": {
+      "post": {
+        "operationId": "refreshMobile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileLoginResponse"
+                }
+              }
+            },
+            "description": "Session renewed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Session expired or revoked"
+          }
+        },
+        "security": [],
+        "summary": "Rotate a native client's one-use refresh credential",
+        "tags": [
+          "Authentication Portal"
+        ]
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "operationId": "refresh",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "refresh_token",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Session renewed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Session expired or revoked"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "CSRF token missing or invalid"
+          }
+        },
+        "security": [],
+        "summary": "Rotate the browser session credential (requires CSRF)",
         "tags": [
           "Authentication Portal"
         ]
@@ -1471,6 +2054,117 @@
         "summary": "Add a new barber",
         "tags": [
           "Barber Management"
+        ]
+      }
+    },
+    "/api/v1/barbers/{barberId}/schedule": {
+      "get": {
+        "operationId": "get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "barberId",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BarberScheduleResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "barber-schedule-controller"
+        ]
+      },
+      "put": {
+        "operationId": "update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "barberId",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BarberScheduleResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "barber-schedule-controller"
+        ]
+      }
+    },
+    "/api/v1/barbers/{barberId}/schedule/preview": {
+      "post": {
+        "operationId": "preview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "barberId",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePreviewResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "barber-schedule-controller"
         ]
       }
     },
@@ -1973,6 +2667,201 @@
         ]
       }
     },
+    "/api/v1/customer/appointments/{publicId}/availability": {
+      "get": {
+        "operationId": "customerRescheduleAvailability",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bookingDate",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Start times the booking cannot move to"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid date"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Booking not found or not owned by user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Booking cannot be rescheduled"
+          }
+        },
+        "summary": "Busy start times of a day for moving my booking (its own barber and booked length; the booking itself does not count)",
+        "tags": [
+          "appointment-self-service-controller"
+        ]
+      }
+    },
+    "/api/v1/customer/appointments/{publicId}/calendar": {
+      "get": {
+        "operationId": "customerCalendar",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarExportResponse"
+                }
+              }
+            },
+            "description": "Calendar content and suggested .ics filename"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Booking not found or not owned by user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Declined or cancelled booking"
+          }
+        },
+        "summary": "Export my appointment as an iCalendar file",
+        "tags": [
+          "appointment-self-service-controller"
+        ]
+      }
+    },
+    "/api/v1/customer/appointments/{publicId}/reschedule": {
+      "put": {
+        "operationId": "customerReschedule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RescheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            },
+            "description": "Appointment moved; approval is pending again"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid slot or outside booking window"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Booking not found or not owned by user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Booking cannot move, slot unavailable, or concurrent change"
+          }
+        },
+        "summary": "Reschedule my booking (same barber and service)",
+        "tags": [
+          "appointment-self-service-controller"
+        ]
+      }
+    },
     "/api/v1/notifications": {
       "get": {
         "operationId": "getNotifications",
@@ -2077,6 +2966,31 @@
           "Client Reviews"
         ]
       }
+    },
+    "/api/v1/telemetry": {
+      "post": {
+        "operationId": "record",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientTelemetryEvent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [],
+        "summary": "Record one anonymous, allowlisted client measurement",
+        "tags": [
+          "client-telemetry-controller"
+        ]
+      }
     }
   },
   "security": [
@@ -2090,7 +3004,7 @@
   "servers": [
     {
       "description": "Generated server url",
-      "url": "http://localhost:8080"
+      "url": "http://localhost"
     }
   ],
   "tags": [

@@ -26,6 +26,9 @@ class CatalogServiceImplTest {
     @Mock
     private ServiceItemRepository repository;
 
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher events;
+
     @InjectMocks
     private CatalogServiceImpl catalogService;
 

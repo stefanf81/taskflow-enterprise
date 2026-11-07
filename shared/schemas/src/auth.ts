@@ -6,6 +6,7 @@ import {
   maxLength,
   minLength,
   object,
+  optional,
   positive,
   regex,
   string,
@@ -63,6 +64,7 @@ export const mobileLoginResponseSchema = object({
   expiresIn: int().check(positive()),
   username: string().check(minLength(1)),
   role: roleSchema,
+  refreshToken: optional(string().check(regex(/^[A-Za-z0-9_-]{43}$/))),
 });
 
 /** POST /api/v1/auth/register response. */

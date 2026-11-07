@@ -8,12 +8,47 @@ import { freezeDate, moveClockTo, restoreClock } from '../test/fakeClock';
 // ==================== Controllable mocks ====================
 let mockIsLoading: boolean;
 let mockIsError: boolean;
+let mockIsFetching: boolean;
+let mockIsPlaceholderData: boolean;
+let mockIsFocused: boolean;
+let mockCancelPending: boolean;
+let mockCancelVariables: string | undefined;
 let mockAppointmentsData: AppointmentPage;
 let mockRefetch: jest.Mock;
 let mockCancelMutate: jest.Mock;
 let mockLogout: jest.Mock;
 let mockUsername: string;
 let mockHookArgs: unknown[];
+let mockRescheduleMutate: jest.Mock;
+let mockReschedulePending: boolean;
+let mockBusySlots: {
+  data?: string[];
+  isLoading: boolean;
+  isError: boolean;
+  error?: unknown;
+  refetch: jest.Mock;
+};
+let mockBusyArgs: unknown[];
+const mockExportCalendar = jest.fn();
+const mockShareCalendarFile = jest.fn();
+
+jest.mock('@react-navigation/native', () => ({ useIsFocused: () => mockIsFocused }));
+
+// The picker's answer for the booking being moved (its barber and booked length).
+jest.mock('../src/core/appointments/useAppointments', () => ({
+  useRescheduleAvailability: (...args: unknown[]) => {
+    mockBusyArgs = args;
+    return mockBusySlots;
+  },
+}));
+
+jest.mock('../src/features/customer/customer', () => ({
+  customerApi: { exportCalendar: (...args: unknown[]) => mockExportCalendar(...args) },
+}));
+
+jest.mock('../src/core/calendar/shareCalendarFile', () => ({
+  shareCalendarFile: (...args: unknown[]) => mockShareCalendarFile(...args),
+}));
 
 // The shop info (time zone, window, hours) as the server's defaults: no query client needed.
 jest.mock('../src/core/shop/useShopInfo', () => ({
@@ -31,12 +66,20 @@ jest.mock('../src/features/customer/useCustomer', () => ({
       data: mockAppointmentsData,
       isLoading: mockIsLoading,
       isError: mockIsError,
+      isSuccess: !mockIsLoading && !mockIsError,
+      isFetching: mockIsFetching,
+      isPlaceholderData: mockIsPlaceholderData,
       refetch: mockRefetch,
     };
   },
   useCancelCustomerAppointment: () => ({
     mutate: mockCancelMutate,
-    isPending: false,
+    isPending: mockCancelPending,
+    variables: mockCancelVariables,
+  }),
+  useRescheduleCustomerAppointment: () => ({
+    mutate: mockRescheduleMutate,
+    isPending: mockReschedulePending,
   }),
 }));
 
@@ -77,12 +120,97 @@ describe('CustomerPortalScreen', () => {
     jest.clearAllMocks();
     mockIsLoading = false;
     mockIsError = false;
+    mockIsFetching = false;
+    mockIsPlaceholderData = false;
+    mockIsFocused = true;
+    mockCancelPending = false;
+    mockCancelVariables = undefined;
     mockAppointmentsData = buildData();
     mockRefetch = jest.fn();
     mockCancelMutate = jest.fn();
     mockLogout = jest.fn();
     mockUsername = 'John';
     mockHookArgs = [];
+    mockRescheduleMutate = jest.fn();
+    mockReschedulePending = false;
+    mockBusySlots = { data: [], isLoading: false, isError: false, refetch: jest.fn() };
+    mockBusyArgs = [];
+  });
+
+  // ============ RESCHEDULE & CALENDAR ============
+  it('offers the booking’s open slots and moves it', async () => {
+    mockBusySlots = { data: ['13:00'], isLoading: false, isError: false, refetch: jest.fn() };
+    mockRescheduleMutate.mockImplementation((_vars, { onSuccess }) => onSuccess());
+    await render(<CustomerPortalScreen />);
+    await fireEvent.press(screen.getByText('Reschedule'));
+
+    // Today (Wed 15 July, 12:00) is the first open day; the 1 PM the server refuses is not offered.
+    expect(mockBusyArgs).toEqual(['TF-0001', '2026-07-15', null]);
+    expect(screen.queryByText('1:00 PM')).toBeNull();
+    expect(screen.queryByText('11:00 AM')).toBeNull();
+    await fireEvent.press(screen.getByText('2:00 PM'));
+    await fireEvent.press(screen.getByText('Save new time'));
+
+    expect(mockRescheduleMutate).toHaveBeenCalledWith(
+      { publicId: 'TF-0001', bookingDate: '2026-07-15', bookingTime: '14:00' },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText('Appointment moved. It is pending the shop’s confirmation again.')).toBeTruthy(),
+    );
+    expect(screen.queryByText('Save new time')).toBeNull();
+  });
+
+  it('shows why the availability could not be loaded, with a retry', async () => {
+    const refetch = jest.fn();
+    mockBusySlots = {
+      isLoading: false,
+      isError: true,
+      error: {
+        response: {
+          status: 409,
+          data: { message: 'Only future pending or approved appointments can be rescheduled.' },
+        },
+      },
+      refetch,
+    };
+    await render(<CustomerPortalScreen />);
+    await fireEvent.press(screen.getByText('Reschedule'));
+
+    expect(
+      screen.getByText('Only future pending or approved appointments can be rescheduled.'),
+    ).toBeTruthy();
+    await fireEvent.press(screen.getByText('Retry'));
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it('keeps the picker open and shows why a move was refused', async () => {
+    mockRescheduleMutate.mockImplementation((_vars, { onError }) =>
+      onError({ response: { status: 409, data: { message: 'The selected slot is already booked or unavailable.' } } }),
+    );
+    await render(<CustomerPortalScreen />);
+    await fireEvent.press(screen.getByText('Reschedule'));
+    await fireEvent.press(screen.getByText('3:00 PM'));
+    await fireEvent.press(screen.getByText('Save new time'));
+
+    await waitFor(() =>
+      expect(screen.getByText('The selected slot is already booked or unavailable.')).toBeTruthy(),
+    );
+    expect(screen.getByText('Save new time')).toBeTruthy();
+  });
+
+  it('shares the calendar file and reports a failed export', async () => {
+    mockExportCalendar.mockResolvedValueOnce({ content: 'BEGIN:VCALENDAR', filename: 'appointment-TF-0001.ics' });
+    mockShareCalendarFile.mockResolvedValueOnce(true);
+    await render(<CustomerPortalScreen />);
+    await fireEvent.press(screen.getByText('Add to Calendar'));
+    await waitFor(() =>
+      expect(mockShareCalendarFile).toHaveBeenCalledWith('BEGIN:VCALENDAR', 'appointment-TF-0001.ics'),
+    );
+
+    mockExportCalendar.mockRejectedValueOnce({ response: { status: 500, data: null } });
+    await fireEvent.press(screen.getByText('Add to Calendar'));
+    await waitFor(() => expect(screen.getByText('Failed to export the calendar file.')).toBeTruthy());
   });
 
   // ============ RENDERING ============
@@ -279,13 +407,13 @@ describe('CustomerPortalScreen', () => {
     await render(<CustomerPortalScreen />);
     await fireEvent.press(screen.getByText('Next'));
     expect(screen.getByText('Page 2 of 3')).toBeTruthy();
-    expect(mockHookArgs).toEqual([1, 10]);
+    expect(mockHookArgs).toEqual([1, 10, { subscribed: true }]);
     await fireEvent.press(screen.getByText('Next'));
     expect(screen.getByText('Page 3 of 3')).toBeTruthy();
-    expect(mockHookArgs).toEqual([2, 10]);
+    expect(mockHookArgs).toEqual([2, 10, { subscribed: true }]);
     expect(screen.getByText('Next').parent?.props.accessibilityState.disabled).toBe(true);
     await fireEvent.press(screen.getByText('Next'));
-    expect(mockHookArgs).toEqual([2, 10]);
+    expect(mockHookArgs).toEqual([2, 10, { subscribed: true }]);
   });
 
   it('navigates to previous page on Prev press', async () => {
@@ -302,7 +430,7 @@ describe('CustomerPortalScreen', () => {
     await fireEvent.press(screen.getByText('Next'));
     await fireEvent.press(screen.getByText('Prev'));
     expect(screen.getByText('Page 1 of 3')).toBeTruthy();
-    expect(mockHookArgs).toEqual([0, 10]);
+    expect(mockHookArgs).toEqual([0, 10, { subscribed: true }]);
   });
 
   it('does not show pagination when single page', async () => {
@@ -365,5 +493,68 @@ describe('CustomerPortalScreen', () => {
       expect(screen.getByText('Too late to cancel')).toBeTruthy();
     });
     alertSpy.mockRestore();
+  });
+
+  it('subscribes only while the tab is focused', async () => {
+    const { rerender } = await render(<CustomerPortalScreen />);
+    expect(mockHookArgs[2]).toEqual({ subscribed: true });
+    mockIsFocused = false;
+    await rerender(<CustomerPortalScreen />);
+    expect(mockHookArgs[2]).toEqual({ subscribed: false });
+  });
+
+  it('shows a spinner only for the cancelling row and disables other cancellations', async () => {
+    mockAppointmentsData.content.push({ ...defaultAppointment, id: 2, publicId: 'TF-0002' });
+    mockCancelPending = true;
+    mockCancelVariables = 'TF-0001';
+    await render(<CustomerPortalScreen />);
+    const buttons = screen.getAllByLabelText('Cancel Booking');
+    expect(buttons[0]!.props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(buttons[1]!.props.accessibilityState).toEqual({ disabled: true, busy: false });
+    await fireEvent.press(buttons[1]!);
+    expect(mockCancelMutate).not.toHaveBeenCalled();
+  });
+
+  it('guards repeated confirmation callbacks before mutation state re-renders', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => {
+      const confirm = buttons?.find((b) => b.text === 'Yes, Cancel')?.onPress;
+      confirm?.();
+      confirm?.();
+    });
+    await render(<CustomerPortalScreen />);
+    await fireEvent.press(screen.getByText('Cancel Booking'));
+    expect(mockCancelMutate).toHaveBeenCalledTimes(1);
+    alertSpy.mockRestore();
+  });
+
+  it('waits for resolved metadata before clamping an empty page to zero', async () => {
+    mockAppointmentsData.page.totalPages = 3;
+    const { rerender } = await render(<CustomerPortalScreen />);
+    await fireEvent.press(screen.getByText('Next'));
+    mockAppointmentsData = buildData({
+      content: [], page: { number: 1, size: 10, totalElements: 0, totalPages: 0 },
+    });
+    mockIsPlaceholderData = true;
+    await rerender(<CustomerPortalScreen />);
+    expect(mockHookArgs[0]).toBe(1);
+    mockIsPlaceholderData = false;
+    mockIsFetching = true;
+    await rerender(<CustomerPortalScreen />);
+    expect(mockHookArgs[0]).toBe(1);
+    mockIsFetching = false;
+    await rerender(<CustomerPortalScreen />);
+    expect(mockHookArgs[0]).toBe(0);
+  });
+
+  it('offers recovery from an empty page that still reports more pages', async () => {
+    mockAppointmentsData.page.totalPages = 3;
+    const { rerender } = await render(<CustomerPortalScreen />);
+    await fireEvent.press(screen.getByText('Next'));
+    mockAppointmentsData = buildData({
+      content: [], page: { number: 1, size: 10, totalElements: 20, totalPages: 3 },
+    });
+    await rerender(<CustomerPortalScreen />);
+    await fireEvent.press(screen.getByText('Back to first page'));
+    expect(mockHookArgs[0]).toBe(0);
   });
 });

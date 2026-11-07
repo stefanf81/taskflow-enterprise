@@ -2,6 +2,8 @@ package com.example.taskflow.notification;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import jakarta.validation.constraints.NotNull;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * The notification outbox, bound from {@code app.notification.*}.
@@ -16,10 +18,14 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * </ul>
  */
 @ConfigurationProperties(prefix = "app.notification")
+@Validated
 record NotificationProperties(
         @DefaultValue("30") int retentionDays,
         @DefaultValue(NotificationProperties.DEFAULT_RETENTION_CRON) String retentionCron,
-        @DefaultValue("false") boolean simulateFailures) {
+        @DefaultValue("false") boolean simulateFailures,
+        @NotNull @DefaultValue("simulated") Gateway gateway) {
+
+    enum Gateway { SIMULATED, SMTP }
 
     static final String DEFAULT_RETENTION_CRON = "0 30 3 * * *";
 }

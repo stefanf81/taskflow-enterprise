@@ -146,6 +146,70 @@ class ContainerConfigGuardTest {
     }
 
     /**
+     * nginx refuses to start ("directive is duplicate") when a single-value directive repeats in
+     * one block, and an error_page aimed at a missing named location fails every such response.
+     * A string-level check, since the image is not started by this task.
+     */
+    @Test
+    void nginx_blocks_declare_single_value_directives_once_and_error_pages_target_real_locations()
+            throws Exception {
+        String content = Files.readString(Path.of("frontend/nginx.conf"));
+        List<String> singleValue = List.of("client_max_body_size", "proxy_pass", "proxy_http_version",
+                "proxy_connect_timeout", "proxy_read_timeout", "proxy_send_timeout", "proxy_buffer_size",
+                "proxy_buffers", "proxy_buffering", "default_type", "root", "index", "return");
+        java.util.regex.Matcher opening = java.util.regex.Pattern.compile("(?m)^\\s*(location|server)\\b[^{;]*\\{")
+                .matcher(content);
+        while (opening.find()) {
+            String header = opening.group().strip();
+            String body = block(content.substring(opening.start()), header);
+            List<String> topLevel = topLevelDirectives(body.substring(body.indexOf('{') + 1, body.length() - 1));
+            for (String name : singleValue) {
+                long count = topLevel.stream().filter(d -> d.equals(name) || d.startsWith(name + " ")).count();
+                assertTrue(count <= 1, name + " is declared " + count + " times in `" + header + "`");
+            }
+        }
+
+        String api = block(content, "location ^~ /api/ {");
+        assertTrue(api.contains("client_max_body_size 32k;") && api.contains("error_page 413 @api_unavailable;"),
+                "the API bounds request bodies and answers 413 as problem JSON");
+        java.util.regex.Matcher target = java.util.regex.Pattern.compile("error_page[^;]*\\s(@[A-Za-z0-9_]+);")
+                .matcher(content);
+        while (target.find()) {
+            assertTrue(content.contains("location " + target.group(1) + " {"),
+                    "error_page targets a missing named location " + target.group(1));
+        }
+        String titles = block(content, "map $status $api_problem_title {");
+        assertTrue(titles.contains("413") && titles.contains("502") && titles.contains("504"),
+                "every status mapped to @api_unavailable has a problem title");
+    }
+
+    /** The directives directly inside a block body: nested blocks and comments removed. */
+    private static List<String> topLevelDirectives(String body) {
+        StringBuilder flat = new StringBuilder();
+        int depth = 0;
+        for (String line : body.lines().map(l -> l.replaceAll("#.*$", "")).toList()) {
+            for (char c : line.toCharArray()) {
+                if (c == '{') {
+                    depth++;
+                    // A nested block ends the directive that opened it.
+                    if (depth == 1) {
+                        flat.append(';');
+                    }
+                } else if (c == '}') {
+                    depth--;
+                } else if (depth == 0) {
+                    flat.append(c);
+                }
+            }
+            flat.append(' ');
+        }
+        return java.util.Arrays.stream(flat.toString().split(";"))
+                .map(s -> s.strip().replaceAll("\\s+", " "))
+                .filter(s -> !s.isEmpty())
+                .toList();
+    }
+
+    /**
      * The image listens on plain HTTP, so $scheme would override a TLS ingress's https. The
      * ingress's X-Forwarded-Proto is honoured only when real-ip.conf trusted the peer.
      */
@@ -229,6 +293,8 @@ class ContainerConfigGuardTest {
                         && content.contains("rewrite ^ /index.csr.html last;")
                         && content.contains("rewrite ^ /index.html last;"),
                 "`/` must serve the client shell to a browser with a session cookie");
+        assertTrue(content.contains("if ($cookie_taskflow_session) {"),
+                "a browser that can renew its session (expired access cookie) is no guest either");
         assertTrue(content.contains("set $shell_vary \"\";")
                         && content.contains("set $shell_vary Cookie;")
                         && content.contains("add_header Vary $shell_vary always;"),

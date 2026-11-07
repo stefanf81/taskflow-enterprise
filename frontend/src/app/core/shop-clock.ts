@@ -1,11 +1,13 @@
-import { Injectable, computed, inject } from '@angular/core';
+import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { HttpContext, httpResource } from '@angular/common/http';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DEFAULT_SHOP_RULES, type ShopRules, shopWallClock } from '@taskflow/domain';
 import { shopInfoResponseSchema, type ShopInfoResponse } from '@taskflow/schemas';
 import { AppointmentsApi } from './api/appointments-api';
 import { PUBLIC_REQUEST } from './http/public-request.token';
 import { isServerRender } from './platform';
-import { safeResourceValue } from './resource-utils';
+import { ReferenceDataEvents } from './reference-data-events';
+import { refreshResource, safeResourceValue } from './resource-utils';
 
 /**
  * The shop's clock and booking rules.
@@ -23,20 +25,35 @@ export class ShopClock {
 
   // Prerendering has no backend; the browser fetches it after hydration.
   private readonly prerendering = isServerRender();
+  private readonly refreshTick = signal(0);
   private readonly resource = httpResource<ShopInfoResponse | null>(
-    () =>
-      this.prerendering
+    () => {
+      this.refreshTick();
+      return this.prerendering
         ? undefined
         : {
             url: this.appointmentsApi.shopInfoUrl,
             context: new HttpContext().set(PUBLIC_REQUEST, true),
-          },
+          };
+    },
     {
       defaultValue: null,
       parse: (raw) => shopInfoResponseSchema.parse(raw),
     },
   );
   private readonly info = safeResourceValue<ShopInfoResponse | null>(this.resource, null);
+
+  constructor() {
+    // Opening hours derive from the barbers' schedules, which an admin may just have changed.
+    inject(ReferenceDataEvents)
+      .rosterChanged.pipe(takeUntilDestroyed(inject(DestroyRef)))
+      .subscribe(() => this.reload());
+  }
+
+  /** Refetches the shop facts (the response is revalidated with its ETag). */
+  reload(): void {
+    refreshResource(this.resource, this.refreshTick);
+  }
 
   /** IANA zone of the shop, or null while unknown. */
   readonly timeZone = computed(() => this.info()?.timeZone ?? null);

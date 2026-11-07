@@ -4,7 +4,9 @@ import {
   int,
   literal,
   maxLength,
+  maximum,
   minLength,
+  multipleOf,
   nullish,
   number,
   object,
@@ -22,11 +24,11 @@ import {
 export const omittedAsEmptyString = () => pipe(nullish(string()), transform((value) => value ?? ""));
 
 export const serviceItemSchema = object({
-  name: string().check(trim(), minLength(1, "Service name is required")),
-  price: number().check(positive("Price must be positive")),
-  durationMinutes: int().check(positive("Duration must be positive")),
-  category: string().check(trim(), minLength(1, "Category is required")),
-  description: optional(string()),
+  name: string().check(trim(), minLength(1, "Service name is required"), maxLength(100, "Service name must not exceed 100 characters")),
+  price: number().check(positive("Price must be positive"), maximum(99999999.99, "Price must have at most 8 integer digits and 2 decimals"), multipleOf(0.01, "Price must have at most 8 integer digits and 2 decimals")),
+  durationMinutes: int().check(positive("Duration must be positive"), maximum(2147483647, "Duration is too large")),
+  category: string().check(trim(), minLength(1, "Category is required"), maxLength(50, "Category must not exceed 50 characters")),
+  description: optional(string().check(maxLength(500, "Description must not exceed 500 characters"))),
 });
 
 export type ServiceItemRequest = zInfer<typeof serviceItemSchema>;

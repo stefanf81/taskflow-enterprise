@@ -64,11 +64,27 @@ export const barberResponseContract = object({
   phone: optional(string()),
 });
 
+export const scheduleDayContract = object({
+  closes: string(),
+  dayOfWeek: number(),
+  opens: string(),
+});
+
+export const barberScheduleResponseContract = object({
+  days: array(scheduleDayContract),
+  revision: string(),
+});
+
 export const barberTimeOffResponseContract = object({
   endDate: string(),
   id: number(),
   reason: optional(string()),
   startDate: string(),
+});
+
+export const calendarExportResponseContract = object({
+  content: string(),
+  filename: string(),
 });
 
 export const loginResponseContract = object({
@@ -79,6 +95,7 @@ export const loginResponseContract = object({
 export const mobileLoginResponseContract = object({
   accessToken: string(),
   expiresIn: number(),
+  refreshToken: optional(string()),
   role: string(),
   tokenType: string(),
   username: string(),
@@ -107,6 +124,11 @@ export const publicBarberResponseContract = object({
 
 export const registerResponseContract = object({
   message: string(),
+});
+
+export const schedulePreviewResponseContract = object({
+  conflictCount: number(),
+  conflictsRevision: string(),
 });
 
 export const serviceItemResponseContract = object({

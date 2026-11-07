@@ -42,6 +42,11 @@ class AuthControllerTest {
     @Mock
     private HttpServletResponse response;
 
+    @Mock
+    private RefreshSessionService refreshSessions;
+
+    private static final String REFRESH = "r".repeat(43);
+
     private AuthController authController;
     private LoginAttemptLimiter loginAttemptLimiter;
     private TokenRevocationList tokenRevocationList;
@@ -51,7 +56,15 @@ class AuthControllerTest {
         loginAttemptLimiter = new LoginAttemptLimiter(3, 300);
         tokenRevocationList = new TokenRevocationList();
         authController = new AuthController(authenticationManager, tokenProvider, userRepository,
-                passwordEncoder, loginAttemptLimiter, tokenRevocationList, new CookieProperties(false));
+                passwordEncoder, loginAttemptLimiter, tokenRevocationList, new CookieProperties(false),
+                refreshSessions);
+    }
+
+    /** The session family a login creates; its access token names it. */
+    private void givenSession(Authentication authentication, String username, String role, String jwt) {
+        when(refreshSessions.create(authentication)).thenReturn(new RefreshSessionService.Issued(
+                "sid-1", username, role, 0, REFRESH, java.time.Instant.now().plusSeconds(3600)));
+        when(tokenProvider.generateToken(authentication, "sid-1", 0)).thenReturn(jwt);
     }
 
     @Test
@@ -64,17 +77,24 @@ class AuthControllerTest {
         when(authentication.getName()).thenReturn("admin@test.com");
         GrantedAuthority authority = () -> "ROLE_ADMIN";
         when(authentication.getAuthorities()).thenAnswer(invocation -> List.of(authority));
-        when(tokenProvider.generateToken(authentication)).thenReturn("jwt-token");
+        givenSession(authentication, "admin@test.com", "ROLE_ADMIN", "jwt-token");
 
         ResponseEntity<LoginResponse> result = authController.authenticateUser(loginRequest, response);
 
         assertEquals(HttpStatus.OK, result.getStatusCode());
         assertEquals("admin@test.com", result.getBody().username());
         assertEquals("ROLE_ADMIN", result.getBody().role());
-        // Verify cookie was set
+        // The access cookie, the refresh cookie scoped to the auth endpoints, and the readable hint.
         ArgumentCaptor<String> headerValue = ArgumentCaptor.forClass(String.class);
-        verify(response).addHeader(eq("Set-Cookie"), headerValue.capture());
-        assertTrue(headerValue.getValue().startsWith("access_token=jwt-token"));
+        verify(response, times(3)).addHeader(eq("Set-Cookie"), headerValue.capture());
+        assertTrue(headerValue.getAllValues().get(0).startsWith("access_token=jwt-token"));
+        String refreshCookie = headerValue.getAllValues().get(1);
+        assertTrue(refreshCookie.startsWith("refresh_token=" + REFRESH));
+        assertTrue(refreshCookie.contains("Path=/api/v1/auth") && refreshCookie.contains("HttpOnly")
+                && refreshCookie.contains("SameSite=Strict"));
+        String hint = headerValue.getAllValues().get(2);
+        assertTrue(hint.startsWith("taskflow_session=1") && hint.contains("Path=/") && !hint.contains("HttpOnly"),
+                "the hint carries no credential and must be readable by the SPA");
     }
 
     @Test
@@ -87,7 +107,7 @@ class AuthControllerTest {
         when(authentication.getName()).thenReturn("admin@test.com");
         GrantedAuthority authority = () -> "ROLE_ADMIN";
         when(authentication.getAuthorities()).thenAnswer(invocation -> List.of(authority));
-        when(tokenProvider.generateToken(authentication)).thenReturn("mobile-jwt");
+        givenSession(authentication, "admin@test.com", "ROLE_ADMIN", "mobile-jwt");
         when(tokenProvider.getTokenLifetimeSeconds()).thenReturn(3600L);
 
         ResponseEntity<MobileLoginResponse> result = authController.authenticateMobileUser(loginRequest);
@@ -98,7 +118,40 @@ class AuthControllerTest {
         assertEquals(3600L, result.getBody().expiresIn());
         assertEquals("admin@test.com", result.getBody().username());
         assertEquals("ROLE_ADMIN", result.getBody().role());
+        assertEquals(REFRESH, result.getBody().refreshToken());
         verify(response, never()).addHeader(eq("Set-Cookie"), anyString());
+    }
+
+    @Test
+    void refresh_rejectsAnUnknownOrRevokedCredentialWith401AndDropsTheBrowserCookies() {
+        when(refreshSessions.rotate(REFRESH)).thenReturn(Optional.empty());
+
+        assertThrows(org.springframework.security.authentication.BadCredentialsException.class,
+                () -> authController.refreshMobile(new RefreshRequest(REFRESH)));
+        verify(response, never()).addHeader(eq("Set-Cookie"), anyString());
+
+        assertThrows(org.springframework.security.authentication.BadCredentialsException.class,
+                () -> authController.refresh(REFRESH, response));
+        ArgumentCaptor<String> headerValue = ArgumentCaptor.forClass(String.class);
+        verify(response, times(2)).addHeader(eq("Set-Cookie"), headerValue.capture());
+        assertTrue(headerValue.getAllValues().stream().anyMatch(v -> v.startsWith("refresh_token=;") && v.contains("Max-Age=0")));
+        assertTrue(headerValue.getAllValues().stream().anyMatch(v -> v.startsWith("taskflow_session=;") && v.contains("Max-Age=0")),
+                "a dead session must stop the SPA from renewing");
+    }
+
+    @Test
+    void logout_revokesTheRefreshCredentialsItIsGivenAndClearsTheCookies() {
+        ResponseEntity<Void> result = authController.logout(null, REFRESH, new RefreshRequest("m".repeat(43)), response);
+
+        assertEquals(HttpStatus.NO_CONTENT, result.getStatusCode());
+        verify(refreshSessions).revoke(REFRESH);
+        verify(refreshSessions).revoke("m".repeat(43));
+        ArgumentCaptor<String> headerValue = ArgumentCaptor.forClass(String.class);
+        verify(response, times(3)).addHeader(eq("Set-Cookie"), headerValue.capture());
+        for (String name : List.of("refresh_token", "taskflow_session", "access_token")) {
+            assertTrue(headerValue.getAllValues().stream().anyMatch(v -> v.startsWith(name + "=;") && v.contains("Max-Age=0")),
+                    name + " must be cleared");
+        }
     }
 
     @Test
@@ -170,13 +223,14 @@ class AuthControllerTest {
 
     @Test
     void logout_shouldClearCookie() {
-        ResponseEntity<Void> result = authController.logout(null, response);
+        ResponseEntity<Void> result = authController.logout(null, null, null, response);
 
         assertEquals(HttpStatus.NO_CONTENT, result.getStatusCode());
         ArgumentCaptor<String> headerValue = ArgumentCaptor.forClass(String.class);
-        verify(response).addHeader(eq("Set-Cookie"), headerValue.capture());
-        assertTrue(headerValue.getValue().contains("access_token="));
-        assertTrue(headerValue.getValue().contains("Max-Age=0"));
+        verify(response, times(3)).addHeader(eq("Set-Cookie"), headerValue.capture());
+        String access = headerValue.getAllValues().get(2);
+        assertTrue(access.contains("access_token="));
+        assertTrue(access.contains("Max-Age=0"));
     }
 
     @Test
@@ -224,7 +278,7 @@ class AuthControllerTest {
         when(authentication.getName()).thenReturn("user@test.com");
         GrantedAuthority authority = () -> "ROLE_CUSTOMER";
         when(authentication.getAuthorities()).thenAnswer(invocation -> List.of(authority));
-        when(tokenProvider.generateToken(authentication)).thenReturn("jwt");
+        givenSession(authentication, "user@test.com", "ROLE_CUSTOMER", "jwt");
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                 .thenThrow(new org.springframework.security.authentication.BadCredentialsException("bad"))
                 .thenThrow(new org.springframework.security.authentication.BadCredentialsException("bad"))
@@ -312,13 +366,16 @@ class AuthControllerTest {
         java.time.Instant now = java.time.Instant.now();
         org.springframework.security.oauth2.jwt.Jwt jwt = org.springframework.security.oauth2.jwt.Jwt
                 .withTokenValue("tok").header("alg", "RS256").jti("jti-1")
-                .issuedAt(now).expiresAt(now.plusSeconds(600)).subject("u@test.com").build();
+                .issuedAt(now).expiresAt(now.plusSeconds(600)).subject("u@test.com")
+                .claim(RefreshSessionService.SESSION_CLAIM, "sid-9").build();
         var authentication = new org.springframework.security.oauth2.server.resource.authentication
                 .JwtAuthenticationToken(jwt);
 
-        authController.logout(authentication, response);
+        authController.logout(authentication, null, null, response);
 
         assertTrue(tokenRevocationList.isRevoked("jti-1"));
         assertFalse(tokenRevocationList.isRevoked("some-other-token"));
+        // The token's whole session family ends with it.
+        verify(refreshSessions).revokeSession("sid-9");
     }
 }

@@ -1,9 +1,9 @@
-import { Injectable, computed, inject } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpContext, httpResource } from '@angular/common/http';
 import { ServiceItem } from '../../types/api';
 import { CatalogApi } from '../api/catalog-api';
 import { PUBLIC_REQUEST } from '../http/public-request.token';
-import { safeResourceValue } from '../resource-utils';
+import { refreshResource, safeResourceValue } from '../resource-utils';
 import { isServerRender } from '../platform';
 import { serviceItemResponseListSchema } from '@taskflow/schemas';
 
@@ -14,14 +14,17 @@ export class ServiceCatalogStore {
   // Build-time prerendering has no backend. Idle on the server renders the same empty list the
   // browser shows while the request is in flight, so hydration starts from identical markup.
   private readonly prerendering = isServerRender();
+  private readonly refreshTick = signal(0);
   private readonly servicesResource = httpResource<ServiceItem[]>(
-    () =>
-      this.prerendering
+    () => {
+      this.refreshTick();
+      return this.prerendering
         ? undefined
         : {
             url: this.catalogApi.servicesUrl,
             context: new HttpContext().set(PUBLIC_REQUEST, true),
-          },
+          };
+    },
     {
       defaultValue: [],
       // Runtime contract check: a drifted backend response becomes a resource
@@ -49,6 +52,22 @@ export class ServiceCatalogStore {
   });
 
   loadServices(): void {
-    this.servicesResource.reload();
+    refreshResource(this.servicesResource, this.refreshTick);
+  }
+
+  /** Apply a validated server response immediately, then revalidate the whole menu. */
+  upsertService(service: ServiceItem): void {
+    const current = this.services();
+    this.servicesResource.set(
+      current.some((item) => item.id === service.id)
+        ? current.map((item) => (item.id === service.id ? service : item))
+        : [...current, service],
+    );
+    this.loadServices();
+  }
+
+  removeService(id: number): void {
+    this.servicesResource.set(this.services().filter((item) => item.id !== id));
+    this.loadServices();
   }
 }

@@ -5,22 +5,62 @@ import { Trend } from 'k6/metrics';
 const BASE_URL = __ENV.BASE_URL;
 if (!BASE_URL) throw new Error('BASE_URL environment variable is required');
 
-export const options = {
-  scenarios: {
-    ramp: {
-      executor: 'ramping-vus',
-      startVUs: 0,
-      stages: [
-        { duration: '30s', target: 50 },
-        { duration: '60s', target: 200 },
-        { duration: '30s', target: 0 },
-      ],
-      gracefulRampDown: '10s',
-    },
+// OPEN_MODEL=true replaces the closed ramp (VUs wait for each response, so a slow server lowers
+// the load it gets) with an open arrival rate: requests keep arriving whatever the latency, and
+// iterations k6 could not start show up as dropped_iterations instead of disappearing.
+const OPEN_MODEL = String(__ENV.OPEN_MODEL || '').toLowerCase() === 'true';
+
+// Up to 200 VUs or 500 requests/s: a local stack only, never production by accident (the
+// production check is k6/probe.js). ALLOW_REMOTE_LOAD=true opts in for an environment you own.
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]', 'host.docker.internal'];
+const host = (/^https?:\/\/(\[[^\]]+\]|[^/:?#]+)/i.exec(BASE_URL) || [])[1] || '';
+if (!LOCAL_HOSTS.includes(host.toLowerCase()) && __ENV.ALLOW_REMOTE_LOAD !== 'true') {
+  throw new Error(
+    `load.js only targets a local stack (BASE_URL host "${host}"). Use k6/probe.js for production, ` +
+      'or set ALLOW_REMOTE_LOAD=true for an environment you own.',
+  );
+}
+
+const closedRamp = {
+  ramp: {
+    executor: 'ramping-vus',
+    startVUs: 0,
+    stages: [
+      { duration: '30s', target: 50 },
+      { duration: '60s', target: 200 },
+      { duration: '30s', target: 0 },
+    ],
+    gracefulRampDown: '10s',
   },
+};
+
+const openArrival = {
+  open_arrival: {
+    executor: 'ramping-arrival-rate',
+    startRate: 50,
+    timeUnit: '1s',
+    preAllocatedVUs: 100,
+    maxVUs: 300,
+    stages: [
+      { duration: '30s', target: 200 },
+      { duration: '60s', target: 500 },
+      { duration: '30s', target: 0 },
+    ],
+  },
+};
+
+export const options = {
+  scenarios: OPEN_MODEL ? openArrival : closedRamp,
   thresholds: {
     http_req_failed: ['rate<0.01'],
     http_req_duration: ['p(95)<500', 'p(99)<800'],
+    // Only an open model can drop iterations: then the offered rate was not met. A handful at
+    // the stage edges, while k6 allocates VUs, is tolerated.
+    ...(OPEN_MODEL ? { dropped_iterations: ['count<10'] } : {}),
+    catalog_duration: ['p(95)<250'],
+    barbers_duration: ['p(95)<250'],
+    busySlots_duration: ['p(95)<500'],
+    barberRatings_duration: ['p(95)<300'],
     checks: ['rate==1.0'],
   },
 };

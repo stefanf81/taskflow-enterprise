@@ -1,9 +1,16 @@
-import axios from 'axios';
+import axios, { type InternalAxiosRequestConfig } from 'axios';
 import { Platform } from 'react-native';
 import { storage } from '../utils/storage';
 import { queryClient } from '../query/queryClient';
 import { isPublicEndpoint } from './publicEndpoints';
-import { SessionExpiredError, isTokenExpired } from '../utils/session';
+import {
+  SessionChangedError,
+  SessionExpiredError,
+  computeExpiryMs,
+  isTokenExpired,
+} from '../utils/session';
+import { mobileLoginResponseSchema } from '@taskflow/schemas';
+import { parseContract } from './contracts';
 
 const getBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_API_URL) {
@@ -26,8 +33,9 @@ const getBaseUrl = () => {
     }
     if (!__DEV__ && !isExplicitLocalE2eBuild && protocol !== 'https:') {
       throw new Error(
-        'Production API URL must use HTTPS. Found: ' + url +
-        '. Set EXPO_PUBLIC_API_URL to an https:// URL in your production .env file.',
+        'Production API URL must use HTTPS. Found: ' +
+          url +
+          '. Set EXPO_PUBLIC_API_URL to an https:// URL in your production .env file.',
       );
     }
     return url;
@@ -78,21 +86,102 @@ export function setSessionEndedHandler(handler: SessionEndedHandler | null): voi
   sessionEndedHandler = handler;
 }
 
-async function endLocalSession(): Promise<void> {
-  try {
-    await storage.clearSession();
-  } catch {
-    // Keychain/Keystore failure — in-memory state is still cleared below.
-  }
+/**
+ * Ends the session of `epoch` (see storage.getSessionEpoch) after the server rejected it, unless
+ * a sign-in or sign-out has replaced it meanwhile. The in-memory session goes first, together
+ * with the epoch, so nothing keeps acting on it while the Keychain/Keystore is being cleared.
+ */
+async function endLocalSession(epoch: number): Promise<void> {
+  if (storage.getSessionEpoch() !== epoch) return;
+  const cleared = storage.clearSession();
   queryClient.clear();
   sessionEndedHandler?.();
+  try {
+    await cleared;
+  } catch {
+    // Keychain/Keystore failure: the in-memory session is already gone.
+  }
 }
+
+let renewal: { epoch: number; promise: Promise<string> } | null = null;
+
+/**
+ * Single-flight rotation of the stored refresh token, per session. `epoch` (by default the
+ * current one) is the session to renew, fixed before anything is read: when a sign-in or
+ * sign-out replaces it at any point (while the refresh token is read, the server answers or the
+ * new credentials are stored), nothing is stored and the renewal fails with SessionChangedError,
+ * so its caller neither ends, nor sends a request with, the session that replaced it.
+ */
+export function renewSession(epoch: number = storage.getSessionEpoch()): Promise<string> {
+  if (renewal?.epoch === epoch) return renewal.promise;
+  const changed = () => storage.getSessionEpoch() !== epoch;
+  const current = {
+    epoch,
+    promise: (async () => {
+      if (changed()) throw new SessionChangedError();
+      try {
+        const refreshToken = await storage.getRefreshToken();
+        if (changed()) throw new SessionChangedError();
+        if (!refreshToken) throw new SessionExpiredError();
+        const response = await apiClient.post('/api/v1/auth/mobile/refresh', {
+          refreshToken,
+        });
+        const result = parseContract(
+          mobileLoginResponseSchema,
+          response.data,
+          'POST /api/v1/auth/mobile/refresh',
+        );
+        if (!result.refreshToken) throw new SessionExpiredError();
+        const stored = await storage.rotateSession(epoch, {
+          token: result.accessToken,
+          expiresAt: computeExpiryMs(result.expiresIn),
+          refreshToken: result.refreshToken,
+        });
+        if (!stored || changed()) throw new SessionChangedError();
+        return result.accessToken;
+      } catch (error) {
+        // A rejection (or any other failure) of a session that is gone says nothing about the
+        // current one.
+        throw changed() ? new SessionChangedError() : error;
+      }
+    })().finally(() => {
+      if (renewal === current) renewal = null;
+    }),
+  };
+  renewal = current;
+  return current.promise;
+}
+
+function carriedBearer(config: { headers?: unknown } | undefined): boolean {
+  const headers = config?.headers as
+    | { get?: (name: string) => unknown; Authorization?: unknown }
+    | undefined;
+  const value =
+    typeof headers?.get === 'function' ? headers.get('Authorization') : headers?.Authorization;
+  return typeof value === 'string' && value.startsWith('Bearer ');
+}
+
+function isSessionRejection(error: unknown): boolean {
+  return (
+    error instanceof SessionExpiredError ||
+    (error as { response?: { status?: number } })?.response?.status === 401
+  );
+}
+
+/**
+ * What the interceptors remember on a protected request's config: the session it was sent under
+ * (kept by its replay, which is the same request) and whether it was already replayed.
+ */
+type SessionRequestConfig = InternalAxiosRequestConfig & {
+  sessionEpoch?: number;
+  sessionRetried?: boolean;
+};
 
 // ---------------------------------------------------------------------------
 // Request interceptor — bearer token (protected endpoints only)
 // ---------------------------------------------------------------------------
 apiClient.interceptors.request.use(
-  async (config) => {
+  async (config: SessionRequestConfig) => {
     const url = config.url || '';
     // Public endpoints never carry the token: Spring returns 401 for an
     // expired token even on permitAll routes.
@@ -100,21 +189,42 @@ apiClient.interceptors.request.use(
       return config;
     }
 
+    // A request (or its replay) whose session a sign-in or sign-out replaced never goes out
+    // with the credentials of the session that replaced it.
+    const epoch = (config.sessionEpoch ??= storage.getSessionEpoch());
+    const assertSameSession = () => {
+      if (storage.getSessionEpoch() !== epoch) throw new SessionChangedError();
+    };
+    assertSameSession();
+
     // Served from storage's in-memory copy; only the first protected request
     // after launch or a credential change reads the keychain/keystore.
-    const [token, expiresAt] = await Promise.all([storage.getToken(), storage.getTokenExpiry()]);
+    const [storedToken, expiresAt] = await Promise.all([
+      storage.getToken(),
+      storage.getTokenExpiry(),
+    ]);
+    assertSameSession();
+    let token = storedToken;
     if (!token) {
       return config;
     }
 
-    // Drop an expired token BEFORE it is sent. Logout is the exception: there
+    // Renew an expired token BEFORE it is sent. Logout is the exception: there
     // is nothing left to revoke, so it simply goes out unauthenticated.
     if (isTokenExpired(expiresAt)) {
       if (url === '/api/v1/auth/logout') {
         return config;
       }
-      await endLocalSession();
-      throw new SessionExpiredError();
+      try {
+        token = await renewSession(epoch);
+      } catch (error) {
+        // Only a rejected (or missing) refresh token ends the session; offline, a timeout, a
+        // 5xx or an unreadable Keychain/Keystore leave it for the next attempt.
+        if (isSessionRejection(error)) {
+          await endLocalSession(epoch);
+        }
+        throw error;
+      }
     }
 
     config.headers.Authorization = `Bearer ${token}`;
@@ -137,7 +247,38 @@ apiClient.interceptors.response.use(
       // stored bearer token is invalid.
       const isPublic = isPublicEndpoint(error.config?.method, url);
       if (!isPublic && (!url.startsWith('/api/v1/auth/') || url === '/api/v1/auth/me')) {
-        await endLocalSession();
+        const config = error.config as SessionRequestConfig | undefined;
+        const epoch = config?.sessionEpoch;
+        // Sent under a session that a sign-in or sign-out has replaced: the 401 is about
+        // credentials that are gone, so it neither ends nor renews the current session.
+        if (!config || epoch === undefined || epoch !== storage.getSessionEpoch()) {
+          return Promise.reject(error);
+        }
+        // Renew only a session this request actually presented: a request that went out
+        // without a bearer token (signed out) must never be signed back in by a 401.
+        // Spring rejects the token before any handler runs, so replaying any method once
+        // after a successful rotation cannot repeat a side effect.
+        if (config.sessionRetried || !carriedBearer(config)) {
+          await endLocalSession(epoch);
+          return Promise.reject(error);
+        }
+        config.sessionRetried = true;
+        try {
+          await renewSession(epoch);
+        } catch (renewalError) {
+          if (renewalError instanceof SessionChangedError) return Promise.reject(error);
+          // A rejected or missing refresh token ends the session, and the caller sees this
+          // request's 401. Any other failure (offline, 5xx, unreadable Keychain/Keystore)
+          // keeps the session and is reported as it is.
+          if (isSessionRejection(renewalError)) {
+            await endLocalSession(epoch);
+            return Promise.reject(error);
+          }
+          return Promise.reject(renewalError);
+        }
+        // The replay keeps this request's epoch: should the session change before it is
+        // sent, the request interceptor refuses it with SessionChangedError.
+        return apiClient.request(config);
       }
     }
     return Promise.reject(error);

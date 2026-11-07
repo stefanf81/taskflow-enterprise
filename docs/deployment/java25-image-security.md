@@ -12,9 +12,11 @@ Temurin 25.0.4.1+1 / Ubuntu 26.04
 
 **2026-10-31 digest refresh:** the Dockerfile now pins
 `sha256:b6e00330337143a2c1a20f1c1c693d4b6ce9a3c30ade8b9d03fc68cc9e3871e7`
-(previous pin `sha256:acd83cdf6c9b5bfcd7c4e9d3e1969bacaacdcfa034c074500ab28610fb840f81`),
-applied ahead of Renovate's 3-day soak at the maintainer's request. The Temurin build and scan
-results have not been recorded for it; CI's image scan covers it on the next build.
+(Temurin `25.0.5+8` / Ubuntu 26.04, built 2026-10-29; previous pin
+`sha256:acd83cdf6c9b5bfcd7c4e9d3e1969bacaacdcfa034c074500ab28610fb840f81`),
+applied ahead of Renovate's 3-day soak at the maintainer's request. This digest ships
+`JAVA_VERSION=jdk-25.0.5+8`, which includes the October 2026 OpenJDK CPU fixes. CI's image scan
+covers it on every build.
 
 **2026-10-28 digest refresh:** the Dockerfile now pins
 `sha256:acd83cdf6c9b5bfcd7c4e9d3e1969bacaacdcfa034c074500ab28610fb840f81`

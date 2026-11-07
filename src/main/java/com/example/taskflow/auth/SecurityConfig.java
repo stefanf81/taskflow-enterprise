@@ -120,9 +120,14 @@ class SecurityConfig {
                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/mobile/login"),
                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/register"),
                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/appointments"),
-                    PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*"),
-                    PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/reviews/public/**"),
-                    bearerOnlyRequestMatcher()
+                     PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*"),
+                     PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, "/api/v1/appointments/public/reschedule/*"),
+                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/appointments/public/reschedule/*/availability"),
+                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/appointments/public/calendar/*"),
+                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/reviews/public/**"),
+                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/telemetry"),
+                     nativeSessionRequestMatcher(),
+                     bearerOnlyRequestMatcher()
                 )));
 
         http
@@ -164,6 +169,7 @@ class SecurityConfig {
                 // Logout must work for everyone: with an expired session it is the
                 // request that clears the cookie, so it cannot require authentication.
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh", "/api/v1/auth/mobile/refresh").permitAll()
                 .requestMatchers("/api/v1/auth/me").authenticated()
                 // Liveness/readiness probes must stay reachable unauthenticated
                 // for Kubernetes/docker healthchecks. The Prometheus scrape is open
@@ -181,6 +187,9 @@ class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments/public/shop").permitAll()
                 .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/public/shop").permitAll()
                 .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*").permitAll()
+                .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/public/reschedule/*").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/appointments/public/reschedule/*/availability").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/appointments/public/calendar/*").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/appointments").permitAll()
                 // Before the public catalog rules: first match wins, and /retired lists services
                 // that are not public.
@@ -189,6 +198,7 @@ class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/catalog", "/api/v1/catalog/**").permitAll()
                 .requestMatchers(HttpMethod.HEAD, "/api/v1/catalog", "/api/v1/catalog/**").permitAll()
                 .requestMatchers("/api/v1/reviews/public/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/telemetry").permitAll()
                 // Public booking only needs a barber identifier and display name.
                 // Contact data and time-off details are restricted to administrators.
                 .requestMatchers(HttpMethod.GET, "/api/v1/barbers").permitAll()
@@ -196,8 +206,8 @@ class SecurityConfig {
                 // Strict Admin restrictions to prevent privilege escalation / BOLA / PII leakage.
                 // GET and HEAD are both covered: HEAD reaches the same handler and would
                 // otherwise leak existence/size (Content-Length) of admin-only data.
-                .requestMatchers(HttpMethod.GET, "/api/v1/barbers/admin", "/api/v1/barbers/*/time-off").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.HEAD, "/api/v1/barbers/admin", "/api/v1/barbers/*/time-off").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/barbers/admin", "/api/v1/barbers/*/time-off", "/api/v1/barbers/*/schedule").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/barbers/admin", "/api/v1/barbers/*/time-off", "/api/v1/barbers/*/schedule").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments/events").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/events").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/appointments").hasRole("ADMIN")
@@ -224,7 +234,7 @@ class SecurityConfig {
             // including login and public pages, into a 401.
             .addFilterBefore(new StaleAccessTokenCookieFilter(jwtDecoder, cookieSecure), CsrfFilter.class)
             .oauth2ResourceServer(oauth2 -> oauth2
-                .bearerTokenResolver(cookieBearerTokenResolver())
+                .bearerTokenResolver(cookieBearerTokenResolver(jwtDecoder))
                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
             .headers(headers -> headers
                 .frameOptions(frame -> frame.sameOrigin())
@@ -243,6 +253,19 @@ class SecurityConfig {
         return repository;
     }
 
+    private static final RequestMatcher REFRESH_REQUESTS = new OrRequestMatcher(
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/refresh"),
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/mobile/refresh"));
+    private static final RequestMatcher WEB_REFRESH_REQUEST =
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/refresh");
+    private static final RequestMatcher MOBILE_REFRESH_REQUEST =
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/mobile/refresh");
+    private static final RequestMatcher LOGOUT_REQUEST =
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/logout");
+    /** The browser's ambient credentials; any other cookie authenticates nothing. */
+    private static final List<String> CREDENTIAL_COOKIES =
+            List.of(StaleAccessTokenCookieFilter.COOKIE_NAME, AuthController.REFRESH_COOKIE);
+
     /**
      * Resolves the OAuth2 bearer token from the HttpOnly {@code access_token} cookie
      * (C2 migration), falling back to the standard {@code Authorization: Bearer}
@@ -250,17 +273,34 @@ class SecurityConfig {
      * ever exposing the JWT to JavaScript.
      */
     @Bean
-    public BearerTokenResolver cookieBearerTokenResolver() {
+    public BearerTokenResolver cookieBearerTokenResolver(JwtDecoder jwtDecoder) {
         DefaultBearerTokenResolver headerResolver = new DefaultBearerTokenResolver();
         return request -> {
             // The scrape token is no JWT: let MetricsScrapeAuthorization read it from the header.
             if (MetricsScrapeAuthorization.SCRAPE.matches(request)) {
                 return null;
             }
+            // Renewal authenticates ONLY the one-use credential, not an expired access JWT.
+            if (REFRESH_REQUESTS.matches(request)) {
+                return null;
+            }
+            // A native logout with an expired bearer must still revoke its refresh credential, so
+            // an unverifiable header token makes the logout anonymous instead of a 401.
+            if (LOGOUT_REQUEST.matches(request) && !hasCredentialCookies(request)) {
+                try {
+                    String token = headerResolver.resolve(request);
+                    if (token != null) {
+                        jwtDecoder.decode(token);
+                    }
+                } catch (org.springframework.security.oauth2.jwt.JwtException
+                         | org.springframework.security.oauth2.core.OAuth2AuthenticationException e) {
+                    return null;
+                }
+            }
             jakarta.servlet.http.Cookie[] cookies = request.getCookies();
             if (cookies != null) {
                 for (jakarta.servlet.http.Cookie cookie : cookies) {
-                    if ("access_token".equals(cookie.getName())) {
+                    if (StaleAccessTokenCookieFilter.COOKIE_NAME.equals(cookie.getName())) {
                         String value = cookie.getValue();
                         return (value != null && !value.isBlank()) ? value : null;
                     }
@@ -273,29 +313,46 @@ class SecurityConfig {
     /**
      * Native bearer requests do not carry ambient browser credentials and are
      * therefore not exposed to the CSRF threat model. Browser requests that
-     * carry the HttpOnly access_token cookie remain protected, even if a
-     * caller also supplies an Authorization header.
+     * carry the HttpOnly access_token or refresh_token cookie remain protected,
+     * even if a caller also supplies an Authorization header.
      */
     RequestMatcher bearerOnlyRequestMatcher() {
         return request -> {
+            // Browser refresh stays CSRF protected, even with an Authorization header.
+            if (WEB_REFRESH_REQUEST.matches(request)) {
+                return false;
+            }
             String authorization = request.getHeader("Authorization");
             if (authorization == null || !authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
                 return false;
             }
+            return !hasCredentialCookies(request);
+        };
+    }
 
-            jakarta.servlet.http.Cookie[] cookies = request.getCookies();
-            if (cookies == null) {
+    /** Native renewal and logout authenticate with the body's refresh token, not with cookies. */
+    private RequestMatcher nativeSessionRequestMatcher() {
+        return request -> !hasCredentialCookies(request)
+                && (MOBILE_REFRESH_REQUEST.matches(request) || LOGOUT_REQUEST.matches(request));
+    }
+
+    /**
+     * Whether the request carries a browser credential cookie. A stale access_token cookie is
+     * already hidden by {@link StaleAccessTokenCookieFilter} at this point: it authenticates
+     * nothing, so it is no ambient credential.
+     */
+    private static boolean hasCredentialCookies(jakarta.servlet.http.HttpServletRequest request) {
+        jakarta.servlet.http.Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return false;
+        }
+        for (jakarta.servlet.http.Cookie cookie : cookies) {
+            if (CREDENTIAL_COOKIES.contains(cookie.getName())
+                    && cookie.getValue() != null && !cookie.getValue().isBlank()) {
                 return true;
             }
-            for (jakarta.servlet.http.Cookie cookie : cookies) {
-                if ("access_token".equals(cookie.getName())
-                        && cookie.getValue() != null
-                        && !cookie.getValue().isBlank()) {
-                    return false;
-                }
-            }
-            return true;
-        };
+        }
+        return false;
     }
 
     @Bean
@@ -355,7 +412,8 @@ class SecurityConfig {
     }
 
     @Bean
-    public JwtDecoder jwtDecoder(TokenRevocationList revocationList, AccountTokenCheck accounts) {
+    public JwtDecoder jwtDecoder(TokenRevocationList revocationList, AccountTokenCheck accounts,
+                                 RefreshSessionService refreshSessions) {
         try {
             NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(this.rsaKey.toRSAPublicKey()).build();
             // A3: validate issuer + audience (expiry is enforced by the default
@@ -372,11 +430,14 @@ class SecurityConfig {
             // Tokens of a deleted or demoted account, or of an account whose tokens were all
             // revoked (token version raised), are rejected too (AccountTokenCheck, #218).
             OAuth2TokenValidator<Jwt> accountUnchanged = accounts::validate;
+            // Tokens of a logged-out, reused or expired session family (RefreshSessionService).
+            OAuth2TokenValidator<Jwt> sessionActive = refreshSessions::validate;
             decoder.setJwtValidator(new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(
                     JwtValidators.createDefaultWithIssuer(jwtIssuer),
                     audienceValidator,
                     notRevoked,
-                    accountUnchanged));
+                    accountUnchanged,
+                    sessionActive));
             // The stale-cookie filter and the bearer-token filter both decode the cookie's token;
             // within one request the second decode reuses the first (validated) result.
             return new RequestScopedJwtDecoder(decoder);

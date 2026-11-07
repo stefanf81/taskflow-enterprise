@@ -183,15 +183,18 @@ abstract class AbstractRedisSecurityStateTest {
     }
 
     /**
-     * Two complete backends (each with its own H2 database, same RSA key pair, one Redis): a token
-     * logged out on replica A is refused by replica B, and failed logins on both add up.
+     * Two complete backends (same RSA key pair, one Redis, one database): a token logged out on
+     * replica A is refused by replica B, and failed logins on both add up. The replicas share the
+     * database like production's PostgreSQL: every access token names its refresh session
+     * (ADR-023), which lives there, so a replica with a database of its own would refuse it.
      */
     @Test
     void twoApplicationReplicasShareLogoutAndTheLoginThrottle() throws Exception {
         KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
         generator.initialize(2048);
         KeyPair keys = generator.generateKeyPair();
-        String[] args = replicaArgs(keys);
+        String[] args = replicaArgs(keys,
+                "jdbc:h2:mem:replicas-" + UUID.randomUUID() + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1");
         try (ConfigurableApplicationContext a = new SpringApplicationBuilder(TaskflowApplication.class).run(args);
              ConfigurableApplicationContext b = new SpringApplicationBuilder(TaskflowApplication.class).run(args)) {
             String baseA = "http://127.0.0.1:" + a.getEnvironment().getProperty("local.server.port");
@@ -201,10 +204,16 @@ abstract class AbstractRedisSecurityStateTest {
             HttpResponse<String> login = post(http, baseA + "/api/v1/auth/mobile/login",
                     "{\"username\":\"admin\",\"password\":\"admin-password\"}", null);
             assertEquals(200, login.statusCode(), login.body());
-            String token = new ObjectMapper().readTree(login.body()).get("accessToken").asText();
+            ObjectMapper json = new ObjectMapper();
+            String token = json.readTree(login.body()).get("accessToken").asText();
+            String jti = json.readTree(Base64.getUrlDecoder().decode(token.split("\\.")[1])).get("jti").asText();
+            keysToDelete.add(RedisTokenRevocationStore.key(jti));
 
             assertEquals(200, get(http, baseB + "/api/v1/auth/me", token).statusCode(), "B accepts A's token");
             assertEquals(204, post(http, baseA + "/api/v1/auth/logout", "", token).statusCode());
+            // The shared database ends the session too; the denylist entry shows that the logout
+            // itself reached the other replicas through Redis.
+            assertEquals(Boolean.TRUE, redisB.hasKey(RedisTokenRevocationStore.key(jti)), "denied in Redis");
             assertEquals(401, get(http, baseA + "/api/v1/auth/me", token).statusCode(), "revoked on A");
             assertEquals(401, get(http, baseB + "/api/v1/auth/me", token).statusCode(), "and on B");
 
@@ -220,7 +229,7 @@ abstract class AbstractRedisSecurityStateTest {
         }
     }
 
-    private String[] replicaArgs(KeyPair keys) {
+    private String[] replicaArgs(KeyPair keys, String databaseUrl) {
         URI uri = URI.create(redisUrl());
         List<String> args = new ArrayList<>(List.of(
                 "--server.port=0",
@@ -230,7 +239,7 @@ abstract class AbstractRedisSecurityStateTest {
                 "--spring.data.redis.port=" + uri.getPort(),
                 "--app.rsa.private-key=" + Base64.getEncoder().encodeToString(keys.getPrivate().getEncoded()),
                 "--app.rsa.public-key=" + Base64.getEncoder().encodeToString(keys.getPublic().getEncoded()),
-                "--spring.datasource.url=jdbc:h2:mem:replica-${random.uuid};MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+                "--spring.datasource.url=" + databaseUrl,
                 "--app.schedulers.enabled=false",
                 "--app.rate-limit.login-max-failures=3",
                 "--management.tracing.sampling.probability=0.0",

@@ -26,6 +26,9 @@ export const queryKeys = {
     all: ['busySlots'] as const,
     forDay: (barberName: string, bookingDate: string, serviceType: string) =>
       ['busySlots', barberName, bookingDate, serviceType] as const,
+    /** What one booking can move to (the guest's email is part of the question). */
+    forMove: (publicId: string, bookingDate: string, email: string) =>
+      ['busySlots', 'move', publicId, bookingDate, email] as const,
   },
 };
 

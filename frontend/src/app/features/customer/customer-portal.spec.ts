@@ -9,6 +9,8 @@ import { AppointmentsApi } from '../../core/api/appointments-api';
 import { CustomerStore } from '../../core/customer/customer.store';
 import { AuthState } from '../../core/auth/auth.state';
 import { ShopClock } from '../../core/shop-clock';
+import { FlashMessages } from '../../core/ui/flash-messages';
+import { DEFAULT_SHOP_RULES } from '@taskflow/domain';
 
 /**
  * TE1: Component-level QA suite for the Customer dashboard.
@@ -64,7 +66,10 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
         AppointmentsApi,
         CustomerStore,
         // Mid-July 2026 on the shop's clock: the fixture's August bookings are still upcoming.
-        { provide: ShopClock, useValue: { now: () => new Date(2026, 6, 15, 12, 0) } },
+        {
+          provide: ShopClock,
+          useValue: { now: () => new Date(2026, 6, 15, 12, 0), rules: () => DEFAULT_SHOP_RULES },
+        },
       ],
     }).compileComponents();
 
@@ -154,6 +159,114 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
     // On logout the store clears auth state and the portal leaves for the landing page.
     expect(TestBed.inject(AuthState).isLoggedIn()).toBe(false);
     expect(navigate).toHaveBeenCalledWith('');
+  });
+
+  describe('reschedule and calendar export', () => {
+    const buttonWith = (text: string): HTMLButtonElement =>
+      Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === text,
+      ) as HTMLButtonElement;
+
+    const availabilityOf = (publicId: string) =>
+      httpMock.expectOne((r) =>
+        r.url.endsWith(`/api/v1/customer/appointments/${publicId}/availability`),
+      );
+
+    it('offers the open slots of the booking and moves it', async () => {
+      fixture.detectChanges();
+      // The first booking's button (Alice with Alex).
+      buttonWith('Reschedule').click();
+      fixture.detectChanges();
+
+      // Today (Wed 15 July, 12:00) is the first open day; the slots the server refuses for this
+      // booking (its barber and booked length) are excluded.
+      const busy = availabilityOf('pub-1');
+      expect(busy.request.method).toBe('GET');
+      expect(busy.request.params.get('bookingDate')).toBe('2026-07-15');
+      busy.flush(['13:00']);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(buttonWith('1:00 PM')).toBeUndefined();
+      expect(buttonWith('11:00 AM')).toBeUndefined();
+      buttonWith('2:00 PM').click();
+      fixture.detectChanges();
+      buttonWith('Save new time').click();
+
+      const move = httpMock.expectOne((r) =>
+        r.url.endsWith('/api/v1/customer/appointments/pub-1/reschedule'),
+      );
+      expect(move.request.method).toBe('PUT');
+      expect(move.request.body).toEqual({ bookingDate: '2026-07-15', bookingTime: '14:00' });
+      move.flush({
+        ...mockAppointments.content[0]!,
+        bookingDate: '2026-07-15',
+        bookingTime: '14:00',
+      });
+      fixture.detectChanges();
+      httpMock
+        .expectOne((r) => r.url.includes('/api/v1/customer/appointments') && r.method === 'GET')
+        .flush(mockAppointments);
+      await fixture.whenStable();
+
+      expect(TestBed.inject(FlashMessages).successMessage()).toContain('Appointment moved');
+      expect(component['reschedulingPublicId']()).toBeNull();
+    });
+
+    it('shows why the availability could not be loaded', async () => {
+      component['openReschedule']('pub-1');
+      fixture.detectChanges();
+      availabilityOf('pub-1').flush(
+        { message: 'Only future pending or approved appointments can be rescheduled.' },
+        { status: 409, statusText: 'Conflict' },
+      );
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const alert = (fixture.nativeElement as HTMLElement).querySelector(
+        'app-reschedule-picker [role="alert"]',
+      );
+      expect(alert?.textContent).toContain(
+        'Only future pending or approved appointments can be rescheduled.',
+      );
+      expect(buttonWith('Retry')).toBeDefined();
+    });
+
+    it('reports a refused move on the banner and keeps the picker open', async () => {
+      component['openReschedule']('pub-1');
+      fixture.detectChanges();
+      availabilityOf('pub-1').flush([]);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      buttonWith('3:00 PM').click();
+      fixture.detectChanges();
+      buttonWith('Save new time').click();
+      httpMock
+        .expectOne((r) => r.url.endsWith('/api/v1/customer/appointments/pub-1/reschedule'))
+        .flush(
+          { message: 'The selected slot is already booked or unavailable.' },
+          { status: 409, statusText: 'x' },
+        );
+      await fixture.whenStable();
+
+      expect(TestBed.inject(FlashMessages).errorMessage()).toBe(
+        'The selected slot is already booked or unavailable.',
+      );
+      expect(component['reschedulingPublicId']()).toBe('pub-1');
+    });
+
+    it('reports a failed calendar export instead of failing silently', () => {
+      component.customerStore.exportCalendar('pub-2');
+      httpMock
+        .expectOne((r) => r.url.endsWith('/api/v1/customer/appointments/pub-2/calendar'))
+        .flush(null, { status: 500, statusText: 'x' });
+
+      expect(TestBed.inject(FlashMessages).errorMessage()).toBe(
+        'Failed to export the calendar file. Please try again.',
+      );
+      expect(component.customerStore.exportingId()).toBeNull();
+    });
   });
 
   describe('cancelled bookings and booking entry (CANCELLED, FE-7)', () => {

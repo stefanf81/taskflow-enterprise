@@ -88,7 +88,16 @@ public interface NotificationOutboxRepository extends JpaRepository<Notification
                             @Param("claimedBy") String claimedBy,
                             @Param("claimedAt") LocalDateTime claimedAt,
                             @Param("retryCount") int retryCount,
-                            @Param("nextAttemptAt") LocalDateTime nextAttemptAt);
+                             @Param("nextAttemptAt") LocalDateTime nextAttemptAt);
+
+    /** Return an unstarted claim without charging a delivery attempt; never touch a newer claim. */
+    @Transactional
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE NotificationOutbox n SET n.status = 'PENDING', n.claimedAt = NULL, n.claimedBy = NULL " +
+            "WHERE n.id = :id AND n.status = 'PROCESSING' AND n.claimedBy = :claimedBy AND n.claimedAt = :claimedAt")
+    int releaseIfClaimed(@Param("id") Long id,
+                         @Param("claimedBy") String claimedBy,
+                         @Param("claimedAt") LocalDateTime claimedAt);
 
     /** Retention: deletes delivered rows enqueued before the cutoff. Returns the number deleted. */
     @Transactional

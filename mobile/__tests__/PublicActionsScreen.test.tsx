@@ -19,6 +19,14 @@ jest.mock('../src/features/landing/PublicReviewModal', () => ({
     visible ? <>{null}</> : null,
 }));
 
+let mockRescheduleVisible = false;
+jest.mock('../src/features/landing/PublicRescheduleModal', () => ({
+  PublicRescheduleModal: ({ visible }: { visible: boolean }) => {
+    mockRescheduleVisible = visible;
+    return null;
+  },
+}));
+
 describe('PublicActionsScreen', () => {
   it('renders the manage booking screen', async () => {
     const { getByText } = await render(<PublicActionsScreen />);
@@ -40,5 +48,13 @@ describe('PublicActionsScreen', () => {
   it('renders subtitle with self-service instructions', async () => {
     const { getByText } = await render(<PublicActionsScreen />);
     expect(getByText(/Self-service options/)).toBeTruthy();
+  });
+
+  it('offers rescheduling as its own action', async () => {
+    const { getByText } = await render(<PublicActionsScreen />);
+    expect(getByText('Reschedule Appointment')).toBeTruthy();
+    expect(mockRescheduleVisible).toBe(false);
+    await fireEvent.press(getByText('Reschedule an Appointment'));
+    expect(mockRescheduleVisible).toBe(true);
   });
 });

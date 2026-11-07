@@ -46,6 +46,14 @@
       Overdue
     </button>
     <button
+      (click)="setFilter('denied')"
+      [class.bg-zinc-950]="selectedFilter() === 'denied'"
+      [class.text-gold]="selectedFilter() === 'denied'"
+      class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100"
+    >
+      Denied
+    </button>
+    <button
       (click)="setFilter('cancelled')"
       [class.bg-zinc-950]="selectedFilter() === 'cancelled'"
       [class.text-gold]="selectedFilter() === 'cancelled'"
@@ -71,7 +79,7 @@
       </button>
     </div>
   } @else if (isLoading() && appointments().length === 0) {
-    <!-- Only when there is nothing to show yet: a refresh (SSE event, approve/deny/delete) keeps
+    <!-- Only when there is nothing to show yet: a refresh (SSE event, approve/deny/cancel) keeps
          the current rows, so focus and scroll position survive it. -->
     <div class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20">
       <span class="text-3xl block mb-2 animate-pulse">⏳</span>
@@ -165,6 +173,7 @@
             <button
               class="flex-1 btn btn-submit py-1.5 text-xs text-center"
               (click)="approveAppointment(appt.id)"
+              [disabled]="pendingIds().has(appt.id)"
               title="Approve booking"
             >
               Approve
@@ -172,6 +181,7 @@
             <button
               class="flex-1 btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-600 hover:text-white py-1.5 text-xs text-center"
               (click)="denyAppointment(appt.id)"
+              [disabled]="pendingIds().has(appt.id)"
               title="Decline booking"
             >
               Deny
@@ -181,6 +191,7 @@
             <button
               class="flex-1 btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-600 hover:text-white py-1.5 text-xs text-center"
               (click)="denyAppointment(appt.id)"
+              [disabled]="pendingIds().has(appt.id)"
               title="Revoke and Decline booking"
             >
               Deny
@@ -190,31 +201,33 @@
             <button
               class="flex-1 btn btn-submit py-1.5 text-xs text-center"
               (click)="approveAppointment(appt.id)"
+              [disabled]="pendingIds().has(appt.id)"
               title="Approve declined booking"
             >
               Approve
             </button>
           }
-          <button
-            class="action-btn btn-delete mx-auto md:mx-0 mt-1"
-            (click)="deleteAppointment(appt.id)"
-            title="Permanently delete booking"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width="2"
-              stroke="currentColor"
-              class="w-4 h-4"
+          @if (appt.status === 'PENDING' || appt.status === 'APPROVED') {
+            <button
+              class="action-btn btn-delete mx-auto md:mx-0 mt-1"
+              (click)="cancelAppointment(appt.id)"
+              [disabled]="pendingIds().has(appt.id)"
+              title="Cancel booking"
+              aria-label="Cancel booking"
             >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-              />
-            </svg>
-          </button>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="2"
+                stroke="currentColor"
+                class="w-4 h-4"
+                aria-hidden="true"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" d="m6 6 12 12M6 18 18 6" />
+              </svg>
+            </button>
+          }
         </div>
       </div>
     }

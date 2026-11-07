@@ -3,6 +3,7 @@ import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 
 import com.example.taskflow.appointment.AppointmentDetails;
 import com.example.taskflow.appointment.AppointmentCancelledEvent;
+import com.example.taskflow.appointment.AppointmentRescheduledEvent;
 import com.example.taskflow.appointment.AppointmentStatusChangedEvent;
 import com.example.taskflow.core.LogSanitizer;
 import org.slf4j.Logger;
@@ -76,6 +77,33 @@ public class NotificationOutboxWriter {
             outboxRepository.save(outbox);
         } catch (Exception e) {
             logger.error("Failed to enqueue cancellation notification: {}", LogSanitizer.safeMessage(e));
+            throw new RuntimeException("Failed to enqueue notification", e);
+        }
+    }
+
+    @EventListener
+    public void handleAppointmentRescheduled(AppointmentRescheduledEvent event) {
+        AppointmentDetails updated = event.appointment();
+        try {
+            String name = safe(updated.customerName());
+            String barber = safe(updated.barberName());
+            String service = safe(updated.serviceType());
+            String date = updated.bookingDate() != null ? updated.bookingDate().toString() : "";
+            String time = safe(updated.bookingTime());
+            if (time.length() > 5) {
+                time = time.substring(0, 5);
+            }
+            String message = String.format(
+                    "Subject: Appointment RESCHEDULED - Dear %s, your %s appointment with %s has been moved to %s at %s and is pending confirmation.",
+                    name, service, barber, date, time);
+            outboxRepository.save(new NotificationOutbox(
+                    safe(updated.customerEmail()),
+                    "EMAIL",
+                    message,
+                    now(),
+                    "PENDING"));
+        } catch (Exception e) {
+            logger.error("Failed to enqueue reschedule notification: {}", LogSanitizer.safeMessage(e));
             throw new RuntimeException("Failed to enqueue notification", e);
         }
     }

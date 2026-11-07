@@ -12,7 +12,14 @@ import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { ErrorMessage } from '../../components/common/ErrorMessage';
 import { LoadingIndicator } from '../../components/common/LoadingIndicator';
-import { useAdminBarbers, useBarberTimeOff, useAddTimeOff } from '../../core/barbers/useBarbers';
+import {
+  useAdminBarbers,
+  useBarberTimeOff,
+  useAddTimeOff,
+  useBarberSchedule,
+} from '../../core/barbers/useBarbers';
+import { AddBarberCard } from './AddBarberCard';
+import { WeeklyHoursEditor } from './WeeklyHoursEditor';
 import { colors } from '../../theme/colors';
 
 export const AdminSchedulesScreen: React.FC = () => {
@@ -21,6 +28,9 @@ export const AdminSchedulesScreen: React.FC = () => {
 
   const { data: timeOffs = [], isLoading: loadingTimeOff } = useBarberTimeOff(selectedBarberId);
   const addTimeOffMutation = useAddTimeOff();
+  const schedule = useBarberSchedule(selectedBarberId);
+  // Messages of the barber and weekly-hours actions (they outlive the editor's remount).
+  const [staffMessage, setStaffMessage] = useState<{ error?: string; success?: string }>({});
 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -70,8 +80,15 @@ export const AdminSchedulesScreen: React.FC = () => {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <Text style={styles.badgeLabel}>STAFF & SCHEDULES</Text>
-          <Text style={styles.title}>Barber Time-Off</Text>
+          <Text style={styles.title}>Barbers, Hours & Time-Off</Text>
         </View>
+
+        <ErrorMessage message={staffMessage.error || ''} />
+        {staffMessage.success ? (
+          <Text style={styles.success} accessibilityRole="alert">
+            {staffMessage.success}
+          </Text>
+        ) : null}
 
         {loadingBarbers ? (
           <LoadingIndicator message="Loading staff..." />
@@ -92,6 +109,30 @@ export const AdminSchedulesScreen: React.FC = () => {
                 );
               })}
             </ScrollView>
+
+            {/* Weekly hours of the selected barber; remounted per barber and revision. */}
+            {selectedBarberId !== null &&
+              (schedule.isError ? (
+                <Card style={styles.emptyCard}>
+                  <Text style={styles.emptyText}>Could not load the weekly hours.</Text>
+                  <Button
+                    title="Retry"
+                    variant="secondary"
+                    size="sm"
+                    onPress={() => void schedule.refetch()}
+                    style={{ marginTop: 8 }}
+                  />
+                </Card>
+              ) : schedule.data && schedule.data.revision ? (
+                <WeeklyHoursEditor
+                  key={`${selectedBarberId}:${schedule.data.revision}`}
+                  barberId={selectedBarberId}
+                  schedule={schedule.data}
+                  onMessage={setStaffMessage}
+                />
+              ) : (
+                <LoadingIndicator message="Loading weekly hours..." />
+              ))}
 
             {/* Time Off List */}
             <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Scheduled Absences</Text>
@@ -146,6 +187,11 @@ export const AdminSchedulesScreen: React.FC = () => {
                 style={{ marginTop: 8 }}
               />
             </Card>
+
+            <AddBarberCard
+              onCreated={(barber) => setSelectedBarberId(barber.id)}
+              onMessage={setStaffMessage}
+            />
           </>
         )}
       </ScrollView>
@@ -239,6 +285,11 @@ const styles = StyleSheet.create({
     color: colors.gold.main,
     fontSize: 16,
     fontWeight: '700',
+    marginBottom: 12,
+  },
+  success: {
+    color: colors.status.approved,
+    fontSize: 13,
     marginBottom: 12,
   },
 });

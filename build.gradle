@@ -60,6 +60,7 @@ dependencyAnalysis {
 				exclude(libs.spring.boot.starter.data.jpa)
 				exclude(libs.spring.boot.starter.data.redis)
 				exclude(libs.spring.boot.starter.flyway)
+				exclude(libs.spring.boot.starter.mail)
 				exclude(libs.spring.boot.starter.oauth2.resource.server)
 				exclude(libs.spring.boot.starter.security)
 				exclude(libs.spring.boot.starter.validation)
@@ -135,6 +136,7 @@ dependencies {
 	implementation libs.spring.boot.starter.actuator
 	implementation libs.spring.boot.starter.cache
 	implementation libs.spring.boot.starter.data.redis
+	implementation libs.spring.boot.starter.mail
 	// Generates META-INF/spring-configuration-metadata.json for the app.* @ConfigurationProperties
 	// records (IDE completion, and PropertyKeysMetadataTest checks the app.* keys against it).
 	annotationProcessor libs.spring.boot.configuration.processor

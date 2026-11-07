@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useIsFocused } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -28,11 +29,14 @@ import { useAuthStore } from '../../core/auth/useAuthStore';
 import { useShallow } from 'zustand/react/shallow';
 import { colors } from '../../theme/colors';
 import { formatTime12Hour, isOverdue } from '../../utils/time-utils';
+import { useShopInfo } from '../../core/shop/useShopInfo';
+import { useNow } from '../booking/useNow';
 import { getApiErrorMessage } from '../../utils/errors';
 
 const FILTERS = ['all', 'pending', 'approved', 'overdue', 'denied', 'cancelled'];
 
 export const AdminDashboardScreen: React.FC = () => {
+  const isFocused = useIsFocused();
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
@@ -45,10 +49,24 @@ export const AdminDashboardScreen: React.FC = () => {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading, isError, refetch } = useAppointments(filter, debouncedSearch, page, 10);
+  const { data, isLoading, isError, isSuccess, isPlaceholderData, isFetching, refetch } =
+    useAppointments(filter, debouncedSearch, page, 10, { subscribed: isFocused });
   const updateStatusMutation = useUpdateAppointmentStatus();
   const deleteMutation = useDeleteAppointment();
+  const { timeZone } = useShopInfo();
+  const now = useNow(60_000, timeZone);
+  const actionLocks = useRef(new Set<number>());
+  const syncingRef = useRef(false);
+  const [busyIds, setBusyIds] = useState<number[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
   const { logout } = useAuthStore(useShallow((state) => ({ logout: state.logout })));
+
+  useEffect(() => {
+    // Previous-page placeholders and an in-flight refresh are not authoritative metadata.
+    if (!isFocused || !isSuccess || isPlaceholderData || isFetching || !data) return;
+    const lastPage = Math.max(0, data.page.page.totalPages - 1);
+    if (page > lastPage) setPage(lastPage);
+  }, [data, isFocused, isSuccess, isPlaceholderData, isFetching, page]);
 
   // Auto-dismissing success/error banners
   const { successMessage, errorMessage, showSuccess, showError, dismissSuccess } =
@@ -62,51 +80,91 @@ export const AdminDashboardScreen: React.FC = () => {
     }
   };
 
-  const handleApprove = (id: number) => {
-    updateStatusMutation.mutate(
-      { id, status: 'APPROVED' },
-      {
-        onSuccess: () => {
-          showSuccess('Appointment APPROVED! Client notification email dispatched.');
+  const handleSync = () => {
+    if (syncingRef.current || isSyncing) return;
+    syncingRef.current = true;
+    setIsSyncing(true);
+    dismissSuccess();
+    void Promise.resolve()
+      .then(() => refetch({ throwOnError: true }))
+      .then(
+        () => {
+          syncingRef.current = false;
+          setIsSyncing(false);
+          showSuccess('Database synced.');
         },
-        onError: (err) => showError(getApiErrorMessage(err, 'Failed to approve appointment.')),
-      },
-    );
+        (err: unknown) => {
+          syncingRef.current = false;
+          setIsSyncing(false);
+          showError(getApiErrorMessage(err, 'Failed to sync appointments. Please try again.'));
+        },
+      );
   };
 
-  const handleDeny = (id: number) => {
-    updateStatusMutation.mutate(
-      { id, status: 'DENIED' },
-      {
-        onSuccess: () => {
-          showSuccess('Appointment DECLINED. Client notification email dispatched.');
+  const runAction = (
+    id: number,
+    action: () => Promise<unknown>,
+    success: string,
+    fallback: string,
+  ) => {
+    // The ref closes the gap before React renders the disabled row. Each row has its own lock.
+    if (actionLocks.current.has(id)) return;
+    actionLocks.current.add(id);
+    setBusyIds((ids) => [...ids, id]);
+    const unlock = () => {
+      actionLocks.current.delete(id);
+      setBusyIds((ids) => ids.filter((busyId) => busyId !== id));
+    };
+    void Promise.resolve()
+      .then(action)
+      .then(
+        () => {
+          unlock();
+          showSuccess(success);
         },
-        onError: (err) => showError(getApiErrorMessage(err, 'Failed to decline appointment.')),
-      },
-    );
+        (err: unknown) => {
+          unlock();
+          showError(getApiErrorMessage(err, fallback));
+        },
+      );
   };
 
-  const handleDelete = (id: number) => {
-    Alert.alert('Delete Booking', 'Are you sure you want to permanently delete this booking?', [
-      { text: 'Cancel', style: 'cancel' },
+  const handleApprove = (id: number) => runAction(
+    id,
+    () => updateStatusMutation.mutateAsync({ id, status: 'APPROVED' }),
+    'Appointment APPROVED! Client notification email queued.',
+    'Failed to approve appointment.',
+  );
+
+  const handleDeny = (id: number) => runAction(
+    id,
+    () => updateStatusMutation.mutateAsync({ id, status: 'DENIED' }),
+    'Appointment DECLINED. Client notification email queued.',
+    'Failed to decline appointment.',
+  );
+
+  const handleCancel = (id: number) => {
+    const appointment = data?.page.content.find((item) => item.id === id);
+    if (actionLocks.current.has(id) ||
+      (appointment?.status !== 'PENDING' && appointment?.status !== 'APPROVED')) return;
+    Alert.alert('Cancel Booking', 'Are you sure you want to cancel this booking?', [
+      { text: 'Keep Booking', style: 'cancel' },
       {
-        text: 'Delete',
+        text: 'Cancel Booking',
         style: 'destructive',
-        onPress: () => {
-          deleteMutation.mutate(id, {
-            onSuccess: () => {
-              showSuccess('Booking permanently deleted.');
-            },
-            onError: (err) => showError(getApiErrorMessage(err, 'Failed to delete booking.')),
-          });
-        },
+        onPress: () => { void runAction(
+          id,
+          () => deleteMutation.mutateAsync(id),
+          'Booking cancelled.',
+          'Failed to cancel booking.',
+        ); },
       },
     ]);
   };
 
   const appointments = data?.page?.content || [];
   const stats = data?.stats;
-  const totalPages = data?.page?.page?.totalPages || 1;
+  const totalPages = data?.page?.page?.totalPages ?? 0;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -118,7 +176,7 @@ export const AdminDashboardScreen: React.FC = () => {
             <Text style={styles.title}>Owner Panel</Text>
           </View>
           <View style={styles.headerActions}>
-            <TouchableOpacity onPress={() => { refetch(); showSuccess('Database synced.'); }} style={styles.syncBtn} accessibilityLabel="Sync">
+            <TouchableOpacity onPress={handleSync} disabled={isSyncing} style={styles.syncBtn} accessibilityLabel="Sync" accessibilityState={{ disabled: isSyncing, busy: isSyncing }}>
               <Ionicons name="refresh-outline" size={18} color={colors.gold.main} />
             </TouchableOpacity>
             <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn} accessibilityLabel="Logout">
@@ -228,18 +286,24 @@ export const AdminDashboardScreen: React.FC = () => {
             ) : isLoading ? (
               <LoadingIndicator message="Loading bookings..." />
             ) : appointments.length === 0 ? (
-              <EmptyState
-                icon="clipboard-outline"
-                title="No Appointments Found"
-                message="No records match your filter criteria."
-              />
+              <View>
+                <EmptyState
+                  icon="clipboard-outline"
+                  title="No Appointments Found"
+                  message="No records match your filter criteria."
+                />
+                {page > 0 && (
+                  <Button title="Back to first page" variant="secondary" onPress={() => setPage(0)} />
+                )}
+              </View>
             ) : (
               <FlatList
                 data={appointments}
                 keyExtractor={(item) => item.id.toString()}
                 contentContainerStyle={styles.listContent}
                 renderItem={({ item }) => {
-                  const overdue = item.status === 'PENDING' && isOverdue(item.bookingDate);
+                  const overdue = item.status === 'PENDING' && isOverdue(item.bookingDate, now);
+                  const isBusy = busyIds.includes(item.id);
                   // Cancelled bookings are final: no approve/decline actions.
                   const isCancelled = item.status.toUpperCase() === 'CANCELLED';
                   return (
@@ -282,7 +346,8 @@ export const AdminDashboardScreen: React.FC = () => {
                             title="Approve"
                             variant="primary"
                             size="sm"
-                            onPress={() => handleApprove(item.id)}
+                             onPress={() => handleApprove(item.id)}
+                             disabled={isBusy}
                             style={styles.actionBtn}
                           />
                         )}
@@ -291,17 +356,19 @@ export const AdminDashboardScreen: React.FC = () => {
                             title="Decline"
                             variant="danger"
                             size="sm"
-                            onPress={() => handleDeny(item.id)}
+                             onPress={() => handleDeny(item.id)}
+                             disabled={isBusy}
                             style={styles.actionBtn}
                           />
                         )}
-                        <Button
-                          title="Delete"
+                        {(item.status === 'PENDING' || item.status === 'APPROVED') && <Button
+                          title="Cancel"
                           variant="secondary"
                           size="sm"
-                          onPress={() => handleDelete(item.id)}
+                          onPress={() => handleCancel(item.id)}
+                          disabled={isBusy}
                           style={styles.actionBtn}
-                        />
+                        />}
                       </View>
                     </Card>
                   );

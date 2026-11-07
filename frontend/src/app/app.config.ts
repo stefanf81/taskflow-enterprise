@@ -1,24 +1,34 @@
 import {
   ApplicationConfig,
+  ErrorHandler,
   inject,
   provideAppInitializer,
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
 import { provideClientHydration } from '@angular/platform-browser';
 import { provideHttpClient, withInterceptors, withXsrfConfiguration } from '@angular/common/http';
-import { provideRouter, withInMemoryScrolling, withViewTransitions } from '@angular/router';
-import { catchError, of, retry, timeout } from 'rxjs';
+import {
+  NavigationEnd,
+  Router,
+  provideRouter,
+  withInMemoryScrolling,
+  withViewTransitions,
+} from '@angular/router';
+import { catchError, filter, firstValueFrom, map, of, retry, take, timeout } from 'rxjs';
 
 import { authInterceptor } from './core/auth/auth.interceptor';
 import { AuthApi } from './core/api/auth-api';
 import { requestTimeoutInterceptor } from './core/http/request-timeout.interceptor';
 import { isServerRender } from './core/platform';
+import { telemetryRoute } from './core/telemetry/client-telemetry';
+import { TelemetryErrorHandler, TelemetryService } from './core/telemetry/telemetry.service';
 import { routes } from './app.routes';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     // Surface uncaught errors (including from effects) to the browser console.
     provideBrowserGlobalErrorListeners(),
+    { provide: ErrorHandler, useClass: TelemetryErrorHandler },
     // No change-detection provider: Angular 22 bootstraps zoneless and components default to
     // OnPush (`ChangeDetectionStrategy.Eager` would opt one out).
 
@@ -59,6 +69,21 @@ export const appConfig: ApplicationConfig = {
     // Not while prerendering: there is no backend at build time.
     provideAppInitializer(() => {
       if (isServerRender()) return;
+      const router = inject(Router);
+      // CONFIG route templates only (never router.url), read when a value is recorded. The
+      // initializer runs before the first navigation, so the page-load vitals wait for it.
+      const currentRoute = () =>
+        telemetryRoute(router.routerState.snapshot.root.firstChild?.routeConfig?.path ?? '');
+      inject(TelemetryService).start(
+        currentRoute,
+        firstValueFrom(
+          router.events.pipe(
+            filter((event) => event instanceof NavigationEnd),
+            take(1),
+            map(currentRoute),
+          ),
+        ),
+      );
       inject(AuthApi)
         .fetchCsrfToken()
         .pipe(

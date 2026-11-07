@@ -132,6 +132,18 @@ class SecurityAuthorizationIntegrationTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/barbers/1/time-off").header("Authorization", customerToken))
                 .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/barbers/1/schedule").header("Authorization", customerToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/barbers/1/schedule/preview")
+                        .header("Authorization", customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"days\":[],\"expectedRevision\":\"r\",\"cancelConflictingAppointments\":false}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/barbers/1/schedule")
+                        .header("Authorization", customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"days\":[],\"expectedRevision\":\"r\",\"cancelConflictingAppointments\":false}"))
+                .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/barbers")
                         .header("Authorization", customerToken)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -220,6 +232,8 @@ class SecurityAuthorizationIntegrationTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(head("/api/v1/barbers/1/time-off").header("Authorization", customerToken))
                 .andExpect(status().isForbidden());
+        mockMvc.perform(head("/api/v1/barbers/1/schedule").header("Authorization", customerToken))
+                .andExpect(status().isForbidden());
         mockMvc.perform(head("/api/v1/catalog/retired").header("Authorization", customerToken))
                 .andExpect(status().isForbidden());
     }
@@ -228,6 +242,9 @@ class SecurityAuthorizationIntegrationTest {
     void head_shouldRequireAuthenticationForAnonymous() throws Exception {
         mockMvc.perform(head("/api/v1/appointments")).andExpect(status().isUnauthorized());
         mockMvc.perform(head("/api/v1/barbers/admin")).andExpect(status().isUnauthorized());
+        mockMvc.perform(head("/api/v1/barbers/1/schedule")).andExpect(status().isUnauthorized());
+        mockMvc.perform(head("/api/v1/customer/appointments/00000000-0000-0000-0000-000000000001/calendar"))
+                .andExpect(status().isUnauthorized());
         mockMvc.perform(head("/api/v1/catalog/retired")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/v1/catalog/retired")).andExpect(status().isUnauthorized());
     }
@@ -264,6 +281,71 @@ class SecurityAuthorizationIntegrationTest {
         mockMvc.perform(patch("/api/v1/appointments/1").header("Authorization", adminToken))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/does-not-exist")).andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * Self-service, session renewal and telemetry: the guest variants are public and
+     * CSRF-exempt (an unknown booking answers 404, never 401/403), the customer variants need
+     * a session, browser renewal keeps its CSRF check, and telemetry accepts anonymous posts only.
+     */
+    @Test
+    void selfServiceRenewalAndTelemetry_haveTheirIntendedAccessRules() throws Exception {
+        String unknown = "00000000-0000-0000-0000-000000000001";
+        mockMvc.perform(post("/api/v1/appointments/public/calendar/" + unknown)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"jane@example.com\"}"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(put("/api/v1/appointments/public/reschedule/" + unknown)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"jane@example.com\",\"bookingDate\":\"2030-05-16\",\"bookingTime\":\"10:00\"}"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/v1/appointments/public/reschedule/" + unknown + "/availability")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"jane@example.com\",\"bookingDate\":\"2030-05-16\"}"))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/api/v1/customer/appointments/" + unknown + "/calendar"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/customer/appointments/" + unknown + "/availability")
+                        .param("bookingDate", "2030-05-16"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(head("/api/v1/customer/appointments/" + unknown + "/availability")
+                        .param("bookingDate", "2030-05-16"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/customer/appointments/" + unknown + "/availability")
+                        .param("bookingDate", "2030-05-16")
+                        .header("Authorization", customerToken))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(put("/api/v1/customer/appointments/" + unknown + "/reschedule")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookingDate\":\"2030-05-16\",\"bookingTime\":\"10:00\"}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/customer/appointments/" + unknown + "/calendar")
+                        .header("Authorization", customerToken))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(put("/api/v1/customer/appointments/" + unknown + "/reschedule")
+                        .header("Authorization", customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookingDate\":\"2030-05-16\",\"bookingTime\":\"10:00\"}"))
+                .andExpect(status().isNotFound());
+
+        // Renewal authenticates the refresh credential itself, so it is permitted; an unknown one is a 401.
+        mockMvc.perform(post("/api/v1/auth/mobile/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + "x".repeat(43) + "\"}"))
+                .andExpect(status().isUnauthorized());
+        // The browser variant runs on an ambient cookie and keeps the double-submit check.
+        mockMvc.perform(post("/api/v1/auth/refresh").cookie(new Cookie("refresh_token", "x".repeat(43))))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/v1/telemetry")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"platform\":\"WEB\",\"route\":\"LANDING\",\"name\":\"LCP\",\"value\":1200}"))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/v1/telemetry")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/telemetry").header("Authorization", customerToken))
+                .andExpect(status().isForbidden());
     }
 
     @Test

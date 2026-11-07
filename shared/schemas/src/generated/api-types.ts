@@ -68,6 +68,11 @@ export interface BarberResponse {
   phone: string;
 }
 
+export interface BarberScheduleResponse {
+  days: ScheduleDay[];
+  revision: string;
+}
+
 export interface BarberTimeOffRequest {
   endDate: string;
   reason?: string;
@@ -81,8 +86,24 @@ export interface BarberTimeOffResponse {
   startDate: string;
 }
 
+export interface CalendarExportRequest {
+  email: string;
+}
+
+export interface CalendarExportResponse {
+  content: string;
+  filename: string;
+}
+
 export interface CancelRequest {
   email: string;
+}
+
+export interface ClientTelemetryEvent {
+  name?: "LCP" | "FCP" | "CLS" | "INP" | "SCREEN_LOAD" | "JS_ERROR" | "UNHANDLED_REJECTION" | "RENDER_ERROR";
+  platform?: "WEB" | "MOBILE";
+  route?: "LANDING" | "BOOKING" | "CUSTOMER" | "ADMIN" | "AUTH" | "OTHER";
+  value?: number;
 }
 
 export interface CsrfToken {
@@ -92,12 +113,22 @@ export interface CsrfToken {
 }
 
 export interface ErrorResponse {
+  detail: string;
   error: string;
+  instance: string;
   message: string;
   path: string;
   status: number;
   timestamp: string;
+  title: string;
+  type: string;
   validationErrors?: ValidationError[];
+}
+
+export interface GuestRescheduleRequest {
+  bookingDate: string;
+  bookingTime: string;
+  email: string;
 }
 
 export interface LoginRequest {
@@ -113,6 +144,7 @@ export interface LoginResponse {
 export interface MobileLoginResponse {
   accessToken: string;
   expiresIn: number;
+  refreshToken?: string;
   role: "ROLE_ADMIN" | "ROLE_CUSTOMER";
   tokenType: "Bearer";
   username: string;
@@ -151,6 +183,10 @@ export interface PublicBarberResponse {
   name: string;
 }
 
+export interface RefreshRequest {
+  refreshToken: string;
+}
+
 export interface RegisterRequest {
   email: string;
   fullName: string;
@@ -162,10 +198,38 @@ export interface RegisterResponse {
   message: string;
 }
 
+export interface RescheduleAvailabilityRequest {
+  bookingDate: string;
+  email: string;
+}
+
+export interface RescheduleRequest {
+  bookingDate: string;
+  bookingTime: string;
+}
+
 export interface ReviewRequest {
   comment?: string;
   customerEmail: string;
   rating: number;
+}
+
+export interface ScheduleChangeRequest {
+  cancelConflictingAppointments?: boolean;
+  days: ScheduleDay[];
+  expectedConflicts?: string;
+  expectedRevision: string;
+}
+
+export interface ScheduleDay {
+  closes: string;
+  dayOfWeek: number;
+  opens: string;
+}
+
+export interface SchedulePreviewResponse {
+  conflictCount: number;
+  conflictsRevision: string;
 }
 
 export interface ServiceItemRequest {

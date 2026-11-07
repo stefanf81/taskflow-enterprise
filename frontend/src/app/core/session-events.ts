@@ -32,15 +32,29 @@ export class SessionEvents {
    */
   readonly sessionStarted: Observable<void> = this.sessionStartedSubject.asObservable();
 
+  private currentEpoch = 0;
+
+  /**
+   * Counts the sign-ins and sign-outs in this tab (a renewal or a boot-time restore continues the
+   * same session and does not count). Work started under one value describes a session that no
+   * longer exists here once the value has moved on: a request's late 401 must not end a newer
+   * login, and a renewal it started must neither apply its result nor replay the request.
+   */
+  epoch(): number {
+    return this.currentEpoch;
+  }
+
   notifyUnauthorized(): void {
     this.unauthorizedSubject.next();
   }
 
   notifySessionEnded(): void {
+    this.currentEpoch++;
     this.sessionEndedSubject.next();
   }
 
   notifySessionStarted(): void {
+    this.currentEpoch++;
     this.sessionStartedSubject.next();
   }
 }

@@ -131,7 +131,7 @@ const TYPE_OVERRIDES = {
   AppointmentUpdateRequest: "{\n  status: 'APPROVED' | 'DENIED';\n}",
   LoginResponse: "{\n  role: 'ROLE_ADMIN' | 'ROLE_CUSTOMER';\n  username: string;\n}",
   MobileLoginResponse:
-    "{\n  accessToken: string;\n  expiresIn: number;\n  role: 'ROLE_ADMIN' | 'ROLE_CUSTOMER';\n  tokenType: 'Bearer';\n  username: string;\n}",
+    "{\n  accessToken: string;\n  expiresIn: number;\n  refreshToken?: string;\n  role: 'ROLE_ADMIN' | 'ROLE_CUSTOMER';\n  tokenType: 'Bearer';\n  username: string;\n}",
 };
 
 // ---------------------------------------------------------------------------

@@ -1,12 +1,13 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { finalize } from 'rxjs';
 import { AppointmentsApi } from '../../core/api/appointments-api';
 import { FlashMessages } from '../../core/ui/flash-messages';
 import { AppointmentStore } from './appointment.store';
 import { ShopClock } from '../../core/shop-clock';
 import { formatTime12Hour, formatLocalDate, isOverdue } from '../../core/time-utils';
 
-/** Owner dashboard · appointments tab (list, filter, search, approve/deny/delete). */
+/** Owner dashboard · appointments tab (list, filter, search, approve/deny/cancel). */
 @Component({
   selector: 'app-admin-appointments-tab',
   imports: [CommonModule],
@@ -25,6 +26,7 @@ export class AdminAppointmentsTab {
   readonly totalPages = this.store.totalPages;
   protected readonly isLoading = this.store.isLoading;
   protected readonly loadErrorMessage = this.store.loadErrorMessage;
+  protected readonly pendingIds = signal<ReadonlySet<number>>(new Set());
 
   setFilter(filter: string): void {
     this.store.setFilter(filter);
@@ -51,36 +53,69 @@ export class AdminAppointmentsTab {
   }
 
   approveAppointment(id: number): void {
-    this.appointmentsApi.updateAppointmentStatus(id, 'APPROVED').subscribe({
-      next: () => {
-        this.flash.showSuccess('Appointment APPROVED! Client notification email dispatched.');
-        this.loadAppointments();
-      },
-      // 409 = invalid transition / conflict: the server's message says why.
-      error: (err) => this.flash.reportActionError(err, 'Failed to approve appointment.'),
-    });
+    if (!this.beginAction(id)) return;
+    this.appointmentsApi
+      .updateAppointmentStatus(id, 'APPROVED')
+      .pipe(finalize(() => this.finishAction(id)))
+      .subscribe({
+        next: () => {
+          this.flash.showSuccess('Appointment APPROVED! Client notification email queued.');
+          this.loadAppointments();
+        },
+        // 409 = invalid transition / conflict: the server's message says why.
+        error: (err) => this.flash.reportActionError(err, 'Failed to approve appointment.'),
+      });
   }
 
   denyAppointment(id: number): void {
-    this.appointmentsApi.updateAppointmentStatus(id, 'DENIED').subscribe({
-      next: () => {
-        this.flash.showSuccess('Appointment DECLINED. Client notification email dispatched.');
-        this.loadAppointments();
-      },
-      error: (err) => this.flash.reportActionError(err, 'Failed to decline appointment.'),
-    });
+    if (!this.beginAction(id)) return;
+    this.appointmentsApi
+      .updateAppointmentStatus(id, 'DENIED')
+      .pipe(finalize(() => this.finishAction(id)))
+      .subscribe({
+        next: () => {
+          this.flash.showSuccess('Appointment DECLINED. Client notification email queued.');
+          this.loadAppointments();
+        },
+        error: (err) => this.flash.reportActionError(err, 'Failed to decline appointment.'),
+      });
   }
 
-  deleteAppointment(id: number): void {
-    if (!confirm('Are you sure you want to permanently delete/cancel this booking?')) return;
+  cancelAppointment(id: number): void {
+    const appointment = this.appointments().find((item) => item.id === id);
+    if (
+      this.pendingIds().has(id) ||
+      (appointment?.status !== 'PENDING' && appointment?.status !== 'APPROVED')
+    ) {
+      return;
+    }
+    if (!confirm('Are you sure you want to cancel this booking?')) return;
+    if (!this.beginAction(id)) return;
 
-    this.appointmentsApi.deleteAppointment(id).subscribe({
-      next: () => {
-        this.flash.showSuccess('Booking permanently deleted.');
-        // If this emptied the last page, AppointmentStore steps back by itself.
-        this.loadAppointments();
-      },
-      error: (err) => this.flash.reportActionError(err, 'Failed to delete booking.'),
+    this.appointmentsApi
+      .deleteAppointment(id)
+      .pipe(finalize(() => this.finishAction(id)))
+      .subscribe({
+        next: () => {
+          this.flash.showSuccess('Booking cancelled.');
+          // If this emptied the last page, AppointmentStore steps back by itself.
+          this.loadAppointments();
+        },
+        error: (err) => this.flash.reportActionError(err, 'Failed to cancel booking.'),
+      });
+  }
+
+  private beginAction(id: number): boolean {
+    if (this.pendingIds().has(id)) return false;
+    this.pendingIds.update((ids) => new Set([...ids, id]));
+    return true;
+  }
+
+  private finishAction(id: number): void {
+    this.pendingIds.update((ids) => {
+      const remaining = new Set(ids);
+      remaining.delete(id);
+      return remaining;
     });
   }
 

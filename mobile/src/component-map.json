@@ -62,7 +62,16 @@
       "storeHook": {
         "web": "frontend/src/app/core/customer/customer.store.ts",
         "mobile": "mobile/src/features/customer/useCustomer.ts"
-      }
+      },
+      "reschedulePicker": {
+        "web": "frontend/src/app/core/ui/reschedule-picker.ts",
+        "mobile": "mobile/src/core/appointments/ReschedulePicker.tsx"
+      },
+      "calendarExport": {
+        "web": "frontend/src/app/core/download.ts",
+        "mobile": "mobile/src/core/calendar/shareCalendarFile.ts"
+      },
+      "rescheduleRules": "shared/domain/src/reschedule.ts"
     },
     {
       "feature": "Admin Dashboard & Management",
@@ -96,6 +105,18 @@
       "storeHook": {
         "web": "frontend/src/app/features/admin/barber.store.ts",
         "mobile": "mobile/src/core/barbers/useBarbers.ts"
+      },
+      "weeklyHoursEditor": {
+        "web": "frontend/src/app/features/admin/admin-weekly-schedule.ts",
+        "mobile": "mobile/src/features/admin/WeeklyHoursEditor.tsx"
+      },
+      "addBarber": {
+        "web": "frontend/src/app/features/admin/admin-schedules-tab.html",
+        "mobile": "mobile/src/features/admin/AddBarberCard.tsx"
+      },
+      "referenceDataRefresh": {
+        "web": "frontend/src/app/core/reference-data-events.ts",
+        "mobile": "mobile/src/core/barbers/useBarbers.ts"
       }
     },
     {
@@ -108,7 +129,7 @@
       }
     },
     {
-      "feature": "Public Guest Cancellation & Reviews",
+      "feature": "Public Guest Cancellation, Reschedule & Reviews",
       "webComponent": "frontend/src/app/features/landing/post-booking-actions/post-booking-actions.ts",
       "mobileComponent": "mobile/src/features/landing/PublicActionsScreen.tsx",
       "mobileCancelModal": "mobile/src/features/landing/PublicCancelModal.tsx",
@@ -116,6 +137,11 @@
       "storeHook": {
         "web": "frontend/src/app/core/reviews/review.store.ts",
         "mobile": "mobile/src/features/landing/useReviews.ts"
+      },
+      "mobileRescheduleModal": "mobile/src/features/landing/PublicRescheduleModal.tsx",
+      "reschedulePicker": {
+        "web": "frontend/src/app/core/ui/reschedule-picker.ts",
+        "mobile": "mobile/src/core/appointments/ReschedulePicker.tsx"
       }
     },
     {
@@ -158,7 +184,11 @@
     {
       "feature": "Receipt Modal (Booking Confirmation)",
       "webComponent": "frontend/src/app/features/booking/receipt-modal/receipt-modal.ts",
-      "mobileComponent": "mobile/src/features/booking/ReceiptModal.tsx"
+      "mobileComponent": "mobile/src/features/booking/ReceiptModal.tsx",
+      "calendarExport": {
+        "web": "frontend/src/app/core/download.ts",
+        "mobile": "mobile/src/core/calendar/shareCalendarFile.ts"
+      }
     },
     {
       "feature": "Flash Messages (alert banners)",
@@ -173,6 +203,23 @@
         "web": "frontend/src/app/core/shop-clock.ts",
         "mobile": "mobile/src/core/shop/useShopInfo.ts"
       }
+    },
+    {
+      "feature": "Session Renewal (refresh sessions, ADR-023)",
+      "description": "Web renews with the HttpOnly refresh cookie (only while the taskflow_session hint exists) on a boot-time or protected 401 and replays once; mobile rotates the SecureStore refresh token before an expired request and after a 401 of a request that carried a bearer token.",
+      "webComponent": "frontend/src/app/core/auth/auth.interceptor.ts",
+      "webState": "frontend/src/app/core/auth/auth.state.ts",
+      "webHint": "frontend/src/app/core/auth/session-hint.ts",
+      "mobileComponent": "mobile/src/api/client.ts",
+      "mobileStorage": "mobile/src/utils/storage.ts"
+    },
+    {
+      "feature": "Client Telemetry (anonymous, off by default)",
+      "webComponent": "frontend/src/app/core/telemetry/telemetry.service.ts",
+      "webClient": "frontend/src/app/core/telemetry/client-telemetry.ts",
+      "webVitals": "frontend/src/app/core/telemetry/web-vitals.ts",
+      "mobileComponent": "mobile/src/core/telemetry/appTelemetry.ts",
+      "mobileClient": "mobile/src/core/telemetry/clientTelemetry.ts"
     }
   ],
   "platformContracts": {

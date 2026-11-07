@@ -70,6 +70,7 @@ class AppointmentControllerEventStreamTest {
         assertEquals("America/New_York", response.getBody().timeZone());
         assertEquals(30, response.getBody().maxAdvanceDays());
         assertEquals(hours, response.getBody().openingHours());
-        assertEquals("max-age=300, public", response.getHeaders().getCacheControl());
+        // Public, but revalidated: an admin's schedule change must not hide behind a max-age.
+        assertEquals("no-cache, public", response.getHeaders().getCacheControl());
     }
 }

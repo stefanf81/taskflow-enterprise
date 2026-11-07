@@ -86,6 +86,7 @@ test.describe('Content-Security-Policy (nginx image)', () => {
     expect(response?.headers()['content-security-policy-report-only']).toBeUndefined();
 
     await expect(page.locator('#cancelEmail')).toBeAttached();
+    await expect(page.locator('#rescheduleEmail')).toBeAttached();
     await expect(page.locator('#reviewEmail')).toBeAttached();
     await page.getByRole('button', { name: 'Owner Portal' }).click();
     await page.locator('#username').fill('admin');
@@ -160,11 +161,12 @@ test.describe('Content-Security-Policy (nginx image)', () => {
       bypassCSP: false,
     });
     try {
-      for (const id of ['cancelEmail', 'reviewEmail']) {
+      // Every guest verification form: cancel, reschedule and review.
+      for (const id of ['cancelEmail', 'rescheduleEmail', 'reviewEmail']) {
         // Use a fresh page after each blocked navigation (Chromium leaves it pending).
         const page = await context.newPage();
         await page.goto('/');
-        await expect(page.locator('form')).toHaveCount(2);
+        await expect(page.locator('form')).toHaveCount(3);
         await page.locator(`#${id}`).fill('private@example.com');
         await expect(page.locator(`form:has(#${id})`)).toHaveAttribute('method', 'post');
         // Call native submit directly: no Angular handler or hydration can protect this path.

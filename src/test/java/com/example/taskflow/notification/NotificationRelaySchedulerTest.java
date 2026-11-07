@@ -16,12 +16,14 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.LongStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -99,17 +101,57 @@ class NotificationRelaySchedulerTest {
     void relayStopsClaimingOnceTheDrainBudgetIsUsedUp() {
         NotificationRelayScheduler noBudget = new NotificationRelayScheduler(outboxRepository, sender, selfProvider,
                 "test-instance", Clock.fixed(NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC), true, Duration.ZERO);
-        when(outboxRepository.findClaimableForUpdate(anyInt(), any(LocalDateTime.class), any(Pageable.class)))
-                .thenReturn(pendingRows(0, NotificationRelayScheduler.CLAIM_BATCH_SIZE));
-        when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
         when(outboxRepository.findStaleProcessing(any(LocalDateTime.class), any(Pageable.class)))
                 .thenReturn(List.of());
 
         noBudget.relay();
 
-        // the full batch is still sent; the rest waits for the next run
-        verify(outboxRepository, times(1)).findClaimableForUpdate(anyInt(), any(LocalDateTime.class), any(Pageable.class));
-        verify(sender, times(NotificationRelayScheduler.CLAIM_BATCH_SIZE)).process(any(NotificationSender.Claim.class));
+        verify(outboxRepository, never()).findClaimableForUpdate(anyInt(), any(LocalDateTime.class), any(Pageable.class));
+        verifyNoInteractions(sender);
+        verify(outboxRepository).findStaleProcessing(any(), any());
+    }
+
+    @Test
+    void relayStopsStartingSendsMidBatchAndReturnsUnstartedClaimsWithoutAnAttempt() {
+        AtomicLong nanos = new AtomicLong();
+        relay = new NotificationRelayScheduler(outboxRepository, sender, selfProvider, "test-instance",
+                Clock.fixed(NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC), true,
+                Duration.ofSeconds(20), nanos::get);
+        when(outboxRepository.findClaimableForUpdate(anyInt(), any(), any()))
+                .thenReturn(pendingRows(0, NotificationRelayScheduler.CLAIM_BATCH_SIZE));
+        when(outboxRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        doAnswer(invocation -> {
+            nanos.addAndGet(Duration.ofSeconds(11).toNanos());
+            return null;
+        }).when(sender).process(any(NotificationSender.Claim.class));
+        when(outboxRepository.findStaleProcessing(any(), any())).thenReturn(List.of());
+
+        relay.relay();
+
+        verify(sender, times(2)).process(any(NotificationSender.Claim.class));
+        verify(outboxRepository, times(1)).findClaimableForUpdate(anyInt(), any(), any());
+        verify(outboxRepository, times(48)).releaseIfClaimed(anyLong(), eq("test-instance"), eq(NOW));
+        verify(outboxRepository, never()).releaseIfClaimed(eq(0L), any(), any());
+        verify(outboxRepository, never()).releaseIfClaimed(eq(1L), any(), any());
+    }
+
+    @Test
+    void budgetExhaustedWhileClaimingDoesNotStartASend() {
+        AtomicLong nanos = new AtomicLong();
+        relay = new NotificationRelayScheduler(outboxRepository, sender, selfProvider, "test-instance",
+                Clock.fixed(NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC), true,
+                Duration.ofSeconds(20), nanos::get);
+        when(outboxRepository.findClaimableForUpdate(anyInt(), any(), any())).thenAnswer(invocation -> {
+            nanos.set(Duration.ofSeconds(21).toNanos());
+            return pendingRows(1, 1);
+        });
+        when(outboxRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(outboxRepository.findStaleProcessing(any(), any())).thenReturn(List.of());
+
+        relay.relay();
+
+        verifyNoInteractions(sender);
+        verify(outboxRepository).releaseIfClaimed(1L, "test-instance", NOW);
     }
 
     private static List<NotificationOutbox> pendingRows(long firstId, int count) {

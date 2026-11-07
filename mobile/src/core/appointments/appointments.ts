@@ -4,6 +4,8 @@ import {
   AppointmentDashboardResponse,
   AppointmentItem,
   AppointmentUpdateRequest,
+  CalendarExportResponse,
+  GuestRescheduleRequest,
 } from '../../types/api';
 import { parseContract, parseRequest } from '../../api/contracts';
 import {
@@ -12,6 +14,10 @@ import {
   appointmentResponseSchema,
   appointmentUpdateSchema,
   busySlotsResponseSchema,
+  calendarExportRequestSchema,
+  calendarExportResponseSchema,
+  guestRescheduleRequestSchema,
+  rescheduleAvailabilityRequestSchema,
   shopInfoResponseSchema,
   type ShopInfoResponse,
 } from '@taskflow/schemas';
@@ -97,6 +103,51 @@ export const appointmentsApi = {
     );
   },
 
+  /**
+   * The start times a signed-in customer's booking cannot move to on `bookingDate`: its own
+   * barber and booked length, the booking itself not counted (getBusySlots counts it and takes
+   * the length from today's catalog).
+   */
+  customerRescheduleAvailability: async (
+    publicId: string,
+    bookingDate: string,
+    { signal }: RequestOptions = {},
+  ): Promise<string[]> => {
+    const response = await apiClient.get<string[]>(
+      `/api/v1/customer/appointments/${encodeURIComponent(publicId)}/availability`,
+      { params: { bookingDate }, signal },
+    );
+    return parseContract(
+      busySlotsResponseSchema,
+      response.data,
+      'GET /api/v1/customer/appointments/{publicId}/availability',
+    );
+  },
+
+  /** The same answer for a guest, who proves the booking with its email (in the body, not the URL). */
+  publicRescheduleAvailability: async (
+    publicId: string,
+    email: string,
+    bookingDate: string,
+    { signal }: RequestOptions = {},
+  ): Promise<string[]> => {
+    const payload = parseRequest(
+      rescheduleAvailabilityRequestSchema,
+      { email, bookingDate },
+      'POST /api/v1/appointments/public/reschedule/{publicId}/availability',
+    );
+    const response = await apiClient.post<string[]>(
+      `/api/v1/appointments/public/reschedule/${encodeURIComponent(publicId)}/availability`,
+      payload,
+      { signal },
+    );
+    return parseContract(
+      busySlotsResponseSchema,
+      response.data,
+      'POST /api/v1/appointments/public/reschedule/{publicId}/availability',
+    );
+  },
+
   publicCancelAppointment: async (publicId: string, email: string): Promise<void> => {
     await apiClient.put(`/api/v1/appointments/public/cancel/${encodeURIComponent(publicId)}`, { email });
   },
@@ -119,5 +170,45 @@ export const appointmentsApi = {
 
   deleteAppointment: async (id: number): Promise<void> => {
     await apiClient.delete(`/api/v1/appointments/${id}`);
+  },
+
+  exportPublicCalendar: async (
+    publicId: string,
+    email: string,
+  ): Promise<CalendarExportResponse> => {
+    const payload = parseRequest(
+      calendarExportRequestSchema,
+      { email },
+      'POST /api/v1/appointments/public/calendar/{publicId}',
+    );
+    const response = await apiClient.post<CalendarExportResponse>(
+      `/api/v1/appointments/public/calendar/${encodeURIComponent(publicId)}`,
+      payload,
+    );
+    return parseContract(
+      calendarExportResponseSchema,
+      response.data,
+      'POST /api/v1/appointments/public/calendar/{publicId}',
+    );
+  },
+
+  publicRescheduleAppointment: async (
+    publicId: string,
+    data: GuestRescheduleRequest,
+  ): Promise<AppointmentItem> => {
+    const payload = parseRequest(
+      guestRescheduleRequestSchema,
+      data,
+      'PUT /api/v1/appointments/public/reschedule/{publicId}',
+    );
+    const response = await apiClient.put<AppointmentItem>(
+      `/api/v1/appointments/public/reschedule/${encodeURIComponent(publicId)}`,
+      payload,
+    );
+    return parseContract(
+      appointmentResponseSchema,
+      response.data,
+      'PUT /api/v1/appointments/public/reschedule/{publicId}',
+    );
   },
 };

@@ -5,6 +5,7 @@ import { colors } from '../../theme/colors';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
+  onError?: (error: Error) => void;
 }
 
 interface ErrorBoundaryState {
@@ -24,6 +25,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('[ErrorBoundary] Uncaught error:', error, errorInfo);
+    this.props.onError?.(error);
   }
 
   render() {

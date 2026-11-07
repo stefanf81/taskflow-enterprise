@@ -57,6 +57,10 @@ public class Appointment implements Timestamped {
     @Size(max = 100)
     private String idempotencyKey;
 
+    /** Frozen before the first write, so a late create replay still works after rescheduling. */
+    @Column(name = "creation_request_fingerprint", length = 64)
+    private String creationRequestFingerprint;
+
     @NotBlank(message = "Customer name is required")
     @Size(max = 100)
     @Column(name = "customer_name", nullable = false, length = 100)
@@ -143,6 +147,9 @@ public class Appointment implements Timestamped {
         if (this.bookingEndTime == null) {
             deriveEndTime();
         }
+        if (this.creationRequestFingerprint == null) {
+            this.creationRequestFingerprint = CreationRequestFingerprint.of(this);
+        }
     }
 
     /** Set by {@link EntityTimestampListener} (before {@link #onCreate}) from the injected Clock. */
@@ -221,6 +228,14 @@ public class Appointment implements Timestamped {
 
     public void setIdempotencyKey(String idempotencyKey) {
         this.idempotencyKey = idempotencyKey;
+    }
+
+    public String getCreationRequestFingerprint() {
+        return creationRequestFingerprint;
+    }
+
+    public void setCreationRequestFingerprint(String creationRequestFingerprint) {
+        this.creationRequestFingerprint = creationRequestFingerprint;
     }
 
     public String getCustomerName() {

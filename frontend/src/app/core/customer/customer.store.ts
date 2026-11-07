@@ -7,6 +7,9 @@ import { AppointmentsApi } from '../api/appointments-api';
 import { extractApiError } from '../api/extract-api-error';
 import { refreshResource, safeResourceValue } from '../resource-utils';
 import { SessionEvents } from '../session-events';
+import { FlashMessages } from '../ui/flash-messages';
+import { downloadTextFile, ICS_MIME_TYPE } from '../download';
+import { finalize } from 'rxjs';
 import { pagedAppointmentResponseSchema } from '@taskflow/schemas';
 
 const EMPTY_PAGE: AppointmentPage = {
@@ -62,6 +65,11 @@ export class CustomerStore {
   // cancelled). Separate from the read-only load errors above.
   readonly cancelErrorMessage = signal<string | null>(null);
   readonly isCancelling = signal<boolean>(false);
+  /** The booking whose move is in flight (one at a time), or null. */
+  readonly reschedulingId = signal<string | null>(null);
+  /** The booking whose calendar file is being fetched, or null. */
+  readonly exportingId = signal<string | null>(null);
+  private readonly flash = inject(FlashMessages);
   private readonly destroyRef = inject(DestroyRef);
 
   constructor() {
@@ -128,9 +136,72 @@ export class CustomerStore {
       });
   }
 
+  /** Saves one of the customer's bookings as an .ics file; errors go to the app-wide banner. */
+  exportCalendar(publicId: string): void {
+    if (this.exportingId()) return;
+    this.flash.errorMessage.set(null);
+    this.exportingId.set(publicId);
+    this.appointmentsApi
+      .exportCustomerCalendar(publicId)
+      .pipe(
+        finalize(() => this.exportingId.set(null)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: ({ content, filename }) => {
+          if (!downloadTextFile(content, filename, ICS_MIME_TYPE)) {
+            this.flash.errorMessage.set('This browser cannot save the calendar file.');
+          }
+        },
+        // A 401 is the session-expiry flow's job (notice + login prompt).
+        error: (err) =>
+          this.flash.reportActionError(
+            err,
+            'Failed to export the calendar file. Please try again.',
+          ),
+      });
+  }
+
+  /**
+   * Moves a booking to another slot (same barber and service; approval starts again). Resolves
+   * whether it moved; a failure is reported on the app-wide banner.
+   */
+  rescheduleAppointment(
+    publicId: string,
+    bookingDate: string,
+    bookingTime: string,
+  ): Promise<boolean> {
+    if (this.reschedulingId()) return Promise.resolve(false);
+    this.flash.errorMessage.set(null);
+    this.reschedulingId.set(publicId);
+    return new Promise<boolean>((resolve) => {
+      this.appointmentsApi
+        .rescheduleCustomerAppointment(publicId, { bookingDate, bookingTime })
+        .pipe(
+          finalize(() => this.reschedulingId.set(null)),
+          takeUntilDestroyed(this.destroyRef),
+        )
+        .subscribe({
+          next: () => {
+            this.loadAppointments();
+            resolve(true);
+          },
+          error: (err) => {
+            this.flash.reportActionError(
+              err,
+              'Failed to reschedule the appointment. Please try again.',
+            );
+            resolve(false);
+          },
+        });
+    });
+  }
+
   private resetSessionState(): void {
     this.currentPage.set(0);
     this.cancelErrorMessage.set(null);
     this.isCancelling.set(false);
+    this.reschedulingId.set(null);
+    this.exportingId.set(null);
   }
 }
