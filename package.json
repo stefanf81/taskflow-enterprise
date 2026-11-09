@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "TaskFlow Enterprise Monorepo Root Workspace",
-  "packageManager": "npm@12.2.1",
+  "packageManager": "npm@12.2.2",
   "workspaces": [
     "frontend",
     "mobile",
