@@ -6,7 +6,7 @@ const { test } = require('node:test');
 
 // Dependabot alert #89 (GHSA-g3hv-75wg-m249): globParts amplification in minimatch's
 // firstPhasePreProcess() when optimizationLevel >= 2, flagged for every version < 11.0.1.
-// The root overrides move minimatch 9/10 to 11.0.3. The 3.x/5.x copies that remain predate the
+// The root overrides move minimatch 9/10 to 11.0.5. The 3.x/5.x copies that remain predate the
 // globParts optimizer (no fixed 3.x/5.x release exists), and minimatch 11's CommonJS export is not
 // callable, so their consumers cannot be overridden. This suite keeps that assessment true.
 const repoRoot = path.resolve(__dirname, '../../..');

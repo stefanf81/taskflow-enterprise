@@ -3,10 +3,10 @@
   "workspaces": {
     ".": {
       "entry": ["k6/*.js"],
-      "ignoreDependencies": ["k6", "jsdom"]
+      "ignoreDependencies": ["k6", "jsdom", "test-renderer"]
     },
     "frontend": {
-      "entry": ["test/setup.ts", "src/app/types/api.ts"]
+      "entry": ["src/app/types/api.ts"]
     },
     "mobile": {
       "entry": [
@@ -16,7 +16,6 @@
         "e2e/jest.config.js",
         "plugins/*.js"
       ],
-      "ignoreDependencies": ["@babel/core", "expo-doctor"],
       "ignoreBinaries": ["eas"]
     },
     "shared/domain": {},

@@ -13,7 +13,6 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
@@ -55,10 +54,8 @@ class OpenApiSecurityDocumentationTest {
 
         List<String> mismatches = new ArrayList<>();
         TreeSet<String> documentedPublic = new TreeSet<>();
-        for (Iterator<Map.Entry<String, JsonNode>> paths = spec.get("paths").fields(); paths.hasNext(); ) {
-            Map.Entry<String, JsonNode> path = paths.next();
-            for (Iterator<Map.Entry<String, JsonNode>> ops = path.getValue().fields(); ops.hasNext(); ) {
-                Map.Entry<String, JsonNode> op = ops.next();
+        for (Map.Entry<String, JsonNode> path : spec.get("paths").properties()) {
+            for (Map.Entry<String, JsonNode> op : path.getValue().properties()) {
                 String operation = op.getKey().toUpperCase() + " " + path.getKey();
                 boolean markedPublic = op.getValue().has("security") && op.getValue().get("security").isEmpty();
                 if (markedPublic) {

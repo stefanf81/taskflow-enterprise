@@ -1,7 +1,7 @@
 [versions]
 spring-boot = "4.1.2"
 dependency-check = "13.0.0"
-dependency-analysis = "3.20.1"
+dependency-analysis = "3.20.2"
 versions-plugin = "0.67.0"
 spotbugs-plugin = "6.5.13"
 spotbugs-tool = "4.10.5"
@@ -13,9 +13,9 @@ commons-lang3 = "3.21.0"
 # hardening for disallowed conditional configuration references.
 logback = "1.6.6"
 # Jackson 2.x and 3.x remain separate families and must stay internally aligned.
-jackson2 = "2.22.4"
-jackson-annotations = "2.22"
-jackson3 = "3.2.4"
+jackson2 = "2.23.0"
+jackson-annotations = "2.23"
+jackson3 = "3.3.0"
 log4j2 = "2.26.1"
 caffeine = "3.3.1"
 spring-modulith = "2.1.2"

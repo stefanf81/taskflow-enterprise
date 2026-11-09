@@ -48,9 +48,13 @@ npm run sync:api-types:check
 
 `overrides` and `allowScripts` only take effect in the **root** `package.json`; do not add
 them to a workspace. A package that a hoisted tool consumes as a peer (for example `jsdom`
-for the frontend's vitest) must resolve to the same version from the tool's location as from
-the app: when two workspaces need different versions, pin the one the hoisted tool needs in
-the root `devDependencies`.
+for the frontend's Vitest or `test-renderer` for React Native Testing Library) must resolve
+to the same version from the tool's location as from the app: pin the version the hoisted
+tool needs in the root `devDependencies`. The mobile test-renderer resolution guard checks
+that component tests actually use that pinned version, not an older hoisted peer.
+
+Keep Knip's `k6` and `eas` exceptions for those externally supplied tools. The dependency-only
+scan can call them redundant, but a full scan needs them to avoid false positives.
 
 `npm run check:dependency-tree` (part of `lint:all`, and run by CI after every install) reads
 `npm ls --all` and fails when any package resolves a dependency outside the range it declares.
