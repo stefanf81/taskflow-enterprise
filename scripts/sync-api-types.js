@@ -70,18 +70,38 @@ function responseSchemaNames(spec) {
 // nullable field into its empty value ("omitted means empty"), and the apps use the parsed value.
 let RESPONSE_SCHEMAS = new Set();
 
-function mapSchemaType(schema, schemas, schemaName) {
+function sanitizeComment(text) {
+  return String(text).replace(/\*\//g, '*\\/');
+}
+
+function assertSupportedSchema(schema, pathLabel) {
+  if (!schema) return;
+  for (const keyword of ['oneOf', 'anyOf', 'allOf']) {
+    if (schema[keyword]) {
+      throw new Error(`Unsupported OpenAPI keyword "${keyword}" at ${pathLabel}`);
+    }
+  }
+  if (Array.isArray(schema.type)) {
+    throw new Error(`Unsupported array "type" at ${pathLabel}`);
+  }
+}
+
+function mapSchemaType(schema, schemas, schemaName, pathLabel = schemaName || 'schema') {
   if (!schema) return 'unknown';
+  assertSupportedSchema(schema, pathLabel);
 
   // Handle $ref: resolve to the referenced type name
   if (schema.$ref) {
     const refName = schema.$ref.split('/').pop();
+    if (schemas && !schemas[refName]) {
+      throw new Error(`Unresolved OpenAPI $ref "${schema.$ref}" at ${pathLabel}`);
+    }
     return refName;
   }
 
   if (schema.enum) {
     // Enum of strings → union type
-    return schema.enum.map((v) => `'${v}'`).join(' | ');
+    return schema.enum.map((v) => JSON.stringify(v)).join(' | ');
   }
 
   switch (schema.type) {
@@ -94,16 +114,16 @@ function mapSchemaType(schema, schemas, schemaName) {
     case 'boolean':
       return 'boolean';
     case 'array':
-      return `${mapSchemaType(schema.items, schemas)}[]`;
+      return `${mapSchemaType(schema.items, schemas, undefined, `${pathLabel}[]`)}[]`;
     case 'object':
       if (schema.properties) {
         const props = Object.entries(schema.properties)
           .map(([key, prop]) => {
             const required = schema.required?.includes(key) || RESPONSE_SCHEMAS.has(schemaName);
             const opt = required ? '' : '?';
-            const type = mapSchemaType(prop, schemas);
-            const desc = prop.description ? `  /** ${prop.description} */\n` : '';
-            const propertyName = /^[A-Za-z_$][\w$]*$/.test(key) ? key : `'${key}'`;
+            const type = mapSchemaType(prop, schemas, undefined, `${pathLabel}.${key}`);
+            const desc = prop.description ? `  /** ${sanitizeComment(prop.description)} */\n` : '';
+            const propertyName = /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
             return `${desc}  ${propertyName}${opt}: ${type};`;
           })
           .join('\n');
@@ -128,10 +148,10 @@ const TYPE_ALIASES = {
 };
 
 const TYPE_OVERRIDES = {
-  AppointmentUpdateRequest: "{\n  status: 'APPROVED' | 'DENIED';\n}",
-  LoginResponse: "{\n  role: 'ROLE_ADMIN' | 'ROLE_CUSTOMER';\n  username: string;\n}",
+  AppointmentUpdateRequest: '{\n  status: "APPROVED" | "DENIED";\n}',
+  LoginResponse: '{\n  role: "ROLE_ADMIN" | "ROLE_CUSTOMER";\n  username: string;\n}',
   MobileLoginResponse:
-    "{\n  accessToken: string;\n  expiresIn: number;\n  refreshToken?: string;\n  role: 'ROLE_ADMIN' | 'ROLE_CUSTOMER';\n  tokenType: 'Bearer';\n  username: string;\n}",
+    '{\n  accessToken: string;\n  expiresIn: number;\n  refreshToken?: string;\n  role: "ROLE_ADMIN" | "ROLE_CUSTOMER";\n  tokenType: "Bearer";\n  username: string;\n}',
 };
 
 // ---------------------------------------------------------------------------
@@ -156,10 +176,11 @@ function generateTypesFromSchemas(schemas) {
   lines.push('');
 
   for (const [name, schema] of Object.entries(schemas).sort(([left], [right]) => left.localeCompare(right))) {
+    assertSupportedSchema(schema, name);
     if (schema.enum || schema.type) {
       const typeDef = TYPE_OVERRIDES[name] || mapSchemaType(schema, schemas, name);
       if (schema.description) {
-        lines.push(`/** ${schema.description} */`);
+        lines.push(`/** ${sanitizeComment(schema.description)} */`);
       }
       if (schema.enum && typeof typeDef === 'string') {
         lines.push(`export type ${name} = ${typeDef};`);
@@ -236,7 +257,7 @@ function generateResponseContracts(schemas, responseNames) {
     });
     deps.forEach(visit);
     used.add('object');
-    const doc = schema.description ? `/** ${schema.description} */\n` : '';
+    const doc = schema.description ? `/** ${sanitizeComment(schema.description)} */\n` : '';
     blocks.set(name, `${doc}export const ${contractName(name)} = object({\n${fields.join('\n')}\n});\n`);
     order.push(name);
   };
@@ -260,11 +281,6 @@ function generateResponseContracts(schemas, responseNames) {
     '',
     ...order.map((name) => blocks.get(name)),
   ].join('\n').replace(/\n+$/, '\n');
-}
-
-/** shared/schemas quotes strings with double quotes, like the rest of the package. */
-function toDoubleQuotes(generated) {
-  return generated.replace(/'([^']*)'/g, '"$1"');
 }
 
 function writeOrCheck(file, content, check, label) {
@@ -297,9 +313,10 @@ async function main() {
     console.log(`✅ OpenAPI Spec (${spec.info?.title || 'unknown'} ${spec.info?.version || ''}) retrieved — ${schemaCount} schemas.`);
 
     RESPONSE_SCHEMAS = responseSchemaNames(spec);
-    writeOrCheck(TYPES_FILE, toDoubleQuotes(generateTypesFromSchemas(schemas)), check, 'Generated API types');
-    writeOrCheck(RESPONSE_CONTRACT_FILE, generateResponseContracts(schemas, RESPONSE_SCHEMAS), check,
-      'Generated response contracts');
+    const typesContent = generateTypesFromSchemas(schemas);
+    const contractsContent = generateResponseContracts(schemas, RESPONSE_SCHEMAS);
+    writeOrCheck(TYPES_FILE, typesContent, check, 'Generated API types');
+    writeOrCheck(RESPONSE_CONTRACT_FILE, contractsContent, check, 'Generated response contracts');
   } catch (err) {
     const rawMessage = err && err.message ? String(err.message) : String(err);
     const safeMessage = rawMessage.replace(/\n|\r/g, '');

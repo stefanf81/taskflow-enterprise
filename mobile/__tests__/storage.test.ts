@@ -319,6 +319,28 @@ describe('storage', () => {
       await expect(storage.getRefreshToken()).resolves.toBeNull();
       expect(mockGetItemAsync).toHaveBeenCalledWith('taskflow_refresh_token');
     });
+
+    it('rolls back partial writes when startSession fails mid-batch', async () => {
+      mockSetItemAsync.mockImplementation(async (key: string) => {
+        if (key === 'taskflow_refresh_token') throw new Error('keychain full');
+      });
+
+      await expect(
+        storage.startSession({
+          token: 'partial-token',
+          expiresAt: 1_900_000_000_000,
+          refreshToken: 'r'.repeat(43),
+          user: { username: 'jane@example.com', role: 'ROLE_CUSTOMER' },
+        }),
+      ).rejects.toThrow('Secure credential storage is unavailable.');
+
+      expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_auth_token');
+      expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_token_expires_at');
+      expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_refresh_token');
+      expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_user_data');
+      mockGetItemAsync.mockResolvedValue(null);
+      await expect(storage.getToken()).resolves.toBeNull();
+    });
   });
 
   // ==================== refresh token ====================

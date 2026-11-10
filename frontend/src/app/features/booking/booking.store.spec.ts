@@ -158,6 +158,7 @@ describe('BookingStore', () => {
     expect(profiles.map((p) => p.name)).toEqual(['Alex the Barber', 'Sara the Stylist']);
     expect(profiles[0]!.rating).toBe('4.8 ★');
     expect(profiles[0]!.reviews).toBe('12 reviews');
+    expect(profiles[1]!.rating).toBe('—');
     expect(profiles[1]!.reviews).toBe('New');
   });
 

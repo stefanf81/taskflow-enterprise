@@ -173,10 +173,9 @@ class AuthControllerTest {
         when(userRepository.findByEmailIgnoreCase("exists@test.com"))
                 .thenReturn(Optional.of(new AppUser()));
 
-        ResponseEntity<RegisterResponse> result = authController.registerUser(request);
-
-        assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
-        assertEquals("Email is already registered.", result.getBody().message());
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> authController.registerUser(request));
+        assertEquals("Email is already registered.", ex.getMessage());
         verify(userRepository, never()).save(any());
     }
 
@@ -297,11 +296,15 @@ class AuthControllerTest {
     @Test
     void nonCredentialFailuresAreNotCountedAgainstTheAccount() {
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
-                .thenThrow(new IllegalStateException("database down"));
+                .thenThrow(new IllegalStateException("database down"))
+                .thenThrow(new org.springframework.security.authentication.InternalAuthenticationServiceException(
+                        "Unable to query user", new org.springframework.dao.DataAccessResourceFailureException("pool exhausted")));
         LoginRequest request = new LoginRequest("user@test.com", "pw");
 
+        assertThrows(IllegalStateException.class, () -> authController.authenticateUser(request, response));
         for (int i = 0; i < 5; i++) {
-            assertThrows(IllegalStateException.class, () -> authController.authenticateUser(request, response));
+            assertThrows(org.springframework.security.authentication.InternalAuthenticationServiceException.class,
+                    () -> authController.authenticateUser(request, response));
         }
         assertDoesNotThrow(() -> loginAttemptLimiter.checkAllowed("user@test.com"));
     }
@@ -321,6 +324,21 @@ class AuthControllerTest {
     }
 
     @Test
+    void providerServiceFailuresAreNotCountedAsBadPasswordsOnEitherLoginRoute() {
+        when(authenticationManager.authenticate(any()))
+                .thenThrow(new org.springframework.security.authentication.AuthenticationServiceException("provider configuration"));
+        LoginRequest request = new LoginRequest("user@test.com", "password");
+        for (int i = 0; i < 5; i++) {
+            assertThrows(org.springframework.security.authentication.AuthenticationServiceException.class,
+                    () -> authController.authenticateUser(request, response));
+            assertThrows(org.springframework.security.authentication.AuthenticationServiceException.class,
+                    () -> authController.authenticateMobileUser(request));
+        }
+        assertDoesNotThrow(() -> loginAttemptLimiter.checkAllowed(request.username()));
+        verifyNoInteractions(refreshSessions);
+    }
+
+    @Test
     void registerUser_losingTheUniqueConstraintRaceAnswersLikeTheDuplicateCheck() {
         RegisterRequest request = new RegisterRequest("Racer", "race@test.com", "password123", null);
         when(userRepository.findByEmailIgnoreCase("race@test.com")).thenReturn(Optional.empty());
@@ -329,10 +347,9 @@ class AuthControllerTest {
                 .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key",
                         new java.sql.SQLException("duplicate key value", "23505")));
 
-        ResponseEntity<RegisterResponse> result = authController.registerUser(request);
-
-        assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
-        assertEquals("Email is already registered.", result.getBody().message());
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> authController.registerUser(request));
+        assertEquals("Email is already registered.", ex.getMessage());
     }
 
     /** A value too long for its column (22001) is not a duplicate and must not say so. */
@@ -358,6 +375,32 @@ class AuthControllerTest {
                     .validate(new RegisterRequest("Jane", email, "password123", "555"));
             assertEquals(1, violations.size());
             assertEquals("email", violations.iterator().next().getPropertyPath().toString());
+        }
+    }
+
+    @Test
+    void registerRequest_enforces72Utf8BytePasswordLimitForBcrypt() {
+        try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
+            var validator = factory.getValidator();
+            // 72 ASCII bytes passes
+            assertTrue(validator.validate(new RegisterRequest("Jane", "j@x.com", "a1" + "b".repeat(70), "555")).isEmpty());
+            // 73 ASCII bytes fails
+            var ascii73 = validator.validate(new RegisterRequest("Jane", "j@x.com", "a1" + "b".repeat(71), "555"));
+            assertEquals(1, ascii73.size());
+            assertEquals("Password must not exceed 72 UTF-8 bytes", ascii73.iterator().next().getMessage());
+            // 72 UTF-8 bytes using multibyte characters (2 + 35*2 = 72 bytes, 37 chars) passes
+            assertTrue(validator.validate(new RegisterRequest("Jane", "j@x.com", "a1" + "é".repeat(35), "555")).isEmpty());
+            // 73 UTF-8 bytes using multibyte characters (38 chars, 73 bytes) fails before BCrypt throws
+            var utf8_73 = validator.validate(new RegisterRequest("Jane", "j@x.com", "a1" + "é".repeat(35) + "x", "555"));
+            assertEquals(1, utf8_73.size());
+            assertEquals("Password must not exceed 72 UTF-8 bytes", utf8_73.iterator().next().getMessage());
+            for (String password : List.of("a1x" + "界".repeat(23), "a1xx" + "😀".repeat(17))) {
+                assertTrue(validator.validate(new RegisterRequest("Jane", "j@x.com", password, "555")).isEmpty());
+            }
+            for (String password : List.of("a1xx" + "界".repeat(23), "a1xxx" + "😀".repeat(17),
+                    "abc12345\uD800", "abc12345\uDC00")) {
+                assertFalse(validator.validate(new RegisterRequest("Jane", "j@x.com", password, "555")).isEmpty());
+            }
         }
     }
 

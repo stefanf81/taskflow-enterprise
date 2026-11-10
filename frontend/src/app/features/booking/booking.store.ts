@@ -99,6 +99,7 @@ export class BookingStore {
   // rendering an unexplained blank list.
   readonly catalogError = this.catalogStore.errorMessage;
   readonly catalogLoaded = this.catalogStore.hasLoaded;
+  readonly rosterLoading = this.publicBarberStore.isLoading;
   readonly rosterError = this.publicBarberStore.errorMessage;
 
   // Booking form model + validation (Angular 22 Signal Forms).
@@ -227,7 +228,11 @@ export class BookingStore {
 
   // Stylist Profiles: API-driven roster (PublicBarberStore) joined with ratings.
   readonly stylistProfiles = computed(() =>
-    toStylistProfiles(this.publicBarberStore.barbers(), this.reviewStore.ratings()),
+    toStylistProfiles(
+      this.publicBarberStore.barbers(),
+      this.reviewStore.ratings(),
+      this.reviewStore.status(),
+    ),
   );
 
   readonly filteredServices = computed(() => {

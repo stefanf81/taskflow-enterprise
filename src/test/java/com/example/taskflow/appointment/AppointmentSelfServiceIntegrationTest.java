@@ -400,6 +400,13 @@ class AppointmentSelfServiceIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         String conflictsRevision = objectMapper.readTree(previewJson).get("conflictsRevision").asText();
 
+        // Null day elements are rejected with 400 (Bean Validation), never a 500 NPE.
+        mockMvc.perform(post("/api/v1/barbers/" + barber.getId() + "/schedule/preview")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"days\":[null],\"expectedRevision\":\"" + revision + "\",\"cancelConflictingAppointments\":false}"))
+                .andExpect(status().isBadRequest());
+
         // Saving without confirmation is rejected with 409.
         mockMvc.perform(put("/api/v1/barbers/" + barber.getId() + "/schedule")
                         .header("Authorization", adminToken)

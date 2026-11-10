@@ -20,7 +20,7 @@ export const StylistCard: React.FC<StylistProps> = ({
   name,
   title,
   specialty,
-  rating = '5.0 ★',
+  rating = '—',
   reviewsCount = 'New',
   badge,
   onSelect,

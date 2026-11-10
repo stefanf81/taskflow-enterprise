@@ -52,6 +52,7 @@ export const HomeScreen: React.FC = () => {
           onBook={() => book({})}
           onSignIn={signIn}
           onOpenAccount={() => navigation.navigate(isAdmin ? 'AdminTabs' : 'CustomerTabs')}
+          onManageBooking={() => navigation.navigate('PublicActions', {})}
         />
 
         <HomeSection

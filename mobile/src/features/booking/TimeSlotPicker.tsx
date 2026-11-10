@@ -29,6 +29,7 @@ export const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
         return (
           <TouchableOpacity
             key={slot}
+            testID={`booking-slot-${isDisabled ? 'unavailable' : 'available'}-${slot}`}
             disabled={isDisabled}
             onPress={() => onSelectSlot(slot)}
             style={[

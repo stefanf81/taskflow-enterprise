@@ -5,6 +5,8 @@ import {
   formatTime12Hour,
   isOverdue,
   isSlotInPast,
+  isValidLocalDate,
+  parseLocalDate,
   parseTimeToMinutes,
   shopWallClock,
   toLocalDateString,
@@ -55,5 +57,15 @@ describe('time helpers', () => {
     expect(berlin.getHours()).toBe(0);
     expect(shopWallClock('Not/AZone', instant)).toBe(instant);
     expect(shopWallClock(null, instant)).toBe(instant);
+  });
+
+  it('rejects impossible calendar dates instead of rolling them over', () => {
+    expect(isValidLocalDate('2026-02-28')).toBe(true);
+    expect(isValidLocalDate('2026-02-29')).toBe(false);
+    expect(isValidLocalDate('2028-02-29')).toBe(true);
+    expect(isValidLocalDate('2026-02-31')).toBe(false);
+    expect(isValidLocalDate('2026-04-31')).toBe(false);
+    expect(isValidLocalDate('2026-00-10')).toBe(false);
+    expect(Number.isNaN(parseLocalDate('2026-02-31').getTime())).toBe(true);
   });
 });

@@ -75,8 +75,8 @@ class AppointmentServiceImplTest extends AppointmentServiceTestSupport {
     @Test
     void testFindDetailsByPublicId() {
         Appointment appt = appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00");
-        when(appointmentRepository.findByPublicId("public-1")).thenReturn(appt);
-        when(appointmentRepository.findByPublicId("nope")).thenReturn(null);
+        when(appointmentRepository.findByPublicIdForUpdate("public-1")).thenReturn(Optional.of(appt));
+        when(appointmentRepository.findByPublicIdForUpdate("nope")).thenReturn(Optional.empty());
 
         AppointmentDetails details = appointmentService.findDetailsByPublicId("public-1").orElseThrow();
 

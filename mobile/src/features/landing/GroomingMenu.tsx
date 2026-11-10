@@ -24,7 +24,7 @@ export const GroomingMenu: React.FC = () => {
           <View key={svc.id} style={styles.menuItem}>
             <View style={styles.menuTop}>
               <Text style={styles.menuName}>{svc.name}</Text>
-              <Text style={styles.menuPrice}>${svc.price.toFixed(0)}</Text>
+              <Text style={styles.menuPrice}>${svc.price.toFixed(2)}</Text>
             </View>
             <Text style={styles.menuDuration}>Duration: {svc.durationMinutes} mins</Text>
             <Text style={styles.menuDesc}>{svc.description}</Text>

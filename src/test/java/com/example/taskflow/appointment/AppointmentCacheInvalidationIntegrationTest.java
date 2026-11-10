@@ -17,6 +17,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -69,6 +70,9 @@ class AppointmentCacheInvalidationIntegrationTest {
 
     @Autowired
     private PlatformTransactionManager transactionManager;
+
+    @Autowired
+    private Clock clock;
 
     private TransactionTemplate transactionTemplate;
 
@@ -140,13 +144,13 @@ class AppointmentCacheInvalidationIntegrationTest {
         var created = bookingService.createAppointment(bookingRequest("10:00"), null);
         primeAvailability();
         statsService.getStatsCached();
-        assertNotNull(cacheManager.getCache(AppointmentStatsService.STATS_CACHE).get(LocalDate.now()));
+        assertNotNull(cacheManager.getCache(AppointmentStatsService.STATS_CACHE).get(LocalDate.now(clock)));
 
         lifecycleService.updateAppointmentStatus(created.appointment().id(),
                 new AppointmentUpdateRequest("APPROVED"));
 
         assertAvailabilityEvicted();
-        assertNull(cacheManager.getCache(AppointmentStatsService.STATS_CACHE).get(LocalDate.now()),
+        assertNull(cacheManager.getCache(AppointmentStatsService.STATS_CACHE).get(LocalDate.now(clock)),
                 "appointmentStats entry must be evicted after a mutation");
     }
 

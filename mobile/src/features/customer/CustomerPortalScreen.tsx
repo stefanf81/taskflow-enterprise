@@ -33,7 +33,7 @@ import { isCustomerCancellable } from '@taskflow/domain';
 import { useShopInfo } from '../../core/shop/useShopInfo';
 import { formatTime12Hour, shopWallClock } from '../../utils/time-utils';
 import { getApiErrorMessage } from '../../utils/errors';
-import { useNow } from '../booking/useNow';
+import { useNow } from '../../core/shop/useNow';
 
 export const CustomerPortalScreen: React.FC = () => {
   const isFocused = useIsFocused();

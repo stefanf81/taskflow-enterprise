@@ -95,8 +95,22 @@ export function toLocalDateString(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
-/** `YYYY-MM-DD` as a local-midnight Date (an invalid Date for anything else). */
+/** Whether `dateStr` is a real Gregorian `YYYY-MM-DD` calendar date (rejects e.g. `2026-02-31`). */
+export function isValidLocalDate(dateStr: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const [yearStr = '', monthStr = '', dayStr = ''] = dateStr.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  if (month < 1 || month > 12 || day < 1) return false;
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ?? 0;
+  return day <= daysInMonth;
+}
+
+/** `YYYY-MM-DD` as a local-midnight Date (an invalid Date for anything else, including rollover dates). */
 export function parseLocalDate(dateStr: string): Date {
+  if (!isValidLocalDate(dateStr)) return new Date(NaN);
   return new Date(`${dateStr}T00:00:00`);
 }
 

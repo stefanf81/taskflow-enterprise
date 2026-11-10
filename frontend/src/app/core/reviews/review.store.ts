@@ -35,6 +35,11 @@ export class ReviewStore {
     const err = this.ratingsResource.error();
     return err ? 'Could not load barber ratings.' : null;
   });
+  readonly status = computed<'loading' | 'error' | 'ready'>(() => {
+    if (this.ratingsResource.error()) return 'error';
+    if (this.ratingsResource.isLoading()) return 'loading';
+    return 'ready';
+  });
 
   loadRatings(): void {
     this.ratingsResource.reload();

@@ -4,6 +4,8 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
@@ -46,6 +48,11 @@ class ClientTelemetryController {
     @Operation(summary = "Record one anonymous, allowlisted client measurement", requestBody =
             @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true,
                     content = @Content(schema = @Schema(implementation = ClientTelemetryEvent.class))))
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "204", description = "Measurement recorded"),
+            @ApiResponse(responseCode = "400", description = "Malformed or disallowed telemetry payload"),
+            @ApiResponse(responseCode = "413", description = "Telemetry payload exceeds 1024 bytes")
+    })
     @PostMapping(path = "/api/v1/telemetry", consumes = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<Void> record(HttpServletRequest request) {
         try {

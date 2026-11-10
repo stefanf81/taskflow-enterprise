@@ -389,9 +389,17 @@
           },
           "value": {
             "format": "double",
+            "maximum": 600000,
+            "minimum": 0,
             "type": "number"
           }
         },
+        "required": [
+          "name",
+          "platform",
+          "route",
+          "value"
+        ],
         "type": "object"
       },
       "CsrfToken": {
@@ -1739,6 +1747,16 @@
             },
             "description": "Login successful — JWT set in HttpOnly cookie"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid login payload"
+          },
           "401": {
             "content": {
               "application/json": {
@@ -1748,6 +1766,46 @@
               }
             },
             "description": "Invalid username or password"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too many failed login attempts"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication service failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication service temporarily unavailable",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying",
+                "schema": {
+                  "example": 1,
+                  "type": "integer"
+                },
+                "style": "simple"
+              }
+            }
           }
         },
         "security": [],
@@ -1839,6 +1897,16 @@
             },
             "description": "Login successful — bearer token returned"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid login payload"
+          },
           "401": {
             "content": {
               "application/json": {
@@ -1848,6 +1916,46 @@
               }
             },
             "description": "Invalid username or password"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too many failed login attempts"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication service failure"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication service temporarily unavailable",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying",
+                "schema": {
+                  "example": 1,
+                  "type": "integer"
+                },
+                "style": "simple"
+              }
+            }
           }
         },
         "security": [],
@@ -1880,6 +1988,16 @@
               }
             },
             "description": "Session renewed"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid refresh payload"
           },
           "401": {
             "content": {
@@ -1934,13 +2052,6 @@
             "description": "Session expired or revoked"
           },
           "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
             "description": "CSRF token missing or invalid"
           }
         },
@@ -2080,9 +2191,20 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "Weekly schedule returned"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Barber not found"
           }
         },
+        "summary": "Get a barber's weekly schedule",
         "tags": [
           "barber-schedule-controller"
         ]
@@ -2119,9 +2241,40 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "Weekly schedule updated"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid schedule"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Barber not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Schedule revision changed or conflicting bookings not confirmed"
           }
         },
+        "summary": "Update a barber's weekly schedule",
         "tags": [
           "barber-schedule-controller"
         ]
@@ -2160,9 +2313,40 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "Conflict preview returned"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid schedule"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Barber not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Schedule revision changed"
           }
         },
+        "summary": "Preview booking conflicts for a weekly schedule change",
         "tags": [
           "barber-schedule-controller"
         ]
@@ -2981,8 +3165,14 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "Measurement recorded"
+          },
+          "400": {
+            "description": "Malformed or disallowed telemetry payload"
+          },
+          "413": {
+            "description": "Telemetry payload exceeds 1024 bytes"
           }
         },
         "security": [],

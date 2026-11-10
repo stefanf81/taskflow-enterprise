@@ -43,13 +43,16 @@ class OpenApiErrorResponseConfig {
             return;
         }
         // The 401/403 of an operation are documented by OpenApiSecurityConfig (see class comment).
-        openApi.getPaths().values().forEach(path -> path.readOperations().forEach(operation -> {
+        // POST /api/v1/telemetry intentionally returns empty 400/413 responses as a privacy boundary.
+        openApi.getPaths().forEach((pathName, path) -> path.readOperationsMap().forEach((method, operation) -> {
             if (operation.getResponses() == null) {
                 return;
             }
+            boolean emptyTelemetryError = "/api/v1/telemetry".equals(pathName)
+                    && method == io.swagger.v3.oas.models.PathItem.HttpMethod.POST;
             operation.getResponses().forEach((code, response) -> {
                 if ((code.startsWith("4") || code.startsWith("5")) && !"401".equals(code) && !"403".equals(code)) {
-                    response.setContent(errorContent());
+                    response.setContent(emptyTelemetryError ? null : errorContent());
                 }
             });
         }));

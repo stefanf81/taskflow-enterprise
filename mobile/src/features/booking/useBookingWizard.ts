@@ -1,4 +1,12 @@
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -6,8 +14,12 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCatalog } from '../../core/catalog/useCatalog';
 import { usePublicBarbers } from '../../core/barbers/useBarbers';
 import { useBusySlots, useCreateAppointment } from '../../core/appointments/useAppointments';
+import { useAuthStore } from '../../core/auth/useAuthStore';
+import { useShallow } from 'zustand/react/shallow';
 import { GuestTabParamList, RootStackParamList } from '../../types/navigation';
-import { AppointmentItem } from '../../types/api';
+import { AppointmentItem, AppointmentPage } from '../../types/api';
+import { queryClient } from '../../query/queryClient';
+import { queryKeys } from '../../query/queryKeys';
 import {
   computeEstimatedEndTime,
   DEFAULT_TIME_SLOTS,
@@ -17,7 +29,7 @@ import {
   toLocalDateString,
 } from '../../utils/time-utils';
 import { getApiErrorMessage, getHttpStatus } from '../../utils/errors';
-import { useNow } from './useNow';
+import { useNow } from '../../core/shop/useNow';
 import { useShopInfo } from '../../core/shop/useShopInfo';
 import { AttemptKey, resolveAttemptKey } from './idempotency';
 import {
@@ -37,6 +49,11 @@ import {
 } from './bookingWizard';
 
 type BookingRouteProp = RouteProp<GuestTabParamList, 'Booking'>;
+
+const subscribeToBookings = (notify: () => void) =>
+  queryClient.getQueryCache().subscribe((event) => {
+    if (event.query.queryKey[0] === queryKeys.customerAppointments.all[0]) notify();
+  });
 
 export type BookingNavProp = CompositeNavigationProp<
   BottomTabNavigationProp<GuestTabParamList, 'Booking'>,
@@ -109,7 +126,55 @@ export function useBookingWizard() {
   const [selectedTime, setSelectedTime] = useState<string>(
     () => getDefaultSlot(upcomingDates, now, shopRules).time,
   );
-  const [contact, setContact] = useState<ContactDetails>(EMPTY_CONTACT);
+  const { isAuthenticated, role, username } = useAuthStore(
+    useShallow((s) => ({
+      isAuthenticated: s.isAuthenticated,
+      role: s.role,
+      username: s.username,
+    })),
+  );
+  const latestBooking = useSyncExternalStore(
+    subscribeToBookings,
+    useCallback(() => {
+      if (!isAuthenticated || role !== 'ROLE_CUSTOMER' || !username) return undefined;
+      const pages = queryClient.getQueriesData<AppointmentPage>({
+        queryKey: queryKeys.customerAppointments.all,
+      });
+      // Pages are ordered by appointment date, not by when contact details were last supplied.
+      // Ignore another account's cached pages even during a session transition.
+      return pages
+        .flatMap(([, page]) => page?.content ?? [])
+        .filter((item) => item.customerEmail.toLowerCase() === username.toLowerCase())
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id)[0];
+    }, [isAuthenticated, role, username]),
+  );
+  const sessionContact = useMemo<ContactDetails>(() => {
+    if (!isAuthenticated || role !== 'ROLE_CUSTOMER') return EMPTY_CONTACT;
+    return {
+      name: latestBooking?.customerName ?? '',
+      email: username && username.includes('@') ? username : (latestBooking?.customerEmail ?? ''),
+      phone: latestBooking?.customerPhone ?? '',
+    };
+  }, [isAuthenticated, role, username, latestBooking]);
+  const [contact, setContact] = useState<ContactDetails>(() => sessionContact);
+  const [editedContact, setEditedContact] = useState<ReadonlySet<keyof ContactDetails>>(() => new Set());
+
+  const resetSessionContact = useEffectEvent(() => {
+    setContact(sessionContact);
+    setEditedContact(new Set());
+  });
+  useEffect(() => {
+    resetSessionContact();
+  }, [isAuthenticated, role, username]);
+
+  useEffect(() => {
+    if (!sessionContact.name && !sessionContact.email && !sessionContact.phone) return;
+    setContact((current) => ({
+      name: editedContact.has('name') ? current.name : sessionContact.name,
+      email: editedContact.has('email') ? current.email : sessionContact.email,
+      phone: editedContact.has('phone') ? current.phone : sessionContact.phone,
+    }));
+  }, [sessionContact, editedContact]);
 
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<BookingReceipt | null>(null);
@@ -198,7 +263,8 @@ export function useBookingWizard() {
     setSelectedService(services[0]?.name ?? '');
     setSelectedDate(first.date);
     setSelectedTime(first.time);
-    setContact(EMPTY_CONTACT);
+    setContact(sessionContact);
+    setEditedContact(new Set());
     setServiceSearchQuery('');
     setSelectedCategory('all');
     setError(null);
@@ -264,8 +330,10 @@ export function useBookingWizard() {
     if (step > 1) setStep((step - 1) as BookingStep);
   };
 
-  const setContactField = (field: keyof ContactDetails, value: string) =>
+  const setContactField = (field: keyof ContactDetails, value: string) => {
+    setEditedContact((current) => new Set([...current, field]));
     setContact((current) => ({ ...current, [field]: value }));
+  };
 
   const submitBooking = async () => {
     const contactError = getContactError(contact);

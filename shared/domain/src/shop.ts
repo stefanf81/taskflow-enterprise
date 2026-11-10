@@ -1,4 +1,4 @@
-import { addDays, formatTime12Hour, parseLocalDate, parseTimeToMinutes, toLocalDateString } from './time';
+import { addDays, formatTime12Hour, isValidLocalDate, parseLocalDate, parseTimeToMinutes, toLocalDateString } from './time';
 
 /** One weekday's hours as `GET /api/v1/appointments/public/shop` reports them. */
 export interface OpeningHours {
@@ -64,7 +64,7 @@ export function lastBookableDate(now: Date, rules: ShopRules): string {
 
 /** Whether `dateStr` lies in [today, today + maxAdvanceDays], the window the server accepts. */
 export function isWithinBookingWindow(dateStr: string, now: Date, rules: ShopRules): boolean {
-  return !!dateStr && dateStr >= toLocalDateString(now) && dateStr <= lastBookableDate(now, rules);
+  return isValidLocalDate(dateStr) && dateStr >= toLocalDateString(now) && dateStr <= lastBookableDate(now, rules);
 }
 
 /** "Bookings can be made at most 90 days ahead." */

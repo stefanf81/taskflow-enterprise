@@ -5,6 +5,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { NotificationStore } from './notification.store';
 import { NotificationItem } from '../../types/api';
+import { AuthState } from '../../core/auth/auth.state';
 
 @Component({ standalone: true, template: '' })
 class TestHost {
@@ -46,6 +47,7 @@ describe('NotificationStore', () => {
     fixture = TestBed.createComponent(TestHost);
     store = fixture.componentInstance.store;
     httpMock = TestBed.inject(HttpTestingController);
+    TestBed.inject(AuthState).applyRole('ROLE_ADMIN', 'admin');
     fixture.detectChanges();
 
     // Flush the initial auto-triggered httpResource request.
@@ -58,6 +60,24 @@ describe('NotificationStore', () => {
 
   afterEach(() => {
     httpMock.verify();
+  });
+
+  it('does not request notifications for guests or customers and clears cached data on logout', async () => {
+    store.loadNotifications();
+    fixture.detectChanges();
+    httpMock.expectOne((r) => r.url.includes('/api/v1/notifications')).flush(mockNotifications);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(store.notifications().length).toBe(2);
+
+    const authState = TestBed.inject(AuthState);
+    authState.clear();
+    fixture.detectChanges();
+    expect(store.notifications()).toEqual([]);
+
+    authState.applyRole('ROLE_CUSTOMER', 'customer');
+    fixture.detectChanges();
+    httpMock.expectNone((r) => r.url.includes('/api/v1/notifications'));
   });
 
   it('should initialize with empty notifications', () => {

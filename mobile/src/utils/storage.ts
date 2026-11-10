@@ -75,14 +75,24 @@ export const storage = {
   }): Promise<void> {
     sessionEpoch++;
     return exclusive(async () => {
-      await storage.setToken(session.token);
-      await storage.setTokenExpiry(session.expiresAt);
-      if (session.refreshToken) {
-        await storage.setRefreshToken(session.refreshToken);
-      } else {
-        await storage.removeRefreshToken();
+      try {
+        await storage.setToken(session.token);
+        await storage.setTokenExpiry(session.expiresAt);
+        if (session.refreshToken) {
+          await storage.setRefreshToken(session.refreshToken);
+        } else {
+          await storage.removeRefreshToken();
+        }
+        await storage.setUserData(session.user);
+      } catch (err) {
+        await Promise.allSettled([
+          storage.removeToken(),
+          storage.removeRefreshToken(),
+          storage.removeTokenExpiry(),
+          storage.removeUserData(),
+        ]);
+        throw err;
       }
-      await storage.setUserData(session.user);
     });
   },
 

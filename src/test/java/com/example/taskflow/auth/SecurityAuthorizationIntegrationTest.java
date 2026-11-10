@@ -281,6 +281,13 @@ class SecurityAuthorizationIntegrationTest {
         mockMvc.perform(patch("/api/v1/appointments/1").header("Authorization", adminToken))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/does-not-exist")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/reviews/public/00000000-0000-0000-0000-000000000001"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(delete("/api/v1/reviews/public/barber-ratings").header("Authorization", customerToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/v1/reviews/public/barber-ratings").header("Authorization", adminToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(head("/api/v1/reviews/public/barber-ratings")).andExpect(status().isOk());
     }
 
     /**

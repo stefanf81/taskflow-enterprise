@@ -74,7 +74,8 @@ class ReviewServiceImpl implements ReviewService {
         // appointment, mirroring the public-cancel verification pattern. This
         // prevents anyone holding the public UUID from leaving a review for an
         // appointment they don't own.
-        if (!appointment.customerEmail().equalsIgnoreCase(request.customerEmail().trim())) {
+        if (appointment.customerEmail() == null || request.customerEmail() == null
+                || !appointment.customerEmail().trim().equalsIgnoreCase(request.customerEmail().trim())) {
             throw new IllegalArgumentException("Verification failed: the provided email does not match this booking.");
         }
 

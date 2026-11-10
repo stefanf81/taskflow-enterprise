@@ -124,7 +124,7 @@ class SecurityConfig {
                      PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, "/api/v1/appointments/public/reschedule/*"),
                      PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/appointments/public/reschedule/*/availability"),
                      PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/appointments/public/calendar/*"),
-                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/reviews/public/**"),
+                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/reviews/public/*"),
                      PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/telemetry"),
                      nativeSessionRequestMatcher(),
                      bearerOnlyRequestMatcher()
@@ -197,7 +197,9 @@ class SecurityConfig {
                 .requestMatchers(HttpMethod.HEAD, "/api/v1/catalog/retired").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/catalog", "/api/v1/catalog/**").permitAll()
                 .requestMatchers(HttpMethod.HEAD, "/api/v1/catalog", "/api/v1/catalog/**").permitAll()
-                .requestMatchers("/api/v1/reviews/public/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/reviews/public/barber-ratings").permitAll()
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/reviews/public/barber-ratings").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/reviews/public/*").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/telemetry").permitAll()
                 // Public booking only needs a barber identifier and display name.
                 // Contact data and time-off details are restricted to administrators.

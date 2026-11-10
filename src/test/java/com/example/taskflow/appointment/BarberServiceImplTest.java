@@ -181,12 +181,21 @@ class BarberServiceImplTest {
         timeOff.setId(1L);
         timeOff.setStartDate(LocalDate.of(2026, 7, 22));
         timeOff.setEndDate(LocalDate.of(2026, 7, 23));
+        when(barberRepository.existsById(1L)).thenReturn(true);
         when(timeOffRepository.findByBarberId(1L)).thenReturn(List.of(timeOff));
 
         List<BarberTimeOffResponse> result = barberService.getTimeOff(1L);
 
         assertEquals(1, result.size());
         assertEquals(LocalDate.of(2026, 7, 22), result.get(0).startDate());
+    }
+
+    @Test
+    void getTimeOff_shouldThrowWhenBarberNotFound() {
+        when(barberRepository.existsById(99L)).thenReturn(false);
+
+        assertThrows(ResourceNotFoundException.class, () -> barberService.getTimeOff(99L));
+        verifyNoInteractions(timeOffRepository);
     }
 
     @Test

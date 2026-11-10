@@ -16,4 +16,10 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  */
 @ConfigurationProperties(prefix = "app.metrics")
 record MetricsProperties(@DefaultValue("") String scrapeToken) {
+
+    @Override
+    public String toString() {
+        return "MetricsProperties[scrapeToken="
+                + (scrapeToken == null || scrapeToken.isEmpty() ? "<empty>" : "[REDACTED]") + "]";
+    }
 }

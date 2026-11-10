@@ -7,6 +7,10 @@ import {
   NO_PREFERENCE_BARBER,
 } from '../src/features/booking/bookingWizard';
 import { freezeDate, moveClockTo, restoreClock } from '../test/fakeClock';
+import { useAuthStore } from '../src/core/auth/useAuthStore';
+import { queryClient } from '../src/query/queryClient';
+import { queryKeys } from '../src/query/queryKeys';
+import type { AppointmentItem } from '../src/types/api';
 
 // ==================== Mock navigation ====================
 const mockNavigate = jest.fn();
@@ -127,6 +131,8 @@ jest.mock('../src/features/booking/ReceiptModal', () => ({
 describe('BookingScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    queryClient.clear();
+    useAuthStore.setState({ isAuthenticated: false, role: null, username: null });
     // Wednesday 2026-08-12 08:00 local: every DEFAULT_TIME_SLOTS entry is still
     // in the future, so the legacy tests below behave exactly as before.
     freezeDate('2026-08-12T08:00:00');
@@ -155,7 +161,74 @@ describe('BookingScreen', () => {
   });
 
   afterEach(() => {
+    queryClient.clear();
+    useAuthStore.setState({ isAuthenticated: false, role: null, username: null });
     restoreClock();
+  });
+
+  describe('customer contact prefill', () => {
+    const booking = (id: number, createdAt: string, name: string): AppointmentItem => ({
+      id, publicId: `booking-${id}`, customerName: name, customerEmail: 'jane@example.com',
+      customerPhone: '123456789', barberName: 'Alex the Barber', bookingDate: '2026-08-15',
+      bookingTime: '09:00', serviceType: 'Classic Haircut', status: 'PENDING', createdAt, updatedAt: createdAt,
+    });
+    const cachePage = (page: number, content: AppointmentItem[]) => queryClient.setQueryData(
+      queryKeys.customerAppointments.page(page, 10),
+      { content, page: { number: page, size: 10, totalElements: content.length, totalPages: 1 } },
+    );
+    const openContact = async () => {
+      const screen = await render(<BookingScreen />);
+      await fireEvent.press(screen.getByText('Continue to Stylist'));
+      await fireEvent.press(screen.getByText('Continue'));
+      mockBusySlotsData = [];
+      await fireEvent.press(screen.getByText('Continue'));
+      return screen;
+    };
+
+    beforeEach(() => {
+      useAuthStore.setState({ isAuthenticated: true, role: 'ROLE_CUSTOMER', username: 'jane@example.com' });
+    });
+
+    it('observes bookings that finish loading after the wizard mounts', async () => {
+      const screen = await openContact();
+      expect(screen.getByTestId('customer-email-input').props.value).toBe('jane@example.com');
+      expect(screen.getByTestId('customer-name-input').props.value).toBe('');
+      await act(() => { cachePage(0, [booking(1, '2026-08-10T08:00:00', 'Jane')]); });
+      expect(screen.getByTestId('customer-name-input').props.value).toBe('Jane');
+      expect(screen.getByTestId('customer-phone-input').props.value).toBe('123456789');
+    });
+
+    it('uses the newest creation across pages and ignores other accounts', async () => {
+      cachePage(0, [booking(1, '2026-08-01T08:00:00', 'Old name')]);
+      cachePage(1, [booking(2, '2026-08-11T08:00:00', 'New name'),
+        { ...booking(3, '2026-08-12T08:00:00', 'Other person'), customerEmail: 'other@example.com' }]);
+      const screen = await openContact();
+      expect(screen.getByTestId('customer-name-input').props.value).toBe('New name');
+    });
+
+    it('preserves edits and deliberately cleared fields when bookings refresh', async () => {
+      cachePage(0, [booking(1, '2026-08-01T08:00:00', 'Jane')]);
+      const screen = await openContact();
+      await fireEvent.changeText(screen.getByTestId('customer-name-input'), 'My edit');
+      await fireEvent.changeText(screen.getByTestId('customer-phone-input'), '');
+      await act(() => { cachePage(0, [booking(2, '2026-08-11T08:00:00', 'New name')]); });
+      expect(screen.getByTestId('customer-name-input').props.value).toBe('My edit');
+      expect(screen.getByTestId('customer-phone-input').props.value).toBe('');
+      await act(() => { mockNavListeners.blur.forEach((listener) => listener()); });
+      await fireEvent.press(screen.getByText('Continue to Stylist'));
+      await fireEvent.press(screen.getByText('Continue'));
+      await fireEvent.press(screen.getByText('Continue'));
+      expect(screen.getByTestId('customer-name-input').props.value).toBe('New name');
+      expect(screen.getByTestId('customer-phone-input').props.value).toBe('123456789');
+    });
+
+    it('clears prior contact data when the session changes', async () => {
+      cachePage(0, [booking(1, '2026-08-01T08:00:00', 'Jane')]);
+      const screen = await openContact();
+      await act(() => { useAuthStore.setState({ username: 'other@example.com' }); });
+      expect(screen.getByTestId('customer-name-input').props.value).toBe('');
+      expect(screen.getByTestId('customer-email-input').props.value).toBe('other@example.com');
+    });
   });
 
   // ============ RENDERING ============

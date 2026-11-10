@@ -21,6 +21,7 @@ import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -88,18 +89,21 @@ class BarberScheduleService {
         schedules.deleteAll(remaining.values());
         for (Appointment appointment : conflicts) {
             appointment.setStatus(AppointmentStatus.CANCELLED);
+        }
+        appointments.flush();
+        for (Appointment appointment : conflicts) {
             changes.cancelled(appointment, AppointmentCancelledEvent.CancelledBy.BARBER_UNAVAILABLE);
             changes.adminEvent(com.example.taskflow.appointment.stream.AppointmentAdminEvent.Type.UPDATED,
                     appointment.getId());
         }
-        appointments.flush();
         events.publishEvent(new BarberRosterChangedEvent());
         events.publishEvent(AvailabilityChangedEvent.allBarbers());
         return response(schedules.findByBarberIdOrderByDayOfWeek(barberId));
     }
 
     static void validate(List<ScheduleDay> days) {
-        if (days == null || days.size() > 7 || days.stream().map(ScheduleDay::dayOfWeek).distinct().count() != days.size()) {
+        if (days == null || days.size() > 7 || days.stream().anyMatch(Objects::isNull)
+                || days.stream().map(ScheduleDay::dayOfWeek).distinct().count() != days.size()) {
             throw new IllegalArgumentException("Supply at most one shift per weekday.");
         }
         for (ScheduleDay day : days) {

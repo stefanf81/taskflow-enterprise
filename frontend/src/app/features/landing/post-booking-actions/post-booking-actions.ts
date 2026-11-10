@@ -360,9 +360,14 @@ export class PostBookingActionsComponent {
   });
 
   onCancel(): void {
+    if (this.isCancelling()) return;
     const publicId = normalizePublicId(this.cancelModel().publicId);
     const email = this.cancelModel().email.trim();
-    if (!publicId || !email) return;
+    if (!publicId || !email || this.cancelForm().invalid()) {
+      this.cancelForm().markAsTouched();
+      this.flash.errorMessage.set('Enter your Booking Code and a valid booking email.');
+      return;
+    }
 
     this.flash.errorMessage.set(null);
     this.isCancelling.set(true);
@@ -375,7 +380,7 @@ export class PostBookingActionsComponent {
           this.flash.showSuccess(
             '🗑️ Reservation successfully cancelled. Your time slot has been released.',
           );
-          this.cancelModel.set({ publicId: '', email: '' });
+          this.cancelForm().reset({ publicId: '', email: '' });
         },
         error: (err) => {
           this.flash.errorMessage.set(
@@ -390,6 +395,7 @@ export class PostBookingActionsComponent {
     const publicId = normalizePublicId(this.rescheduleModel().publicId);
     const email = this.rescheduleModel().email.trim();
     if (!publicId || !email || this.rescheduleForm().invalid()) {
+      this.rescheduleForm().markAsTouched();
       this.flash.errorMessage.set('Enter your Booking Code and the email you booked with.');
       return;
     }
@@ -410,7 +416,7 @@ export class PostBookingActionsComponent {
         next: (moved) => {
           this.isRescheduling.set(false);
           // Also closes the picker (see rescheduleTarget).
-          this.rescheduleModel.set({ publicId: '', email: '' });
+          this.rescheduleForm().reset({ publicId: '', email: '' });
           this.flash.showSuccess(
             `🔁 Booking moved to ${formatLocalDate(moved.bookingDate)} at ${formatTime12Hour(moved.bookingTime)}. The shop will confirm it again.`,
           );
@@ -428,10 +434,18 @@ export class PostBookingActionsComponent {
   }
 
   onReview(): void {
+    if (this.isReviewing()) return;
     const publicId = normalizePublicId(this.reviewModel().publicId);
     const email = this.reviewModel().email.trim();
-    if (!publicId || !email) return;
+    if (!publicId || !email || this.reviewForm().invalid()) {
+      this.reviewForm().markAsTouched();
+      this.flash.errorMessage.set(
+        'Enter your Booking Code, a valid booking email and a rating from 1 to 5.',
+      );
+      return;
+    }
 
+    this.flash.errorMessage.set(null);
     this.isReviewing.set(true);
     this.reviewsApi
       .submitReview(publicId, {
@@ -445,7 +459,7 @@ export class PostBookingActionsComponent {
           this.isReviewing.set(false);
           this.flash.showSuccess('Thank you for your review! We appreciate your feedback.');
           this.reviewStore.loadRatings();
-          this.reviewModel.set({ publicId: '', email: '', rating: 5, comment: '' });
+          this.reviewForm().reset({ publicId: '', email: '', rating: 5, comment: '' });
         },
         error: (err) => {
           this.isReviewing.set(false);

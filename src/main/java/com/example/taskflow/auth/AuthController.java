@@ -3,6 +3,8 @@ import com.example.taskflow.auth.internal.UserRepository;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,6 +17,7 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.CacheControl;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -76,6 +79,10 @@ class AuthController {
                     new UsernamePasswordAuthenticationToken(loginRequest.username(), loginRequest.password()));
             loginAttemptLimiter.recordSuccess(loginRequest.username());
             return authentication;
+        } catch (AuthenticationServiceException e) {
+            // A provider/system failure is not evidence of an incorrect password, even when
+            // it is not the internal lookup failure that our advice exposes as retryable 503.
+            throw e;
         } catch (AuthenticationException e) {
             loginAttemptLimiter.recordFailure(loginRequest.username());
             throw e;
@@ -86,7 +93,13 @@ class AuthController {
     @Operation(summary = "Authenticate user and issue an HttpOnly JWT cookie")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Login successful — JWT set in HttpOnly cookie"),
-            @ApiResponse(responseCode = "401", description = "Invalid username or password")
+            @ApiResponse(responseCode = "400", description = "Invalid login payload"),
+            @ApiResponse(responseCode = "401", description = "Invalid username or password"),
+            @ApiResponse(responseCode = "429", description = "Too many failed login attempts"),
+            @ApiResponse(responseCode = "500", description = "Authentication service failure"),
+            @ApiResponse(responseCode = "503", description = "Authentication service temporarily unavailable",
+                    headers = @Header(name = "Retry-After", description = "Seconds before retrying",
+                            schema = @Schema(type = "integer", example = "1")))
     })
     public ResponseEntity<LoginResponse> authenticateUser(@Valid @RequestBody LoginRequest loginRequest,
                                                           HttpServletResponse response) {
@@ -105,7 +118,13 @@ class AuthController {
     @Operation(summary = "Authenticate a native client and issue a bearer token")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Login successful — bearer token returned"),
-            @ApiResponse(responseCode = "401", description = "Invalid username or password")
+            @ApiResponse(responseCode = "400", description = "Invalid login payload"),
+            @ApiResponse(responseCode = "401", description = "Invalid username or password"),
+            @ApiResponse(responseCode = "429", description = "Too many failed login attempts"),
+            @ApiResponse(responseCode = "500", description = "Authentication service failure"),
+            @ApiResponse(responseCode = "503", description = "Authentication service temporarily unavailable",
+                    headers = @Header(name = "Retry-After", description = "Seconds before retrying",
+                            schema = @Schema(type = "integer", example = "1")))
     })
     public ResponseEntity<MobileLoginResponse> authenticateMobileUser(
             @Valid @RequestBody LoginRequest loginRequest) {
@@ -150,6 +169,7 @@ class AuthController {
     @PostMapping("/mobile/refresh")
     @Operation(summary = "Rotate a native client's one-use refresh credential")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "Session renewed"),
+            @ApiResponse(responseCode = "400", description = "Invalid refresh payload"),
             @ApiResponse(responseCode = "401", description = "Session expired or revoked")})
     public ResponseEntity<MobileLoginResponse> refreshMobile(@Valid @RequestBody RefreshRequest request) {
         RefreshSessionService.Issued session = refreshSessions.rotate(request.refreshToken())
@@ -176,7 +196,7 @@ class AuthController {
         // let " A@x.com " pass the check and then collide with "a@x.com" (500).
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         if (userRepository.findByEmailIgnoreCase(email).isPresent()) {
-            return emailAlreadyRegistered();
+            throw emailAlreadyRegistered();
         }
 
         AppUser user = new AppUser(
@@ -194,7 +214,7 @@ class AuthController {
             // the pre-check does instead of leaking a 500. Any other integrity failure
             // (e.g. a value too long for its column) is not a duplicate: let it surface.
             if (isUniqueViolation(e)) {
-                return emailAlreadyRegistered();
+                throw emailAlreadyRegistered();
             }
             throw e;
         }
@@ -212,8 +232,8 @@ class AuthController {
         return false;
     }
 
-    private ResponseEntity<RegisterResponse> emailAlreadyRegistered() {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new RegisterResponse("Email is already registered."));
+    private static IllegalArgumentException emailAlreadyRegistered() {
+        return new IllegalArgumentException("Email is already registered.");
     }
 
     @GetMapping("/csrf")

@@ -8,11 +8,25 @@ import {
   object,
   optional,
   positive,
+  refine,
   regex,
   string,
   trim,
   type infer as zInfer,
 } from "zod/mini";
+
+const MAX_PASSWORD_UTF8_BYTES = 72;
+
+function utf8ByteLength(value: string): number {
+  let bytes = 0;
+  for (const character of value) {
+    const point = character.codePointAt(0)!;
+    // Reject unpaired UTF-16 surrogates rather than hashing a runtime-specific replacement.
+    if (point >= 0xd800 && point <= 0xdfff) return Infinity;
+    bytes += point <= 0x7f ? 1 : point <= 0x7ff ? 2 : point <= 0xffff ? 3 : 4;
+  }
+  return bytes;
+}
 
 /**
  * Roles the backend can issue. Validating the enum at the transport boundary
@@ -41,6 +55,9 @@ export const registerSchema = object({
       /^(?=.*[0-9])(?=.*[a-zA-Z]).{8,}$/,
       "Password must be at least 8 characters long and contain both letters and numbers",
     ),
+    refine((value) => utf8ByteLength(value) <= MAX_PASSWORD_UTF8_BYTES, {
+      message: "Password must not exceed 72 UTF-8 bytes",
+    }),
   ),
   phone: string().check(
     trim(),

@@ -74,6 +74,7 @@ class ReviewRatingsIntegrationTest {
             Appointment current = appointmentRepository.findById(appointment.getId()).orElseThrow();
             current.setStatus(status);
             Appointment saved = appointmentRepository.save(current);
+            appointmentRepository.flush();
             eventPublisher.publishEvent(status == AppointmentStatus.CANCELLED
                     ? new AppointmentCancelledEvent(AppointmentDetailsFixtures.of(saved),
                             AppointmentCancelledEvent.CancelledBy.ADMIN)
@@ -124,4 +125,5 @@ class ReviewRatingsIntegrationTest {
         assertNotNull(ratingsCache().get(ReviewCacheConfig.ALL_RATINGS_KEY),
                 "approving or declining an upcoming booking cannot change any rating");
     }
+
 }

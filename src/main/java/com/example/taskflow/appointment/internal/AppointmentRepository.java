@@ -27,6 +27,10 @@ public interface AppointmentRepository
 
     Appointment findByPublicId(String publicId);
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM Appointment a WHERE a.publicId = :publicId")
+    java.util.Optional<Appointment> findByPublicIdForUpdate(@Param("publicId") String publicId);
+
     Appointment findByIdempotencyKey(String idempotencyKey);
 
     /**

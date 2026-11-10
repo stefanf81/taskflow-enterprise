@@ -16,6 +16,7 @@ import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -140,13 +141,13 @@ class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleHttpMessageNotReadableException(
             org.springframework.http.converter.HttpMessageNotReadableException ex, HttpServletRequest request) {
 
-        // M1: Log the detailed message server-side for debugging, but return a
-        // generic message to the client. The raw mostSpecificCause message can
-        // leak internal class names (e.g. "Cannot deserialize value of type
-        // `com.example.taskflow.appointment.AppointmentCreateRequest`"), which
-        // is an information-disclosure vector flagged by OWASP / ZAP.
-        String detailedMessage = ex.getMostSpecificCause() != null ? ex.getMostSpecificCause().getMessage() : ex.getMessage();
-        logger.warn("Malformed JSON request on {}: {}", LogSanitizer.stripNewlines(request.getRequestURI()), LogSanitizer.stripNewlines(detailedMessage));
+        // M1: Log the request path and exception type server-side for debugging, but never the
+        // parser's detailed message (which can embed the offending user-supplied scalar value)
+        // or internal class names in the client response.
+        Throwable cause = ex.getMostSpecificCause();
+        logger.warn("Malformed JSON request on {} ({})",
+                LogSanitizer.stripNewlines(request.getRequestURI()),
+                cause != null ? cause.getClass().getSimpleName() : ex.getClass().getSimpleName());
 
         ErrorResponse errorResponse = new ErrorResponse(
                 now(),
@@ -269,6 +270,36 @@ class GlobalExceptionHandler {
             }
         }
         return null;
+    }
+
+    /**
+     * An internal failure inside {@code DaoAuthenticationProvider} (e.g. the user lookup query
+     * failed because the database or connection pool was unavailable) arrives wrapped in
+     * {@link org.springframework.security.authentication.InternalAuthenticationServiceException}.
+     * Handle it before {@link #handleAuthenticationException} so an outage is reported as 503
+     * rather than a false 401 "Invalid credentials".
+     */
+    @ExceptionHandler(org.springframework.security.authentication.InternalAuthenticationServiceException.class)
+    public ResponseEntity<ErrorResponse> handleInternalAuthenticationServiceException(
+            org.springframework.security.authentication.InternalAuthenticationServiceException ex,
+            HttpServletRequest request) {
+        // Provider messages/causes may include account names or query parameters.
+        logger.warn("Authentication service unavailable on {} ({})",
+                LogSanitizer.stripNewlines(request.getRequestURI()), ex.getClass().getSimpleName());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header("Retry-After", "1")
+                .body(new ErrorResponse(now(), 503, "Service Unavailable",
+                        "The service is temporarily busy. Please try again shortly.", request.getRequestURI()));
+    }
+
+    @ExceptionHandler(AuthenticationServiceException.class)
+    public ResponseEntity<ErrorResponse> handleAuthenticationServiceException(
+            AuthenticationServiceException ex, HttpServletRequest request) {
+        logger.error("Authentication service failed on {} ({})",
+                LogSanitizer.stripNewlines(request.getRequestURI()), ex.getClass().getSimpleName());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse(now(), 500, "Internal Server Error",
+                        "Authentication is unavailable. Please try again later.", request.getRequestURI()));
     }
 
     @ExceptionHandler(AuthenticationException.class)

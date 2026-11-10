@@ -16,7 +16,11 @@ import java.util.Optional;
  */
 public interface AppointmentService {
 
-    /** Read-only view of the booking with this public id; empty when none exists. */
+    /**
+     * Snapshot of the booking with this public id, locked {@code FOR UPDATE} for the caller's
+     * transaction so a concurrent status change or cancellation cannot interleave with review
+     * creation; empty when none exists.
+     */
     Optional<AppointmentDetails> findDetailsByPublicId(String publicId);
 
     /**

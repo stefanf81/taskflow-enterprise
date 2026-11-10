@@ -3,6 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AdminNotificationsTab } from './admin-notifications-tab';
+import { AuthState } from '../../core/auth/auth.state';
 
 describe('AdminNotificationsTab', () => {
   let fixture: ComponentFixture<AdminNotificationsTab>;
@@ -28,12 +29,19 @@ describe('AdminNotificationsTab', () => {
       providers: [provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
+    TestBed.inject(AuthState).applyRole('ROLE_ADMIN', 'admin');
     fixture = TestBed.createComponent(AdminNotificationsTab);
     httpMock = TestBed.inject(HttpTestingController);
     fixture.detectChanges();
   });
 
   afterEach(() => httpMock.verify());
+
+  it('shows a loading state instead of the empty message while the outbox request is pending', async () => {
+    expect(text()).toContain('Loading notification outbox');
+    expect(text()).not.toContain('No notifications sent yet');
+    await respond([]);
+  });
 
   it('lists outbox entries, including ones not sent yet', async () => {
     await respond([

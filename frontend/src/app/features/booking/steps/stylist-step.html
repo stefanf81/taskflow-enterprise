@@ -4,7 +4,11 @@
   aria-labelledby="step-tab-2"
   class="space-y-4 animate-fadeIn"
 >
-  @if (store.rosterError()) {
+  @if (store.rosterLoading() && store.stylistProfiles().length === 0) {
+    <p role="status" class="text-center text-xs text-zinc-400 py-2">
+      Loading stylists&hellip; You can still choose "No Preference".
+    </p>
+  } @else if (store.rosterError()) {
     <div role="alert" class="text-center text-xs text-rose-400 py-2">
       <p>{{ store.rosterError() }} You can still choose "No Preference".</p>
       <button

@@ -35,6 +35,7 @@ describe('shop rules', () => {
     expect(isOpenOn('2026-08-09', DEFAULT_SHOP_RULES)).toBe(false); // Sunday
     expect(isOpenOn('2026-08-08', weekdaysOnly)).toBe(false);
     expect(isOpenOn('not-a-date', DEFAULT_SHOP_RULES)).toBe(false);
+    expect(isOpenOn('2026-02-31', DEFAULT_SHOP_RULES)).toBe(false);
     expect(closedWeekdays(DEFAULT_SHOP_RULES)).toEqual([0]);
     expect(closedWeekdays(weekdaysOnly)).toEqual([0, 6]);
   });
@@ -46,6 +47,7 @@ describe('shop rules', () => {
     expect(isWithinBookingWindow('2026-09-02', now, weekdaysOnly)).toBe(true);
     expect(isWithinBookingWindow('2026-09-03', now, weekdaysOnly)).toBe(false);
     expect(isWithinBookingWindow('2026-08-02', now, weekdaysOnly)).toBe(false);
+    expect(isWithinBookingWindow('2026-08-32', now, weekdaysOnly)).toBe(false);
     expect(isWithinBookingWindow('', now, weekdaysOnly)).toBe(false);
     expect(bookingWindowMessage(weekdaysOnly)).toBe('Bookings can be made at most 30 days ahead.');
   });

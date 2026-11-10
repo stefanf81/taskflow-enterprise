@@ -289,7 +289,7 @@ class AppointmentBookingService {
             Appointment item = new Appointment();
             item.setIdempotencyKey(trimmedKey);
             item.setCustomerName(request.customerName());
-            item.setCustomerEmail(request.customerEmail());
+            item.setCustomerEmail(request.customerEmail().trim());
             item.setCustomerPhone(request.customerPhone());
             // A1: keep denormalized name cache in sync with the FK (renders instantly
             // in the UI without an extra join) AND wire the real catalog FKs.

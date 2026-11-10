@@ -26,21 +26,36 @@ const BARBER_PRESENTATION: Record<string, { title: string; specialty: string; ba
   },
 };
 
+export type RatingsDisplayState = 'loading' | 'error' | 'ready';
+
 /** Joins the public roster with the public ratings into the wizard's stylist cards. */
 export function toStylistProfiles(
   barbers: readonly PublicBarber[],
   ratings: readonly BarberRating[],
+  ratingsState: RatingsDisplayState = 'ready',
 ): StylistProfile[] {
   return barbers.map((barber) => {
     const presentation = BARBER_PRESENTATION[barber.name];
     const rating = ratings.find((r) => r.barberName === barber.name);
+    let ratingLabel = '—';
+    let reviewsLabel = 'New';
+    if (ratingsState === 'loading' && !rating) {
+      ratingLabel = '…';
+      reviewsLabel = 'Loading';
+    } else if (ratingsState === 'error' && !rating) {
+      ratingLabel = '—';
+      reviewsLabel = 'Unavailable';
+    } else if (rating && rating.reviewCount > 0) {
+      ratingLabel = `${rating.averageRating.toFixed(1)} ★`;
+      reviewsLabel = `${rating.reviewCount} reviews`;
+    }
     return {
       name: barber.name,
       title: presentation?.title ?? 'Professional Barber',
       specialty: presentation?.specialty ?? 'All grooming services',
       ...(presentation?.badge ? { badge: presentation.badge } : {}),
-      rating: rating ? `${rating.averageRating.toFixed(1)} ★` : '5.0 ★',
-      reviews: rating ? `${rating.reviewCount} reviews` : 'New',
+      rating: ratingLabel,
+      reviews: reviewsLabel,
     };
   });
 }

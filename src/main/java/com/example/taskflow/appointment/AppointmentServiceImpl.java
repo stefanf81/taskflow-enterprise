@@ -30,9 +30,9 @@ class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public Optional<AppointmentDetails> findDetailsByPublicId(String publicId) {
-        return Optional.ofNullable(appointmentRepository.findByPublicId(publicId)).map(AppointmentDetails::of);
+        return appointmentRepository.findByPublicIdForUpdate(publicId).map(AppointmentDetails::of);
     }
 
     @Override

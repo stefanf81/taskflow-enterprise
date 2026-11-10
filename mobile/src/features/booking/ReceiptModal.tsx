@@ -78,7 +78,9 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
         <View style={styles.receiptCard}>
           <View style={styles.row}>
             <Text style={styles.label}>Public Reference ID</Text>
-            <Text style={styles.publicId}>{appointment.publicId}</Text>
+            <Text testID="receipt-booking-code" style={styles.publicId}>
+              {appointment.publicId}
+            </Text>
           </View>
           <View style={styles.divider} />
 

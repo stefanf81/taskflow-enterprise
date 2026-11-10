@@ -112,6 +112,7 @@ export class CustomerStore {
   }
 
   cancelAppointment(publicId: string): void {
+    if (this.isCancelling()) return;
     if (!confirm('Are you sure you want to cancel this appointment?')) return;
 
     this.cancelErrorMessage.set(null);

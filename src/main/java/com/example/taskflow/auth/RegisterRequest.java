@@ -1,5 +1,6 @@
 package com.example.taskflow.auth;
 
+import com.example.taskflow.auth.internal.Utf8ByteLength;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -17,6 +18,7 @@ record RegisterRequest(
     @NotBlank(message = "Password is required") 
     @Size(min = 8, message = "Password must be at least 8 characters") 
     @Pattern(regexp = "^(?=.*[0-9])(?=.*[a-zA-Z]).{8,}$", message = "Password must be at least 8 characters long and contain both letters and numbers")
+    @Utf8ByteLength(max = 72, message = "Password must not exceed 72 UTF-8 bytes")
     String password,
     
     @NotBlank(message = "Phone number is required")

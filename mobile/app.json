@@ -14,11 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.taskflow.mobile",
-      "infoPlist": {
-        "NSCameraUsageDescription": "TaskFlow requires camera access to scan booking QR codes or take profile pictures.",
-        "NSFaceIDUsageDescription": "TaskFlow uses Face ID for fast and secure staff and customer login."
-      }
+      "bundleIdentifier": "com.taskflow.mobile"
     },
     "android": {
       "adaptiveIcon": {
@@ -41,12 +37,7 @@
           "backgroundColor": "#0F0F11"
         }
       ],
-      [
-        "expo-secure-store",
-        {
-          "faceIDPermission": "Allow TaskFlow to use Face ID for fast authentication."
-        }
-      ],
+      "expo-secure-store",
       [
         "expo-detox-config-plugin",
         {

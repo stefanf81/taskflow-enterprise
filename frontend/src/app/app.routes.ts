@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, effect, inject } from '@angular/core';
 import { Router, RouterLink, Routes } from '@angular/router';
 import { authGuard } from './core/auth/auth.guard';
 import { AuthState } from './core/auth/auth.state';
@@ -29,13 +29,13 @@ class NotFoundComponent {
   private readonly router = inject(Router);
 
   constructor() {
-    const role = this.auth.role();
-    if (role === 'ROLE_ADMIN') {
-      this.router.navigateByUrl('/admin');
-    } else if (role === 'ROLE_CUSTOMER') {
-      this.router.navigateByUrl('/customer');
-    }
-    // Guests stay on the 404 page
+    effect(() => {
+      const role = this.auth.role();
+      if (role === 'ROLE_ADMIN' || role === 'ROLE_CUSTOMER') {
+        this.router.navigateByUrl(this.auth.dashboardPathFor(role), { replaceUrl: true });
+      }
+      // Guests stay on the 404 page
+    });
   }
 }
 

@@ -1,5 +1,6 @@
 import * as contracts from '@taskflow/schemas/src/generated/api-responses';
 import * as validators from '@taskflow/schemas';
+import { refine, string } from 'zod/mini';
 
 /**
  * The response validators in @taskflow/schemas are hand-written (they add enums, lengths and the
@@ -42,7 +43,32 @@ const pairs = Object.entries(VALIDATOR_FOR_CONTRACT) as [
   keyof typeof validators,
 ][];
 
+type FieldSchema = ObjectSchema['shape'][string];
+// Include valid examples for constrained response scalars (role, token type, token and HH:mm).
+const probes = ['ROLE_ADMIN', 'Bearer', 'r'.repeat(43), '09:00', 'text', 1, true, [], {}];
+const acceptedKinds = (schema: FieldSchema) =>
+  new Set(
+    probes
+      .filter((probe) => schema.safeParse(probe).success)
+      .map((probe) => (Array.isArray(probe) ? 'array' : typeof probe)),
+  );
+
+function assertFieldTypes(contract: FieldSchema, validator: FieldSchema): void {
+  const contractKinds = acceptedKinds(contract);
+  const validatorKinds = acceptedKinds(validator);
+  // Equality, not subset: a validator that rejects every sample must fail for a scalar contract.
+  expect(validatorKinds).toEqual(contractKinds);
+}
+
 describe('response validators match the generated OpenAPI contracts', () => {
+  it('rejects vacuous validators and wrong primitive types', () => {
+    expect(() => assertFieldTypes(string(), string().check(refine(() => false)))).toThrow();
+    expect(() =>
+      assertFieldTypes(string(), {
+        safeParse: (value) => ({ success: typeof value === 'number' }),
+      }),
+    ).toThrow();
+  });
   it('has a validator for every generated contract', () => {
     expect(Object.keys(contracts).sort()).toEqual(Object.keys(VALIDATOR_FOR_CONTRACT).sort());
   });
@@ -68,4 +94,19 @@ describe('response validators match the generated OpenAPI contracts', () => {
 
     expect(mayBeAbsent(validator)).toEqual(mayBeAbsent(contract));
   });
+
+  it.each(pairs)(
+    '%s <-> %s agree on primitive field types (string vs number vs boolean vs object/array)',
+    (contractName, validatorName) => {
+      const contract = contracts[contractName] as unknown as ObjectSchema;
+      const validator = validators[validatorName] as unknown as ObjectSchema;
+
+      for (const [field, contractField] of Object.entries(contract.shape)) {
+        const validatorField = validator.shape[field];
+        expect(validatorField).toBeDefined();
+        if (!validatorField) continue;
+        assertFieldTypes(contractField, validatorField);
+      }
+    },
+  );
 });

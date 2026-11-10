@@ -19,6 +19,8 @@ import java.util.TreeSet;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -73,6 +75,27 @@ class OpenApiSecurityDocumentationTest {
         // Every listed operation exists (a typo in the list would silently document nothing).
         assertEquals(new TreeSet<>(OpenApiSecurityConfig.PUBLIC_OPERATIONS), documentedPublic);
         assertEquals("[{\"cookieAuth\":[]},{\"bearerAuth\":[]}]", spec.get("security").toString());
+
+        // Telemetry documents 204 and intentionally empty 400/413 error responses, with all event fields required.
+        JsonNode telemetryResponses = spec.at("/paths/~1api~1v1~1telemetry/post/responses");
+        assertTrue(telemetryResponses.has("204"));
+        assertFalse(telemetryResponses.has("200"));
+        assertFalse(telemetryResponses.path("400").has("content"));
+        assertFalse(telemetryResponses.path("413").has("content"));
+        assertEquals("[\"name\",\"platform\",\"route\",\"value\"]",
+                spec.at("/components/schemas/ClientTelemetryEvent/required").toString());
+
+        // Browser refresh CSRF 403 is answered by CsrfFilter without a body; 401 still carries ErrorResponse.
+        JsonNode refreshResponses = spec.at("/paths/~1api~1v1~1auth~1refresh/post/responses");
+        assertTrue(refreshResponses.path("401").has("content"));
+        assertFalse(refreshResponses.path("403").has("content"));
+
+        for (String path : List.of("~1api~1v1~1auth~1login", "~1api~1v1~1auth~1mobile~1login")) {
+            JsonNode unavailable = spec.at("/paths/" + path + "/post/responses/503");
+            assertEquals("integer", unavailable.at("/headers/Retry-After/schema/type").asText());
+            assertEquals("#/components/schemas/ErrorResponse",
+                    unavailable.at("/content/application~1json/schema/$ref").asText());
+        }
     }
 
     private boolean reachableAnonymously(String method, String pathTemplate) throws Exception {

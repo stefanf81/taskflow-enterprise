@@ -85,6 +85,12 @@ describe('HomeScreen', () => {
     expect(getByText('Sign In / Register')).toBeTruthy();
   });
 
+  it('offers guest booking management on Home', async () => {
+    const { getByText } = await render(<HomeScreen />);
+    await fireEvent.press(getByText('Manage Booking'));
+    expect(mockNavigate).toHaveBeenCalledWith('PublicActions', {});
+  });
+
   it('renders Master Stylists section', async () => {
     const { getByText } = await render(<HomeScreen />);
     expect(getByText('Master Stylists')).toBeTruthy();

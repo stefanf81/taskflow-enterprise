@@ -201,7 +201,8 @@
       "notes": "Time zone, booking window and opening hours from GET /api/v1/appointments/public/shop; the rules themselves (opening days, window, cancellable bookings, time helpers) live in shared/domain (@taskflow/domain).",
       "storeHook": {
         "web": "frontend/src/app/core/shop-clock.ts",
-        "mobile": "mobile/src/core/shop/useShopInfo.ts"
+        "mobile": "mobile/src/core/shop/useShopInfo.ts",
+        "mobileClock": "mobile/src/core/shop/useNow.ts"
       }
     },
     {

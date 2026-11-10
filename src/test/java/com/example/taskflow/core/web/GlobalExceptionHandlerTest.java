@@ -171,6 +171,20 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void testHandleAuthenticationServiceExceptionMapsToServiceUnavailable() {
+        org.springframework.security.authentication.InternalAuthenticationServiceException ex =
+                new org.springframework.security.authentication.InternalAuthenticationServiceException(
+                        "PreparedStatementCallback; Connection is not available",
+                        new org.springframework.dao.DataAccessResourceFailureException("HikariPool-1 - Connection is not available"));
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleInternalAuthenticationServiceException(ex, request);
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+        assertEquals("1", response.getHeaders().getFirst("Retry-After"));
+        assertNotNull(response.getBody());
+        assertEquals(503, response.getBody().status());
+    }
+
+    @Test
     void testHandleAccessDeniedException() {
         AccessDeniedException ex = new AccessDeniedException("Access denied");
         ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleAccessDeniedException(ex, request);
@@ -178,6 +192,49 @@ class GlobalExceptionHandlerTest {
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertNotNull(response.getBody());
         assertEquals(403, response.getBody().status());
+    }
+
+    @Test
+    void serviceExceptionAdviceSelectsSafe500OrRetryable503WithoutLoggingAccountData() throws Exception {
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class);
+        var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            var mvc = org.springframework.test.web.servlet.setup.MockMvcBuilders
+                    .standaloneSetup(new FailingAuthenticationController())
+                    .setControllerAdvice(globalExceptionHandler).build();
+            for (String type : List.of("internal", "service")) {
+                var response = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .post("/auth-failure").param("type", type)).andReturn().getResponse();
+                assertEquals(type.equals("internal") ? 503 : 500, response.getStatus());
+                assertEquals(type.equals("internal") ? "1" : null, response.getHeader("Retry-After"));
+                assertFalse(response.getContentAsString().contains("private-customer"));
+                assertFalse(response.getContentAsString().contains("SELECT"));
+            }
+            assertEquals(2, appender.list.size());
+            for (var event : appender.list) {
+                assertFalse(event.getFormattedMessage().contains("private-customer"));
+                assertFalse(event.getFormattedMessage().contains("SELECT"));
+                assertNull(event.getThrowableProxy(), "do not attach a cause carrying account/query details");
+            }
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @org.springframework.web.bind.annotation.RestController
+    static class FailingAuthenticationController {
+        @org.springframework.web.bind.annotation.PostMapping("/auth-failure")
+        public void fail(@org.springframework.web.bind.annotation.RequestParam String type) {
+            String sensitive = "private-customer@example.com SELECT * FROM app_users";
+            if (type.equals("internal")) {
+                throw new org.springframework.security.authentication.InternalAuthenticationServiceException(
+                        sensitive, new org.springframework.dao.DataAccessResourceFailureException(sensitive));
+            }
+            throw new org.springframework.security.authentication.AuthenticationServiceException(sensitive);
+        }
     }
 
     @Test
@@ -195,14 +252,28 @@ class GlobalExceptionHandlerTest {
     void testHandleHttpMessageNotReadableException() {
         org.springframework.http.converter.HttpMessageNotReadableException ex = mock(org.springframework.http.converter.HttpMessageNotReadableException.class);
         when(ex.getMessage()).thenReturn("Malformed JSON");
-        RuntimeException cause = new RuntimeException("Parse error detail");
+        RuntimeException cause = new RuntimeException("Cannot deserialize value from String \"secret-customer@example.com\"");
         when(ex.getMostSpecificCause()).thenReturn(cause);
-        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleHttpMessageNotReadableException(ex, request);
 
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertNotNull(response.getBody());
-        // M1: response message must NOT leak the internal cause detail
-        assertEquals("Malformed JSON request payload. Please check your request body and content type.", response.getBody().message());
+        ch.qos.logback.classic.Logger logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory
+                .getLogger(GlobalExceptionHandler.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
+                new ch.qos.logback.core.read.ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleHttpMessageNotReadableException(ex, request);
+
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+            assertNotNull(response.getBody());
+            // M1: neither the client response nor the server log may echo the offending scalar value
+            assertEquals("Malformed JSON request payload. Please check your request body and content type.", response.getBody().message());
+            assertEquals(1, appender.list.size());
+            String logged = appender.list.getFirst().getFormattedMessage();
+            assertFalse(logged.contains("secret-customer@example.com"), "Parser log must not include customer values: " + logged);
+        } finally {
+            logger.detachAppender(appender);
+        }
     }
 
     @Test

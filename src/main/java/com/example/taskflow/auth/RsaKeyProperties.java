@@ -20,4 +20,11 @@ record RsaKeyProperties(
         @Nullable String privateKey,
         @Nullable String publicKey,
         @DefaultValue("false") boolean requirePersistentKeys) {
+
+    @Override
+    public String toString() {
+        return "RsaKeyProperties[privateKey=" + (privateKey == null || privateKey.isEmpty() ? "<empty>" : "[REDACTED]")
+                + ", publicKey=" + publicKey
+                + ", requirePersistentKeys=" + requirePersistentKeys + "]";
+    }
 }

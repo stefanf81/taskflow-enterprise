@@ -74,6 +74,8 @@ class AppointmentLifecycleService {
         Appointment savedItem = appointmentRepository.save(item);
         if (target == AppointmentStatus.APPROVED) {
             flushApproval();
+        } else {
+            appointmentRepository.flush();
         }
         changes.availabilityChanged(savedItem);
 
@@ -154,7 +156,8 @@ class AppointmentLifecycleService {
         if (item == null) {
             throw new ResourceNotFoundException("Appointment booking not found.");
         }
-        if (!item.getCustomerEmail().equalsIgnoreCase(email.trim())) {
+        if (email == null || item.getCustomerEmail() == null
+                || !item.getCustomerEmail().trim().equalsIgnoreCase(email.trim())) {
             throw new IllegalArgumentException("Verification failed: The provided email address does not match this booking ID.");
         }
         cancelAppointment(item, AppointmentCancelledEvent.CancelledBy.GUEST, true);
@@ -165,7 +168,8 @@ class AppointmentLifecycleService {
     public void cancelMyAppointment(String publicId, String email) {
         Appointment appointment = Optional.ofNullable(appointmentRepository.findByPublicId(publicId))
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found or unauthorized."));
-        if (!appointment.getCustomerEmail().equalsIgnoreCase(email)) {
+        if (email == null || appointment.getCustomerEmail() == null
+                || !appointment.getCustomerEmail().trim().equalsIgnoreCase(email.trim())) {
             throw new ResourceNotFoundException("Appointment not found or unauthorized.");
         }
         cancelAppointment(appointment, AppointmentCancelledEvent.CancelledBy.CUSTOMER, true);
@@ -198,6 +202,7 @@ class AppointmentLifecycleService {
 
         item.setStatus(AppointmentStatus.CANCELLED);
         Appointment saved = appointmentRepository.save(item);
+        appointmentRepository.flush();
         changes.cancelled(saved, cancelledBy);
         changes.availabilityChanged(saved);
         changes.adminEvent(AppointmentAdminEvent.Type.UPDATED, saved.getId());

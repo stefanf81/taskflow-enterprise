@@ -11,6 +11,8 @@ interface HeroSectionProps {
   onSignIn: () => void;
   /** Opens the signed-in user's own area (admin or customer tabs). */
   onOpenAccount: () => void;
+  /** Opens guest booking management (cancel / reschedule / review by booking code). */
+  onManageBooking?: () => void;
 }
 
 /** Landing headline with the booking call to action and the sign-in / account button. */
@@ -20,6 +22,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   onBook,
   onSignIn,
   onOpenAccount,
+  onManageBooking,
 }) => (
   <View style={styles.heroContainer}>
     <View style={styles.squireBadge}>
@@ -45,13 +48,24 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         style={styles.heroBtn}
       />
       {!isAuthenticated ? (
-        <Button
-          title="Sign In / Register"
-          variant="outline"
-          size="lg"
-          onPress={onSignIn}
-          style={styles.heroBtn}
-        />
+        <>
+          <Button
+            title="Sign In / Register"
+            variant="outline"
+            size="lg"
+            onPress={onSignIn}
+            style={styles.heroBtn}
+          />
+          {onManageBooking && (
+            <Button
+              title="Manage Booking"
+              variant="secondary"
+              size="md"
+              onPress={onManageBooking}
+              style={styles.heroBtn}
+            />
+          )}
+        </>
       ) : (
         <Button
           title={isAdmin ? 'Admin Portal' : 'My Account'}

@@ -100,10 +100,10 @@ export interface CancelRequest {
 }
 
 export interface ClientTelemetryEvent {
-  name?: "LCP" | "FCP" | "CLS" | "INP" | "SCREEN_LOAD" | "JS_ERROR" | "UNHANDLED_REJECTION" | "RENDER_ERROR";
-  platform?: "WEB" | "MOBILE";
-  route?: "LANDING" | "BOOKING" | "CUSTOMER" | "ADMIN" | "AUTH" | "OTHER";
-  value?: number;
+  name: "LCP" | "FCP" | "CLS" | "INP" | "SCREEN_LOAD" | "JS_ERROR" | "UNHANDLED_REJECTION" | "RENDER_ERROR";
+  platform: "WEB" | "MOBILE";
+  route: "LANDING" | "BOOKING" | "CUSTOMER" | "ADMIN" | "AUTH" | "OTHER";
+  value: number;
 }
 
 export interface CsrfToken {

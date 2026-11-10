@@ -113,6 +113,9 @@ class BarberServiceImpl implements BarberService {
     @Override
     @Transactional(readOnly = true)
     public List<BarberTimeOffResponse> getTimeOff(Long barberId) {
+        if (!barberRepository.existsById(barberId)) {
+            throw new ResourceNotFoundException("Barber not found with id: " + barberId);
+        }
         return timeOffRepository.findByBarberId(barberId).stream()
                 .map(BarberTimeOffResponse::fromEntity)
                 .toList();
@@ -161,6 +164,7 @@ class BarberServiceImpl implements BarberService {
             }
             appointment.setStatus(AppointmentStatus.CANCELLED);
             Appointment saved = appointmentRepository.save(appointment);
+            appointmentRepository.flush();
             eventPublisher.publishEvent(new AppointmentCancelledEvent(
                     AppointmentDetails.of(saved), AppointmentCancelledEvent.CancelledBy.BARBER_UNAVAILABLE));
             eventPublisher.publishEvent(new AppointmentAdminEvent(

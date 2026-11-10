@@ -42,11 +42,14 @@ class AuthPropertiesBindingTest {
                 .run(context -> {
                     assertThat(context.getBean(JwtProperties.class)).isEqualTo(new JwtProperties("issuer", "audience", 60));
                     assertThat(context.getBean(RsaKeyProperties.class))
-                            .isEqualTo(new RsaKeyProperties("private", "public", true));
+                            .isEqualTo(new RsaKeyProperties("private", "public", true))
+                            .hasToString("RsaKeyProperties[privateKey=[REDACTED], publicKey=public, requirePersistentKeys=true]");
                     assertThat(context.getBean(CookieProperties.class).secure()).isFalse();
                     assertThat(context.getBean(CorsProperties.class).allowedOrigins()).isEqualTo("https://shop.example");
                     assertThat(context.getBean(LoginThrottleProperties.class)).isEqualTo(new LoginThrottleProperties(3, 30));
-                    assertThat(context.getBean(MetricsProperties.class)).isEqualTo(new MetricsProperties("token"));
+                    assertThat(context.getBean(MetricsProperties.class))
+                            .isEqualTo(new MetricsProperties("token"))
+                            .hasToString("MetricsProperties[scrapeToken=[REDACTED]]");
                 });
     }
 

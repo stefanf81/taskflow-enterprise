@@ -18,7 +18,7 @@ import { CommonModule } from '@angular/common';
             (click)="toggleFaq(0)"
             [attr.aria-expanded]="activeFaq() === 0"
             aria-controls="faq-panel-0"
-            class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center outline-none"
+            class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
           >
             <span>⏰ How early should I arrive for my appointment?</span>
             <span class="text-gold font-extrabold">{{ activeFaq() === 0 ? '−' : '+' }}</span>
@@ -40,7 +40,7 @@ import { CommonModule } from '@angular/common';
             (click)="toggleFaq(1)"
             [attr.aria-expanded]="activeFaq() === 1"
             aria-controls="faq-panel-1"
-            class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center outline-none"
+            class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
           >
             <span>💳 Do you accept credit cards and contactless payments?</span>
             <span class="text-gold font-extrabold">{{ activeFaq() === 1 ? '−' : '+' }}</span>
@@ -60,7 +60,7 @@ import { CommonModule } from '@angular/common';
             (click)="toggleFaq(2)"
             [attr.aria-expanded]="activeFaq() === 2"
             aria-controls="faq-panel-2"
-            class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center outline-none"
+            class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
           >
             <span>🔄 What is your cancellation policy?</span>
             <span class="text-gold font-extrabold">{{ activeFaq() === 2 ? '−' : '+' }}</span>

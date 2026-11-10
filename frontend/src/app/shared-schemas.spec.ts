@@ -16,7 +16,9 @@ import {
   publicBarberResponseSchema,
   registerResponseSchema,
   registerSchema,
+  rescheduleRequestSchema,
   reviewSchema,
+  scheduleChangeRequestSchema,
   serviceItemResponseSchema,
   serviceItemSchema,
 } from '@taskflow/schemas';
@@ -29,15 +31,86 @@ describe('shared API schemas', () => {
     });
   });
 
-  it('rejects an invalid registration password', () => {
+  it('rejects an invalid registration password and enforces the 72 UTF-8 byte BCrypt limit', () => {
+    const base = {
+      fullName: 'Jane Smith',
+      email: 'jane@example.com',
+      phone: '+1-555-0000',
+    };
+    const noNumber = registerSchema.safeParse({ ...base, password: 'password' });
+    expect(noNumber.success).toBe(false);
+    expect(noNumber.error?.issues[0]?.message).toContain('letters and numbers');
+
+    // 72 ASCII bytes passes; 73 ASCII bytes fails
+    expect(registerSchema.safeParse({ ...base, password: 'a1' + 'b'.repeat(70) }).success).toBe(
+      true,
+    );
+    const ascii73 = registerSchema.safeParse({ ...base, password: 'a1' + 'b'.repeat(71) });
+    expect(ascii73.success).toBe(false);
+    expect(ascii73.error?.issues[0]?.message).toBe('Password must not exceed 72 UTF-8 bytes');
+
+    // Multibyte UTF-8: 2 + 35*2 = 72 bytes (37 chars) passes; +1 byte (38 chars, 73 bytes) fails
+    expect(registerSchema.safeParse({ ...base, password: 'a1' + 'é'.repeat(35) }).success).toBe(
+      true,
+    );
+    const multibyte73 = registerSchema.safeParse({
+      ...base,
+      password: 'a1' + 'é'.repeat(35) + 'x',
+    });
+    expect(multibyte73.success).toBe(false);
+    expect(multibyte73.error?.issues[0]?.message).toBe('Password must not exceed 72 UTF-8 bytes');
+  });
+
+  it('rejects impossible calendar dates and defaults omitted cancelConflictingAppointments to false', () => {
+    const badFormat = rescheduleRequestSchema.safeParse({
+      bookingDate: '31/02/2026',
+      bookingTime: '10:00',
+    });
+    expect(badFormat.success).toBe(false);
+    expect(badFormat.error?.issues[0]?.message).toBe('Date must use YYYY-MM-DD format');
+
+    const rollover = rescheduleRequestSchema.safeParse({
+      bookingDate: '2026-02-31',
+      bookingTime: '10:00',
+    });
+    expect(rollover.success).toBe(false);
+    expect(rollover.error?.issues[0]?.message).toBe('Date must be a valid calendar date');
+
     expect(
-      registerSchema.safeParse({
-        fullName: 'Jane Smith',
-        email: 'jane@example.com',
-        phone: '+1-555-0000',
-        password: 'password',
-      }).success,
-    ).toBe(false);
+      scheduleChangeRequestSchema.parse({
+        days: [{ dayOfWeek: 1, opens: '09:00', closes: '17:00' }],
+        expectedRevision: 'rev-1',
+      }),
+    ).toEqual({
+      days: [{ dayOfWeek: 1, opens: '09:00', closes: '17:00' }],
+      expectedRevision: 'rev-1',
+      cancelConflictingAppointments: false,
+    });
+  });
+
+  it('counts UTF-8 without TextEncoder and rejects unpaired surrogates', () => {
+    const base = { fullName: 'Jane', email: 'j@x.com', phone: '555' };
+    const original = globalThis.TextEncoder;
+    try {
+      // Simulates a native runtime without the browser/Node encoding global.
+      Object.defineProperty(globalThis, 'TextEncoder', { configurable: true, value: undefined });
+      for (const [password, valid] of [
+        ['a1' + 'b'.repeat(70), true],
+        ['a1' + 'b'.repeat(71), false],
+        ['a1' + 'é'.repeat(35), true],
+        ['a1' + 'é'.repeat(35) + 'x', false],
+        ['a1x' + '界'.repeat(23), true],
+        ['a1xx' + '界'.repeat(23), false],
+        ['a1xx' + '😀'.repeat(17), true],
+        ['a1xxx' + '😀'.repeat(17), false],
+        ['abc12345\ud800', false],
+        ['abc12345\udc00', false],
+      ] as const) {
+        expect(registerSchema.safeParse({ ...base, password }).success).toBe(valid);
+      }
+    } finally {
+      Object.defineProperty(globalThis, 'TextEncoder', { configurable: true, value: original });
+    }
   });
 
   it('validates the public catalog response contract', () => {

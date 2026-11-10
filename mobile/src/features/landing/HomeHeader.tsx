@@ -1,6 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { isOpenAt } from '@taskflow/domain';
+import { useNow } from '../../core/shop/useNow';
+import { useShopInfo } from '../../core/shop/useShopInfo';
 import { colors } from '../../theme/colors';
 
 interface HomeHeaderProps {
@@ -8,28 +11,38 @@ interface HomeHeaderProps {
   onOwnerPortal?: () => void;
 }
 
-/** Brand row: logo, "Shop Open" badge and, for guests, the owner sign-in link. */
-export const HomeHeader: React.FC<HomeHeaderProps> = ({ onOwnerPortal }) => (
-  <View style={styles.navHeader}>
-    <View style={styles.navBrand}>
-      <Ionicons name="checkmark-circle" size={24} color={colors.gold.main} />
-      <Text style={styles.navTitle}>
-        TaskFlow <Text style={styles.navPro}>pro</Text>
-      </Text>
-    </View>
-    <View style={styles.navRight}>
-      <View style={styles.shopBadge}>
-        <View style={styles.shopDot} />
-        <Text style={styles.shopText}>Shop Open</Text>
+/** Brand row: logo, live "Shop Open" / "Closed" badge and, for guests, the owner sign-in link. */
+export const HomeHeader: React.FC<HomeHeaderProps> = ({ onOwnerPortal }) => {
+  const { timeZone, rules, loaded } = useShopInfo();
+  const now = useNow(60_000, timeZone);
+  const openNow = loaded ? isOpenAt(now, rules) : null;
+
+  return (
+    <View style={styles.navHeader}>
+      <View style={styles.navBrand}>
+        <Ionicons name="checkmark-circle" size={24} color={colors.gold.main} />
+        <Text style={styles.navTitle}>
+          TaskFlow <Text style={styles.navPro}>pro</Text>
+        </Text>
       </View>
-      {onOwnerPortal && (
-        <TouchableOpacity onPress={onOwnerPortal}>
-          <Text style={styles.ownerLink}>Owner Portal</Text>
-        </TouchableOpacity>
-      )}
+      <View style={styles.navRight}>
+        {openNow !== null && (
+          <View style={[styles.shopBadge, !openNow && styles.shopBadgeClosed]}>
+            <View style={[styles.shopDot, !openNow && styles.shopDotClosed]} />
+            <Text style={[styles.shopText, !openNow && styles.shopTextClosed]}>
+              {openNow ? 'Shop Open' : 'Closed'}
+            </Text>
+          </View>
+        )}
+        {onOwnerPortal && (
+          <TouchableOpacity onPress={onOwnerPortal}>
+            <Text style={styles.ownerLink}>Owner Portal</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
-  </View>
-);
+  );
+};
 
 const styles = StyleSheet.create({
   navHeader: {
@@ -85,6 +98,16 @@ const styles = StyleSheet.create({
     color: '#34d399',
     fontSize: 10,
     fontWeight: '700',
+  },
+  shopBadgeClosed: {
+    backgroundColor: 'rgba(161, 161, 170, 0.1)',
+    borderColor: 'rgba(161, 161, 170, 0.2)',
+  },
+  shopDotClosed: {
+    backgroundColor: '#a1a1aa',
+  },
+  shopTextClosed: {
+    color: '#a1a1aa',
   },
   ownerLink: {
     color: '#a1a1aa',

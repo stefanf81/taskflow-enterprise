@@ -57,6 +57,7 @@ export const DateTimeStep: React.FC<DateTimeStepProps> = ({
         return (
           <TouchableOpacity
             key={d.dateStr}
+            testID={`booking-day-${d.dateStr}`}
             style={[styles.dayCard, isSel && styles.daySelected]}
             onPress={() => onSelectDate(d.dateStr)}
           >

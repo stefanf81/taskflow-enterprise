@@ -18,7 +18,11 @@ interface MasterStylistsProps {
 
 /** The live barber roster with review ratings; picking one opens the wizard for that barber. */
 export const MasterStylists: React.FC<MasterStylistsProps> = ({ onSelectBarber }) => {
-  const { data: ratings = [] } = useBarberRatings();
+  const {
+    data: ratings = [],
+    isLoading: ratingsLoading,
+    isError: ratingsError,
+  } = useBarberRatings();
   // API-driven roster (mirrors the web PublicBarberStore). Empty until the
   // directory loads; never substitute invented names that can drift.
   const { data: barbers = [], isError, refetch } = usePublicBarbers();
@@ -35,8 +39,18 @@ export const MasterStylists: React.FC<MasterStylistsProps> = ({ onSelectBarber }
       ) : (
         barbers.map((b) => {
           const dbRating = ratings.find((r) => r.barberName === b.name);
-          const ratingText = dbRating ? `${dbRating.averageRating.toFixed(1)} ★` : '5.0 ★';
-          const reviewsCount = dbRating ? `${dbRating.reviewCount} reviews` : 'New';
+          let ratingText = '—';
+          let reviewsCount = 'New';
+          if (ratingsLoading && !dbRating) {
+            ratingText = '…';
+            reviewsCount = 'Loading';
+          } else if (ratingsError && !dbRating) {
+            ratingText = '—';
+            reviewsCount = 'Unavailable';
+          } else if (dbRating && dbRating.reviewCount > 0) {
+            ratingText = `${dbRating.averageRating.toFixed(1)} ★`;
+            reviewsCount = `${dbRating.reviewCount} reviews`;
+          }
           const meta = BARBER_META[b.name] || { title: 'Stylist', specialty: 'Salon Services' };
 
           return (

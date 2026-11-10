@@ -30,7 +30,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { colors } from '../../theme/colors';
 import { formatTime12Hour, isOverdue } from '../../utils/time-utils';
 import { useShopInfo } from '../../core/shop/useShopInfo';
-import { useNow } from '../booking/useNow';
+import { useNow } from '../../core/shop/useNow';
 import { getApiErrorMessage } from '../../utils/errors';
 
 const FILTERS = ['all', 'pending', 'approved', 'overdue', 'denied', 'cancelled'];

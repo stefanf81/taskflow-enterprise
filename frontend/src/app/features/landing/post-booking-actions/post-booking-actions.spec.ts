@@ -31,6 +31,25 @@ describe('PostBookingActionsComponent', () => {
 
   afterEach(() => httpMock.verify());
 
+  it.each(['', 'not-an-email'])(
+    'explains invalid cancellation input (%s) without a request',
+    (email) => {
+      component.cancelModel.set({ publicId: 'code', email });
+      component.onCancel();
+      expect(flash.errorMessage()).toBe('Enter your Booking Code and a valid booking email.');
+      httpMock.expectNone((req) => req.url.includes('/appointments/public/cancel/'));
+      expect(component['cancelForm'].email().touched()).toBe(true);
+    },
+  );
+
+  it.each([0, 6])('explains an invalid review rating (%s) without a request', (rating) => {
+    component.reviewModel.set({ publicId: 'code', email: 'a@x.com', rating, comment: '' });
+    component.onReview();
+    expect(flash.errorMessage()).toContain('a rating from 1 to 5');
+    httpMock.expectNone((req) => req.url.includes('/reviews/public/'));
+    expect(component['reviewForm'].rating().touched()).toBe(true);
+  });
+
   it('never defaults sensitive native forms to GET and prevents native submission', () => {
     const forms = (fixture.nativeElement as HTMLElement).querySelectorAll('form');
     expect(forms).toHaveLength(3);

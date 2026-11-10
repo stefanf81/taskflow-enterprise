@@ -103,7 +103,12 @@ class OpenApiSecurityConfig {
                 if (operation.getResponses() != null) {
                     operation.getResponses().forEach((code, response) -> {
                         if ("401".equals(code) || "403".equals(code)) {
-                            response.setContent(isPublic ? handlerErrorContent() : null);
+                            // Browser refresh is public but keeps the double-submit CSRF filter check,
+                            // whose 403 is answered by CsrfFilter without a response body.
+                            boolean csrfFilterRejection = "403".equals(code)
+                                    && entry.getKey() == PathItem.HttpMethod.POST
+                                    && "/api/v1/auth/refresh".equals(path);
+                            response.setContent(isPublic && !csrfFilterRejection ? handlerErrorContent() : null);
                         }
                     });
                 }
