@@ -2430,4 +2430,15 @@ The class now remembers the `CsrfFilter`'s token repository before each test and
 * **Scans as `ROLE_CUSTOMER`** (issue #222): a third job with a customer token and its own expectations.
 * **Path variables with real ids.** The spec has no examples, so ZAP sends `10` or the parameter name; requests to `/appointments/{id}` and the like mostly end in 404 before the handler's logic.
 
-**Verification:** the table above; `GlobalExceptionHandlerTest` (4 new cases), `test_zap_scan_health.py`, `test_zap_sarif.py`.
+### In CI
+
+| Run (this branch) | Job | Requests at the backend | 429 | 2xx | 5xx | Result |
+| :--- | :--- | ---: | ---: | ---: | ---: | :--- |
+| 43100284329 | API scan | 15,418 | 408 (2.6%, login throttle) | 616 | 0 | green; `/barbers/admin` answered 2xx 23 times |
+| 43100284329 | Frontend scan | 2,520 | 0 | 627 | 0 | green |
+| 43101485797 (`web_only`, AJAX spider off) | Frontend scan | 646 | 0 | 641 | 0 | green |
+
+* **Duration is unchanged within its spread.** Run 43100284329 took 6 min 17 s; the two `main` runs of the day took 5 min 36 s and 6 min 13 s. The frontend job sets it, and its ZAP step already varied between 198 s and 269 s (now 246 s plus a 21 s pull that used to be inside the step).
+* **Starting the JVM before the image pull** removed the 13–20 s readiness wait from both jobs ("Wait for Spring Boot": 0–1 s). The API job reaches its scan 11–17 s earlier; in the frontend job the saving did not show (the frontend build ran 16 s and 22 s next to the starting JVM, 12 s alone).
+
+**Verification:** the tables above; `GlobalExceptionHandlerTest` (4 new cases), `test_zap_scan_health.py`, `test_zap_sarif.py`, `./gradlew check`.

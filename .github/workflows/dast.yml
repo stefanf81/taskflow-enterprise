@@ -475,7 +475,8 @@ jobs:
           rules-file: .zap/web-rules.tsv
           zap-exit-code: ${{ steps.zap.outputs.exit-code }}
           fail-on-findings: ${{ env.FAIL_ON_FINDINGS }}
-          # Only API calls reach the backend; nginx serves the rest.
+          # Only API calls reach the backend, nginx serves the rest: 2,520 requests with the
+          # AJAX spider, 646 without (BENCHMARKS §69).
           min-served: "200"
 
       - name: Teardown DAST runtime resources
