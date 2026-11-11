@@ -26,10 +26,13 @@ const RESULTS_DIR = __ENV.RESULTS_DIR;
 // skips it.
 const CHECK_EARLY_CLICK = __ENV.CHECK_EARLY_CLICK !== 'false';
 
-// Added to every request of the early-click page, so its scripts arrive after the prerendered
-// card is clickable. Unthrottled, a runner close to the edge got them in ~45 ms and the check
-// passed against a deployment that loses the click (k6 run 43112226328).
-const EARLY_CLICK_LATENCY_MS = Number(__ENV.EARLY_CLICK_LATENCY_MS || 300);
+// Added to every script request of the early-click page, so the scripts arrive after the
+// prerendered card is clickable, as in frontend/e2e/early-interaction.spec.ts. Without it a
+// runner close to the edge got them in ~45 ms and the check passed against a deployment that
+// loses the click (k6 run 43112226328); throttling every request (API calls too) moved when the
+// app became stable and made the result vary from run to run (43114322212 failed, 43114687515
+// passed, same production build).
+const EARLY_CLICK_SCRIPT_DELAY_MS = Number(__ENV.EARLY_CLICK_SCRIPT_DELAY_MS || 300);
 
 const EARLY_CLICK_CHECK = '6.1 a lookbook click made while the page loads is not lost';
 
@@ -65,7 +68,7 @@ export const options = {
     'browser_http_req_failed{url:app}': ['rate<0.01'],
     // ----- Web vital performance gates — CWV good thresholds -----
     // TTFB <800ms good per web.dev, FCP <1800, LCP <2500. Scoped to the booking flow's
-    // scenario: the early-click page is throttled on purpose.
+    // scenario: the early-click page delays its scripts on purpose.
     ...(ENFORCE_CWV
       ? {
           'browser_web_vital_ttfb{scenario:browser}': ['p(95)<800'],
@@ -99,8 +102,11 @@ export async function earlyClickScenario() {
     });
     await within(
       15000,
-      'throttling the network',
-      page.throttleNetwork({ latency: EARLY_CLICK_LATENCY_MS, download: -1, upload: -1 }),
+      'routing the scripts',
+      page.route(/\.js(\?.*)?$/, async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, EARLY_CLICK_SCRIPT_DELAY_MS));
+        await route.continue();
+      }),
     );
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
     const card = page.locator('app-lookbook button').first();
