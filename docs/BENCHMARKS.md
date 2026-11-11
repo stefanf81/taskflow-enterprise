@@ -2462,18 +2462,28 @@ The class now remembers the `CsrfFilter`'s token repository before each test and
 | Wizard category pill | **lost** | lost (still `hydrate on idle`) |
 
   Clicked 1.5–2.5 s later, all four are delivered in both columns.
+* **How wide the window is depends on how long the scripts take.** Lookbook card and FAQ question, three loads per cell, clicks delivered (both elements gave the same counts):
+
+| Each script delayed | Template | Click after 0 ms | 200 ms | 600 ms | 1500 ms | 3000 ms |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 800 ms | `hydrate on idle` | 0/3 | 0/3 | 0/3 | 3/3 | 3/3 |
+| 250 ms | `hydrate on idle` | 0/3 | 0/3 | 3/3 | 3/3 | 3/3 |
+| 0 ms | `hydrate on idle` | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 |
+| 800, 250 and 0 ms | `hydrate on interaction` | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 |
 * **Why.** Event replay hands the clicks queued before bootstrap to the application in `initEventReplay`, which runs at `ApplicationRef.whenStable()`. A deferred block that hydrates removes `jsaction`/`ngb` and its stashed listeners from its elements (`removeListenersFromBlocks`). An `on idle` block can hydrate before the app is stable (the first API requests are still in flight), and the queued click then finds neither a block to hydrate nor a listener to call. A block that is still dehydrated at that point is hydrated by the replayed click, which is what `hydrate on interaction` guarantees.
 * **The e2e suite could not see it.** There the bundle arrives within milliseconds of the HTML, so no click lands in the window. `app.config.ts` documented the replay as covering exactly this case.
 
 ### Adopted
 
 * **Lookbook and FAQ: `prefetch on idle; hydrate on interaction`.** They only react to clicks and keys. Their chunks are still fetched on idle (20 of the 24 scripts are loaded before any interaction, with both blocks still dehydrated), so the first click does not wait for the network.
-* **`frontend/e2e/early-interaction.spec.ts`** delays every script by 600 ms and clicks at once. Both cases fail on the previous template and pass now.
+* **`frontend/e2e/early-interaction.spec.ts`** delays every script by 300 ms and clicks at once. Both cases fail on the previous template and pass now.
+* **The E2E stacks raise the general API rate-limit bucket** (`APP_RATE_LIMIT_MAX_REQUESTS_PER_MINUTE=1000`; the CI e2e job, `verify.sh`, `npm run e2e:docker`, passed through by Compose). The first CI run with the new spec (43108284981) failed its lookbook case with every API request of that page load answered 429: each page load costs five public requests, the suite arrives from one address inside one minute, and at production's 100/min it had no room for two more tests. Only the auth bucket had been raised (§53).
 * **`k6/browser.js` waits for `networkidle` before its first interaction.** It is a smoke test of the booking flow; "visible" stopped meaning "ready" when the page became prerendered. It also logs the real error (a locator timeout has no `message`: "threw: undefined") and saves a screenshot on failure; `k6.yml` uploads it with the logs and writes k6's report to the job summary.
+* **`k6/probe.js` tolerates two requests without an HTTP response.** With 60 requests, `http_req_failed rate<0.01` allowed none, and run 43108279606 failed on a single `connection reset by peer`. Requests the server answered must still all be 2xx with `Cache-Control`.
 
 ### Not adopted
 
 * **The wizard and the post-booking forms keep `hydrate on idle`.** The wizard is driven from outside and owns the shared banners (§63); the forms must be bound before anyone types. Clicks on them before the page has loaded are still dropped; the wizard shows placeholder rows during that time, so the category pills and the search box are what is affected.
 * **Hydrating everything only after the app is stable** (`hydrate when` on a signal set from `whenStable()`) would close that gap, but a request that never settles would leave the wizard dead.
 
-**Verification:** the table above; the new spec (fails before, passes after) and the existing lookbook and FAQ specs against the local stand-in; 515 frontend unit tests, `npm run lint`, `format:check`. The stand-in sends no CSP header, so `e2e/csp.spec.ts` needs the nginx image (CI); the inline-script inventory `frontend/Dockerfile` pins is unchanged.
+**Verification:** the tables above; the new spec fails on the previous template and passes on this one (local stand-in); 515 frontend unit tests, `npm run lint`, `format:check`. CI run 43109276626 on the branch is green, including the whole Playwright suite (`e2e/csp.spec.ts` too) against the nginx image. k6 against production from the branch: run 43108279606 passed the browser test through all wizard steps (the probe hit the reset above), run 43108735309 passed both.
