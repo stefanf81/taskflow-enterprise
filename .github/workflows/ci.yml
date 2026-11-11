@@ -383,7 +383,7 @@ jobs:
           cache-read-only: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
 
       # `testcontainersTest` and `spotbugsMain` run in `backend-integration`:
-      # on one 4-vCPU runner they competed with the 3 unit-test forks for CPU,
+      # on one 4-vCPU runner they competed with the unit-test forks for CPU,
       # and the unit suite is this job's long pole.
       - name: Build and Test
         if: env.RUN_TESTS == 'true'

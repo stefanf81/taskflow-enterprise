@@ -2298,3 +2298,52 @@ Framework and libraries were ~76% of the 545 kB; `@angular/cdk` is correctly laz
 * **Small ones.** The EAS `preview` APK builds `arm64-v8a,armeabi-v7a` only (`ORG_GRADLE_PROJECT_reactNativeArchitectures`, validated with `@expo/eas-json`; not built on EAS here). The landing page's promo-dot loop stops while its tab is hidden (`AnnouncementBar active={useIsFocused()}`); a new test fails on the old component. Compose Redis runs with `--save ""` (AOF only; `CONFIG GET save` is empty on Redis 7.0). `k6/probe.js` sends `serviceType` like `load.js` and both clients.
 
 **Verification:** backend `./gradlew check` with the real-Redis suites enabled (`TASKFLOW_TEST_REDIS_URL`); frontend lint, strict `tsc`, Prettier, 515 unit tests and the production build (initial 440.91 kB); mobile `tsc`, 62 suites / 701 Jest tests and 82 security tests; workflow-policy and `verify.sh` tests; YAML parse of `ci.yml` and compose. Not run: actionlint (not installed), GitHub Actions, Docker builds, the compose stack, Playwright, Detox and EAS.
+
+## ⚡ 67. CI Wall-Clock Audit — The Unit Suite Is the Critical Path, and No Cheaper Change Shortens a Run (2026-11-11)
+
+**Goal:** find out whether a change to `ci.yml` or to the backend image build shortens a full `main` run, which takes about 3 minutes.
+
+**Methodology:** run [`43024758583`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43024758583) (`workflow_dispatch`, `run_tests=true`, `dc29210`, all 15 jobs green, 12:57:04 → 13:00:08). Step timings come from the Actions API, Gradle and Docker timings from the job logs, per-fork test time from the JUnit XML of the uploaded test report. Everything was measured on GitHub-hosted `ubuntu-26.04` runners in that one run; nothing was timed in the audit container. Four other runs on `main` in the two days before (two nightlies, two pushes) ended after 2:55 to 3:02, so the run is typical; their jobs were not inspected.
+
+### Results
+
+Wall clock 3 m 04 s. The critical path is **Detect Changes (6 s) → Backend build (2 m 38 s) → Backend gate (4 s)**; every other job finished earlier:
+
+| Job | Execution | Finished | Slack behind Backend build |
+| :--- | ---: | ---: | ---: |
+| Backend build | 2 m 38 s | 13:00:01 | — |
+| Build Docker (backend) | 1 m 53 s | 12:59:50 | **11 s** |
+| Backend integration | 1 m 50 s | 12:59:13 | 48 s |
+| End-to-End Playwright | 1 m 03 s | 12:59:08 | 53 s |
+| Dependency Submission | 37 s | 12:58:00 | 2 m 01 s |
+
+* **Backend build:** job setup 3 s, checkout 1 s, `Set up Gradle` 5 s, `Build and Test` 142 s, report upload 2 s. Inside `Build and Test`: Gradle daemon and configuration ≈ 13 s (9.3 s of it "Calculating task graph as no cached configuration is available"), compilation ≈ 11 s, the `test` task ≈ 116 s.
+* **Unit suite:** 120 test classes, 781 tests; 214 s of class time summed over the 2 forks, spanning 103 s of wall time, balanced between the forks, so no single class is a straggler. The `test` task took ~62 s in §53 and 587 tests were recorded in §62. 45 test classes boot a full `@SpringBootTest` context and 18 a slice (static counts; how many distinct contexts the forks actually cache was not measured). A 37 s `ArchitectureTest` in the JUnit XML is a false lead: the class is reported by two test engines and its test cases sum to about 4 s.
+* **Build Docker (backend):** waiting for the Postgres/Redis pulls 7 s, `Build Image` 63 s (AOT training 31.3 s, runtime-stage apt 6.8 s, prod package refresh 9.2 s, AOT validation 6.4 s, export 7.6 s), Trivy Java DB restore 12 s (915 MB), scan 13 s, SARIF upload 3 s, production-image verification 3 s.
+* **What changed since §53:** there, Backend build finished 5–10 s *before* the backend image chain on pushes. It is now the long pole, by 11 s.
+
+### Options examined
+
+| Option | Measured cost | Effect on the run | Decision |
+| :--- | :--- | :--- | :--- |
+| Persist Gradle's configuration cache (`cache-encryption-key` on the `backend` and `backend-integration` setup steps) | 9.3 s in each job | ≤ 9 s | **Rejected earlier, not retried.** §53: 4 runs, never restored; §59: setup-gradle v6 does not restore it without a Develocity licence. Check those entries before proposing it again. |
+| Start the Postgres/Redis smoke containers without waiting for their pulls | 7 s in Build Docker (backend) | none: that job ends 11 s before Backend build | Not adopted |
+| Dockerfile: move the AOT `COPY` out of `runtime` so the 9.2 s prod package refresh overlaps the 31 s AOT training | ≈ 9 s in Build Docker (backend) | none (same slack) | Not adopted: touches the Dockerfile that `ContainerConfigGuardTest` and `ContainerImageBenchmarkTest` pin, and only a Docker build can verify it |
+| Shard the unit tests over two runners | ≈ 20 s net (**estimate, not measured**): each runner repeats ≈ 33 s of setup, daemon and compile and a cold-JVM context boot; the JaCoCo gate (computed from `test` only) would need merged coverage data | ≈ 20 s at best | Not adopted: doubles the runner minutes and adds a merge step |
+| Drop the gate jobs' checkout (it only supplies the local `require-job-results` action) | 1–2 s | 1–2 s | Not adopted |
+| Skip Dependency Submission on dispatch and nightly | 37 s of runner time, in parallel | none | Left: the job's `if:` names `schedule` and `workflow_dispatch` on purpose |
+| Overlap the Trivy Java DB restore (12 s) with the image build | 12 s | none (same slack) | Not adopted |
+
+`dorny/paths-filter` has no base to diff on dispatch and nightly (shallow clone, "Change detection in last commit"), so it reported all 939 files as changed on this dispatch and Dependency Submission ran. It runs on every dispatch and nightly, and on `main` pushes only when Gradle files changed; `docs/ci/overview.md` §7a said "only for Gradle-file changes".
+
+### Adopted
+
+* **Documentation only, plus one comment.** `ci.yml` no longer says the unit tests use "3 forks" (`build.gradle` runs at most 2); `docs/ci/overview.md` states the job's permissions correctly (`contents: write`, as the job declares and §7a already said), when Dependency Submission runs, and the critical path; `docs/agents/ci.md` points here.
+
+### Not adopted
+
+Every row of the table above, for the reason given there. **If the unit suite gets shorter by more than 11 s, `Build Docker (backend)` becomes the critical path**; the pull-wait change (7 s) and the Dockerfile reorder (≈ 9 s) are then worth about 16 s together, the pull wait first because it does not touch the Dockerfile.
+
+**Open lever:** the unit suite is the only thing that moves the total. §53 estimated that merging Spring contexts would save at most ~12 s and would make test classes share a database again (`AppointmentControllerIntegrationTest` failed that way); that estimate predates the growth from ~62 s to ~116 s for the `test` task, so measure the distinct contexts per fork before judging it.
+
+**Verification:** `./gradlew containerConfigTest` (reads `ci.yml` and the Dockerfile) and `node --test .github/scripts/workflow-policy.test.cjs` pass after the comment change. Not run: actionlint (CI's Workflow Lint job covers it) and any workflow run; the audit changed no behaviour.
