@@ -127,7 +127,7 @@ The E2E suite validates critical guest user journeys end-to-end:
 - **Guest Booking Submission:** Picks the second displayed operating day (`booking-day-<yyyy-mm-dd>`) and its first `booking-slot-available-<HH:mm>`, fills `customer-name-input`, `customer-email-input` (a unique address per run) and `customer-phone-input` using `replaceText()`, taps `Confirm & Request Booking`, waits for `'Booking Confirmation'`, then cancels the booking through `PUT /api/v1/appointments/public/cancel/{publicId}` with the code from `receipt-booking-code`, so repeated runs do not use up slots.
 
 ### 2. Guest Login Flow
-- **Navigation:** Scrolls `home-scroll-view` until `Sign In / Register` is fully visible, taps it and asserts `'Sign In to TaskFlow'` form header.
+- **Navigation:** Scrolls `home-scroll-view` back to the top (see gotcha 5), taps `Sign In / Register` once it is fully visible and asserts `'Sign In to TaskFlow'` form header.
 - **Validation:** Taps `login-submit-btn` with empty fields and asserts validation prevents screen transition.
 - **Form Completion:** Enters credentials in `login-email-input` and `login-password-input` via `replaceText()`, submits form via `login-submit-btn`.
 
@@ -157,5 +157,12 @@ The E2E suite validates critical guest user journeys end-to-end:
    await element(by.id(/^booking-day-\d{4}-\d{2}-\d{2}$/)).atIndex(1).tap();
    ```
 
-5. **HTTPS Bypass for Local Emulator Tests:**
+5. **Android Launches Outside Touch Mode (Home Starts Scrolled Down):**
+   The generated `DetoxTest` launches `MainActivity` with `ActivityTestRule(..., initialTouchMode = false)`. Outside touch mode Android focuses the first focusable view to appear, and a ScrollView scrolls to keep the focused view on screen. Which button wins depends on React Native's mount order: when a lookbook `Book This Look` button wins, Home starts about 4,200 px down and the hero is off screen (nightlies 886-898). Scrolling *down* cannot bring it back; scroll `home-scroll-view` to the top before using the hero:
+   ```typescript
+   await element(by.id('home-scroll-view')).scrollTo('top');
+   ```
+   The first tap puts the device back in touch mode. `displays the home screen on launch` asserts the launch state as is and has passed so far; if it starts failing on Android, this is the cause.
+
+6. **HTTPS Bypass for Local Emulator Tests:**
    The release API client configuration (`src/api/client.ts`) allows `http://10.0.2.2` and `http://localhost` during local emulator testing (E2E builds keep `localhost` on Android; `.detoxrc.js` forwards port 8080 with `reversePorts`) while strictly enforcing `https://` for external production domains.

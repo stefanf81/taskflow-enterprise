@@ -33,9 +33,13 @@ const scrollIntoView = (matcher: ReturnType<typeof by.id>, scrollViewId: string)
 const BOOKING_DAY = /^booking-day-\d{4}-\d{2}-\d{2}$/;
 const AVAILABLE_SLOT = /^booking-slot-available-\d{2}:\d{2}$/;
 
-// The landing page's Sign In button sits low enough on the Pixel 6 emulator that the bottom of the
-// Home scroll view can cut through it, and Espresso refuses to tap a view less than 75% visible.
+// Detox starts the Android app outside touch mode (the generated DetoxTest uses
+// ActivityTestRule(MainActivity, initialTouchMode = false)). Android then focuses the first
+// focusable view to appear, and the Home ScrollView scrolls to keep it on screen: when a lookbook
+// "Book This Look" button wins that race, the hero, Sign In included, starts ~4,200 px above the
+// viewport. A user is in touch mode and never sees this; scroll back to the top before tapping.
 const openSignIn = async () => {
+  await element(by.id('home-scroll-view')).scrollTo('top');
   await scrollIntoView(by.text('Sign In / Register'), 'home-scroll-view');
   await element(by.text('Sign In / Register')).tap();
 };
