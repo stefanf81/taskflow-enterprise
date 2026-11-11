@@ -1,5 +1,6 @@
 import { browser } from 'k6/browser';
 import { check } from 'k6';
+import { clearTimeout, setTimeout } from 'k6/timers';
 
 const BASE_URL = __ENV.BASE_URL;
 if (!BASE_URL) throw new Error('BASE_URL environment variable is required');
@@ -30,14 +31,30 @@ const CHECK_EARLY_CLICK = __ENV.CHECK_EARLY_CLICK !== 'false';
 // passed against a deployment that loses the click (k6 run 43112226328).
 const EARLY_CLICK_LATENCY_MS = Number(__ENV.EARLY_CLICK_LATENCY_MS || 300);
 
+const EARLY_CLICK_CHECK = '6.1 a lookbook click made while the page loads is not lost';
+
 export const options = {
   scenarios: {
     browser: {
       executor: 'shared-iterations',
       vus: 1,
       iterations: 1,
+      exec: 'bookingFlowScenario',
       options: { browser: { type: 'chromium' } },
     },
+    // A scenario of its own, so it gets its own browser and cache: a second context opened in
+    // the same iteration hung until the job timed out (k6 run 43112708385).
+    ...(CHECK_EARLY_CLICK
+      ? {
+          early_click: {
+            executor: 'shared-iterations',
+            vus: 1,
+            iterations: 1,
+            exec: 'earlyClickScenario',
+            options: { browser: { type: 'chromium' } },
+          },
+        }
+      : {}),
   },
   thresholds: {
     checks: ['rate==1.0'],
@@ -47,54 +64,48 @@ export const options = {
     // re-tags it as `auth-probe` so it is excluded from this submetric.
     'browser_http_req_failed{url:app}': ['rate<0.01'],
     // ----- Web vital performance gates — CWV good thresholds -----
-    // TTFB <800ms good per web.dev, FCP <1800, LCP <2500. Scoped to the booking flow's page
-    // (`url:app`): the early-click page is throttled on purpose.
+    // TTFB <800ms good per web.dev, FCP <1800, LCP <2500. Scoped to the booking flow's
+    // scenario: the early-click page is throttled on purpose.
     ...(ENFORCE_CWV
       ? {
-          'browser_web_vital_ttfb{url:app}': ['p(95)<800'],
-          'browser_web_vital_fcp{url:app}': ['p(95)<1800'],
-          'browser_web_vital_lcp{url:app}': ['p(95)<2500'],
+          'browser_web_vital_ttfb{scenario:browser}': ['p(95)<800'],
+          'browser_web_vital_fcp{scenario:browser}': ['p(95)<1800'],
+          'browser_web_vital_lcp{scenario:browser}': ['p(95)<2500'],
         }
       : {}),
   },
 };
 
-export default async function () {
-  // Each part gets its own browser context (k6 allows one open context at a time; closing a page
-  // does not close its context). An error that escapes either one becomes a failed check:
-  // an uncaught one did not fail the run (k6 run 43112226328 went green without the booking
-  // flow).
-  let failure = null;
-  try {
-    await bookingFlow();
-  } catch (err) {
-    failure = err;
-  }
-  if (CHECK_EARLY_CLICK) {
-    try {
-      await earlyClick();
-    } catch (err) {
-      console.error(`\n[FAIL] Early click threw: ${(err && err.message) || err}`);
-      check(false, { '6.1 a lookbook click made while the page loads is not lost': () => false });
-    }
-  }
-  if (failure) throw failure;
+/**
+ * Rejects if `promise` has not settled within `ms`: some browser calls take no timeout. The
+ * timer is cleared once it settles, since k6 ends an iteration only when no timer is pending.
+ */
+function within(ms, what, promise) {
+  let timer;
+  const expired = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} timed out after ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, expired]).finally(() => clearTimeout(timer));
 }
 
-async function earlyClick() {
+export async function earlyClickScenario() {
   console.log('--- 6. Lookbook click while the page loads ---');
-  const context = await browser.newContext();
+  let page;
   try {
-    const page = await context.newPage();
-    // Kept out of the {url:app} submetrics (request failures, web vitals).
+    page = await within(30000, 'opening the page', browser.newPage());
+    // Kept out of the {url:app} request-failure gate.
     page.on('metric', (metric) => {
       metric.tag({ name: 'early-click', matches: [{ url: /.*/ }] });
     });
-    await page.throttleNetwork({ latency: EARLY_CLICK_LATENCY_MS, download: -1, upload: -1 });
+    await within(
+      15000,
+      'throttling the network',
+      page.throttleNetwork({ latency: EARLY_CLICK_LATENCY_MS, download: -1, upload: -1 }),
+    );
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
     const card = page.locator('app-lookbook button').first();
     await card.waitFor({ state: 'visible', timeout: 10000 });
-    await card.click();
+    await card.click({ timeout: 10000 });
     const advanced = await page
       .locator('#step-panel-2')
       .waitFor({ state: 'visible', timeout: 10000 })
@@ -102,25 +113,25 @@ async function earlyClick() {
         () => true,
         () => false,
       );
-    check(advanced, {
-      '6.1 a lookbook click made while the page loads is not lost': (v) => v === true,
-    });
+    check(advanced, { [EARLY_CLICK_CHECK]: (v) => v === true });
     if (!advanced && RESULTS_DIR) {
       await page
         .screenshot({ path: `${RESULTS_DIR}/failed-early-click.png`, fullPage: true })
         .catch((screenshotError) => console.error(`screenshot failed: ${screenshotError}`));
     }
+  } catch (err) {
+    // An uncaught error does not fail a k6 run (k6 run 43112226328 went green that way).
+    console.error(`\n[FAIL] Early click threw: ${(err && err.message) || err}`);
+    check(false, { [EARLY_CLICK_CHECK]: () => false });
   } finally {
-    await context.close();
+    if (page) await within(15000, 'closing the page', page.close()).catch(() => undefined);
   }
 }
 
-async function bookingFlow() {
-  let context;
+export async function bookingFlowScenario() {
   let page;
   try {
-    context = await browser.newContext();
-    page = await context.newPage();
+    page = await within(30000, 'opening the page', browser.newPage());
   } catch (err) {
     console.error(`\n[FAIL] Could not open the browser page: ${(err && err.message) || err}`);
     check(false, { 'scenario "init" completed': () => false });
@@ -325,6 +336,6 @@ async function bookingFlow() {
     check(false, { [`scenario "${scenario}" completed`]: () => false });
     throw err;
   } finally {
-    await context.close();
+    await within(15000, 'closing the page', page.close()).catch(() => undefined);
   }
 }
