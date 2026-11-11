@@ -1,12 +1,14 @@
 package com.example.taskflow.notification;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.boot.test.system.CapturedOutput;
-import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 
@@ -14,7 +16,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-@ExtendWith(OutputCaptureExtension.class)
 class NotificationGatewayConfigTest {
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
@@ -35,12 +36,27 @@ class NotificationGatewayConfigTest {
         });
     }
 
+    // Checks the logged event, not the console: once a Spring Boot test in the same JVM has applied
+    // logback-spring.xml, the console is behind an AsyncAppender and the line can arrive after the
+    // assertion (it failed that way about once in 18 suite runs).
     @Test
-    void prodSimulationWarnsInsteadOfBreakingSmokeTests(CapturedOutput output) {
-        runner.withPropertyValues("spring.profiles.active=prod").run(context -> {
-            assertThat(context).hasNotFailed();
-            assertThat(output).contains("Notification gateway is SIMULATED", "app.notification.gateway=smtp");
-        });
+    void prodSimulationWarnsInsteadOfBreakingSmokeTests() {
+        Logger logger = (Logger) LoggerFactory.getLogger(NotificationGatewayConfig.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            runner.withPropertyValues("spring.profiles.active=prod").run(context -> {
+                assertThat(context).hasNotFailed();
+                assertThat(appender.list)
+                        .filteredOn(event -> event.getLevel() == Level.WARN)
+                        .extracting(ILoggingEvent::getFormattedMessage)
+                        .anySatisfy(message -> assertThat(message)
+                                .contains("Notification gateway is SIMULATED", "app.notification.gateway=smtp"));
+            });
+        } finally {
+            logger.detachAppender(appender);
+        }
     }
 
     @Test

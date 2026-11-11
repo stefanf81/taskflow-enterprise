@@ -2393,6 +2393,6 @@ The class now remembers the `CsrfFilter`'s token repository before each test and
 | After | 109.0, 109.6, 105.9, 110.8 s | 108.8 s | 98.5 s | 14–23 s | 79–82 s |
 
 * **About −5 s, not the −10 s estimated above.** The single-fork tail halved, but the work it removed from fork A partly reappears as time when both forks are busy, where they compete for the 4 vCPUs. The runs also spread less (6 s against 15 s). CI's effect is not measured.
-* **Unrelated flake seen on an unchanged run:** `NotificationGatewayConfigTest.prodSimulationWarnsInsteadOfBreakingSmokeTests` once did not find its warning in the captured output (1 failure in 18 full runs of the current code today, 9 with the fix and 9 without; it failed on one without).
+* **Unrelated flake seen on an unchanged run:** `NotificationGatewayConfigTest.prodSimulationWarnsInsteadOfBreakingSmokeTests` once did not find its warning in the captured output (1 failure in 18 full runs of the current code today, 9 with the fix and 9 without; it failed on one without). Cause: `logback-spring.xml` sends the console through an `AsyncAppender`, so once a Spring Boot test in the same JVM has applied it, the warning can reach the captured console after the assertion (reproduced: 6 misses in 300 context refreshes; a `ListAppender` on the logger, 0 in 300). Fixed: the test now checks the logged WARN event.
 
 **Verification:** the measurements above; the diagnostic listener lived in a temporary worktree, and the ordered control run's `build.gradle` edit was reverted. The suite passed in all 9 full runs with the fix.
