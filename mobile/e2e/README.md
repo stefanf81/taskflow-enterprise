@@ -124,10 +124,10 @@ The E2E suite validates critical guest user journeys end-to-end:
 - **Step 1 (Treatment Selection):** Asserts `'BOOKING ASSISTANT'`, scrolls down `booking-scroll-view`, taps `Continue to Stylist`, and asserts `'SELECT BARBER'`.
 - **Step 2 (Stylist Selection):** Scrolls down, taps `Continue` (No Preference), and asserts `'SELECT OPERATING DAY'`.
 - **Step 3 (Date/Time Slot Selection):** Scrolls down, taps `Continue`, and asserts `'4. Contact Details & Summary'`.
-- **Step 4 (Customer Contact Details):** Fills `customer-name-input`, `customer-email-input`, and `customer-phone-input` using `replaceText()`, scrolls down, and asserts `'Confirm & Request Booking'` CTA.
+- **Guest Booking Submission:** Picks the second displayed operating day (`booking-day-<yyyy-mm-dd>`) and its first `booking-slot-available-<HH:mm>`, fills `customer-name-input`, `customer-email-input` (a unique address per run) and `customer-phone-input` using `replaceText()`, taps `Confirm & Request Booking`, waits for `'Booking Confirmation'`, then cancels the booking through `PUT /api/v1/appointments/public/cancel/{publicId}` with the code from `receipt-booking-code`, so repeated runs do not use up slots.
 
 ### 2. Guest Login Flow
-- **Navigation:** Taps `Sign In / Register` button and asserts `'Sign In to TaskFlow'` form header.
+- **Navigation:** Scrolls `home-scroll-view` until `Sign In / Register` is fully visible, taps it and asserts `'Sign In to TaskFlow'` form header.
 - **Validation:** Taps `login-submit-btn` with empty fields and asserts validation prevents screen transition.
 - **Form Completion:** Enters credentials in `login-email-input` and `login-password-input` via `replaceText()`, submits form via `login-submit-btn`.
 
@@ -151,5 +151,11 @@ The E2E suite validates critical guest user journeys end-to-end:
    await element(by.text('Continue')).tap();
    ```
 
-4. **HTTPS Bypass for Local Emulator Tests:**
+4. **Regex Matchers Match the Whole String:**
+   `by.id(/.../)` and `by.text(/.../)` succeed only when the pattern matches the entire value, on both platforms (Kotlin `Regex.matches` on Android, a full-range `NSRegularExpression` match on iOS). A prefix such as `/^booking-day-/` matches nothing; spell out the rest:
+   ```typescript
+   await element(by.id(/^booking-day-\d{4}-\d{2}-\d{2}$/)).atIndex(1).tap();
+   ```
+
+5. **HTTPS Bypass for Local Emulator Tests:**
    The release API client configuration (`src/api/client.ts`) allows `http://10.0.2.2` and `http://localhost` during local emulator testing (E2E builds keep `localhost` on Android; `.detoxrc.js` forwards port 8080 with `reversePorts`) while strictly enforcing `https://` for external production domains.

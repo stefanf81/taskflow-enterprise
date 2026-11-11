@@ -28,6 +28,18 @@ const RELAUNCH_TIMEOUT_MS = 240_000;
 const scrollIntoView = (matcher: ReturnType<typeof by.id>, scrollViewId: string) =>
   waitFor(element(matcher)).toBeVisible(100).whileElement(by.id(scrollViewId)).scroll(150, 'down');
 
+// Detox regex matchers must match the WHOLE id on both platforms (Kotlin Regex.matches, and a
+// full-range NSRegularExpression match on iOS): a prefix such as /^booking-day-/ matches nothing.
+const BOOKING_DAY = /^booking-day-\d{4}-\d{2}-\d{2}$/;
+const AVAILABLE_SLOT = /^booking-slot-available-\d{2}:\d{2}$/;
+
+// The landing page's Sign In button sits low enough on the Pixel 6 emulator that the bottom of the
+// Home scroll view can cut through it, and Espresso refuses to tap a view less than 75% visible.
+const openSignIn = async () => {
+  await scrollIntoView(by.text('Sign In / Register'), 'home-scroll-view');
+  await element(by.text('Sign In / Register')).tap();
+};
+
 describe('Guest Booking Flow', () => {
   beforeEach(relaunch, RELAUNCH_TIMEOUT_MS);
 
@@ -125,12 +137,12 @@ describe('Guest Booking Flow', () => {
     // A future displayed operating day avoids the current day's last-slot cutoff. Pick an
     // actually available slot rather than assuming the wizard's default is still free.
     await element(by.id('booking-scroll-view')).scrollTo('top');
-    await element(by.id(/^booking-day-/)).atIndex(1).tap();
-    await waitFor(element(by.id(/^booking-slot-available-/)).atIndex(0))
+    await element(by.id(BOOKING_DAY)).atIndex(1).tap();
+    await waitFor(element(by.id(AVAILABLE_SLOT)).atIndex(0))
       .toBeVisible()
       .whileElement(by.id('booking-scroll-view'))
       .scroll(150, 'down');
-    await element(by.id(/^booking-slot-available-/)).atIndex(0).tap();
+    await element(by.id(AVAILABLE_SLOT)).atIndex(0).tap();
 
     await waitFor(element(by.text('Continue')))
       .toBeVisible()
@@ -179,12 +191,12 @@ describe('Guest Login Flow', () => {
   beforeEach(relaunch, RELAUNCH_TIMEOUT_MS);
 
   it('navigates to login via Sign In / Register', async () => {
-    await element(by.text('Sign In / Register')).tap();
+    await openSignIn();
     await expect(element(by.text('Sign In to TaskFlow'))).toBeVisible();
   });
 
   it('shows validation for empty fields', async () => {
-    await element(by.text('Sign In / Register')).tap();
+    await openSignIn();
     await element(by.id('login-submit-btn')).tap();
     // Should still be on login screen (no error shown because validation
     // in handleLogin silently returns)
@@ -192,7 +204,7 @@ describe('Guest Login Flow', () => {
   });
 
   it('signs in as admin and lands on the dashboard', async () => {
-    await element(by.text('Sign In / Register')).tap();
+    await openSignIn();
     // On iOS the open keyboard covers the next control, and the scroll view shifts the content
     // to keep the focused field above it; Detox's visibility check ignores the keyboard. Close it
     // with Return after each field, as a user would. Android needs none of this (Espresso's
