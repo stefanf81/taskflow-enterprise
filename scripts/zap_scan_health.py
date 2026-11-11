@@ -6,8 +6,9 @@ clean one: dast.yml ran that way (99% of the requests answered 429, every admin 
 and stayed green. This reads the `http_server_requests` counters the scanned backend exposes
 on /actuator/prometheus and reports:
 
-  effective      enough requests were served (not 429) and every `--require-success` URI
-                 answered 2xx at least once (proof that the scan was authenticated)
+  effective      enough requests were served (not 429), no more than a small share was
+                 answered 429, and every `--require-success` URI answered 2xx at least once
+                 (proof that the scan was authenticated)
   server_errors  how many requests the backend answered with 5xx
 
 Both are written to `--github-output`; dast.yml's gate decides what fails the job.
@@ -38,7 +39,7 @@ def parse_requests(text):
     return samples
 
 
-def evaluate(samples, required_success=(), min_served=1):
+def evaluate(samples, required_success=(), min_served=1, max_throttled_percent=20):
     by_status = Counter()
     for labels, count in samples:
         by_status[labels['status']] += count
@@ -63,6 +64,12 @@ def evaluate(samples, required_success=(), min_served=1):
         problems.append(
             f'the backend served {served} requests (expected at least {min_served}); '
             f'{throttled} of {total} were answered 429 by its rate limiters')
+    # The per-account login throttle answers a few percent of a scan with 429 (2.6% of the API
+    # scan); the per-IP limiter at production limits answers nearly all of it.
+    if total and 100 * throttled > max_throttled_percent * total:
+        problems.append(
+            f'{100 * throttled / total:.1f}% of the requests were answered 429 '
+            f'(at most {max_throttled_percent}% expected): the rate limiter throttled the scan')
     for uri, count in successes.items():
         if count == 0:
             problems.append(
@@ -107,13 +114,15 @@ def main(argv=None):
                         help='`uri` tag that must have answered 2xx at least once (repeatable)')
     parser.add_argument('--min-served', type=int, default=1,
                         help='requests the backend must have served, not counting 429 responses')
+    parser.add_argument('--max-throttled-percent', type=float, default=20,
+                        help='largest share of 429 responses that still counts as an unthrottled scan')
     parser.add_argument('--summary', help='file to append a Markdown summary to')
     parser.add_argument('--github-output', help='file to append `effective` and `server_errors` to')
     args = parser.parse_args(argv)
 
     with open(args.metrics, encoding='utf-8') as file:
         samples = parse_requests(file.read())
-    result = evaluate(samples, args.require_success, args.min_served)
+    result = evaluate(samples, args.require_success, args.min_served, args.max_throttled_percent)
 
     print(f"requests: {result['total']}, served: {result['served']}, 429: {result['throttled']}, "
           f"5xx: {result['server_error_count']}")

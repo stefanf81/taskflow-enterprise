@@ -32,6 +32,12 @@ inputs:
   min-served:
     description: Requests the backend must have served (429 responses do not count).
     required: true
+  max-throttled-percent:
+    description: >-
+      Largest share of 429 responses that still counts as an unthrottled scan.
+      The per-account login throttle accounts for a few percent.
+    required: false
+    default: "20"
   require-success:
     description: >-
       Optional request URI that only the scan's credentials can reach; it must
@@ -63,6 +69,7 @@ runs:
         SCAN: ${{ inputs.scan }}
         BACKEND_URL: ${{ inputs.backend-url }}
         MIN_SERVED: ${{ inputs.min-served }}
+        MAX_THROTTLED_PERCENT: ${{ inputs.max-throttled-percent }}
         REQUIRE_SUCCESS: ${{ inputs.require-success }}
         TOKEN: ${{ inputs.token }}
       run: |
@@ -77,7 +84,7 @@ runs:
           exit 0
         fi
 
-        options=(--metrics "$metrics" --min-served "$MIN_SERVED")
+        options=(--metrics "$metrics" --min-served "$MIN_SERVED" --max-throttled-percent "$MAX_THROTTLED_PERCENT")
         if [[ -n "$REQUIRE_SUCCESS" ]]; then
           options+=(--require-success "$REQUIRE_SUCCESS")
         fi

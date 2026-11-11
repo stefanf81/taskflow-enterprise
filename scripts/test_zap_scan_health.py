@@ -51,8 +51,16 @@ class ScanHealthTest(unittest.TestCase):
         self.assertEqual((result['total'], result['served'], result['throttled']), (15153, 127, 15026))
         self.assertIn('served 127 requests (expected at least 2000)', result['problems'][0])
 
+    def test_throttled_scan_is_not_effective_whatever_its_volume(self):
+        # The frontend scan sends far fewer requests than the API scan, so its floor is low;
+        # the share of 429 responses still gives a throttled run away.
+        result = self.health(THROTTLED, min_served=100)
+        self.assertEqual(result['problems'], [
+            '99.2% of the requests were answered 429 (at most 20% expected): '
+            'the rate limiter throttled the scan'])
+
     def test_scan_that_never_authenticated_is_not_effective(self):
-        result = self.health(THROTTLED, required_success=[ADMIN])
+        result = self.health(THROTTLED, required_success=[ADMIN], max_throttled_percent=100)
         self.assertEqual(result['successes'], {ADMIN: 0})
         self.assertIn(f'{ADMIN} never answered 2xx', result['problems'][0])
 
