@@ -2,6 +2,19 @@ name: k6 Browser Test
 
 on:
   workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Target URL (empty: the BASE_URL repository variable, production)"
+        type: string
+        default: ""
+      check_early_click:
+        description: "Also click a lookbook card while the page is still loading (BENCHMARKS §70)"
+        type: boolean
+        default: true
+      enforce_cwv:
+        description: "Gate on Core Web Vitals budgets (only meaningful from a runner close to the origin)"
+        type: boolean
+        default: false
 
 # Least-privilege: this workflow only checks out the repo and runs a k6
 # browser test and rate-limit-safe API probe against an external BASE_URL. It must NOT inherit the
@@ -27,7 +40,9 @@ jobs:
     timeout-minutes: 10
 
     env:
-      BASE_URL: ${{ vars.BASE_URL }}
+      BASE_URL: ${{ inputs.base_url || vars.BASE_URL }}
+      CHECK_EARLY_CLICK: ${{ inputs.check_early_click }}
+      ENFORCE_CWV: ${{ inputs.enforce_cwv }}
       # renovate: datasource=docker depName=grafana/k6 versioning=docker
       K6_VERSION: "2.3.0-with-browser"
 
@@ -40,7 +55,7 @@ jobs:
       - name: Verify BASE_URL is set
         run: |
           if [ -z "$BASE_URL" ]; then
-            echo "::error::vars.BASE_URL is not set on this environment"
+            echo "::error::Neither the base_url input nor vars.BASE_URL is set"
             exit 1
           fi
 
@@ -73,11 +88,12 @@ jobs:
 
           # Remote smoke test: the GitHub runner measures cross-region latency,
           # so web.dev "good" CWV budgets (FCP<1800/LCP<2500) are not a valid
-          # gate here — disable them and keep the functional/availability
-          # checks. Same-region runs keep the CWV gate (ENFORCE_CWV defaults true).
+          # gate here by default (enforce_cwv input). The web vitals are still
+          # reported in the summary.
           docker run --rm \
             -e BASE_URL \
-            -e ENFORCE_CWV=false \
+            -e ENFORCE_CWV \
+            -e CHECK_EARLY_CLICK \
             -e RESULTS_DIR=k6-results \
             -v "$GITHUB_WORKSPACE/k6:/work/k6:ro" \
             -v "$GITHUB_WORKSPACE/k6-results:/work/k6-results" \
@@ -124,7 +140,7 @@ jobs:
             echo ""
           }
           {
-            echo "Target: \`${BASE_URL}\`"
+            echo "Target: \`${BASE_URL}\` · early click checked: \`${CHECK_EARLY_CLICK}\` · CWV enforced: \`${ENFORCE_CWV}\`"
             echo ""
             report "k6 browser test (booking flow)" k6-results/browser.log
             report "k6 API probe" k6-results/probe.log

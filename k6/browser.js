@@ -19,6 +19,12 @@ const ENFORCE_CWV = __ENV.ENFORCE_CWV !== 'false';
 // Unset: no screenshot.
 const RESULTS_DIR = __ENV.RESULTS_DIR;
 
+// Also click a lookbook card the moment it appears, before the page has loaded (BENCHMARKS.md
+// §70: production dropped that click). The booking flow below waits for the page to load
+// first, so without this nothing here would notice the regression. `-e CHECK_EARLY_CLICK=false`
+// skips it.
+const CHECK_EARLY_CLICK = __ENV.CHECK_EARLY_CLICK !== 'false';
+
 export const options = {
   scenarios: {
     browser: {
@@ -48,6 +54,44 @@ export const options = {
 };
 
 export default async function () {
+  // First, while nothing is cached: on a warm cache the scripts arrive at once and the click
+  // could not land before them.
+  if (CHECK_EARLY_CLICK) await earlyClick();
+  await bookingFlow();
+}
+
+async function earlyClick() {
+  console.log('--- 0. Lookbook click while the page loads ---');
+  const page = await browser.newPage();
+  try {
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    const card = page.locator('app-lookbook button').first();
+    await card.waitFor({ state: 'visible', timeout: 10000 });
+    await card.click();
+    const advanced = await page
+      .locator('#step-panel-2')
+      .waitFor({ state: 'visible', timeout: 10000 })
+      .then(
+        () => true,
+        () => false,
+      );
+    check(advanced, {
+      '0.1 a lookbook click made while the page loads is not lost': (v) => v === true,
+    });
+    if (!advanced && RESULTS_DIR) {
+      await page
+        .screenshot({ path: `${RESULTS_DIR}/failed-early-click.png`, fullPage: true })
+        .catch((screenshotError) => console.error(`screenshot failed: ${screenshotError}`));
+    }
+  } catch (err) {
+    console.error(`\n[FAIL] Early click threw: ${(err && err.message) || err}`);
+    check(false, { '0.1 a lookbook click made while the page loads is not lost': () => false });
+  } finally {
+    await page.close();
+  }
+}
+
+async function bookingFlow() {
   const page = await browser.newPage();
 
   // Separate the expected anonymous session bootstrap from real application
