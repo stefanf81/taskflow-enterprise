@@ -25,6 +25,11 @@ const RESULTS_DIR = __ENV.RESULTS_DIR;
 // skips it.
 const CHECK_EARLY_CLICK = __ENV.CHECK_EARLY_CLICK !== 'false';
 
+// Added to every request of the early-click page, so its scripts arrive after the prerendered
+// card is clickable. Unthrottled, a runner close to the edge got them in ~45 ms and the check
+// passed against a deployment that loses the click (k6 run 43112226328).
+const EARLY_CLICK_LATENCY_MS = Number(__ENV.EARLY_CLICK_LATENCY_MS || 300);
+
 export const options = {
   scenarios: {
     browser: {
@@ -42,28 +47,50 @@ export const options = {
     // re-tags it as `auth-probe` so it is excluded from this submetric.
     'browser_http_req_failed{url:app}': ['rate<0.01'],
     // ----- Web vital performance gates — CWV good thresholds -----
-    // TTFB <800ms good per web.dev, FCP <1800, LCP <2500
+    // TTFB <800ms good per web.dev, FCP <1800, LCP <2500. Scoped to the booking flow's page
+    // (`url:app`): the early-click page is throttled on purpose.
     ...(ENFORCE_CWV
       ? {
-          browser_web_vital_ttfb: ['p(95)<800'],
-          browser_web_vital_fcp: ['p(95)<1800'],
-          browser_web_vital_lcp: ['p(95)<2500'],
+          'browser_web_vital_ttfb{url:app}': ['p(95)<800'],
+          'browser_web_vital_fcp{url:app}': ['p(95)<1800'],
+          'browser_web_vital_lcp{url:app}': ['p(95)<2500'],
         }
       : {}),
   },
 };
 
 export default async function () {
-  // First, while nothing is cached: on a warm cache the scripts arrive at once and the click
-  // could not land before them.
-  if (CHECK_EARLY_CLICK) await earlyClick();
-  await bookingFlow();
+  // Each part gets its own browser context (k6 allows one open context at a time; closing a page
+  // does not close its context). An error that escapes either one becomes a failed check:
+  // an uncaught one did not fail the run (k6 run 43112226328 went green without the booking
+  // flow).
+  let failure = null;
+  try {
+    await bookingFlow();
+  } catch (err) {
+    failure = err;
+  }
+  if (CHECK_EARLY_CLICK) {
+    try {
+      await earlyClick();
+    } catch (err) {
+      console.error(`\n[FAIL] Early click threw: ${(err && err.message) || err}`);
+      check(false, { '6.1 a lookbook click made while the page loads is not lost': () => false });
+    }
+  }
+  if (failure) throw failure;
 }
 
 async function earlyClick() {
-  console.log('--- 0. Lookbook click while the page loads ---');
-  const page = await browser.newPage();
+  console.log('--- 6. Lookbook click while the page loads ---');
+  const context = await browser.newContext();
   try {
+    const page = await context.newPage();
+    // Kept out of the {url:app} submetrics (request failures, web vitals).
+    page.on('metric', (metric) => {
+      metric.tag({ name: 'early-click', matches: [{ url: /.*/ }] });
+    });
+    await page.throttleNetwork({ latency: EARLY_CLICK_LATENCY_MS, download: -1, upload: -1 });
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
     const card = page.locator('app-lookbook button').first();
     await card.waitFor({ state: 'visible', timeout: 10000 });
@@ -76,23 +103,29 @@ async function earlyClick() {
         () => false,
       );
     check(advanced, {
-      '0.1 a lookbook click made while the page loads is not lost': (v) => v === true,
+      '6.1 a lookbook click made while the page loads is not lost': (v) => v === true,
     });
     if (!advanced && RESULTS_DIR) {
       await page
         .screenshot({ path: `${RESULTS_DIR}/failed-early-click.png`, fullPage: true })
         .catch((screenshotError) => console.error(`screenshot failed: ${screenshotError}`));
     }
-  } catch (err) {
-    console.error(`\n[FAIL] Early click threw: ${(err && err.message) || err}`);
-    check(false, { '0.1 a lookbook click made while the page loads is not lost': () => false });
   } finally {
-    await page.close();
+    await context.close();
   }
 }
 
 async function bookingFlow() {
-  const page = await browser.newPage();
+  let context;
+  let page;
+  try {
+    context = await browser.newContext();
+    page = await context.newPage();
+  } catch (err) {
+    console.error(`\n[FAIL] Could not open the browser page: ${(err && err.message) || err}`);
+    check(false, { 'scenario "init" completed': () => false });
+    throw err;
+  }
 
   // Separate the expected anonymous session bootstrap from real application
   // traffic before navigation. Collapse per-URL cardinality into `app`, then
@@ -292,6 +325,6 @@ async function bookingFlow() {
     check(false, { [`scenario "${scenario}" completed`]: () => false });
     throw err;
   } finally {
-    await page.close();
+    await context.close();
   }
 }
