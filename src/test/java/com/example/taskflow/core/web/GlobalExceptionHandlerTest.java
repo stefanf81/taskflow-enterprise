@@ -364,6 +364,56 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void textPostgresCannotStoreIsABadRequestNotAServerError() {
+        // A NUL character in a JSON string or a search term (found by the DAST scan): the INSERT
+        // and the SELECT both fail with character_not_in_repertoire.
+        var ex = new org.springframework.dao.DataIntegrityViolationException("could not execute statement",
+                new RuntimeException("wrapper",
+                        new java.sql.SQLException("invalid byte sequence for encoding \"UTF8\": 0x00", "22021")));
+
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleDataIntegrityViolation(ex, request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals("Bad Request: The request contains a character that cannot be stored.",
+                response.getBody().message());
+    }
+
+    @Test
+    void loginWithAnUnstorableUsernameIsABadRequestNotAnOutage() {
+        var ex = new org.springframework.security.authentication.InternalAuthenticationServiceException(
+                "user lookup failed",
+                new org.springframework.dao.DataIntegrityViolationException("JDBC exception executing SQL",
+                        new java.sql.SQLException("invalid byte sequence for encoding \"UTF8\": 0x00", "22021")));
+
+        ResponseEntity<ErrorResponse> response =
+                globalExceptionHandler.handleInternalAuthenticationServiceException(ex, request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNull(response.getHeaders().getFirst("Retry-After"));
+    }
+
+    @Test
+    void unparseableRequestParametersAreABadRequestNotAServerError() {
+        // GET /api/v1/appointments?=&page=0 (found by the DAST scan): Tomcat throws from getParameterValues.
+        var ex = new org.apache.tomcat.util.http.InvalidParameterException(
+                "Invalid chunk starting at byte [0] and ending at byte [1] with a value of [=] ignored");
+
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleInvalidParameters(ex, request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals("Bad Request: The request parameters could not be parsed.", response.getBody().message());
+        assertEquals("/api/test", response.getBody().path());
+    }
+
+    @Test
+    void tooManyRequestParametersKeepTomcatsOwnStatus() {
+        var ex = new org.apache.tomcat.util.http.InvalidParameterException("too many parameters", 413);
+
+        assertEquals(HttpStatus.CONTENT_TOO_LARGE,
+                globalExceptionHandler.handleInvalidParameters(ex, request).getStatusCode());
+    }
+
+    @Test
     void otherIntegrityViolationsStayServerErrors() {
         var ex = new org.springframework.dao.DataIntegrityViolationException("null value",
                 new java.sql.SQLException("not null", "23502"));

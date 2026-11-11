@@ -235,17 +235,47 @@ class GlobalExceptionHandler {
     }
 
     /**
+     * Tomcat 11 refuses a query string or form body it cannot parse (an empty parameter name as
+     * in {@code ?=}, a bad percent escape, too many parameters) by throwing from the first
+     * {@code getParameter*} call, i.e. while Spring resolves a {@code @RequestParam}. That is a
+     * malformed request (the exception carries 400 or 413), not a server fault; the catch-all
+     * answered it with a 500 and an ERROR stack trace, which any client could trigger.
+     */
+    @ExceptionHandler(org.apache.tomcat.util.http.InvalidParameterException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidParameters(
+            org.apache.tomcat.util.http.InvalidParameterException ex, HttpServletRequest request) {
+        HttpStatus status = HttpStatus.resolve(ex.getErrorCode());
+        if (status == null || !status.is4xxClientError()) {
+            status = HttpStatus.BAD_REQUEST;
+        }
+        logger.debug("Unparseable request parameters ({}) on {}", status.value(),
+                LogSanitizer.stripNewlines(request.getRequestURI()));
+        ErrorResponse errorResponse = new ErrorResponse(
+                now(),
+                status.value(),
+                status.getReasonPhrase(),
+                "Bad Request: The request parameters could not be parsed.",
+                request.getRequestURI()
+        );
+        return new ResponseEntity<>(errorResponse, status);
+    }
+
+    /**
      * Unique/foreign-key/exclusion violations are conflicts with existing data (duplicate
      * service name, deleting a service that has bookings, re-activating a booking
      * whose slot was taken; 23P01 is PostgreSQL's appointments_no_overlap exclusion
-     * constraint), not server faults. Everything else — NOT NULL, length
-     * — is left to the catch-all so it is still logged as an error.
+     * constraint), not server faults. Text PostgreSQL cannot store (22021: a NUL character in a
+     * name or a search term) is the client's malformed input, so it is a 400. Everything else
+     * — NOT NULL, length — is left to the catch-all so it is still logged as an error.
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(
             DataIntegrityViolationException ex, HttpServletRequest request) {
 
         String sqlState = findSqlState(ex);
+        if (UNSTORABLE_TEXT.equals(sqlState)) {
+            return unstorableText(request);
+        }
         if (!"23505".equals(sqlState) && !"23503".equals(sqlState) && !"23P01".equals(sqlState)) {
             return handleGlobalException(ex, request);
         }
@@ -258,6 +288,21 @@ class GlobalExceptionHandler {
                 request.getRequestURI()
         );
         return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
+    }
+
+    /** PostgreSQL {@code character_not_in_repertoire}: the statement carried text it cannot store. */
+    private static final String UNSTORABLE_TEXT = "22021";
+
+    private ResponseEntity<ErrorResponse> unstorableText(HttpServletRequest request) {
+        logger.debug("Unstorable character in request on {}", LogSanitizer.stripNewlines(request.getRequestURI()));
+        ErrorResponse errorResponse = new ErrorResponse(
+                now(),
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                "Bad Request: The request contains a character that cannot be stored.",
+                request.getRequestURI()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
     private static String findSqlState(Throwable ex) {
@@ -277,12 +322,17 @@ class GlobalExceptionHandler {
      * failed because the database or connection pool was unavailable) arrives wrapped in
      * {@link org.springframework.security.authentication.InternalAuthenticationServiceException}.
      * Handle it before {@link #handleAuthenticationException} so an outage is reported as 503
-     * rather than a false 401 "Invalid credentials".
+     * rather than a false 401 "Invalid credentials". A lookup that failed because the username
+     * holds text PostgreSQL cannot store is no outage: it gets the same 400 as on any other path,
+     * instead of a "temporarily busy" 503 an anonymous caller could produce at will.
      */
     @ExceptionHandler(org.springframework.security.authentication.InternalAuthenticationServiceException.class)
     public ResponseEntity<ErrorResponse> handleInternalAuthenticationServiceException(
             org.springframework.security.authentication.InternalAuthenticationServiceException ex,
             HttpServletRequest request) {
+        if (UNSTORABLE_TEXT.equals(findSqlState(ex))) {
+            return unstorableText(request);
+        }
         // Provider messages/causes may include account names or query parameters.
         logger.warn("Authentication service unavailable on {} ({})",
                 LogSanitizer.stripNewlines(request.getRequestURI()), ex.getClass().getSimpleName());
