@@ -17,6 +17,9 @@ export default defineConfig({
   // suite makes ~32 auth requests, well past production's 20/min. With that
   // headroom, tests run in parallel: the two ~10s journeys (booking, a11y) no
   // longer run back to back (BENCHMARKS.md §53: ~35s -> ~22s locally).
+  // They raise the general API bucket too (APP_RATE_LIMIT_MAX_REQUESTS_PER_MINUTE,
+  // 1000 instead of 100): every page load costs five public API requests, and the
+  // suite outgrew 100 a minute (BENCHMARKS.md §70).
   fullyParallel: true,
   forbidOnly: !!process.env['CI'],
   retries: process.env['CI'] ? 2 : 0,

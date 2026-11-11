@@ -917,6 +917,11 @@ jobs:
       # past production's 20/min. At 20, 12 csrf/me calls were throttled, and
       # a throttled login would fail a test. The limiter itself stays enabled.
       APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE: "200"
+      # The general API bucket likewise: every page load costs five public API
+      # requests and the whole suite arrives from the ingress container's one
+      # address within a minute. At production's 100/min it had no room left;
+      # two more tests exhausted it and the catalog answered 429 (run 43108284981).
+      APP_RATE_LIMIT_MAX_REQUESTS_PER_MINUTE: "1000"
 
     steps:
       - name: Checkout

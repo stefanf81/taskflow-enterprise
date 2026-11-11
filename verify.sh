@@ -168,6 +168,7 @@ run_step 'PostgreSQL parity tests' ./gradlew testcontainersTest
 # Recheck after the tests: never silently adopt a stack started in the meantime.
 run_step 'fresh-stack ownership check' assert_fresh_stack
 export APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE="${APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE:-200}"
+export APP_RATE_LIMIT_MAX_REQUESTS_PER_MINUTE="${APP_RATE_LIMIT_MAX_REQUESTS_PER_MINUTE:-1000}"
 # Set ownership before startup so even a partially failed Compose up is cleaned.
 OWN_STACK=true
 run_step 'fresh application build and startup' ./start-docker.sh

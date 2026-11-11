@@ -121,6 +121,9 @@ services:
       # 20/min auth bucket (login/register/refresh/logout) mid-suite. verify.sh
       # and `npm run e2e:docker` export a higher value; normal local runs keep 20.
       - APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE=${APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE:-20}
+      # Same for the general API bucket (production: 100/min): the suite's page loads
+      # alone exceed it within a minute.
+      - APP_RATE_LIMIT_MAX_REQUESTS_PER_MINUTE=${APP_RATE_LIMIT_MAX_REQUESTS_PER_MINUTE:-100}
       # The backend accepts forwarding headers only from the Nginx container, i.e.
       # from frontend-tier, whose subnet is pinned below (networks: ipam). Without
       # the pin Docker picks any free pool (172.17-31/16, then 192.168.x/20), so a
