@@ -1,0 +1,220 @@
+name: Report and gate a ZAP scan
+description: >-
+  Everything dast.yml does after a ZAP run, once for both scan jobs: check from
+  the backend's own request counters that the scan exercised the application,
+  convert the report to SARIF, upload SARIF and reports, write the job summary
+  and fail the job. Expects `zap-<scan>-report.{json,md,html}` in the workspace
+  and the scanned backend still running.
+inputs:
+  scan:
+    description: Short scan name (`api` or `web`); selects the report files, artifact and SARIF category.
+    required: true
+  title:
+    description: Heading of the job summary.
+    required: true
+  target:
+    description: URL ZAP scanned (restricts SARIF results to that host).
+    required: true
+  rules-file:
+    description: ZAP rules file the scan ran with.
+    required: true
+  zap-exit-code:
+    description: >-
+      Exit code of the packaged scan (0 clean, 1 FAIL alerts, 2 WARN alerts,
+      anything else: ZAP could not complete). Empty when the scan did not run.
+    required: true
+  fail-on-findings:
+    description: >-
+      "false" reports alerts and server errors without failing the job. A scan
+      that did not complete or did not exercise the application always fails.
+    required: false
+    default: "true"
+  min-served:
+    description: Requests the backend must have served (429 responses do not count).
+    required: true
+  require-success:
+    description: >-
+      Optional request URI that only the scan's credentials can reach; it must
+      have answered 2xx at least once.
+    required: false
+    default: ""
+  token:
+    description: >-
+      Optional bearer token the scan ran with. It must still be accepted after
+      the scan (a scanned logout or account change may have revoked it).
+    required: false
+    default: ""
+  backend-url:
+    description: Base URL of the scanned backend (for its request counters).
+    required: false
+    default: http://localhost:8080
+runs:
+  using: composite
+  steps:
+    # ZAP's exit code cannot tell a clean scan from one the application never saw.
+    # Never fails by itself: the gate below reads its outputs, and a missing
+    # output counts as "not effective".
+    - name: Check that the scan exercised the application
+      id: health
+      if: ${{ !cancelled() && inputs.zap-exit-code != '' }}
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        SCAN: ${{ inputs.scan }}
+        BACKEND_URL: ${{ inputs.backend-url }}
+        MIN_SERVED: ${{ inputs.min-served }}
+        REQUIRE_SUCCESS: ${{ inputs.require-success }}
+        TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+
+        metrics="zap-${SCAN}-backend-requests.prom"
+        code="$(curl --silent --output "$RUNNER_TEMP/prometheus.txt" --write-out '%{http_code}' --max-time 15 \
+          "$BACKEND_URL/actuator/prometheus" || true)"
+        if [[ "$code" != "200" ]] || ! grep '^http_server_requests_seconds_count' "$RUNNER_TEMP/prometheus.txt" > "$metrics"; then
+          # 429 here means the backend's rate limiter is throttling this job, the scan included.
+          echo "::error::The backend's request counters could not be read after the scan (HTTP $code)"
+          exit 0
+        fi
+
+        options=(--metrics "$metrics" --min-served "$MIN_SERVED")
+        if [[ -n "$REQUIRE_SUCCESS" ]]; then
+          options+=(--require-success "$REQUIRE_SUCCESS")
+        fi
+        if ! python3 scripts/zap_scan_health.py "${options[@]}" \
+            --summary "$RUNNER_TEMP/zap-${SCAN}-health.md" --github-output "$RUNNER_TEMP/zap-${SCAN}-health.out"; then
+          echo "::error::The backend's request counters could not be evaluated"
+          exit 0
+        fi
+
+        # After the counters were read, so this probe is not counted as scan traffic.
+        if [[ -n "$TOKEN" ]]; then
+          code="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 \
+            --header "Authorization: Bearer $TOKEN" "$BACKEND_URL/api/v1/auth/me" || true)"
+          if [[ "$code" != "200" ]]; then
+            echo "::error::The scan's bearer token was no longer accepted after the scan (HTTP $code): part of the scan ran unauthenticated"
+            echo "- The scan's bearer token was no longer accepted after the scan (HTTP \`$code\`)." \
+              >> "$RUNNER_TEMP/zap-${SCAN}-health.md"
+            sed -i 's/^effective=true$/effective=false/' "$RUNNER_TEMP/zap-${SCAN}-health.out"
+          fi
+        fi
+        cat "$RUNNER_TEMP/zap-${SCAN}-health.out" >> "$GITHUB_OUTPUT"
+
+    - name: Convert ZAP JSON to SARIF
+      if: ${{ !cancelled() && hashFiles(format('zap-{0}-report.json', inputs.scan)) != '' }}
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        SCAN: ${{ inputs.scan }}
+        RULES_FILE: ${{ inputs.rules-file }}
+        TARGET: ${{ inputs.target }}
+      run: |
+        python3 scripts/zap2sarif.py \
+          "zap-${SCAN}-report.json" \
+          "zap-${SCAN}-results.sarif" \
+          --rules-file "$RULES_FILE" \
+          --target "$TARGET"
+
+    - name: Upload SARIF
+      if: ${{ !cancelled() && hashFiles(format('zap-{0}-results.sarif', inputs.scan)) != '' }}
+      uses: ./.github/actions/upload-sarif
+      with:
+        path: zap-${{ inputs.scan }}-results.sarif
+        category: dast-zap-${{ inputs.scan }}
+
+    - name: Upload reports
+      if: ${{ !cancelled() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: zap-${{ inputs.scan }}-scan
+        path: |
+          spring.log
+          zap-${{ inputs.scan }}-report.html
+          zap-${{ inputs.scan }}-report.json
+          zap-${{ inputs.scan }}-report.md
+          zap-${{ inputs.scan }}-results.sarif
+          zap-${{ inputs.scan }}-backend-requests.prom
+        if-no-files-found: ignore
+        retention-days: 14
+
+    - name: Write scan summary
+      if: ${{ !cancelled() }}
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        SCAN: ${{ inputs.scan }}
+        TITLE: ${{ inputs.title }}
+        TARGET: ${{ inputs.target }}
+        ZAP_EXIT: ${{ inputs.zap-exit-code }}
+        EFFECTIVE: ${{ steps.health.outputs.effective }}
+        SERVER_ERRORS: ${{ steps.health.outputs.server_errors }}
+      run: |
+        {
+          echo "## 🛡️ ${TITLE}"
+          echo ""
+          echo "| Target | ZAP exit code | Scan exercised the application | Server errors |"
+          echo "| :--- | :--- | :--- | :--- |"
+          echo "| \`${TARGET}\` | \`${ZAP_EXIT:-did not run}\` | \`${EFFECTIVE:-unknown}\` | \`${SERVER_ERRORS:-unknown}\` |"
+          if [[ -f "$RUNNER_TEMP/zap-${SCAN}-health.md" ]]; then
+            cat "$RUNNER_TEMP/zap-${SCAN}-health.md"
+          fi
+          if [[ -f "zap-${SCAN}-report.md" ]]; then
+            echo ""
+            echo "<details><summary><strong>📋 ZAP report</strong></summary>"
+            echo ""
+            cat "zap-${SCAN}-report.md"
+            echo ""
+            echo "</details>"
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Enforce scan results
+      if: ${{ !cancelled() }}
+      shell: bash
+      env:
+        TITLE: ${{ inputs.title }}
+        ZAP_EXIT: ${{ inputs.zap-exit-code }}
+        EFFECTIVE: ${{ steps.health.outputs.effective }}
+        SERVER_ERRORS: ${{ steps.health.outputs.server_errors }}
+        FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+      run: |
+        set -euo pipefail
+
+        echo "zap_exit=${ZAP_EXIT:-none} effective=${EFFECTIVE:-unknown} server_errors=${SERVER_ERRORS:-unknown} fail_on_findings=$FAIL_ON_FINDINGS"
+
+        # A scan that did not complete or did not reach the application has no
+        # result to triage, so audit mode (fail_on_findings=false) does not excuse it.
+        case "$ZAP_EXIT" in
+          0 | 1 | 2) ;;
+          "")
+            echo "::error::${TITLE}: the scan did not run"
+            exit 1
+            ;;
+          *)
+            echo "::error::${TITLE}: ZAP could not complete the scan (exit code $ZAP_EXIT)"
+            exit 1
+            ;;
+        esac
+        if [[ "$EFFECTIVE" != "true" ]]; then
+          echo "::error::${TITLE}: the scan did not exercise the application (see the job summary)"
+          exit 1
+        fi
+
+        findings=()
+        if [[ "$ZAP_EXIT" != "0" ]]; then
+          findings+=("ZAP reported alerts (exit code $ZAP_EXIT)")
+        fi
+        if (( ${SERVER_ERRORS:-0} > 0 )); then
+          findings+=("the backend answered $SERVER_ERRORS requests with 5xx")
+        fi
+        if (( ${#findings[@]} == 0 )); then
+          echo "${TITLE} passed."
+          exit 0
+        fi
+
+        message="$(printf '%s; ' "${findings[@]}")"
+        if [[ "$FAIL_ON_FINDINGS" == "true" ]]; then
+          echo "::error::${TITLE}: ${message%; }"
+          exit 1
+        fi
+        echo "::warning::${TITLE}: ${message%; } (fail_on_findings is disabled)"

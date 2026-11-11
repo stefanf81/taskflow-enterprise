@@ -18,3 +18,14 @@
 # ZAP's unsolicited method probes flag REST verbs without proving exposure; PUT/PATCH/DELETE
 # are intentional, per-endpoint-authorized routes, and unauthenticated calls are rejected.
 90028	IGNORE	(Method probes are rejected; REST verbs are authorized per endpoint)
+# Text fields are stored and returned verbatim as application/json; the web and mobile clients
+# escape on render (no innerHTML or bypassSecurityTrust* in the Angular app, React Native Text),
+# and the server renders no HTML. ZAP raises this variant at Low risk / Low confidence only
+# because its payload came back in a JSON body. Scoped to the JSON API, not ignored globally.
+40014	OUTOFSCOPE	^http://localhost:8080/api/v1/
+# Check 6-5 (Low confidence, no evidence) infers path traversal when a made-up name is rejected
+# and the URL's own last segment ("catalog", "barbers", an id) is accepted. Creating or renaming a
+# record whose name must be unique behaves exactly like that: ZAP's fixed made-up name is a
+# duplicate (409) after its first use, the next unused name succeeds. Which of these endpoints it
+# lands on varies from run to run. The names are database values, never paths.
+6	OUTOFSCOPE	^http://localhost:8080/api/v1/(catalog|barbers)(/\d+)?$

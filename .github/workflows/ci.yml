@@ -140,6 +140,8 @@ jobs:
               - 'scripts/test_nuclei_sarif.py'
               - 'scripts/zap2sarif.py'
               - 'scripts/test_zap_sarif.py'
+              - 'scripts/zap_scan_health.py'
+              - 'scripts/test_zap_scan_health.py'
               - '.zap/**'
 
             docker:
@@ -275,8 +277,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Test SARIF converters
-        run: python3 -m unittest discover -s scripts -p 'test_*sarif.py' -v
+      - name: Test SARIF converters and the DAST scan-health check
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
       - name: Set up Node.js for verification script tests
         uses: actions/setup-node@v7

@@ -77,6 +77,7 @@ Containers
 CI
 - Pin every third-party action to a full commit SHA with a `# vX.Y.Z` comment; GitHub-owned `actions/*` stay on tags.
 - A job that must run after a skipped `needs` starts with `!cancelled()`, never `always()`.
+- DAST: ZAP exits 0 for a scan the app never saw. Keep `dast.yml`'s rate-limit overrides, `ZAP_AUTH_HEADER_SITE: localhost` (a host name, not a URL) and the `zap-report` gate (BENCHMARKS §69).
 
 Frontend
 - Never read `httpResource().value` directly in a computed or template (it throws in error state); use `safeResourceValue` and gate on `error()`/`hasValue()`.

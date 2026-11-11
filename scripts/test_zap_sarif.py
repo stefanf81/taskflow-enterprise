@@ -61,6 +61,19 @@ class ZapSarifTest(unittest.TestCase):
         run = self.convert([self.alert('10010', 'http://localhost:4200/api/v1/auth/csrf')])
         self.assertEqual(run['results'], [])
 
+    def test_server_errors_stay_findings_although_response_code_alerts_are_ignored(self):
+        rules = Path(__file__).resolve().parents[1] / '.zap' / 'api-rules.tsv'
+        client_error = {**self.alert('100000', 'http://localhost:8080/api/v1/catalog/0'), 'riskcode': '0',
+                        'name': 'A Client Error response code was returned by the server'}
+        server_error = {**self.alert('100000', 'http://localhost:8080/api/v1/appointments?='), 'riskcode': '1',
+                        'name': 'A Server Error response code was returned by the server'}
+        run = self.convert([client_error, server_error], rules)
+        self.assertEqual([
+            result['locations'][0]['logicalLocations'][0]['name'] for result in run['results']
+        ], ['http://localhost:8080/api/v1/appointments?='])
+        self.assertEqual([rule['name'] for rule in run['tool']['driver']['rules']],
+                         ['A Server Error response code was returned by the server'])
+
     def test_wildcard_and_comma_separated_scopes_match_packaged_scans(self):
         rules = self.directory / 'rules.tsv'
         rules.write_text(

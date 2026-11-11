@@ -26,6 +26,15 @@ def ignored_rule_ids(rules_file):
     return ignored
 
 
+def is_server_error(alert):
+    """ZAP's response-code script raises 4xx (Informational) and 5xx (Low) under one rule id.
+
+    The rules files ignore that rule, 100000, because fuzzing is expected to be answered with
+    4xx. A 5xx is an unhandled failure in the application, so it stays a finding.
+    """
+    return alert.get('pluginid') == '100000' and alert.get('riskcode', '0') != '0'
+
+
 def scoped_rule_exclusions(rules_file):
     """Mirror packaged scans' per-rule OUTOFSCOPE regexes, not a global rule ignore."""
     exclusions = {}
@@ -88,7 +97,7 @@ def main(file_in, file_out, rules_file=None, target=None):
 
         for alert in site.get("alerts", []):
             rule_id = f"ZAP-{alert.get('pluginid', alert.get('alertRef', 'unknown'))}"
-            if rule_id in ignored_rules:
+            if rule_id in ignored_rules and not is_server_error(alert):
                 continue
             patterns = scoped_exclusions.get('*', []) + scoped_exclusions.get(rule_id, [])
             instances = [

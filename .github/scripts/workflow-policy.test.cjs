@@ -76,3 +76,19 @@ test('the BuildKit image is pinned to a version and index digest', () => {
     `${marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n\\s+default: "moby/buildkit:v\\d+\\.\\d+\\.\\d+@sha256:[a-f0-9]{64}"`,
   ));
 });
+
+test('the DAST API scan sends its token and proves it', () => {
+  const dast = fs.readFileSync(path.join(workflowDir, 'dast.yml'), 'utf8');
+  // ZAP adds the auth header when the request's host name contains this value. A URL never
+  // matches, and the scan then runs unauthenticated without any error (BENCHMARKS.md §69).
+  const sites = [...dast.matchAll(/^\s*ZAP_AUTH_HEADER_SITE:\s*(\S+)\s*$/gm)].map((match) => match[1]);
+  assert.notDeepEqual(sites, []);
+  for (const site of sites) {
+    assert.doesNotMatch(site, /[:/]/, 'ZAP_AUTH_HEADER_SITE is a host-name substring, not a URL');
+  }
+
+  const api = dast.slice(dast.indexOf('\n  dast-api:'), dast.indexOf('\n  dast-web:'));
+  assert.match(api, /^\s+uses: \.\/\.github\/actions\/zap-report$/m);
+  assert.match(api, /^\s+require-success: \/api\/v1\/\S+$/m);
+  assert.match(api, /^\s+token: \$\{\{ steps\.auth\.outputs\.token \}\}$/m);
+});

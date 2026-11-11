@@ -2396,3 +2396,38 @@ The class now remembers the `CsrfFilter`'s token repository before each test and
 * **Unrelated flake seen on an unchanged run:** `NotificationGatewayConfigTest.prodSimulationWarnsInsteadOfBreakingSmokeTests` once did not find its warning in the captured output (1 failure in 18 full runs of the current code today, 9 with the fix and 9 without; it failed on one without). Cause: `logback-spring.xml` sends the console through an `AsyncAppender`, so once a Spring Boot test in the same JVM has applied it, the warning can reach the captured console after the assertion (reproduced: 6 misses in 300 context refreshes; a `ListAppender` on the logger, 0 in 300). Fixed: the test now checks the logged WARN event.
 
 **Verification:** the measurements above; the diagnostic listener lived in a temporary worktree, and the ordered control run's `build.gradle` edit was reverted. The suite passed in all 9 full runs with the fix.
+
+## 🛡️ 69. The DAST Scans Never Reached the Application — Rate Limiter and an Unsent Token (2026-11-11)
+
+**Goal:** audit DAST run 43093570262 (`main`, green, 5 min 36 s) for what the two ZAP scans actually exercised.
+
+**Methodology:** the run's own artifacts (`spring.log`, ZAP JSON reports), then a reproduction in this container: the same `bootJar` under the `prod` profile on PostgreSQL 16 and Redis, scanned by ZAP 2.17.0 with the image's packaged `zap-api-scan.py` and the workflow's arguments. The first row ran with the release's bundled add-ons, the others with CI's rule set (add-ons updated, beta rules installed). Tomcat's access log counted every request the backend received. The frontend scan was not reproduced (no browser for the AJAX spider here); its figures come from the CI artifacts only.
+
+### Results
+
+| API scan configuration | Requests | 429 | 2xx | 5xx | ZAP exit |
+| :--- | ---: | ---: | ---: | ---: | :--- |
+| As in run 43093570262 | 15,153 | 15,026 (99.2%) | 5 | 0 | 0 (clean) |
+| Token sent, limiter raised | 19,839 | 469 (2.4%, login throttle) | 752 | 5 | 2 (2 WARN) |
+| Plus the backend fix and two scoped rule exclusions (2 runs) | 19,837 | 469–470 | 757–761 | 0 | 0 (clean) |
+
+* **The per-IP rate limiter answered the scan.** The `prod` profile enables it at 100 requests/min (20/min for `/auth` writes) per client address, and the whole scan comes from one. CI's `spring.log` has `Rate limit exceeded for IP 127.0.0.1` in the API job (both buckets, twice) and `…172.17.0.2` (the ingress container) in the web job (twice); the line is written once per bucket and window. §51's load test hit the same trap.
+* **The bearer token was never sent.** `ZAP_AUTH_HEADER_SITE` was `http://localhost:8080`. ZAP 2.17.0 adds the header when `getHostName().contains(site)` (`HttpSenderAuthHeaderListener`), and `localhost` does not contain a URL. In the CI report every admin-only endpoint (`/auth/me`, `/barbers/admin`, `/appointments`, `/notifications`, `/catalog/retired`) answered 401 or 429, never 2xx.
+* **Nothing showed it.** Both rules files ignore rule 100000 (response codes), so 401 and 429 raised no alert, and ZAP exits 0 when it has no alerts. The step was named "Run authenticated OWASP ZAP API Scan" throughout.
+* **Reaching the handlers found two defects at once**, both a 5xx for malformed input: a query string Tomcat 11 cannot parse (`?=`) threw `InvalidParameterException` out of `@RequestParam` resolution (500), and a NUL character failed in PostgreSQL with SQLState 22021 (500 on writes and searches, and a "temporarily busy" 503 on login, where the failed user lookup looked like an outage). Rule 100000 carries the 5xx alerts too, so the ignore hid these as well.
+* **Two alerts were scanner heuristics**, now scoped out for the affected URLs in `.zap/api-rules.tsv` with their reasons: 40014 (a payload stored in a text field came back in a JSON body; Low/Low) and check 6-5 (path traversal inferred from a unique-name conflict; Low confidence, a different endpoint in each run).
+
+### Adopted
+
+* `dast.yml`: `ZAP_AUTH_HEADER_SITE: localhost`; both jobs raise the two per-IP limits (the limiter stays enabled, the per-account login throttle is untouched).
+* **A gate on what the backend saw**, in the shared `zap-report` action (`scripts/zap_scan_health.py`): after the scan it reads the backend's `http_server_requests` counters and fails the job when fewer than `min-served` requests were served (429 does not count), when the admin-only `/api/v1/barbers/admin` never answered 2xx, or when the token is no longer accepted. The first table row fails it twice (127 requests served, `/barbers/admin` never 2xx). 5xx responses are findings; a scan error or an ineffective scan fails even with `fail_on_findings: false`.
+* `GlobalExceptionHandler`: 400 for unparseable request parameters and for text PostgreSQL cannot store, on the data and the login path.
+* The web scan is declared what it always was, a guest scan: the SPA restores a session only when its session-hint cookie exists, so a bearer header would not have shown ZAP's browser the admin or customer screens.
+
+### Not adopted
+
+* **Crawling the admin and customer UI.** It needs a real browser session in the AJAX spider (login, or the session cookies) and a way to keep the spider off "Sign out"; the packaged scan has neither, ZAP's Automation Framework does.
+* **Scans as `ROLE_CUSTOMER`** (issue #222): a third job with a customer token and its own expectations.
+* **Path variables with real ids.** The spec has no examples, so ZAP sends `10` or the parameter name; requests to `/appointments/{id}` and the like mostly end in 404 before the handler's logic.
+
+**Verification:** the table above; `GlobalExceptionHandlerTest` (4 new cases), `test_zap_scan_health.py`, `test_zap_sarif.py`.
