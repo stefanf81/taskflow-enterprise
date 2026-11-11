@@ -2318,7 +2318,7 @@ Wall clock 3 m 04 s. The critical path is **Detect Changes (6 s) → Backend bui
 | Dependency Submission | 37 s | 12:58:00 | 2 m 01 s |
 
 * **Backend build:** job setup 3 s, checkout 1 s, `Set up Gradle` 5 s, `Build and Test` 142 s, report upload 2 s. Inside `Build and Test`: Gradle daemon and configuration ≈ 13 s (9.3 s of it "Calculating task graph as no cached configuration is available"), compilation ≈ 11 s, the `test` task ≈ 116 s.
-* **Unit suite:** 120 test classes, 781 tests; 214 s of class time summed over the 2 forks, spanning 103 s of wall time, balanced between the forks, so no single class is a straggler. The `test` task took ~62 s in §53 and 587 tests were recorded in §62. 45 test classes boot a full `@SpringBootTest` context and 18 a slice (static counts; how many distinct contexts the forks actually cache was not measured). A 37 s `ArchitectureTest` in the JUnit XML is a false lead: the class is reported by two test engines and its test cases sum to about 4 s.
+* **Unit suite:** 120 test classes, 781 tests; 214 s of class time summed over the 2 forks, spanning 103 s of wall time. That is not balanced: 214 s includes a 35 s `ArchitectureTest` artifact, so the forks carried about 90 s each against a 103 s span, and §68 measures a 25 s idle tail on one fork. The `test` task took ~62 s in §53 and 587 tests were recorded in §62. 45 test classes boot a full `@SpringBootTest` context and 18 a slice (static counts; how many distinct contexts the forks actually cache was not measured). A 37 s `ArchitectureTest` in the JUnit XML is a false lead: the class is reported by two test engines and its test cases sum to about 4 s.
 * **Build Docker (backend):** waiting for the Postgres/Redis pulls 7 s, `Build Image` 63 s (AOT training 31.3 s, runtime-stage apt 6.8 s, prod package refresh 9.2 s, AOT validation 6.4 s, export 7.6 s), Trivy Java DB restore 12 s (915 MB), scan 13 s, SARIF upload 3 s, production-image verification 3 s.
 * **What changed since §53:** there, Backend build finished 5–10 s *before* the backend image chain on pushes. It is now the long pole, by 11 s.
 
@@ -2344,6 +2344,40 @@ Wall clock 3 m 04 s. The critical path is **Detect Changes (6 s) → Backend bui
 
 Every row of the table above, for the reason given there. **If the unit suite gets shorter by more than 11 s, `Build Docker (backend)` becomes the critical path**; the pull-wait change (7 s) and the Dockerfile reorder (≈ 9 s) are then worth about 16 s together, the pull wait first because it does not touch the Dockerfile.
 
-**Open lever:** the unit suite is the only thing that moves the total. §53 estimated that merging Spring contexts would save at most ~12 s and would make test classes share a database again (`AppointmentControllerIntegrationTest` failed that way); that estimate predates the growth from ~62 s to ~116 s for the `test` task, so measure the distinct contexts per fork before judging it.
+**Open lever:** the unit suite is the only thing that moves the total; §68 explains the slowdown from ~62 s to ~116 s (one fork finishes ~25 s before the other) and what could be done about it.
 
 **Verification:** `./gradlew containerConfigTest` (reads `ci.yml` and the Dockerfile) and `node --test .github/scripts/workflow-policy.test.cjs` pass after the comment change. Not run: actionlint (CI's Workflow Lint job covers it) and any workflow run; the audit changed no behaviour.
+
+## ⚡ 68. Why the Unit Suite Slowed Down — A Single-Fork Tail, Not Slower Tests (2026-11-11)
+
+**Goal:** explain why the `test` task went from ~62 s (§53) to ~116 s (§67).
+
+**Methodology:** this container (4 vCPU), `./gradlew cleanTest test --no-build-cache` at four commits — the oldest in the shallow history (`0d53433`, 2026-10-31), `5171110` (11-04), `6bdbaed` (11-07) and `57660aa` (11-11) — each decomposed from its JUnit XML into test-method time, Spring context startup (the `Started … in N seconds` lines) and the rest. At `57660aa` a throwaway JUnit `TestExecutionListener` (not committed) also logged the fork PID and wall-clock start and end of every test class. The local run took 2 m 02 s of Gradle time end to end (CI: `test` ≈ 116 s). The 10-04 baseline of §53 cannot be re-run: the history starts on 10-31.
+
+| Commit | Tests | Contexts | Class time | Wall span | One fork busy | Both forks busy |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `0d53433` (10-31) | 605 | 21 | 133 s | 68 s | 2 s | 65 s |
+| `5171110` (11-04) | 719 | 24 | 154 s | 88 s | 22 s | 66 s |
+| `6bdbaed` (11-07) | 759 | 26 | 172 s | 103 s | 34 s | 69 s |
+| `57660aa` (11-11) | 781 | 26 | 167 s | 100 s | 34 s | 67 s |
+
+### Results
+
+* **The suite grew moderately; the wall time grew far more.** Tests +29%, contexts 21 → 26, class time 133 → 167 s (+26%), but the span went 68 → 100 s (+47%). The time with both forks busy stayed at 65–69 s; every added second landed in a stretch where only one fork was running.
+* **At `57660aa` the two forks get 60 and 59 classes but 102 s and 77 s of work.** Fork B runs out at +77 s and sits idle for the last 25 s; with an even split the suite would take about 90 s. The forks are loaded by class count, not by cost, and a new class can reshuffle which fork gets the heavy ones, so the tail came and went between commits rather than growing steadily. I did not establish Gradle's exact class-to-fork rule (no strict alternation in any scan order I tried), and CI's file order may differ from this container's; CI's XML also implies an idle tail (§67: ~90 s of work per fork against a 103 s span).
+* **Spring context creation is over half of the class time.** At `57660aa`: 87 s of startup (26 contexts, 13 per fork, 3.4 s each) against 75 s of test methods and 5 s of other overhead; at `0d53433` it was 70 s against 58 s. §53 counted about 7 contexts per fork.
+* **Gradle's XML hides some of it.** `OpenApiSecurityDocumentationTest` spends 10.8 s at class level and the XML shows 0.8 s: it carries `@DirtiesContext(AFTER_CLASS)` because `csrf()` permanently replaces the filter chain's token repository (its Javadoc). Its context is built, used and thrown away, and the next class with the same configuration in that fork builds another. The 34.7 s `ArchitectureTest` in the XML is still only an artifact (`@ArchTest` runs in the ArchUnit engine, the plain `@Test` in Jupiter; Gradle spans the two).
+* **Four context configurations are built once in each fork** (18 distinct annotation fingerprints for 26 contexts): about 9 s of fork time for three pairs, up to 16 s if the five Spring Modulith module tests turn out to share one.
+
+### Options
+
+| Option | Estimated effect on the `test` task | Notes |
+| :--- | :--- | :--- |
+| Stop dirtying the context in `OpenApiSecurityDocumentationTest` (restore the `CsrfFilter`'s repository after the test instead) | ≈ −10 s while it sits on the busy fork, plus one fewer rebuild | The Javadoc records the failure the dirtying prevents (`SecurityAuthorizationIntegrationTest.cookieLogout_requiresTheActualDoubleSubmitHeader`); keep that test green |
+| Balance the two forks by cost | ≈ −12 s | The documented settings (`maxParallelForks`, `forkEvery`) do not balance by cost; it needs two `Test` tasks with explicit class sets, or a different split, and a JaCoCo merge |
+| Share more contexts (fewer annotation variants, co-locate duplicates) | ≈ −5 to −16 s | §53's warning stands: shared contexts share a database again |
+| Leave as is | — | The run stays at ~3 minutes |
+
+Estimates, not measurements; none of them was tried. They are not additive: an even split only helps while one fork carries the surplus.
+
+**Verification:** the measurements above; no repository file other than this one changed (the diagnostic listener lived in a temporary worktree).
