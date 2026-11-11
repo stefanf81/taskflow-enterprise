@@ -2,15 +2,20 @@ package com.example.taskflow.auth;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.security.test.web.support.WebTestUtils;
+import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.context.WebApplicationContext;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,19 +40,41 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * request got through.
  *
  * <p>{@code csrf()} replaces the {@code CsrfFilter}'s cookie repository with a session-based test
- * repository for good, so this test throws its context away afterwards: sharing it, the next class
- * found no {@code XSRF-TOKEN} cookie on {@code GET /api/v1/auth/csrf}
- * ({@code SecurityAuthorizationIntegrationTest.cookieLogout_requiresTheActualDoubleSubmitHeader}).
+ * repository for good. Left in place, the next class sharing this context found no
+ * {@code XSRF-TOKEN} cookie on {@code GET /api/v1/auth/csrf}
+ * ({@code SecurityAuthorizationIntegrationTest.cookieLogout_requiresTheActualDoubleSubmitHeader}), so
+ * each test puts the original repository back, which keeps the context shareable. This class used to
+ * carry {@code @DirtiesContext} instead: a context of its own (10.8 s of class setup on a 4-vCPU
+ * machine) that was then thrown away (BENCHMARKS.md §68).
  */
 @SpringBootTest(properties = {"app.rate-limit.enabled=false"})
 @AutoConfigureMockMvc
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class OpenApiSecurityDocumentationTest {
 
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private WebApplicationContext context;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private CsrfTokenRepository originalCsrfTokenRepository;
+
+    @BeforeEach
+    void rememberCsrfTokenRepository() {
+        originalCsrfTokenRepository = WebTestUtils.getCsrfTokenRepository(filterChainRequest());
+    }
+
+    @AfterEach
+    void restoreCsrfTokenRepository() {
+        WebTestUtils.setCsrfTokenRepository(filterChainRequest(), originalCsrfTokenRepository);
+    }
+
+    /** The application has one SecurityFilterChain, so any request finds its CsrfFilter. */
+    private MockHttpServletRequest filterChainRequest() {
+        return new MockHttpServletRequest(context.getServletContext());
+    }
 
     @Test
     void theSpecMarksExactlyTheOperationsTheFilterChainLetsAnonymousCallersReach() throws Exception {

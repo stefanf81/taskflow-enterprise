@@ -2378,6 +2378,21 @@ Every row of the table above, for the reason given there. **If the unit suite ge
 | Share more contexts (fewer annotation variants, co-locate duplicates) | ≈ −5 to −16 s | §53's warning stands: shared contexts share a database again |
 | Leave as is | — | The run stays at ~3 minutes |
 
-Estimates, not measurements; none of them was tried. They are not additive: an even split only helps while one fork carries the surplus.
+Estimates, not measurements; only the first was tried (below). They are not additive: an even split only helps while one fork carries the surplus.
 
-**Verification:** the measurements above; no repository file other than this one changed (the diagnostic listener lived in a temporary worktree).
+### Tried: `OpenApiSecurityDocumentationTest` without `@DirtiesContext`
+
+The class now remembers the `CsrfFilter`'s token repository before each test and puts it back afterwards (`WebTestUtils`; the application has one `SecurityFilterChain`), so its context is shared like any other.
+
+* **The guard is real.** Removing only `@DirtiesContext`, and running this class and `SecurityAuthorizationIntegrationTest` in one fork in that order (`maxParallelForks = 1`, `ClassOrderer$ClassName`, a temporary edit), failed `cookieLogout_requiresTheActualDoubleSubmitHeader`, as the Javadoc said. With the restore, both pass, and `SecurityAuthorizationIntegrationTest` logs no context start of its own.
+* **Measured, 4 + 4 alternating runs** of `./gradlew cleanTest test --no-build-cache --profile` (Gradle's `:test` task):
+
+| | `:test` per run | Mean | Class span (mean) | One fork busy | Both forks busy |
+| :--- | :--- | ---: | ---: | ---: | ---: |
+| Before | 112.7, 120.2, 105.3, 118.2 s | 114.1 s | 106.5 s | 34–39 s | 69–76 s |
+| After | 109.0, 109.6, 105.9, 110.8 s | 108.8 s | 98.5 s | 14–23 s | 79–82 s |
+
+* **About −5 s, not the −10 s estimated above.** The single-fork tail halved, but the work it removed from fork A partly reappears as time when both forks are busy, where they compete for the 4 vCPUs. The runs also spread less (6 s against 15 s). CI's effect is not measured.
+* **Unrelated flake seen on an unchanged run:** `NotificationGatewayConfigTest.prodSimulationWarnsInsteadOfBreakingSmokeTests` once did not find its warning in the captured output (1 failure in 18 full runs of the current code today, 9 with the fix and 9 without; it failed on one without).
+
+**Verification:** the measurements above; the diagnostic listener lived in a temporary worktree, and the ordered control run's `build.gradle` edit was reverted. The suite passed in all 9 full runs with the fix.
