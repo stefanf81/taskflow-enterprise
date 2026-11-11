@@ -17,6 +17,10 @@ concurrency:
   group: k6-${{ github.repository }}
   cancel-in-progress: false
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   browser-test:
     runs-on: ubuntu-26.04
@@ -28,7 +32,10 @@ jobs:
       K6_VERSION: "2.3.0-with-browser"
 
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Verify BASE_URL is set
         run: |
@@ -37,26 +44,98 @@ jobs:
             exit 1
           fi
 
+      # Once for both runs below, with retries: a Docker Hub reset inside
+      # `docker run` would read as a failed smoke test.
+      - name: Pull k6 image
+        run: |
+          set -euo pipefail
+          for attempt in {1..5}; do
+            if docker pull --quiet "grafana/k6:${K6_VERSION}"; then
+              exit 0
+            fi
+            if (( attempt == 5 )); then
+              break
+            fi
+            echo "docker pull failed (attempt ${attempt}/5); retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::Failed to pull grafana/k6:${K6_VERSION} after 5 attempts"
+          exit 1
+
       - name: Run k6 browser test
         run: |
+          set -euo pipefail
+
+          # The image runs as an unprivileged user: the scripts are mounted
+          # read-only, and it writes only its failure screenshot into k6-results.
+          mkdir -p k6-results
+          chmod a+w k6-results
+
           # Remote smoke test: the GitHub runner measures cross-region latency,
           # so web.dev "good" CWV budgets (FCP<1800/LCP<2500) are not a valid
           # gate here — disable them and keep the functional/availability
           # checks. Same-region runs keep the CWV gate (ENFORCE_CWV defaults true).
           docker run --rm \
-            -e BASE_URL="$BASE_URL" \
+            -e BASE_URL \
             -e ENFORCE_CWV=false \
-            -v ${{ github.workspace }}:/work \
+            -e RESULTS_DIR=k6-results \
+            -v "$GITHUB_WORKSPACE/k6:/work/k6:ro" \
+            -v "$GITHUB_WORKSPACE/k6-results:/work/k6-results" \
             -w /work \
-            grafana/k6:${K6_VERSION} \
-            run k6/browser.js
+            "grafana/k6:${K6_VERSION}" \
+            run --quiet k6/browser.js 2>&1 | tee k6-results/browser.log
 
+      # Also after a failed browser test: the two answer different questions
+      # (does the booking flow work / do the public endpoints answer in time).
       - name: Run k6 production API probe
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
+          set -euo pipefail
+
+          mkdir -p k6-results
           docker run --rm \
-            -e BASE_URL="$BASE_URL" \
-            -v ${{ github.workspace }}:/work \
+            -e BASE_URL \
+            -v "$GITHUB_WORKSPACE/k6:/work/k6:ro" \
             -w /work \
-            grafana/k6:${K6_VERSION} \
-            run k6/probe.js
+            "grafana/k6:${K6_VERSION}" \
+            run --quiet k6/probe.js 2>&1 | tee k6-results/probe.log
+
+      - name: Write summary
+        if: ${{ !cancelled() }}
+        run: |
+          # k6's own end-of-test report (thresholds, checks, web vitals), or the
+          # tail of the log when the run ended before it was printed.
+          report() {
+            local title="$1" log="$2"
+            echo "## ${title}"
+            echo ""
+            if [[ ! -s "$log" ]]; then
+              echo "Did not run."
+              echo ""
+              return
+            fi
+            echo '```text'
+            if grep -q 'THRESHOLDS' "$log"; then
+              sed -n '/THRESHOLDS/,$p' "$log"
+            else
+              tail -n 40 "$log"
+            fi
+            echo '```'
+            echo ""
+          }
+          {
+            echo "Target: \`${BASE_URL}\`"
+            echo ""
+            report "k6 browser test (booking flow)" k6-results/browser.log
+            report "k6 API probe" k6-results/probe.log
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The logs, and a screenshot of the page if a browser scenario failed.
+      - name: Upload k6 results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: k6-results
+          path: k6-results/
+          if-no-files-found: ignore
+          retention-days: 14

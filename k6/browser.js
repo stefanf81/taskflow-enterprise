@@ -15,6 +15,10 @@ const SLOT_LOAD_MS = 1500;
 // and availability checks as the gate there.
 const ENFORCE_CWV = __ENV.ENFORCE_CWV !== 'false';
 
+// Directory for a screenshot of the page when a scenario fails (the workflow uploads it).
+// Unset: no screenshot.
+const RESULTS_DIR = __ENV.RESULTS_DIR;
+
 export const options = {
   scenarios: {
     browser: {
@@ -74,6 +78,13 @@ export default async function () {
     await page
       .locator('#step-panel-1')
       .waitFor({ state: 'visible', timeout: 10000 });
+    // The landing page is prerendered: the wizard and the lookbook are on screen before main.js
+    // has run, so "visible" does not mean "ready". This test checks that the booking flow works,
+    // so let the page finish loading (scripts, lazy chunks, the first API answers) before
+    // touching it. Clicks made earlier are a separate guarantee, pinned with controlled script
+    // latency by frontend/e2e/early-interaction.spec.ts (BENCHMARKS.md §70: this test clicked a
+    // lookbook card 80 ms after it appeared, and the page lost the click).
+    await page.waitForLoadState('networkidle', { timeout: 30000 });
 
     const title = await page.title();
     check(title, {
@@ -93,9 +104,9 @@ export default async function () {
     scenario = 'wizard-step1-lookbook';
     console.log('--- 2. Wizard — Lookbook card ---');
 
-    // The lookbook is deferred until the browser is idle, so wait for it rather
-    // than falling back to an unrelated card in the first wizard step. Cards are
-    // semantic <button> elements (a11y refactor); do not target div[role=button].
+    // Wait for the lookbook rather than falling back to an unrelated card in the first wizard
+    // step (it is deferred until the browser is idle when the page is rendered client-side).
+    // Cards are semantic <button> elements (a11y refactor); do not target div[role=button].
     const lookbookCard = page.locator('app-lookbook button').first();
     await lookbookCard.waitFor({ state: 'visible', timeout: 10000 });
     await lookbookCard.click();
@@ -222,7 +233,15 @@ export default async function () {
 
     console.log('=== All scenarios completed ===');
   } catch (err) {
-    console.error(`\n[FAIL] Scenario "${scenario}" threw: ${err.message}`);
+    // k6 browser rejects with a plain value for some failures (a locator timeout has no
+    // `message`), which used to log "threw: undefined".
+    console.error(`\n[FAIL] Scenario "${scenario}" threw: ${(err && err.message) || err}`);
+    if (RESULTS_DIR) {
+      // What the page looked like when it failed, e.g. the wizard still on step 1.
+      await page
+        .screenshot({ path: `${RESULTS_DIR}/failed-${scenario}.png`, fullPage: true })
+        .catch((screenshotError) => console.error(`screenshot failed: ${screenshotError}`));
+    }
     // Turn an aborted scenario into a failed check so the `checks rate==1.0`
     // threshold fails the run. A bare rethrow alone does not guarantee a
     // non-zero exit, which previously let a scenario failure pass unnoticed.
