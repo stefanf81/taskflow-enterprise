@@ -118,7 +118,7 @@ class RateLimiterConfig {
 
                 String clientIp = getClientIp(request);
                 String path = requestPath(request);
-                boolean isAuthEndpoint = path.startsWith("/api/v1/auth/");
+                boolean isAuthEndpoint = isAuthBucket(request.getMethod(), path);
 
                 int maxRequests = isAuthEndpoint ? authMaxRequestsPerMinute : maxRequestsPerMinute;
 
@@ -192,6 +192,18 @@ class RateLimiterConfig {
     static long retryAfterSeconds(long remainingMillis) {
         long millis = remainingMillis <= 0 ? WINDOW_MILLIS : Math.min(remainingMillis, WINDOW_MILLIS);
         return Math.max(1, (millis + 999) / 1000);
+    }
+
+    /**
+     * Whether a request is billed to the strict auth bucket: the state-changing calls under
+     * {@code /api/v1/auth/} (login, register, refresh, logout), which cost a BCrypt check or a
+     * database write. The read-only {@code GET}/{@code HEAD} ones ({@code /csrf}, {@code /me}) only
+     * verify a token and go to the API bucket: every page load of the web app fetches the CSRF
+     * token, so in the auth bucket ten page loads a minute from one shared address (shop Wi-Fi,
+     * an office or carrier NAT) refused logins for everyone behind it.
+     */
+    static boolean isAuthBucket(String method, String path) {
+        return path.startsWith("/api/v1/auth/") && !"GET".equals(method) && !"HEAD".equals(method);
     }
 
     /**

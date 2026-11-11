@@ -112,7 +112,7 @@ services:
       # passes whether Playwright drives the browser via localhost or 127.0.0.1.
       - APP_CORS_ALLOWED_ORIGINS=http://localhost:4200,http://127.0.0.1:4200
       # The local E2E suite shares one client IP and would exhaust the production
-      # 20/min auth bucket (csrf/me/login/register/logout) mid-suite. verify.sh
+      # 20/min auth bucket (login/register/refresh/logout) mid-suite. verify.sh
       # and `npm run e2e:docker` export a higher value; normal local runs keep 20.
       - APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE=${APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE:-20}
       # The backend accepts forwarding headers only from the Nginx container, i.e.
@@ -132,13 +132,17 @@ services:
       # CMD — see the Dockerfile's shared runtime stage for the sizing-agnostic rationale.
       # This block mirrors the prod homelab/TF backend.yaml intent.
       # At 2560M limit × MaxRAMPercentage=50.0 → ~1.25 GiB heap, ~1.3 GiB off-heap.
+      # InitialRAMPercentage matches it: AlwaysPreTouch only touches the INITIAL heap, which
+      # ergonomics sets to 1/64 of RAM (40 MiB), so the rest was committed during GC pauses
+      # under load. Boot measured on JDK 25 (median of 4): 9.97 → 10.61 s, peak RSS
+      # 624 → 1418 MiB (the heap is resident from the start), GC pauses while booting 54 → 33.
       # GC log and OOM heap dump go to the backend-diagnostics volume, not the /tmp
       # tmpfs: tmpfs pages count against the 2560M limit (a heap-sized dump on top
       # of the running JVM invites the OOM killer) and vanish when the container
       # stops, which ExitOnOutOfMemoryError makes it do. The dump is named
       # java_pid<pid>.hprof and an existing file is never overwritten: delete it
       # after analysis. The GC log rotates the previous run's file on start.
-      - JAVA_TOOL_OPTIONS=-XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=50.0 -XX:MaxGCPauseMillis=100 -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/var/log/taskflow -Xlog:gc*:file=/var/log/taskflow/gc.log:time,uptime:filecount=3,filesize=10m -XX:+UseStringDeduplication -XX:+AlwaysPreTouch -XX:+ParallelRefProcEnabled -XX:+DisableExplicitGC -XX:MaxDirectMemorySize=256m -XX:MaxMetaspaceSize=256m
+      - JAVA_TOOL_OPTIONS=-XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxRAMPercentage=50.0 -XX:InitialRAMPercentage=50.0 -XX:MaxGCPauseMillis=100 -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/var/log/taskflow -Xlog:gc*:file=/var/log/taskflow/gc.log:time,uptime:filecount=3,filesize=10m -XX:+UseStringDeduplication -XX:+AlwaysPreTouch -XX:+ParallelRefProcEnabled -XX:+DisableExplicitGC -XX:MaxDirectMemorySize=256m -XX:MaxMetaspaceSize=256m
       # glibc-only knob (no musl equivalent): arenas scale to 8 x cores by
       # default and the JVM's carrier/worker threads spread native allocations
       # across them, padding RSS. 2 recovered ~72 MiB (median) with no

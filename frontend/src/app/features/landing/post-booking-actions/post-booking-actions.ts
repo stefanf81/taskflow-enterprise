@@ -1,5 +1,4 @@
 import { Component, signal, inject, linkedSignal, DestroyRef } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { email, form, max, min, required, FormField } from '@angular/forms/signals';
 import { AppointmentsApi } from '../../../core/api/appointments-api';
@@ -43,7 +42,7 @@ interface ReviewFormModel {
 @Component({
   selector: 'app-post-booking-actions',
   standalone: true,
-  imports: [CommonModule, FormField, ReschedulePicker],
+  imports: [FormField, ReschedulePicker],
   template: `
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
       <!-- Interactive secure self-service cancellation portal -->

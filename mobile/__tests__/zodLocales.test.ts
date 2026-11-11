@@ -1,5 +1,6 @@
+import path from 'path';
 import * as z from 'zod/mini';
-import { EMPTY_LOCALES, resolveRequest } from '../metro/zodLocales';
+import { EMPTY_LOCALES, EMPTY_MODULE, resolveRequest } from '../metro/zodLocales';
 
 describe('zod locale namespace (metro/zodLocales.js)', () => {
   const upstream = { type: 'sourceFile', filePath: '/upstream.cjs' };
@@ -46,5 +47,55 @@ describe('zod locale namespace (metro/zodLocales.js)', () => {
 
     const fallback = z.string().check(z.minLength(2)).safeParse('a');
     expect(fallback.error?.issues[0]?.message).toBe('Invalid input');
+  });
+
+  it.each([
+    ['/app/node_modules/zod/v4/core/index.cjs', './compile.cjs'],
+    ['/app/node_modules/zod/v4/core/index.cjs', './memoizer.cjs'],
+    ['/app/node_modules/zod/v4/core/index.cjs', './to-json-schema.cjs'],
+    ['/app/node_modules/zod/v4/core/index.js', './json-schema-processors.js'],
+    ['/app/node_modules/zod/v4/core/index.cjs', './json-schema-generator.cjs'],
+    ['/app/node_modules/zod/v4/mini/external.cjs', '../core/json-schema-processors.cjs'],
+    ['C:\\app\\node_modules\\zod\\v4\\core\\index.cjs', './compile.cjs'],
+  ])('serves an empty module to the zod barrel %s for %s', (origin, request) => {
+    const context = contextFrom(origin);
+
+    expect(resolveRequest(context, request, 'android')).toEqual({
+      type: 'sourceFile',
+      filePath: EMPTY_MODULE,
+    });
+    expect(context.resolveRequest).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    // zod's classic API converts to JSON Schema itself and keeps the real modules.
+    ['/app/node_modules/zod/v4/classic/schemas.cjs', '../core/to-json-schema.cjs'],
+    ['/app/node_modules/zod/v4/classic/external.cjs', '../core/json-schema-processors.cjs'],
+    // Modules other than the barrels, and other packages, are untouched.
+    ['/app/node_modules/zod/v4/core/compile.cjs', './memoizer.cjs'],
+    ['/app/node_modules/zod/v4/core/index.cjs', './schemas.cjs'],
+    ['/app/node_modules/other/v4/core/index.cjs', './compile.cjs'],
+  ])('leaves %s -> %s to the default resolver', (origin, request) => {
+    const context = contextFrom(origin);
+
+    expect(resolveRequest(context, request, 'ios')).toBe(upstream);
+  });
+
+  it('parses the shared schemas with zod/mini when the stubbed modules are absent', () => {
+    const zodCore = path.dirname(require.resolve('zod/v4/core'));
+    jest.isolateModules(() => {
+      for (const name of ['compile', 'memoizer', 'to-json-schema', 'json-schema-processors',
+        'json-schema-generator']) {
+        jest.doMock(path.join(zodCore, `${name}.cjs`), () => ({}));
+      }
+      expect(require(path.join(zodCore, 'compile.cjs'))).toEqual({});
+      const schemas = require('@taskflow/schemas');
+      const mini = require('zod/mini');
+
+      expect(schemas.loginResponseSchema.parse({ username: 'jane', role: 'ROLE_CUSTOMER' }))
+        .toEqual({ username: 'jane', role: 'ROLE_CUSTOMER' });
+      const bad = mini.string().check(mini.minLength(1, 'Name is required')).safeParse('');
+      expect(bad.error?.issues[0]?.message).toBe('Name is required');
+    });
   });
 });

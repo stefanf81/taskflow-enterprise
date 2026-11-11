@@ -10,7 +10,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *   <li>{@code enabled} (default {@code false}; {@code true} in prod, needs Redis): read by the
  *       {@code @ConditionalOnProperty} that creates the filter at all.</li>
  *   <li>{@code max-requests-per-minute} (default 100): per client IP for the API.</li>
- *   <li>{@code auth-max-requests-per-minute} (default 20): per client IP for {@code /api/v1/auth/**}.</li>
+ *   <li>{@code auth-max-requests-per-minute} (default 20): per client IP for the
+ *       state-changing {@code /api/v1/auth/**} requests (every method but {@code GET}/{@code HEAD}).</li>
  * </ul>
  *
  * <p>The per-account login throttle reads its own {@code app.rate-limit.login-*} keys in the auth

@@ -248,6 +248,41 @@ class RateLimiterConfigTest {
     }
 
     @Test
+    void readOnlyAuthRequestsAreBilledToTheApiBucket() throws Exception {
+        // Every web page load fetches the CSRF token; in the auth bucket ten loads a minute from
+        // one shared address refused logins for everyone behind it.
+        for (String path : List.of("/api/v1/auth/csrf", "/api/v1/auth/me")) {
+            for (String method : List.of("GET", "HEAD")) {
+                MockHttpServletRequest request = new MockHttpServletRequest(method, path);
+                request.setRemoteAddr("10.0.0.10");
+                mockExecuteForKey("rate_limit:10.0.0.10:api", 21L);
+
+                MockHttpServletResponse response = new MockHttpServletResponse();
+                FilterChain filterChain = mock(FilterChain.class);
+                filter.doFilter(request, response, filterChain);
+
+                assertEquals(200, response.getStatus(), method + " " + path + " must use the API limit (100)");
+                verify(filterChain).doFilter(request, response);
+            }
+        }
+    }
+
+    @Test
+    void stateChangingAuthRequestsKeepTheAuthBucket() throws Exception {
+        for (String path : List.of("/api/v1/auth/login", "/api/v1/auth/mobile/login", "/api/v1/auth/register",
+                "/api/v1/auth/refresh", "/api/v1/auth/mobile/refresh", "/api/v1/auth/logout")) {
+            MockHttpServletRequest request = new MockHttpServletRequest("POST", path);
+            request.setRemoteAddr("10.0.0.11");
+            mockExecuteForKey("rate_limit:10.0.0.11:auth", 21L);
+
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            filter.doFilter(request, response, mock(FilterChain.class));
+
+            assertEquals(429, response.getStatus(), "POST " + path + " must use the auth limit (20)");
+        }
+    }
+
+    @Test
     void redisFailureFallsBackToAnInMemoryLimitInsteadOfFailingOpen() throws Exception {
         when(redisTemplate.execute(ArgumentMatchers.<RedisScript<List<Long>>>any(), anyList(), anyString()))
                 .thenThrow(new RuntimeException("redis down"));

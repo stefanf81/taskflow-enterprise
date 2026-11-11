@@ -344,10 +344,14 @@ abstract class AbstractDataMigrationsTest {
             assertFalse(indexes.contains("idx_reviews_rating_created"));
             assertFalse(indexes.contains("idx_appointments_service_type"));
             assertFalse(indexes.contains("idx_appointment_customer_name"));
+            // V42: prefixes of other indexes, never scanned
+            assertFalse(indexes.contains("idx_appointment_status"));
+            assertFalse(indexes.contains("idx_appointment_barber_date"));
+            assertFalse(indexes.contains("idx_appointments_booking_date"));
             // still used by queries
             assertTrue(indexes.contains("idx_appointments_customer_email"));
             assertTrue(indexes.contains("idx_appointment_status_date"));
-            assertTrue(indexes.contains("idx_appointments_booking_date"));
+            assertTrue(indexes.contains("idx_appointments_date_time_id"));
             assertTrue(indexes.contains("idx_appointments_service_id"));
             assertTrue(indexes.contains("idx_appointment_slot_active"));
         }

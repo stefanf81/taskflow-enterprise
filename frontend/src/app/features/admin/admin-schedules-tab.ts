@@ -1,5 +1,4 @@
 import { Component, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { form, required, FormField } from '@angular/forms/signals';
 import { AdminWeeklySchedule } from './admin-weekly-schedule';
 import { AppointmentStore } from './appointment.store';
@@ -15,7 +14,7 @@ interface TimeOffFormModel {
 /** Owner dashboard · barbers, their weekly hours and time off (Signal Forms). */
 @Component({
   selector: 'app-admin-schedules-tab',
-  imports: [CommonModule, FormField, AdminWeeklySchedule],
+  imports: [FormField, AdminWeeklySchedule],
   templateUrl: './admin-schedules-tab.html',
 })
 export class AdminSchedulesTab {

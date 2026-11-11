@@ -84,12 +84,14 @@ Frontend
 - Guest endpoints are marked with the `PUBLIC_REQUEST` token, not matched by URL.
 - The `access_token` cookie is HttpOnly and never read by JavaScript; the role lives only in the in-memory `AuthState`.
 - The landing page must not import `BookingStore` (it pulls Signal Forms into `main.js`); use `LookbookSelectionBus`.
+- No `@angular/common` pipes, `NgClass` or `CommonModule` (ESLint enforces it): they ship ~22 kB to every guest page; use `core/format.ts` and `[class]` bindings.
 - Edit `src/theme/tokens.json`, not `tokens.generated.css`. Schemas use `zod/mini`; keep the check order, since it decides `issues[0]`.
 - Prettier: 100 columns, single quotes, run from `frontend/`.
 
 Mobile
 - Layout mirrors web: a feature's screens/hooks/API calls live in `src/features/<name>/`, what several features share in `src/core/<domain>/`. Public calls go through `src/api/publicEndpoints.ts`; follow the Rules of React (the compiler bails out silently, `reactCompiler.test.ts` catches it).
 - Subscribe to the auth store with per-field selectors, never the whole store. No bulk Prettier runs (mobile has no `.prettierrc`).
+- Never call zod's `toJSONSchema` or `z.core.compile`: Metro stubs them out of the bundle (`metro/zodLocales.js`).
 - Credentials change only through `storage.startSession`/`rotateSession`/`clearSession` (session epoch, ADR-023), never the single setters.
 
 Dependencies

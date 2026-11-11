@@ -20,10 +20,8 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "appointments", indexes = {
-    @Index(name = "idx_appointment_status", columnList = "status"),
-    @Index(name = "idx_appointments_booking_date", columnList = "booking_date"),
+    @Index(name = "idx_appointments_date_time_id", columnList = "booking_date,booking_time,id"),
     @Index(name = "idx_appointment_public_id", columnList = "public_id", unique = true),
-    @Index(name = "idx_appointment_barber_date", columnList = "barber_name,booking_date"),
     @Index(name = "idx_appointment_status_date", columnList = "status,booking_date"),
     @Index(name = "idx_appointments_customer_email", columnList = "customer_email"),
     @Index(name = "idx_appointments_barber_id", columnList = "barber_id"),

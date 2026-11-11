@@ -39,47 +39,74 @@ class AppointmentQueryService {
 
     @Transactional(readOnly = true)
     public AppointmentDashboardResponse getAllAppointments(String status, String searchName, int page, int size) {
-        // Several barbers share a slot, so (date, time) alone is not a total order: id breaks the tie
-        // so LIMIT/OFFSET pages neither repeat nor skip rows.
-        Pageable pageable = PageRequest.of(page, size, Sort.by("bookingDate").ascending()
-                .and(Sort.by("bookingTime").ascending())
-                .and(Sort.by("id").ascending()));
-
-        List<Specification<Appointment>> filters = new ArrayList<>();
+        // Newest first: the dashboard opens on the latest (and upcoming) bookings, not on the oldest
+        // history. Several barbers share a slot, so (date, time) alone is not a total order: id
+        // breaks the tie so LIMIT/OFFSET pages neither repeat nor skip rows. The whole key is one
+        // index (V42), read backwards.
+        Pageable pageable = PageRequest.of(page, size, Sort.by("bookingDate").descending()
+                .and(Sort.by("bookingTime").descending())
+                .and(Sort.by("id").descending()));
         String statusFilter = status == null ? "" : status.trim();
-        if ("OVERDUE".equalsIgnoreCase(statusFilter)) {
-            // Overdue = still PENDING although the booking date has passed. The search
-            // term below applies on top of it (it used to be silently ignored).
-            LocalDate today = LocalDate.now(clock);
-            filters.add((root, query, cb) -> cb.and(
-                    cb.equal(root.get("status"), AppointmentStatus.PENDING),
-                    cb.lessThan(root.<LocalDate>get("bookingDate"), today)));
-        } else if (!statusFilter.isEmpty()) {
-            // Unknown statuses are a 400, not a silent fall back to PENDING.
-            AppointmentStatus parsed = AppointmentStatus.fromString(statusFilter);
-            filters.add((root, query, cb) -> cb.equal(root.get("status"), parsed));
-        }
-
         String term = searchName == null ? "" : searchName.trim();
-        if (!term.isEmpty()) {
-            filters.add(matchesSearchTerm(term));
-        }
-
-        // The unfiltered default view takes its total from the cached row count (evicted with the
-        // stats on every booking) instead of counting the whole table on each request.
-        Page<Appointment> itemPage = filters.isEmpty()
-                ? new PageImpl<>(appointmentRepository.findPageWithoutCount(pageable).getContent(), pageable,
-                        statsService.getTotalCountCached())
-                : appointmentRepository.findAll(
-                        (root, query, cb) -> cb.and(filters.stream()
-                                .map(f -> f.toPredicate(root, query, cb))
-                                .toArray(Predicate[]::new)),
-                        pageable);
-
-        Page<AppointmentResponse> responsePage = itemPage.map(AppointmentResponse::fromEntity);
-
+        boolean overdue = "OVERDUE".equalsIgnoreCase(statusFilter);
+        // Unknown statuses are a 400, not a silent fall back to PENDING.
+        AppointmentStatus parsed = overdue || statusFilter.isEmpty() ? null : AppointmentStatus.fromString(statusFilter);
+        LocalDate today = LocalDate.now(clock);
         AppointmentStats stats = statsService.getStatsCached();
+
+        Page<Appointment> itemPage;
+        if (term.isEmpty()) {
+            // Without a search term the total is already known: the unfiltered view takes it from the
+            // cached row count and a status view from the cached dashboard counters (both evicted on
+            // every booking and status change), instead of counting the table on each request.
+            List<Appointment> content;
+            long total;
+            if (overdue) {
+                content = appointmentRepository.findByStatusAndBookingDateBefore(
+                        AppointmentStatus.PENDING, today, pageable).getContent();
+                total = stats.overdue();
+            } else if (parsed != null) {
+                content = appointmentRepository.findByStatus(parsed, pageable).getContent();
+                total = countOf(parsed, stats);
+            } else {
+                content = appointmentRepository.findPageWithoutCount(pageable).getContent();
+                total = statsService.getTotalCountCached();
+            }
+            itemPage = new PageImpl<>(content, pageable, total);
+        } else {
+            List<Specification<Appointment>> filters = new ArrayList<>();
+            if (overdue) {
+                // Overdue = still PENDING although the booking date has passed. The search term
+                // applies on top of it (it used to be silently ignored).
+                filters.add((root, query, cb) -> cb.and(
+                        cb.equal(root.get("status"), AppointmentStatus.PENDING),
+                        cb.lessThan(root.<LocalDate>get("bookingDate"), today)));
+            } else if (parsed != null) {
+                filters.add((root, query, cb) -> cb.equal(root.get("status"), parsed));
+            }
+            filters.add(matchesSearchTerm(term));
+            itemPage = appointmentRepository.findAll(
+                    (root, query, cb) -> cb.and(filters.stream()
+                            .map(f -> f.toPredicate(root, query, cb))
+                            .toArray(Predicate[]::new)),
+                    pageable);
+        }
+        Page<AppointmentResponse> responsePage = itemPage.map(AppointmentResponse::fromEntity);
         return new AppointmentDashboardResponse(responsePage, stats);
+    }
+
+    /**
+     * Rows with one status, from the dashboard counters. {@code total} counts every row except the
+     * cancelled ones, so those are the rest of the table's row count (never below zero: the two
+     * cached values are loaded separately and a booking may land in between).
+     */
+    private long countOf(AppointmentStatus status, AppointmentStats stats) {
+        return switch (status) {
+            case PENDING -> stats.pending();
+            case APPROVED -> stats.approved();
+            case DENIED -> stats.denied();
+            case CANCELLED -> Math.max(0, statsService.getTotalCountCached() - stats.total());
+        };
     }
 
     /**

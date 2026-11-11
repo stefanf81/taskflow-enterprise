@@ -1,5 +1,4 @@
 import { Component, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { injectSignOut } from '../../core/auth/sign-out';
 import { CustomerStore } from '../../core/customer/customer.store';
@@ -16,10 +15,18 @@ import { formatTime12Hour, formatLocalDate } from '../../core/time-utils';
  * code splitting). Its list lives in CustomerStore; action messages use the app-wide banner
  * (FlashMessages).
  */
+/** Colours of each status badge; the badge's static classes add the shape. */
+const STATUS_BADGE_CLASSES: Readonly<Record<string, string>> = {
+  APPROVED: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  PENDING: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+  DENIED: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+  CANCELLED: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20',
+};
+
 @Component({
   selector: 'app-customer-portal',
   standalone: true,
-  imports: [CommonModule, RouterLink, ReschedulePicker],
+  imports: [RouterLink, ReschedulePicker],
   templateUrl: './customer-portal.html',
 })
 export class CustomerPortal {
@@ -69,6 +76,11 @@ export class CustomerPortal {
 
   protected prevPage(): void {
     this.customerStore.prevPage();
+  }
+
+  /** Colours of a status badge (added to its static classes). */
+  protected statusBadgeClass(status: string): string {
+    return STATUS_BADGE_CLASSES[status] ?? '';
   }
 
   protected statusLabel(status: string): string {

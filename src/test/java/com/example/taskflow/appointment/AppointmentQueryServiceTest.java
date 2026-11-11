@@ -24,6 +24,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /** {@link AppointmentQueryService}: the admin dashboard listing, single lookup and response mapping. */
@@ -59,17 +60,65 @@ class AppointmentQueryServiceTest extends AppointmentServiceTestSupport {
 
     @Test
     @SuppressWarnings("unchecked")
-    void testGetAllAppointments_StatusSearchAndOverdueUseASpecification() {
+    void testGetAllAppointments_SearchUsesASpecificationWithItsCount() {
         when(appointmentRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
         when(statsService.getStatsCached()).thenReturn(new AppointmentStats(0L, 0L, 0L, 0L, 0L, 0, 0.0));
 
         queryService.getAllAppointments("PENDING", "John", 0, 10);
-        queryService.getAllAppointments("cancelled", null, 0, 10);
         queryService.getAllAppointments(null, "john@test.com", 0, 10);
         queryService.getAllAppointments("OVERDUE", "john", 0, 10);
 
-        verify(appointmentRepository, times(4)).findAll(any(Specification.class), any(Pageable.class));
+        verify(appointmentRepository, times(3)).findAll(any(Specification.class), any(Pageable.class));
         verify(appointmentRepository, never()).findPageWithoutCount(any(Pageable.class));
+        verify(appointmentRepository, never()).findByStatus(any(), any(Pageable.class));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testGetAllAppointments_StatusViewsTakeTheirTotalFromTheCachedStats() {
+        // total (not cancelled) 40 = 12 pending + 20 approved + 8 denied; 3 pending are overdue
+        when(statsService.getStatsCached()).thenReturn(new AppointmentStats(40L, 12L, 20L, 8L, 3L, 0, 0.0));
+        when(statsService.getTotalCountCached()).thenReturn(55L);
+        when(appointmentRepository.findByStatus(any(), any(Pageable.class))).thenReturn(new SliceImpl<>(List.of()));
+        when(appointmentRepository.findByStatusAndBookingDateBefore(any(), any(), any(Pageable.class)))
+                .thenReturn(new SliceImpl<>(List.of()));
+
+        assertEquals(12, queryService.getAllAppointments("pending", null, 0, 10).page().getTotalElements());
+        assertEquals(20, queryService.getAllAppointments("APPROVED", null, 0, 10).page().getTotalElements());
+        assertEquals(8, queryService.getAllAppointments("DENIED", "  ", 0, 10).page().getTotalElements());
+        assertEquals(15, queryService.getAllAppointments("CANCELLED", null, 0, 10).page().getTotalElements());
+        assertEquals(3, queryService.getAllAppointments("OVERDUE", null, 0, 10).page().getTotalElements());
+
+        verify(appointmentRepository).findByStatus(eq(AppointmentStatus.CANCELLED), any(Pageable.class));
+        verify(appointmentRepository).findByStatusAndBookingDateBefore(
+                eq(AppointmentStatus.PENDING), eq(LocalDate.now(CLOCK)), any(Pageable.class));
+        // no COUNT query for any of them
+        verify(appointmentRepository, never()).findAll(any(Specification.class), any(Pageable.class));
+    }
+
+    @Test
+    void testGetAllAppointments_CancelledCountNeverGoesNegative() {
+        when(statsService.getStatsCached()).thenReturn(new AppointmentStats(10L, 10L, 0L, 0L, 0L, 0, 0.0));
+        when(statsService.getTotalCountCached()).thenReturn(9L);
+        when(appointmentRepository.findByStatus(any(), any(Pageable.class))).thenReturn(new SliceImpl<>(List.of()));
+
+        assertEquals(0, queryService.getAllAppointments("CANCELLED", null, 0, 10).page().getTotalElements());
+    }
+
+    @Test
+    void testGetAllAppointments_NewestFirst() {
+        when(appointmentRepository.findPageWithoutCount(any(Pageable.class))).thenReturn(new SliceImpl<>(List.of()));
+        when(statsService.getStatsCached()).thenReturn(new AppointmentStats(0L, 0L, 0L, 0L, 0L, 0, 0.0));
+        org.mockito.ArgumentCaptor<Pageable> pageable = org.mockito.ArgumentCaptor.forClass(Pageable.class);
+
+        queryService.getAllAppointments(null, null, 2, 50);
+
+        verify(appointmentRepository).findPageWithoutCount(pageable.capture());
+        assertEquals(org.springframework.data.domain.Sort.by(
+                org.springframework.data.domain.Sort.Order.desc("bookingDate"),
+                org.springframework.data.domain.Sort.Order.desc("bookingTime"),
+                org.springframework.data.domain.Sort.Order.desc("id")), pageable.getValue().getSort());
+        assertEquals(100, pageable.getValue().getOffset());
     }
 
     @Test

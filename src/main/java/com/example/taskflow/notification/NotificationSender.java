@@ -14,6 +14,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Validates and snapshots a claim in a short transaction, sends without a transaction, then
@@ -59,8 +63,71 @@ class NotificationSender {
         deliver(readTransaction.execute(status -> snapshot(claim.id(), claim)));
     }
 
+    /**
+     * Sends several claimed rows in one gateway call (one SMTP session), then records each outcome
+     * in its own transaction like {@link #process(Claim)}. A claim that was lost meanwhile is skipped.
+     * Outcomes are recorded for every row even when one of those writes fails (that failure is
+     * rethrown afterwards), so a database error cannot leave delivered rows PROCESSING to be sent
+     * again by the stale-claim recovery.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public void process(List<Claim> claims) {
+        if (claims.isEmpty()) {
+            return;
+        }
+        List<Delivery> deliveries = readTransaction.execute(status -> {
+            Map<Long, NotificationOutbox> rows = new HashMap<>();
+            for (NotificationOutbox row : outboxRepository.findAllById(claims.stream().map(Claim::id).toList())) {
+                rows.put(row.getId(), row);
+            }
+            List<Delivery> owned = new ArrayList<>(claims.size());
+            for (Claim claim : claims) {
+                Delivery delivery = snapshot(claim.id(), claim, rows.get(claim.id()));
+                if (delivery != null) {
+                    owned.add(delivery);
+                }
+            }
+            return owned;
+        });
+        if (deliveries == null || deliveries.isEmpty()) {
+            return;
+        }
+        Map<Long, RuntimeException> failed;
+        try {
+            failed = gateway.sendAll(deliveries.stream().map(Delivery::message).toList());
+        } catch (RuntimeException e) {
+            failed = new HashMap<>();
+            for (Delivery delivery : deliveries) {
+                failed.put(delivery.claim().id(), e);
+            }
+        }
+        RuntimeException recordFailure = null;
+        for (Delivery delivery : deliveries) {
+            RuntimeException cause = failed.get(delivery.claim().id());
+            if (cause != null) {
+                logger.warn("Dispatch failed for outbox id={} ({})", delivery.claim().id(),
+                        cause.getClass().getSimpleName());
+            }
+            try {
+                outcomeTransaction.executeWithoutResult(status -> recordOutcome(delivery, cause == null));
+            } catch (RuntimeException e) {
+                if (recordFailure == null) {
+                    recordFailure = e;
+                } else {
+                    recordFailure.addSuppressed(e);
+                }
+            }
+        }
+        if (recordFailure != null) {
+            throw recordFailure;
+        }
+    }
+
     private @Nullable Delivery snapshot(Long id, @Nullable Claim expected) {
-        NotificationOutbox row = outboxRepository.findById(id).orElse(null);
+        return snapshot(id, expected, outboxRepository.findById(id).orElse(null));
+    }
+
+    private @Nullable Delivery snapshot(Long id, @Nullable Claim expected, @Nullable NotificationOutbox row) {
         if (row == null) {
             logger.warn("Outbox id={} no longer exists; skipping.", id);
             return null;

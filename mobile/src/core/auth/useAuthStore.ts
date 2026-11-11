@@ -1,11 +1,16 @@
 import { create } from 'zustand';
 import { storage } from '../../utils/storage';
 import { authApi } from './auth';
-import { setSessionEndedHandler } from '../../api/client';
+import { renewSessionWithIdentity, setSessionEndedHandler } from '../../api/client';
 import { LoginRequest, LoginResponse, RegisterRequest } from '../../types/api';
 import { queryClient } from '../../query/queryClient';
 import { getApiErrorMessage, getHttpStatus } from '../../utils/errors';
-import { SESSION_EXPIRED_MESSAGE, computeExpiryMs, isTokenExpired } from '../../utils/session';
+import {
+  SESSION_EXPIRED_MESSAGE,
+  SessionExpiredError,
+  computeExpiryMs,
+  isTokenExpired,
+} from '../../utils/session';
 import { ApiContractError } from '../../api/contracts';
 
 /** Shown when /me answered with an account this build cannot read (e.g. a role it does not know). */
@@ -78,7 +83,6 @@ export const useAuthStore = create<AuthState>((set) => ({
         token: res.accessToken,
         expiresAt: computeExpiryMs(res.expiresIn),
         refreshToken: res.refreshToken,
-        user: { username: res.username, role: res.role },
       });
 
       set({
@@ -164,10 +168,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Drop a token that is already past its stored expiry without a round
     // trip when no refresh token is stored, and tell the user why they are signed out.
     // An unreadable refresh token proves nothing: keep the session and offer a retry.
+    let tokenExpired: boolean;
     let expiredForGood: boolean;
     try {
-      expiredForGood =
-        isTokenExpired(await storage.getTokenExpiry()) && !(await storage.getRefreshToken());
+      tokenExpired = isTokenExpired(await storage.getTokenExpiry());
+      expiredForGood = tokenExpired && !(await storage.getRefreshToken());
     } catch {
       set(STORAGE_UNAVAILABLE);
       return;
@@ -190,11 +195,13 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     let unreadableAccount = false;
     try {
-      const res = await authApi.me();
+      // The access token lives an hour and the refresh session a month, so a returning user
+      // usually launches with an expired token. Renewing it answers who the account is as well
+      // (the refresh response carries the username and role), so /me is only asked when the
+      // stored token is still valid. Both paths parse the same shared role schema.
+      const res = tokenExpired ? await renewSessionWithIdentity() : await authApi.me();
       if (res.username && res.role) {
         // Server confirmed identity — fully authenticated
-        await storage.setUserData({ username: res.username, role: res.role });
-
         set({
           isAuthenticated: true,
           isBootstrapping: false,
@@ -206,7 +213,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         return;
       }
     } catch (error: unknown) {
-      const status = getHttpStatus(error);
+      // A missing refresh token rejects the session like a 401 would.
+      const status = error instanceof SessionExpiredError ? 401 : getHttpStatus(error);
       // The server answered, but with a body the shared contract rejects (a new role, a renamed
       // field). That is not "offline": every Retry gets the same answer, so the user would be
       // stuck on the Retry screen for good. Sign out instead, like the unknown-role guard in

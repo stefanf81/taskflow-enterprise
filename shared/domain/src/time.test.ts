@@ -13,6 +13,14 @@ import {
 } from './time';
 
 describe('time helpers', () => {
+  it('reuses one formatter per zone and keeps zones apart', () => {
+    const instant = new Date('2026-07-01T22:30:00Z');
+    expect(shopWallClock('Asia/Tokyo', instant).getDate()).toBe(2); // 07:30 the next day
+    expect(shopWallClock('America/New_York', instant).getHours()).toBe(18);
+    expect(shopWallClock('Asia/Tokyo', instant).getHours()).toBe(7);
+    expect(shopWallClock('Asia/Tokyo', new Date('2026-07-01T00:00:00Z')).getHours()).toBe(9);
+  });
+
   it('formats 24h times as 12h and leaves junk alone', () => {
     expect(formatTime12Hour('00:30')).toBe('12:30 AM');
     expect(formatTime12Hour('13:05')).toBe('1:05 PM');
@@ -55,6 +63,8 @@ describe('time helpers', () => {
     const berlin = shopWallClock('Europe/Berlin', instant);
     expect(toLocalDateString(berlin)).toBe('2026-03-03');
     expect(berlin.getHours()).toBe(0);
+    expect(shopWallClock('Not/AZone', instant)).toBe(instant);
+    // An unknown zone is not cached as if it worked: it keeps falling back.
     expect(shopWallClock('Not/AZone', instant)).toBe(instant);
     expect(shopWallClock(null, instant)).toBe(instant);
   });

@@ -14,9 +14,14 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.Map;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -59,6 +64,65 @@ class NotificationSenderTest {
         verify(outboxRepository, never()).save(any());
         verify(outboxRepository, never()).markFailedIfClaimed(anyLong(), anyString(), any(), anyInt(), any());
         verify(transactions, times(2)).commit(any());
+    }
+
+    @Test
+    void batchRecordsSentAndFailedPerRowFromOneGatewayCall() {
+        NotificationOutbox second = claimedRow(2L);
+        NotificationOutbox lost = claimedRow(3L);
+        lost.setClaimedBy("another-worker");
+        when(outboxRepository.findAllById(List.of(1L, 2L, 3L))).thenReturn(List.of(outbox, second, lost));
+        when(gateway.sendAll(anyList())).thenReturn(Map.of(2L, new MailSendException("mailbox full")));
+        when(outboxRepository.markSentIfClaimed(anyLong(), anyString(), any())).thenReturn(1);
+        when(outboxRepository.markFailedIfClaimed(anyLong(), anyString(), any(), anyInt(), any())).thenReturn(1);
+
+        sender.process(List.of(claim, new NotificationSender.Claim(2L, WORKER, CLAIMED_AT),
+                new NotificationSender.Claim(3L, WORKER, CLAIMED_AT)));
+
+        // One call for both rows this worker still owns; the row claimed elsewhere is not sent.
+        verify(gateway).sendAll(List.of(
+                new NotificationGateway.Message(1L, outbox.getRecipient(), "EMAIL", outbox.getMessage()),
+                new NotificationGateway.Message(2L, second.getRecipient(), "EMAIL", second.getMessage())));
+        verify(gateway, never()).send(any());
+        verify(outboxRepository).markSentIfClaimed(1L, WORKER, CLAIMED_AT);
+        verify(outboxRepository).markFailedIfClaimed(eq(2L), eq(WORKER), eq(CLAIMED_AT), eq(1), any());
+        verify(outboxRepository, never()).markSentIfClaimed(eq(3L), any(), any());
+        verify(outboxRepository, never()).markFailedIfClaimed(eq(3L), any(), any(), anyInt(), any());
+    }
+
+    @Test
+    void batchCountsEveryRowAsFailedWhenTheGatewayItselfThrows() {
+        when(outboxRepository.findAllById(List.of(1L))).thenReturn(List.of(outbox));
+        when(gateway.sendAll(anyList())).thenThrow(new IllegalStateException("gateway broken"));
+        when(outboxRepository.markFailedIfClaimed(anyLong(), anyString(), any(), anyInt(), any())).thenReturn(1);
+
+        sender.process(List.of(claim));
+
+        verify(outboxRepository).markFailedIfClaimed(eq(1L), eq(WORKER), eq(CLAIMED_AT), eq(1), any());
+    }
+
+    @Test
+    void batchRecordsTheRemainingOutcomesWhenOneWriteFails() {
+        NotificationOutbox second = claimedRow(2L);
+        when(outboxRepository.findAllById(List.of(1L, 2L))).thenReturn(List.of(outbox, second));
+        when(gateway.sendAll(anyList())).thenReturn(Map.of());
+        when(outboxRepository.markSentIfClaimed(1L, WORKER, CLAIMED_AT))
+                .thenThrow(new org.springframework.dao.QueryTimeoutException("db slow"));
+        when(outboxRepository.markSentIfClaimed(2L, WORKER, CLAIMED_AT)).thenReturn(1);
+
+        assertThrows(org.springframework.dao.QueryTimeoutException.class, () -> sender.process(
+                List.of(claim, new NotificationSender.Claim(2L, WORKER, CLAIMED_AT))));
+
+        // The delivered second row is still marked SENT, so stale-claim recovery cannot resend it.
+        verify(outboxRepository).markSentIfClaimed(2L, WORKER, CLAIMED_AT);
+    }
+
+    private NotificationOutbox claimedRow(long id) {
+        NotificationOutbox row = new NotificationOutbox("row" + id + "@example.com", "EMAIL", "m" + id, NOW, "PROCESSING");
+        row.setId(id);
+        row.setClaimedBy(WORKER);
+        row.setClaimedAt(CLAIMED_AT);
+        return row;
     }
 
     @Test

@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 const TOKEN_KEY = 'taskflow_auth_token';
+// Written by earlier versions (nothing read it); only removed now, so a sign-out still clears it.
 const USER_KEY = 'taskflow_user_data';
 const EXPIRY_KEY = 'taskflow_token_expires_at';
 const REFRESH_TOKEN_KEY = 'taskflow_refresh_token';
@@ -71,7 +72,6 @@ export const storage = {
     token: string;
     expiresAt: number;
     refreshToken?: string | null;
-    user: object;
   }): Promise<void> {
     sessionEpoch++;
     return exclusive(async () => {
@@ -83,13 +83,11 @@ export const storage = {
         } else {
           await storage.removeRefreshToken();
         }
-        await storage.setUserData(session.user);
       } catch (err) {
         await Promise.allSettled([
           storage.removeToken(),
           storage.removeRefreshToken(),
           storage.removeTokenExpiry(),
-          storage.removeUserData(),
         ]);
         throw err;
       }
@@ -235,52 +233,6 @@ export const storage = {
         throw new Error('Secure credential removal failed. Please try signing out again.');
       }
       memoryStore.delete(REFRESH_TOKEN_KEY);
-    }
-  },
-
-  async setUserData(data: object): Promise<void> {
-    const json = JSON.stringify(data);
-    try {
-      if (Platform.OS === 'web') {
-        memoryStore.set(USER_KEY, json);
-      } else {
-        await SecureStore.setItemAsync(USER_KEY, json);
-      }
-    } catch (err) {
-      if (Platform.OS !== 'web') {
-        throw new Error('Secure credential storage is unavailable.');
-      }
-      console.warn(
-        '[storage] SecureStore.setUserData failed, falling back to in-memory storage. Error:',
-        err instanceof Error ? err.message : err,
-      );
-      memoryStore.set(USER_KEY, json);
-    }
-  },
-
-  async getUserData<T>(): Promise<T | null> {
-    try {
-      let json: string | null = null;
-      if (Platform.OS === 'web') {
-        json = memoryStore.get(USER_KEY) || null;
-      } else {
-        json = await SecureStore.getItemAsync(USER_KEY);
-      }
-      return json ? (JSON.parse(json) as T) : null;
-    } catch (err) {
-      if (Platform.OS !== 'web') {
-        throw new Error('Secure credential storage is unavailable.');
-      }
-      console.warn(
-        '[storage] SecureStore.getUserData failed, falling back to in-memory storage. Error:',
-        err instanceof Error ? err.message : err,
-      );
-      try {
-        const json = memoryStore.get(USER_KEY);
-        return json ? (JSON.parse(json) as T) : null;
-      } catch {
-        return null;
-      }
     }
   },
 

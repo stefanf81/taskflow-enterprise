@@ -69,6 +69,40 @@ class SmtpNotificationGatewayTest {
         assertThrows(MailSendException.class, () -> gateway.send(message("body")));
     }
 
+    @Test
+    void sendsABatchInOneSessionAndReportsOnlyTheMessagesTheServerRefused() {
+        Session session = Session.getInstance(new Properties());
+        when(mailSender.createMimeMessage()).thenAnswer(invocation -> new MimeMessage(session));
+        doAnswer(invocation -> {
+            MimeMessage[] sent = (MimeMessage[]) invocation.getRawArguments()[0];
+            assertThat(sent).hasSize(2);
+            // The transport refused the second one only.
+            throw new MailSendException(java.util.Map.of(sent[1], new MailSendException("550 mailbox unavailable")));
+        }).when(mailSender).send(any(MimeMessage[].class));
+
+        var failed = gateway.sendAll(java.util.List.of(
+                new NotificationGateway.Message(1L, "a@example.com", "EMAIL", "first"),
+                new NotificationGateway.Message(2L, "b@example.com", "EMAIL", "second"),
+                new NotificationGateway.Message(3L, "c@example.com\r\nBcc: x@example.com", "EMAIL", "injected")));
+
+        verify(mailSender).send(any(MimeMessage[].class));
+        verify(mailSender, never()).send(any(MimeMessage.class));
+        assertThat(failed.keySet()).containsExactlyInAnyOrder(2L, 3L);
+        assertThat(failed.get(3L)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void aFailureWithoutPerMessageDetailFailsTheWholeBatch() {
+        when(mailSender.createMimeMessage()).thenAnswer(invocation -> new MimeMessage(Session.getInstance(new Properties())));
+        doThrow(new org.springframework.mail.MailAuthenticationException("535 bad credentials"))
+                .when(mailSender).send(any(MimeMessage[].class));
+
+        var failed = gateway.sendAll(java.util.List.of(message("one"),
+                new NotificationGateway.Message(43L, "other@example.com", "EMAIL", "two")));
+
+        assertThat(failed.keySet()).containsExactlyInAnyOrder(42L, 43L);
+    }
+
     private static NotificationGateway.Message message(String content) {
         return new NotificationGateway.Message(42L, "customer@example.com", "EMAIL", content);
     }

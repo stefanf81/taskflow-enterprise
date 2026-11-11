@@ -1,5 +1,4 @@
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { serviceItemSchema } from '@taskflow/schemas';
 import { CatalogApi } from '../../core/api/catalog-api';
@@ -27,7 +26,7 @@ const emptyDraft = (): ServiceDraft => ({
 /** Owner dashboard · service catalog tab: the menu, and the retired services that can be restored. */
 @Component({
   selector: 'app-admin-services-tab',
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './admin-services-tab.html',
 })
 export class AdminServicesTab {

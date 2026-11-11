@@ -1,6 +1,6 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { App } from './app';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { Router, provideRouter } from '@angular/router';
@@ -21,6 +21,15 @@ describe('App shell', () => {
     app = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
   });
+
+  afterEach(() => {
+    document.cookie = 'taskflow_session=; max-age=0; path=/';
+  });
+
+  /** The readable hint the server sets next to the session cookies. */
+  function withSessionHint(): void {
+    document.cookie = 'taskflow_session=1; path=/';
+  }
 
   function flushMe(status: 'ok' | 'unauthorized', role?: string): void {
     const reqs = httpMock.match((req) => req.url.includes('/api/v1/auth/me'));
@@ -43,6 +52,7 @@ describe('App shell', () => {
     const router = TestBed.inject(Router);
     const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
     const authState = TestBed.inject(AuthState);
+    withSessionHint();
 
     fixture.detectChanges();
     flushMe('ok', 'ROLE_CUSTOMER');
@@ -53,13 +63,31 @@ describe('App shell', () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it('stays logged out when no session cookie is present', async () => {
+  it('stays logged out without asking the server when no session hint is present', async () => {
     const router = TestBed.inject(Router);
     const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
     const authState = TestBed.inject(AuthState);
 
     fixture.detectChanges();
+    httpMock.expectNone((req) => req.url.includes('/api/v1/auth/me'));
+
+    await fixture.whenStable();
+    expect(authState.isLoggedIn()).toBe(false);
+    expect(authState.isBootstrapDone()).toBe(true);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('stays logged out when the session behind the hint is gone', async () => {
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    const authState = TestBed.inject(AuthState);
+    withSessionHint();
+
+    fixture.detectChanges();
     flushMe('unauthorized');
+    for (const renew of httpMock.match((req) => req.url.includes('/api/v1/auth/refresh'))) {
+      renew.flush(null, { status: 401, statusText: 'Unauthorized' });
+    }
 
     await fixture.whenStable();
     expect(authState.isLoggedIn()).toBe(false);

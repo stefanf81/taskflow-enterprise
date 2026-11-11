@@ -1,5 +1,5 @@
-import { Component, inject, DestroyRef, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, computed, inject, DestroyRef, signal } from '@angular/core';
+import { formatUsd } from '../../core/format';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { asyncScheduler, throttleTime } from 'rxjs';
 import { Router } from '@angular/router';
@@ -24,13 +24,7 @@ export const REFRESH_THROTTLE_MS = 300;
 
 @Component({
   selector: 'app-admin-dashboard',
-  imports: [
-    CommonModule,
-    AdminAppointmentsTab,
-    AdminServicesTab,
-    AdminSchedulesTab,
-    AdminNotificationsTab,
-  ],
+  imports: [AdminAppointmentsTab, AdminServicesTab, AdminSchedulesTab, AdminNotificationsTab],
   templateUrl: './admin-dashboard.html',
 })
 export class AdminDashboard {
@@ -42,6 +36,7 @@ export class AdminDashboard {
   private readonly signOut = injectSignOut();
 
   readonly stats = this.store.stats;
+  protected readonly approvedRevenue = computed(() => formatUsd(this.stats().approvedRevenue));
   protected readonly loadErrorMessage = this.store.loadErrorMessage;
   protected readonly errorMessage = this.flash.errorMessage;
   protected readonly successMessage = this.flash.successMessage;

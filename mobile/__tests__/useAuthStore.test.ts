@@ -3,7 +3,8 @@ import { ApiContractError } from '../src/api/contracts';
 import { authApi } from '../src/core/auth/auth';
 import { storage } from '../src/utils/storage';
 import { queryClient } from '../src/query/queryClient';
-import { SESSION_EXPIRED_MESSAGE } from '../src/utils/session';
+import { SESSION_EXPIRED_MESSAGE, SessionExpiredError } from '../src/utils/session';
+import { renewSessionWithIdentity } from '../src/api/client';
 import { freezeDate, restoreClock } from '../test/fakeClock';
 
 jest.mock('../src/core/auth/auth', () => ({
@@ -22,6 +23,7 @@ jest.mock('../src/api/client', () => ({
   setSessionEndedHandler: (handler: (() => void) | null) => {
     mockSessionEndedHandler = handler;
   },
+  renewSessionWithIdentity: jest.fn(),
 }));
 
 jest.mock('../src/utils/storage', () => ({
@@ -32,7 +34,6 @@ jest.mock('../src/utils/storage', () => ({
     setTokenExpiry: jest.fn(),
     getTokenExpiry: jest.fn(),
     removeTokenExpiry: jest.fn(),
-    setUserData: jest.fn(),
     removeUserData: jest.fn(),
     setRefreshToken: jest.fn(),
     getRefreshToken: jest.fn(),
@@ -106,7 +107,6 @@ describe('useAuthStore', () => {
           token: 'admin-jwt',
           expiresAt: new Date('2026-08-12T10:00:00Z').getTime() + 3600 * 1000,
           refreshToken: undefined,
-          user: { username: 'admin', role: 'ROLE_ADMIN' },
         });
         expect(storage.setToken).not.toHaveBeenCalled();
       } finally {
@@ -259,7 +259,65 @@ describe('useAuthStore', () => {
       expect(authApi.me).toHaveBeenCalledTimes(1);
       expect(useAuthStore.getState().isAuthenticated).toBe(true);
       expect(useAuthStore.getState().isBootstrapping).toBe(false);
-      expect(storage.setUserData).toHaveBeenCalledWith({ username: 'admin', role: 'ROLE_ADMIN' });
+    });
+
+    describe('with an expired access token and a refresh token', () => {
+      const expiredSignIn = () => {
+        (storage.getToken as jest.Mock).mockResolvedValueOnce('expired-jwt');
+        (storage.getTokenExpiry as jest.Mock).mockResolvedValueOnce(Date.now() - 60_000);
+        (storage.getRefreshToken as jest.Mock).mockResolvedValueOnce('r'.repeat(43));
+      };
+
+      it('restores the account from the renewal without asking /me', async () => {
+        expiredSignIn();
+        (renewSessionWithIdentity as jest.Mock).mockResolvedValueOnce({
+          accessToken: 'renewed-jwt',
+          username: 'jane@example.com',
+          role: 'ROLE_CUSTOMER',
+        });
+
+        await useAuthStore.getState().checkAuth();
+
+        expect(renewSessionWithIdentity).toHaveBeenCalledTimes(1);
+        expect(authApi.me).not.toHaveBeenCalled();
+        const state = useAuthStore.getState();
+        expect(state.isAuthenticated).toBe(true);
+        expect(state.username).toBe('jane@example.com');
+        expect(state.role).toBe('ROLE_CUSTOMER');
+        expect(state.isBootstrapping).toBe(false);
+      });
+
+      it('signs out with the notice when the server rejects the renewal', async () => {
+        expiredSignIn();
+        (renewSessionWithIdentity as jest.Mock).mockRejectedValueOnce({ response: { status: 401 } });
+
+        await useAuthStore.getState().checkAuth();
+
+        expect(storage.clearSession).toHaveBeenCalled();
+        expect(useAuthStore.getState().isAuthenticated).toBe(false);
+        expect(useAuthStore.getState().sessionNotice).toBe(SESSION_EXPIRED_MESSAGE);
+      });
+
+      it('signs out when the refresh token vanished before the renewal read it', async () => {
+        expiredSignIn();
+        (renewSessionWithIdentity as jest.Mock).mockRejectedValueOnce(new SessionExpiredError());
+
+        await useAuthStore.getState().checkAuth();
+
+        expect(storage.clearSession).toHaveBeenCalled();
+        expect(useAuthStore.getState().sessionNotice).toBe(SESSION_EXPIRED_MESSAGE);
+      });
+
+      it('keeps the credentials and offers a retry when the renewal cannot reach the server', async () => {
+        expiredSignIn();
+        (renewSessionWithIdentity as jest.Mock).mockRejectedValueOnce(new Error('Network Error'));
+
+        await useAuthStore.getState().checkAuth();
+
+        expect(storage.clearSession).not.toHaveBeenCalled();
+        expect(useAuthStore.getState().isOffline).toBe(true);
+        expect(useAuthStore.getState().isBootstrapping).toBe(false);
+      });
     });
 
     it('does not call /me without a stored bearer token', async () => {

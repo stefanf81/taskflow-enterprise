@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -73,8 +74,9 @@ class NotificationRelaySchedulerTest {
         // Claim query is evaluated against the shop clock so rows in backoff are skipped. A short
         // batch means the backlog is drained: no second claim.
         verify(outboxRepository, times(1)).findClaimableForUpdate(eq(10), eq(NOW), any(Pageable.class));
-        verify(sender).process(new NotificationSender.Claim(1L, "test-instance", NOW));
-        verify(sender).process(new NotificationSender.Claim(2L, "test-instance", NOW));
+        // Both go out in one gateway call (one SMTP session).
+        verify(sender).process(List.of(new NotificationSender.Claim(1L, "test-instance", NOW),
+                new NotificationSender.Claim(2L, "test-instance", NOW)));
         assertEquals("PROCESSING", pending.getStatus());
         assertEquals("test-instance", pending.getClaimedBy());
     }
@@ -93,7 +95,9 @@ class NotificationRelaySchedulerTest {
         relay.relay();
 
         verify(outboxRepository, times(3)).findClaimableForUpdate(anyInt(), any(LocalDateTime.class), any(Pageable.class));
-        verify(sender, times(120)).process(any(NotificationSender.Claim.class));
+        // 50 + 50 + 20 rows in chunks of SEND_BATCH_SIZE (10): 5 + 5 + 2 sends.
+        verify(sender, times(12)).process(anyList());
+        verify(sender, never()).process(any(NotificationSender.Claim.class));
         verify(outboxRepository, times(1)).findStaleProcessing(any(LocalDateTime.class), any(Pageable.class));
     }
 
@@ -123,16 +127,18 @@ class NotificationRelaySchedulerTest {
         doAnswer(invocation -> {
             nanos.addAndGet(Duration.ofSeconds(11).toNanos());
             return null;
-        }).when(sender).process(any(NotificationSender.Claim.class));
+        }).when(sender).process(anyList());
         when(outboxRepository.findStaleProcessing(any(), any())).thenReturn(List.of());
 
         relay.relay();
 
-        verify(sender, times(2)).process(any(NotificationSender.Claim.class));
+        // Two chunks of 10 start (11 s each), the 30 claims after them go back without an attempt.
+        verify(sender, times(2)).process(anyList());
         verify(outboxRepository, times(1)).findClaimableForUpdate(anyInt(), any(), any());
-        verify(outboxRepository, times(48)).releaseIfClaimed(anyLong(), eq("test-instance"), eq(NOW));
+        verify(outboxRepository, times(30)).releaseIfClaimed(anyLong(), eq("test-instance"), eq(NOW));
         verify(outboxRepository, never()).releaseIfClaimed(eq(0L), any(), any());
-        verify(outboxRepository, never()).releaseIfClaimed(eq(1L), any(), any());
+        verify(outboxRepository, never()).releaseIfClaimed(eq(19L), any(), any());
+        verify(outboxRepository).releaseIfClaimed(eq(20L), any(), any());
     }
 
     @Test
@@ -171,7 +177,7 @@ class NotificationRelaySchedulerTest {
 
         relay.relay();
 
-        verify(sender, never()).process(any(NotificationSender.Claim.class));
+        verify(sender, never()).process(anyList());
     }
 
     @Test

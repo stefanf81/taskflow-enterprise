@@ -25,6 +25,12 @@ public interface AppointmentRepository
     @Query("SELECT a FROM Appointment a")
     Slice<Appointment> findPageWithoutCount(Pageable pageable);
 
+    /** One page of a status, without a count query (the caller has the total from the cached stats). */
+    Slice<Appointment> findByStatus(AppointmentStatus status, Pageable pageable);
+
+    /** One page of a status before a date (the OVERDUE view), without a count query. */
+    Slice<Appointment> findByStatusAndBookingDateBefore(AppointmentStatus status, LocalDate date, Pageable pageable);
+
     Appointment findByPublicId(String publicId);
 
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)

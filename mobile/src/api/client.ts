@@ -11,6 +11,7 @@ import {
 } from '../utils/session';
 import { mobileLoginResponseSchema } from '@taskflow/schemas';
 import { parseContract } from './contracts';
+import type { LoginResponse } from '../types/api';
 
 const getBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_API_URL) {
@@ -103,7 +104,14 @@ async function endLocalSession(epoch: number): Promise<void> {
   }
 }
 
-let renewal: { epoch: number; promise: Promise<string> } | null = null;
+/** A renewed session: the new access token and the account the server renewed it for. */
+export interface RenewedSession {
+  accessToken: string;
+  username: string;
+  role: LoginResponse['role'];
+}
+
+let renewal: { epoch: number; promise: Promise<RenewedSession> } | null = null;
 
 /**
  * Single-flight rotation of the stored refresh token, per session. `epoch` (by default the
@@ -113,6 +121,16 @@ let renewal: { epoch: number; promise: Promise<string> } | null = null;
  * so its caller neither ends, nor sends a request with, the session that replaced it.
  */
 export function renewSession(epoch: number = storage.getSessionEpoch()): Promise<string> {
+  return renewSessionWithIdentity(epoch).then((renewed) => renewed.accessToken);
+}
+
+/**
+ * {@link renewSession} with the account the refresh response names, so restoring a session at
+ * launch needs no further /me round trip. Shares the same single flight.
+ */
+export function renewSessionWithIdentity(
+  epoch: number = storage.getSessionEpoch(),
+): Promise<RenewedSession> {
   if (renewal?.epoch === epoch) return renewal.promise;
   const changed = () => storage.getSessionEpoch() !== epoch;
   const current = {
@@ -138,7 +156,7 @@ export function renewSession(epoch: number = storage.getSessionEpoch()): Promise
           refreshToken: result.refreshToken,
         });
         if (!stored || changed()) throw new SessionChangedError();
-        return result.accessToken;
+        return { accessToken: result.accessToken, username: result.username, role: result.role };
       } catch (error) {
         // A rejection (or any other failure) of a session that is gone says nothing about the
         // current one.

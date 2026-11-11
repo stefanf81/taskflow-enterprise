@@ -4,7 +4,7 @@
 
 ## Context
 
-`RateLimiterConfig` enforces per-IP fixed-window rate limits on `/*` before Spring Security reaches JWT verification and BCrypt (`Ordered.HIGHEST_PRECEDENCE + 20`). Two limits are applied: `app.rate-limit.max-requests-per-minute` (default 100, general API) and `app.rate-limit.auth-max-requests-per-minute` (default 20, `POST /api/v1/auth/**`). The filter skips `/actuator/health/**` so Kubernetes liveness/readiness probes do not burn budget.
+`RateLimiterConfig` enforces per-IP fixed-window rate limits on `/*` before Spring Security reaches JWT verification and BCrypt (`Ordered.HIGHEST_PRECEDENCE + 20`). Two limits are applied: `app.rate-limit.max-requests-per-minute` (default 100, general API) and `app.rate-limit.auth-max-requests-per-minute` (default 20, `/api/v1/auth/**` except `GET`/`HEAD`, i.e. login, register, refresh and logout; `GET /csrf` and `/me` only verify a token and count against the general bucket since 2026-11-11). The filter skips `/actuator/health/**` so Kubernetes liveness/readiness probes do not burn budget.
 
 The original implementation used two separate Redis commands:
 

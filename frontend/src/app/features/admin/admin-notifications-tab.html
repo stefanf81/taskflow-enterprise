@@ -33,7 +33,7 @@
             <span class="text-xs font-bold text-gold uppercase tracking-wider">
               {{ msg.type }} &rarr; {{ msg.recipient }}
             </span>
-            <span class="text-[10px] text-zinc-500">{{ msg.sentAt | date: 'medium' }}</span>
+            <span class="text-[10px] text-zinc-500">{{ formatDateTime(msg.sentAt) }}</span>
           </div>
           <p
             class="text-sm text-zinc-300 font-light italic bg-black/40 p-3 rounded-lg border border-white/5"

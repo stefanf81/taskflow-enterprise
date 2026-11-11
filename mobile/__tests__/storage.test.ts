@@ -100,53 +100,6 @@ describe('storage', () => {
     });
   });
 
-  // ==================== setUserData ====================
-  describe('setUserData', () => {
-    it('stores user data as JSON via SecureStore on native', async () => {
-      const data = { name: 'John', email: 'john@ex.com' };
-      await storage.setUserData(data);
-      expect(mockSetItemAsync).toHaveBeenCalledWith(
-        'taskflow_user_data',
-        JSON.stringify(data),
-      );
-    });
-
-    it('stores user data in memory on web', async () => {
-      (Platform as any).OS = 'web';
-      const data = { name: 'Web User' };
-      await storage.setUserData(data);
-      const retrieved = await storage.getUserData<{ name: string }>();
-      expect(retrieved).toEqual(data);
-    });
-
-    it('fails closed when SecureStore throws', async () => {
-      mockSetItemAsync.mockRejectedValue(new Error('fail'));
-      const data = { name: 'Fallback' };
-      await expect(storage.setUserData(data)).rejects.toThrow('Secure credential storage is unavailable.');
-    });
-  });
-
-  // ==================== getUserData ====================
-  describe('getUserData', () => {
-    it('retrieves and parses user data from SecureStore', async () => {
-      const data = { name: 'John', role: 'admin' };
-      mockGetItemAsync.mockResolvedValue(JSON.stringify(data));
-      const result = await storage.getUserData<{ name: string; role: string }>();
-      expect(result).toEqual(data);
-    });
-
-    it('returns null when no user data', async () => {
-      mockGetItemAsync.mockResolvedValue(null);
-      const result = await storage.getUserData();
-      expect(result).toBeNull();
-    });
-
-    it('fails closed when SecureStore read fails', async () => {
-      mockGetItemAsync.mockRejectedValue(new Error('fail'));
-      await expect(storage.getUserData()).rejects.toThrow('Secure credential storage is unavailable.');
-    });
-  });
-
   // ==================== removeUserData ====================
   describe('removeUserData', () => {
     it('removes user data via SecureStore on native', async () => {
@@ -156,10 +109,8 @@ describe('storage', () => {
 
     it('removes user data from memory on web', async () => {
       (Platform as any).OS = 'web';
-      await storage.setUserData({ temp: true });
-      await storage.removeUserData();
-      const result = await storage.getUserData();
-      expect(result).toBeNull();
+      await expect(storage.removeUserData()).resolves.toBeUndefined();
+      expect(mockDeleteItemAsync).not.toHaveBeenCalled();
     });
 
     it('fails closed when SecureStore deletion throws', async () => {
@@ -330,14 +281,12 @@ describe('storage', () => {
           token: 'partial-token',
           expiresAt: 1_900_000_000_000,
           refreshToken: 'r'.repeat(43),
-          user: { username: 'jane@example.com', role: 'ROLE_CUSTOMER' },
         }),
       ).rejects.toThrow('Secure credential storage is unavailable.');
 
       expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_auth_token');
       expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_token_expires_at');
       expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_refresh_token');
-      expect(mockDeleteItemAsync).toHaveBeenCalledWith('taskflow_user_data');
       mockGetItemAsync.mockResolvedValue(null);
       await expect(storage.getToken()).resolves.toBeNull();
     });
@@ -409,7 +358,6 @@ describe('storage', () => {
         token: 'login',
         expiresAt: 1_786_000_000_000,
         refreshToken: 'a'.repeat(43),
-        user: { username: 'jane', role: 'ROLE_CUSTOMER' },
       });
       expect(storage.getSessionEpoch()).toBe(before + 1);
       await started;
@@ -417,17 +365,15 @@ describe('storage', () => {
       expect(disk.get('taskflow_auth_token')).toBe('login');
       expect(disk.get('taskflow_token_expires_at')).toBe('1786000000000');
       expect(disk.get('taskflow_refresh_token')).toBe('a'.repeat(43));
-      expect(JSON.parse(disk.get('taskflow_user_data')!)).toEqual({
-        username: 'jane',
-        role: 'ROLE_CUSTOMER',
-      });
+      // The account is not stored: it is asked from the server (or the renewal) at launch.
+      expect(disk.has('taskflow_user_data')).toBe(false);
     });
 
     it('drops an earlier refresh token when the new sign-in has none', async () => {
       const disk = useDisk();
       await storage.setRefreshToken('o'.repeat(43));
 
-      await storage.startSession({ token: 'login', expiresAt: 1, user: {} });
+      await storage.startSession({ token: 'login', expiresAt: 1 });
 
       expect(disk.has('taskflow_refresh_token')).toBe(false);
       await expect(storage.getRefreshToken()).resolves.toBeNull();

@@ -52,11 +52,18 @@ class NotificationRelayScheduler {
     static final int CLAIM_BATCH_SIZE = 50;
     static final int CLAIM_STALE_MINUTES = 5;
     /**
+     * Claimed rows sent per gateway call, i.e. per SMTP session. One session per mail paid the TCP
+     * and TLS handshake and the authentication for every message. Small enough that the drain
+     * budget is still checked often, and that a connection dying mid-batch fails few messages.
+     */
+    static final int SEND_BATCH_SIZE = 10;
+    /**
      * How long one run keeps claiming further batches while they come back full. One batch per
      * 30 s capped delivery below 100 mails a minute, so a burst (time off cancelling many
      * bookings, the reminder sweep) queued for minutes. Far below the stale-claim window, since
-     * every batch is sent right after its own claim. It bounds starts, not an in-flight SMTP call;
-     * that call is bounded by transport timeouts. Unstarted claims are released without an attempt.
+     * every batch is sent right after its own claim. It bounds starts of a {@link #SEND_BATCH_SIZE}
+     * chunk, not an SMTP session in flight; that is bounded by the transport timeouts. Unstarted
+     * claims are released without an attempt.
      */
     static final Duration DRAIN_BUDGET = Duration.ofSeconds(20);
 
@@ -144,7 +151,7 @@ class NotificationRelayScheduler {
             }
             logger.info("Notification relay claimed {} outbox entr{} via {}", claims.size(),
                     claims.size() == 1 ? "y" : "ies", instanceId);
-            for (int index = 0; index < claims.size(); index++) {
+            for (int index = 0; index < claims.size(); index += SEND_BATCH_SIZE) {
                 if (!hasBudget(startedAt)) {
                     List<NotificationSender.Claim> unstarted = claims.subList(index, claims.size());
                     if (self != null) {
@@ -154,12 +161,14 @@ class NotificationRelayScheduler {
                     }
                     break;
                 }
-                NotificationSender.Claim claim = claims.get(index);
+                List<NotificationSender.Claim> chunk =
+                        claims.subList(index, Math.min(index + SEND_BATCH_SIZE, claims.size()));
                 try {
-                    sender.process(claim);
+                    sender.process(chunk);
                 } catch (Exception e) {
                     String safeMsg = LogSanitizer.safeMessage(e);
-                    logger.error("Relay failed to process outbox id={}: {}", claim.id(), safeMsg);
+                    logger.error("Relay failed to process outbox ids {}..{}: {}", chunk.getFirst().id(),
+                            chunk.getLast().id(), safeMsg);
                 }
             }
             if (claims.size() < CLAIM_BATCH_SIZE) {

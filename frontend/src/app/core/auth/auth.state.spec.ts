@@ -14,6 +14,10 @@ import { LoginResponse } from '../../types/api';
 import { AuthApi } from '../api/auth-api';
 import { SessionEvents } from '../session-events';
 
+/** The readable session hint the server sets with every access cookie (see session-hint.ts). */
+const setHint = () => (document.cookie = 'taskflow_session=1; path=/');
+const dropHint = () => (document.cookie = 'taskflow_session=; max-age=0; path=/');
+
 describe('AuthState (mocked AuthApi)', () => {
   let authState: AuthState;
   let me$: Subject<LoginResponse>;
@@ -28,7 +32,10 @@ describe('AuthState (mocked AuthApi)', () => {
       ],
     });
     authState = TestBed.inject(AuthState);
+    setHint();
   });
+
+  afterEach(() => dropHint());
 
   it('does not restore authentication when a pre-logout bootstrap completes late', () => {
     authState.bootstrap().subscribe();
@@ -92,8 +99,43 @@ describe('AuthState (HTTP + interceptor)', () => {
     httpTesting.verify();
   });
 
-  describe('guest bootstrap (FE-9)', () => {
-    it('completes as "no session" on a /me 401 without broadcasting an expiry', () => {
+  describe('guest without a session hint', () => {
+    it('completes as "no session" without asking the server', () => {
+      const results: string[] = [];
+      authState.bootstrap().subscribe({
+        next: (role) => results.push(role),
+        error: () => results.push('error'),
+      });
+
+      // No /me request: it could only answer 401, and it spends the per-IP auth budget.
+      httpTesting.expectNone('/api/v1/auth/me');
+      expect(results).toEqual(['error']);
+      expect(authState.isBootstrapDone()).toBe(true);
+      expect(authState.isLoggedIn()).toBe(false);
+      expect(unauthorizedCalls).toBe(0);
+      expect(sessionEndedCalls).toBe(0);
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('keeps a session signed in during this page load', () => {
+      authState.applyRole('ROLE_CUSTOMER', 'jane@example.com');
+
+      authState.bootstrap().subscribe({ error: () => undefined });
+
+      httpTesting.expectOne('/api/v1/auth/me').flush({
+        username: 'jane@example.com',
+        role: 'ROLE_CUSTOMER',
+      });
+      expect(authState.isLoggedIn()).toBe(true);
+      expect(sessionEndedCalls).toBe(0);
+    });
+  });
+
+  describe('guest bootstrap with a session hint (FE-9)', () => {
+    beforeEach(() => setHint());
+    afterEach(() => dropHint());
+
+    it('completes as "no session" when /me and the renewal both answer 401, without broadcasting an expiry', () => {
       const results: string[] = [];
       authState.bootstrap().subscribe({
         next: (role) => results.push(role),
@@ -102,6 +144,10 @@ describe('AuthState (HTTP + interceptor)', () => {
 
       httpTesting
         .expectOne('/api/v1/auth/me')
+        .flush(null, { status: 401, statusText: 'Unauthorized' });
+      // The hint said the browser could renew; the server says the session is gone.
+      httpTesting
+        .expectOne('/api/v1/auth/refresh')
         .flush(null, { status: 401, statusText: 'Unauthorized' });
 
       expect(results).toEqual(['error']);
@@ -116,6 +162,7 @@ describe('AuthState (HTTP + interceptor)', () => {
     it('does not ask the server again once the guest bootstrap finished', () => {
       authState.bootstrap().subscribe({ error: () => undefined });
       httpTesting.expectOne('/api/v1/auth/me').flush(null, { status: 401, statusText: 'x' });
+      httpTesting.expectOne('/api/v1/auth/refresh').flush(null, { status: 401, statusText: 'x' });
 
       expect(authState.isBootstrapDone()).toBe(true);
       httpTesting.expectNone('/api/v1/auth/me');
@@ -139,6 +186,9 @@ describe('AuthState (HTTP + interceptor)', () => {
       httpTesting
         .expectOne('/api/v1/auth/me')
         .flush(null, { status: 401, statusText: 'Unauthorized' });
+      for (const renew of httpTesting.match('/api/v1/auth/refresh')) {
+        renew.flush(null, { status: 401, statusText: 'Unauthorized' });
+      }
 
       expect(authState.isLoggedIn()).toBe(true);
       expect(authState.role()).toBe('ROLE_CUSTOMER');
@@ -309,8 +359,6 @@ describe('AuthState (HTTP + interceptor)', () => {
   });
 
   describe('session renewal with the refresh cookie (ADR-023)', () => {
-    const setHint = () => (document.cookie = 'taskflow_session=1; path=/');
-    const dropHint = () => (document.cookie = 'taskflow_session=; max-age=0; path=/');
     let sessionStartedCalls: number;
 
     beforeEach(() => {

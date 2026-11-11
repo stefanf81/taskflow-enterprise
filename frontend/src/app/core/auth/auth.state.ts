@@ -32,6 +32,14 @@ export class SessionChangedError extends Error {
   }
 }
 
+/** {@link AuthState.bootstrap} found no session to restore (no session hint cookie). */
+export class NoSessionError extends Error {
+  constructor() {
+    super('No session to restore.');
+    this.name = 'NoSessionError';
+  }
+}
+
 /**
  * A1.2 — Single source of truth for the authenticated UI role.
  *
@@ -97,6 +105,14 @@ export class AuthState {
     // Deduplicate concurrent calls: share a single in-flight request so the
     // auth guard and App.ngOnInit don't fire two `me()` calls on a deep-link.
     if (!this.bootstrap$) {
+      // The server sets the readable session hint with every access cookie and keeps it for the
+      // whole refresh session, so without it there is nothing to restore: asking /me would only
+      // collect a 401, and every guest page load would spend one of the per-IP auth requests
+      // that login and registration share. Same end state as the 401 path below.
+      if (!hasRenewableSession() && !this.isLoggedIn()) {
+        this.clear();
+        return throwError(() => new NoSessionError());
+      }
       const version = ++this.bootstrapVersion;
       this.bootstrap$ = this.authApi.me().pipe(
         // The access cookie expires long before the refresh session: a browser that can renew

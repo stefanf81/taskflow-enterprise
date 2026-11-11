@@ -52,7 +52,7 @@ function reachablePackages(lock, entryPoints) {
   return seen;
 }
 
-/** RegExps for every top-level `<workspaceRoot>/node_modules/<package>` outside the app's closure. */
+/** A RegExp matching every top-level `<workspaceRoot>/node_modules/<package>` outside the app's closure. */
 function workspaceBlockList(workspaceRoot, entryPoints = ['mobile', 'shared/schemas']) {
   const lockPath = path.join(workspaceRoot, 'package-lock.json');
   if (!fs.existsSync(lockPath)) return [];
@@ -66,9 +66,20 @@ function workspaceBlockList(workspaceRoot, entryPoints = ['mobile', 'shared/sche
       !reachable.has(key) &&
       !lock.packages[key].link,
   );
-  return unreachable.map(
-    (key) => new RegExp(`^${escape(path.join(workspaceRoot, key))}(?:[\\\\/].*)?$`),
-  );
+  if (unreachable.length === 0) return [];
+  // One pattern with the shared prefix outside the alternation. Metro joins a blockList array into
+  // a single `(a)|(b)|...` RegExp tested against every crawled path; with one entry per package
+  // (300+), each path that is not blocked failed every alternative from the start: Metro's crawl
+  // took 0.8 s instead of 0.2 s, slower than with no blockList at all. Here a path outside the
+  // hoisted node_modules fails at the prefix, and one inside it is compared by package name only.
+  const names = unreachable
+    .map((key) => escape(key.slice('node_modules/'.length)).replace(/\//g, '[\\\\/]'))
+    .sort();
+  return [
+    new RegExp(
+      `^${escape(path.join(workspaceRoot, 'node_modules'))}[\\\\/](?:${names.join('|')})(?:[\\\\/].*)?$`,
+    ),
+  ];
 }
 
 module.exports = { workspaceBlockList, reachablePackages };

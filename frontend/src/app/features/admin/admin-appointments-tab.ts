@@ -1,5 +1,4 @@
 import { Component, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { finalize } from 'rxjs';
 import { AppointmentsApi } from '../../core/api/appointments-api';
 import { FlashMessages } from '../../core/ui/flash-messages';
@@ -10,7 +9,7 @@ import { formatTime12Hour, formatLocalDate, isOverdue } from '../../core/time-ut
 /** Owner dashboard · appointments tab (list, filter, search, approve/deny/cancel). */
 @Component({
   selector: 'app-admin-appointments-tab',
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './admin-appointments-tab.html',
 })
 export class AdminAppointmentsTab {

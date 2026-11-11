@@ -5,6 +5,25 @@ import angular from 'angular-eslint';
 import prettier from 'eslint-config-prettier';
 import tseslint from 'typescript-eslint';
 
+// The router already pulls @angular/common's shared chunk into the initial bundle, so a template
+// pipe or directive from it, even in a lazy component, ships its code and locale data to every
+// guest page (~22 kB raw). Use the Intl formatters in core/format.ts and [class] bindings instead.
+// A separate constant because each block below sets the rule again, which replaces its options.
+const COMMON_TEMPLATE_IMPORTS = {
+  name: '@angular/common',
+  importNames: [
+    'CommonModule',
+    'NgClass',
+    'NgStyle',
+    'CurrencyPipe',
+    'DatePipe',
+    'DecimalPipe',
+    'PercentPipe',
+  ],
+  message:
+    'Pulls @angular/common formatters into the initial bundle: use core/format.ts or [class]/[style] bindings.',
+};
+
 export default defineConfig(
   globalIgnores([
     'dist/**',
@@ -41,6 +60,7 @@ export default defineConfig(
           caughtErrorsIgnorePattern: '^_',
         },
       ],
+      'no-restricted-imports': ['error', { paths: [COMMON_TEMPLATE_IMPORTS] }],
     },
   },
   {
@@ -52,6 +72,7 @@ export default defineConfig(
       'no-restricted-imports': [
         'error',
         {
+          paths: [COMMON_TEMPLATE_IMPORTS],
           patterns: [
             {
               group: ['**/booking/booking.store'],
@@ -72,6 +93,7 @@ export default defineConfig(
       'no-restricted-imports': [
         'error',
         {
+          paths: [COMMON_TEMPLATE_IMPORTS],
           patterns: [
             {
               group: ['**/features/**'],

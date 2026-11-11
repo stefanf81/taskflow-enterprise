@@ -16,6 +16,7 @@ Key factors for selecting G1GC:
 1. **Low Pause Time SLA** — `-XX:MaxGCPauseMillis=100` guarantees sub-100ms GC pauses, preventing Virtual Thread carrier thread stalls.
 2. **Concurrent Marking** — G1GC handles heap marking concurrently alongside Virtual Thread execution.
 3. **Container Heap Sizing** — Memory limits managed via `MaxRAMPercentage=50.0` (1 GiB heap on 2 GiB container) with `AlwaysPreTouch` for eager page allocation.
+   *Follow-up (BENCHMARKS.md §65):* `AlwaysPreTouch` touches only the **initial** heap, which ergonomics sets to 1/64 of RAM (40 MiB at 2560M), so the eager allocation this decision intended never happened. `docker-compose.yml` therefore also sets `-XX:InitialRAMPercentage=50.0`; the GitOps manifests must mirror it.
 
 ## Consequences
 

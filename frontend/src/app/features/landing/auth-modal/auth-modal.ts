@@ -1,6 +1,5 @@
 import { Component, output, signal, inject, DestroyRef, isDevMode } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { CommonModule } from '@angular/common';
 import { A11yModule } from '@angular/cdk/a11y';
 import { form, required, FormField } from '@angular/forms/signals';
 import { AuthApi } from '../../../core/api/auth-api';
@@ -31,7 +30,7 @@ interface AuthFormModel {
 @Component({
   selector: 'app-auth-modal',
   standalone: true,
-  imports: [CommonModule, FormField, A11yModule],
+  imports: [FormField, A11yModule],
   template: `
     <div class="modal-overlay" tabindex="-1" (keydown.escape)="closeModal()">
       <div

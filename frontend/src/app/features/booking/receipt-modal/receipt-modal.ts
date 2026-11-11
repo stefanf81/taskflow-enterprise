@@ -1,5 +1,5 @@
-import { Component, DestroyRef, inject, input, output, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, computed, DestroyRef, inject, input, output, signal } from '@angular/core';
+import { formatAmount } from '../../../core/format';
 import { A11yModule } from '@angular/cdk/a11y';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize } from 'rxjs';
@@ -12,7 +12,7 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
 @Component({
   selector: 'app-receipt-modal',
   standalone: true,
-  imports: [CommonModule, A11yModule],
+  imports: [A11yModule],
   template: `
     <div
       class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn"
@@ -97,7 +97,7 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
             <hr class="border-t border-dashed border-slate-300 my-2" />
             <p class="flex justify-between text-sm font-bold text-zinc-100 pt-1">
               <span>Estimated Price:</span>
-              <span class="text-gold">\${{ checkoutTotal() | number: '1.2-2' }}</span>
+              <span class="text-gold">\${{ checkoutTotalLabel() }}</span>
             </p>
           </div>
         </div>
@@ -139,6 +139,7 @@ export class ReceiptModalComponent {
   private readonly destroyRef = inject(DestroyRef);
   readonly appointment = input<AppointmentItem | null>(null);
   readonly checkoutTotal = input(0);
+  protected readonly checkoutTotalLabel = computed(() => formatAmount(this.checkoutTotal()));
   readonly closed = output<void>();
   protected readonly exportingCalendar = signal(false);
   protected readonly calendarError = signal<string | null>(null);

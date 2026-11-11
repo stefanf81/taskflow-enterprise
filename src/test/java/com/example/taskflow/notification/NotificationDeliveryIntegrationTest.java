@@ -92,7 +92,7 @@ class NotificationDeliveryIntegrationTest {
                 throw new MailSendException("offline");
             }
             return null;
-        }).when(mailSender).send(any(MimeMessage.class));
+        }).when(mailSender).send(any(MimeMessage[].class)); // the relay sends its claims as one batch
 
         relay.relay();
         assertEquals("FAILED", reload(row).getStatus());
