@@ -146,6 +146,13 @@ jobs:
             report "k6 API probe" k6-results/probe.log
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # k6 runs as its own user in the container and writes the screenshot
+      # readable only by that user, so the upload failed with EACCES and lost
+      # the logs as well (k6 run 43114322212).
+      - name: Make k6 results readable
+        if: ${{ !cancelled() }}
+        run: sudo chmod -R a+rX k6-results 2>/dev/null || true
+
       # The logs, and a screenshot of the page if a browser scenario failed.
       - name: Upload k6 results
         if: ${{ !cancelled() }}
