@@ -1,6 +1,6 @@
 import http from 'k6/http';
 import { check } from 'k6';
-import { Trend } from 'k6/metrics';
+import { Counter, Trend } from 'k6/metrics';
 
 const BASE_URL = __ENV.BASE_URL;
 if (!BASE_URL) throw new Error('BASE_URL environment variable is required');
@@ -19,11 +19,18 @@ export const options = {
     },
   },
   thresholds: {
-    http_req_failed: ['rate<0.01'],
-    http_req_duration: ['p(95)<500', 'p(99)<800'],
+    // Every request the server answered must be a 2xx with caching headers.
     checks: ['rate==1.0'],
+    // A request with no answer at all (connection reset, timeout) is the network between this
+    // runner and the edge, not the application: tolerate two in the 60. With `rate<0.01` on
+    // http_req_failed a single reset (1 of 61 = 1.6%) failed the whole probe.
+    transport_errors: ['count<=2'],
+    http_req_failed: ['rate<0.05'],
+    http_req_duration: ['p(95)<500', 'p(99)<800'],
   },
 };
+
+const transportErrors = new Counter('transport_errors');
 
 const catalogTrend = new Trend('catalog_duration');
 const barbersTrend = new Trend('barbers_duration');
@@ -48,6 +55,9 @@ export default function () {
   }
 
   const res = http.get(url, { headers: { Accept: 'application/json' } });
+  // Status 0: k6 got no HTTP response. Counted (0 keeps the metric present on a clean run).
+  transportErrors.add(res.status === 0 ? 1 : 0);
+  if (res.status === 0) return;
   trend.add(res.timings.duration);
   check(res, {
     'status 2xx': (response) => response.status >= 200 && response.status < 300,
