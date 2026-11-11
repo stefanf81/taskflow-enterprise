@@ -97,6 +97,27 @@ abstract class AbstractRedisSecurityStateTest {
     }
 
     @Test
+    void aRestoreWritesEveryRevocationBackInPipelinedBatchesWithItsRemainingLifetime() {
+        TokenRevocationList restarted = new TokenRevocationList(null, new RedisTokenRevocationStore(redisA));
+        List<RevokedToken> stored = new ArrayList<>();
+        for (int i = 0; i < RedisTokenRevocationStore.WRITE_BATCH + 20; i++) {
+            stored.add(new RevokedToken(freshJti(), Instant.now().plusSeconds(120)));
+        }
+        RevokedToken almostExpired = new RevokedToken(freshJti(), Instant.now().plusMillis(500));
+        stored.add(almostExpired);
+
+        assertTrue(restarted.restore(stored) == stored.size());
+
+        TokenRevocationList other = new TokenRevocationList(null, new RedisTokenRevocationStore(redisB));
+        assertTrue(other.isRevoked(stored.getFirst().getJti()), "first batch written");
+        assertTrue(other.isRevoked(stored.get(RedisTokenRevocationStore.WRITE_BATCH + 5).getJti()), "second batch written");
+        Long ttl = redisA.getExpire(RedisTokenRevocationStore.key(stored.getFirst().getJti()), TimeUnit.MILLISECONDS);
+        assertTrue(ttl != null && ttl > 110_000 && ttl <= 120_000, "TTL = remaining token lifetime: " + ttl);
+        Long floor = redisA.getExpire(RedisTokenRevocationStore.key(almostExpired.getJti()), TimeUnit.MILLISECONDS);
+        assertTrue(floor != null && floor > 4_000 && floor <= RedisTokenRevocationStore.MIN_TTL_MILLIS, "ttl=" + floor);
+    }
+
+    @Test
     void anAlmostExpiredTokenGetsTheMinimumTtlNeverNone() {
         TokenRevocationList replicaA = new TokenRevocationList(null, new RedisTokenRevocationStore(redisA));
         String jti = freshJti();

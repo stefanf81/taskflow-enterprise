@@ -22,7 +22,7 @@ does, because that turns out to decide the question.
 | | Served from | Cost on a repeat visit |
 | :--- | :--- | :--- |
 | `main.js`, chunks, CSS | HTTP cache, `immutable` | **0 RTT**, no revalidation |
-| Inter woff2 | HTTP cache, 1 h + revalidate | 0 RTT within the hour |
+| Inter woff2, background image | HTTP cache, `immutable` (content-hashed under `/media/` since BENCHMARKS.md §66; was 1 h + revalidate) | **0 RTT**, no revalidation |
 | `index.html` / `index.csr.html` | `no-cache`, ETag | **1 RTT**, usually a 304 |
 | `/api/v1/catalog`, `/barbers` | `max-age=300, public` | 0 RTT within 5 min, else 1 RTT |
 

@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ClientTelemetry, TelemetryEvent, telemetryRoute } from './client-telemetry';
+import {
+  ClientTelemetry,
+  DEFAULT_TELEMETRY_OPTIONS,
+  TelemetryEvent,
+  telemetryOptionsFrom,
+  telemetryRoute,
+} from './client-telemetry';
 
 const enabled = { enabled: true, sampleRate: 1 };
 
@@ -65,5 +71,14 @@ describe('ClientTelemetry', () => {
     expect(telemetryRoute('customer/book')).toBe('BOOKING');
     expect(telemetryRoute('admin')).toBe('ADMIN');
     expect(telemetryRoute('/customer?ref=abc')).toBe('OTHER');
+  });
+
+  it('turns on only for a build-time sample rate in (0, 1]', () => {
+    expect(telemetryOptionsFrom(0.1)).toEqual({ enabled: true, sampleRate: 0.1 });
+    expect(telemetryOptionsFrom('1')).toEqual({ enabled: true, sampleRate: 1 });
+    for (const off of [undefined, null, 0, '0', -0.5, 1.5, 'abc', '', NaN, Infinity, true, {}]) {
+      expect(telemetryOptionsFrom(off)).toBe(DEFAULT_TELEMETRY_OPTIONS);
+    }
+    expect(DEFAULT_TELEMETRY_OPTIONS.enabled).toBe(false);
   });
 });

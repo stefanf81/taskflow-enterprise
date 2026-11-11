@@ -50,6 +50,15 @@ class ContainerConfigGuardTest {
         assertTrue(hasJsCssImmutable, "js/css must have immutable max-age=15552000");
         assertTrue(hasIcoPublic, "unhashed images/fonts must use a short revalidating public cache");
         assertFalse(oldSingle, "old single location with mixed types must be split");
+        // Fonts and images referenced from the stylesheets are content-hashed into media/ by the
+        // build (frontend/src/styles.css, app.css), so they are immutable like the bundles. `^~`,
+        // or the unhashed-asset regex location below would match them first.
+        String media = content.substring(content.indexOf("location ^~ /media/ {"));
+        media = media.substring(0, media.indexOf('}'));
+        assertTrue(media.contains("add_header Cache-Control \"public, immutable, max-age=15552000\";"),
+                "hashed media/ assets must be cached immutable");
+        assertTrue(Files.readString(Path.of("frontend/src/styles.css")).contains("url('./assets/fonts/"),
+                "the font must be referenced relatively, so the build hashes it into media/");
 
         // Verify index.html not immutable (served via location / try_files)
         assertTrue(content.contains("location / {") && content.contains("try_files"), "index.html via location /");

@@ -106,6 +106,12 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
+      # Span export is off unless Jaeger runs: it only starts with the `observability` profile,
+      # and without it every sampled span (10%) is a failed DNS lookup plus an ERROR line, noise
+      # in the E2E and k6 runs this stack is for. Tracing itself stays active. To look at traces,
+      # set both in .env: COMPOSE_PROFILES=observability and
+      # MANAGEMENT_TRACING_EXPORT_OTLP_ENABLED=true (CI's smoke test disables it the same way).
+      - MANAGEMENT_TRACING_EXPORT_OTLP_ENABLED=${MANAGEMENT_TRACING_EXPORT_OTLP_ENABLED:-false}
       # CORS: same-origin SPA→nginx→backend requests bypass CORS entirely, but
       # state-changing POST/PUT still carry an Origin header that Spring checks
       # against this list. Whitelist both loopback hostnames so the E2E stack
@@ -242,6 +248,11 @@ services:
       - "yes"
       - "--appendfsync"
       - "everysec"
+      # No RDB snapshots next to the AOF: the default save points forked a background save
+      # every few minutes under write load (rate-limit counters), which the AOF above already
+      # makes redundant. Its rewrite (BGREWRITEAOF) still compacts the file. Mirror in homelab/TF.
+      - "--save"
+      - ""
       # The official image turns protected-mode off, so without a password any client that
       # reaches the port could flush the rate-limit counters, read cached barber contact
       # details or poison the cache and the token denylist. The backend gets the same value

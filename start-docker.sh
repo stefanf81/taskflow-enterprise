@@ -37,13 +37,22 @@ fi
 # Reusing pre-built artifacts in Docker is a huge optimization that prevents in-container rebuilding.
 # =========================================================================================
 echo "🔨 Building backend JAR on the host..."
-./gradlew bootJar --no-daemon
+# The daemon that ./gradlew check left running (verify.sh) is reused; --no-daemon forked a cold
+# single-use JVM because gradle.properties sets org.gradle.jvmargs.
+./gradlew bootJar
 
 echo "🔨 Building frontend production bundle on the host..."
 # One install from the root for every workspace (README "Install"). `npm ci` inside frontend/
 # acts as `npm ci --workspace frontend`: it deletes the root node_modules and reinstalls only the
 # frontend, leaving mobile, shared/schemas and the root tooling uninstalled afterwards.
-npm ci --prefer-offline --no-audit --no-fund
+# Skipped when the installed tree matches the lockfile: npm rewrites node_modules/.package-lock.json
+# on every install, so a lockfile newer than it means an install is due. verify.sh has just run
+# every lint and test against this tree; reinstalling it (~1 GB with React Native) cost 15-45 s.
+if [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
+    npm ci --prefer-offline --no-audit --no-fund
+else
+    echo "   node_modules matches package-lock.json; skipping npm ci (delete node_modules to force it)."
+fi
 npm --prefix frontend run build
 
 echo "📦 Building images..."

@@ -1,7 +1,7 @@
 import React from 'react';
 import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -31,6 +31,7 @@ type NavigationProp = CompositeNavigationProp<
  */
 export const HomeScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
+  const isFocused = useIsFocused();
   const { isAuthenticated, role } = useAuthStore(
     useShallow((state) => ({ isAuthenticated: state.isAuthenticated, role: state.role })),
   );
@@ -42,7 +43,7 @@ export const HomeScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView testID="home-scroll-view" contentContainerStyle={styles.scrollContent}>
-        <AnnouncementBar />
+        <AnnouncementBar active={isFocused} />
 
         <HomeHeader onOwnerPortal={isAuthenticated ? undefined : signIn} />
 

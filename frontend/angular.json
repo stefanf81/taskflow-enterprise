@@ -35,6 +35,9 @@
             "security": {
               "autoCsp": false
             },
+            "define": {
+              "TASKFLOW_TELEMETRY_SAMPLE_RATE": "0"
+            },
             "browser": "src/main.ts",
             "server": "src/main.server.ts",
             "outputMode": "static",

@@ -207,29 +207,47 @@ class TokenRevocationListRedisTest {
 
     /** #218: stored revocations are written back to Redis (it may have lost them), without an announcement. */
     @Test
-    void restoreWritesStoredRevocationsBackToRedis() {
-        list.restore(java.util.List.of(new RevokedToken("jti-9", Instant.now().plusSeconds(600))));
+    @SuppressWarnings("unchecked")
+    void restoreWritesStoredRevocationsBackToRedisInOnePipeline() {
+        list.restore(java.util.List.of(new RevokedToken("jti-9", Instant.now().plusSeconds(600)),
+                new RevokedToken("jti-10", Instant.now().plusSeconds(600))));
 
-        verify(values).set(eq("revoked:jti-9"), eq("1"), any(Duration.class));
+        verify(redis, times(1)).executePipelined(any(RedisCallback.class));
+        verify(values, never()).set(anyString(), anyString(), any(Duration.class));
         verify(redis, never()).convertAndSend(anyString(), anyString());
         verify(events, never()).publishEvent(any());
         assertTrue(list.isRevoked("jti-9"));
     }
 
+    /** One round trip per batch: 1,200 revocations are three pipelines, not 1,200 commands. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void restoreBatchesLargeRestores() {
+        java.util.List<RevokedToken> many = java.util.stream.IntStream.range(0, 1_200)
+                .mapToObj(i -> new RevokedToken("jti-" + i, Instant.now().plusSeconds(600)))
+                .toList();
+
+        assertEquals(1_200, list.restore(many));
+
+        verify(redis, times(3)).executePipelined(any(RedisCallback.class));
+    }
+
     /** While Redis fails, restored revocations still deny on this replica through the local map. */
     @Test
+    @SuppressWarnings("unchecked")
     void restoreStopsWritingToRedisAtTheFirstFailureButKeepsEveryEntryLocally() {
         org.mockito.Mockito.doThrow(new RedisConnectionFailureException("down"))
-                .when(values).set(anyString(), anyString(), any(Duration.class));
+                .when(redis).executePipelined(any(RedisCallback.class));
+        java.util.List<RevokedToken> many = java.util.stream.IntStream.range(0, 1_200)
+                .mapToObj(i -> new RevokedToken("j" + i, Instant.now().plusSeconds(600)))
+                .toList();
 
-        int applied = list.restore(java.util.List.of(
-                new RevokedToken("a", Instant.now().plusSeconds(600)),
-                new RevokedToken("b", Instant.now().plusSeconds(600))));
+        int applied = list.restore(many);
 
-        assertEquals(2, applied);
-        verify(values, times(1)).set(anyString(), anyString(), any(Duration.class));
+        assertEquals(1_200, applied);
+        verify(redis, times(1)).executePipelined(any(RedisCallback.class));
         redisLookupFails();
-        assertTrue(list.isRevoked("a"));
-        assertTrue(list.isRevoked("b"));
+        assertTrue(list.isRevoked("j0"));
+        assertTrue(list.isRevoked("j1199"));
     }
 }

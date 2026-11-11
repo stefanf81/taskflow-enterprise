@@ -1,17 +1,27 @@
 import { ErrorHandler, Injectable, InjectionToken, inject } from '@angular/core';
 import {
   ClientTelemetry,
-  DEFAULT_TELEMETRY_OPTIONS,
   TELEMETRY_ENDPOINT,
   TelemetryEvent,
   TelemetryOptions,
   TelemetryRoute,
+  telemetryOptionsFrom,
 } from './client-telemetry';
 import { observeWebVitals } from './web-vitals';
 
+/** Replaced at build time (`define` in angular.json); undeclared in the unit tests. */
+declare const TASKFLOW_TELEMETRY_SAMPLE_RATE: unknown;
+
 export const CLIENT_TELEMETRY_OPTIONS = new InjectionToken<Readonly<TelemetryOptions>>(
   'CLIENT_TELEMETRY_OPTIONS',
-  { factory: () => DEFAULT_TELEMETRY_OPTIONS },
+  {
+    factory: () =>
+      telemetryOptionsFrom(
+        typeof TASKFLOW_TELEMETRY_SAMPLE_RATE === 'undefined'
+          ? undefined
+          : TASKFLOW_TELEMETRY_SAMPLE_RATE,
+      ),
+  },
 );
 
 /**

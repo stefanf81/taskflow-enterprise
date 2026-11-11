@@ -25,6 +25,19 @@ export const DEFAULT_TELEMETRY_OPTIONS: Readonly<TelemetryOptions> = Object.free
   sampleRate: 0.1,
 });
 
+/**
+ * Off unless the build sets the sample rate (0 < rate <= 1, the share of page loads that report),
+ * like mobile's `EXPO_PUBLIC_TELEMETRY_SAMPLE_RATE`: `angular.json` defines
+ * `TASKFLOW_TELEMETRY_SAMPLE_RATE` as 0, and a deployment that wants measurements builds with
+ * `ng build --define TASKFLOW_TELEMETRY_SAMPLE_RATE=0.1`. Anything else keeps it off.
+ */
+export function telemetryOptionsFrom(rate: unknown): Readonly<TelemetryOptions> {
+  const sampleRate = typeof rate === 'number' || typeof rate === 'string' ? Number(rate) : NaN;
+  return Number.isFinite(sampleRate) && sampleRate > 0 && sampleRate <= 1
+    ? Object.freeze({ enabled: true, sampleRate })
+    : DEFAULT_TELEMETRY_OPTIONS;
+}
+
 /** Accept route CONFIG templates only, never router.url, location.href or URL parameters. */
 export function telemetryRoute(template: string): TelemetryRoute {
   switch (template) {

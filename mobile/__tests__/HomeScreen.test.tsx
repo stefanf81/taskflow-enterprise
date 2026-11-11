@@ -6,6 +6,7 @@ import { HomeScreen } from '../src/features/landing/HomeScreen';
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate }),
+  useIsFocused: () => true,
   CompositeNavigationProp: jest.fn(),
 }));
 

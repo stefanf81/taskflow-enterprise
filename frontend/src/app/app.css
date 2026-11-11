@@ -372,7 +372,8 @@ html {
    The image sits on a viewport-fixed pseudo-element instead of `background-attachment: fixed`,
    which repaints the whole background on every scroll frame (and is ignored by iOS Safari).
    barber-bg.jpg is 1280 px wide at quality 60 (33 kB, was 1920 px / 200 kB): it is dimmed to
-   ~6 % by the overlay, so the extra resolution was never visible. */
+   ~6 % by the overlay, so the extra resolution was never visible. Referenced relatively, so the
+   build content-hashes it under /media/ (cached immutable, see styles.css). */
 .bg-faint-barber {
   /* Own stacking context, so the fixed layer below stays behind this container's content. Anything
      that must show above the layer belongs inside the container (a static sibling placed before it
@@ -389,7 +390,8 @@ html {
   z-index: -1;
   pointer-events: none;
   background-image:
-    linear-gradient(to bottom, rgba(0, 0, 0, 0.9), rgba(9, 13, 22, 0.94)), url('/barber-bg.jpg');
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.9), rgba(9, 13, 22, 0.94)),
+    url('../assets/barber-bg.jpg');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;

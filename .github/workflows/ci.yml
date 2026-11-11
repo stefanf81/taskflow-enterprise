@@ -160,6 +160,8 @@ jobs:
               - docker-compose.yml
               - .dockerignore
               - .trivyignore
+              # containerConfigTest reads it (REDIS_PASSWORD must stay listed).
+              - .env.example
               # The backend job's containerConfigTest asserts how these
               # workflows build the backend image (target prod, linux/amd64),
               # so a workflow-only edit must run it too.
@@ -370,10 +372,15 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
+      # Writes the shared `backend` Gradle entry that `package`, DAST, image publishing and the
+      # mobile E2E JAR restore, except on the nightly and manual dispatches: those run with
+      # --no-build-cache, so an entry saved there (on a SHA a frontend-only push left without
+      # one) carried no build outputs and served every reader an empty build cache until the
+      # next backend push. `backend-integration` has the same rule for its own entry.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
-          cache-read-only: false
+          cache-read-only: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
 
       # `testcontainersTest` and `spotbugsMain` run in `backend-integration`:
       # on one 4-vCPU runner they competed with the 3 unit-test forks for CPU,
@@ -1495,12 +1502,12 @@ jobs:
           name: frontend-dist
           path: frontend/dist/frontend/browser
 
-      # Unlike the backend image, the frontend image keeps Buildx and the GHA
-      # layer cache: its brotli/gzip compression stage only depends on the
-      # bundle and is expensive to rebuild.
-      - name: Set up Buildx
-        uses: ./.github/actions/prepull-buildkit
-
+      # The runner's default `docker` builder, like `docker-backend` and the E2E
+      # ingress: no BuildKit container to pull and boot (`prepull-buildkit`,
+      # ~10 s) and no GHA layer cache to export. That cache could not pay off:
+      # the whole build takes 6-9 s uncached (BENCHMARKS.md §57), every new
+      # bundle invalidates the compression stage, and APK_BUST invalidates the
+      # runtime stage on every run.
       - name: Build Image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -1513,16 +1520,6 @@ jobs:
           tags: |
             ${{ steps.images.outputs.image }}:${{ env.IMAGE_TAG }}
             ${{ steps.images.outputs.image }}:latest
-
-          cache-from: |
-            type=gha,scope=frontend-main
-            type=gha,scope=frontend-pr
-
-          # ignore-error: GHA cache-export blips (e.g. "error writing layer
-          # blob: not_found", observed in run 36245702011) must not fail the
-          # build; the image itself built fine.
-          cache-to: |
-            type=gha,mode=max,scope=frontend-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }},ignore-error=true
 
           provenance: false
           sbom: false

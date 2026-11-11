@@ -2,12 +2,16 @@ package com.example.taskflow.auth;
 
 import com.example.taskflow.core.redis.RedisBackoff;
 import com.example.taskflow.core.SharedStateStore;
+import org.springframework.data.redis.connection.SetCondition;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.types.Expiration;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -76,6 +80,41 @@ final class RedisTokenRevocationStore {
             backoff.recordFailure(e);
             return false;
         }
+    }
+
+    /** Entries per pipelined batch of {@link #writeAll}: one round trip each. */
+    static final int WRITE_BATCH = 500;
+
+    private static final byte[] PRESENT = "1".getBytes(StandardCharsets.UTF_8);
+
+    /**
+     * Writes many denylist entries (the periodic restore of the durable copy) in pipelined batches of
+     * {@link #WRITE_BATCH}, the same {@code SET ... PX} as {@link #write} each. One by one, a restore
+     * of 10,000 revocations was 10,000 sequential round trips every minute. Returns {@code false} at
+     * the first batch that fails (Redis unavailable); the batches before it are written.
+     */
+    boolean writeAll(List<Map.Entry<String, Instant>> entries, Instant now) {
+        for (int from = 0; from < entries.size(); from += WRITE_BATCH) {
+            if (!backoff.allowRequest()) {
+                return false;
+            }
+            List<Map.Entry<String, Instant>> batch = entries.subList(from, Math.min(from + WRITE_BATCH, entries.size()));
+            try {
+                redis.executePipelined((RedisCallback<Object>) connection -> {
+                    for (Map.Entry<String, Instant> entry : batch) {
+                        long ttlMillis = Math.max(MIN_TTL_MILLIS, Duration.between(now, entry.getValue()).toMillis());
+                        connection.stringCommands().set(key(entry.getKey()).getBytes(StandardCharsets.UTF_8), PRESENT,
+                                SetCondition.upsert(), Expiration.milliseconds(ttlMillis));
+                    }
+                    return null;
+                });
+                backoff.recordSuccess();
+            } catch (RuntimeException e) {
+                backoff.recordFailure(e);
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

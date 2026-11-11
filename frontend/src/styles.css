@@ -6,13 +6,16 @@
 
 /* Self-hosted Inter (variable, latin subset — 48 kB woff2).
    Self-hosting avoids a third-party render-blocking request and keeps the CSP
-   tight (font-src 'self'), instead of preconnecting to Google Fonts. */
+   tight (font-src 'self'), instead of preconnecting to Google Fonts.
+   A relative url(), so the build emits it content-hashed under /media/ and nginx can cache it
+   immutable; from public/ it kept a fixed name and was revalidated every hour. No preload in
+   index.html: it cannot name the hashed file, and removing it changed neither FCP nor LCP (§59). */
 @font-face {
   font-family: 'Inter';
   font-style: normal;
   font-weight: 400 900;
   font-display: swap;
-  src: url('/fonts/inter-latin-var.woff2') format('woff2');
+  src: url('./assets/fonts/inter-latin-var.woff2') format('woff2');
 }
 
 @import './theme/tokens.generated.css';

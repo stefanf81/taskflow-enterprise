@@ -7,6 +7,8 @@ import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -180,15 +182,16 @@ class TokenRevocationList {
 
     /**
      * Applies revocations loaded from the durable copy: cached locally and, in Redis mode, written to
-     * Redis again (an unchanged key just gets the same TTL). Not announced: streams opened with these
-     * tokens were closed when they were revoked. Stops writing to Redis at the first failure; the
-     * local map still gets every entry.
+     * Redis again (an unchanged key just gets the same TTL), in pipelined batches. Not announced:
+     * streams opened with these tokens were closed when they were revoked. Stops writing to Redis at
+     * the first failed batch; the local map still gets every entry.
      *
      * @return the number of unexpired revocations applied
      */
     int restore(Iterable<RevokedToken> revocations) {
         Instant now = Instant.now(clock);
         boolean redisUp = shared != null && shared.isAvailable();
+        List<Map.Entry<String, Instant>> toWrite = new ArrayList<>();
         int applied = 0;
         for (RevokedToken revocation : revocations) {
             if (revocation.getJti() == null || !revocation.getExpiresAt().isAfter(now)) {
@@ -196,9 +199,12 @@ class TokenRevocationList {
             }
             cacheLocally(revocation.getJti(), revocation.getExpiresAt(), now);
             if (redisUp) {
-                redisUp = shared.write(revocation.getJti(), revocation.getExpiresAt(), now);
+                toWrite.add(Map.entry(revocation.getJti(), revocation.getExpiresAt()));
             }
             applied++;
+        }
+        if (!toWrite.isEmpty()) {
+            shared.writeAll(toWrite, now);
         }
         return applied;
     }

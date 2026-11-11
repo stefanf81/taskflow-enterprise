@@ -42,7 +42,8 @@ export default function () {
     const date = new Date();
     date.setDate(date.getDate() + 1);
     const iso = date.toISOString().slice(0, 10);
-    url = `${BASE_URL}/api/v1/appointments/public/busy-slots?barberName=${encodeURIComponent('Alex the Barber')}&bookingDate=${iso}`;
+    // With serviceType, like both clients send it (and k6/load.js since §64).
+    url = `${BASE_URL}/api/v1/appointments/public/busy-slots?barberName=${encodeURIComponent('Alex the Barber')}&bookingDate=${iso}&serviceType=${encodeURIComponent('Classic Haircut')}`;
     trend = busySlotsTrend;
   }
 

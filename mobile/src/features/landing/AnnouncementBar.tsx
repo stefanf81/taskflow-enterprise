@@ -2,8 +2,17 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Animated, useAnimatedValue } from 'react-native';
 import { colors } from '../../theme/colors';
 
+interface AnnouncementBarProps {
+  /**
+   * Whether the dot pulses. Bottom tabs stay mounted when another tab (or a pushed screen) is
+   * shown, so the landing page passes its focus: a hidden loop still ran a native-driver
+   * animation every frame.
+   */
+  active?: boolean;
+}
+
 /** Promo strip at the top of the landing page, with a pulsing dot. */
-export const AnnouncementBar: React.FC = () => {
+export const AnnouncementBar: React.FC<AnnouncementBarProps> = ({ active = true }) => {
   // useAnimatedValue, not useRef(...).current: reading a ref during render makes React Compiler
   // skip the whole component.
   const pingAnim = useAnimatedValue(1);
@@ -12,7 +21,7 @@ export const AnnouncementBar: React.FC = () => {
   useEffect(() => {
     // Detox waits for the app to go idle; an endless animation keeps iOS busy forever.
     // Local E2E builds (the only ones with this flag) therefore keep the dot static.
-    if (process.env.EXPO_PUBLIC_E2E_LOCAL_API === 'true') {
+    if (!active || process.env.EXPO_PUBLIC_E2E_LOCAL_API === 'true') {
       return undefined;
     }
     const animation = Animated.loop(
@@ -30,8 +39,12 @@ export const AnnouncementBar: React.FC = () => {
       ]),
     );
     animation.start();
-    return () => animation.stop();
-  }, [pingAnim]);
+    return () => {
+      animation.stop();
+      // Resume from full opacity, not from wherever the loop was stopped.
+      pingAnim.setValue(1);
+    };
+  }, [pingAnim, active]);
 
   return (
     <View style={styles.announcementBar}>
