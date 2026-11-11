@@ -2442,3 +2442,38 @@ The class now remembers the `CsrfFilter`'s token repository before each test and
 * **Starting the JVM before the image pull** removed the 13–20 s readiness wait from both jobs ("Wait for Spring Boot": 0–1 s). The API job reaches its scan 11–17 s earlier; in the frontend job the saving did not show (the frontend build ran 16 s and 22 s next to the starting JVM, 12 s alone).
 
 **Verification:** the tables above; `GlobalExceptionHandlerTest` (4 new cases), `test_zap_scan_health.py`, `test_zap_sarif.py`, `./gradlew check`.
+
+## 🖱️ 70. Clicks Lost Before the Landing Page Has Loaded — Idle Hydration vs. Event Replay (2026-11-11)
+
+**Goal:** explain why the production smoke test (`k6/browser.js`, k6 run 43093489792) fails: it clicks the first lookbook card and wizard step 2 never appears. It last passed on 2026-10-12 and failed on 11-09 and 11-11; in between the landing page became prerendered (§60) and its sections `@defer (… hydrate on idle)` (§63).
+
+**Methodology:** Playwright (Chromium) replaying the script's first two scenarios against production and against a local stand-in (the `ng build` output behind a static server that proxies `/api` to the backend on H2 and can delay every script), with the page's state sampled from inside it; then Angular 22.2.5's event-replay source.
+
+### Results
+
+* **The click is real and the page drops it.** On production the card is on screen 0.7–1.6 s after navigation starts (it is prerendered), and hydration finishes 0.7–1.3 s later. A click ~80 ms after the card appeared was lost in 5 of 5 loads: no step change, no alert, and the same card works when clicked again after hydration. Clicks 0.3–3 s after it appeared were delivered in 4 of 4. The catalog was not the cause (production serves `Classic Haircut`).
+* **Only deferred blocks lose it.** Locally, every script delayed 800 ms, one click right after `DOMContentLoaded`:
+
+| Clicked | `hydrate on idle` (before) | After |
+| :--- | :--- | :--- |
+| "Owner Portal" (not deferred) | delivered | delivered |
+| Lookbook card | **lost** | delivered (`hydrate on interaction`) |
+| FAQ question | **lost** | delivered (`hydrate on interaction`) |
+| Wizard category pill | **lost** | lost (still `hydrate on idle`) |
+
+  Clicked 1.5–2.5 s later, all four are delivered in both columns.
+* **Why.** Event replay hands the clicks queued before bootstrap to the application in `initEventReplay`, which runs at `ApplicationRef.whenStable()`. A deferred block that hydrates removes `jsaction`/`ngb` and its stashed listeners from its elements (`removeListenersFromBlocks`). An `on idle` block can hydrate before the app is stable (the first API requests are still in flight), and the queued click then finds neither a block to hydrate nor a listener to call. A block that is still dehydrated at that point is hydrated by the replayed click, which is what `hydrate on interaction` guarantees.
+* **The e2e suite could not see it.** There the bundle arrives within milliseconds of the HTML, so no click lands in the window. `app.config.ts` documented the replay as covering exactly this case.
+
+### Adopted
+
+* **Lookbook and FAQ: `prefetch on idle; hydrate on interaction`.** They only react to clicks and keys. Their chunks are still fetched on idle (20 of the 24 scripts are loaded before any interaction, with both blocks still dehydrated), so the first click does not wait for the network.
+* **`frontend/e2e/early-interaction.spec.ts`** delays every script by 600 ms and clicks at once. Both cases fail on the previous template and pass now.
+* **`k6/browser.js` waits for `networkidle` before its first interaction.** It is a smoke test of the booking flow; "visible" stopped meaning "ready" when the page became prerendered. It also logs the real error (a locator timeout has no `message`: "threw: undefined") and saves a screenshot on failure; `k6.yml` uploads it with the logs and writes k6's report to the job summary.
+
+### Not adopted
+
+* **The wizard and the post-booking forms keep `hydrate on idle`.** The wizard is driven from outside and owns the shared banners (§63); the forms must be bound before anyone types. Clicks on them before the page has loaded are still dropped; the wizard shows placeholder rows during that time, so the category pills and the search box are what is affected.
+* **Hydrating everything only after the app is stable** (`hydrate when` on a signal set from `whenStable()`) would close that gap, but a request that never settles would leave the wizard dead.
+
+**Verification:** the table above; the new spec (fails before, passes after) and the existing lookbook and FAQ specs against the local stand-in; 515 frontend unit tests, `npm run lint`, `format:check`. The stand-in sends no CSP header, so `e2e/csp.spec.ts` needs the nginx image (CI); the inline-script inventory `frontend/Dockerfile` pins is unchanged.

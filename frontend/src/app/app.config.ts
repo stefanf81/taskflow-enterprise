@@ -36,8 +36,10 @@ export const appConfig: ApplicationConfig = {
     // it again. Incremental hydration (on by default since Angular 22; `withIncrementalHydration()`
     // is deprecated) also renders the `@defer (… hydrate on idle)` blocks on the server and
     // hydrates them when their trigger fires; it includes event replay, which replays clicks made
-    // before the code that handles them has loaded. Pages rendered in the browser (index.csr.html
-    // carries `ngcm`) skip hydration.
+    // before the code that handles them has loaded. The replay runs once the app is stable, so
+    // it does not reach a block that has already hydrated on idle: see the triggers in
+    // landing-page.html. Pages rendered in the browser (index.csr.html carries `ngcm`) skip
+    // hydration.
     provideClientHydration(),
 
     provideRouter(

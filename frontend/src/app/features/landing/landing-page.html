@@ -70,9 +70,15 @@
 
       <!-- INTERACTIVE LOOKBOOK SHOWCASE (lazy: below hero, non-critical for FCP — P1). The
            `hydrate` trigger makes the prerendered page contain it (its intro text is the LCP
-           element); the chunk then loads and hydrates on idle. The other triggers apply when the
-           page is rendered in the browser (client-side navigation to `/`). -->
-      @defer (on idle; on viewport; hydrate on idle) {
+           element). The other triggers apply when the page is rendered in the browser
+           (client-side navigation to `/`).
+           Hydration is `on interaction`, NOT `on idle`: Angular replays a click made before
+           main.js has run only once the app is stable, and a block that hydrated on idle has
+           dropped its replay hooks by then, so the click was lost (BENCHMARKS.md §70). A block
+           that is still dehydrated at that point is hydrated by the replayed click. The chunk
+           is prefetched on idle, so that first click does not wait for the network. This suits
+           blocks that only react to clicks and keys; see the wizard below for one that cannot. -->
+      @defer (on idle; on viewport; prefetch on idle; hydrate on interaction) {
         <app-lookbook (styleSelected)="selectLookbookStyle($event.serviceName, $event.category)" />
       } @placeholder {
         <div class="h-64 mb-16"></div>
@@ -213,7 +219,8 @@
           <!-- Prerendered like the sections above, so first paint is unchanged, but its chunk
                (the wizard + Signal Forms, ~105 kB raw) is fetched on idle instead of riding in
                main.js.
-               Hydration is `on idle`, NOT `on interaction`: this block is not self-contained.
+               Hydration is `on idle`, NOT `on interaction` like the lookbook: this block is not
+               self-contained (so a click on it made before main.js has run is not replayed).
                The lookbook drives it from outside (through LookbookSelectionBus), its service
                list has to render before anyone touches the wizard, and the guest page's shared
                `.alert-error` / `.alert-success` banners live in its template. With
@@ -231,8 +238,8 @@
       </div>
 
       <!-- Defer loading of non-critical FAQ sections to maximize First Contentful Paint speed
-           (prerendered, hydrated on idle, like the lookbook) -->
-      @defer (on idle; hydrate on idle) {
+           (prerendered; hydrated on interaction with its chunk prefetched, like the lookbook) -->
+      @defer (on idle; prefetch on idle; hydrate on interaction) {
         <app-faq-section />
       } @placeholder {
         <div
@@ -243,7 +250,7 @@
       }
 
       <!-- POST-BOOKING ACTIONS: Cancel & Review (lazy — below the fold, P1; prerendered,
-           hydrated on idle) -->
+           hydrated on idle: its forms must be bound before anyone types into them) -->
       @defer (on idle; on viewport; hydrate on idle) {
         <app-post-booking-actions />
       } @placeholder {

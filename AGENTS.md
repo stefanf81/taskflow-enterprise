@@ -85,6 +85,7 @@ Frontend
 - Guest endpoints are marked with the `PUBLIC_REQUEST` token, not matched by URL.
 - The `access_token` cookie is HttpOnly and never read by JavaScript; the role lives only in the in-memory `AuthState`.
 - The landing page must not import `BookingStore` (it pulls Signal Forms into `main.js`); use `LookbookSelectionBus`.
+- A prerendered `@defer` block that only reacts to clicks hydrates `on interaction` (with `prefetch on idle`), not `on idle`: idle hydration loses clicks made before the page has loaded (`e2e/early-interaction.spec.ts`).
 - No `@angular/common` pipes, `NgClass` or `CommonModule` (ESLint enforces it): they ship ~22 kB to every guest page; use `core/format.ts` and `[class]` bindings.
 - Edit `src/theme/tokens.json`, not `tokens.generated.css`. Schemas use `zod/mini`; keep the check order, since it decides `issues[0]`.
 - Prettier: 100 columns, single quotes, run from `frontend/`.
