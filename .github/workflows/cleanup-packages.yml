@@ -8,6 +8,16 @@ on:
         required: false
         type: boolean
         default: false
+      prune_commit_sha_tags:
+        description: Also allow deleting old 40-char commit-SHA tags (requires protected_refs when confirm_delete=true)
+        required: false
+        type: boolean
+        default: false
+      protected_refs:
+        description: Comma- or space-separated deployed digests (sha256:...) or tags to retain (augments vars.PROTECTED_PACKAGE_REFS)
+        required: false
+        type: string
+        default: ""
 
 env:
   # Container packages published by pushdockerimage.yml. ci.yml only builds and
@@ -16,6 +26,9 @@ env:
   PACKAGE_NAMES: "taskflow-backend taskflow-frontend"
   PACKAGE_TYPE: "container" # Can be container, npm, maven, rubygems, docker, nuget
   RETENTION_DAYS: "3"
+  # Safety floor when prune_commit_sha_tags=true: always retain at least the N
+  # newest promoted commit-SHA images per package in addition to protected_refs.
+  KEEP_RECENT_COMMIT_RELEASES: "5"
   # Upper bound on deletions per run so a bad filter cannot wipe a package.
   MAX_DELETE: "50"
 
@@ -42,8 +55,24 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
           CONFIRM_DELETE: ${{ inputs.confirm_delete }}
+          PRUNE_COMMIT_SHA_TAGS: ${{ inputs.prune_commit_sha_tags }}
+          PROTECTED_REFS_RAW: "${{ inputs.protected_refs }} ${{ vars.PROTECTED_PACKAGE_REFS }}"
         run: |
           set -euo pipefail
+
+          protected_json="$(
+            printf '%s\n' "$PROTECTED_REFS_RAW" \
+              | tr ', \t\r' '\n\n\n\n' \
+              | sed '/^$/d' \
+              | jq -R . \
+              | jq -sc 'unique'
+          )"
+          echo "Explicitly protected tags/digests: $protected_json"
+
+          if [ "$CONFIRM_DELETE" = "true" ] && [ "$PRUNE_COMMIT_SHA_TAGS" = "true" ] && [ "$protected_json" = "[]" ]; then
+            echo "::error::Refusing confirm_delete=true with prune_commit_sha_tags=true without protected_refs (or vars.PROTECTED_PACKAGE_REFS) naming the currently deployed digest(s)/rollback tag(s)."
+            exit 1
+          fi
 
           echo "Determining account type for $OWNER..."
           ACCOUNT_TYPE=$(gh api "/users/$OWNER" -q '.type')
@@ -57,6 +86,9 @@ jobs:
           cutoff_date=$(date -d "${RETENTION_DAYS} days ago" -u +"%Y-%m-%dT%H:%M:%SZ")
           echo "Cutoff date for deletion: $cutoff_date"
 
+          api_err="$(mktemp)"
+          trap 'rm -f "$api_err"' EXIT
+
           for PACKAGE_NAME in $PACKAGE_NAMES; do
             echo ""
             echo "========================================================"
@@ -64,21 +96,29 @@ jobs:
             echo "========================================================"
 
             # --paginate emits each page as its own JSON array; jq -s 'add'
-            # flattens them. The `if !` guard maps "package not found" (404)
-            # and any API failure to an empty list so the run continues.
-            if ! versions_json="$(
+            # flattens them. Only HTTP 404 means "package not created yet"; any
+            # auth, rate-limit or 5xx error must fail loudly instead of reporting green.
+            if raw_pages="$(
               gh api \
                 -H "Accept: application/vnd.github+json" \
                 -H "X-GitHub-Api-Version: 2022-11-28" \
                 --paginate \
                 "$BASE_URL/packages/$PACKAGE_TYPE/$PACKAGE_NAME/versions" \
-                2>/dev/null | jq -s 'add // []'
+                2>"$api_err"
             )"; then
-              versions_json="[]"
+              versions_json="$(jq -s 'add // []' <<<"$raw_pages")"
+            else
+              err_msg="$(<"$api_err")"
+              if [[ "$err_msg" == *"(HTTP 404)"* ]]; then
+                echo "Package $PACKAGE_NAME not found (HTTP 404), skipping."
+                continue
+              fi
+              echo "::error::Failed to list versions for $PACKAGE_NAME: $err_msg"
+              exit 1
             fi
 
             if [ "$versions_json" = "[]" ] || [ -z "$versions_json" ]; then
-              echo "Package $PACKAGE_NAME not found or has no versions, skipping."
+              echo "Package $PACKAGE_NAME has no versions, skipping."
               continue
             fi
 
@@ -88,38 +128,73 @@ jobs:
             #     the child platform / SBOM / provenance manifests of an OCI
             #     index (tags == []). Deleting a child while its parent index is
             #     retained leaves the retained tag pointing at a broken graph,
-            #     so untagged manifests are never candidates here. Deleting the
-            #     tagged parent index is safe; its children simply become
-            #     unreferenced.
+            #     so untagged manifests are never candidates here.
             #  2. created_at is older than the cutoff.
-            #  3. No tag is `latest` or a semantic version (`v1.2.3`, `1.2.3`).
-            #     These are the release tags we must retain.
-            version_ids_to_delete=$(jq -r --arg cutoff "$cutoff_date" '
-              .[] |
-              select(((.metadata.container.tags // []) | length) > 0) |
-              select(.created_at < $cutoff) |
-              select(
-                (.metadata.container.tags // []) |
-                (index("latest") | not) and
-                (map(test("^v?[0-9]+(\\.[0-9]+)*$")) | any | not)
-              ) |
-              .id
+            #  3. Never delete:
+            #     - `latest`
+            #     - semantic version tags (`v1.2.3`, `1.2.3`, `v1.2.3-rc.1`)
+            #     - rollback / production marker tags (`rollback`, `rollback-*`, `prod*`, `deployed*`)
+            #     - any digest (`version.name`, e.g. `sha256:...`) or tag in `protected_refs`
+            #     - 40-char commit-SHA release tags (`pushdockerimage.yml`'s default tag),
+            #       unless `prune_commit_sha_tags=true` AND outside the newest
+            #       `KEEP_RECENT_COMMIT_RELEASES` promoted commit-SHA versions.
+            candidates_tsv=$(jq -r \
+              --arg cutoff "$cutoff_date" \
+              --argjson protected "$protected_json" \
+              --argjson prune_sha "${PRUNE_COMMIT_SHA_TAGS:-false}" \
+              --argjson keep_recent "$KEEP_RECENT_COMMIT_RELEASES" '
+              (
+                [
+                  .[]
+                  | select((.metadata.container.tags // []) | any(test("^[0-9a-f]{40}$")))
+                ]
+                | sort_by(.created_at)
+                | reverse
+                | .[:$keep_recent]
+                | map(.id)
+              ) as $recent_sha_ids
+              | .[]
+              | (.metadata.container.tags // []) as $tags
+              | select(($tags | length) > 0)
+              | select(.created_at < $cutoff)
+              | select((.id as $id | $recent_sha_ids | index($id)) | not)
+              | select((.name as $digest | $protected | index($digest)) | not)
+              | select(($tags | any(. as $t | $protected | index($t))) | not)
+              | select(($tags | index("latest")) | not)
+              | select(
+                  ($tags | any(
+                    (endswith("-scan") | not) and
+                    test("^(v[0-9]+|v?[0-9]+(\\.[0-9]+)+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?)$")
+                  )) | not
+                )
+              | select(
+                  ($tags | any(
+                    (endswith("-scan") | not) and
+                    test("^(rollback|prod|production|deployed)([-_.].*)?$")
+                  )) | not
+                )
+              | select($prune_sha or (($tags | any(test("^[0-9a-f]{40}$"))) | not))
+              | "\(.id)\t\(.name)\t\(.created_at)\t\($tags | join(","))"
             ' <<<"$versions_json")
 
-            if [ -z "$version_ids_to_delete" ]; then
+            if [ -z "$candidates_tsv" ]; then
               echo "No versions of $PACKAGE_NAME matched the deletion criteria."
               continue
             fi
 
-            total_candidates=$(printf '%s\n' "$version_ids_to_delete" | wc -l | tr -d ' ')
-            version_ids_to_delete=$(head -n "$MAX_DELETE" <<<"$version_ids_to_delete")
+            total_candidates=$(printf '%s\n' "$candidates_tsv" | wc -l | tr -d ' ')
+            selected_tsv=$(head -n "$MAX_DELETE" <<<"$candidates_tsv")
+            version_ids_to_delete=$(cut -f1 <<<"$selected_tsv")
             selected_count=$(printf '%s\n' "$version_ids_to_delete" | wc -l | tr -d ' ')
 
             echo "Found $total_candidates deletable $PACKAGE_NAME version(s); acting on $selected_count (MAX_DELETE=$MAX_DELETE)."
+            printf '  %s\n' "ID	DIGEST	CREATED_AT	TAGS"
+            while IFS= read -r row; do
+              printf '  %s\n' "$row"
+            done <<<"$selected_tsv"
 
             if [ "$CONFIRM_DELETE" != "true" ]; then
-              echo "Dry run only. Re-run with confirm_delete=true to delete these versions:"
-              echo "$version_ids_to_delete"
+              echo "Dry run only. Re-run with confirm_delete=true to delete the versions listed above."
               continue
             fi
 
