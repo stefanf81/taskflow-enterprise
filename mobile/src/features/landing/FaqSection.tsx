@@ -11,7 +11,7 @@ const FAQS = [
   },
   {
     q: 'What is your cancellation policy?',
-    a: 'You can cancel up to 2 hours prior to your scheduled slot using your Public Reference ID and Email.',
+    a: 'You can cancel or reschedule online any time before your scheduled start time using your Public Reference ID and Email.',
   },
   {
     q: 'How does payment work?',

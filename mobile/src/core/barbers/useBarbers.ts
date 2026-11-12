@@ -3,6 +3,7 @@ import { barbersApi } from './barbers';
 import { BarberRequest, BarberTimeOffRequest, ScheduleChangeRequest } from '../../types/api';
 import { invalidateBookingQueries } from '../../query/queryKeys';
 import { getHttpStatus } from '../../utils/errors';
+import { storage } from '../../utils/storage';
 
 export const usePublicBarbers = () => {
   return useQuery({
@@ -94,12 +95,19 @@ export const useUpdateBarberSchedule = () => {
   return useMutation({
     mutationFn: ({ barberId, data }: { barberId: number; data: ScheduleChangeRequest }) =>
       barbersApi.updateSchedule(barberId, data),
-    onSuccess: (saved, variables) => {
-      queryClient.setQueryData(['barberSchedule', variables.barberId], saved);
+    onMutate: () => ({ epoch: storage.getSessionEpoch() }),
+    onSuccess: (saved, variables, context) => {
+      if (context?.epoch === storage.getSessionEpoch()) {
+        queryClient.setQueryData(['barberSchedule', variables.barberId], saved);
+      }
       // The shop's hours derive from the schedules, and conflicting bookings were cancelled.
       queryClient.invalidateQueries({ queryKey: ['shopInfo'] });
       invalidateBookingQueries(queryClient);
     },
-    onError: (error, variables) => reloadScheduleOnConflict(queryClient, error, variables.barberId),
+    onError: (error, variables, context) => {
+      if (context?.epoch === storage.getSessionEpoch()) {
+        reloadScheduleOnConflict(queryClient, error, variables.barberId);
+      }
+    },
   });
 };

@@ -3,7 +3,11 @@ import { ApiContractError } from '../src/api/contracts';
 import { authApi } from '../src/core/auth/auth';
 import { storage } from '../src/utils/storage';
 import { queryClient } from '../src/query/queryClient';
-import { SESSION_EXPIRED_MESSAGE, SessionExpiredError } from '../src/utils/session';
+import {
+  SESSION_EXPIRED_MESSAGE,
+  SessionChangedError,
+  SessionExpiredError,
+} from '../src/utils/session';
 import { renewSessionWithIdentity } from '../src/api/client';
 import { freezeDate, restoreClock } from '../test/fakeClock';
 
@@ -73,7 +77,11 @@ describe('useAuthStore', () => {
     queryClient.clear();
     resetState();
     jest.clearAllMocks();
+    (storage.getSessionEpoch as jest.Mock).mockReturnValue(0);
+    (storage.getToken as jest.Mock).mockResolvedValue(null);
     (storage.getTokenExpiry as jest.Mock).mockResolvedValue(null);
+    (storage.getRefreshToken as jest.Mock).mockResolvedValue(null);
+    (storage.startSession as jest.Mock).mockResolvedValue(undefined);
     (storage.clearSession as jest.Mock).mockResolvedValue(undefined);
     (authApi.logout as jest.Mock).mockResolvedValue(undefined);
   });
@@ -242,6 +250,59 @@ describe('useAuthStore', () => {
     it('uses a default message when the cleanup failure has no message', async () => {
       (storage.clearSession as jest.Mock).mockRejectedValueOnce('boom');
       await expect(useAuthStore.getState().logout()).rejects.toThrow(/Secure sign-out failed/);
+    });
+
+    it('clears local state immediately and never wipes a newer login when server logout finishes late', async () => {
+      let epoch = 1;
+      (storage.getSessionEpoch as jest.Mock).mockImplementation(() => epoch);
+      (storage.getToken as jest.Mock).mockResolvedValueOnce('old-jwt');
+      (storage.getTokenExpiry as jest.Mock).mockResolvedValueOnce(Date.now() + 60_000);
+      (storage.getRefreshToken as jest.Mock).mockResolvedValueOnce('old-refresh');
+      (storage.clearSession as jest.Mock).mockImplementation(async () => {
+        epoch++;
+      });
+      (storage.startSession as jest.Mock).mockImplementation(async () => {
+        epoch++;
+      });
+
+      let resolveRevoke: (() => void) | undefined;
+      const revokeStarted = new Promise<void>((resolve) => {
+        (authApi.logout as jest.Mock).mockImplementationOnce(() => {
+          resolve();
+          return new Promise<void>((done) => {
+            resolveRevoke = done;
+          });
+        });
+      });
+
+      useAuthStore.setState({ isAuthenticated: true, username: 'admin', role: 'ROLE_ADMIN' });
+      const pendingLogout = useAuthStore.getState().logout();
+      await revokeStarted;
+
+      // Local session is already gone while the network revoke is still in flight.
+      expect(storage.clearSession).toHaveBeenCalledTimes(1);
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+      expect(authApi.logout).toHaveBeenCalledWith({
+        accessToken: 'old-jwt',
+        refreshToken: 'old-refresh',
+      });
+
+      // A new user signs in before the slow logout finishes.
+      (authApi.login as jest.Mock).mockResolvedValueOnce(
+        mobileLoginResponse('customer@example.com', 'ROLE_CUSTOMER'),
+      );
+      await useAuthStore
+        .getState()
+        .login({ username: 'customer@example.com', password: 'password123' });
+      expect(useAuthStore.getState().username).toBe('customer@example.com');
+
+      resolveRevoke?.();
+      await pendingLogout;
+
+      expect(storage.clearSession).toHaveBeenCalledTimes(1);
+      expect(useAuthStore.getState().isAuthenticated).toBe(true);
+      expect(useAuthStore.getState().username).toBe('customer@example.com');
+      expect(useAuthStore.getState().role).toBe('ROLE_CUSTOMER');
     });
   });
 
@@ -445,6 +506,30 @@ describe('useAuthStore', () => {
       await useAuthStore.getState().checkAuth();
       expect(useAuthStore.getState().storageUnavailable).toBe(false);
       expect(useAuthStore.getState().isOffline).toBe(false);
+    });
+
+    it('does not flip to offline or clobber a newer session when overtaken (SessionChangedError)', async () => {
+      (storage.getToken as jest.Mock).mockResolvedValueOnce('stored-jwt');
+      let rejectMe: ((reason?: unknown) => void) | undefined;
+      (authApi.me as jest.Mock).mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectMe = reject;
+          }),
+      );
+
+      const pendingCheck = useAuthStore.getState().checkAuth();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      await useAuthStore.getState().resetSavedSession();
+      rejectMe?.(new SessionChangedError());
+      await pendingCheck;
+
+      const state = useAuthStore.getState();
+      expect(state.isOffline).toBe(false);
+      expect(state.isBootstrapping).toBe(false);
+      expect(state.error).toBeNull();
     });
   });
 

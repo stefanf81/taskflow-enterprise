@@ -7,19 +7,31 @@ const mockPreviewMutate = jest.fn();
 const mockUpdateMutate = jest.fn();
 const mockCreateMutate = jest.fn();
 const mockScheduleRefetch = jest.fn();
+const mockBarbersRefetch = jest.fn();
+const mockTimeOffRefetch = jest.fn();
+let mockBarbersError = false;
+let mockTimeOffError = false;
 let mockSchedule: { data?: { days: { dayOfWeek: number; opens: string; closes: string }[]; revision: string }; isError: boolean };
 
 jest.mock('../src/core/barbers/useBarbers', () => ({
   useAdminBarbers: () => ({
-    data: [
-      { id: 1, name: 'Alex the Barber', email: '', phone: '' },
-      { id: 2, name: 'Sara the Stylist', email: '', phone: '' },
-    ],
+    data: mockBarbersError
+      ? []
+      : [
+          { id: 1, name: 'Alex the Barber', email: '', phone: '' },
+          { id: 2, name: 'Sara the Stylist', email: '', phone: '' },
+        ],
     isLoading: false,
+    isError: mockBarbersError,
+    refetch: mockBarbersRefetch,
   }),
   useBarberTimeOff: () => ({
-    data: [{ startDate: '2026-08-01', endDate: '2026-08-03', reason: 'Vacation' }],
+    data: mockTimeOffError
+      ? []
+      : [{ id: 1, startDate: '2026-08-01', endDate: '2026-08-03', reason: 'Vacation' }],
     isLoading: false,
+    isError: mockTimeOffError,
+    refetch: mockTimeOffRefetch,
   }),
   useAddTimeOff: () => ({
     mutateAsync: mockMutateAsync,
@@ -34,6 +46,8 @@ jest.mock('../src/core/barbers/useBarbers', () => ({
 describe('AdminSchedulesScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockBarbersError = false;
+    mockTimeOffError = false;
     mockSchedule = {
       data: {
         days: [
@@ -68,6 +82,22 @@ describe('AdminSchedulesScreen', () => {
     await fireEvent.press(getByText('Add Time-Off Record'));
     expect(getByText('Start date and end date are required.')).toBeTruthy();
     expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('shows error state and retries when the staff roster fails to load', async () => {
+    mockBarbersError = true;
+    await render(<AdminSchedulesScreen />);
+    expect(screen.getByText("Couldn't load the staff roster.")).toBeTruthy();
+    await fireEvent.press(screen.getByText('Retry'));
+    expect(mockBarbersRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows error state and retries when time-off fails to load', async () => {
+    mockTimeOffError = true;
+    await render(<AdminSchedulesScreen />);
+    expect(screen.getByText('Could not load scheduled time-off.')).toBeTruthy();
+    await fireEvent.press(screen.getByText('Retry'));
+    expect(mockTimeOffRefetch).toHaveBeenCalledTimes(1);
   });
 
   describe('weekly hours', () => {

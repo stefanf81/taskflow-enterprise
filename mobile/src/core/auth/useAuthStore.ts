@@ -7,6 +7,7 @@ import { queryClient } from '../../query/queryClient';
 import { getApiErrorMessage, getHttpStatus } from '../../utils/errors';
 import {
   SESSION_EXPIRED_MESSAGE,
+  SessionChangedError,
   SessionExpiredError,
   computeExpiryMs,
   isTokenExpired,
@@ -65,6 +66,9 @@ const STORAGE_UNAVAILABLE = {
   error: 'Secure credential storage is unavailable. Please try again.',
 } as const;
 
+/** Monotonic counter fencing `checkAuth` against newer sign-ins, sign-outs, resets or retries. */
+let bootstrapVersion = 0;
+
 export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isBootstrapping: true,
@@ -79,17 +83,21 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ error: null, sessionNotice: null });
     try {
       const res = await authApi.login(credentials);
+      bootstrapVersion++;
       await storage.startSession({
         token: res.accessToken,
         expiresAt: computeExpiryMs(res.expiresIn),
         refreshToken: res.refreshToken,
       });
+      queryClient.clear();
 
       set({
         isAuthenticated: true,
+        isBootstrapping: false,
         username: res.username,
         role: res.role,
         isOffline: false,
+        storageUnavailable: false,
         error: null,
         sessionNotice: null,
       });
@@ -114,51 +122,84 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
-    // Revoke the bearer token server-side first (best effort: a network
-    // failure, timeout or an already-expired token must never block sign-out).
-    try {
-      await authApi.logout();
-    } catch {
-      // ignored — local cleanup below is authoritative
+    bootstrapVersion++;
+    const readSafe = async <T>(read: () => Promise<T> | T): Promise<T | null> => {
+      try {
+        return await read();
+      } catch {
+        return null;
+      }
+    };
+
+    const originEpoch = storage.getSessionEpoch();
+    const [token, expiresAt, refreshToken] = await Promise.all([
+      readSafe(() => storage.getToken()),
+      readSafe(() => storage.getTokenExpiry()),
+      readSafe(() => storage.getRefreshToken()),
+    ]);
+    // Another sign-in or sign-out already replaced the session while reading SecureStore.
+    if (storage.getSessionEpoch() !== originEpoch) {
+      return;
     }
 
-    let cleanupError: unknown = null;
+    // Call clearSession() synchronously so sessionEpoch advances at once, and attach a handler
+    // immediately so a rejected mock/Keychain removal is never an unhandled rejection while
+    // network revocation is in flight.
+    let clearCall: Promise<void>;
     try {
-      await storage.clearSession();
-    } catch (error) {
-      cleanupError = error;
+      clearCall = Promise.resolve(storage.clearSession());
+    } catch (syncErr) {
+      clearCall = Promise.reject(syncErr);
     }
-
-    const cleanupMessage = cleanupError
-      ? `Sign-out could not remove saved credentials from this device. ${
-          cleanupError instanceof Error && cleanupError.message
-            ? cleanupError.message
-            : 'Secure sign-out failed. Please try again.'
-        }`
-      : null;
-
-    // Always drop in-memory auth state and cached data, even when the
-    // Keychain/Keystore deletion failed, so the UI never stays signed in. A
-    // failed cleanup is surfaced app-wide (the calling screen unmounts as soon
-    // as the state flips) because the saved token could restore the session on
-    // the next launch.
+    const clearOutcome = clearCall.then(
+      () => ({ cleanupError: null as unknown }),
+      (cleanupError: unknown) => ({ cleanupError }),
+    );
+    const clearedEpoch = storage.getSessionEpoch();
     queryClient.clear();
-    set({ ...SIGNED_OUT, error: null, sessionNotice: cleanupMessage });
+    set({ ...SIGNED_OUT, isBootstrapping: false, error: null, sessionNotice: null });
 
-    if (cleanupMessage) {
+    const accessToken = token && !isTokenExpired(expiresAt) ? token : null;
+    const revokeOutcome = Promise.resolve()
+      .then(() => authApi.logout({ accessToken, refreshToken }))
+      .catch(() => undefined);
+
+    const [{ cleanupError }] = await Promise.all([clearOutcome, revokeOutcome]);
+
+    if (cleanupError) {
+      const cleanupMessage = `Sign-out could not remove saved credentials from this device. ${
+        cleanupError instanceof Error && cleanupError.message
+          ? cleanupError.message
+          : 'Secure sign-out failed. Please try again.'
+      }`;
+      if (storage.getSessionEpoch() === clearedEpoch) {
+        set({
+          ...SIGNED_OUT,
+          isBootstrapping: false,
+          error: null,
+          sessionNotice: cleanupMessage,
+        });
+      }
       throw new Error(cleanupMessage);
     }
   },
 
   checkAuth: async () => {
+    const version = ++bootstrapVersion;
+    const epoch = storage.getSessionEpoch();
+    const isSuperseded = () =>
+      version !== bootstrapVersion || storage.getSessionEpoch() !== epoch;
+
     set({ isBootstrapping: true });
     let token: string | null;
     try {
       token = await storage.getToken();
     } catch {
+      if (isSuperseded()) return;
       set(STORAGE_UNAVAILABLE);
       return;
     }
+    if (isSuperseded()) return;
     set({ storageUnavailable: false });
     if (!token) {
       set({ ...SIGNED_OUT, isBootstrapping: false, error: null });
@@ -174,15 +215,18 @@ export const useAuthStore = create<AuthState>((set) => ({
       tokenExpired = isTokenExpired(await storage.getTokenExpiry());
       expiredForGood = tokenExpired && !(await storage.getRefreshToken());
     } catch {
+      if (isSuperseded()) return;
       set(STORAGE_UNAVAILABLE);
       return;
     }
+    if (isSuperseded()) return;
     if (expiredForGood) {
       try {
         await storage.clearSession();
       } catch {
         // in-memory state is cleared below regardless
       }
+      if (version !== bootstrapVersion) return;
       queryClient.clear();
       set({
         ...SIGNED_OUT,
@@ -199,7 +243,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       // usually launches with an expired token. Renewing it answers who the account is as well
       // (the refresh response carries the username and role), so /me is only asked when the
       // stored token is still valid. Both paths parse the same shared role schema.
-      const res = tokenExpired ? await renewSessionWithIdentity() : await authApi.me();
+      const res = tokenExpired ? await renewSessionWithIdentity(epoch) : await authApi.me();
+      if (isSuperseded()) return;
       if (res.username && res.role) {
         // Server confirmed identity — fully authenticated
         set({
@@ -213,6 +258,11 @@ export const useAuthStore = create<AuthState>((set) => ({
         return;
       }
     } catch (error: unknown) {
+      // Overtaken by a concurrent login, logout, reset or newer checkAuth: never mistake a
+      // superseded session for a network outage or clobber the newer session's state.
+      if (error instanceof SessionChangedError || version !== bootstrapVersion) {
+        return;
+      }
       // A missing refresh token rejects the session like a 401 would.
       const status = error instanceof SessionExpiredError ? 401 : getHttpStatus(error);
       // The server answered, but with a body the shared contract rejects (a new role, a renamed
@@ -221,6 +271,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       // RootNavigator, so the app stays usable as a guest.
       unreadableAccount = error instanceof ApiContractError;
       if (!unreadableAccount && status !== 401 && status !== 403) {
+        if (isSuperseded()) return;
         // A timeout/offline/DNS failure does not prove the bearer token is
         // invalid. Preserve it and let the user retry when connectivity returns.
         set({
@@ -232,12 +283,16 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
     }
 
-    // Only a definitive authentication failure clears native credentials.
-    try {
-      await storage.clearSession();
-    } catch {
-      // in-memory state is cleared below regardless
+    // Only a definitive authentication failure clears native credentials (skip if client.ts's
+    // 401 interceptor already cleared this exact epoch).
+    if (storage.getSessionEpoch() === epoch) {
+      try {
+        await storage.clearSession();
+      } catch {
+        // in-memory state is cleared below regardless
+      }
     }
+    if (version !== bootstrapVersion) return;
     queryClient.clear();
     set({
       ...SIGNED_OUT,
@@ -248,6 +303,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   resetSavedSession: async () => {
+    bootstrapVersion++;
     try {
       await storage.clearSession();
     } catch {

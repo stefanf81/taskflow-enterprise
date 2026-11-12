@@ -24,21 +24,30 @@ export const PublicReviewModal: React.FC<PublicReviewModalProps> = ({
   onSuccess,
 }) => {
   const [publicId, setPublicId] = useState(initialPublicId);
-
-  // useState only reads its initial value: re-sync whenever the modal is
-  // (re)opened or the reference passed in from the route changes, so a new
-  // booking's ID is never shadowed by a stale one.
-  useEffect(() => {
-    if (visible) setPublicId(initialPublicId);
-  }, [visible, initialPublicId]);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // useState only reads its initial value: reset transient inputs and re-sync the
+  // reference whenever the modal is (re)opened, so a previous booking's draft never leaks.
+  useEffect(() => {
+    if (visible) {
+      setPublicId(initialPublicId);
+      setRating(5);
+      setComment('');
+      setCustomerEmail('');
+      setError(null);
+    }
+  }, [visible, initialPublicId]);
+
   const reviewMutation = useSubmitReview();
+  const handleDismiss = () => {
+    if (!reviewMutation.isPending) onClose();
+  };
 
   const handleSubmit = async () => {
+    if (reviewMutation.isPending) return;
     if (!publicId.trim()) {
       setError('Public Reference ID is required.');
       return;
@@ -62,7 +71,7 @@ export const PublicReviewModal: React.FC<PublicReviewModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} onClose={onClose} title="Leave a Review">
+    <Modal visible={visible} onClose={handleDismiss} title="Leave a Review">
       <View style={styles.container}>
         <Text style={styles.description}>
           Share your experience with TaskFlow. Please provide your Public Reference ID from your booking.
@@ -77,6 +86,7 @@ export const PublicReviewModal: React.FC<PublicReviewModalProps> = ({
           onChangeText={setPublicId}
           autoCapitalize="none"
           autoCorrect={false}
+          editable={!reviewMutation.isPending}
         />
 
         <Input
@@ -86,12 +96,18 @@ export const PublicReviewModal: React.FC<PublicReviewModalProps> = ({
           onChangeText={setCustomerEmail}
           keyboardType="email-address"
           autoCapitalize="none"
+          editable={!reviewMutation.isPending}
         />
 
         <Text style={styles.label}>Rating</Text>
         <View style={styles.starRow}>
           {[1, 2, 3, 4, 5].map((star) => (
-            <TouchableOpacity key={star} onPress={() => setRating(star)} style={styles.starTouch}>
+            <TouchableOpacity
+              key={star}
+              disabled={reviewMutation.isPending}
+              onPress={() => setRating(star)}
+              style={styles.starTouch}
+            >
               <Ionicons
                 name={star <= rating ? 'star' : 'star-outline'}
                 size={32}
@@ -109,10 +125,17 @@ export const PublicReviewModal: React.FC<PublicReviewModalProps> = ({
           multiline
           numberOfLines={3}
           style={styles.commentInput}
+          editable={!reviewMutation.isPending}
         />
 
         <View style={styles.buttons}>
-          <Button title="Cancel" variant="secondary" onPress={onClose} style={styles.halfBtn} />
+          <Button
+            title="Cancel"
+            variant="secondary"
+            disabled={reviewMutation.isPending}
+            onPress={handleDismiss}
+            style={styles.halfBtn}
+          />
           <Button
             title="Submit Review"
             variant="primary"

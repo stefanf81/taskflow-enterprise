@@ -190,10 +190,16 @@ function isSessionRejection(error: unknown): boolean {
  * What the interceptors remember on a protected request's config: the session it was sent under
  * (kept by its replay, which is the same request) and whether it was already replayed.
  */
-type SessionRequestConfig = InternalAxiosRequestConfig & {
-  sessionEpoch?: number;
-  sessionRetried?: boolean;
+export type SessionRequestOptions = {
+  /** Skip reading or rotating `storage` credentials (used when revoking captured credentials after local sign-out). */
+  skipSessionAuth?: boolean;
 };
+
+type SessionRequestConfig = InternalAxiosRequestConfig &
+  SessionRequestOptions & {
+    sessionEpoch?: number;
+    sessionRetried?: boolean;
+  };
 
 // ---------------------------------------------------------------------------
 // Request interceptor — bearer token (protected endpoints only)
@@ -202,8 +208,9 @@ apiClient.interceptors.request.use(
   async (config: SessionRequestConfig) => {
     const url = config.url || '';
     // Public endpoints never carry the token: Spring returns 401 for an
-    // expired token even on permitAll routes.
-    if (isPublicEndpoint(config.method, url)) {
+    // expired token even on permitAll routes. Captured-session revocations carry
+    // their own explicit Authorization header after storage was already cleared.
+    if (config.skipSessionAuth || isPublicEndpoint(config.method, url)) {
       return config;
     }
 

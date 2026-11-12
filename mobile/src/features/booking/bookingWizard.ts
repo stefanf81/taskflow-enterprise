@@ -2,6 +2,7 @@ import { DEFAULT_SHOP_RULES, type ShopRules } from '@taskflow/domain';
 import { AppointmentCreateRequest, ServiceItem } from '../../types/api';
 import {
   DEFAULT_TIME_SLOTS,
+  type WallClock,
   getFirstSelectableSlot,
   getSlotValidationError,
   getUpcomingDays,
@@ -76,7 +77,7 @@ export function getBookingDays(
  */
 export function getDefaultSlot(
   dates: readonly string[],
-  now: Date,
+  now: WallClock,
   rules: ShopRules = DEFAULT_SHOP_RULES,
 ): SlotSelection {
   const first = getFirstSelectableSlot(dates, now, DEFAULT_TIME_SLOTS, rules);
@@ -87,7 +88,7 @@ export function getDefaultSlot(
 }
 
 /** Slots of `date` that already started (shown disabled in the picker). */
-export function getPastSlots(date: string, now: Date): string[] {
+export function getPastSlots(date: string, now: WallClock): string[] {
   return DEFAULT_TIME_SLOTS.filter((slot) => isSlotInPast(date, slot, now));
 }
 
@@ -106,7 +107,7 @@ export interface SlotAvailability {
 export function getDateTimeStepError(
   date: string,
   time: string,
-  now: Date,
+  now: WallClock,
   availability: SlotAvailability,
   rules: ShopRules = DEFAULT_SHOP_RULES,
 ): string | null {

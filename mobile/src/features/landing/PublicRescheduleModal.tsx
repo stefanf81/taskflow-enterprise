@@ -46,10 +46,15 @@ export const PublicRescheduleModal: React.FC<PublicRescheduleModalProps> = ({
   useEffect(() => {
     if (visible) {
       setPublicId(initialPublicId);
+      setEmail('');
       setTarget(null);
       setError(null);
     }
   }, [visible, initialPublicId]);
+
+  const handleDismiss = () => {
+    if (!rescheduleMutation.isPending) onClose();
+  };
 
   const handleChooseTime = () => {
     if (!publicId.trim() || !email.trim()) {
@@ -84,7 +89,7 @@ export const PublicRescheduleModal: React.FC<PublicRescheduleModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} onClose={onClose} title="Reschedule Appointment">
+    <Modal visible={visible} onClose={handleDismiss} title="Reschedule Appointment">
       <View style={styles.container}>
         <Text style={styles.description}>
           Enter your Public Reference ID and the email address used during booking, then pick a new
@@ -131,7 +136,13 @@ export const PublicRescheduleModal: React.FC<PublicRescheduleModalProps> = ({
           />
         ) : (
           <View style={styles.buttons}>
-            <Button title="Back" variant="secondary" onPress={onClose} style={styles.halfBtn} />
+            <Button
+              title="Back"
+              variant="secondary"
+              disabled={rescheduleMutation.isPending}
+              onPress={handleDismiss}
+              style={styles.halfBtn}
+            />
             <Button
               title="Choose a new time"
               variant="primary"

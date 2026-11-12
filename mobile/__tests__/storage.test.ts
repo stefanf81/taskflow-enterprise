@@ -121,9 +121,9 @@ describe('storage', () => {
 
   // ==================== Cross-operation integrity ====================
   it('getToken returns null after removeToken', async () => {
-    mockSetItemAsync.mockResolvedValue();
+    mockSetItemAsync.mockResolvedValue(undefined);
     mockGetItemAsync.mockResolvedValue('temp');
-    mockDeleteItemAsync.mockResolvedValue();
+    mockDeleteItemAsync.mockResolvedValue(undefined);
     await storage.setToken('temp');
     // Override get to simulate actual removal
     mockGetItemAsync.mockResolvedValue(null);

@@ -23,19 +23,26 @@ export const PublicCancelModal: React.FC<PublicCancelModalProps> = ({
   onSuccess,
 }) => {
   const [publicId, setPublicId] = useState(initialPublicId);
-
-  // useState only reads its initial value: re-sync whenever the modal is
-  // (re)opened or the reference passed in from the route changes, so a new
-  // booking's ID is never shadowed by a stale one.
-  useEffect(() => {
-    if (visible) setPublicId(initialPublicId);
-  }, [visible, initialPublicId]);
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // useState only reads its initial value: reset transient inputs and re-sync the
+  // reference whenever the modal is (re)opened, so stale emails or errors never linger.
+  useEffect(() => {
+    if (visible) {
+      setPublicId(initialPublicId);
+      setEmail('');
+      setError(null);
+    }
+  }, [visible, initialPublicId]);
+
   const cancelMutation = usePublicCancelAppointment();
+  const handleDismiss = () => {
+    if (!cancelMutation.isPending) onClose();
+  };
 
   const handleCancel = async () => {
+    if (cancelMutation.isPending) return;
     if (!publicId.trim() || !email.trim()) {
       setError('Both Public Reference ID and Customer Email are required.');
       return;
@@ -52,7 +59,7 @@ export const PublicCancelModal: React.FC<PublicCancelModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} onClose={onClose} title="Cancel Appointment">
+    <Modal visible={visible} onClose={handleDismiss} title="Cancel Appointment">
       <View style={styles.container}>
         <Text style={styles.description}>
           Enter your Public Reference ID and the email address used during booking to cancel your appointment.
@@ -67,6 +74,7 @@ export const PublicCancelModal: React.FC<PublicCancelModalProps> = ({
           onChangeText={setPublicId}
           autoCapitalize="none"
           autoCorrect={false}
+          editable={!cancelMutation.isPending}
         />
 
         <Input
@@ -76,10 +84,17 @@ export const PublicCancelModal: React.FC<PublicCancelModalProps> = ({
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
+          editable={!cancelMutation.isPending}
         />
 
         <View style={styles.buttons}>
-          <Button title="Back" variant="secondary" onPress={onClose} style={styles.halfBtn} />
+          <Button
+            title="Back"
+            variant="secondary"
+            disabled={cancelMutation.isPending}
+            onPress={handleDismiss}
+            style={styles.halfBtn}
+          />
           <Button
             title="Cancel Appointment"
             variant="danger"

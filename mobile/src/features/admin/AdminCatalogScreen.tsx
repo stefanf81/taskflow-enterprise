@@ -63,7 +63,13 @@ export const AdminCatalogScreen: React.FC = () => {
 
   const save = () => {
     if (pending) return;
-    const parsed = serviceItemSchema.safeParse({ ...draft, price: Number(draft.price), durationMinutes: Number(draft.durationMinutes) });
+    const normalizedPrice = draft.price.trim().replace(',', '.');
+    const normalizedDuration = draft.durationMinutes.trim();
+    const parsed = serviceItemSchema.safeParse({
+      ...draft,
+      price: normalizedPrice === '' ? NaN : Number(normalizedPrice),
+      durationMinutes: normalizedDuration === '' ? NaN : Number(normalizedDuration),
+    });
     if (!parsed.success) {
       setFormError(parsed.error.issues[0]?.message ?? 'Please check the service details.');
       return;

@@ -113,6 +113,30 @@ describe('PublicReviewModal', () => {
     expect(screen.getByDisplayValue(NEW_ID)).toBeTruthy();
   });
 
+  it('resets comment, email and error state when closed and reopened', async () => {
+    const { rerender } = await render(
+      <PublicReviewModal visible={true} initialPublicId="123e4567-e89b-12d3-a456-426614174000" onClose={() => {}} onSuccess={() => {}} />,
+    );
+    await fireEvent.press(screen.getByText('Submit Review'));
+    expect(screen.getByText('Verification email is required.')).toBeTruthy();
+    await fireEvent.changeText(screen.getByPlaceholderText('e.g. john@example.com'), 'stale@example.com');
+    await fireEvent.changeText(
+      screen.getByPlaceholderText('Tell us how your hair style turned out...'),
+      'Old draft',
+    );
+
+    await rerender(
+      <PublicReviewModal visible={false} initialPublicId="123e4567-e89b-12d3-a456-426614174000" onClose={() => {}} onSuccess={() => {}} />,
+    );
+    await rerender(
+      <PublicReviewModal visible={true} initialPublicId="123e4567-e89b-12d3-a456-426614174000" onClose={() => {}} onSuccess={() => {}} />,
+    );
+
+    expect(screen.queryByDisplayValue('stale@example.com')).toBeNull();
+    expect(screen.queryByDisplayValue('Old draft')).toBeNull();
+    expect(screen.queryByText('Verification email is required.')).toBeNull();
+  });
+
   it('shows the server message when the review is rejected', async () => {
     mockMutateAsync.mockRejectedValueOnce({ response: { status: 400, data: { message: 'Review already submitted' } } });
     await render(

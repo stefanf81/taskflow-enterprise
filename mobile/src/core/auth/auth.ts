@@ -1,4 +1,5 @@
-import { apiClient } from '../../api/client';
+import type { AxiosRequestConfig } from 'axios';
+import { apiClient, type SessionRequestOptions } from '../../api/client';
 import { storage } from '../../utils/storage';
 import { parseContract, parseRequest } from '../../api/contracts';
 import { LoginRequest, LoginResponse, MobileLoginResponse, RegisterRequest } from '../../types/api';
@@ -38,10 +39,29 @@ export const authApi = {
   /**
    * Revokes the bearer token and its refresh session server-side. Callers treat this as
    * best effort (short timeout; local cleanup, which also erases the refresh token from
-   * the device, happens regardless of the outcome). An unreadable refresh token still lets
-   * the logout go out: a valid bearer token alone revokes its whole refresh session.
+   * the device, happens regardless of the outcome). When `captured` credentials are supplied,
+   * the request uses them directly (`skipSessionAuth`) so clearing `storage` beforehand
+   * neither drops the old bearer nor attaches a newer session's bearer.
    */
-  logout: async (): Promise<void> => {
+  logout: async (captured?: {
+    accessToken?: string | null;
+    refreshToken?: string | null;
+  }): Promise<void> => {
+    if (captured !== undefined) {
+      const config: AxiosRequestConfig & SessionRequestOptions = {
+        timeout: LOGOUT_TIMEOUT_MS,
+        skipSessionAuth: true,
+        headers: captured.accessToken
+          ? { Authorization: `Bearer ${captured.accessToken}` }
+          : undefined,
+      };
+      await apiClient.post(
+        '/api/v1/auth/logout',
+        captured.refreshToken ? { refreshToken: captured.refreshToken } : null,
+        config,
+      );
+      return;
+    }
     const refreshToken = await storage.getRefreshToken().catch(() => null);
     await apiClient.post(
       '/api/v1/auth/logout',

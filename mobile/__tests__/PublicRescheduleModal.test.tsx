@@ -126,4 +126,20 @@ describe('PublicRescheduleModal', () => {
     );
     expect(screen.getByText('Save new time')).toBeTruthy();
   });
+
+  it('clears typed email when closed and reopened', async () => {
+    const { rerender } = await render(
+      <PublicRescheduleModal visible initialPublicId={ID} onClose={() => {}} onSuccess={() => {}} />,
+    );
+    await fireEvent.changeText(screen.getByPlaceholderText('your.email@example.com'), 'stale@example.com');
+
+    await rerender(
+      <PublicRescheduleModal visible={false} initialPublicId={ID} onClose={() => {}} onSuccess={() => {}} />,
+    );
+    await rerender(
+      <PublicRescheduleModal visible initialPublicId={ID} onClose={() => {}} onSuccess={() => {}} />,
+    );
+
+    expect(screen.queryByDisplayValue('stale@example.com')).toBeNull();
+  });
 });

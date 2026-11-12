@@ -96,6 +96,25 @@ describe('PublicCancelModal', () => {
     expect(screen.queryByDisplayValue('123e4567-e89b-12d3-a456-426614174000')).toBeNull();
   });
 
+  it('clears typed email and error message when closed and reopened', async () => {
+    const { rerender } = await render(
+      <PublicCancelModal visible={true} initialPublicId="123e4567-e89b-12d3-a456-426614174000" onClose={() => {}} onSuccess={() => {}} />,
+    );
+    await fireEvent.press(screen.getAllByText('Cancel Appointment')[1]);
+    expect(screen.getByText('Both Public Reference ID and Customer Email are required.')).toBeTruthy();
+    await fireEvent.changeText(screen.getByPlaceholderText('your.email@example.com'), 'stale@example.com');
+
+    await rerender(
+      <PublicCancelModal visible={false} initialPublicId="123e4567-e89b-12d3-a456-426614174000" onClose={() => {}} onSuccess={() => {}} />,
+    );
+    await rerender(
+      <PublicCancelModal visible={true} initialPublicId="123e4567-e89b-12d3-a456-426614174000" onClose={() => {}} onSuccess={() => {}} />,
+    );
+
+    expect(screen.queryByDisplayValue('stale@example.com')).toBeNull();
+    expect(screen.queryByText('Both Public Reference ID and Customer Email are required.')).toBeNull();
+  });
+
   it('shows the server message when the cancellation is rejected', async () => {
     mockMutateAsyncFn.mockRejectedValueOnce({ response: { status: 400, data: { message: 'Booking already cancelled' } } });
     await render(

@@ -493,11 +493,13 @@ describe('Hooks', () => {
       const invalidateQueries = jest.spyOn(lastQueryClient!, 'invalidateQueries');
 
       await act(async () => {
-        await result.current.mutateAsync(3);
+        await result.current.mutateAsync('123e4567-e89b-12d3-a456-426614174000');
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
-      expect(mockCustomerCancelAppointmentFn).toHaveBeenCalledWith(3);
+      expect(mockCustomerCancelAppointmentFn).toHaveBeenCalledWith(
+        '123e4567-e89b-12d3-a456-426614174000',
+      );
       // The freed slot must show as available again, and the admin list changed too.
       expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['customerAppointments'] });
       expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['busySlots'] });

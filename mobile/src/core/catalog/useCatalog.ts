@@ -2,6 +2,7 @@ import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/re
 import { ServiceItemRequest } from '@taskflow/schemas';
 import { ServiceItem } from '../../types/api';
 import { invalidateCatalogQueries, queryKeys } from '../../query/queryKeys';
+import { storage } from '../../utils/storage';
 import { catalogApi } from './catalog';
 
 export const useCatalog = () => {
@@ -25,20 +26,23 @@ export const useRestoreService = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => catalogApi.restoreService(id),
-    onSuccess: (service) => acceptService(queryClient, service),
+    onMutate: () => ({ epoch: storage.getSessionEpoch() }),
+    onSuccess: (service, _id, context) => acceptService(queryClient, service, context?.epoch),
   });
 };
 
-/** Only committed, validated server responses enter the menu cache. */
-function acceptService(queryClient: QueryClient, service: ServiceItem): void {
+/** Only committed, validated server responses enter the menu cache; retired cache stays session-fenced. */
+function acceptService(queryClient: QueryClient, service: ServiceItem, epoch?: number): void {
   queryClient.setQueryData<ServiceItem[]>(queryKeys.catalog.all, (current = []) =>
     current.some((item) => item.id === service.id)
       ? current.map((item) => item.id === service.id ? service : item)
       : [...current, service],
   );
-  queryClient.setQueryData<ServiceItem[]>(queryKeys.catalog.retired, (current) =>
-    current?.filter((item) => item.id !== service.id),
-  );
+  if (epoch === undefined || epoch === storage.getSessionEpoch()) {
+    queryClient.setQueryData<ServiceItem[]>(queryKeys.catalog.retired, (current) =>
+      current?.filter((item) => item.id !== service.id),
+    );
+  }
   invalidateCatalogQueries(queryClient);
 }
 
@@ -46,7 +50,8 @@ export const useCreateService = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (request: ServiceItemRequest) => catalogApi.createService(request),
-    onSuccess: (service) => acceptService(queryClient, service),
+    onMutate: () => ({ epoch: storage.getSessionEpoch() }),
+    onSuccess: (service, _request, context) => acceptService(queryClient, service, context?.epoch),
   });
 };
 
@@ -54,7 +59,8 @@ export const useUpdateService = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, request }: { id: number; request: ServiceItemRequest }) => catalogApi.updateService(id, request),
-    onSuccess: (service) => acceptService(queryClient, service),
+    onMutate: () => ({ epoch: storage.getSessionEpoch() }),
+    onSuccess: (service, _variables, context) => acceptService(queryClient, service, context?.epoch),
   });
 };
 

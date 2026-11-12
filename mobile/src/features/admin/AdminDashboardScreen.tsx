@@ -28,7 +28,7 @@ import {
 import { useAuthStore } from '../../core/auth/useAuthStore';
 import { useShallow } from 'zustand/react/shallow';
 import { colors } from '../../theme/colors';
-import { formatTime12Hour, isOverdue } from '../../utils/time-utils';
+import { formatTime12Hour, formatUsd, isOverdue } from '../../utils/time-utils';
 import { useShopInfo } from '../../core/shop/useShopInfo';
 import { useNow } from '../../core/shop/useNow';
 import { getApiErrorMessage } from '../../utils/errors';
@@ -224,7 +224,7 @@ export const AdminDashboardScreen: React.FC = () => {
             </Card>
             <Card style={styles.statCard}>
               <Text style={[styles.statVal, { color: colors.gold.bright }]}>
-                ${(stats.approvedRevenue ?? 0).toFixed(0)}
+                {formatUsd(stats.approvedRevenue ?? 0)}
               </Text>
               <Text style={styles.statLbl}>Est. Revenue</Text>
             </Card>

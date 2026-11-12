@@ -11,6 +11,7 @@ import {
   DEFAULT_SHOP_RULES,
   DEFAULT_TIME_SLOTS,
   type ShopRules,
+  type WallClock,
   bookingWindowMessage,
   isOpenOn,
   isSlotInPast,
@@ -20,11 +21,14 @@ import {
 
 export {
   DEFAULT_TIME_SLOTS,
+  type WallClock,
   computeEstimatedEndTime,
   formatMinutesToTimeString,
   formatTime12Hour,
+  formatUsd,
   isOverdue,
   isSlotInPast,
+  parseLocalDate,
   parseTimeToMinutes,
   shopWallClock,
   toLocalDateString,
@@ -39,6 +43,8 @@ export interface UpcomingDay {
 
 /** How many calendar days (from `from`) the day list searches for open days. */
 const LOOKAHEAD_DAYS = 14;
+const SHORT_WEEKDAY_FORMAT = new Intl.DateTimeFormat('en-US', { weekday: 'short' });
+const SHORT_MONTH_FORMAT = new Intl.DateTimeFormat('en-US', { month: 'short' });
 
 /**
  * The next `count` open days starting at `from`: days the shop's opening hours leave out are
@@ -46,22 +52,21 @@ const LOOKAHEAD_DAYS = 14;
  * matches the calendar the user sees (no UTC drift).
  */
 export function getUpcomingDays(
-  from: Date,
+  from: WallClock,
   count = 7,
   rules: ShopRules = DEFAULT_SHOP_RULES,
 ): UpcomingDay[] {
   const days: UpcomingDay[] = [];
   const lookahead = Math.min(LOOKAHEAD_DAYS, rules.maxAdvanceDays + 1);
   for (let offset = 0; days.length < count && offset < lookahead; offset++) {
-    const nextDate = new Date(from);
-    nextDate.setDate(from.getDate() + offset);
+    const nextDate = new Date(from.getFullYear(), from.getMonth(), from.getDate() + offset, 12);
     const dateStr = toLocalDateString(nextDate);
     if (!isOpenOn(dateStr, rules)) continue;
     days.push({
       dateStr,
-      dayName: nextDate.toLocaleDateString('en-US', { weekday: 'short' }),
+      dayName: SHORT_WEEKDAY_FORMAT.format(nextDate),
       dayNum: nextDate.getDate(),
-      monthName: nextDate.toLocaleDateString('en-US', { month: 'short' }),
+      monthName: SHORT_MONTH_FORMAT.format(nextDate),
     });
   }
   return days;
@@ -72,7 +77,7 @@ export const PAST_SLOT_MESSAGE = 'That time has already passed. Please choose a 
 /** The subset of `slots` that are still in the future on `dateStr` (empty outside the window). */
 export function getSelectableSlots(
   dateStr: string,
-  now: Date,
+  now: WallClock,
   slots: readonly string[] = DEFAULT_TIME_SLOTS,
   rules: ShopRules = DEFAULT_SHOP_RULES,
 ): string[] {
@@ -84,7 +89,7 @@ export function getSelectableSlots(
 export function getSlotValidationError(
   dateStr: string,
   time24: string,
-  now: Date,
+  now: WallClock,
   rules: ShopRules = DEFAULT_SHOP_RULES,
 ): string | null {
   if (!dateStr || !time24) return 'Please select a date and time slot.';
@@ -103,7 +108,7 @@ export interface SlotSelection {
 /** First day (in `dates` order) that still has a selectable slot, with its first slot. */
 export function getFirstSelectableSlot(
   dates: readonly string[],
-  now: Date,
+  now: WallClock,
   slots: readonly string[] = DEFAULT_TIME_SLOTS,
   rules: ShopRules = DEFAULT_SHOP_RULES,
 ): SlotSelection | null {
@@ -122,7 +127,7 @@ export function getFirstSelectableSlot(
 export function resolveBookableSelection(
   current: SlotSelection,
   dates: readonly string[],
-  now: Date,
+  now: WallClock,
   slots: readonly string[] = DEFAULT_TIME_SLOTS,
   rules: ShopRules = DEFAULT_SHOP_RULES,
 ): SlotSelection | null {

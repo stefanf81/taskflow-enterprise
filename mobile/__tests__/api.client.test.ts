@@ -49,8 +49,9 @@ jest.mock('axios', () => {
   mockPost = post;
   mockRequest = request;
 
+  const defaults: Record<string, unknown> = {};
   const instance: Record<string, unknown> = {
-    defaults: {},
+    defaults,
     interceptors: {
       request: { use: requestUse },
       response: { use: responseUse },
@@ -62,7 +63,7 @@ jest.mock('axios', () => {
   return {
     create: (config: Record<string, unknown>) => {
       capturedCreateConfig = config;
-      Object.assign(instance.defaults, config);
+      Object.assign(defaults, config);
       return instance;
     },
   };
@@ -118,9 +119,15 @@ describe('mobile api client', () => {
   });
 
   describe('request interceptor', () => {
+    const reqConfig = (url: string, method = 'get') => ({
+      headers: {} as Record<string, string | undefined>,
+      url,
+      method,
+    });
+
     it('injects a SecureStore bearer token on protected requests', async () => {
       mockGetToken.mockResolvedValueOnce('test-jwt');
-      const config = { headers: {}, url: '/api/v1/appointments', method: 'get' };
+      const config = reqConfig('/api/v1/appointments');
 
       await expect(requestHandler(config)).resolves.toBe(config);
       expect(config.headers.Authorization).toBe('Bearer test-jwt');
@@ -128,7 +135,7 @@ describe('mobile api client', () => {
 
     it('omits Authorization when no token is stored', async () => {
       mockGetToken.mockResolvedValueOnce(null);
-      const config = { headers: {}, url: '/api/v1/appointments', method: 'get' };
+      const config = reqConfig('/api/v1/appointments');
 
       await requestHandler(config);
       expect(config.headers.Authorization).toBeUndefined();
@@ -150,7 +157,7 @@ describe('mobile api client', () => {
         ['post', '/api/v1/reviews/public/123e4567-e89b-12d3-a456-426614174000'],
       ];
       for (const [method, url] of publicCalls) {
-        const config = { headers: {}, url, method };
+        const config = reqConfig(url, method);
         await requestHandler(config);
         expect(config.headers.Authorization).toBeUndefined();
       }
@@ -169,7 +176,7 @@ describe('mobile api client', () => {
         ['get', '/api/v1/customer/appointments'],
         ['get', '/api/v1/notifications'],
       ]) {
-        const config = { headers: {}, url, method };
+        const config = reqConfig(url, method);
         await requestHandler(config);
         expect(config.headers.Authorization).toBe('Bearer valid-jwt');
       }
@@ -179,7 +186,7 @@ describe('mobile api client', () => {
       mockGetToken.mockResolvedValue('expired-jwt');
       mockGetTokenExpiry.mockResolvedValue(Date.now() - 1000);
       queryClient.setQueryData(['customerAppointments', 0, 10], { content: ['private'] });
-      const config = { headers: {}, url: '/api/v1/customer/appointments', method: 'get' };
+      const config = reqConfig('/api/v1/customer/appointments');
 
       await expect(requestHandler(config)).rejects.toBeInstanceOf(SessionExpiredError);
 
@@ -193,14 +200,14 @@ describe('mobile api client', () => {
       mockGetToken.mockResolvedValue('almost-expired-jwt');
       mockGetTokenExpiry.mockResolvedValue(Date.now() + 2000);
       await expect(
-        requestHandler({ headers: {}, url: '/api/v1/appointments', method: 'get' }),
+        requestHandler(reqConfig('/api/v1/appointments')),
       ).rejects.toBeInstanceOf(SessionExpiredError);
     });
 
     it('keeps a token whose expiry is unknown', async () => {
       mockGetToken.mockResolvedValue('legacy-jwt');
       mockGetTokenExpiry.mockResolvedValue(null);
-      const config = { headers: {}, url: '/api/v1/appointments', method: 'get' };
+      const config = reqConfig('/api/v1/appointments');
       await requestHandler(config);
       expect(config.headers.Authorization).toBe('Bearer legacy-jwt');
     });
@@ -208,7 +215,7 @@ describe('mobile api client', () => {
     it('lets logout go out unauthenticated when the token already expired', async () => {
       mockGetToken.mockResolvedValue('expired-jwt');
       mockGetTokenExpiry.mockResolvedValue(Date.now() - 1000);
-      const config = { headers: {}, url: '/api/v1/auth/logout', method: 'post' };
+      const config = reqConfig('/api/v1/auth/logout', 'post');
 
       await expect(requestHandler(config)).resolves.toBe(config);
       expect(config.headers.Authorization).toBeUndefined();

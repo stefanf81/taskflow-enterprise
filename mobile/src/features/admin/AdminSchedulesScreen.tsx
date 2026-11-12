@@ -11,6 +11,7 @@ import { Card } from '../../components/common/Card';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { ErrorMessage } from '../../components/common/ErrorMessage';
+import { ErrorState } from '../../components/common/ErrorState';
 import { LoadingIndicator } from '../../components/common/LoadingIndicator';
 import {
   useAdminBarbers,
@@ -21,12 +22,23 @@ import {
 import { AddBarberCard } from './AddBarberCard';
 import { WeeklyHoursEditor } from './WeeklyHoursEditor';
 import { colors } from '../../theme/colors';
+import { getApiErrorMessage } from '../../utils/errors';
 
 export const AdminSchedulesScreen: React.FC = () => {
-  const { data: barbers = [], isLoading: loadingBarbers } = useAdminBarbers();
+  const {
+    data: barbers = [],
+    isLoading: loadingBarbers,
+    isError: barbersError,
+    refetch: refetchBarbers,
+  } = useAdminBarbers();
   const [selectedBarberId, setSelectedBarberId] = useState<number | null>(null);
 
-  const { data: timeOffs = [], isLoading: loadingTimeOff } = useBarberTimeOff(selectedBarberId);
+  const {
+    data: timeOffs = [],
+    isLoading: loadingTimeOff,
+    isError: timeOffError,
+    refetch: refetchTimeOff,
+  } = useBarberTimeOff(selectedBarberId);
   const addTimeOffMutation = useAddTimeOff();
   const schedule = useBarberSchedule(selectedBarberId);
   // Messages of the barber and weekly-hours actions (they outlive the editor's remount).
@@ -65,13 +77,7 @@ export const AdminSchedulesScreen: React.FC = () => {
       setEndDate('');
       setReason('');
     } catch (err: unknown) {
-      const message =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-          : err instanceof Error
-            ? err.message
-            : 'Failed to record time-off.';
-      setError(message || 'Failed to record time-off.');
+      setError(getApiErrorMessage(err, 'Failed to record time-off.'));
     }
   };
 
@@ -92,6 +98,11 @@ export const AdminSchedulesScreen: React.FC = () => {
 
         {loadingBarbers ? (
           <LoadingIndicator message="Loading staff..." />
+        ) : barbersError ? (
+          <ErrorState
+            message="Couldn't load the staff roster."
+            onRetry={() => void refetchBarbers()}
+          />
         ) : (
           <>
             <Text style={styles.sectionLabel}>Select Barber</Text>
@@ -138,13 +149,24 @@ export const AdminSchedulesScreen: React.FC = () => {
             <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Scheduled Absences</Text>
             {loadingTimeOff ? (
               <LoadingIndicator message="Fetching time-off..." />
+            ) : timeOffError ? (
+              <Card style={styles.emptyCard}>
+                <Text style={styles.emptyText}>Could not load scheduled time-off.</Text>
+                <Button
+                  title="Retry"
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => void refetchTimeOff()}
+                  style={{ marginTop: 8 }}
+                />
+              </Card>
             ) : timeOffs.length === 0 ? (
               <Card style={styles.emptyCard}>
                 <Text style={styles.emptyText}>No scheduled time-off for this barber.</Text>
               </Card>
             ) : (
-              timeOffs.map((to, idx) => (
-                <Card key={idx} style={styles.timeOffCard}>
+              timeOffs.map((to) => (
+                <Card key={to.id} style={styles.timeOffCard}>
                   <Text style={styles.dates}>
                     {to.startDate} → {to.endDate}
                   </Text>

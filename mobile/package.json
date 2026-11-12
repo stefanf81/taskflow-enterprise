@@ -14,7 +14,7 @@
     "e2e:test": "detox test --configuration ios.sim.release",
     "e2e:build:android": "detox build --configuration android.emu.release",
     "e2e:test:android": "detox test --configuration android.emu.release",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.spec.json",
     "check:eas": "node scripts/check-eas-config.cjs",
     "build:android": "npm run check:eas && eas build --platform android",
     "build:ios": "npm run check:eas && eas build --platform ios"

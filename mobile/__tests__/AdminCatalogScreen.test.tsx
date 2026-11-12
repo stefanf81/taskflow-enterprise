@@ -15,6 +15,7 @@ const mockRefetch = jest.fn();
 let mockRetired: typeof mockServices;
 let mockRetiredEnabled: boolean | undefined;
 const mockRestore = jest.fn();
+const mockCreate = jest.fn();
 let mockRestorePending = false;
 
 jest.mock('../src/core/catalog/useCatalog', () => ({
@@ -34,7 +35,7 @@ jest.mock('../src/core/catalog/useCatalog', () => ({
     variables: undefined,
   }),
   useCreateService: () => ({
-    mutate: jest.fn(),
+    mutate: mockCreate,
     isPending: false,
     variables: undefined,
   }),
@@ -149,5 +150,26 @@ describe('AdminCatalogScreen', () => {
       await fireEvent.press(screen.getByText('Retired'));
       expect(screen.getByText('No Retired Services')).toBeTruthy();
     });
+  });
+
+  it('accepts locale comma decimal prices in the service editor', async () => {
+    await render(<AdminCatalogScreen />);
+    await fireEvent.press(screen.getByLabelText('Create service'));
+    await fireEvent.changeText(screen.getByLabelText('Service name'), 'Beard Sculpt');
+    await fireEvent.changeText(screen.getByLabelText('Price'), '25,50');
+    await fireEvent.changeText(screen.getByLabelText('Duration (minutes)'), '30');
+    await fireEvent.changeText(screen.getByLabelText('Category'), 'beard');
+    await fireEvent.press(screen.getByText('Save service'));
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      {
+        name: 'Beard Sculpt',
+        price: 25.5,
+        durationMinutes: 30,
+        category: 'beard',
+        description: '',
+      },
+      expect.anything(),
+    );
   });
 });

@@ -21,8 +21,6 @@ export const AdminTabNavigator: React.FC = () => {
           backgroundColor: colors.obsidian.card,
           borderTopColor: colors.obsidian.border,
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
           paddingTop: 8,
         },
         tabBarIcon: ({ color, size }) => {

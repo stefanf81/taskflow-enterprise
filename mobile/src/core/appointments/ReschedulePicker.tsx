@@ -7,6 +7,7 @@ import {
   parseLocalDate,
   rescheduleDates,
   type ShopRules,
+  type WallClock,
 } from '@taskflow/domain';
 import { Button } from '../../components/common/Button';
 import { useRescheduleAvailability } from './useAppointments';
@@ -20,7 +21,7 @@ export interface RescheduleSelection {
 
 interface ReschedulePickerProps {
   /** The shop's wall clock (see useNow) and rules (see useShopInfo). */
-  now: Date;
+  now: WallClock;
   rules: ShopRules;
   /** The booking to move; a guest also passes the email it was booked with. */
   publicId: string;
@@ -33,12 +34,15 @@ interface ReschedulePickerProps {
   onClose: () => void;
 }
 
+const SHORT_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
+  weekday: 'short',
+  month: 'short',
+  day: 'numeric',
+});
+
 function shortDate(dateStr: string): string {
-  return parseLocalDate(dateStr).toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  });
+  const date = parseLocalDate(dateStr);
+  return Number.isNaN(date.getTime()) ? dateStr : SHORT_DATE_FORMAT.format(date);
 }
 
 /**

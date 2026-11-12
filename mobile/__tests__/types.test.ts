@@ -98,12 +98,20 @@ describe('types/api', () => {
   });
 
   it('BarberTimeOff has date range', () => {
-    const to: BarberTimeOff = { startDate: '2026-08-01', endDate: '2026-08-02', reason: 'Vacation' };
+    const to: BarberTimeOff = { id: 1, startDate: '2026-08-01', endDate: '2026-08-02', reason: 'Vacation' };
     expect(to.reason).toBe('Vacation');
   });
 
   it('NotificationItem has log fields', () => {
-    const n: NotificationItem = { id: 1, recipient: 'admin', type: 'EMAIL', message: 'Test', sentAt: '2026-07-24T10:00:00', status: 'SENT' };
+    const n: NotificationItem = {
+      id: 1,
+      recipient: 'admin',
+      type: 'EMAIL',
+      message: 'Test',
+      sentAt: '2026-07-24T10:00:00',
+      status: 'SENT',
+      retryCount: 0,
+    };
     expect(n.status).toBe('SENT');
   });
 

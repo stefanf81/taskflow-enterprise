@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
-import { shopWallClock } from '../../utils/time-utils';
+import { type WallClock, shopWallClock } from '../../utils/time-utils';
 
 /**
  * Current time on the shop's wall clock (see `shopWallClock`; the phone's own clock while the
@@ -8,7 +8,7 @@ import { shopWallClock } from '../../utils/time-utils';
  * known, and when the app returns to the foreground (timers are suspended in the background, so
  * the value would otherwise be stale after a long pause or a midnight rollover).
  */
-export function useNow(intervalMs = 60_000, timeZone: string | null = null): Date {
+export function useNow(intervalMs = 60_000, timeZone: string | null = null): WallClock {
   const [now, setNow] = useState(() => shopWallClock(timeZone));
 
   useEffect(() => {

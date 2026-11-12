@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 import * as z from 'zod/mini';
 import { EMPTY_LOCALES, EMPTY_MODULE, resolveRequest } from '../metro/zodLocales';
@@ -96,6 +97,52 @@ describe('zod locale namespace (metro/zodLocales.js)', () => {
         .toEqual({ username: 'jane', role: 'ROLE_CUSTOMER' });
       const bad = mini.string().check(mini.minLength(1, 'Name is required')).safeParse('');
       expect(bad.error?.issues[0]?.message).toBe('Name is required');
+    });
+  });
+
+  it('matches the real barrel files and relative specifiers in the installed zod package', () => {
+    const coreEntry = require.resolve('zod/v4/core');
+    const miniDir = path.dirname(require.resolve('zod/v4/mini'));
+    const miniExternal = path.join(miniDir, 'external.cjs');
+    const classicExternal = path.join(path.dirname(coreEntry), '..', 'classic', 'external.cjs');
+
+    const coreSource = fs.readFileSync(coreEntry, 'utf8');
+    const miniSource = fs.readFileSync(miniExternal, 'utf8');
+    const classicSource = fs.readFileSync(classicExternal, 'utf8');
+
+    // Guard against upstream Zod layout/specifier renames that would silently defeat stubbing.
+    for (const [barrel, source] of [
+      [coreEntry, coreSource],
+      [miniExternal, miniSource],
+      [classicExternal, classicSource],
+    ] as const) {
+      expect(source).toContain('../locales/index.cjs');
+      expect(resolveRequest(contextFrom(barrel), '../locales/index.cjs', 'android')).toEqual({
+        type: 'sourceFile',
+        filePath: EMPTY_LOCALES,
+      });
+    }
+
+    for (const specifier of [
+      './compile.cjs',
+      './memoizer.cjs',
+      './to-json-schema.cjs',
+      './json-schema-processors.cjs',
+      './json-schema-generator.cjs',
+    ]) {
+      expect(coreSource).toContain(specifier);
+      expect(resolveRequest(contextFrom(coreEntry), specifier, 'ios')).toEqual({
+        type: 'sourceFile',
+        filePath: EMPTY_MODULE,
+      });
+    }
+
+    expect(miniSource).toContain('../core/json-schema-processors.cjs');
+    expect(
+      resolveRequest(contextFrom(miniExternal), '../core/json-schema-processors.cjs', 'ios'),
+    ).toEqual({
+      type: 'sourceFile',
+      filePath: EMPTY_MODULE,
     });
   });
 });

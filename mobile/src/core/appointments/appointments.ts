@@ -16,6 +16,7 @@ import {
   busySlotsResponseSchema,
   calendarExportRequestSchema,
   calendarExportResponseSchema,
+  cancelRequestSchema,
   guestRescheduleRequestSchema,
   rescheduleAvailabilityRequestSchema,
   shopInfoResponseSchema,
@@ -149,7 +150,12 @@ export const appointmentsApi = {
   },
 
   publicCancelAppointment: async (publicId: string, email: string): Promise<void> => {
-    await apiClient.put(`/api/v1/appointments/public/cancel/${encodeURIComponent(publicId)}`, { email });
+    const payload = parseRequest(
+      cancelRequestSchema,
+      { email },
+      'PUT /api/v1/appointments/public/cancel/{publicId}',
+    );
+    await apiClient.put(`/api/v1/appointments/public/cancel/${encodeURIComponent(publicId)}`, payload);
   },
 
   updateAppointmentStatus: async (

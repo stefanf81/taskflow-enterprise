@@ -105,4 +105,27 @@ describe('authApi', () => {
     server.use(http.post('*/api/v1/auth/logout', () => HttpResponse.error()));
     await expect(authApi.logout()).rejects.toThrow();
   });
+
+  it('sends captured credentials directly without reading a newer session from storage', async () => {
+    await storage.startSession({
+      token: 'newer-session-jwt',
+      expiresAt: Date.now() + 60_000,
+      refreshToken: 'newer-refresh',
+    });
+    let authHeader: string | null = null;
+    let body: unknown = null;
+    server.use(
+      http.post('*/api/v1/auth/logout', async ({ request }) => {
+        authHeader = request.headers.get('authorization');
+        body = await request.json();
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    await expect(
+      authApi.logout({ accessToken: 'captured-old-jwt', refreshToken: 'captured-old-refresh' }),
+    ).resolves.toBeUndefined();
+    expect(authHeader).toBe('Bearer captured-old-jwt');
+    expect(body).toEqual({ refreshToken: 'captured-old-refresh' });
+  });
 });

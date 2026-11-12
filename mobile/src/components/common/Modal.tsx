@@ -1,5 +1,15 @@
 import React from 'react';
-import { Modal as RNModal, View, Text, TouchableOpacity, StyleSheet, ModalProps } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal as RNModal,
+  Platform,
+  ScrollView,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ModalProps,
+} from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors } from '../../theme/colors';
 
@@ -18,7 +28,10 @@ export const Modal: React.FC<CustomModalProps> = ({ title, onClose, visible, chi
       onRequestClose={onClose}
       {...props}
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.content}>
           <View style={styles.header}>
             {title ? <Text style={styles.title}>{title}</Text> : <View />}
@@ -26,9 +39,15 @@ export const Modal: React.FC<CustomModalProps> = ({ title, onClose, visible, chi
               <Ionicons name="close" size={20} color={colors.text.secondary} />
             </TouchableOpacity>
           </View>
-          <View style={styles.body}>{children}</View>
+          <ScrollView
+            contentContainerStyle={styles.body}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {children}
+          </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </RNModal>
   );
 };
