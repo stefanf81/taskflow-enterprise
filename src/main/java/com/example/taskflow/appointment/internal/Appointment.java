@@ -294,6 +294,16 @@ public class Appointment implements Timestamped {
         this.bookingEndTime = bookingEndTime;
     }
 
+    /**
+     * Updates date, start and end time atomically without calling {@link #deriveEndTime()} (which
+     * would otherwise initialize a lazy {@link ServiceItem} proxy during rescheduling).
+     */
+    public void setBookingSlot(LocalDate bookingDate, String bookingTime, LocalTime bookingEndTime) {
+        this.bookingDate = bookingDate;
+        this.bookingTime = bookingTime;
+        this.bookingEndTime = bookingEndTime;
+    }
+
     public String getServiceType() {
         return serviceType;
     }

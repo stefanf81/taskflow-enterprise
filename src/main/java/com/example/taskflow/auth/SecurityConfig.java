@@ -170,7 +170,8 @@ class SecurityConfig {
                 // request that clears the cookie, so it cannot require authentication.
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh", "/api/v1/auth/mobile/refresh").permitAll()
-                .requestMatchers("/api/v1/auth/me").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/v1/auth/me").authenticated()
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/auth/me").authenticated()
                 // Liveness/readiness probes must stay reachable unauthenticated
                 // for Kubernetes/docker healthchecks. The Prometheus scrape is open
                 // while app.metrics.scrape-token is unset (then only the production
@@ -195,8 +196,8 @@ class SecurityConfig {
                 // that are not public.
                 .requestMatchers(HttpMethod.GET, "/api/v1/catalog/retired").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.HEAD, "/api/v1/catalog/retired").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.GET, "/api/v1/catalog", "/api/v1/catalog/**").permitAll()
-                .requestMatchers(HttpMethod.HEAD, "/api/v1/catalog", "/api/v1/catalog/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/catalog", "/api/v1/catalog/*").permitAll()
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/catalog", "/api/v1/catalog/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/reviews/public/barber-ratings").permitAll()
                 .requestMatchers(HttpMethod.HEAD, "/api/v1/reviews/public/barber-ratings").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/reviews/public/*").permitAll()
@@ -224,8 +225,18 @@ class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/v1/catalog/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/v1/catalog/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/catalog/**").hasRole("ADMIN")
-                .requestMatchers("/api/v1/notifications/**").hasRole("ADMIN")
-                .requestMatchers("/api/v1/customer/**").hasAnyRole("CUSTOMER", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/notifications").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/notifications").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/customer/appointments",
+                        "/api/v1/customer/appointments/*/calendar",
+                        "/api/v1/customer/appointments/*/availability").hasAnyRole("CUSTOMER", "ADMIN")
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/customer/appointments",
+                        "/api/v1/customer/appointments/*/calendar",
+                        "/api/v1/customer/appointments/*/availability").hasAnyRole("CUSTOMER", "ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/customer/appointments/*/reschedule")
+                        .hasAnyRole("CUSTOMER", "ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/customer/appointments/*")
+                        .hasAnyRole("CUSTOMER", "ADMIN")
                 // Deny by default. A new endpoint, or a method that no rule above
                 // names, is refused until someone writes an explicit rule for it —
                 // it must not silently become "any logged-in user".
@@ -304,7 +315,9 @@ class SecurityConfig {
                 for (jakarta.servlet.http.Cookie cookie : cookies) {
                     if (StaleAccessTokenCookieFilter.COOKIE_NAME.equals(cookie.getName())) {
                         String value = cookie.getValue();
-                        return (value != null && !value.isBlank()) ? value : null;
+                        if (value != null && !value.isBlank()) {
+                            return value;
+                        }
                     }
                 }
             }

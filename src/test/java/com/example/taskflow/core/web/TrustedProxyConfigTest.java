@@ -68,10 +68,17 @@ class TrustedProxyConfigTest {
         assertEquals(1, run(filter, "203.0.113.7", null));
         // The peer is the trusted proxy and the header is still there (a chain the valve kept): fine.
         assertEquals(1, run(filter, "172.30.0.2", "203.0.113.7"));
+        // Multi-hop chain already processed by RemoteIpValve: remoteAddr is now the client IP,
+        // upstream hops remain in X-Forwarded-For, and Globals.REQUEST_FORWARDED_ATTRIBUTE is set.
+        MockHttpServletRequest multiHop = new MockHttpServletRequest("GET", "/api/v1/catalog");
+        multiHop.setRemoteAddr("203.0.113.7");
+        multiHop.addHeader("X-Forwarded-For", "198.51.100.4");
+        multiHop.setAttribute(org.apache.catalina.Globals.REQUEST_FORWARDED_ATTRIBUTE, Boolean.TRUE);
+        filter.doFilter(multiHop, new MockHttpServletResponse(), new MockFilterChain());
         assertEquals(0.0, counter.count());
 
         // The symptom: the proxy's address does not match the regex, so the header was ignored.
-        assertEquals(1, run(filter, "10.42.0.15", "203.0.113.7"));
+        assertEquals(1, run(filter, "10.42.0.15\r\nforged", "203.0.113.7"));
         assertEquals(1, run(filter, "10.42.0.15", "198.51.100.4"));
         assertEquals(2.0, counter.count(), "every such request is counted; the request itself goes on");
     }

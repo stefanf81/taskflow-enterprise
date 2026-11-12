@@ -239,8 +239,10 @@ class AuthController {
     @GetMapping("/csrf")
     @Operation(summary = "Get CSRF token for authenticated state-changing requests")
     @ApiResponse(responseCode = "200", description = "CSRF token returned (also set in XSRF-TOKEN cookie)")
-    public CsrfToken csrf(@Parameter(hidden = true) CsrfToken token) {
-        return token;
+    public ResponseEntity<CsrfToken> csrf(@Parameter(hidden = true) CsrfToken token) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(token);
     }
 
     @GetMapping("/me")
@@ -253,10 +255,14 @@ class AuthController {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()
                 || "anonymousUser".equals(authentication.getName())) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .cacheControl(CacheControl.noStore())
+                    .build();
         }
         String role = extractRole(authentication);
-        return ResponseEntity.ok(new LoginResponse(authentication.getName(), role));
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new LoginResponse(authentication.getName(), role));
     }
 
     /**

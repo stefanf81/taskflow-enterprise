@@ -334,6 +334,7 @@ tasks.register("testcontainersTest", Test) {
 	}
 	environment "SPRING_SECURITY_PASSWORD", "admin-password"
 	systemProperty "spring.cache.type", "simple"
+	systemProperty "app.schedulers.enabled", "false"
 	testLogging {
 		showExceptions = true
 		showCauses = true
@@ -357,6 +358,7 @@ tasks.register("benchmarkTest", Test) {
 	}
 	environment "SPRING_SECURITY_PASSWORD", "admin-password"
 	systemProperty "spring.cache.type", "simple"
+	systemProperty "app.schedulers.enabled", "false"
 	testLogging {
 		showStandardStreams = true
 		showExceptions = true

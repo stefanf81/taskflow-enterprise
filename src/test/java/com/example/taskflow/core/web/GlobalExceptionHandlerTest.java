@@ -249,6 +249,32 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void unhandledSqlConstraintViolationLogsSqlStateWithoutRowPii() {
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class);
+        var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            var sqlEx = new java.sql.SQLException(
+                    "ERROR: value too long\n  Detail: Failing row contains (jane@secret.example, +1-555-0199)",
+                    "22001");
+            var ex = new org.springframework.dao.DataIntegrityViolationException("insert failed", sqlEx);
+
+            ResponseEntity<ErrorResponse> response =
+                    globalExceptionHandler.handleDataIntegrityViolation(ex, request);
+
+            assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+            assertEquals(1, appender.list.size());
+            var logged = appender.list.getFirst();
+            assertFalse(logged.getFormattedMessage().contains("jane@secret.example"));
+            assertNull(logged.getThrowableProxy(), "must not dump PSQLException cause carrying row values");
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
     void testHandleHttpMessageNotReadableException() {
         org.springframework.http.converter.HttpMessageNotReadableException ex = mock(org.springframework.http.converter.HttpMessageNotReadableException.class);
         when(ex.getMessage()).thenReturn("Malformed JSON");

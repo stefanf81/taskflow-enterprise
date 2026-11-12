@@ -33,7 +33,7 @@ class NotificationModuleTest {
                 "Classic Haircut", LocalDate.now().plusDays(3), "10:00", AppointmentStatus.CANCELLED);
 
         scenario.publish(new AppointmentCancelledEvent(booking, CancelledBy.ADMIN))
-                .andWaitForStateChange(() -> outbox.findTop100ByOrderBySentAtDesc().stream()
+                .andWaitForStateChange(() -> outbox.findTop100ByOrderBySentAtDescIdDesc().stream()
                         .filter(row -> "notify-module@example.com".equals(row.getRecipient()))
                         .filter(row -> "PENDING".equals(row.getStatus()))
                         .findFirst()

@@ -64,12 +64,21 @@ final class SmtpNotificationGateway implements NotificationGateway {
             if (rejected.isEmpty()) {
                 batch.forEach(mime -> failed.put(prepared.get(mime), e));
             } else {
-                rejected.forEach((mime, cause) -> {
-                    Long id = prepared.get(mime);
-                    if (id != null) {
-                        failed.put(id, cause instanceof RuntimeException runtime ? runtime : e);
+                boolean unmappedKey = false;
+                for (Map.Entry<Object, Exception> entry : rejected.entrySet()) {
+                    Long id = prepared.get(entry.getKey());
+                    if (id == null) {
+                        unmappedKey = true;
+                        break;
                     }
-                });
+                    Exception cause = entry.getValue();
+                    failed.put(id, cause instanceof RuntimeException runtime ? runtime : e);
+                }
+                if (unmappedKey || failed.isEmpty()) {
+                    // Fail closed if a transport wrapper ever keys failedMessages differently, so
+                    // undelivered messages are retried rather than silently marked SENT.
+                    batch.forEach(mime -> failed.putIfAbsent(prepared.get(mime), e));
+                }
             }
         } catch (RuntimeException e) {
             // Authentication or any other failure without a per-message account: nothing counts as

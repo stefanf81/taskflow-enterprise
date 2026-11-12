@@ -35,7 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * ensuring that your tests run against the exact same engine used in production.
  */
 @Tag("testcontainers")
-@SpringBootTest(properties = "app.rate-limit.enabled=false")
+@SpringBootTest(properties = {"app.rate-limit.enabled=false", "app.schedulers.enabled=false"})
 @AutoConfigureMockMvc
 @Testcontainers
 public class AppointmentControllerTestcontainersTest {

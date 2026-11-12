@@ -3,11 +3,13 @@ import com.example.taskflow.core.FixedWindowCounter;
 import com.example.taskflow.core.LogSanitizer;
 import com.example.taskflow.core.redis.RedisBackoff;
 import com.example.taskflow.core.redis.RedisConnectionRecovery;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -20,9 +22,19 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.core.Ordered;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.CorsProcessor;
+import org.springframework.web.cors.CorsUtils;
+import org.springframework.web.cors.DefaultCorsProcessor;
 import org.springframework.web.filter.OncePerRequestFilter;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 
@@ -56,6 +68,10 @@ class RateLimiterConfig {
     }
 
     private static final long WINDOW_MILLIS = 60_000;
+    private static final String RATE_LIMIT_MESSAGE = "Too many requests. Please try again later.";
+    private static final JsonMapper ERROR_WRITER = JsonMapper.builder()
+            .changeDefaultPropertyInclusion(v -> v.withValueInclusion(JsonInclude.Include.NON_NULL))
+            .build();
 
     private final int maxRequestsPerMinute;
     private final int authMaxRequestsPerMinute;
@@ -74,19 +90,41 @@ class RateLimiterConfig {
     private final FixedWindowCounter localFallback = new FixedWindowCounter(WINDOW_MILLIS, 50_000);
     /** Skips Redis after it failed, so an outage costs one timeout per interval, not one per request. */
     private final RedisBackoff redisBackoff;
+    private final @Nullable CorsConfigurationSource corsConfigurationSource;
+    private final CorsProcessor corsProcessor = new DefaultCorsProcessor();
+    private final Clock clock;
 
     @Autowired
     public RateLimiterConfig(RateLimitProperties properties,
-                             ObjectProvider<RedisConnectionRecovery> connectionRecovery) {
-        this.maxRequestsPerMinute = properties.maxRequestsPerMinute();
-        this.authMaxRequestsPerMinute = properties.authMaxRequestsPerMinute();
-        this.redisBackoff = new RedisBackoff("Rate limiter", connectionRecovery.getIfAvailable());
+                             ObjectProvider<RedisConnectionRecovery> connectionRecovery,
+                             ObjectProvider<CorsConfigurationSource> corsConfigurationSource,
+                             ObjectProvider<Clock> clock) {
+        this(properties.maxRequestsPerMinute(), properties.authMaxRequestsPerMinute(),
+                new RedisBackoff("Rate limiter", connectionRecovery.getIfAvailable()),
+                corsConfigurationSource.getIfAvailable(),
+                clock.getIfAvailable(Clock::systemUTC));
     }
 
     RateLimiterConfig(int maxRequestsPerMinute, int authMaxRequestsPerMinute) {
+        this(maxRequestsPerMinute, authMaxRequestsPerMinute, new RedisBackoff("Rate limiter"), null,
+                Clock.systemUTC());
+    }
+
+    RateLimiterConfig(int maxRequestsPerMinute, int authMaxRequestsPerMinute,
+                      @Nullable CorsConfigurationSource corsConfigurationSource, Clock clock) {
+        this(maxRequestsPerMinute, authMaxRequestsPerMinute, new RedisBackoff("Rate limiter"),
+                corsConfigurationSource, clock);
+    }
+
+    private RateLimiterConfig(int maxRequestsPerMinute, int authMaxRequestsPerMinute,
+                              RedisBackoff redisBackoff,
+                              @Nullable CorsConfigurationSource corsConfigurationSource,
+                              Clock clock) {
         this.maxRequestsPerMinute = maxRequestsPerMinute;
         this.authMaxRequestsPerMinute = authMaxRequestsPerMinute;
-        this.redisBackoff = new RedisBackoff("Rate limiter");
+        this.redisBackoff = redisBackoff;
+        this.corsConfigurationSource = corsConfigurationSource;
+        this.clock = clock;
     }
 
     @Bean
@@ -135,10 +173,27 @@ class RateLimiterConfig {
                         log.warn("Rate limit exceeded for IP {} on path {}; further requests in this window "
                                 + "are rejected without logging", safeIp, safePath);
                     }
-                    response.setStatus(429);
+                    // Short-circuiting ahead of Spring Security skips CorsFilter: apply CORS here
+                    // so cross-origin clients see the 429 Problem Details body and Retry-After
+                    // instead of an opaque browser network error.
+                    if (corsConfigurationSource != null && CorsUtils.isCorsRequest(request)) {
+                        CorsConfiguration corsConfig = corsConfigurationSource.getCorsConfiguration(request);
+                        if (!corsProcessor.processRequest(corsConfig, request, response)
+                                || response.isCommitted()) {
+                            return;
+                        }
+                    }
+                    ErrorResponse body = new ErrorResponse(
+                            Instant.now(clock),
+                            HttpStatus.TOO_MANY_REQUESTS.value(),
+                            HttpStatus.TOO_MANY_REQUESTS.getReasonPhrase(),
+                            RATE_LIMIT_MESSAGE,
+                            request.getRequestURI());
+                    response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
                     response.setHeader("Retry-After", String.valueOf(counted.retryAfterSeconds()));
+                    response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
                     response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write("{\"error\":\"Too many requests. Please try again later.\"}");
+                    response.getWriter().write(ERROR_WRITER.writeValueAsString(body));
                     return;
                 }
 

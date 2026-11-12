@@ -300,6 +300,11 @@ class BusySlotsServiceTest {
         Optional<String> conflict = busySlotsService.findConflict(barber, TEST_DATE, LocalTime.of(16, 0), 61, null);
         assertTrue(conflict.isPresent());
         assertTrue(conflict.get().contains("closing time"));
+        // Extreme duration cannot overflow 32-bit int and slip past closing-time validation.
+        Optional<String> overflow = busySlotsService.findConflict(
+                barber, TEST_DATE, LocalTime.of(10, 0), Integer.MAX_VALUE, null);
+        assertTrue(overflow.isPresent());
+        assertTrue(overflow.get().contains("closing time"));
     }
 
     @Test

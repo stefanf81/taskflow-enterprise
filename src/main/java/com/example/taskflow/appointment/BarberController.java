@@ -71,7 +71,9 @@ class BarberController {
     })
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<BarberTimeOffResponse>> getTimeOff(@Parameter(description = "Barber database ID") @PathVariable Long barberId) {
-        return ResponseEntity.ok(barberService.getTimeOff(barberId));
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(barberService.getTimeOff(barberId));
     }
 
     @PostMapping("/{barberId}/time-off")

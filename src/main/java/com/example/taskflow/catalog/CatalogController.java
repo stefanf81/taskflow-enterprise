@@ -56,7 +56,9 @@ class CatalogController {
             @ApiResponse(responseCode = "404", description = "Service not found")
     })
     public ResponseEntity<ServiceItemResponse> getServiceById(@Parameter(description = "Service database ID") @PathVariable Long id) {
-        return ResponseEntity.ok(catalogService.getServiceById(id));
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noCache().cachePublic())
+                .body(catalogService.getServiceById(id));
     }
 
     @PostMapping

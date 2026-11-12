@@ -156,15 +156,15 @@ public class BusySlotsService {
             return Optional.of("Booking time must be within the barber's working hours ("
                     + schedule.getStartTime() + "–" + schedule.getEndTime() + ").");
         }
-        // Compare in minutes of the day: LocalTime.plusMinutes wraps past midnight.
+        // Compare in minutes of the day (widened to long so extreme durations cannot overflow int).
         int startMinute = minuteOf(start);
-        if (startMinute + durationMinutes > minuteOf(schedule.getEndTime())) {
+        long endMinute = (long) startMinute + durationMinutes;
+        if (endMinute > minuteOf(schedule.getEndTime())) {
             return Optional.of("The selected service takes " + durationMinutes
                     + " minutes and would end after the barber's closing time ("
                     + schedule.getEndTime() + "). Please choose an earlier time.");
         }
 
-        int endMinute = startMinute + durationMinutes;
         for (Appointment other : day.active()) {
             if (excludeAppointmentId != null && excludeAppointmentId.equals(other.getId())) {
                 continue;
@@ -198,10 +198,33 @@ public class BusySlotsService {
         } catch (DateTimeParseException e) {
             return Optional.empty();
         }
-
         // Deterministic order (lowest id first) so the same slot consistently
         // resolves to the same barber until that barber is booked.
-        return loadBarberDays(barberRepository.findAllByOrderByIdAsc(), date).stream()
+        return findFirstAvailableBarber(barberRepository.findAllByOrderByIdAsc(), date, requested, durationMinutes);
+    }
+
+    /**
+     * Resolves "No Preference" against an already-locked candidate list (e.g. from
+     * {@link BarberRepository#findAllForBooking()}) so booking transactions do not query
+     * {@code barbers} a second time.
+     */
+    Optional<Barber> findFirstAvailableBarber(List<Barber> candidates, LocalDate date, String bookingTime,
+                                              int durationMinutes) {
+        if (candidates == null || candidates.isEmpty() || date == null || bookingTime == null || bookingTime.isBlank()) {
+            return Optional.empty();
+        }
+        LocalTime requested;
+        try {
+            requested = LocalTime.parse(bookingTime.trim());
+        } catch (DateTimeParseException e) {
+            return Optional.empty();
+        }
+        return findFirstAvailableBarber(candidates, date, requested, durationMinutes);
+    }
+
+    private Optional<Barber> findFirstAvailableBarber(List<Barber> candidates, LocalDate date, LocalTime requested,
+                                                      int durationMinutes) {
+        return loadBarberDays(candidates, date).stream()
                 .filter(day -> evaluate(day, requested, durationMinutes, null).isEmpty())
                 .map(BarberDay::barber)
                 .findFirst();

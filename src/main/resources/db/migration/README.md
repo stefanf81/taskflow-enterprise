@@ -72,3 +72,4 @@ by `TASKFLOW_TEST_POSTGRES_URL`).
 | V38 | `reviews.barber_name` (NOT NULL) and `reviews.counted` (appointment still APPROVED), backfilled from `appointments`; kept current by the review module from the appointment events (ADR-022 Follow-up 3). A later migration that rewrites the status or barber of reviewed appointments must update both |
 | V39 | `app_users.token_version` (copied into every JWT as `tv`; raising it revokes all tokens of the account) and `revoked_tokens(jti, expires_at)`, the durable copy of the logout denylist (issue #218) |
 | V42 | admin listing index `(booking_date, booking_time, id)` (newest-first order); drop the unused `idx_appointments_booking_date`, `idx_appointment_status`, `idx_appointment_barber_date` |
+| V43 (Java) | convert `notification_outbox.claimed_at` and `next_attempt_at` to `TIMESTAMP WITH TIME ZONE` (instant-based outbox leases and retry backoffs, DST-safe; clamp any future zone-offset skew to `now` / `+1h`) |

@@ -100,7 +100,9 @@ abstract class AppointmentServiceTestSupport {
         haircut = new ServiceItem("Haircut", new BigDecimal("25.00"), 30, "hair", "");
 
         lenient().when(barberRepository.findByName("Alex the Barber")).thenReturn(Optional.of(alex));
+        lenient().when(barberRepository.findByNameForBooking("Alex the Barber")).thenReturn(Optional.of(alex));
         lenient().when(barberRepository.findByIdForBooking(7L)).thenReturn(Optional.of(alex));
+        lenient().when(barberRepository.findAllForBooking()).thenReturn(List.of(alex));
         lenient().when(barberRepository.findAllByOrderByIdAsc()).thenReturn(List.of(alex));
         lenient().when(barberScheduleRepository.findForBarbersOnDay(any(), any())).thenReturn(List.of(schedule));
         lenient().when(barberTimeOffRepository.findBarberIdsOnTimeOff(any(), any())).thenReturn(Collections.emptyList());

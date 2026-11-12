@@ -682,6 +682,40 @@ abstract class AbstractDataMigrationsTest {
     }
 
     @Test
+    void v43ConvertsOutboxOperationalTimestampsToInstantsAndClampsFutureSkew() throws Exception {
+        String url = newUrl();
+        flyway(url, DEV_MIGRATION).target("42").load().migrate();
+        try (Connection c = open(url)) {
+            exec(c, "INSERT INTO notification_outbox (recipient, type, message, sent_at, status, retry_count, "
+                    + "claimed_at, claimed_by, next_attempt_at) VALUES "
+                    + "('skew@x.test', 'EMAIL', 'm', CURRENT_TIMESTAMP, 'PROCESSING', 1, "
+                    + "CAST('2099-01-01 12:00:00' AS TIMESTAMP), 'worker-1', "
+                    + "CAST('2099-01-01 15:00:00' AS TIMESTAMP))");
+        }
+
+        flyway(url, DEV_MIGRATION).load().migrate();
+
+        try (Connection c = open(url)) {
+            assertEquals(0, count(c, "SELECT COUNT(*) FROM notification_outbox WHERE claimed_at > CURRENT_TIMESTAMP"),
+                    "future-skewed claimed_at is clamped to now");
+            if (isPostgres()) {
+                assertEquals(0, count(c, "SELECT COUNT(*) FROM notification_outbox "
+                        + "WHERE next_attempt_at > CURRENT_TIMESTAMP + INTERVAL '65 minutes'"));
+            } else {
+                assertEquals(0, count(c, "SELECT COUNT(*) FROM notification_outbox "
+                        + "WHERE next_attempt_at > DATEADD('MINUTE', 65, CURRENT_TIMESTAMP)"));
+            }
+            List<String> indexes = new ArrayList<>();
+            try (Statement st = c.createStatement(); ResultSet rs = st.executeQuery(indexNamesSql())) {
+                while (rs.next()) {
+                    indexes.add(rs.getString(1));
+                }
+            }
+            assertTrue(indexes.contains("idx_outbox_claim"));
+        }
+    }
+
+    @Test
     void productionLayoutStillFailsFastWhenAnAppliedMigrationDisappears() throws Exception {
         String url = newUrl();
         prodLike(url).load().migrate();

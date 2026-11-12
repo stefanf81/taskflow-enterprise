@@ -22,7 +22,7 @@ class NotificationService {
 
     @Transactional(readOnly = true)
     public List<NotificationOutboxResponse> getRecentNotifications() {
-        return repository.findTop100ByOrderBySentAtDesc()
+        return repository.findTop100ByOrderBySentAtDescIdDesc()
                 .stream()
                 .map(NotificationOutboxResponse::fromEntity)
                 .toList();

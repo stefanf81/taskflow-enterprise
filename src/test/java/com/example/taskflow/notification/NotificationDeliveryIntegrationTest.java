@@ -97,7 +97,7 @@ class NotificationDeliveryIntegrationTest {
         relay.relay();
         assertEquals("FAILED", reload(row).getStatus());
         assertEquals(1, reload(row).getRetryCount());
-        assertEquals(LocalDateTime.ofInstant(NOW.plusSeconds(30), clock.getZone()), reload(row).getNextAttemptAt());
+        assertEquals(NOW.plusSeconds(30), reload(row).getNextAttemptAt());
         relay.relay();
         assertEquals(1, calls.get(), "no retry during backoff");
         clock.advance(Duration.ofSeconds(31));

@@ -11,6 +11,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
@@ -27,8 +28,9 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class NotificationSenderTest {
 
-    private static final LocalDateTime NOW = LocalDateTime.of(2031, 3, 10, 10, 0);
-    private static final LocalDateTime CLAIMED_AT = NOW.minusSeconds(5);
+    private static final LocalDateTime SENT_AT = LocalDateTime.of(2031, 3, 10, 10, 0);
+    private static final Instant NOW = SENT_AT.toInstant(ZoneOffset.UTC);
+    private static final Instant CLAIMED_AT = NOW.minusSeconds(5);
     private static final String WORKER = "relay-1";
 
     @Mock private NotificationOutboxRepository outboxRepository;
@@ -42,14 +44,14 @@ class NotificationSenderTest {
     @BeforeEach
     void setUp() {
         outbox = new NotificationOutbox("john.doe@example.com", "EMAIL",
-                "Subject: Appointment APPROVED - Dear John, your appointment has been APPROVED.", NOW, "PROCESSING");
+                "Subject: Appointment APPROVED - Dear John, your appointment has been APPROVED.", SENT_AT, "PROCESSING");
         outbox.setId(1L);
         outbox.setClaimedBy(WORKER);
         outbox.setClaimedAt(CLAIMED_AT);
         claim = new NotificationSender.Claim(1L, WORKER, CLAIMED_AT);
         when(transactions.getTransaction(any())).thenAnswer(invocation -> new SimpleTransactionStatus());
         sender = new NotificationSender(outboxRepository, gateway,
-                Clock.fixed(NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC), transactions);
+                Clock.fixed(NOW, ZoneOffset.UTC), transactions);
     }
 
     @Test
@@ -118,7 +120,7 @@ class NotificationSenderTest {
     }
 
     private NotificationOutbox claimedRow(long id) {
-        NotificationOutbox row = new NotificationOutbox("row" + id + "@example.com", "EMAIL", "m" + id, NOW, "PROCESSING");
+        NotificationOutbox row = new NotificationOutbox("row" + id + "@example.com", "EMAIL", "m" + id, SENT_AT, "PROCESSING");
         row.setId(id);
         row.setClaimedBy(WORKER);
         row.setClaimedAt(CLAIMED_AT);

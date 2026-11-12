@@ -82,7 +82,45 @@ class RateLimiterConfigTest {
         verify(filterChain, never()).doFilter(any(), any());
         assertEquals(429, response.getStatus());
         assertEquals("42", response.getHeader("Retry-After"), "the rest of the shared window, not a fixed 60");
-        assertTrue(response.getContentAsString().contains("Too many requests"));
+        assertEquals("no-store", response.getHeader("Cache-Control"));
+        var json = tools.jackson.databind.json.JsonMapper.builder().build().readTree(response.getContentAsString());
+        assertEquals(429, json.get("status").asInt());
+        assertEquals("Too Many Requests", json.get("error").asString());
+        assertEquals("Too Many Requests", json.get("title").asString());
+        assertEquals("Too many requests. Please try again later.", json.get("message").asString());
+        assertEquals("Too many requests. Please try again later.", json.get("detail").asString());
+        assertEquals("/api/v1/auth/login", json.get("path").asString());
+        assertEquals("/api/v1/auth/login", json.get("instance").asString());
+        assertEquals("about:blank", json.get("type").asString());
+        assertNull(json.get("validationErrors"));
+    }
+
+    @Test
+    void crossOriginRateLimitResponseCarriesCorsHeadersForAllowedOrigin() throws Exception {
+        org.springframework.web.cors.CorsConfiguration cors = new org.springframework.web.cors.CorsConfiguration();
+        cors.setAllowedOrigins(List.of("https://app.taskflow.example"));
+        cors.setAllowCredentials(true);
+        cors.setAllowedMethods(List.of("GET", "POST"));
+        cors.setExposedHeaders(List.of("X-XSRF-TOKEN", "Retry-After"));
+        org.springframework.web.cors.UrlBasedCorsConfigurationSource source =
+                new org.springframework.web.cors.UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", cors);
+
+        OncePerRequestFilter corsAwareFilter = new RateLimiterConfig(
+                100, 20, source, java.time.Clock.fixed(java.time.Instant.parse("2026-10-12T08:00:00Z"),
+                java.time.ZoneOffset.UTC)).createRateLimitFilter(redisTemplate);
+        mockExecute(21L);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login");
+        request.addHeader("Origin", "https://app.taskflow.example");
+        request.setRemoteAddr("198.51.100.10");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        corsAwareFilter.doFilter(request, response, mock(FilterChain.class));
+
+        assertEquals(429, response.getStatus());
+        assertEquals("https://app.taskflow.example", response.getHeader("Access-Control-Allow-Origin"));
+        assertTrue(response.getHeader("Access-Control-Expose-Headers").contains("Retry-After"));
     }
 
     @Test

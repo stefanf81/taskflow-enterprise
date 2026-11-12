@@ -59,12 +59,13 @@ class AppointmentBookingServiceTest extends AppointmentServiceTestSupport {
 
     @Test
     void testCreateAppointment_NoPreferenceNoBarberAvailable_Rejected() {
-        when(barberRepository.findAllByOrderByIdAsc()).thenReturn(Collections.emptyList());
+        when(barberRepository.findAllForBooking()).thenReturn(Collections.emptyList());
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> bookingService.createAppointment(
                 request(AppointmentBookingService.NO_PREFERENCE_BARBER, TOMORROW, "10:00"), null));
         assertTrue(ex.getMessage().contains("No barber is available"));
         verify(appointmentRepository, never()).save(any(Appointment.class));
+        verify(barberRepository, never()).findAllByOrderByIdAsc();
     }
 
     /** BKG-1: 10:30 and 10:01 are not grid slots and must never reach the busy/overlap logic. */
@@ -150,7 +151,7 @@ class AppointmentBookingServiceTest extends AppointmentServiceTestSupport {
 
     @Test
     void testCreateAppointment_UnknownBarberAndServiceRejected() {
-        when(barberRepository.findByName("Ghost Barber")).thenReturn(Optional.empty());
+        when(barberRepository.findByNameForBooking("Ghost Barber")).thenReturn(Optional.empty());
         IllegalArgumentException barber = assertThrows(IllegalArgumentException.class,
                 () -> bookingService.createAppointment(request("Ghost Barber", TOMORROW, "10:00"), null));
         assertTrue(barber.getMessage().contains("Unknown barber"));

@@ -247,15 +247,15 @@ class AppointmentBookingService {
 
             // Roster/time-off writes take the barber's exclusive lock. Take our shared lock
             // before ANY schedule inputs are loaded (including No Preference resolution).
-            if (NO_PREFERENCE_BARBER.equals(request.barberName())) {
-                barberRepository.findAllForBooking();
-            }
+            List<Barber> lockedBarbers = NO_PREFERENCE_BARBER.equals(request.barberName())
+                    ? barberRepository.findAllForBooking()
+                    : null;
 
             // H2: "No Preference (First Available)" is an input-only sentinel. Resolve
             // it to a concrete, available barber BEFORE persisting so the partial
             // unique slot index and the per-barber availability queries both see the
             // booking. The resolver applies the same rules as a named barber.
-            ResolvedBarber resolved = resolveBarber(request, durationMinutes);
+            ResolvedBarber resolved = resolveBarber(request, durationMinutes, lockedBarbers);
             Barber resolvedBarber = resolved.barber();
             String effectiveBarberName = resolvedBarber.getName();
 
@@ -299,10 +299,9 @@ class AppointmentBookingService {
             item.setService(service);
             // Freeze the price: later catalog price edits must not rewrite revenue history.
             item.setPriceAtBooking(service.getPrice());
-            item.setBookingDate(bookingDate);
-            item.setBookingTime(request.bookingTime().trim());
             // Store exactly the interval the rules above validated; the exclusion constraint keys on it.
-            item.setBookingEndTime(Appointment.endTimeOf(bookingTime, durationMinutes));
+            item.setBookingSlot(bookingDate, request.bookingTime().trim(),
+                    Appointment.endTimeOf(bookingTime, durationMinutes));
             item.setStatus(AppointmentStatus.PENDING);
 
             Appointment savedItem = appointmentRepository.save(item);
@@ -393,16 +392,16 @@ class AppointmentBookingService {
      * can take the booking (schedule, time off, service length, overlap); unknown
      * concrete names are rejected with a 400.
      */
-    private ResolvedBarber resolveBarber(AppointmentCreateRequest request, int durationMinutes) {
+    private ResolvedBarber resolveBarber(AppointmentCreateRequest request, int durationMinutes,
+                                         List<Barber> lockedBarbers) {
         if (NO_PREFERENCE_BARBER.equals(request.barberName())) {
             return busySlotsService.findFirstAvailableBarber(
-                            request.bookingDate(), request.bookingTime(), durationMinutes)
+                            lockedBarbers, request.bookingDate(), request.bookingTime(), durationMinutes)
                     .map(barber -> new ResolvedBarber(barber, true))
                     .orElseThrow(() -> new IllegalArgumentException(
                             "No barber is available for the selected time. Please choose another time or barber."));
         }
-        return barberRepository.findByName(request.barberName())
-                .flatMap(barber -> barberRepository.findByIdForBooking(barber.getId()))
+        return barberRepository.findByNameForBooking(request.barberName())
                 .map(barber -> new ResolvedBarber(barber, false))
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Unknown barber: '" + LogSanitizer.stripNewlines(request.barberName())

@@ -236,6 +236,8 @@ class SecurityAuthorizationIntegrationTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(head("/api/v1/catalog/retired").header("Authorization", customerToken))
                 .andExpect(status().isForbidden());
+        mockMvc.perform(head("/api/v1/notifications").header("Authorization", customerToken))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -243,6 +245,9 @@ class SecurityAuthorizationIntegrationTest {
         mockMvc.perform(head("/api/v1/appointments")).andExpect(status().isUnauthorized());
         mockMvc.perform(head("/api/v1/barbers/admin")).andExpect(status().isUnauthorized());
         mockMvc.perform(head("/api/v1/barbers/1/schedule")).andExpect(status().isUnauthorized());
+        mockMvc.perform(head("/api/v1/notifications")).andExpect(status().isUnauthorized());
+        mockMvc.perform(head("/api/v1/auth/me")).andExpect(status().isUnauthorized());
+        mockMvc.perform(head("/api/v1/customer/appointments")).andExpect(status().isUnauthorized());
         mockMvc.perform(head("/api/v1/customer/appointments/00000000-0000-0000-0000-000000000001/calendar"))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(head("/api/v1/catalog/retired")).andExpect(status().isUnauthorized());
@@ -253,11 +258,23 @@ class SecurityAuthorizationIntegrationTest {
     void head_shouldWorkForAdminsAndOnPublicEndpoints() throws Exception {
         mockMvc.perform(head("/api/v1/barbers/admin").header("Authorization", adminToken))
                 .andExpect(status().isOk());
+        mockMvc.perform(head("/api/v1/notifications").header("Authorization", adminToken))
+                .andExpect(status().isOk());
+        mockMvc.perform(head("/api/v1/auth/me").header("Authorization", customerToken))
+                .andExpect(status().isOk());
+        mockMvc.perform(head("/api/v1/customer/appointments").header("Authorization", customerToken))
+                .andExpect(status().isOk());
+        // A blank access_token cookie falls back to the Authorization bearer header instead of dropping auth.
+        mockMvc.perform(get("/api/v1/auth/me")
+                        .cookie(new jakarta.servlet.http.Cookie("access_token", ""))
+                        .header("Authorization", customerToken))
+                .andExpect(status().isOk());
         mockMvc.perform(head("/api/v1/catalog/retired").header("Authorization", adminToken))
                 .andExpect(status().isOk());
-        // 404 (no such appointment), not 401/403: the admin passes authorization.
+        // 404 (no such appointment/service), not 401/403: caller passes authorization.
         mockMvc.perform(head("/api/v1/appointments/999999").header("Authorization", adminToken))
                 .andExpect(status().isNotFound());
+        mockMvc.perform(head("/api/v1/catalog/999999")).andExpect(status().isNotFound());
         mockMvc.perform(head("/api/v1/catalog")).andExpect(status().isOk());
         mockMvc.perform(head("/api/v1/barbers")).andExpect(status().isOk());
         mockMvc.perform(head("/api/v1/auth/csrf")).andExpect(status().isOk());

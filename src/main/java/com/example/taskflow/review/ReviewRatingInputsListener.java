@@ -2,6 +2,7 @@ package com.example.taskflow.review;
 
 import com.example.taskflow.appointment.AppointmentCancelledEvent;
 import com.example.taskflow.appointment.AppointmentDetails;
+import com.example.taskflow.appointment.AppointmentRescheduledEvent;
 import com.example.taskflow.appointment.AppointmentStatus;
 import com.example.taskflow.appointment.AppointmentStatusChangedEvent;
 import com.example.taskflow.core.LogSanitizer;
@@ -50,6 +51,11 @@ class ReviewRatingInputsListener {
 
     @EventListener
     public void onCancelled(AppointmentCancelledEvent event) {
+        sync(event.appointment());
+    }
+
+    @EventListener
+    public void onRescheduled(AppointmentRescheduledEvent event) {
         sync(event.appointment());
     }
 

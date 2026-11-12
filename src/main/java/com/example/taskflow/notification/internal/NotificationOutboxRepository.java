@@ -13,12 +13,13 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
 public interface NotificationOutboxRepository extends JpaRepository<NotificationOutbox, Long> {
-    List<NotificationOutbox> findTop100ByOrderBySentAtDesc();
+    List<NotificationOutbox> findTop100ByOrderBySentAtDescIdDesc();
 
     /**
      * Atomically claim claimable rows for delivery. Uses PESSIMISTIC_WRITE with
@@ -42,7 +43,7 @@ public interface NotificationOutboxRepository extends JpaRepository<Notification
             "AND (n.nextAttemptAt IS NULL OR n.nextAttemptAt <= :now) " +
             "ORDER BY n.id")
     List<NotificationOutbox> findClaimableForUpdate(@Param("max") int maxRetry,
-                                                    @Param("now") LocalDateTime now,
+                                                    @Param("now") Instant now,
                                                     Pageable pageable);
 
     /**
@@ -58,7 +59,7 @@ public interface NotificationOutboxRepository extends JpaRepository<Notification
     @Query("SELECT n FROM NotificationOutbox n " +
             "WHERE n.status = 'PROCESSING' AND n.claimedAt < :threshold " +
             "ORDER BY n.id")
-    List<NotificationOutbox> findStaleProcessing(@Param("threshold") LocalDateTime threshold, Pageable pageable);
+    List<NotificationOutbox> findStaleProcessing(@Param("threshold") Instant threshold, Pageable pageable);
 
     /**
      * Records a successful delivery, but only while the row is still PROCESSING and owned by the
@@ -73,7 +74,7 @@ public interface NotificationOutboxRepository extends JpaRepository<Notification
             "WHERE n.id = :id AND n.status = 'PROCESSING' AND n.claimedBy = :claimedBy AND n.claimedAt = :claimedAt")
     int markSentIfClaimed(@Param("id") Long id,
                           @Param("claimedBy") String claimedBy,
-                          @Param("claimedAt") LocalDateTime claimedAt);
+                          @Param("claimedAt") Instant claimedAt);
 
     /**
      * Records a failed delivery (status FAILED, retry counter and backoff written by the caller),
@@ -86,9 +87,9 @@ public interface NotificationOutboxRepository extends JpaRepository<Notification
             "WHERE n.id = :id AND n.status = 'PROCESSING' AND n.claimedBy = :claimedBy AND n.claimedAt = :claimedAt")
     int markFailedIfClaimed(@Param("id") Long id,
                             @Param("claimedBy") String claimedBy,
-                            @Param("claimedAt") LocalDateTime claimedAt,
+                            @Param("claimedAt") Instant claimedAt,
                             @Param("retryCount") int retryCount,
-                             @Param("nextAttemptAt") LocalDateTime nextAttemptAt);
+                            @Param("nextAttemptAt") Instant nextAttemptAt);
 
     /** Return an unstarted claim without charging a delivery attempt; never touch a newer claim. */
     @Transactional
@@ -97,7 +98,7 @@ public interface NotificationOutboxRepository extends JpaRepository<Notification
             "WHERE n.id = :id AND n.status = 'PROCESSING' AND n.claimedBy = :claimedBy AND n.claimedAt = :claimedAt")
     int releaseIfClaimed(@Param("id") Long id,
                          @Param("claimedBy") String claimedBy,
-                         @Param("claimedAt") LocalDateTime claimedAt);
+                         @Param("claimedAt") Instant claimedAt);
 
     /** Retention: deletes delivered rows enqueued before the cutoff. Returns the number deleted. */
     @Transactional

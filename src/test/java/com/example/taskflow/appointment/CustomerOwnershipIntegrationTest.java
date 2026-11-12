@@ -209,4 +209,19 @@ class CustomerOwnershipIntegrationTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void invalidPaginationAndOverflowingOffsetsReturn400InsteadOf500() throws Exception {
+        register("pager@example.com", "pager-pass-123");
+        String customerToken = login("pager@example.com", "pager-pass-123");
+
+        for (String query : java.util.List.of("?page=-1&size=10", "?page=0&size=0", "?page=21474837&size=100")) {
+            mockMvc.perform(get("/api/v1/customer/appointments" + query).header("Authorization", customerToken))
+                    .andExpect(status().isBadRequest());
+            mockMvc.perform(get("/api/v1/appointments" + query)
+                            .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors
+                                    .user("admin").roles("ADMIN")))
+                    .andExpect(status().isBadRequest());
+        }
+    }
 }

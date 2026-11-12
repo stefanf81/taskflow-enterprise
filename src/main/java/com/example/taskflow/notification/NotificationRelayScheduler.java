@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -203,7 +203,7 @@ class NotificationRelayScheduler {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<NotificationSender.Claim> claimBatch() {
-        LocalDateTime now = now();
+        Instant now = now();
         List<NotificationOutbox> claimable = outboxRepository.findClaimableForUpdate(
                 MAX_RETRIES, now, PageRequest.of(0, CLAIM_BATCH_SIZE));
         if (claimable.isEmpty()) {
@@ -228,8 +228,8 @@ class NotificationRelayScheduler {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void reclaimStaleClaims() {
-        LocalDateTime now = now();
-        LocalDateTime threshold = now.minusMinutes(CLAIM_STALE_MINUTES);
+        Instant now = now();
+        Instant threshold = now.minus(Duration.ofMinutes(CLAIM_STALE_MINUTES));
         List<NotificationOutbox> stale = outboxRepository.findStaleProcessing(
                 threshold, PageRequest.of(0, CLAIM_BATCH_SIZE));
         if (stale.isEmpty()) {
@@ -252,7 +252,7 @@ class NotificationRelayScheduler {
         }
     }
 
-    private LocalDateTime now() {
-        return LocalDateTime.now(clock).truncatedTo(ChronoUnit.MILLIS);
+    private Instant now() {
+        return Instant.now(clock).truncatedTo(ChronoUnit.MILLIS);
     }
 }

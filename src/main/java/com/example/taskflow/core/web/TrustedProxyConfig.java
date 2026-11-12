@@ -1,5 +1,6 @@
 package com.example.taskflow.core.web;
 
+import com.example.taskflow.core.LogSanitizer;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Metrics;
@@ -7,6 +8,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.apache.catalina.Globals;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -104,13 +106,18 @@ class TrustedProxyConfig {
         protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                         FilterChain chain) throws ServletException, IOException {
             String peer = request.getRemoteAddr();
-            if (request.getHeader(FORWARDED_FOR) != null && peer != null && !proxies.matcher(peer).matches()) {
+            boolean handledByValve = Boolean.TRUE.equals(request.getAttribute(Globals.REQUEST_FORWARDED_ATTRIBUTE));
+            if (!handledByValve
+                    && request.getHeader(FORWARDED_FOR) != null
+                    && peer != null
+                    && !proxies.matcher(peer).matches()) {
                 counter.increment();
                 if (warned.compareAndSet(false, true)) {
+                    String safePeer = LogSanitizer.stripNewlines(peer);
                     log.warn("A request from {} carried X-Forwarded-For, but {} does not match that peer, so its "
                                     + "client address was ignored. If {} is the reverse proxy, APP_TRUSTED_PROXY_REGEX is "
                                     + "wrong and every client shares one rate-limit bucket (logged once; counted in {}).",
-                            peer, PROXIES_PROPERTY, peer, UNTRUSTED_COUNTER);
+                            safePeer, PROXIES_PROPERTY, safePeer, UNTRUSTED_COUNTER);
                 }
             }
             chain.doFilter(request, response);

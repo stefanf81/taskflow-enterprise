@@ -67,6 +67,10 @@ class NotificationOutboxIntegrationTest {
         appointments.deleteAll();
     }
 
+    private Instant nowInstant() {
+        return clock.instant();
+    }
+
     private LocalDateTime now() {
         return LocalDateTime.ofInstant(clock.instant(), clock.getZone());
     }
@@ -147,7 +151,7 @@ class NotificationOutboxIntegrationTest {
         NotificationOutbox reclaimed = reload(row);
         assertEquals("PENDING", reclaimed.getStatus());
         assertEquals(1, reclaimed.getRetryCount(), "the abandoned attempt is counted");
-        assertEquals(now().plusSeconds(30), reclaimed.getNextAttemptAt(), "30s backoff after the first failure");
+        assertEquals(nowInstant().plusSeconds(30), reclaimed.getNextAttemptAt(), "30s backoff after the first failure");
         assertTrue(relay.claimBatch().isEmpty(), "not claimable while in backoff");
         clock.advance(Duration.ofSeconds(31));
         NotificationSender.Claim current = relay.claimBatch().get(0);
@@ -157,7 +161,7 @@ class NotificationOutboxIntegrationTest {
         // worker 1 wakes up: it must neither send nor write anything
         sender.process(stale);
         assertEquals(0, outbox.markSentIfClaimed(row.getId(), stale.claimedBy(), stale.claimedAt()));
-        assertEquals(0, outbox.markFailedIfClaimed(row.getId(), stale.claimedBy(), stale.claimedAt(), 5, now()));
+        assertEquals(0, outbox.markFailedIfClaimed(row.getId(), stale.claimedBy(), stale.claimedAt(), 5, nowInstant()));
         NotificationOutbox afterStale = reload(row);
         assertEquals("PROCESSING", afterStale.getStatus());
         assertEquals(current.claimedAt(), afterStale.getClaimedAt());
@@ -169,7 +173,7 @@ class NotificationOutboxIntegrationTest {
 
         // a very late worker 1 still cannot flip a SENT row back or to FAILED
         sender.process(stale);
-        assertEquals(0, outbox.markFailedIfClaimed(row.getId(), stale.claimedBy(), stale.claimedAt(), 5, now()));
+        assertEquals(0, outbox.markFailedIfClaimed(row.getId(), stale.claimedBy(), stale.claimedAt(), 5, nowInstant()));
         assertEquals("SENT", reload(row).getStatus());
     }
 
@@ -200,7 +204,7 @@ class NotificationOutboxIntegrationTest {
         NotificationOutbox row = outbox.findAll().get(0);
         assertEquals("FAILED", row.getStatus());
         assertEquals(1, row.getRetryCount());
-        assertEquals(now().plusSeconds(30), row.getNextAttemptAt());
+        assertEquals(nowInstant().plusSeconds(30), row.getNextAttemptAt());
 
         clock.advance(Duration.ofSeconds(29));
         relay.relay();
@@ -210,13 +214,13 @@ class NotificationOutboxIntegrationTest {
         relay.relay();
         row = reload(row);
         assertEquals(2, row.getRetryCount());
-        assertEquals(now().plusSeconds(60), row.getNextAttemptAt(), "second failure waits twice as long");
+        assertEquals(nowInstant().plusSeconds(60), row.getNextAttemptAt(), "second failure waits twice as long");
 
         clock.advance(Duration.ofSeconds(61));
         relay.relay();
         row = reload(row);
         assertEquals(3, row.getRetryCount());
-        assertEquals(now().plusSeconds(120), row.getNextAttemptAt());
+        assertEquals(nowInstant().plusSeconds(120), row.getNextAttemptAt());
     }
 
     @Test

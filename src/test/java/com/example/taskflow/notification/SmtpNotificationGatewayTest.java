@@ -103,6 +103,22 @@ class SmtpNotificationGatewayTest {
         assertThat(failed.keySet()).containsExactlyInAnyOrder(42L, 43L);
     }
 
+    @Test
+    void unmappedFailedMessageKeyFailsClosedAcrossTheWholeBatch() {
+        Session session = Session.getInstance(new Properties());
+        when(mailSender.createMimeMessage()).thenAnswer(invocation -> new MimeMessage(session));
+        doAnswer(invocation -> {
+            // Simulate a wrapper returning a copied/foreign key in getFailedMessages().
+            throw new MailSendException(java.util.Map.of("foreign-key", new MailSendException("rejected")));
+        }).when(mailSender).send(any(MimeMessage[].class));
+
+        var failed = gateway.sendAll(java.util.List.of(
+                new NotificationGateway.Message(10L, "a@example.com", "EMAIL", "one"),
+                new NotificationGateway.Message(11L, "b@example.com", "EMAIL", "two")));
+
+        assertThat(failed.keySet()).containsExactlyInAnyOrder(10L, 11L);
+    }
+
     private static NotificationGateway.Message message(String content) {
         return new NotificationGateway.Message(42L, "customer@example.com", "EMAIL", content);
     }

@@ -229,9 +229,11 @@ class CatalogRetirementIntegrationTest {
         tooManyDecimals.put("price", new BigDecimal("1.234"));
         Map<String, Object> zeroDuration = body("Ok Name");
         zeroDuration.put("durationMinutes", 0);
+        Map<String, Object> overDayDuration = body("Ok Name");
+        overDayDuration.put("durationMinutes", 1441);
 
         for (Map<String, Object> invalid : java.util.List.of(longName, longCategory, longDescription, tooManyDigits,
-                tooManyDecimals, zeroDuration)) {
+                tooManyDecimals, zeroDuration, overDayDuration)) {
             mockMvc.perform(post("/api/v1/catalog").header("Authorization", adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(invalid)))
@@ -242,6 +244,7 @@ class CatalogRetirementIntegrationTest {
         boundary.put("category", "c".repeat(50));
         boundary.put("description", "d".repeat(500));
         boundary.put("price", new BigDecimal("12345678.99"));
+        boundary.put("durationMinutes", 1440);
         mockMvc.perform(post("/api/v1/catalog").header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(boundary)))

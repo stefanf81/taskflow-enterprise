@@ -1,6 +1,7 @@
 package com.example.taskflow.notification;
 
 import jakarta.persistence.*;
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 @Entity
@@ -30,17 +31,17 @@ public class NotificationOutbox {
     private int retryCount = 0;
 
     @Column(name = "claimed_at")
-    private java.time.LocalDateTime claimedAt;
+    private Instant claimedAt;
 
     @Column(name = "claimed_by", length = 100)
     private String claimedBy;
 
     /**
-     * Earliest instant the relay may claim this row again (V31). {@code null} = immediately
+     * Earliest instant the relay may claim this row again (V31/V43). {@code null} = immediately
      * eligible. Set by the relay after a failed delivery or a reclaimed stale claim.
      */
     @Column(name = "next_attempt_at")
-    private LocalDateTime nextAttemptAt;
+    private Instant nextAttemptAt;
 
     public NotificationOutbox() {}
 
@@ -69,11 +70,11 @@ public class NotificationOutbox {
     public int getRetryCount() { return retryCount; }
     public void setRetryCount(int retryCount) { this.retryCount = retryCount; }
 
-    public LocalDateTime getClaimedAt() { return claimedAt; }
-    public void setClaimedAt(LocalDateTime claimedAt) { this.claimedAt = claimedAt; }
+    public Instant getClaimedAt() { return claimedAt; }
+    public void setClaimedAt(Instant claimedAt) { this.claimedAt = claimedAt; }
     public String getClaimedBy() { return claimedBy; }
     public void setClaimedBy(String claimedBy) { this.claimedBy = claimedBy; }
 
-    public LocalDateTime getNextAttemptAt() { return nextAttemptAt; }
-    public void setNextAttemptAt(LocalDateTime nextAttemptAt) { this.nextAttemptAt = nextAttemptAt; }
+    public Instant getNextAttemptAt() { return nextAttemptAt; }
+    public void setNextAttemptAt(Instant nextAttemptAt) { this.nextAttemptAt = nextAttemptAt; }
 }

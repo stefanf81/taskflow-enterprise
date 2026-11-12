@@ -42,7 +42,7 @@ class CorsConfig {
         configuration.setAllowedHeaders(Arrays.asList("Content-Type", "Authorization", "X-XSRF-TOKEN", "Idempotency-Key"));
         // No Set-Cookie: it is a forbidden response header name (Fetch standard) that a browser never
         // exposes to scripts, whatever this list says; the browser stores the cookies itself.
-        configuration.setExposedHeaders(List.of("X-XSRF-TOKEN"));
+        configuration.setExposedHeaders(List.of("X-XSRF-TOKEN", "Retry-After"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

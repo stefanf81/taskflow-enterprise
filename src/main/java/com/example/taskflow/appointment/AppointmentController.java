@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -68,9 +69,9 @@ class AppointmentController {
             @Parameter(description = "Search by customer name, e-mail or phone (contains, case-insensitive) or by exact public id")
             @RequestParam(required = false) String search,
             @Parameter(description = "Page number (0-indexed)")
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
             @Parameter(description = "Page size")
-            @RequestParam(defaultValue = "10") @Max(100) int size) {
+            @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size) {
 
         AppointmentDashboardResponse response = queryService.getAllAppointments(status, search, page, size);
         // Customer names, e-mails and phones: no-store keeps them out of the browser and

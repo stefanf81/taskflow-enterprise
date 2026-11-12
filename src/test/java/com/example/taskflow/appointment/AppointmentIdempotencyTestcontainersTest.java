@@ -41,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * hits the unique index after the winner commits.
  */
 @Tag("testcontainers")
-@SpringBootTest(properties = "app.rate-limit.enabled=false")
+@SpringBootTest(properties = {"app.rate-limit.enabled=false", "app.schedulers.enabled=false"})
 @AutoConfigureMockMvc
 @Testcontainers
 class AppointmentIdempotencyTestcontainersTest {

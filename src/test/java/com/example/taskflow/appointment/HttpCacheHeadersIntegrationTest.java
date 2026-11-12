@@ -144,7 +144,10 @@ class HttpCacheHeadersIntegrationTest {
      */
     @Test
     void adminEditableReferenceDataIsPublicButRevalidated() throws Exception {
-        for (String path : new String[] {"/api/v1/catalog", "/api/v1/barbers", "/api/v1/appointments/public/shop"}) {
+        Long serviceId = serviceItemRepository.findAll().getFirst().getId();
+        for (String path : new String[] {
+                "/api/v1/catalog", "/api/v1/catalog/" + serviceId, "/api/v1/barbers", "/api/v1/appointments/public/shop"
+        }) {
             String etag = mockMvc.perform(get(path))
                     .andExpect(status().isOk())
                     .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-cache, public"))
@@ -180,21 +183,24 @@ class HttpCacheHeadersIntegrationTest {
                 "/api/v1/barbers/admin"}) {
             mockMvc.perform(get(path).with(user("admin").roles("ADMIN")))
                     .andExpect(status().isOk())
-                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"));
+                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                    .andExpect(header().doesNotExist(HttpHeaders.ETAG));
         }
         mockMvc.perform(get("/api/v1/customer/appointments").with(user("jane@test.com").roles("CUSTOMER")))
                 .andExpect(status().isOk())
-                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"));
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(header().doesNotExist(HttpHeaders.ETAG));
     }
 
-    /** Endpoints without an explicit tier rely on Spring Security's default no-store headers. */
+    /** Sensitive/session GET endpoints send explicit no-store and never emit an ETag. */
     @Test
-    void authenticatedEndpointsWithoutATierFallBackToNoStore() throws Exception {
+    void authenticatedAndCsrfEndpointsSendNoStoreWithoutEtag() throws Exception {
         for (String path : new String[] {"/api/v1/notifications", "/api/v1/barbers/" + barber.getId() + "/time-off",
-                "/api/v1/auth/me"}) {
+                "/api/v1/auth/me", "/api/v1/auth/csrf"}) {
             mockMvc.perform(get(path).with(user("admin").roles("ADMIN")))
                     .andExpect(status().isOk())
-                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")));
+                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")))
+                    .andExpect(header().doesNotExist(HttpHeaders.ETAG));
         }
     }
 }

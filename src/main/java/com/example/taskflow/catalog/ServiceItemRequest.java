@@ -1,6 +1,7 @@
 package com.example.taskflow.catalog;
 
 import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -25,6 +26,7 @@ public record ServiceItemRequest(
 
     @NotNull(message = "Duration is required")
     @Positive(message = "Duration must be positive")
+    @Max(value = 1440, message = "Duration must not exceed 1440 minutes")
     Integer durationMinutes,
 
     @NotBlank(message = "Category is required")

@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -43,9 +44,7 @@ class AppointmentQueryService {
         // history. Several barbers share a slot, so (date, time) alone is not a total order: id
         // breaks the tie so LIMIT/OFFSET pages neither repeat nor skip rows. The whole key is one
         // index (V42), read backwards.
-        Pageable pageable = PageRequest.of(page, size, Sort.by("bookingDate").descending()
-                .and(Sort.by("bookingTime").descending())
-                .and(Sort.by("id").descending()));
+        Pageable pageable = newestFirstPageable(page, size);
         String statusFilter = status == null ? "" : status.trim();
         String term = searchName == null ? "" : searchName.trim();
         boolean overdue = "OVERDUE".equalsIgnoreCase(statusFilter);
@@ -59,20 +58,22 @@ class AppointmentQueryService {
             // Without a search term the total is already known: the unfiltered view takes it from the
             // cached row count and a status view from the cached dashboard counters (both evicted on
             // every booking and status change), instead of counting the table on each request.
-            List<Appointment> content;
+            Slice<Appointment> slice;
             long total;
             if (overdue) {
-                content = appointmentRepository.findByStatusAndBookingDateBefore(
-                        AppointmentStatus.PENDING, today, pageable).getContent();
+                slice = appointmentRepository.findByStatusAndBookingDateBefore(
+                        AppointmentStatus.PENDING, today, pageable);
                 total = stats.overdue();
             } else if (parsed != null) {
-                content = appointmentRepository.findByStatus(parsed, pageable).getContent();
+                slice = appointmentRepository.findByStatus(parsed, pageable);
                 total = countOf(parsed, stats);
             } else {
-                content = appointmentRepository.findPageWithoutCount(pageable).getContent();
+                slice = appointmentRepository.findPageWithoutCount(pageable);
                 total = statsService.getTotalCountCached();
             }
-            itemPage = new PageImpl<>(content, pageable, total);
+            List<Appointment> content = slice.getContent();
+            long minTotal = pageable.getOffset() + content.size() + (slice.hasNext() ? 1L : 0L);
+            itemPage = new PageImpl<>(content, pageable, Math.max(total, minTotal));
         } else {
             List<Specification<Appointment>> filters = new ArrayList<>();
             if (overdue) {
@@ -136,10 +137,22 @@ class AppointmentQueryService {
     @Transactional(readOnly = true)
     public Page<AppointmentResponse> getMyAppointments(String email, int page, int size) {
         // Newest first, with a unique tiebreaker so pages stay stable when bookings share a date/time.
-        Pageable pageable = PageRequest.of(page, size, Sort.by("bookingDate").descending()
-                .and(Sort.by("bookingTime").descending())
-                .and(Sort.by("id").descending()));
+        Pageable pageable = newestFirstPageable(page, size);
         return appointmentRepository.findByCustomerEmailIgnoreCase(email, pageable)
                 .map(AppointmentResponse::fromEntity);
+    }
+
+    /**
+     * Spring Data JPA turns {@link Pageable#getOffset()} into a 32-bit SQL {@code OFFSET} via
+     * {@code PageableUtils.getOffsetAsInteger}, which throws {@code InvalidDataAccessApiUsageException}
+     * (HTTP 500) past {@link Integer#MAX_VALUE}. Refuse negative bounds and overflowing offsets with 400.
+     */
+    private static Pageable newestFirstPageable(int page, int size) {
+        if (page < 0 || size < 1 || (long) page * size > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Invalid pagination parameters.");
+        }
+        return PageRequest.of(page, size, Sort.by("bookingDate").descending()
+                .and(Sort.by("bookingTime").descending())
+                .and(Sort.by("id").descending()));
     }
 }

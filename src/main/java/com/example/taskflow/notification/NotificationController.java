@@ -3,6 +3,7 @@ package com.example.taskflow.notification;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,6 +28,8 @@ class NotificationController {
     @Operation(summary = "Get all notifications (Admin Only)")
     @ApiResponse(responseCode = "200", description = "List of notifications returned (newest first, capped at top 100)")
     public ResponseEntity<List<NotificationOutboxResponse>> getNotifications() {
-        return ResponseEntity.ok(notificationService.getRecentNotifications());
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(notificationService.getRecentNotifications());
     }
 }

@@ -48,6 +48,16 @@ class ShallowEtagFilterTest {
 
         assertSame(response, chain.getResponse());
         assertNull(response.getHeader("ETag"));
+
+        MockHttpServletRequest encoded = new MockHttpServletRequest("GET", "/api/v1/appointments/%65vents");
+        encoded.setServletPath(EtagFilterConfig.EVENT_STREAM_PATH);
+        MockHttpServletResponse encodedResponse = new MockHttpServletResponse();
+        MockFilterChain encodedChain = new MockFilterChain();
+
+        filter.doFilter(encoded, encodedResponse, encodedChain);
+
+        assertSame(encodedResponse, encodedChain.getResponse());
+        assertNull(encodedResponse.getHeader("ETag"));
     }
 
     @Test

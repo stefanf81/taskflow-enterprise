@@ -138,6 +138,35 @@ class AppointmentQueryServiceTest extends AppointmentServiceTestSupport {
     }
 
     @Test
+    void testGetAllAppointments_SliceHasNextRaisesUnderstatedCachedTotal() {
+        List<Appointment> fullPage = java.util.stream.IntStream.rangeClosed(1, 10)
+                .mapToObj(id -> appointment(id, AppointmentStatus.PENDING, TOMORROW, "10:00"))
+                .toList();
+        when(statsService.getStatsCached()).thenReturn(new AppointmentStats(10L, 10L, 0L, 0L, 0L, 0, 0.0));
+        when(appointmentRepository.findByStatus(eq(AppointmentStatus.PENDING), any(Pageable.class)))
+                .thenReturn(new SliceImpl<>(fullPage, org.springframework.data.domain.PageRequest.of(0, 10), true));
+
+        AppointmentDashboardResponse response = queryService.getAllAppointments("PENDING", null, 0, 10);
+
+        assertEquals(11, response.page().getTotalElements());
+        assertEquals(2, response.page().getTotalPages());
+        assertTrue(response.page().hasNext());
+    }
+
+    @Test
+    void testPaginationRejectsNegativeBoundsAndIntegerOffsetOverflow() {
+        assertThrows(IllegalArgumentException.class,
+                () -> queryService.getAllAppointments(null, null, -1, 10));
+        assertThrows(IllegalArgumentException.class,
+                () -> queryService.getAllAppointments(null, null, 0, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> queryService.getAllAppointments(null, null, 21_474_837, 100));
+        assertThrows(IllegalArgumentException.class,
+                () -> queryService.getMyAppointments("john@test.com", 21_474_837, 100));
+        verifyNoInteractions(appointmentRepository, statsService);
+    }
+
+    @Test
     void testNullEntityToResponse() {
         assertNull(AppointmentResponse.fromEntity(null));
     }

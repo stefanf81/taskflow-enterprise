@@ -73,6 +73,11 @@ class LoginAttemptLimiter {
                             ? failures.secondsUntilReset(key)
                             : retryAfter);
                 }
+                // Also consult the local fallback so failures recorded during a brief Redis outage
+                // are not forgiven the moment Redis reconnects with an empty key.
+                if (failures.current(key) >= maxFailures) {
+                    throw new TooManyLoginAttemptsException(failures.secondsUntilReset(key));
+                }
                 return;
             }
         }

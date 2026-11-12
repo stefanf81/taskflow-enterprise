@@ -31,7 +31,7 @@ class CorsConfigTest {
 
         assertNotNull(corsConfiguration);
         // Set-Cookie is a forbidden response header name: browsers never expose it to scripts.
-        assertEquals(java.util.List.of("X-XSRF-TOKEN"), corsConfiguration.getExposedHeaders());
+        assertEquals(java.util.List.of("X-XSRF-TOKEN", "Retry-After"), corsConfiguration.getExposedHeaders());
     }
 
     @Test

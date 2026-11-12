@@ -481,8 +481,17 @@ class GlobalExceptionHandler {
             }
         }
 
-        // Log the actual exception securely on the server
-        logger.error("Unhandled exception caught: ", ex);
+        // SQL/data-access causes (e.g. PSQLException on CHECK/NOT NULL/length violations) can embed
+        // failing row column values with customer PII: log only the exception type and SQLState.
+        String sqlState = findSqlState(ex);
+        if (sqlState != null || ex instanceof org.springframework.dao.DataAccessException) {
+            logger.error("Unhandled data-access exception ({}, SQLState {}) on {}",
+                    ex.getClass().getSimpleName(),
+                    sqlState != null ? sqlState : "none",
+                    LogSanitizer.stripNewlines(request.getRequestURI()));
+        } else {
+            logger.error("Unhandled exception caught on {}: ", LogSanitizer.stripNewlines(request.getRequestURI()), ex);
+        }
 
         // Return an obfuscated message to the client to prevent Information Disclosure (ZAP Security fix)
         ErrorResponse errorResponse = new ErrorResponse(

@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.data.domain.Page;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
@@ -34,12 +35,13 @@ class CustomerController {
     @Operation(summary = "Get all appointments for the logged-in customer")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Paginated appointments returned"),
+            @ApiResponse(responseCode = "400", description = "Invalid pagination parameters"),
             @ApiResponse(responseCode = "401", description = "Not authenticated")
     })
     public ResponseEntity<Page<AppointmentResponse>> getMyAppointments(
             Authentication authentication,
-            @Parameter(description = "Page number (0-indexed)") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Page size") @RequestParam(defaultValue = "10") @Max(100) int size) {
+            @Parameter(description = "Page number (0-indexed)") @RequestParam(defaultValue = "0") @Min(0) int page,
+            @Parameter(description = "Page size") @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size) {
         String email = authentication.getName();
         // no-store: the customer's own bookings must not stay in the device HTTP cache after logout
         return ResponseEntity.ok()

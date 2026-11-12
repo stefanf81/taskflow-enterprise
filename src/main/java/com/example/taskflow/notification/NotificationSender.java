@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,7 +29,7 @@ class NotificationSender {
 
     private static final Logger logger = LoggerFactory.getLogger(NotificationSender.class);
 
-    public record Claim(Long id, String claimedBy, LocalDateTime claimedAt) { }
+    public record Claim(Long id, String claimedBy, Instant claimedAt) { }
 
     private record Delivery(Claim claim, int retryCount, NotificationGateway.Message message) { }
 
@@ -167,7 +167,7 @@ class NotificationSender {
             updated = outboxRepository.markSentIfClaimed(claim.id(), claim.claimedBy(), claim.claimedAt());
         } else {
             int retries = Math.min(delivery.retryCount() + 1, OutboxBackoff.MAX_ATTEMPTS);
-            LocalDateTime next = LocalDateTime.now(clock).plus(OutboxBackoff.delayAfter(retries))
+            Instant next = Instant.now(clock).plus(OutboxBackoff.delayAfter(retries))
                     .truncatedTo(ChronoUnit.MILLIS);
             updated = outboxRepository.markFailedIfClaimed(claim.id(), claim.claimedBy(), claim.claimedAt(), retries, next);
         }

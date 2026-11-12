@@ -105,10 +105,8 @@ class AppointmentReschedulingService {
         if (item.getCreationRequestFingerprint() == null) {
             item.setCreationRequestFingerprint(CreationRequestFingerprint.of(item));
         }
-        item.setBookingDate(request.bookingDate());
-        item.setBookingTime(start.toString());
-        // setBookingTime derives from today's catalog; explicitly restore the booked duration.
-        item.setBookingEndTime(Appointment.endTimeOf(start, duration));
+        // Preserve the booked duration directly without touching the lazy ServiceItem proxy.
+        item.setBookingSlot(request.bookingDate(), start.toString(), Appointment.endTimeOf(start, duration));
         item.setStatus(AppointmentStatus.PENDING);
         item.setReminderSent(false);
         try {
@@ -122,7 +120,10 @@ class AppointmentReschedulingService {
         } catch (OptimisticLockingFailureException | PessimisticLockingFailureException ex) {
             throw new ConflictException("The appointment or slot changed concurrently. Please refresh and retry.");
         }
-        events.publishEvent(AvailabilityChangedEvent.single(previous.barberName(), previous.bookingDate()));
+        if (!previous.bookingDate().equals(item.getBookingDate())
+                || !previous.barberName().equals(item.getBarberName())) {
+            events.publishEvent(AvailabilityChangedEvent.single(previous.barberName(), previous.bookingDate()));
+        }
         changes.availabilityChanged(item);
         events.publishEvent(new AppointmentRescheduledEvent(previous, AppointmentDetails.of(item), actor));
         changes.adminEvent(AppointmentAdminEvent.Type.UPDATED, item.getId());

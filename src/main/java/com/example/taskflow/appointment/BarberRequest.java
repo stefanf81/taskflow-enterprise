@@ -22,6 +22,9 @@ public record BarberRequest(
         String phone
 ) {
     public Barber toEntity() {
-        return new Barber(name, email, phone);
+        return new Barber(
+                name == null ? null : name.trim(),
+                email == null ? null : email.trim(),
+                phone == null ? null : phone.trim());
     }
 }

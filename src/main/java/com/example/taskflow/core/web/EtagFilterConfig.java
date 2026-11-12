@@ -46,9 +46,10 @@ class EtagFilterConfig {
              */
             @Override
             protected boolean shouldNotFilter(HttpServletRequest request) {
+                String path = RateLimiterConfig.requestPath(request);
                 String accept = request.getHeader("Accept");
-                return request.getRequestURI().endsWith(EVENT_STREAM_PATH)
-                        || RateLimiterConfig.requestPath(request).startsWith(ACTUATOR_PATH)
+                return path.endsWith(EVENT_STREAM_PATH)
+                        || path.startsWith(ACTUATOR_PATH)
                         || (accept != null && accept.contains("text/event-stream"));
             }
         };

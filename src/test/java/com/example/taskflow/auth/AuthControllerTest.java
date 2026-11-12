@@ -237,9 +237,11 @@ class AuthControllerTest {
         CsrfToken token = mock(CsrfToken.class);
         when(token.getToken()).thenReturn("csrf-value");
 
-        CsrfToken result = authController.csrf(token);
+        ResponseEntity<CsrfToken> result = authController.csrf(token);
 
-        assertEquals("csrf-value", result.getToken());
+        assertEquals(HttpStatus.OK, result.getStatusCode());
+        assertEquals("no-store", result.getHeaders().getCacheControl());
+        assertEquals("csrf-value", result.getBody().getToken());
     }
 
     @Test

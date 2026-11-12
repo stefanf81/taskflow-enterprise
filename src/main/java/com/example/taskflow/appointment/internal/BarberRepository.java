@@ -27,6 +27,10 @@ public interface BarberRepository extends JpaRepository<Barber, Long> {
     Optional<Barber> findByIdForBooking(@Param("id") Long id);
 
     @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("SELECT b FROM Barber b WHERE b.name = :name")
+    Optional<Barber> findByNameForBooking(@Param("name") String name);
+
+    @Lock(LockModeType.PESSIMISTIC_READ)
     @Query("SELECT b FROM Barber b ORDER BY b.id ASC")
     List<Barber> findAllForBooking();
 

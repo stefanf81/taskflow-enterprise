@@ -877,6 +877,7 @@
           "durationMinutes": {
             "exclusiveMinimum": 0,
             "format": "int32",
+            "maximum": 1440,
             "type": "integer"
           },
           "name": {
@@ -1029,6 +1030,7 @@
             "schema": {
               "default": 0,
               "format": "int32",
+              "minimum": 0,
               "type": "integer"
             }
           },
@@ -1041,6 +1043,7 @@
               "default": 10,
               "format": "int32",
               "maximum": 100,
+              "minimum": 1,
               "type": "integer"
             }
           }
@@ -2766,6 +2769,7 @@
             "schema": {
               "default": 0,
               "format": "int32",
+              "minimum": 0,
               "type": "integer"
             }
           },
@@ -2778,6 +2782,7 @@
               "default": 10,
               "format": "int32",
               "maximum": 100,
+              "minimum": 1,
               "type": "integer"
             }
           }
@@ -2792,6 +2797,16 @@
               }
             },
             "description": "Paginated appointments returned"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid pagination parameters"
           },
           "401": {
             "description": "Not authenticated"
