@@ -16,6 +16,13 @@ on:
         type: boolean
         default: false
 
+  schedule:
+    # Nightly against production, after the other nightlies (ci 22:00 ... renovate 22:40).
+    # Fires 22:52 UTC to land execution ~03:52 UTC (GitHub scheduler lag ~5h, see ci.yml).
+    # Scheduled runs use the inputs' defaults (production, early-click check on, CWV not
+    # enforced) and only run from the default branch.
+    - cron: "52 22 * * *"
+
 # Least-privilege: this workflow only checks out the repo and runs a k6
 # browser test and rate-limit-safe API probe against an external BASE_URL. It must NOT inherit the
 # repository-wide "Read and write" default (required by pushdockerimage.yml
@@ -24,8 +31,8 @@ on:
 permissions:
   contents: read
 
-# Serialize manual runs so two k6 browser sessions do not load the shared
-# external BASE_URL at the same time.
+# Serialize runs (nightly and manual) so two k6 browser sessions do not load the
+# shared external BASE_URL at the same time.
 concurrency:
   group: k6-${{ github.repository }}
   cancel-in-progress: false
@@ -41,8 +48,10 @@ jobs:
 
     env:
       BASE_URL: ${{ inputs.base_url || vars.BASE_URL }}
-      CHECK_EARLY_CLICK: ${{ inputs.check_early_click }}
-      ENFORCE_CWV: ${{ inputs.enforce_cwv }}
+      # A scheduled run has no inputs: spell out the defaults. An empty ENFORCE_CWV
+      # would turn the CWV gate on (browser.js enforces unless it is "false").
+      CHECK_EARLY_CLICK: ${{ inputs.check_early_click != false }}
+      ENFORCE_CWV: ${{ inputs.enforce_cwv == true }}
       # renovate: datasource=docker depName=grafana/k6 versioning=docker
       K6_VERSION: "2.3.0-with-browser"
 
