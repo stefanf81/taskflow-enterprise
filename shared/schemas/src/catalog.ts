@@ -25,8 +25,8 @@ export const omittedAsEmptyString = () => pipe(nullish(string()), transform((val
 
 export const serviceItemSchema = object({
   name: string().check(trim(), minLength(1, "Service name is required"), maxLength(100, "Service name must not exceed 100 characters")),
-  price: number().check(positive("Price must be positive"), maximum(99999999.99, "Price must have at most 8 integer digits and 2 decimals"), multipleOf(0.01, "Price must have at most 8 integer digits and 2 decimals")),
-  durationMinutes: int().check(positive("Duration must be positive"), maximum(2147483647, "Duration is too large")),
+  price: number("Price must be a valid number").check(positive("Price must be positive"), maximum(99999999.99, "Price must have at most 8 integer digits and 2 decimals"), multipleOf(0.01, "Price must have at most 8 integer digits and 2 decimals")),
+  durationMinutes: int("Duration must be a whole number").check(positive("Duration must be positive"), maximum(1440, "Duration must not exceed 1440 minutes")),
   category: string().check(trim(), minLength(1, "Category is required"), maxLength(50, "Category must not exceed 50 characters")),
   description: optional(string().check(maxLength(500, "Description must not exceed 500 characters"))),
 });
@@ -34,8 +34,20 @@ export const serviceItemSchema = object({
 export type ServiceItemRequest = zInfer<typeof serviceItemSchema>;
 
 export const barberSchema = object({
-  name: string().check(trim(), minLength(1, "Barber name is required"), maxLength(100)),
-  email: optional(union([string().check(email("Email must be valid"), maxLength(100)), literal("")])),
+  name: string().check(
+    trim(),
+    minLength(1, "Barber name is required"),
+    maxLength(100, "Barber name must not exceed 100 characters"),
+  ),
+  email: optional(
+    union([
+      string().check(
+        email("Email must be valid"),
+        maxLength(100, "Email must not exceed 100 characters"),
+      ),
+      literal(""),
+    ]),
+  ),
   phone: optional(string().check(maxLength(50, "Phone must be at most 50 characters"))),
 });
 

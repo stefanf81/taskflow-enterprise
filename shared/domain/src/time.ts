@@ -72,41 +72,114 @@ function wallClockFormatter(timeZone: string): Intl.DateTimeFormat {
 }
 
 /**
- * The shop's wall clock as a `Date` whose LOCAL components (getHours(), getDate(), ...) read the
- * time in the shop's time zone, so the local-component helpers here decide "today", "past" and
- * "too far ahead" the way the server does (it judges bookings in the shop zone, not the
- * visitor's). The result is a shifted stand-in for display and comparison only, never an instant
- * to send anywhere.
+ * Timezone-independent wall-clock reading in a calendar zone (`Date` satisfies this structurally,
+ * so callers and tests may pass either `shopWallClock(...)` or a local `Date`). Keeping shop
+ * wall-clock components out of `new Date(y, m, d, h, ...)` avoids shifting hours that fall inside
+ * a non-existent DST spring-forward gap on the visitor's own device.
+ */
+export interface WallClock {
+  getFullYear(): number;
+  getMonth(): number;
+  getDate(): number;
+  getDay(): number;
+  getHours(): number;
+  getMinutes(): number;
+  getSeconds(): number;
+  getMilliseconds(): number;
+}
+
+class ShopWallClock implements WallClock {
+  constructor(
+    private readonly year: number,
+    private readonly monthIndex: number,
+    private readonly day: number,
+    private readonly dayOfWeek: number,
+    private readonly hour: number,
+    private readonly minute: number,
+    private readonly second: number,
+    private readonly millisecond: number,
+  ) {}
+
+  getFullYear(): number {
+    return this.year;
+  }
+  getMonth(): number {
+    return this.monthIndex;
+  }
+  getDate(): number {
+    return this.day;
+  }
+  getDay(): number {
+    return this.dayOfWeek;
+  }
+  getHours(): number {
+    return this.hour;
+  }
+  getMinutes(): number {
+    return this.minute;
+  }
+  getSeconds(): number {
+    return this.second;
+  }
+  getMilliseconds(): number {
+    return this.millisecond;
+  }
+}
+
+/**
+ * The shop's wall clock as a {@link WallClock} whose components (`getHours()`, `getDate()`, ...)
+ * read the time in the shop's time zone, so the local-component helpers here decide "today",
+ * "past" and "too far ahead" the way the server does (it judges bookings in the shop zone, not the
+ * visitor's). The result is for display and comparison only, never an instant to send anywhere.
  *
  * Without a usable zone (not loaded yet, unknown id, no Intl time-zone support) the device's own
  * clock is returned: the server stays authoritative and rejects what this guesses wrong.
  */
-export function shopWallClock(timeZone: string | null | undefined, instant: Date = new Date()): Date {
+export function shopWallClock(
+  timeZone: string | null | undefined,
+  instant: Date = new Date(),
+): WallClock {
   if (!timeZone) return instant;
   try {
     const parts = wallClockFormatter(timeZone).formatToParts(instant);
     const read = (type: Intl.DateTimeFormatPartTypes): number =>
       Number(parts.find((part) => part.type === type)?.value);
-    const wall = new Date(
-      read('year'),
-      read('month') - 1,
-      read('day'),
-      read('hour'),
-      read('minute'),
-      read('second'),
+    const year = read('year');
+    const monthIndex = read('month') - 1;
+    const day = read('day');
+    const hour = read('hour');
+    const minute = read('minute');
+    const second = read('second');
+    const utcDay = Date.UTC(year, monthIndex, day);
+    if (
+      Number.isNaN(utcDay) ||
+      Number.isNaN(hour) ||
+      Number.isNaN(minute) ||
+      Number.isNaN(second)
+    ) {
+      return instant;
+    }
+    return new ShopWallClock(
+      year,
+      monthIndex,
+      day,
+      new Date(utcDay).getUTCDay(),
+      hour,
+      minute,
+      second,
       instant.getMilliseconds(),
     );
-    return Number.isNaN(wall.getTime()) ? instant : wall;
   } catch {
     return instant;
   }
 }
 
 /**
- * A Date as `YYYY-MM-DD` from its LOCAL components. Never `toISOString().split('T')[0]`: that
- * converts to UTC first and shifts the day near midnight in every zone ahead of UTC.
+ * A {@link WallClock} or `Date` as `YYYY-MM-DD` from its wall-clock components. Never
+ * `toISOString().split('T')[0]`: that converts to UTC first and shifts the day near midnight in
+ * every zone ahead of UTC.
  */
-export function toLocalDateString(date: Date): string {
+export function toLocalDateString(date: WallClock): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${date.getFullYear()}-${month}-${day}`;
@@ -131,13 +204,16 @@ export function parseLocalDate(dateStr: string): Date {
   return new Date(`${dateStr}T00:00:00`);
 }
 
-/** `YYYY-MM-DD` `days` calendar days after `date` (local components, DST-safe). */
-export function addDays(date: Date, days: number): string {
-  return toLocalDateString(new Date(date.getFullYear(), date.getMonth(), date.getDate() + days));
+/** `YYYY-MM-DD` `days` calendar days after `date` (wall-clock components, DST-safe). */
+export function addDays(date: WallClock, days: number): string {
+  const shifted = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate() + days));
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(shifted.getUTCDate()).padStart(2, '0');
+  return `${shifted.getUTCFullYear()}-${month}-${day}`;
 }
 
 /** Whether a slot has already started at `now`: a booking must lie strictly in the future. */
-export function isSlotInPast(dateStr: string, time24: string, now: Date): boolean {
+export function isSlotInPast(dateStr: string, time24: string, now: WallClock): boolean {
   if (!dateStr || !time24) return false;
   const today = toLocalDateString(now);
   if (dateStr < today) return true;
@@ -146,7 +222,10 @@ export function isSlotInPast(dateStr: string, time24: string, now: Date): boolea
 }
 
 /** Whether a booking date lies before today (a PENDING one is then overdue for the shop). */
-export function isOverdue(input: { bookingDate?: string } | string, now: Date = new Date()): boolean {
+export function isOverdue(
+  input: { bookingDate?: string } | string,
+  now: WallClock = new Date(),
+): boolean {
   if (!input) return false;
   const bookingDate = typeof input === 'string' ? input : input.bookingDate;
   return !!bookingDate && bookingDate < toLocalDateString(now);

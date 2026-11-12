@@ -69,6 +69,20 @@ describe('time helpers', () => {
     expect(shopWallClock(null, instant)).toBe(instant);
   });
 
+  it('preserves shop wall-clock hours that fall inside a US DST spring-forward gap', () => {
+    // 2026-03-08 01:30Z is 02:30 CET in Zurich, while America/New_York skips 02:00 -> 03:00.
+    const instant = new Date('2026-03-08T01:30:15.250Z');
+    const zurich = shopWallClock('Europe/Zurich', instant);
+    expect(toLocalDateString(zurich)).toBe('2026-03-08');
+    expect([zurich.getDay(), zurich.getHours(), zurich.getMinutes(), zurich.getSeconds(), zurich.getMilliseconds()]).toEqual([
+      0,
+      2,
+      30,
+      15,
+      250,
+    ]);
+  });
+
   it('rejects impossible calendar dates instead of rolling them over', () => {
     expect(isValidLocalDate('2026-02-28')).toBe(true);
     expect(isValidLocalDate('2026-02-29')).toBe(false);

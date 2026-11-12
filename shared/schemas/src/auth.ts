@@ -42,12 +42,16 @@ export const loginSchema = object({
 export type LoginRequest = zInfer<typeof loginSchema>;
 
 export const registerSchema = object({
-  fullName: string().check(trim(), minLength(1, "Full name is required"), maxLength(100)),
+  fullName: string().check(
+    trim(),
+    minLength(1, "Full name is required"),
+    maxLength(100, "Full name must not exceed 100 characters"),
+  ),
   email: string().check(
     trim(),
     minLength(1, "Email is required"),
     email("Valid email is required"),
-    maxLength(100),
+    maxLength(100, "Email must not exceed 100 characters"),
   ),
   password: string().check(
     minLength(8, "Password must be at least 8 characters"),

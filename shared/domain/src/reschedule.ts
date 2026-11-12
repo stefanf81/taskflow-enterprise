@@ -1,5 +1,5 @@
 import { hoursOn, isOpenOn, isWithinBookingWindow, isoWeekday, type ShopRules } from './shop';
-import { addDays, isSlotInPast, parseLocalDate, parseTimeToMinutes } from './time';
+import { type WallClock, addDays, isSlotInPast, parseLocalDate, parseTimeToMinutes } from './time';
 
 /** How many bookable days a reschedule picker offers. */
 export const RESCHEDULE_DAY_COUNT = 14;
@@ -12,7 +12,7 @@ export const RESCHEDULE_DAY_COUNT = 14;
  */
 export function openSlotsOn(
   dateStr: string,
-  now: Date,
+  now: WallClock,
   rules: ShopRules,
   slots: readonly string[],
   busy: readonly string[] = [],
@@ -35,7 +35,7 @@ export function openSlotsOn(
  * the booking window that still have a slot left.
  */
 export function rescheduleDates(
-  now: Date,
+  now: WallClock,
   rules: ShopRules,
   slots: readonly string[],
   count: number = RESCHEDULE_DAY_COUNT,

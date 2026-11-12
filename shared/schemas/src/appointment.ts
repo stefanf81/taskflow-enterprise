@@ -41,18 +41,34 @@ const timeSchema = string().check(
 );
 
 export const appointmentCreateSchema = object({
-  customerName: string().check(trim(), minLength(1, "Customer name is required"), maxLength(100)),
+  customerName: string().check(
+    trim(),
+    minLength(1, "Customer name is required"),
+    maxLength(100, "Customer name must not exceed 100 characters"),
+  ),
   customerEmail: string().check(
     trim(),
     minLength(1, "Customer email is required"),
     email("Invalid email format"),
-    maxLength(100),
+    maxLength(100, "Customer email must not exceed 100 characters"),
   ),
-  customerPhone: string().check(trim(), minLength(1, "Customer phone is required"), maxLength(50)),
-  barberName: string().check(trim(), minLength(1, "Barber name is required"), maxLength(100)),
+  customerPhone: string().check(
+    trim(),
+    minLength(1, "Customer phone is required"),
+    maxLength(50, "Customer phone must not exceed 50 characters"),
+  ),
+  barberName: string().check(
+    trim(),
+    minLength(1, "Barber name is required"),
+    maxLength(100, "Barber name must not exceed 100 characters"),
+  ),
   bookingDate: dateSchema,
   bookingTime: timeSchema,
-  serviceType: string().check(trim(), minLength(1, "Service type is required"), maxLength(100)),
+  serviceType: string().check(
+    trim(),
+    minLength(1, "Service type is required"),
+    maxLength(100, "Service type must not exceed 100 characters"),
+  ),
 });
 
 export type AppointmentCreateRequest = zInfer<typeof appointmentCreateSchema>;
@@ -183,12 +199,23 @@ export type BarberTimeOffResponse = zInfer<typeof barberTimeOffResponseSchema>;
 /** GET /api/v1/barbers/{id}/time-off response. */
 export const barberTimeOffResponseListSchema = array(barberTimeOffResponseSchema);
 
+export const cancelRequestSchema = object({
+  email: string().check(
+    trim(),
+    minLength(1, "Customer email is required"),
+    email("Invalid email format"),
+    maxLength(100, "Customer email must not exceed 100 characters"),
+  ),
+});
+
+export type CancelRequest = zInfer<typeof cancelRequestSchema>;
+
 export const calendarExportRequestSchema = object({
   email: string().check(
     trim(),
     minLength(1, "Customer email is required"),
     email("Invalid email format"),
-    maxLength(100),
+    maxLength(100, "Customer email must not exceed 100 characters"),
   ),
 });
 
@@ -213,7 +240,7 @@ export const guestRescheduleRequestSchema = object({
     trim(),
     minLength(1, "Customer email is required"),
     email("Invalid email format"),
-    maxLength(100),
+    maxLength(100, "Customer email must not exceed 100 characters"),
   ),
   bookingDate: dateSchema,
   bookingTime: timeSchema,
@@ -227,7 +254,7 @@ export const rescheduleAvailabilityRequestSchema = object({
     trim(),
     minLength(1, "Customer email is required"),
     email("Invalid email format"),
-    maxLength(100),
+    maxLength(100, "Customer email must not exceed 100 characters"),
   ),
   bookingDate: dateSchema,
 });
@@ -235,7 +262,10 @@ export const rescheduleAvailabilityRequestSchema = object({
 export type RescheduleAvailabilityRequest = zInfer<typeof rescheduleAvailabilityRequestSchema>;
 
 export const scheduleDaySchema = object({
-  dayOfWeek: int().check(gte(1), lte(7)),
+  dayOfWeek: int("Weekday must be a whole number").check(
+    gte(1, "Weekday must be between 1 and 7"),
+    lte(7, "Weekday must be between 1 and 7"),
+  ),
   opens: timeSchema,
   closes: timeSchema,
 });
@@ -251,8 +281,14 @@ export type BarberScheduleResponse = zInfer<typeof barberScheduleResponseSchema>
 
 export const scheduleChangeRequestSchema = object({
   days: array(scheduleDaySchema),
-  expectedRevision: string().check(trim(), minLength(1), maxLength(64)),
-  expectedConflicts: optional(string().check(maxLength(64))),
+  expectedRevision: string().check(
+    trim(),
+    minLength(1, "Schedule revision is required"),
+    maxLength(64, "Schedule revision must not exceed 64 characters"),
+  ),
+  expectedConflicts: optional(
+    string().check(maxLength(64, "Conflicts revision must not exceed 64 characters")),
+  ),
   cancelConflictingAppointments: _default(boolean(), false),
 });
 

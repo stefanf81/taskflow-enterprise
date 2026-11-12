@@ -1,4 +1,12 @@
-import { addDays, formatTime12Hour, isValidLocalDate, parseLocalDate, parseTimeToMinutes, toLocalDateString } from './time';
+import {
+  type WallClock,
+  addDays,
+  formatTime12Hour,
+  isValidLocalDate,
+  parseLocalDate,
+  parseTimeToMinutes,
+  toLocalDateString,
+} from './time';
 
 /** One weekday's hours as `GET /api/v1/appointments/public/shop` reports them. */
 export interface OpeningHours {
@@ -36,8 +44,8 @@ function dayName(dayOfWeek: number): string {
   return WEEKDAY_NAMES[dayOfWeek - 1] ?? '';
 }
 
-/** ISO weekday (1 = Monday ... 7 = Sunday) of a Date's local date. */
-export function isoWeekday(date: Date): number {
+/** ISO weekday (1 = Monday ... 7 = Sunday) of a wall-clock date. */
+export function isoWeekday(date: WallClock): number {
   return ((date.getDay() + 6) % 7) + 1;
 }
 
@@ -58,12 +66,12 @@ export function closedWeekdays(rules: ShopRules): number[] {
 }
 
 /** The last bookable date: today plus `maxAdvanceDays`. */
-export function lastBookableDate(now: Date, rules: ShopRules): string {
+export function lastBookableDate(now: WallClock, rules: ShopRules): string {
   return addDays(now, rules.maxAdvanceDays);
 }
 
 /** Whether `dateStr` lies in [today, today + maxAdvanceDays], the window the server accepts. */
-export function isWithinBookingWindow(dateStr: string, now: Date, rules: ShopRules): boolean {
+export function isWithinBookingWindow(dateStr: string, now: WallClock, rules: ShopRules): boolean {
   return isValidLocalDate(dateStr) && dateStr >= toLocalDateString(now) && dateStr <= lastBookableDate(now, rules);
 }
 
@@ -107,7 +115,7 @@ export function openingHoursRows(rules: ShopRules): OpeningHoursRow[] {
 }
 
 /** Whether the shop is open at the wall-clock moment `now` (shop time zone, see shopWallClock). */
-export function isOpenAt(now: Date, rules: ShopRules): boolean {
+export function isOpenAt(now: WallClock, rules: ShopRules): boolean {
   const hours = hoursOn(rules, isoWeekday(now));
   if (!hours) return false;
   const minutes = now.getHours() * 60 + now.getMinutes();

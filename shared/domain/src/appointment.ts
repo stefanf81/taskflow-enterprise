@@ -1,4 +1,4 @@
-import { isSlotInPast } from './time';
+import { type WallClock, isSlotInPast } from './time';
 
 /**
  * The "any barber" choice. Sent as the barber name; the server resolves it to a real barber inside
@@ -16,7 +16,7 @@ export const CANCELLABLE_STATUSES: readonly string[] = ['PENDING', 'APPROVED'];
  */
 export function isCustomerCancellable(
   booking: { status: string; bookingDate: string; bookingTime: string },
-  now: Date,
+  now: WallClock,
 ): boolean {
   return (
     CANCELLABLE_STATUSES.includes(booking.status.toUpperCase()) &&
