@@ -1,4 +1,5 @@
 import { Component, inject } from '@angular/core';
+import { formatUsd } from '../../../core/format';
 import { BookingStore } from '../booking.store';
 
 /** Wizard step 1: search and filter the catalog, pick a treatment. */
@@ -11,6 +12,7 @@ import { BookingStore } from '../booking.store';
 })
 export class ServiceStep {
   protected readonly store = inject(BookingStore);
+  protected readonly formatUsd = formatUsd;
 
   protected readonly categories = [
     { id: 'all', label: 'All' },

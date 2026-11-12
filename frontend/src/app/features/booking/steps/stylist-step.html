@@ -31,6 +31,7 @@
   <!-- No Preference Option -->
   <button
     type="button"
+    [attr.aria-pressed]="store.bookingBarber() === store.noPreferenceLabel"
     class="card w-full text-left p-4 border border-white/5 bg-zinc-900/30 hover:border-gold/30 hover:bg-gold/5 flex items-center gap-4 cursor-pointer transition-all"
     [class.selected-service-item]="store.bookingBarber() === store.noPreferenceLabel"
     (click)="store.selectStylist(store.noPreferenceLabel)"

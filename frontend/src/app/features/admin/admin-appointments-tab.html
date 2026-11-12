@@ -1,8 +1,12 @@
 <!-- SEARCH AND TABS CONTROLS -->
 <div class="space-y-4 mb-6">
   <div class="relative w-full">
-    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500">🔍</span>
+    <label for="admin-appointment-search" class="sr-only">Search customers</label>
+    <span aria-hidden="true" class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"
+      >🔍</span
+    >
     <input
+      id="admin-appointment-search"
       type="text"
       [value]="searchQuery()"
       (input)="onSearchChange($any($event.target).value)"
@@ -14,7 +18,9 @@
   <!-- Pill Filter Tabs -->
   <div class="flex bg-white/5 rounded-xl p-1 border border-white/5">
     <button
+      type="button"
       (click)="setFilter('all')"
+      [attr.aria-pressed]="selectedFilter() === 'all'"
       [class.bg-zinc-950]="selectedFilter() === 'all'"
       [class.text-gold]="selectedFilter() === 'all'"
       class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100"
@@ -22,7 +28,9 @@
       All
     </button>
     <button
+      type="button"
       (click)="setFilter('pending')"
+      [attr.aria-pressed]="selectedFilter() === 'pending'"
       [class.bg-zinc-950]="selectedFilter() === 'pending'"
       [class.text-gold]="selectedFilter() === 'pending'"
       class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100"
@@ -30,7 +38,9 @@
       Pending
     </button>
     <button
+      type="button"
       (click)="setFilter('approved')"
+      [attr.aria-pressed]="selectedFilter() === 'approved'"
       [class.bg-zinc-950]="selectedFilter() === 'approved'"
       [class.text-gold]="selectedFilter() === 'approved'"
       class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100"
@@ -38,7 +48,9 @@
       Approved
     </button>
     <button
+      type="button"
       (click)="setFilter('overdue')"
+      [attr.aria-pressed]="selectedFilter() === 'overdue'"
       [class.bg-zinc-950]="selectedFilter() === 'overdue'"
       [class.text-gold]="selectedFilter() === 'overdue'"
       class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100 tab-btn tab-danger"
@@ -46,7 +58,9 @@
       Overdue
     </button>
     <button
+      type="button"
       (click)="setFilter('denied')"
+      [attr.aria-pressed]="selectedFilter() === 'denied'"
       [class.bg-zinc-950]="selectedFilter() === 'denied'"
       [class.text-gold]="selectedFilter() === 'denied'"
       class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100"
@@ -54,7 +68,9 @@
       Denied
     </button>
     <button
+      type="button"
       (click)="setFilter('cancelled')"
+      [attr.aria-pressed]="selectedFilter() === 'cancelled'"
       [class.bg-zinc-950]="selectedFilter() === 'cancelled'"
       [class.text-gold]="selectedFilter() === 'cancelled'"
       class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100"

@@ -10,12 +10,14 @@ import {
 } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { merge } from 'rxjs';
 import { form, required } from '@angular/forms/signals';
 import { appointmentCreateSchema } from '@taskflow/schemas';
 import { NO_PREFERENCE_BARBER, closedDaysMessage, isWithinBookingWindow } from '@taskflow/domain';
 import { AppointmentItem } from '../../types/api';
 import {
   DEFAULT_TIME_SLOTS,
+  type WallClock,
   computeEstimatedEndTime,
   isSlotInPast,
   msUntilNextLocalMidnight,
@@ -23,6 +25,7 @@ import {
 } from '../../core/time-utils';
 import { AppointmentsApi } from '../../core/api/appointments-api';
 import { extractApiError } from '../../core/api/extract-api-error';
+import { formatUsd } from '../../core/format';
 import { AuthState } from '../../core/auth/auth.state';
 import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
 import { CustomerStore } from '../../core/customer/customer.store';
@@ -150,7 +153,7 @@ export class BookingStore {
    * on when the wizard is re-entered, the tab becomes visible again, or local
    * midnight passes. See {@link watchToday} / {@link refreshToday}.
    */
-  readonly now = signal<Date>(this.shopClock.now());
+  readonly now = signal<WallClock>(this.shopClock.now());
   readonly today = computed(() => toLocalDateString(this.now()));
   /** Booking window and opening days, from the backend (`ShopClock`). */
   readonly shopRules = this.shopClock.rules;
@@ -266,7 +269,7 @@ export class BookingStore {
   // receipt and the wizard summary show the catalog service price only.
   readonly checkoutTotal = computed(() => this.selectedServiceObj()?.price ?? 0);
 
-  readonly formattedTotal = computed(() => `$${this.checkoutTotal().toFixed(2)}`);
+  readonly formattedTotal = computed(() => formatUsd(this.checkoutTotal()));
 
   /**
    * Idempotency key for the current logical booking attempt. Generated on the
@@ -279,6 +282,8 @@ export class BookingStore {
 
   /** Contact details of the signed-in customer, re-applied whenever the form resets. */
   private sessionContact = NO_CONTACT;
+  /** Re-arms {@link watchToday}'s midnight timer once `/public/shop` delivers the shop's zone. */
+  private rearmMidnight: (() => void) | null = null;
 
   constructor() {
     // The lookbook lives on the landing page, which no longer imports this store (that static
@@ -296,10 +301,13 @@ export class BookingStore {
       untracked(() => this.selectLookbookStyle(pick.serviceName, pick.category));
     });
 
-    // The shop's zone arrives after the first render: re-read "now" in it.
+    // The shop's zone arrives after the first render: re-read "now" in it and re-arm midnight.
     effect(() => {
       this.shopClock.timeZone();
-      untracked(() => this.refreshToday());
+      untracked(() => {
+        this.refreshToday();
+        this.rearmMidnight?.();
+      });
     });
 
     // Keep the selection on a service the catalog really offers: preselect the first one
@@ -314,15 +322,17 @@ export class BookingStore {
       });
     });
 
-    // Nothing of a finished session may linger for the next visitor on a shared device:
-    // the contact details, the receipt (it carries the customer's name and code) and the form.
-    this.sessionEvents.sessionEnded.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
-      this.sessionContact = NO_CONTACT;
-      this.showReceiptModal.set(false);
-      this.lastBookedAppointment.set(null);
-      this.lastBookedTotal.set(0);
-      this.resetBookingForm();
-    });
+    // Nothing of a guest or finished session may linger across sign-in or sign-out on a shared
+    // device: contact details, receipt (carries the customer's name and code), search and form.
+    merge(this.sessionEvents.sessionEnded, this.sessionEvents.sessionStarted)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.sessionContact = NO_CONTACT;
+        this.showReceiptModal.set(false);
+        this.lastBookedAppointment.set(null);
+        this.lastBookedTotal.set(0);
+        this.resetBookingForm();
+      });
   }
 
   retryCatalog(): void {
@@ -430,6 +440,7 @@ export class BookingStore {
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const arm = () => {
+      if (timer !== undefined) clearTimeout(timer);
       // +1s so the refresh lands safely after midnight even with timer drift.
       timer = setTimeout(
         () => {
@@ -439,11 +450,13 @@ export class BookingStore {
         msUntilNextLocalMidnight(this.shopClock.now()) + 1000,
       );
     };
+    this.rearmMidnight = arm;
     arm();
 
     owner.onDestroy(() => {
       document.removeEventListener('visibilitychange', onVisible);
       if (timer !== undefined) clearTimeout(timer);
+      if (this.rearmMidnight === arm) this.rearmMidnight = null;
     });
   }
 
@@ -677,6 +690,7 @@ export class BookingStore {
       serviceType: defaultService,
     });
     this.selectedCategory.set('all');
+    this.serviceSearchQuery.set('');
     this.activeStep.set(1);
     // A fresh booking must not open step 4 with "required" errors from the last one.
     this.bookingForm().reset();

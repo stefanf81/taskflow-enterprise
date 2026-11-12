@@ -9,6 +9,7 @@ import {
   barberTimeOffResponseSchema,
   barberTimeOffSchema,
   busySlotsResponseSchema,
+  cancelRequestSchema,
   loginResponseSchema,
   loginSchema,
   mobileLoginResponseSchema,
@@ -318,7 +319,18 @@ describe('shared API schemas', () => {
 
     expect(barberSchema.safeParse({ name: 'Alex', email: '' }).success).toBe(true);
     expect(barberSchema.safeParse({ name: 'Alex', email: 'not-an-email' }).success).toBe(false);
-    expect(barberSchema.safeParse({ name: 'x'.repeat(101) }).success).toBe(false);
+    const tooLongBarber = barberSchema.safeParse({ name: 'x'.repeat(101) });
+    expect(tooLongBarber.success).toBe(false);
+    expect(tooLongBarber.error?.issues[0]?.message).toBe(
+      'Barber name must not exceed 100 characters',
+    );
+
+    expect(cancelRequestSchema.parse({ email: '  jane@example.com ' })).toEqual({
+      email: 'jane@example.com',
+    });
+    expect(cancelRequestSchema.safeParse({ email: 'bad' }).error?.issues[0]?.message).toBe(
+      'Invalid email format',
+    );
   });
 
   it('keeps review ratings whole numbers between 1 and 5', () => {

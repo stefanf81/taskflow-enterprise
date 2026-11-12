@@ -15,10 +15,37 @@
   </button>
 
   @if (actionSuccess(); as message) {
-    <div role="status" class="alert alert-success py-3 px-4 rounded-xl text-xs">{{ message }}</div>
+    <div
+      role="status"
+      aria-live="polite"
+      class="alert alert-success py-3 px-4 rounded-xl text-xs border border-emerald-500/10 flex items-center gap-2"
+    >
+      <span class="text-emerald-400 leading-normal font-medium">{{ message }}</span>
+      <button
+        type="button"
+        class="text-base font-bold opacity-60 hover:opacity-100 ml-auto"
+        (click)="actionSuccess.set(null)"
+        aria-label="Dismiss"
+      >
+        &times;
+      </button>
+    </div>
   }
   @if (actionError(); as message) {
-    <div role="alert" class="alert alert-error py-3 px-4 rounded-xl text-xs">{{ message }}</div>
+    <div
+      role="alert"
+      class="alert alert-error py-3 px-4 rounded-xl text-xs border border-red-500/20 flex items-center gap-2"
+    >
+      <span class="text-rose-400 leading-normal font-medium">{{ message }}</span>
+      <button
+        type="button"
+        class="text-base font-bold opacity-60 hover:opacity-100 ml-auto"
+        (click)="actionError.set(null)"
+        aria-label="Dismiss error"
+      >
+        &times;
+      </button>
+    </div>
   }
 
   @if (editorOpen()) {
@@ -177,7 +204,9 @@
                 {{ service.category }}
               </p>
             </div>
-            <p class="text-sm font-bold text-gold whitespace-nowrap">${{ service.price }}</p>
+            <p class="text-sm font-bold text-gold whitespace-nowrap">
+              {{ formatUsd(service.price) }}
+            </p>
           </div>
           <p class="text-[11px] text-zinc-400 mt-2 font-light">
             ⏱️ Duration: {{ service.durationMinutes }} mins
@@ -254,7 +283,9 @@
                   {{ service.category }}
                 </p>
               </div>
-              <p class="text-sm font-bold text-zinc-400 whitespace-nowrap">${{ service.price }}</p>
+              <p class="text-sm font-bold text-zinc-400 whitespace-nowrap">
+                {{ formatUsd(service.price) }}
+              </p>
             </div>
             <p class="text-[11px] text-zinc-400 mt-2 font-light">
               ⏱️ Duration: {{ service.durationMinutes }} mins

@@ -146,10 +146,10 @@ export class AppointmentStore {
    */
   onSearchChange(value: string): void {
     this.searchQuery.set(value);
-    this.currentPage.set(0); // Reset page
     this.cancelSearchDebounce();
     this.searchDebounceTimer = setTimeout(() => {
       this.searchDebounceTimer = null;
+      this.currentPage.set(0);
       this.searchDebounced.set(value);
     }, 300);
   }

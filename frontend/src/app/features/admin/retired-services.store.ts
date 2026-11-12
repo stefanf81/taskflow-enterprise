@@ -1,10 +1,12 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { merge } from 'rxjs';
 import { serviceItemResponseListSchema } from '@taskflow/schemas';
 import { ServiceItem } from '../../types/api';
 import { CatalogApi } from '../../core/api/catalog-api';
 import { extractApiError } from '../../core/api/extract-api-error';
+import { AuthState } from '../../core/auth/auth.state';
 import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
 import { refreshResource, safeResourceValue } from '../../core/resource-utils';
 import { SessionEvents } from '../../core/session-events';
@@ -18,11 +20,16 @@ import { SessionEvents } from '../../core/session-events';
 export class RetiredServicesStore {
   private readonly catalogApi = inject(CatalogApi);
   private readonly catalogStore = inject(ServiceCatalogStore);
+  private readonly authState = inject(AuthState);
+  private readonly sessionEvents = inject(SessionEvents);
   private readonly destroyRef = inject(DestroyRef);
 
   private readonly refreshTick = signal(0);
   private readonly retiredResource = httpResource<ServiceItem[]>(
     () => {
+      if (!this.authState.isLoggedIn() || this.authState.role() !== 'ROLE_ADMIN') {
+        return undefined;
+      }
       // Read so refreshResource() can restart a load that reload() would drop.
       this.refreshTick();
       return this.catalogApi.retiredUrl;
@@ -46,10 +53,12 @@ export class RetiredServicesStore {
   readonly actionSuccessMessage = signal<string | null>(null);
 
   constructor() {
-    // Drop per-session banners when the owner signs out / the session expires.
-    inject(SessionEvents)
-      .sessionEnded.pipe(takeUntilDestroyed(this.destroyRef))
+    // Drop cached retired services and banners across session boundaries, and restart on re-login.
+    merge(this.sessionEvents.sessionEnded, this.sessionEvents.sessionStarted)
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
+        this.retiredResource.set([]);
+        this.refreshTick.update((n) => n + 1);
         this.restoringId.set(null);
         this.actionErrorMessage.set(null);
         this.actionSuccessMessage.set(null);

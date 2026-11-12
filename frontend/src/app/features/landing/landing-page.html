@@ -112,7 +112,7 @@
                 <div class="border-b border-white/5 pb-4 last:border-none last:pb-0">
                   <div class="flex justify-between items-center font-bold text-sm mb-1">
                     <span class="text-zinc-100">{{ service.name }}</span>
-                    <span class="text-gold">${{ service.price }}</span>
+                    <span class="text-gold">{{ formatUsd(service.price) }}</span>
                   </div>
                   <p class="text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-2">
                     ⏱️ Duration: {{ service.durationMinutes }} mins

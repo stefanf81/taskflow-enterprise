@@ -110,11 +110,15 @@ describe('AdminEventsService', () => {
   });
 
   describe('reconnect (FE-6)', () => {
-    it('asks for a full reload after every (re)connect to catch up on missed events', () => {
+    it('skips reload on initial open and asks for a full reload after transient or permanent reconnects', () => {
       const reload = vi.fn();
       service.appointmentChanges.subscribe(reload);
       service.connect();
 
+      source().open();
+      expect(reload).not.toHaveBeenCalled();
+
+      source().dropTransiently();
       source().open();
       expect(reload).toHaveBeenCalledTimes(1);
 

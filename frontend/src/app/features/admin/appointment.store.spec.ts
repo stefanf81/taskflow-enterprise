@@ -163,18 +163,29 @@ describe('AppointmentStore', () => {
   it('should debounce search and encode the query in the URL (B1)', async () => {
     authState.applyRole('ROLE_ADMIN', 'admin');
     fixture.detectChanges();
-    httpMock.expectOne(() => true).flush(mockDashboard);
+    const multiPage = {
+      ...mockDashboard,
+      page: { ...mockDashboard.page, page: { ...mockDashboard.page.page, totalPages: 3 } },
+    };
+    httpMock.expectOne(() => true).flush(multiPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    store.setPage(2);
+    fixture.detectChanges();
+    httpMock.expectOne((r) => r.url.includes('page=2')).flush(multiPage);
+    await fixture.whenStable();
     fixture.detectChanges();
 
     vi.useFakeTimers();
     try {
       store.onSearchChange('Alice Smith');
 
-      // No request fires while the 300ms debounce window is still open.
+      // Neither search nor page reset fires an HTTP request while the 300ms debounce is open.
       fixture.detectChanges();
-      expect(httpMock.match((r) => r.url.includes('search='))).toHaveLength(0);
+      expect(httpMock.match((r) => r.url.includes('/api/v1/appointments'))).toHaveLength(0);
 
-      // Elapse the window -> searchDebounced updates -> resource refetches once.
+      // Elapse the window -> currentPage=0 and searchDebounced update together in one fetch.
       vi.advanceTimersByTime(300);
       await Promise.resolve(); // flush the resource effect microtask
       fixture.detectChanges();

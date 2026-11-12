@@ -66,7 +66,7 @@
       <span class="text-rose-400 leading-normal font-medium">{{ errorMessage() }}</span>
       <button
         type="button"
-        class="text-base font-bold opacity-60 hover:opacity-100"
+        class="text-base font-bold opacity-60 hover:opacity-100 ml-auto"
         (click)="errorMessage.set(null)"
         aria-label="Dismiss error"
       >
@@ -82,6 +82,14 @@
       class="alert alert-success mb-6 animate-fadeIn py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-emerald-500/10"
     >
       <span class="text-emerald-400 leading-normal font-medium">{{ successMessage() }}</span>
+      <button
+        type="button"
+        class="text-base font-bold opacity-60 hover:opacity-100 ml-auto"
+        (click)="successMessage.set(null)"
+        aria-label="Dismiss"
+      >
+        &times;
+      </button>
     </div>
   }
 
@@ -203,7 +211,14 @@
         <span>Slot Approval Completion Rate</span>
         <span class="text-gold font-extrabold text-sm">{{ stats().progress }}%</span>
       </div>
-      <div class="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+      <div
+        role="progressbar"
+        aria-label="Slot approval completion rate"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        [attr.aria-valuenow]="stats().progress"
+        class="w-full h-2 bg-white/5 rounded-full overflow-hidden"
+      >
         <div
           class="h-full bg-gradient-to-r from-gold to-gold-dark rounded-full"
           [style.width.%]="stats().progress"
@@ -256,7 +271,9 @@
         <!-- ADMIN VIEW TOGGLE -->
         <div class="flex gap-4 mb-6 border-b border-white/10 pb-4">
           <button
+            type="button"
             (click)="setAdminView('appointments')"
+            [attr.aria-pressed]="adminView() === 'appointments'"
             [class.text-gold]="adminView() === 'appointments'"
             [class.font-black]="adminView() === 'appointments'"
             class="text-sm font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors"
@@ -264,7 +281,9 @@
             Appointments
           </button>
           <button
+            type="button"
             (click)="setAdminView('services')"
+            [attr.aria-pressed]="adminView() === 'services'"
             [class.text-gold]="adminView() === 'services'"
             [class.font-black]="adminView() === 'services'"
             class="text-sm font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors"
@@ -272,7 +291,9 @@
             Service Catalog
           </button>
           <button
+            type="button"
             (click)="setAdminView('schedules')"
+            [attr.aria-pressed]="adminView() === 'schedules'"
             [class.text-gold]="adminView() === 'schedules'"
             [class.font-black]="adminView() === 'schedules'"
             class="text-sm font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors"
@@ -280,7 +301,9 @@
             Schedules & Time-Off
           </button>
           <button
+            type="button"
             (click)="setAdminView('notifications')"
+            [attr.aria-pressed]="adminView() === 'notifications'"
             [class.text-gold]="adminView() === 'notifications'"
             [class.font-black]="adminView() === 'notifications'"
             class="text-sm font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors"

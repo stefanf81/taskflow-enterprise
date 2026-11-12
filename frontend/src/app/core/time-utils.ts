@@ -2,13 +2,17 @@
  * Time helpers of the web client: the ones both clients share come from `@taskflow/domain`
  * (re-exported here so the app keeps one import point); the rest format for the browser.
  */
+import { parseLocalDate, type WallClock } from '@taskflow/domain';
+
 export {
   DEFAULT_TIME_SLOTS,
+  type WallClock,
   computeEstimatedEndTime,
   formatMinutesToTimeString,
   formatTime12Hour,
   isOverdue,
   isSlotInPast,
+  parseLocalDate,
   parseTimeToMinutes,
   shopWallClock,
   toLocalDateString,
@@ -32,14 +36,20 @@ const LOCAL_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
 
 export function formatLocalDate(dateStr: string): string {
   if (!dateStr) return '';
-  const date = new Date(`${dateStr}T00:00:00`);
+  const date = parseLocalDate(dateStr);
   if (Number.isNaN(date.getTime())) return dateStr;
   return LOCAL_DATE_FORMAT.format(date);
 }
 
 /** Milliseconds until the next local midnight (the moment "today" changes). */
-export function msUntilNextLocalMidnight(now: Date): number {
-  const next = new Date(now);
-  next.setHours(24, 0, 0, 0);
-  return next.getTime() - now.getTime();
+export function msUntilNextLocalMidnight(now: WallClock): number {
+  if (now instanceof Date) {
+    const next = new Date(now);
+    next.setHours(24, 0, 0, 0);
+    return next.getTime() - now.getTime();
+  }
+  const elapsedMs =
+    ((now.getHours() * 60 + now.getMinutes()) * 60 + now.getSeconds()) * 1000 +
+    now.getMilliseconds();
+  return 86_400_000 - elapsedMs;
 }

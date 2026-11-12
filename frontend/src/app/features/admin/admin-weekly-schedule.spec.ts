@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminWeeklySchedule } from './admin-weekly-schedule';
 import { AppointmentStore } from './appointment.store';
 import { BarberStore } from './barber.store';
+import { AuthState } from '../../core/auth/auth.state';
 
 describe('AdminWeeklySchedule', () => {
   let fixture: ComponentFixture<AdminWeeklySchedule>;
@@ -35,6 +36,7 @@ describe('AdminWeeklySchedule', () => {
       ],
     });
     httpMock = TestBed.inject(HttpTestingController);
+    TestBed.inject(AuthState).applyRole('ROLE_ADMIN', 'admin');
     store = TestBed.inject(BarberStore);
     store.selectedBarberId.set(1);
     fixture = TestBed.createComponent(AdminWeeklySchedule);

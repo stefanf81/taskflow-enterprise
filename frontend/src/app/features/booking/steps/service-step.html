@@ -6,8 +6,12 @@
 >
   <!-- Live Search Box inside Step 1 -->
   <div class="relative w-full">
-    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500">🔍</span>
+    <label for="service-search-input" class="sr-only">Search treatments</label>
+    <span aria-hidden="true" class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"
+      >🔍</span
+    >
     <input
+      id="service-search-input"
       type="text"
       [value]="store.serviceSearchQuery()"
       (input)="store.serviceSearchQuery.set($any($event.target).value)"
@@ -22,6 +26,7 @@
       <button
         type="button"
         (click)="store.setServiceCategory(category.id)"
+        [attr.aria-pressed]="store.selectedCategory() === category.id"
         [class.bg-zinc-950]="store.selectedCategory() === category.id"
         [class.text-gold]="store.selectedCategory() === category.id"
         class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
@@ -48,6 +53,7 @@
     @for (service of store.filteredServices(); track service.name) {
       <button
         type="button"
+        [attr.aria-pressed]="store.bookingService() === service.name"
         class="card w-full text-left p-4 border border-white/5 bg-zinc-900/30 hover:border-gold/30 cursor-pointer transition-all"
         [class.selected-service-item]="store.bookingService() === service.name"
         (click)="store.selectService(service.name)"
@@ -59,7 +65,7 @@
             }
             {{ service.name }}
           </span>
-          <span class="text-gold text-lg">${{ service.price }}</span>
+          <span class="text-gold text-lg">{{ formatUsd(service.price) }}</span>
         </span>
         <span class="block text-[10px] font-bold text-zinc-500 uppercase mt-0.5">
           ⏱️ Duration: {{ service.durationMinutes }} mins

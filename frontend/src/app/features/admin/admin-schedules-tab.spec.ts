@@ -5,6 +5,7 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { AdminSchedulesTab } from './admin-schedules-tab';
 import { BarberStore } from './barber.store';
+import { AuthState } from '../../core/auth/auth.state';
 
 describe('AdminSchedulesTab', () => {
   let fixture: ComponentFixture<AdminSchedulesTab>;
@@ -17,6 +18,7 @@ describe('AdminSchedulesTab', () => {
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     }).compileComponents();
 
+    TestBed.inject(AuthState).applyRole('ROLE_ADMIN', 'admin');
     fixture = TestBed.createComponent(AdminSchedulesTab);
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);

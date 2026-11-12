@@ -67,8 +67,9 @@ import { Component, signal } from '@angular/core';
           @if (activeFaq() === 2) {
             <div id="faq-panel-2" role="region" aria-labelledby="faq-btn-2" class="animate-fadeIn">
               <p class="text-zinc-400 font-light leading-relaxed mt-2 pl-1">
-                You can cancel or reschedule your reservation up to 2 hours prior to your scheduled
-                time through the online confirmation modal or by calling the shop directly.
+                You can cancel or reschedule your reservation online any time before your scheduled
+                start time using your Booking ID and verification email (or from My Appointments),
+                or by calling the shop directly.
               </p>
             </div>
           }

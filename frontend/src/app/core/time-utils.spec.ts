@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_TIME_SLOTS,
+  type WallClock,
   computeEstimatedEndTime,
   formatLocalDate,
   formatMinutesToTimeString,
@@ -14,7 +15,7 @@ import {
 } from './time-utils';
 import { DEFAULT_SHOP_RULES, isWithinBookingWindow } from '@taskflow/domain';
 
-const isBookableDate = (date: string, now: Date) =>
+const isBookableDate = (date: string, now: WallClock) =>
   isWithinBookingWindow(date, now, DEFAULT_SHOP_RULES);
 
 describe('time-utils', () => {
@@ -78,6 +79,7 @@ describe('time-utils', () => {
     it('returns empty string for empty input and the raw value when invalid', () => {
       expect(formatLocalDate('')).toBe('');
       expect(formatLocalDate('not-a-date')).toBe('not-a-date');
+      expect(formatLocalDate('2026-02-31')).toBe('2026-02-31');
     });
   });
 

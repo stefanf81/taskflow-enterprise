@@ -731,6 +731,29 @@ describe('BookingStore', () => {
       expect(store.showReceiptModal()).toBe(false);
       httpMock.match(() => true);
     });
+
+    it('clears pre-login guest draft, receipt and search query when a customer signs in', () => {
+      store.bookingModel.update((m) => ({
+        ...m,
+        customerName: 'Guest Alice',
+        customerEmail: 'alice@guest.test',
+        customerPhone: '555-0199',
+      }));
+      store.serviceSearchQuery.set('beard');
+      store.lastBookedAppointment.set({ id: 99 } as AppointmentItem);
+      store.showReceiptModal.set(true);
+
+      TestBed.inject(AuthState).applyRole('ROLE_CUSTOMER', 'bob@example.com');
+      store.prefillFromSession();
+
+      expect(store.bookingModel().customerName).toBe('');
+      expect(store.bookingModel().customerEmail).toBe('bob@example.com');
+      expect(store.bookingModel().customerPhone).toBe('');
+      expect(store.serviceSearchQuery()).toBe('');
+      expect(store.lastBookedAppointment()).toBeNull();
+      expect(store.showReceiptModal()).toBe(false);
+      httpMock.match(() => true);
+    });
   });
 });
 

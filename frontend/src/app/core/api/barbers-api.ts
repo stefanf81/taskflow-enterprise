@@ -15,6 +15,7 @@ import {
   barberResponseSchema,
   barberScheduleResponseSchema,
   barberSchema,
+  barberTimeOffResponseSchema,
   barberTimeOffSchema,
   scheduleChangeRequestSchema,
   schedulePreviewResponseSchema,
@@ -54,7 +55,13 @@ export class BarbersApi {
   addTimeOff(barberId: number, request: BarberTimeOffRequest): Observable<BarberTimeOff> {
     return defer(() => {
       const validated = parseRequest(barberTimeOffSchema, request);
-      return this.http.post<BarberTimeOff>(this.timeOffUrl(barberId), validated);
+      return this.http
+        .post<BarberTimeOff>(this.timeOffUrl(barberId), validated)
+        .pipe(
+          map((raw) =>
+            parseResponse(barberTimeOffResponseSchema, raw, 'POST /api/v1/barbers/{id}/time-off'),
+          ),
+        );
     });
   }
 

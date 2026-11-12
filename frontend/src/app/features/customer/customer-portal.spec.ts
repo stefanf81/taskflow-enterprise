@@ -68,7 +68,12 @@ describe('CustomerPortal Component Quality Assurance Suite', () => {
         // Mid-July 2026 on the shop's clock: the fixture's August bookings are still upcoming.
         {
           provide: ShopClock,
-          useValue: { now: () => new Date(2026, 6, 15, 12, 0), rules: () => DEFAULT_SHOP_RULES },
+          useValue: {
+            now: () => new Date(2026, 6, 15, 12, 0),
+            rules: () => DEFAULT_SHOP_RULES,
+            watch: () => undefined,
+            tick: () => undefined,
+          },
         },
       ],
     }).compileComponents();

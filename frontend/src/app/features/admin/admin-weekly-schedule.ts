@@ -65,7 +65,7 @@ function toDraft(schedule: BarberScheduleResponse | null): DayDraft[] {
                   [value]="day.opens"
                   [disabled]="isSaving()"
                   (change)="updateDay(day.dayOfWeek, { opens: $any($event.target).value })"
-                  class="search-input p-1.5 rounded-lg text-xs bg-zinc-950 border border-white/10 text-white"
+                  class="form-control p-1.5 rounded-lg text-xs bg-zinc-950 border border-white/10 text-white"
                 />
                 <span class="text-zinc-500 text-xs">to</span>
                 <input
@@ -74,7 +74,7 @@ function toDraft(schedule: BarberScheduleResponse | null): DayDraft[] {
                   [value]="day.closes"
                   [disabled]="isSaving()"
                   (change)="updateDay(day.dayOfWeek, { closes: $any($event.target).value })"
-                  class="search-input p-1.5 rounded-lg text-xs bg-zinc-950 border border-white/10 text-white"
+                  class="form-control p-1.5 rounded-lg text-xs bg-zinc-950 border border-white/10 text-white"
                 />
               } @else {
                 <span class="text-xs text-zinc-500 italic">Not working</span>

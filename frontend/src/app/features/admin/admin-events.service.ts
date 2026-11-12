@@ -27,9 +27,10 @@ const RECONNECT_MAX_MS = 30_000;
  * sends `evicted` (this stream was replaced because the admin opened too many tabs).
  *
  * Events can be missed while disconnected, so `appointmentChanges` also emits a
- * "reload everything" tick after EVERY (re)connect, and once per failed attempt
- * (which doubles as a cheap session probe: if the cookie expired, the HTTP reload
- * gets a 401 and the normal session-expiry flow takes over).
+ * "reload everything" tick after every RECONNECT (skipped on the initial open,
+ * when `AppointmentStore`'s reactive mount load is already in flight), and once per
+ * failed attempt (which doubles as a cheap session probe: if the cookie expired, the
+ * HTTP reload gets a 401 and the normal session-expiry flow takes over).
  */
 @Injectable({ providedIn: 'root' })
 export class AdminEventsService {
@@ -40,6 +41,7 @@ export class AdminEventsService {
   private source: EventSource | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
+  private reconnecting = false;
   /** True between connect() and close(): the only state in which reconnecting is allowed. */
   private wanted = false;
 
@@ -64,6 +66,7 @@ export class AdminEventsService {
   close(): void {
     this.wanted = false;
     this.reconnectAttempts = 0;
+    this.reconnecting = false;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -82,13 +85,19 @@ export class AdminEventsService {
 
     this.source = source;
     source.onopen = () => {
+      const shouldCatchUp = this.reconnecting;
+      this.reconnecting = false;
       this.reconnectAttempts = 0;
       this.connected.set(true);
-      // Anything that happened while we were not listening is lost: catch up.
-      this.appointmentChangesSubject.next();
+      // Anything that happened while we were disconnected is lost: catch up on reconnects.
+      // Initial mount already triggers AppointmentStore's reactive resource load.
+      if (shouldCatchUp) {
+        this.appointmentChangesSubject.next();
+      }
     };
     source.onerror = () => {
       this.connected.set(false);
+      this.reconnecting = true;
       if (source.readyState === READY_STATE_CLOSED) {
         this.handleClosed(source);
       }

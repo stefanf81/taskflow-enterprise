@@ -111,6 +111,14 @@
       <span class="flex-1 leading-normal text-emerald-400 font-medium">{{
         flash.successMessage()
       }}</span>
+      <button
+        type="button"
+        class="text-base font-bold opacity-60 hover:opacity-100"
+        (click)="flash.successMessage.set(null)"
+        aria-label="Dismiss"
+      >
+        &times;
+      </button>
     </div>
   }
 

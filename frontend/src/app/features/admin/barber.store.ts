@@ -1,6 +1,8 @@
 import { Injectable, signal, computed, inject, effect, DestroyRef } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { merge } from 'rxjs';
+import { AuthState } from '../../core/auth/auth.state';
 import {
   Barber,
   BarberRequest,
@@ -24,11 +26,16 @@ import {
 @Injectable({ providedIn: 'root' })
 export class BarberStore {
   private readonly barbersApi = inject(BarbersApi);
+  private readonly authState = inject(AuthState);
+  private readonly sessionEvents = inject(SessionEvents);
   private readonly referenceData = inject(ReferenceDataEvents);
 
   private readonly barbersRefreshTick = signal(0);
   private readonly barbersResource = httpResource<Barber[]>(
     () => {
+      if (!this.authState.isLoggedIn() || this.authState.role() !== 'ROLE_ADMIN') {
+        return undefined;
+      }
       this.barbersRefreshTick();
       return this.barbersApi.adminListUrl;
     },
@@ -45,6 +52,9 @@ export class BarberStore {
   private readonly timeOffRefreshTick = signal(0);
   private readonly timeOffsResource = httpResource<BarberTimeOff[]>(
     () => {
+      if (!this.authState.isLoggedIn() || this.authState.role() !== 'ROLE_ADMIN') {
+        return undefined;
+      }
       const id = this.selectedBarberId();
       // Read so refreshResource() can restart a load that reload() would drop.
       this.timeOffRefreshTick();
@@ -61,6 +71,9 @@ export class BarberStore {
   private readonly scheduleRefreshTick = signal(0);
   private readonly scheduleResource = httpResource<BarberScheduleResponse | null>(
     () => {
+      if (!this.authState.isLoggedIn() || this.authState.role() !== 'ROLE_ADMIN') {
+        return undefined;
+      }
       const id = this.selectedBarberId();
       this.scheduleRefreshTick();
       return id ? this.barbersApi.scheduleUrl(id) : undefined;
@@ -97,10 +110,18 @@ export class BarberStore {
   private readonly destroyRef = inject(DestroyRef);
 
   constructor() {
-    // Drop per-session banners when the admin signs out / the session expires.
-    inject(SessionEvents)
-      .sessionEnded.pipe(takeUntilDestroyed(this.destroyRef))
+    // Drop admin roster contact data, schedules, time-offs and banners across session boundaries,
+    // and bump the refresh ticks so re-signing in after an expired session reloads cleanly.
+    merge(this.sessionEvents.sessionEnded, this.sessionEvents.sessionStarted)
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
+        this.selectedBarberId.set(null);
+        this.barbersResource.set([]);
+        this.timeOffsResource.set([]);
+        this.scheduleResource.set(null);
+        this.barbersRefreshTick.update((n) => n + 1);
+        this.timeOffRefreshTick.update((n) => n + 1);
+        this.scheduleRefreshTick.update((n) => n + 1);
         this.actionErrorMessage.set(null);
         this.actionSuccessMessage.set(null);
         this.isSaving.set(false);

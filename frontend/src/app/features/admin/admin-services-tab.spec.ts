@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { AuthState } from '../../core/auth/auth.state';
 import { AdminServicesTab } from './admin-services-tab';
 
 describe('AdminServicesTab', () => {
@@ -40,6 +41,7 @@ describe('AdminServicesTab', () => {
       providers: [provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
+    TestBed.inject(AuthState).applyRole('ROLE_ADMIN', 'admin');
     fixture = TestBed.createComponent(AdminServicesTab);
     httpMock = TestBed.inject(HttpTestingController);
     fixture.detectChanges();

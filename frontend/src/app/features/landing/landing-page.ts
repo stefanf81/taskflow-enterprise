@@ -1,6 +1,7 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthState } from '../../core/auth/auth.state';
+import { formatUsd } from '../../core/format';
 import { DashboardPrefetch } from '../../dashboard-loaders';
 import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
 import { FlashMessages } from '../../core/ui/flash-messages';
@@ -54,6 +55,7 @@ export class LandingPage {
   );
 
   protected readonly isLoggedIn = this.authState.isLoggedIn;
+  protected readonly formatUsd = formatUsd;
   readonly showAdminLoginModal = signal(false);
   protected readonly services = this.catalogStore.services;
   readonly servicesLoading = this.catalogStore.isLoading;
@@ -63,6 +65,8 @@ export class LandingPage {
   protected readonly skeletonRows = [0, 1, 2, 3, 4];
 
   constructor() {
+    this.shopClock.watch?.(inject(DestroyRef));
+
     // A session that expired elsewhere in the app sends the user here with the
     // login modal requested (AuthState owns the "session expired" notice).
     effect(() => {

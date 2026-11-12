@@ -149,8 +149,10 @@ class ContainerConfigGuardTest {
         assertFalse(problem.contains("add_header"), "the error location must keep the server-level headers");
 
         String sse = block(content, "location = /api/v1/appointments/events {");
-        assertTrue(sse.contains("proxy_read_timeout 1h;") && sse.contains("proxy_buffering off;"),
-                "the SSE stream keeps its unbuffered, long-lived proxy (ADR-009)");
+        assertTrue(sse.contains("proxy_connect_timeout 5s;")
+                        && sse.contains("proxy_read_timeout 1h;")
+                        && sse.contains("proxy_buffering off;"),
+                "the SSE stream bounds upstream connect time and keeps its unbuffered, long-lived proxy (ADR-009)");
         assertFalse(sse.contains("error_page"), "the SSE location is not part of the JSON error mapping");
     }
 

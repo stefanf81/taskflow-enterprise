@@ -22,6 +22,7 @@
           tabindex="0"
           role="button"
           [attr.aria-label]="'Select barber: ' + barber.name"
+          [attr.aria-pressed]="selectedBarberId() === barber.id"
           class="p-4 rounded-xl border cursor-pointer transition-all"
           [class]="
             selectedBarberId() === barber.id
@@ -52,7 +53,7 @@
           placeholder="Name *"
           [value]="newBarberName()"
           (input)="newBarberName.set($any($event.target).value)"
-          class="search-input w-full p-2 rounded-xl text-xs bg-zinc-950 border border-white/10 text-white"
+          class="form-control w-full p-2 rounded-xl text-xs bg-zinc-950 border border-white/10 text-white"
         />
         <input
           type="email"
@@ -60,7 +61,7 @@
           placeholder="Email"
           [value]="newBarberEmail()"
           (input)="newBarberEmail.set($any($event.target).value)"
-          class="search-input w-full p-2 rounded-xl text-xs bg-zinc-950 border border-white/10 text-white"
+          class="form-control w-full p-2 rounded-xl text-xs bg-zinc-950 border border-white/10 text-white"
         />
         <input
           type="text"
@@ -68,7 +69,7 @@
           placeholder="Phone"
           [value]="newBarberPhone()"
           (input)="newBarberPhone.set($any($event.target).value)"
-          class="search-input w-full p-2 rounded-xl text-xs bg-zinc-950 border border-white/10 text-white"
+          class="form-control w-full p-2 rounded-xl text-xs bg-zinc-950 border border-white/10 text-white"
         />
         <button
           type="button"
@@ -141,7 +142,7 @@
               id="timeOffStartDate"
               type="date"
               [formField]="timeOffForm.startDate"
-              class="search-input w-full p-2.5 rounded-xl text-sm bg-zinc-950 border border-white/10 text-white"
+              class="form-control w-full p-2.5 rounded-xl text-sm bg-zinc-950 border border-white/10 text-white"
             />
           </div>
           <div>
@@ -154,7 +155,7 @@
               id="timeOffEndDate"
               type="date"
               [formField]="timeOffForm.endDate"
-              class="search-input w-full p-2.5 rounded-xl text-sm bg-zinc-950 border border-white/10 text-white"
+              class="form-control w-full p-2.5 rounded-xl text-sm bg-zinc-950 border border-white/10 text-white"
             />
           </div>
         </div>
@@ -169,7 +170,7 @@
             type="text"
             [formField]="timeOffForm.reason"
             placeholder="e.g. Vacation"
-            class="search-input w-full p-2.5 rounded-xl text-sm bg-zinc-950 border border-white/10 text-white"
+            class="form-control w-full p-2.5 rounded-xl text-sm bg-zinc-950 border border-white/10 text-white"
           />
         </div>
         <button class="btn btn-submit w-full py-2.5" [disabled]="isSaving()" (click)="addTimeOff()">

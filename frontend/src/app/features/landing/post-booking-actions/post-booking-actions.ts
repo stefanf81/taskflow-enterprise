@@ -70,7 +70,9 @@ interface ReviewFormModel {
                 [formField]="cancelForm.publicId"
                 placeholder="e.g., 8f8d9b..."
                 class="form-control"
-                [attr.aria-invalid]="cancelForm.publicId().invalid() ? 'true' : null"
+                [attr.aria-invalid]="
+                  cancelForm.publicId().touched() && cancelForm.publicId().invalid() ? 'true' : null
+                "
                 aria-describedby="cancelBookingId-error"
               />
               <span
@@ -96,7 +98,9 @@ interface ReviewFormModel {
                 [formField]="cancelForm.email"
                 placeholder="e.g., john@example.com"
                 class="form-control"
-                [attr.aria-invalid]="cancelForm.email().invalid() ? 'true' : null"
+                [attr.aria-invalid]="
+                  cancelForm.email().touched() && cancelForm.email().invalid() ? 'true' : null
+                "
                 aria-describedby="cancelEmail-error"
               />
               <span
@@ -150,7 +154,11 @@ interface ReviewFormModel {
               [formField]="rescheduleForm.publicId"
               placeholder="e.g., 8f8d9b..."
               class="form-control"
-              [attr.aria-invalid]="rescheduleForm.publicId().invalid() ? 'true' : null"
+              [attr.aria-invalid]="
+                rescheduleForm.publicId().touched() && rescheduleForm.publicId().invalid()
+                  ? 'true'
+                  : null
+              "
             />
           </div>
           <div class="form-group flex flex-col gap-1.5">
@@ -165,7 +173,9 @@ interface ReviewFormModel {
               [formField]="rescheduleForm.email"
               placeholder="e.g., john@example.com"
               class="form-control"
-              [attr.aria-invalid]="rescheduleForm.email().invalid() ? 'true' : null"
+              [attr.aria-invalid]="
+                rescheduleForm.email().touched() && rescheduleForm.email().invalid() ? 'true' : null
+              "
             />
           </div>
           @if (!rescheduleTarget()) {
@@ -214,7 +224,9 @@ interface ReviewFormModel {
                 [formField]="reviewForm.publicId"
                 placeholder="e.g., 8f8d9b..."
                 class="form-control"
-                [attr.aria-invalid]="reviewForm.publicId().invalid() ? 'true' : null"
+                [attr.aria-invalid]="
+                  reviewForm.publicId().touched() && reviewForm.publicId().invalid() ? 'true' : null
+                "
                 aria-describedby="reviewPublicId-error"
               />
               <span
@@ -240,7 +252,9 @@ interface ReviewFormModel {
                 [formField]="reviewForm.email"
                 placeholder="e.g., john@example.com"
                 class="form-control"
-                [attr.aria-invalid]="reviewForm.email().invalid() ? 'true' : null"
+                [attr.aria-invalid]="
+                  reviewForm.email().touched() && reviewForm.email().invalid() ? 'true' : null
+                "
                 aria-describedby="reviewEmail-error"
               />
               <span
@@ -263,7 +277,9 @@ interface ReviewFormModel {
                 id="reviewRating"
                 [formField]="reviewForm.rating"
                 class="form-control"
-                [attr.aria-invalid]="reviewForm.rating().invalid() ? 'true' : null"
+                [attr.aria-invalid]="
+                  reviewForm.rating().touched() && reviewForm.rating().invalid() ? 'true' : null
+                "
                 aria-describedby="reviewRating-error"
               />
               <span
@@ -393,9 +409,13 @@ export class PostBookingActionsComponent {
   onChooseNewTime(): void {
     const publicId = normalizePublicId(this.rescheduleModel().publicId);
     const email = this.rescheduleModel().email.trim();
-    if (!publicId || !email || this.rescheduleForm().invalid()) {
+    if (!publicId || !email || email.length > 100 || this.rescheduleForm().invalid()) {
       this.rescheduleForm().markAsTouched();
-      this.flash.errorMessage.set('Enter your Booking Code and the email you booked with.');
+      this.flash.errorMessage.set(
+        email.length > 100
+          ? 'Customer email must not exceed 100 characters.'
+          : 'Enter your Booking Code and the email you booked with.',
+      );
       return;
     }
     this.flash.errorMessage.set(null);

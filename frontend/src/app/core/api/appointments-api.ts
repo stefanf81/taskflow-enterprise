@@ -18,7 +18,9 @@ import {
   busySlotsResponseSchema,
   calendarExportRequestSchema,
   calendarExportResponseSchema,
+  cancelRequestSchema,
   guestRescheduleRequestSchema,
+  rescheduleAvailabilityRequestSchema,
   rescheduleRequestSchema,
 } from '@taskflow/schemas';
 
@@ -113,18 +115,18 @@ export class AppointmentsApi {
 
   /**
    * The same answer for a guest, who proves the booking with its email. A POST, so the email
-   * stays out of the URL (and out of access logs); it is not validated here, the server answers
-   * a malformed one with 400 and a wrong one with 404.
+   * stays out of the URL (and out of access logs).
    */
   publicRescheduleAvailabilityRequest(
     publicId: string,
     email: string,
     bookingDate: string,
   ): HttpResourceRequest {
+    const validated = parseRequest(rescheduleAvailabilityRequestSchema, { email, bookingDate });
     return {
       url: `${this.base}/public/reschedule/${encodeURIComponent(publicId)}/availability`,
       method: 'POST',
-      body: { email, bookingDate },
+      body: validated,
       context: new HttpContext().set(PUBLIC_REQUEST, true),
     };
   }
@@ -141,11 +143,14 @@ export class AppointmentsApi {
   }
 
   publicCancelAppointment(publicId: string, email: string): Observable<void> {
-    return this.http.put<void>(
-      `${this.base}/public/cancel/${encodeURIComponent(publicId)}`,
-      { email },
-      { context: new HttpContext().set(PUBLIC_REQUEST, true) },
-    );
+    return defer(() => {
+      const validated = parseRequest(cancelRequestSchema, { email });
+      return this.http.put<void>(
+        `${this.base}/public/cancel/${encodeURIComponent(publicId)}`,
+        validated,
+        { context: new HttpContext().set(PUBLIC_REQUEST, true) },
+      );
+    });
   }
 
   updateAppointmentStatus(

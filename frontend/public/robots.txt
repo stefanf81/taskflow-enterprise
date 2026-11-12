@@ -3,4 +3,5 @@ Allow: /
 Disallow: /admin
 Disallow: /customer
 
+# Default local/homelab origin; update alongside index.html and sitemap.xml for a public domain.
 Sitemap: https://taskflow.local/sitemap.xml

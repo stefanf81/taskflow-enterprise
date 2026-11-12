@@ -1,8 +1,18 @@
-import { Component, computed, inject, input, linkedSignal, output, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  computed,
+  inject,
+  input,
+  linkedSignal,
+  output,
+  signal,
+} from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import {
   DEFAULT_TIME_SLOTS,
   formatTime12Hour,
+  isSlotInPast,
   openSlotsOn,
   parseLocalDate,
   rescheduleDates,
@@ -115,6 +125,10 @@ export class ReschedulePicker {
   private readonly shopClock = inject(ShopClock);
   private readonly appointmentsApi = inject(AppointmentsApi);
 
+  constructor() {
+    this.shopClock.watch?.(inject(DestroyRef));
+  }
+
   /** The booking to move; a guest also passes the email it was booked with. */
   readonly publicId = input.required<string>();
   readonly email = input<string | null>(null);
@@ -183,18 +197,26 @@ export class ReschedulePicker {
     const bookingDate = this.selectedDate();
     const bookingTime = this.selectedTime();
     if (!bookingDate || !bookingTime || this.saving()) return;
+    this.shopClock.tick?.();
+    if (isSlotInPast(bookingDate, bookingTime, this.shopClock.now())) {
+      this.selectedTime.set('');
+      return;
+    }
     this.confirmed.emit({ bookingDate, bookingTime });
   }
 
   protected shortDate(dateStr: string): string {
-    return parseLocalDate(dateStr).toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
+    const date = parseLocalDate(dateStr);
+    return Number.isNaN(date.getTime()) ? dateStr : SHORT_DATE_FORMAT.format(date);
   }
 
   protected formatTime12Hour(time24: string): string {
     return formatTime12Hour(time24);
   }
 }
+
+const SHORT_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
+  weekday: 'short',
+  month: 'short',
+  day: 'numeric',
+});

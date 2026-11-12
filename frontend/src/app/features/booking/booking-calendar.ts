@@ -7,7 +7,7 @@
  * without fake timers. The shop facts (opening days, booking window) are a `ShopRules` argument,
  * which `ShopClock.rules()` reads from the backend.
  */
-import { type ShopRules, isOpenOn } from '@taskflow/domain';
+import { type ShopRules, type WallClock, isOpenOn } from '@taskflow/domain';
 import { isSlotInPast, toLocalDateString } from '../../core/time-utils';
 
 /** How many bookable days the date carousel shows. */
@@ -15,6 +15,8 @@ export const CAROUSEL_DAY_COUNT = 7;
 
 /** How many calendar days (from today) the carousel searches for its bookable days. */
 const CAROUSEL_LOOKAHEAD_DAYS = 14;
+const SHORT_WEEKDAY_FORMAT = new Intl.DateTimeFormat('en-US', { weekday: 'short' });
+const SHORT_MONTH_FORMAT = new Intl.DateTimeFormat('en-US', { month: 'short' });
 
 /** One chip of the date carousel. */
 export interface BookingDay {
@@ -31,7 +33,7 @@ export function isClosedDay(dateStr: string, rules: ShopRules): boolean {
 }
 
 /** Whether every slot of `dateStr` has already started at `now`. */
-export function isDayOver(dateStr: string, now: Date, slots: readonly string[]): boolean {
+export function isDayOver(dateStr: string, now: WallClock, slots: readonly string[]): boolean {
   return slots.every((slot) => isSlotInPast(dateStr, slot, now));
 }
 
@@ -40,7 +42,7 @@ export function isDayOver(dateStr: string, now: Date, slots: readonly string[]):
  * weekdays are skipped, and so is today once none of its slots is left.
  */
 export function upcomingBookingDays(
-  now: Date,
+  now: WallClock,
   slots: readonly string[],
   rules: ShopRules,
 ): BookingDay[] {
@@ -48,18 +50,16 @@ export function upcomingBookingDays(
   // Offsets 0..maxAdvanceDays are inside the booking window.
   const lookahead = Math.min(CAROUSEL_LOOKAHEAD_DAYS, rules.maxAdvanceDays + 1);
   for (let offset = 0; days.length < CAROUSEL_DAY_COUNT && offset < lookahead; offset++) {
-    const date = new Date(now);
-    date.setDate(now.getDate() + offset);
-    // Local components on purpose: `now` is the shop's wall clock, and `toISOString()` would
-    // shift the day in US/EU time zones.
+    // Noon avoids midnight DST rollovers on the visitor's device while keeping weekday/month names exact.
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset, 12);
     const dateStr = toLocalDateString(date);
     if (!isOpenOn(dateStr, rules)) continue;
     if (offset === 0 && isDayOver(dateStr, now, slots)) continue;
     days.push({
       dateStr,
-      dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
+      dayName: SHORT_WEEKDAY_FORMAT.format(date),
       dayNum: date.getDate(),
-      monthName: date.toLocaleDateString('en-US', { month: 'short' }),
+      monthName: SHORT_MONTH_FORMAT.format(date),
     });
   }
   return days;
@@ -69,7 +69,7 @@ export function upcomingBookingDays(
 export function isSlotUnavailable(
   dateStr: string,
   slot: string,
-  now: Date,
+  now: WallClock,
   busySlots: readonly string[],
 ): boolean {
   return busySlots.includes(slot) || isSlotInPast(dateStr, slot, now);
@@ -78,7 +78,7 @@ export function isSlotUnavailable(
 /** The first slot of `dateStr` that has not started and is not known to be taken ('' if none). */
 export function firstOpenSlot(
   dateStr: string,
-  now: Date,
+  now: WallClock,
   slots: readonly string[],
   busySlots: readonly string[],
 ): string {

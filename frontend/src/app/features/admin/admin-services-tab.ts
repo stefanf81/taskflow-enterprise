@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { serviceItemSchema } from '@taskflow/schemas';
 import { CatalogApi } from '../../core/api/catalog-api';
 import { extractApiError } from '../../core/api/extract-api-error';
+import { formatUsd } from '../../core/format';
 import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
 import { ServiceItem } from '../../types/api';
 import { RetiredServicesStore } from './retired-services.store';
@@ -49,6 +50,7 @@ export class AdminServicesTab {
   );
   protected readonly actionError = signal<string | null>(null);
   protected readonly actionSuccess = signal<string | null>(null);
+  protected readonly formatUsd = formatUsd;
 
   protected openEditor(service?: ServiceItem): void {
     if (this.pending()) return;

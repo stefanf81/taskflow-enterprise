@@ -7,17 +7,15 @@
  * The formatters are built once: constructing an `Intl` formatter costs about ten times as much as
  * using one, and these run per row on every change detection pass.
  */
-const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+import { formatUsd } from '@taskflow/domain';
+
 const AMOUNT = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
 const DATE_TIME = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'medium' });
 
-/** `1234.5` → `$1,234.50` (the `currency: 'USD'` pipe); '' for a missing value. */
-export function formatUsd(amount: number | null | undefined): string {
-  return amount == null || Number.isNaN(amount) ? '' : USD.format(amount);
-}
+export { formatUsd };
 
 /** `1234.5` → `1,234.50` (the `number: '1.2-2'` pipe); '' for a missing value. */
 export function formatAmount(amount: number | null | undefined): string {

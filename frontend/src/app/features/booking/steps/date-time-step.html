@@ -90,6 +90,7 @@
         @for (slot of store.timeSlots; track slot) {
           <button
             type="button"
+            [attr.aria-pressed]="store.bookingTime() === slot"
             class="btn btn-secondary slot-picker-btn time-slot-btn"
             [class.slot-busy]="store.isSlotUnavailable(slot)"
             [class.slot-selected]="store.bookingTime() === slot"

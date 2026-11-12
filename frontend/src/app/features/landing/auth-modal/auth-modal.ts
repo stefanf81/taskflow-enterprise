@@ -1,4 +1,4 @@
-import { Component, output, signal, inject, DestroyRef, isDevMode } from '@angular/core';
+import { Component, computed, output, signal, inject, DestroyRef, isDevMode } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { A11yModule } from '@angular/cdk/a11y';
 import { form, required, FormField } from '@angular/forms/signals';
@@ -114,7 +114,11 @@ interface AuthFormModel {
                     ? 'true'
                     : null
                 "
-                aria-describedby="regName-error"
+                [attr.aria-describedby]="
+                  authForm.fullName().touched() && !authModel().fullName.trim()
+                    ? 'regName-error'
+                    : null
+                "
               />
               @if (authForm.fullName().touched() && !authModel().fullName.trim()) {
                 <span id="regName-error" class="text-rose-400 text-[10px]">
@@ -150,7 +154,11 @@ interface AuthFormModel {
               [attr.aria-invalid]="
                 authForm.username().touched() && authForm.username().invalid() ? 'true' : null
               "
-              aria-describedby="username-error"
+              [attr.aria-describedby]="
+                authForm.username().touched() && authForm.username().invalid()
+                  ? 'username-error'
+                  : null
+              "
             />
             @if (authForm.username().touched() && authForm.username().invalid()) {
               <span id="username-error" class="text-rose-400 text-[10px]">
@@ -172,7 +180,7 @@ interface AuthFormModel {
               [attr.aria-invalid]="
                 authForm.password().touched() && authForm.password().invalid() ? 'true' : null
               "
-              aria-describedby="password-error password-policy"
+              [attr.aria-describedby]="passwordDescribedBy()"
             />
             @if (authForm.password().touched() && authForm.password().invalid()) {
               <span id="password-error" class="text-rose-400 text-[10px]">
@@ -248,6 +256,16 @@ export class AuthModalComponent {
   /** Mirrors the backend password rule so the requirement is visible BEFORE a failed submit. */
   readonly passwordPolicy =
     'Password must be at least 8 characters long and contain both letters and numbers.';
+  protected readonly passwordDescribedBy = computed(() => {
+    const ids: string[] = [];
+    if (this.authForm.password().touched() && this.authForm.password().invalid()) {
+      ids.push('password-error');
+    }
+    if (this.isRegisterMode()) {
+      ids.push('password-policy');
+    }
+    return ids.length > 0 ? ids.join(' ') : null;
+  });
 
   /** Handle login submission (or delegates to onRegister when in register mode). */
   onLogin(): void {
@@ -356,10 +374,13 @@ export class AuthModalComponent {
           this.errorMessage.set(null);
         },
         error: (err) => {
-          // A password-policy failure shows the whole policy, not just the first rule that tripped.
+          // A password-policy failure shows the whole policy, except >72-byte length errors which
+          // must explain the ceiling instead of telling a user with a long passphrase it is too short.
           this.errorMessage.set(
             err instanceof RequestValidationError && err.field === 'password'
-              ? this.passwordPolicy
+              ? err.message.includes('72')
+                ? err.message
+                : this.passwordPolicy
               : extractApiError(err, 'Failed to create account.'),
           );
           this.isSubmitting.set(false);

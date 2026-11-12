@@ -32,6 +32,7 @@ describe('BarberStore', () => {
       providers: [provideHttpClient(), provideHttpClientTesting(), BarbersApi, BarberStore],
     });
 
+    TestBed.inject(AuthState).applyRole('ROLE_ADMIN', 'admin');
     fixture = TestBed.createComponent(TestHost);
     store = fixture.componentInstance.store;
     httpMock = TestBed.inject(HttpTestingController);
@@ -268,14 +269,38 @@ describe('BarberStore', () => {
     httpMock.match((r) => r.url.includes('/api/v1/barbers/1/time-off')).forEach((r) => r.flush([]));
   });
 
-  it('forgets action banners when the session ends', () => {
+  it('clears admin roster data, selection and banners when the session ends and reloads on re-login', async () => {
     store.actionErrorMessage.set('boom');
     store.actionSuccessMessage.set('ok');
+    expect(store.barbers()).toHaveLength(2);
+    expect(store.selectedBarberId()).toBe(1);
 
-    TestBed.inject(AuthState).applyRole('ROLE_ADMIN', 'admin');
-    TestBed.inject(AuthState).clear();
+    const auth = TestBed.inject(AuthState);
+    auth.clear();
+    fixture.detectChanges();
 
+    expect(store.barbers()).toEqual([]);
+    expect(store.timeOffs()).toEqual([]);
+    expect(store.schedule()).toBeNull();
+    expect(store.selectedBarberId()).toBeNull();
     expect(store.actionErrorMessage()).toBeNull();
     expect(store.actionSuccessMessage()).toBeNull();
+
+    // Non-admin sign-in never triggers admin roster requests.
+    auth.applyRole('ROLE_CUSTOMER', 'jane@example.com');
+    fixture.detectChanges();
+    httpMock.expectNone((r) => r.url.includes('/api/v1/barbers'));
+
+    // Admin re-login reloads the roster automatically.
+    auth.applyRole('ROLE_ADMIN', 'admin');
+    fixture.detectChanges();
+    httpMock.expectOne('/api/v1/barbers/admin').flush(mockBarbers);
+    await Promise.resolve();
+    fixture.detectChanges();
+    httpMock.match((r) => r.url.includes('/time-off')).forEach((r) => r.flush(mockTimeOffs));
+    flushSchedules();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(store.barbers()).toEqual(mockBarbers);
   });
 });

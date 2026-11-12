@@ -1,5 +1,5 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { Component, DestroyRef, inject } from '@angular/core';
+import { Component, DestroyRef, computed, inject } from '@angular/core';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import {
@@ -8,9 +8,10 @@ import {
   TestRequest,
 } from '@angular/common/http/testing';
 import { FlashMessages } from '../../core/ui/flash-messages';
+import { ShopClock } from '../../core/shop-clock';
 import { BookingStore } from './booking.store';
 import { BookingWizard } from './booking-wizard';
-import { DEFAULT_SHOP_RULES } from '@taskflow/domain';
+import { DEFAULT_SHOP_RULES, isOpenAt } from '@taskflow/domain';
 
 /** Monday 2026-10-12, 14:30 local time. */
 const MONDAY_AFTERNOON = new Date(2026, 9, 12, 14, 30);
@@ -248,6 +249,47 @@ describe('BookingStore.watchToday lifecycle (FE-5)', () => {
     vi.setSystemTime(new Date(2026, 9, 20, 8, 0));
     document.dispatchEvent(new Event('visibilitychange'));
     expect(store.today()).toBe('2026-10-14');
+  });
+
+  it('re-arms the midnight timer for the shop time zone once /public/shop resolves', async () => {
+    // 14:59Z is 14:59 in UTC, and 23:59 in Asia/Tokyo (1 minute before Tokyo's midnight).
+    vi.setSystemTime(new Date('2026-10-12T14:59:00Z'));
+    const httpMock = TestBed.inject(HttpTestingController);
+    const store = TestBed.inject(BookingStore);
+    const { owner, destroy } = makeOwner();
+
+    store.watchToday(owner);
+    TestBed.tick();
+    httpMock
+      .match((r) => r.url.includes('/public/shop'))
+      .forEach((r) => r.flush({ ...DEFAULT_SHOP_RULES, timeZone: 'Asia/Tokyo' }));
+    await Promise.resolve();
+    TestBed.tick();
+
+    expect(store.today()).toBe('2026-10-12');
+    expect(vi.getTimerCount()).toBe(1);
+
+    vi.advanceTimersByTime(61_000);
+    expect(store.today()).toBe('2026-10-13');
+
+    destroy();
+    httpMock.match(() => true);
+  });
+
+  it('ShopClock.watch updates computed consumers as open/closed boundaries pass', () => {
+    vi.setSystemTime(new Date(2026, 9, 12, 16, 59, 30)); // Monday 16:59:30 (open until 17:00)
+    const shopClock = TestBed.inject(ShopClock);
+    const { owner, destroy } = makeOwner();
+    const openNow = computed(() => isOpenAt(shopClock.now(), DEFAULT_SHOP_RULES));
+
+    shopClock.watch(owner);
+    expect(openNow()).toBe(true);
+
+    vi.advanceTimersByTime(60_000); // Monday 17:00:30 (closed)
+    expect(openNow()).toBe(false);
+
+    destroy();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 
