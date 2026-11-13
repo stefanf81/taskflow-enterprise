@@ -2562,3 +2562,38 @@ The class now remembers the `CsrfFilter`'s token repository before each test and
 * **The slower Detox step is start-up, not tests.** `npx` took 94 s to print its first line and the first launch took 45 s (about 20 s before), right after a 154 s first boot; the booking-flow tests themselves took 48 s (47 s before). The admin sign-in took 21 s instead of 11 s while Detox reported the app busy with two JS timers and two pending native animation updates; it passed within its 45 s wait.
 * **Expo is current.** SDK 58 is the newest (npm's `latest` is 58.0.25 from 2026-11-12; the `canary` tag is still 58, there is no SDK 59), and `npx expo install --check` reports "Dependencies are up to date". `expo-modules-core` 58.1.0 is not a minor update slipping past `renovate.json`'s Expo rule: `expo` 58.0.25 itself depends on `expo-modules-core ~58.1.0`. Patches within SDK 58 keep arriving through the Monday `expo-maintenance.yml` run (`npx expo install --fix`, PR from `maintenance/expo-sdk`) and Renovate; an SDK upgrade stays a deliberate change that also moves React, React Native, `react-native-screens`, `react-native-safe-area-context` and `jest-expo`, and unblocks Babel 8 and `babel-plugin-transform-import-meta` 3.
 * **The lockfile behind #195.** Renovate's lock file maintenance had produced (2026-11-09) a `package-lock.json` in which 1,489 of 1,532 entries had no `resolved` URL and no `integrity`; CI caught it only through the three `file:mobile/vendor/*.tgz` patches. Regenerated on 2026-11-13 with a debug-logged Renovate run ([`43395121315`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43395121315): Node 26.13.1, npm 12.2.2, `npm install --no-audit --prefer-dedupe --ignore-scripts` twice because of `npmDedupe`), it was correct; the original cause was not found (that run logged at `info`), and no local regeneration with npm 11 or 12, `--package-lock-only` or `npm dedupe` reproduced it. `check-dependency-tree.js` now rejects such a lockfile directly (#234, CONTRIBUTING.md).
+
+### Follow-up: what the simulator does after its first boot (2026-11-13)
+
+**Goal:** explain the 1.5–3.5 min between "simulator ready" and the first app launch, which landed in a different step in every run (`npx` start-up 22–96 s against 1–4 s before the boot, a first `simctl terminate` of 89 s, a first launch of 45 s), and the missing ExpoModulesJSI line.
+
+**Methodology:** the four runs above, plus `workflow_dispatch` run [`43413301687`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43413301687) (cached app, repacked) with a background sampler in the iOS Detox job. Every 5 s, from before the boot to the end of the Detox step, it records the 1-min load average, `memory_pressure` free memory, swap in use, cumulative swap-ins/outs and the four busiest processes. It is printed after the Detox step and uploaded as `runner-load.log`.
+
+| Time (43413301687) | Load (1 min) | Free memory | Swap | Busiest processes |
+| :--- | ---: | ---: | ---: | :--- |
+| 11:01:34, before the boot | 18 | 81% | 0 | backend `java`, Spotlight `mds` |
+| 11:02–11:04, data migration | 46–194 | 59% | 0 | `intelligenceplatformd`, `lsd`, migration plugins |
+| 11:04:12 `bootstatus` "Finished" → 11:06:21 | 261–556 | 40% | 0 | `SpringBoard`, widget extensions (Screen Time, Health, News, People, Sleep) |
+| 11:07:48–11:08:33 | 577–**682** | 27–48% | 460–**983 MB** | `KonaSynthesizer`, `BackgroundShortcutRunner`, `suggestd` |
+| 11:11:39, Detox step ends | 312 | 40% | 743 MB | `diagnosticd`, `apsd`, `SafariViewService` |
+
+* **The runner is CPU-starved by the simulator's own first-boot work**, not by Detox, `npx`, the backend or (at first) memory. On the 3-core runner the load average stays in the hundreds for the whole Detox step, more than 7 min after `bootstatus` reports "Finished": hundreds of simulator processes (widget rendering, Apple Intelligence and suggestion services, Shortcuts, push, logging), none of them alone above ~95% of a core. Whatever runs first absorbs the wait, which is why it moved between `npx`, `terminate` and the first launch. Swap starts only ~4 min after the boot, at about 1 GB.
+* **This run was the slowest yet:** boot command → first test 6.9 min. The app took 65 s after `simctl launch` to connect to Detox and 2 min 13 s to its first test.
+* **One test failed because of it.** The submit test made the booking and showed the receipt, but its clean-up `PUT …/public/cancel/{publicId}` took 8.97 s inside the backend (access log), and the test's `AbortSignal.timeout(10000)` aborted it. The timeout is now 30 s.
+* **ExpoModulesJSI line:** the build-phase output is in the raw `xcodebuild` log that both iOS jobs keep, but never was in the Detox build's activity logs. Both jobs now read the raw log; the `ios` job of 43413301687 printed `xcframework slices up to date, skipping build`. The raw logs of 43400040948 confirm the earlier inference: 84 s (`ios`) and 78 s (Detox) rebuilds after the lockfile change. The Detox job restores the snapshot ~5 min before the `ios` job saves the new key, so after a lockfile change it rebuilds once.
+
+**Not adopted: restoring a settled simulator instead of booting a fresh one.** Booting earlier does not help (the post-boot work outlasts the ~1 min of other work on the cached-app path), so the experiment (branch `claude/serene-mccarthy-ds6oz4-sim-snapshot`) cached the data directory of the image's pre-created "iPhone 17 Pro" after a passing run and moved it back in before `simctl boot` on the next. Key: image version, Xcode build, runtime build, UDID. Before the snapshot: wait for the load to drop below 15 (max. 12 min), uninstall the app, `simctl keychain reset` (the admin session from the login test survives an uninstall), shut down, drop the unified logs. All four runs used the cached, repacked app.
+
+| | [`43413301687`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43413301687) fresh | [`43427356860`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43427356860) fresh | [`43431217194`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43431217194) fresh | [`43434341555`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43434341555) snapshot |
+| :--- | ---: | ---: | ---: | ---: |
+| Snapshot restore (1.09 GB download + extract) | – | – | – | 36 s |
+| Boot step start → `bootstatus` ready | 168 s | 156 s | 80 s | **72 s** (no data migration) |
+| Ready → first app launch done | 113 s | 158 s | 108 s | 143 s |
+| Jest `Time` | 391 s (1 failed) | 292 s | 241 s | **223 s** |
+| Boot step start → Detox done (+ restore) | 608 s | 457 s | 355 s | 313 s (**349 s**) |
+| Peak 1-min load average | 682 | ~536 | 291 | **528** |
+
+* **Data migration is the only work the snapshot removes.** `bootstatus` reported "Device already booted" and the ~45–90 s of migration plugins disappeared, but the restore costs 36 s, and the post-boot load came back at the same height (104 → 528, with `SpringBoard`, `WidgetRenderer`, widget and poster extensions, `healthd`, `modelcatalogd`, `mediaanalysisd` at up to 180%, `apsd`, `diagnosticd`). That work runs on every boot, not only the first. The stall moved again, this time into Detox's first `applesimutils --list` (71 s).
+* **Within the noise of fresh boots.** Including the restore, the snapshot run (349 s) beat the best fresh run (355 s) by 6 s; fresh runs alone spread over 355–608 s.
+* **Cost:** a 1.09 GB cache entry (of the repository's 10 GB), and every runner-image update (about weekly) changes the key, so a nightly would pay a fresh boot plus ~12 min of settling (the load never fell below 37 in 12 min) and the upload.
+* The Keychain reset worked: the restored device started signed out and all 9 tests passed.
