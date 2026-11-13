@@ -1242,16 +1242,31 @@ jobs:
         run: npx detox build-framework-cache
 
       # The raw xcodebuild output is too long for the Actions log; keep it as
-      # an artifact and print the tail when the build fails.
+      # an artifact and print the tail when the build fails. Like the `ios`
+      # job, print the per-phase totals (-showBuildTimingSummary in
+      # .detoxrc.js) and whether the restored ExpoModulesJSI slice was reused:
+      # with every C/C++ compile a ccache hit, this build still took 7 min.
       - name: Build Detox release app
         id: native-build
         if: steps.repack.outputs.repacked != 'true'
         run: |
           log="${RUNNER_TEMP}/ios-e2e-build.log"
-          if ! npm run e2e:build > "${log}" 2>&1; then
+          status=0
+          npm run e2e:build > "${log}" 2>&1 || status=$?
+          if (( status != 0 )); then
             tail -n 150 "${log}"
-            exit 1
           fi
+
+          timing="$(sed -n '/^Build Timing Summary/,/\*\* BUILD/p' "${log}")"
+          if [[ -n "${timing}" ]]; then
+            printf '%s\n' "${timing}"
+            printf '### iOS Detox build timing\n\n```\n%s\n```\n' "${timing}" >> "${GITHUB_STEP_SUMMARY}"
+          fi
+          find ios/build/Logs/Build -name '*.xcactivitylog' -exec gzip -dc {} + 2>/dev/null \
+            | LC_ALL=C grep -a -o -E '\[ExpoModulesJSI\] (Built xcframework successfully in [0-9]+s|xcframework slices up to date, skipping build)' \
+            | sort -u || true
+
+          exit "${status}"
 
       # Only an app the repack reproduces exactly is cached for later repacks.
       - name: Check the repack against the native build
