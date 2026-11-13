@@ -11,6 +11,13 @@
  *   - any invalid or missing regular/optional dependency;
  *   - any invalid peer dependency that is not in KNOWN_PEER_MISMATCHES below.
  *
+ * Before that it checks package-lock.json itself: every installed package must carry a
+ * `resolved` URL and an `integrity` hash, and the URL must be the public registry or one of the
+ * vendored security patches. Without them `npm ci` downloads whatever matches the range and
+ * verifies nothing. A Renovate lock file maintenance run once produced such a lockfile (PR #195,
+ * 2026-11-09: 1,489 of 1,532 entries); only the three vendored packages made the tree check
+ * notice it, with a misleading hint.
+ *
  * Usage: node scripts/check-dependency-tree.js [--workspace <name> ...]
  *   (pass the same --workspace flags as the `npm ci` that installed the tree)
  */
@@ -67,6 +74,49 @@ function edgeKind(manifest, name) {
 }
 
 const packageName = (relDir) => relDir.split('node_modules/').pop();
+
+// Where a locked package may come from: the public registry (.npmrc pins it, so a mirror host
+// leaking in is also an error) and the vendored patch tarballs referenced by root `overrides`.
+const ALLOWED_RESOLVED = [/^https:\/\/registry\.npmjs\.org\//, /^file:mobile\/vendor\/[^/]+\.tgz$/];
+
+/**
+ * Lockfile entries `npm ci` could not install reproducibly. Workspace folders (no
+ * `node_modules/` in the key), workspace links and packages bundled inside another tarball
+ * (`inBundle`) legitimately have neither URL nor hash.
+ */
+function lockfileProblems(lock) {
+  const problems = [];
+  for (const [key, entry] of Object.entries(lock.packages || {})) {
+    if (!key.includes('node_modules/') || entry.link || entry.inBundle) continue;
+    const missing = ['resolved', 'integrity'].filter((field) => !entry[field]);
+    if (missing.length > 0) problems.push(`${key}: no ${missing.join(' or ')}`);
+    else if (!ALLOWED_RESOLVED.some((re) => re.test(entry.resolved))) {
+      problems.push(`${key}: resolved from ${entry.resolved}`);
+    }
+  }
+  return problems;
+}
+
+function checkLockfile() {
+  const lock = JSON.parse(fs.readFileSync(path.join(ROOT, 'package-lock.json'), 'utf8'));
+  const problems = lockfileProblems(lock);
+  if (problems.length === 0) return;
+  for (const line of problems.slice(0, 20)) console.error(`lockfile: ${line}`);
+  if (problems.length > 20) console.error(`lockfile: ... and ${problems.length - 20} more`);
+  console.error(
+    `${problems.length} package-lock.json entr${problems.length === 1 ? 'y is' : 'ies are'} ` +
+      'not pinned to a registry URL and integrity hash. The lockfile was regenerated wrongly: ' +
+      'do not merge it; regenerate it (Renovate: tick the rebase box) and check the URLs.',
+  );
+  process.exit(1);
+}
+
+if (require.main !== module) {
+  module.exports = { lockfileProblems };
+  return;
+}
+
+checkLockfile();
 
 const args = process.argv.slice(2);
 let output;

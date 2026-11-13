@@ -131,6 +131,8 @@ jobs:
               - 'stop-docker.sh'
               - 'scripts/check-verification-ports.cjs'
               - 'scripts/verify.test.cjs'
+              - 'scripts/check-dependency-tree.js'
+              - 'scripts/check-dependency-tree.test.cjs'
               - '.github/workflows/**'
               - '.github/actions/**'
               - '.github/scripts/**'
@@ -288,6 +290,9 @@ jobs:
 
       - name: Test verification orchestration without Docker
         run: node --test scripts/verify.test.cjs
+
+      - name: Test the lockfile and dependency-tree guard
+        run: node --test scripts/check-dependency-tree.test.cjs
 
       - name: Test mobile E2E backend probes and diagnostics
         run: node --test .github/scripts/mobile-e2e-backend.test.cjs

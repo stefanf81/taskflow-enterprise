@@ -64,6 +64,13 @@ Peer mismatches that cannot be fixed under `legacy-peer-deps` are listed, with a
 `KNOWN_PEER_MISMATCHES` in `scripts/check-dependency-tree.js`. Regenerate the lockfile with
 `npm install`; never hand-edit or merge lockfiles.
 
+Before reading the tree, the same script checks `package-lock.json` itself: every installed
+package needs a `resolved` URL and an `integrity` hash, and the URL must be
+`https://registry.npmjs.org/` or a `file:mobile/vendor/*.tgz` patch. Only workspaces, workspace
+links and packages bundled inside another tarball are exempt. A lockfile that fails this was
+regenerated wrongly (Renovate lock file maintenance produced one on 2026-11-09, PR #195): do not
+merge it; regenerate it. Its tests: `npm run test:dependency-tree`.
+
 Security overrides that cross a major version are keyed by the vulnerable line only
 (`"minimatch@^9"`, `"minimatch@^10"`, `"glob@^10"`, `"glob@^13"` → minimatch 11 / glob 14 for
 GHSA-g3hv-75wg-m249 and GHSA-3g3m-2fjr-6pw4), so older lines with a different API (glob 6–8,
