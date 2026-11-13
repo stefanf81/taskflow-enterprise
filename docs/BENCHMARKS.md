@@ -2541,3 +2541,24 @@ The class now remembers the `CsrfFilter`'s token repository before each test and
 **Caveat:** the first nightly on `main` after this change builds both Detox apps natively once (the `.detoxrc.js` hash is part of both cache keys, and branch caches are not visible to `main`).
 
 **Verification:** run 43389193585 green with all required contexts; 9/9 Detox tests on Android and on iOS, two launches each, no screenshot calls. Mobile `npm run lint`; the e2e file type-checked with `tsconfig.spec.json` (which does not include `e2e/`); the screenshot configuration composed with Detox's own `composeArtifactsConfig` for the CI and the local case; the build step's shell run against a stub `npm` for success and failure, with and without an ExpoModulesJSI line.
+
+### Follow-up: first run on `main` after the dependency updates (2026-11-13)
+
+`workflow_dispatch` run [`43400040948`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43400040948) on `a17472b`: this section's change (#233), the lockfile guard (#234), the regenerated lockfile (#195) and the dependency updates (#235: Node.js 26.13.1, jsdom 31, vite 8.3.8, Gradle 9.9.1, postgres 18.7, …). Every job green, 9/9 Detox tests on both platforms, two launches each.
+
+| | 43389193585 (this change, branch) | 43400040948 (`main`) |
+| :--- | ---: | ---: |
+| iOS Detox E2E job | 12 m 51 s | 17 m 43 s |
+| "Build Detox release app" (native) | 2 m 54 s | 4 m 23 s |
+| of which script phases (task time) | 86 s | 168 s |
+| Simulator "ready after … s of waiting" | 116 s | 154 s |
+| "Run Detox on the iOS simulator" | 3 m 29 s | 4 m 46 s |
+| of which `npx` start-up (step start to first output) | 44 s | 94 s |
+| Jest `Time` | 157 s | 178 s |
+| "Run Detox on the Android emulator" | 1 m 19 s | 1 m 16 s |
+
+* **Both Detox apps were rebuilt** (iOS fingerprint `d7311c4…` → `6049e11…`, Android APK cache miss too). #195's lockfile moved the Expo SDK 58 packages: `expo` 58.0.23 → 58.0.25, `expo-modules-core` and `ExpoModulesWorklets` 58.0.30 → 58.1.0, `ExpoModulesJSI` 58.0.22 → 58.0.23, and patch bumps of `expo-constants`, `expo-asset`, `expo-crypto`, `expo-font`, `expo-keep-awake`, `expo-network`, `expo-secure-store`, `expo-sharing`, `expo-splash-screen` and `expo-status-bar`. The rebuilt apps are cached for the new fingerprint.
+* **The longer native build** is mostly script phases (+82 s). The ExpoModulesJSI snapshot was restored through the prefix fallback from the previous lockfile's key, so with 58.0.23's sources its hash check most likely rebuilt the slice; the `ios` job of the same run saved a snapshot under the new key. The Detox build's activity log again had no `[ExpoModulesJSI]` line (now reported as such), so this is inferred, not read.
+* **The slower Detox step is start-up, not tests.** `npx` took 94 s to print its first line and the first launch took 45 s (about 20 s before), right after a 154 s first boot; the booking-flow tests themselves took 48 s (47 s before). The admin sign-in took 21 s instead of 11 s while Detox reported the app busy with two JS timers and two pending native animation updates; it passed within its 45 s wait.
+* **Expo is current.** SDK 58 is the newest (npm's `latest` is 58.0.25 from 2026-11-12; the `canary` tag is still 58, there is no SDK 59), and `npx expo install --check` reports "Dependencies are up to date". `expo-modules-core` 58.1.0 is not a minor update slipping past `renovate.json`'s Expo rule: `expo` 58.0.25 itself depends on `expo-modules-core ~58.1.0`. Patches within SDK 58 keep arriving through the Monday `expo-maintenance.yml` run (`npx expo install --fix`, PR from `maintenance/expo-sdk`) and Renovate; an SDK upgrade stays a deliberate change that also moves React, React Native, `react-native-screens`, `react-native-safe-area-context` and `jest-expo`, and unblocks Babel 8 and `babel-plugin-transform-import-meta` 3.
+* **The lockfile behind #195.** Renovate's lock file maintenance had produced (2026-11-09) a `package-lock.json` in which 1,489 of 1,532 entries had no `resolved` URL and no `integrity`; CI caught it only through the three `file:mobile/vendor/*.tgz` patches. Regenerated on 2026-11-13 with a debug-logged Renovate run ([`43395121315`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43395121315): Node 26.13.1, npm 12.2.2, `npm install --no-audit --prefer-dedupe --ignore-scripts` twice because of `npmDedupe`), it was correct; the original cause was not found (that run logged at `info`), and no local regeneration with npm 11 or 12, `--package-lock-only` or `npm dedupe` reproduced it. `check-dependency-tree.js` now rejects such a lockfile directly (#234, CONTRIBUTING.md).
