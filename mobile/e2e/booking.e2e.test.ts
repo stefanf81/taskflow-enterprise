@@ -19,6 +19,29 @@ const relaunch = () => device.launchApp({ newInstance: true });
 // hook gets its own budget.
 const RELAUNCH_TIMEOUT_MS = 240_000;
 
+// Bounded waits. On the hosted iOS runner the freshly booted simulator keeps the 3-core machine at
+// a load average of 300-680 for the whole run (BENCHMARKS §71). Most of a step's time there goes
+// into Detox's own wait for the app to go idle (animations, timers, in-flight network requests)
+// before each action, which has no limit of its own: only Jest's testTimeout caps it. Measured with
+// the [e2e-wait] lines (run 43440581632, load up to 543): booking screen 6.9 s (the budget had been
+// 10 s), receipt 0.2 s, release 0.6 s (8.97 s once), admin dashboard 8.1 s, while whole steps took
+// up to 45 s there and 77 s in other runs. A screen that never appears still fails.
+const BOOKING_SCREEN_MS = 30_000;
+const RECEIPT_MS = 45_000;
+const RELEASE_BOOKING_MS = 30_000;
+const ADMIN_DASHBOARD_MS = 90_000;
+
+// Prints how long a bounded wait took against its budget ("[e2e-wait] ..."), so nightly logs show
+// the remaining headroom per wait instead of only whole-test durations.
+const timed = async <T,>(what: string, budgetMs: number, wait: () => Promise<T>): Promise<T> => {
+  const start = Date.now();
+  try {
+    return await wait();
+  } finally {
+    console.log(`[e2e-wait] ${what}: ${Date.now() - start} ms of ${budgetMs} ms`);
+  }
+};
+
 type Step = (title: string, fn: () => Promise<void>) => void;
 
 // Each flow launches the app once and its tests run in order, each one continuing on the screen
@@ -75,9 +98,11 @@ flow('Guest Booking Flow', (step) => {
     // Tap the bottom tab "Book" using testID
     await element(by.id('tab-booking')).tap();
     // The booking screen header should appear (uppercase due to textTransform)
-    await waitFor(element(by.text('BOOKING ASSISTANT')))
-      .toBeVisible()
-      .withTimeout(10000);
+    await timed('booking screen', BOOKING_SCREEN_MS, () =>
+      waitFor(element(by.text('BOOKING ASSISTANT')))
+        .toBeVisible()
+        .withTimeout(BOOKING_SCREEN_MS),
+    );
   });
 
   step('completes Step 1: selects a treatment', async () => {
@@ -136,25 +161,28 @@ flow('Guest Booking Flow', (step) => {
       .whileElement(by.id('booking-scroll-view'))
       .scroll(200, 'down');
     await element(by.text('Confirm & Request Booking')).tap();
-    await waitFor(element(by.text('Booking Confirmation')))
-      .toBeVisible()
-      .withTimeout(15000);
+    await timed('receipt', RECEIPT_MS, () =>
+      waitFor(element(by.text('Booking Confirmation')))
+        .toBeVisible()
+        .withTimeout(RECEIPT_MS),
+    );
 
     // Release only this test's booking so isolated and repeated runs do not consume slots.
     const attributes = await element(by.id('receipt-booking-code')).getAttributes();
     const publicId = 'text' in attributes ? attributes.text
       : 'label' in attributes ? attributes.label : undefined;
     if (typeof publicId !== 'string' || !publicId) throw new Error('Receipt has no booking code');
-    const response = await fetch(
-      `http://localhost:8080/api/v1/appointments/public/cancel/${encodeURIComponent(publicId)}`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-        // Not 10 s: on the hosted iOS runner the simulator's post-boot work keeps the load average
-        // in the hundreds, and this PUT once took 8.97 s inside the backend (run 43413301687).
-        signal: AbortSignal.timeout(30000),
-      },
+    // This PUT once took 8.97 s inside the CPU-starved backend (run 43413301687).
+    const response = await timed('release booking', RELEASE_BOOKING_MS, () =>
+      fetch(
+        `http://localhost:8080/api/v1/appointments/public/cancel/${encodeURIComponent(publicId)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+          signal: AbortSignal.timeout(RELEASE_BOOKING_MS),
+        },
+      ),
     );
     if (!response.ok) throw new Error(`Failed to release E2E booking: HTTP ${response.status}`);
   });
@@ -191,9 +219,11 @@ flow('Guest Login Flow', (step) => {
     // The admin tab navigator replaces the guest stack once the backend accepts the login and the
     // session is written to the Keychain. On a freshly booted simulator those three writes took
     // 27 s (securityd still migrating) while the login itself answered in 450 ms.
-    await waitFor(element(by.label('Logout')))
-      .toBeVisible()
-      .withTimeout(45000);
+    await timed('admin dashboard', ADMIN_DASHBOARD_MS, () =>
+      waitFor(element(by.label('Logout')))
+        .toBeVisible()
+        .withTimeout(ADMIN_DASHBOARD_MS),
+    );
     await expect(element(by.text('Sign In to TaskFlow'))).not.toBeVisible();
   });
 });
