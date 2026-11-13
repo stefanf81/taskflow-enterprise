@@ -8,7 +8,7 @@ spotbugs-tool = "4.10.5"
 # The companion BOM keeps every OpenTelemetry module at this security-reviewed release.
 opentelemetry = "1.68.0"
 prometheus = "1.10.0"
-commons-lang3 = "3.21.0"
+commons-lang3 = "3.22.0"
 # Pinned to the 1.6 line (Spring Boot 4.1 ships 1.5.38); 1.6.x includes the
 # hardening for disallowed conditional configuration references.
 logback = "1.6.6"

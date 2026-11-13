@@ -33,19 +33,19 @@ Spring Boot Backend
 
 | Tool | Version | Verify |
 |------|---------|--------|
-| Node.js | 26.13.0 (`mobile/.nvmrc`) | `node -v` |
-| npm | 12.2.1 (CI pin; enforces `allowScripts`) | `npm -v` |
+| Node.js | 26.13.1 (`mobile/.nvmrc`) | `node -v` |
+| npm | 12.2.2 (CI pin; enforces `allowScripts`) | `npm -v` |
 | Java | 21 for local Android/Detox builds | `java -version` |
 | Xcode | >=16 | `xcodebuild -version` |
 | CocoaPods | >=1.15 | `pod --version` |
 | Docker | (for backend) | `docker ps` |
 
 Node 26 bundles npm 11.20.0, which silently ignores the `allowScripts` allowlist
-in `package.json`. CI installs npm 12.2.1 (declared in `frontend/package.json`
+in `package.json`. CI installs npm 12.2.2 (declared in `frontend/package.json`
 via `.github/actions/npm-ci`), so install the same version locally:
 
 ```bash
-npm install --global npm@12.2.1
+npm install --global npm@12.2.2
 ```
 
 Install the macOS tools with Homebrew when needed:
@@ -203,7 +203,7 @@ For standalone production builds or preview binaries shared with testers, `mobil
 ```json
 "preview": {
   "environment": "preview",
-  "node": "26.13.0",
+  "node": "26.13.1",
   "env": {
     "TASKFLOW_TLS_POLICY": "required",
     "EAS_USE_CACHE": "1",
@@ -214,7 +214,7 @@ For standalone production builds or preview binaries shared with testers, `mobil
 },
 "production": {
   "environment": "production",
-  "node": "26.13.0",
+  "node": "26.13.1",
   "env": {
     "TASKFLOW_TLS_POLICY": "required",
     "EAS_RESTORE_CACHE": "0",

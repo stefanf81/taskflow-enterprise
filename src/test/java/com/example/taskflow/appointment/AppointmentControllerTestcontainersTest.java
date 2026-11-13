@@ -60,7 +60,7 @@ public class AppointmentControllerTestcontainersTest {
 
     // Define the PostgreSQL container matching production.
     @Container
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.6-alpine")
+    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.7-alpine")
             .withDatabaseName("taskflow_test")
             .withUsername("postgres")
             .withPassword("postgres-password");

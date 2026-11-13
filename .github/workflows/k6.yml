@@ -53,7 +53,7 @@ jobs:
       CHECK_EARLY_CLICK: ${{ inputs.check_early_click != false }}
       ENFORCE_CWV: ${{ inputs.enforce_cwv == true }}
       # renovate: datasource=docker depName=grafana/k6 versioning=docker
-      K6_VERSION: "2.3.0-with-browser"
+      K6_VERSION: "2.4.0-with-browser"
 
     steps:
       - name: Checkout
