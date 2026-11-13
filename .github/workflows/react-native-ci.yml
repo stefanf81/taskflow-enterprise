@@ -1354,7 +1354,14 @@ jobs:
       # (2-17 min). The boot starts after the builds: booting during them
       # slowed the framework-cache step from seconds to 2.5 min. The wait step
       # before Detox times it.
-      - name: Create and start booting the Detox simulator
+      #
+      # A first boot is followed by minutes of data migration and post-boot
+      # work (BENCHMARKS §71), so the device's data directory is cached once
+      # it has settled and restored before later boots. The runner image ships
+      # the same pre-created "iPhone 17 Pro" (same UDID, same paths) on every
+      # runner of an image version; the key pins image, Xcode, runtime build
+      # and UDID, so any of them changing starts from a fresh device again.
+      - name: Pick the Detox simulator
         id: simulator
         run: |
           set -euo pipefail
@@ -1366,7 +1373,44 @@ jobs:
             udid="$(xcrun simctl create "iPhone 17 Pro" com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro "${runtime}")"
           fi
           echo "udid=${udid}" >> "$GITHUB_OUTPUT"
-          xcrun simctl boot "${udid}"
+
+          runtime="$(xcrun simctl list devices -j \
+            | jq -r --arg u "${udid}" '.devices | to_entries[] | select(any(.value[]; .udid == $u)) | .key')"
+          build="$(xcrun simctl list runtimes -j \
+            | jq -r --arg r "${runtime}" '.runtimes[] | select(.identifier == $r) | .buildversion')"
+          xcode="$(xcodebuild -version | awk '/Build version/ { print $3 }')"
+          if [[ -n "${ImageVersion:-}" && -n "${build}" && -n "${xcode}" \
+            && -f "${HOME}/Library/Developer/CoreSimulator/Devices/${udid}/device.plist" ]]; then
+            echo "snapshot-key=ios-sim-settled-v1-${ImageOS:-macos}-${ImageVersion}-${xcode}-${build}-${udid}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No simulator snapshot key (image ${ImageVersion:-?}, runtime ${build:-?}, Xcode ${xcode:-?})."
+          fi
+
+      - name: Restore the settled simulator
+        id: sim-snapshot
+        if: steps.simulator.outputs.snapshot-key != ''
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/sim-snapshot
+          key: ${{ steps.simulator.outputs.snapshot-key }}
+
+      - name: Start booting the Detox simulator
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+          RESTORED: ${{ steps.sim-snapshot.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          device="${HOME}/Library/Developer/CoreSimulator/Devices/${UDID}"
+          snapshot="${RUNNER_TEMP}/sim-snapshot/data"
+          if [[ "${RESTORED}" == "true" && -d "${snapshot}" ]]; then
+            # Never booted on this runner, so nothing holds the directory.
+            rm -rf "${device}/data"
+            mv "${snapshot}" "${device}/data"
+            echo "Booting the settled simulator snapshot ($(du -sh "${device}/data" | cut -f1))." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Booting a fresh simulator (no snapshot)." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          xcrun simctl boot "${UDID}"
 
       - name: Wait for the Detox simulator to finish booting
         timeout-minutes: 25
@@ -1405,6 +1449,58 @@ jobs:
           echo "::group::Runner load every 5 s (step times are in this job's log)"
           cat "${LOAD_LOG}"
           echo "::endgroup::"
+
+      # Only after a passing run on a fresh device. Waits for the post-boot
+      # work to quieten (load average below 15, at most 12 min) so the snapshot
+      # carries as much of it as possible, then removes what a later run must
+      # not inherit: the app and its Keychain items (the admin session from the
+      # login test; Keychain entries outlive an uninstall), and the unified
+      # logs. Shut down before copying so the data directory is consistent.
+      - name: Prepare a settled simulator snapshot
+        id: sim-snapshot-save
+        if: >-
+          success() && steps.simulator.outputs.snapshot-key != '' &&
+          steps.sim-snapshot.outputs.cache-hit != 'true' && github.event_name != 'pull_request'
+        continue-on-error: true
+        timeout-minutes: 20
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -euo pipefail
+          start=$SECONDS
+          while (( SECONDS - start < 720 )); do
+            load="$(sysctl -n vm.loadavg | awk '{ print $2 }')"
+            awk -v l="${load}" 'BEGIN { exit !(l < 15) }' && break
+            sleep 15
+          done
+          echo "Load ${load} after $((SECONDS - start)) s of settling." | tee -a "$GITHUB_STEP_SUMMARY"
+
+          xcrun simctl uninstall "${UDID}" com.taskflow.mobile || true
+          xcrun simctl keychain "${UDID}" reset
+          xcrun simctl shutdown "${UDID}"
+
+          data="${HOME}/Library/Developer/CoreSimulator/Devices/${UDID}/data"
+          rm -rf "${data}/var/db/diagnostics" "${data}/var/db/uuidtext"
+          mkdir -p "${RUNNER_TEMP}/sim-snapshot"
+          mv "${data}" "${RUNNER_TEMP}/sim-snapshot/data"
+
+          size_mb="$(du -sm "${RUNNER_TEMP}/sim-snapshot/data" | cut -f1)"
+          echo "Snapshot: ${size_mb} MB. Largest directories:"
+          du -m -d 4 "${RUNNER_TEMP}/sim-snapshot/data" 2>/dev/null | sort -rn | head -n 15
+          # The repository's whole Actions cache is 10 GB.
+          if (( size_mb > 2500 )); then
+            echo "::warning::Simulator snapshot is ${size_mb} MB; not caching it."
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save the settled simulator snapshot
+        if: steps.sim-snapshot-save.outputs.ready == 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/sim-snapshot
+          key: ${{ steps.simulator.outputs.snapshot-key }}
 
       - name: Collect the app's simulator log on failure
         if: failure() && steps.simulator.outputs.udid != ''
