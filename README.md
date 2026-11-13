@@ -22,7 +22,7 @@ This page gets a checkout running. The rules for changing the code live in
 - JDK 25. Gradle comes from the checked-in wrapper; without a local JDK 25 the foojay
   toolchain resolver downloads one. Local Android Detox builds still use JDK 21
   (`mobile/e2e/README.md`).
-- Node.js 26.13.0 and npm 12.2.1 (`mobile/.nvmrc`, `packageManager` in `frontend/package.json`).
+- Node.js 26.13.1 and npm 12.2.2 (`mobile/.nvmrc`, `packageManager` in `frontend/package.json`).
 - For the full stack: Docker Engine 25+ (Compose 2.20.2+, the health checks use
   `start_interval`) with at least 5 GB for Docker.
 - For native mobile work: Xcode and CocoaPods (macOS) or Android Studio with an SDK and an
