@@ -2488,3 +2488,56 @@ The class now remembers the `CsrfFilter`'s token repository before each test and
 * **Hydrating everything only after the app is stable** (`hydrate when` on a signal set from `whenStable()`) would close that gap, but a request that never settles would leave the wizard dead.
 
 **Verification:** the tables above; the new spec fails on the previous template and passes on this one (local stand-in); 515 frontend unit tests, `npm run lint`, `format:check`. CI run 43109276626 on the branch is green, including the whole Playwright suite (`e2e/csp.spec.ts` too) against the nginx image. k6 against production from the branch: run 43108279606 passed the browser test through all wizard steps (the probe hit the reset above), run 43108735309 passed both.
+
+## ⚡ 71. Mobile Detox E2E — One Launch per Flow, No Test-Start Screenshots (2026-11-13)
+
+**Goal:** shorten the nightly `ios-e2e` job (27 min on 2026-11-13 with a native build, 11 m 52 s on 2026-11-12 with the cached app). With the cached app, 9.3 of those 11.9 min were the simulator boot (3 m 29 s) and the Detox step (5 m 48 s).
+
+**Methodology:** step timestamps of three runs. Baselines: nightly [`43146800782`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43146800782) (2026-11-12, cached app, repacked) and nightly [`43354663236`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43354663236) (2026-11-13, native build). Measurement: `workflow_dispatch` run [`43389193585`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43389193585) on this change, which also builds natively because `.detoxrc.js` is part of both Detox app cache keys. One sample on the new code; macOS runners vary a lot (§52), so the Detox rows below are the comparison, not the job totals.
+
+### Results
+
+* **iOS Detox step.** Per-flow times include the launches (Jest counts a `beforeEach` in the test's time; the two `beforeAll` launches are added by hand: 20 s and 27 s).
+
+| iOS | 43146800782 (cached app) | 43354663236 (native build) | 43389193585 (this change) |
+| :--- | ---: | ---: | ---: |
+| "Run Detox on the iOS simulator" | 5 m 48 s | 7 m 52 s | **3 m 29 s** |
+| Jest `Time` | 313 s | 444 s | **157 s** |
+| App launches | 9 | 9 | **2** |
+| `simctl io … screenshot` calls | 9 | 9 | **0** |
+| Guest Booking Flow (6 tests) | 216 s | 240 s | **~67 s** |
+| Guest Login Flow (3 tests) | 61 s | 57 s | **~47 s** |
+
+* **Android Detox step:** 2 m 12 s (43146800782) → **1 m 19 s**. The Linux emulator runs vary far less than the macOS ones, so this is the cleaner measure of the test change.
+* **Where the time went.** Every test launched the app cold (`beforeEach(relaunch)`): terminate, launch and reconnect cost 6–40 s per test on the hosted simulator. Tests 2–5 also walked every earlier wizard step again, which the submit test then did once more. `--take-screenshots failing` took a screenshot before every test and discarded it when the test passed (1–14 s each, ~30 s per iOS run), before the relaunch, so it never showed the test's own screen.
+* **The 7-minute iOS build was a slow runner.** The same build from the same caches (ccache 152/152 hits in both) on two runners:
+
+| Step | 43354663236 | 43389193585 |
+| :--- | ---: | ---: |
+| `npm ci` (mobile) | 94 s | 32 s |
+| `pod install` ("Pod install took") | 111 s | 39 s |
+| of which "Ensuring required slices in ExpoModulesJSI.xcframework" | 41 s | 17 s |
+| "Build Detox release app" | 7 m 03 s | 2 m 54 s |
+| Repack check | 62 s | 20 s |
+| Simulator "ready after … s of waiting" | 191 s | 116 s |
+
+  The new `-showBuildTimingSummary` totals for the 2 m 54 s build (task time summed across parallel tasks): script phases 86 s (42 tasks: bundling, Hermes, Expo's framework switching), `SwiftDriver` 45 s, `SwiftCompile` 25 s, `CompileStoryboard` 15 s, `CompileAssetCatalogVariant` 14 s, `CompileC` 11 s (152 ccache hits). Nothing stands out to fix.
+* **The first app operation after boot stalls.** 43354663236: Detox's first `simctl terminate` (before installing) took 89 s to report "found nothing to terminate". 43146800782: the first test's terminate took 29 s and its launch ~60 s (first test 96 s). 43389193585: neither; Detox setup through the first launch took 66 s. Moving that work to another step only moves the wait.
+* **ExpoModulesJSI line:** the `ios` job's activity-log check printed `[ExpoModulesJSI] xcframework slices up to date, skipping build` in 43389193585; the same check on the Detox build (`ios/build/Logs/Build`) found nothing. Cause not found; the step now prints "no build-phase line found" instead of nothing. The 86 s of script phases rule out a long rebuild in that run.
+
+### Adopted
+
+* **One app launch per flow** (`mobile/e2e/booking.e2e.test.ts`). Each `describe` launches in `beforeAll` and its tests run in order, each continuing on the screen the previous one left. Step 3 now picks the day and a free slot (formerly in the submit test). After a failed or timed-out step, the rest of its flow fails immediately with `Not run: the earlier step "…" did not pass` instead of waiting out its timeouts on the wrong screen. An in-place reload is still not used: `device.reloadReactNative` brings Home back scrolled down on React Native 0.88.
+* **No test-start screenshot.** `.detoxrc.js` sets `artifacts.plugins.screenshot.takeWhen: { testStart: false, testFailure: true, testDone: false }`. Detox merges it with the CLI's `--take-screenshots failing` (checked against Detox 20.51.4's `composeArtifactsConfig`), so CI keeps only a screenshot taken at the moment a test or hook fails; local runs without the flag stay manual.
+* **Build timing in the iOS Detox job.** `-showBuildTimingSummary` on the `ios.release` build; the step prints the totals (also to the job summary) and the ExpoModulesJSI line, like the `ios` job.
+
+### Not adopted
+
+* **Booting the simulator earlier when the cached app hits.** It could overlap the ~50 s of repack, `applesimutils` and backend checks, but a first boot saturates the runner (the backend's health probes timed out under it, and the framework-cache step slowed from seconds to 2.5 min); worth a measured experiment, not a default.
+* **A `node_modules` cache for the macOS job** (`npm ci` 32–94 s). Detox's install script builds `~/Library/Detox` during `npm ci`; on a cache hit the "Build Detox framework cache" step would have to build it instead, which is unmeasured.
+* **Caching `~/Library/Caches/ReactNative`.** `pod install` downloads ~250 MB of React Native and Hermes tarballs on a native build, 3–12 s here.
+* **Caching a booted simulator's data** to skip first-boot data migration (most of the 116–191 s): fragile across runner image and runtime updates.
+
+**Caveat:** the first nightly on `main` after this change builds both Detox apps natively once (the `.detoxrc.js` hash is part of both cache keys, and branch caches are not visible to `main`).
+
+**Verification:** run 43389193585 green with all required contexts; 9/9 Detox tests on Android and on iOS, two launches each, no screenshot calls. Mobile `npm run lint`; the e2e file type-checked with `tsconfig.spec.json` (which does not include `e2e/`); the screenshot configuration composed with Detox's own `composeArtifactsConfig` for the CI and the local case; the build step's shell run against a stub `npm` for success and failure, with and without an ExpoModulesJSI line.
