@@ -20,12 +20,12 @@ const relaunch = () => device.launchApp({ newInstance: true });
 const RELAUNCH_TIMEOUT_MS = 240_000;
 
 // Bounded waits. On the hosted iOS runner the freshly booted simulator keeps the 3-core machine at
-// a load average of 300-680 for the whole run (BENCHMARKS §71), and every Detox action first
-// waits, without a limit of its own, for the app to go idle; only Jest's testTimeout caps that.
-// Measured there: the whole Book-tab step took up to 9.1 s (budget was 10 s), a backend call up to
-// 9 s, and the admin sign-in step 48-77 s (the Logout wait alone had 45 s). Each budget below is
-// about 3x the slowest measurement, and testTimeout leaves room for one full budget plus the
-// typing, scrolling and idle waits around it. A screen that never appears still fails.
+// a load average of 300-680 for the whole run (BENCHMARKS §71). Most of a step's time there goes
+// into Detox's own wait for the app to go idle (animations, timers, in-flight network requests)
+// before each action, which has no limit of its own: only Jest's testTimeout caps it. Measured with
+// the [e2e-wait] lines (run 43440581632, load up to 543): booking screen 6.9 s (the budget had been
+// 10 s), receipt 0.2 s, release 0.6 s (8.97 s once), admin dashboard 8.1 s, while whole steps took
+// up to 45 s there and 77 s in other runs. A screen that never appears still fails.
 const BOOKING_SCREEN_MS = 30_000;
 const RECEIPT_MS = 45_000;
 const RELEASE_BOOKING_MS = 30_000;
