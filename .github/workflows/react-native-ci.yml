@@ -711,12 +711,11 @@ jobs:
             printf '### iOS build timing\n\n```\n%s\n```\n' "${timing}" >> "${GITHUB_STEP_SUMMARY}"
           fi
 
-          # xcodebuild does not echo script-phase output, but Xcode's activity
-          # log keeps it: show whether the cached ExpoModulesJSI slice was
-          # reused or rebuilt (and how long the rebuild took).
-          find ios/build/DerivedData/Logs/Build -name '*.xcactivitylog' -exec gzip -dc {} + 2>/dev/null \
-            | LC_ALL=C grep -a -o -E '\[ExpoModulesJSI\] (Built xcframework successfully in [0-9]+s|xcframework slices up to date, skipping build)' \
-            | sort -u || true
+          # xcbeautify drops script-phase output, but the raw log keeps it:
+          # show whether the cached ExpoModulesJSI slice was reused or
+          # rebuilt (and how long the rebuild took).
+          LC_ALL=C grep -a -o -E '\[ExpoModulesJSI\] (Built xcframework successfully in [0-9]+s|xcframework slices up to date, skipping build)' \
+            "${raw_log}" | sort -u || true
 
           exit "${pipe_status[0]}"
 
@@ -1247,8 +1246,8 @@ jobs:
       # .detoxrc.js) and whether the restored ExpoModulesJSI slice was reused.
       # The same cached build took 7 min and 2 min 54 s on two runners
       # (BENCHMARKS §71), so compare the totals, not the step time. The JSI
-      # line was missing from this build's activity log in run 43389193585
-      # (the `ios` job's showed it); say so rather than print nothing.
+      # line is read from the raw log: this build's activity logs under
+      # ios/build/Logs/Build never contained it (runs 43389193585, 43400040948).
       - name: Build Detox release app
         id: native-build
         if: steps.repack.outputs.repacked != 'true'
@@ -1265,10 +1264,9 @@ jobs:
             printf '%s\n' "${timing}"
             printf '### iOS Detox build timing\n\n```\n%s\n```\n' "${timing}" >> "${GITHUB_STEP_SUMMARY}"
           fi
-          jsi="$(find ios/build/Logs/Build -name '*.xcactivitylog' -exec gzip -dc {} + 2>/dev/null \
-            | LC_ALL=C grep -a -o -E '\[ExpoModulesJSI\] (Built xcframework successfully in [0-9]+s|xcframework slices up to date, skipping build)' \
-            | sort -u || true)"
-          echo "${jsi:-[ExpoModulesJSI] no build-phase line found in ios/build/Logs/Build}"
+          jsi="$(LC_ALL=C grep -a -o -E '\[ExpoModulesJSI\] (Built xcframework successfully in [0-9]+s|xcframework slices up to date, skipping build)' \
+            "${log}" | sort -u || true)"
+          echo "${jsi:-[ExpoModulesJSI] no build-phase line in the build log}"
 
           exit "${status}"
 
@@ -1315,6 +1313,42 @@ jobs:
 
       - *mobile-backend-preflight
 
+      # The 1.5-3.5 min between "simulator ready" and the first app launch
+      # move between steps from run to run (npx start-up 22-96 s, a first
+      # `simctl terminate` of 89 s, a first launch of 45 s; BENCHMARKS §71).
+      # Sample the runner every 5 s from before the boot to the end of the
+      # Detox step, so a run shows whether CPU, memory or swap is saturated
+      # and by which processes. Printed and uploaded by the step after Detox.
+      - name: Start sampling runner load
+        env:
+          LOAD_LOG: ${{ runner.temp }}/runner-load.log
+        run: |
+          # One line per sample: 1-min load average, free memory, swap in use,
+          # cumulative swap-ins/outs (pages), then the four busiest processes
+          # (CPU, resident memory, name). A failed probe leaves its field empty.
+          sample() {
+            set +e +o pipefail
+            while :; do
+              vm="$(vm_stat)"
+              printf '%s load=%s free=%s swap_used=%s swapins=%s swapouts=%s | %s\n' \
+                "$(date +%T)" \
+                "$(sysctl -n vm.loadavg | awk '{ print $2 }')" \
+                "$(memory_pressure -Q | awk -F': ' '/free percentage/ { print $2 }')" \
+                "$(sysctl -n vm.swapusage | awk '{ print $6 }')" \
+                "$(awk '$1 == "Swapins:" { print $2 + 0 }' <<< "${vm}")" \
+                "$(awk '$1 == "Swapouts:" { print $2 + 0 }' <<< "${vm}")" \
+                "$(ps -Ao pcpu=,rss=,comm= -r | head -n 4 | awk '{
+                    name = $0; sub(/^ *[^ ]+ +[^ ]+ +/, "", name); n = split(name, part, "/")
+                    printf "%s%% %dM %s; ", $1, $2 / 1024, part[n] }')"
+              sleep 5
+            done
+          }
+          sample < /dev/null >> "${LOAD_LOG}" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/runner-load.pid"
+          disown
+          sleep 1
+          cat "${LOAD_LOG}"
+
       # Detox gets this simulator's UDID (.detoxrc.js). Matching by type alone
       # let it pick and boot another "iPhone 17 Pro" inside its silent setup
       # (2-17 min). The boot starts after the builds: booting during them
@@ -1359,6 +1393,19 @@ jobs:
           DETOX_IOS_SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
         run: npx detox test --configuration ios.sim.release --headless --loglevel debug --take-screenshots failing --artifacts-location artifacts/detox
 
+      - name: Stop sampling runner load
+        if: always()
+        continue-on-error: true
+        env:
+          LOAD_LOG: ${{ runner.temp }}/runner-load.log
+        run: |
+          pid_file="${RUNNER_TEMP}/runner-load.pid"
+          [[ -f "${pid_file}" ]] && kill "$(cat "${pid_file}")" 2>/dev/null || true
+          [[ -f "${LOAD_LOG}" ]] || exit 0
+          echo "::group::Runner load every 5 s (step times are in this job's log)"
+          cat "${LOAD_LOG}"
+          echo "::endgroup::"
+
       - name: Collect the app's simulator log on failure
         if: failure() && steps.simulator.outputs.udid != ''
         continue-on-error: true
@@ -1380,6 +1427,7 @@ jobs:
           path: |
             mobile/artifacts/detox/
             ${{ runner.temp }}/ios-e2e-build.log
+            ${{ runner.temp }}/runner-load.log
             e2e-backend.log
             e2e-backend-diagnostics/
           if-no-files-found: ignore
