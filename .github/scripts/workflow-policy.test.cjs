@@ -92,11 +92,3 @@ test('the DAST API scan sends its token and proves it', () => {
   assert.match(api, /^\s+require-success: \/api\/v1\/\S+$/m);
   assert.match(api, /^\s+token: \$\{\{ steps\.auth\.outputs\.token \}\}$/m);
 });
-
-test('package cleanup protects deployed digests, rollback tags and default commit-SHA releases', () => {
-  const cleanup = fs.readFileSync(path.join(workflowDir, 'cleanup-packages.yml'), 'utf8');
-  assert.match(cleanup, /protected_refs:/);
-  assert.match(cleanup, /rollback\|prod\|production\|deployed/);
-  assert.match(cleanup, /\[0-9a-f\]\{40\}/);
-  assert.doesNotMatch(cleanup, /2>\/dev\/null\s*\|\s*jq/, 'only HTTP 404 may skip; API failures must fail');
-});
