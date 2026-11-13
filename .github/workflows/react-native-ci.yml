@@ -1471,6 +1471,7 @@ jobs:
           while (( SECONDS - start < 720 )); do
             load="$(sysctl -n vm.loadavg | awk '{ print $2 }')"
             awk -v l="${load}" 'BEGIN { exit !(l < 15) }' && break
+            (( (SECONDS - start) % 60 < 15 )) && echo "$((SECONDS - start)) s: load ${load}"
             sleep 15
           done
           echo "Load ${load} after $((SECONDS - start)) s of settling." | tee -a "$GITHUB_STEP_SUMMARY"
@@ -1486,7 +1487,8 @@ jobs:
 
           size_mb="$(du -sm "${RUNNER_TEMP}/sim-snapshot/data" | cut -f1)"
           echo "Snapshot: ${size_mb} MB. Largest directories:"
-          du -m -d 4 "${RUNNER_TEMP}/sim-snapshot/data" 2>/dev/null | sort -rn | head -n 15
+          # `head` closing the pipe makes BSD sort exit 2 under pipefail.
+          du -m -d 4 "${RUNNER_TEMP}/sim-snapshot/data" 2>/dev/null | sort -rn | head -n 15 || true
           # The repository's whole Actions cache is 10 GB.
           if (( size_mb > 2500 )); then
             echo "::warning::Simulator snapshot is ${size_mb} MB; not caching it."
