@@ -1244,8 +1244,11 @@ jobs:
       # The raw xcodebuild output is too long for the Actions log; keep it as
       # an artifact and print the tail when the build fails. Like the `ios`
       # job, print the per-phase totals (-showBuildTimingSummary in
-      # .detoxrc.js) and whether the restored ExpoModulesJSI slice was reused:
-      # with every C/C++ compile a ccache hit, this build still took 7 min.
+      # .detoxrc.js) and whether the restored ExpoModulesJSI slice was reused.
+      # The same cached build took 7 min and 2 min 54 s on two runners
+      # (BENCHMARKS §71), so compare the totals, not the step time. The JSI
+      # line was missing from this build's activity log in run 43389193585
+      # (the `ios` job's showed it); say so rather than print nothing.
       - name: Build Detox release app
         id: native-build
         if: steps.repack.outputs.repacked != 'true'
@@ -1262,9 +1265,10 @@ jobs:
             printf '%s\n' "${timing}"
             printf '### iOS Detox build timing\n\n```\n%s\n```\n' "${timing}" >> "${GITHUB_STEP_SUMMARY}"
           fi
-          find ios/build/Logs/Build -name '*.xcactivitylog' -exec gzip -dc {} + 2>/dev/null \
+          jsi="$(find ios/build/Logs/Build -name '*.xcactivitylog' -exec gzip -dc {} + 2>/dev/null \
             | LC_ALL=C grep -a -o -E '\[ExpoModulesJSI\] (Built xcframework successfully in [0-9]+s|xcframework slices up to date, skipping build)' \
-            | sort -u || true
+            | sort -u || true)"
+          echo "${jsi:-[ExpoModulesJSI] no build-phase line found in ios/build/Logs/Build}"
 
           exit "${status}"
 
