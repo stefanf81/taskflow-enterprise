@@ -50,7 +50,7 @@ class AppointmentIdempotencyTestcontainersTest {
     private static final String SERVICE = "Race Cut";
 
     @Container
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.6-alpine")
+    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.7-alpine")
             .withDatabaseName("taskflow_test")
             .withUsername("postgres")
             .withPassword("postgres-password");

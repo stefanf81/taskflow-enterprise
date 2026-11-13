@@ -47,7 +47,7 @@ public final class PostgresTestServer {
 
     private static synchronized PostgreSQLContainer container() {
         if (container == null) {
-            PostgreSQLContainer started = new PostgreSQLContainer("postgres:18.6-alpine")
+            PostgreSQLContainer started = new PostgreSQLContainer("postgres:18.7-alpine")
                     .withDatabaseName("postgres")
                     .withUsername("postgres")
                     .withPassword("postgres-password");

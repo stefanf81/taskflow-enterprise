@@ -5,7 +5,7 @@
 ### Prerequisites
 
 - Git
-- OpenJDK 25 (the Gradle wrapper supplies Gradle 9.9.0; local Android Detox builds use JDK 21)
+- OpenJDK 25 (the Gradle wrapper supplies Gradle 9.9.1; local Android Detox builds use JDK 21)
 - Node.js 26.13.1 and npm 12.2.2 (mobile/.nvmrc pins the Node version)
 - Docker Desktop with a running daemon for the Docker stack and PostgreSQL tests
 - At least 5 GB available to Docker Desktop for the full Compose stack

@@ -10,7 +10,7 @@ inputs:
     # Pinned instead of the floating `buildx-stable-1` tag (v0.33.1 when
     # pinned) so a retargeted tag cannot change the builder unreviewed.
     # buildkit-image: tracked by the dedicated regex manager in .github/renovate.json
-    default: "moby/buildkit:v0.34.2@sha256:c5f8862f52499773af85bc07695b2379ef08e8002352b0df2c4864c91d78dabe"
+    default: "moby/buildkit:v0.35.0@sha256:aa632b921ef07411d2cb77292cd34213d4f7b384001d6fceef1e1f25bf9752bb"
 runs:
   using: composite
   steps:
