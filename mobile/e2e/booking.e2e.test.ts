@@ -151,7 +151,9 @@ flow('Guest Booking Flow', (step) => {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
-        signal: AbortSignal.timeout(10000),
+        // Not 10 s: on the hosted iOS runner the simulator's post-boot work keeps the load average
+        // in the hundreds, and this PUT once took 8.97 s inside the backend (run 43413301687).
+        signal: AbortSignal.timeout(30000),
       },
     );
     if (!response.ok) throw new Error(`Failed to release E2E booking: HTTP ${response.status}`);

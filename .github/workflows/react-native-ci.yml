@@ -1337,7 +1337,7 @@ jobs:
                 "$(sysctl -n vm.swapusage | awk '{ print $6 }')" \
                 "$(awk '$1 == "Swapins:" { print $2 + 0 }' <<< "${vm}")" \
                 "$(awk '$1 == "Swapouts:" { print $2 + 0 }' <<< "${vm}")" \
-                "$(ps -Ao pcpu=,rss=,comm= -r | head -n 4 | awk '{
+                "$(ps -Ao pcpu=,rss=,comm= -r 2>/dev/null | head -n 4 | awk '{
                     name = $0; sub(/^ *[^ ]+ +[^ ]+ +/, "", name); n = split(name, part, "/")
                     printf "%s%% %dM %s; ", $1, $2 / 1024, part[n] }')"
               sleep 5
