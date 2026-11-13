@@ -2582,4 +2582,18 @@ The class now remembers the `CsrfFilter`'s token repository before each test and
 * **One test failed because of it.** The submit test made the booking and showed the receipt, but its clean-up `PUT …/public/cancel/{publicId}` took 8.97 s inside the backend (access log), and the test's `AbortSignal.timeout(10000)` aborted it. The timeout is now 30 s.
 * **ExpoModulesJSI line:** the build-phase output is in the raw `xcodebuild` log that both iOS jobs keep, but never was in the Detox build's activity logs. Both jobs now read the raw log; the `ios` job of 43413301687 printed `xcframework slices up to date, skipping build`. The raw logs of 43400040948 confirm the earlier inference: 84 s (`ios`) and 78 s (Detox) rebuilds after the lockfile change. The Detox job restores the snapshot ~5 min before the `ios` job saves the new key, so after a lockfile change it rebuilds once.
 
-**Next:** a first boot is unavoidable on a fresh runner, so the lever is not booting a fresh device at all. The experiment is to cache an already-settled device (keyed by runner image and simulator runtime) and restore it instead of creating one. Booting earlier does not help: the post-boot work outlasts the ~1 min of other work on the cached-app path.
+**Not adopted: restoring a settled simulator instead of booting a fresh one.** Booting earlier does not help (the post-boot work outlasts the ~1 min of other work on the cached-app path), so the experiment (branch `claude/serene-mccarthy-ds6oz4-sim-snapshot`) cached the data directory of the image's pre-created "iPhone 17 Pro" after a passing run and moved it back in before `simctl boot` on the next. Key: image version, Xcode build, runtime build, UDID. Before the snapshot: wait for the load to drop below 15 (max. 12 min), uninstall the app, `simctl keychain reset` (the admin session from the login test survives an uninstall), shut down, drop the unified logs. All four runs used the cached, repacked app.
+
+| | [`43413301687`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43413301687) fresh | [`43427356860`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43427356860) fresh | [`43431217194`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43431217194) fresh | [`43434341555`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43434341555) snapshot |
+| :--- | ---: | ---: | ---: | ---: |
+| Snapshot restore (1.09 GB download + extract) | – | – | – | 36 s |
+| Boot step start → `bootstatus` ready | 168 s | 156 s | 80 s | **72 s** (no data migration) |
+| Ready → first app launch done | 113 s | 158 s | 108 s | 143 s |
+| Jest `Time` | 391 s (1 failed) | 292 s | 241 s | **223 s** |
+| Boot step start → Detox done (+ restore) | 608 s | 457 s | 355 s | 313 s (**349 s**) |
+| Peak 1-min load average | 682 | ~536 | 291 | **528** |
+
+* **Data migration is the only work the snapshot removes.** `bootstatus` reported "Device already booted" and the ~45–90 s of migration plugins disappeared, but the restore costs 36 s, and the post-boot load came back at the same height (104 → 528, with `SpringBoard`, `WidgetRenderer`, widget and poster extensions, `healthd`, `modelcatalogd`, `mediaanalysisd` at up to 180%, `apsd`, `diagnosticd`). That work runs on every boot, not only the first. The stall moved again, this time into Detox's first `applesimutils --list` (71 s).
+* **Within the noise of fresh boots.** Including the restore, the snapshot run (349 s) beat the best fresh run (355 s) by 6 s; fresh runs alone spread over 355–608 s.
+* **Cost:** a 1.09 GB cache entry (of the repository's 10 GB), and every runner-image update (about weekly) changes the key, so a nightly would pay a fresh boot plus ~12 min of settling (the load never fell below 37 in 12 min) and the upload.
+* The Keychain reset worked: the restored device started signed out and all 9 tests passed.
