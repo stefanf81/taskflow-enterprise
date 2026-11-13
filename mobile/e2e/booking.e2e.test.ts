@@ -13,14 +13,33 @@
 
 import { device, element, by, expect, waitFor } from 'detox';
 
-// Every test starts from a cold launch. On React Native 0.88 an in-place JS reload
-// (device.reloadReactNative) brings the Home ScrollView back scrolled down, so the
-// hero and header assertions fail; a release build never reloads in place.
 const relaunch = () => device.launchApp({ newInstance: true });
 // Cold launches on hosted macOS runners vary widely (34-57 s in passing nightlies, 82 s plus a
 // premature "ready" on 2026-11-01, which ran the hook past Jest's 120 s testTimeout), so the
 // hook gets its own budget.
 const RELAUNCH_TIMEOUT_MS = 240_000;
+
+type Step = (title: string, fn: () => Promise<void>) => void;
+
+// Each flow launches the app once and its tests run in order, each one continuing on the screen
+// the previous one left. A cold launch per test cost 6-40 s on hosted macOS runners, and every
+// wizard test walked all the earlier steps again. (An in-place JS reload is no substitute: on
+// React Native 0.88 device.reloadReactNative brings the Home ScrollView back scrolled down.)
+// Once a step fails or times out, the rest of its flow fails at once and names it, instead of
+// waiting out its own timeouts on a screen the flow never reached.
+const flow = (name: string, defineSteps: (step: Step) => void) =>
+  describe(name, () => {
+    let unfinished: string | undefined;
+    beforeAll(relaunch, RELAUNCH_TIMEOUT_MS);
+    defineSteps((title, fn) =>
+      it(title, async () => {
+        if (unfinished) throw new Error(`Not run: the earlier step "${unfinished}" did not pass`);
+        unfinished = title;
+        await fn();
+        unfinished = undefined;
+      }),
+    );
+  });
 
 // Detox never scrolls by itself, and iOS does not resize the window for the keyboard: the field
 // or button below the focused input sits behind it until the scroll view is moved. iOS also
@@ -44,17 +63,15 @@ const openSignIn = async () => {
   await element(by.text('Sign In / Register')).tap();
 };
 
-describe('Guest Booking Flow', () => {
-  beforeEach(relaunch, RELAUNCH_TIMEOUT_MS);
-
-  it('displays the home screen on launch', async () => {
+flow('Guest Booking Flow', (step) => {
+  step('displays the home screen on launch', async () => {
     // The Hero section title should be visible
     await expect(element(by.text('LUXURY BARBER SCHEDULER'))).toBeVisible();
     // The Book Appointment CTA on the home screen
     await expect(element(by.id('home-book-appointment-btn'))).toBeVisible();
   });
 
-  it('navigates to booking screen via Book tab', async () => {
+  step('navigates to booking screen via Book tab', async () => {
     // Tap the bottom tab "Book" using testID
     await element(by.id('tab-booking')).tap();
     // The booking screen header should appear (uppercase due to textTransform)
@@ -63,9 +80,7 @@ describe('Guest Booking Flow', () => {
       .withTimeout(10000);
   });
 
-  it('completes Step 1: selects a treatment', async () => {
-    await element(by.id('tab-booking')).tap();
-    await waitFor(element(by.text('BOOKING ASSISTANT'))).toBeVisible().withTimeout(5000);
+  step('completes Step 1: selects a treatment', async () => {
     // Scroll down to make "Continue to Stylist" button fully visible
     await waitFor(element(by.text('Continue to Stylist')))
       .toBeVisible()
@@ -75,69 +90,17 @@ describe('Guest Booking Flow', () => {
     await expect(element(by.text('SELECT BARBER'))).toBeVisible();
   });
 
-  it('completes Step 2: selects a barber', async () => {
-    await element(by.id('tab-booking')).tap();
-    await waitFor(element(by.text('BOOKING ASSISTANT'))).toBeVisible().withTimeout(5000);
-    await waitFor(element(by.text('Continue to Stylist')))
-      .toBeVisible()
-      .whileElement(by.id('booking-scroll-view'))
-      .scroll(200, 'down');
-    await element(by.text('Continue to Stylist')).tap();
-    await expect(element(by.text('SELECT BARBER'))).toBeVisible();
-
-    // Scroll down to "Continue" button
+  step('completes Step 2: selects a barber', async () => {
+    // Scroll down to "Continue" button (No Preference stays selected)
     await waitFor(element(by.text('Continue')))
       .toBeVisible()
       .whileElement(by.id('booking-scroll-view'))
       .scroll(200, 'down');
     await element(by.text('Continue')).tap();
-    // Step 3 appears
     await expect(element(by.text('SELECT OPERATING DAY'))).toBeVisible();
   });
 
-  it('completes Step 3: picks a date', async () => {
-    await element(by.id('tab-booking')).tap();
-    await waitFor(element(by.text('BOOKING ASSISTANT'))).toBeVisible().withTimeout(5000);
-    await waitFor(element(by.text('Continue to Stylist')))
-      .toBeVisible()
-      .whileElement(by.id('booking-scroll-view'))
-      .scroll(200, 'down');
-    await element(by.text('Continue to Stylist')).tap();
-
-    await waitFor(element(by.text('Continue')))
-      .toBeVisible()
-      .whileElement(by.id('booking-scroll-view'))
-      .scroll(200, 'down');
-    await element(by.text('Continue')).tap();
-
-    await expect(element(by.text('SELECT OPERATING DAY'))).toBeVisible();
-
-    await waitFor(element(by.text('Continue')))
-      .toBeVisible()
-      .whileElement(by.id('booking-scroll-view'))
-      .scroll(200, 'down');
-    await element(by.text('Continue')).tap();
-
-    // Step 4 should appear
-    await expect(element(by.text('4. Contact Details & Summary'))).toBeVisible();
-  });
-
-  it('submits a guest booking and displays its receipt', async () => {
-    const email = `detox-${Date.now()}@example.com`;
-    await element(by.id('tab-booking')).tap();
-    await waitFor(element(by.text('BOOKING ASSISTANT'))).toBeVisible().withTimeout(5000);
-    await waitFor(element(by.text('Continue to Stylist')))
-      .toBeVisible()
-      .whileElement(by.id('booking-scroll-view'))
-      .scroll(200, 'down');
-    await element(by.text('Continue to Stylist')).tap();
-
-    await waitFor(element(by.text('Continue')))
-      .toBeVisible()
-      .whileElement(by.id('booking-scroll-view'))
-      .scroll(200, 'down');
-    await element(by.text('Continue')).tap();
-
+  step('completes Step 3: picks a date and a free slot', async () => {
     // A future displayed operating day avoids the current day's last-slot cutoff. Pick an
     // actually available slot rather than assuming the wizard's default is still free.
     await element(by.id('booking-scroll-view')).scrollTo('top');
@@ -155,6 +118,10 @@ describe('Guest Booking Flow', () => {
     await element(by.text('Continue')).tap();
 
     await expect(element(by.text('4. Contact Details & Summary'))).toBeVisible();
+  });
+
+  step('submits a guest booking and displays its receipt', async () => {
+    const email = `detox-${Date.now()}@example.com`;
 
     // Fill in contact details using replaceText for fast, keyboard-layout-agnostic entry
     await scrollIntoView(by.id('customer-name-input'), 'booking-scroll-view');
@@ -191,24 +158,20 @@ describe('Guest Booking Flow', () => {
   });
 });
 
-describe('Guest Login Flow', () => {
-  beforeEach(relaunch, RELAUNCH_TIMEOUT_MS);
-
-  it('navigates to login via Sign In / Register', async () => {
+flow('Guest Login Flow', (step) => {
+  step('navigates to login via Sign In / Register', async () => {
     await openSignIn();
     await expect(element(by.text('Sign In to TaskFlow'))).toBeVisible();
   });
 
-  it('shows validation for empty fields', async () => {
-    await openSignIn();
+  step('shows validation for empty fields', async () => {
     await element(by.id('login-submit-btn')).tap();
     // Should still be on login screen (no error shown because validation
     // in handleLogin silently returns)
     await expect(element(by.text('Sign In to TaskFlow'))).toBeVisible();
   });
 
-  it('signs in as admin and lands on the dashboard', async () => {
-    await openSignIn();
+  step('signs in as admin and lands on the dashboard', async () => {
     // On iOS the open keyboard covers the next control, and the scroll view shifts the content
     // to keep the focused field above it; Detox's visibility check ignores the keyboard. Close it
     // with Return after each field, as a user would. Android needs none of this (Espresso's

@@ -18,7 +18,7 @@ module.exports = {
     'ios.release': {
       type: 'ios.app',
       binaryPath: 'ios/build/Build/Products/Release-iphonesimulator/TaskFlowMobile.app',
-      build: `${RELEASE_BUNDLE_ENV} xcodebuild -workspace ios/TaskFlowMobile.xcworkspace -scheme TaskFlowMobile -configuration Release -sdk iphonesimulator -derivedDataPath ios/build ONLY_ACTIVE_ARCH=YES ARCHS=arm64`,
+      build: `${RELEASE_BUNDLE_ENV} xcodebuild -workspace ios/TaskFlowMobile.xcworkspace -scheme TaskFlowMobile -configuration Release -sdk iphonesimulator -derivedDataPath ios/build -showBuildTimingSummary ONLY_ACTIVE_ARCH=YES ARCHS=arm64`,
     },
     'ios.debug': {
       type: 'ios.app',
@@ -69,6 +69,17 @@ module.exports = {
     'android.emu.release': {
       device: 'emulator',
       app: 'android.release',
+    },
+  },
+  // `--take-screenshots failing` (CI) keeps screenshots of failing tests only, but by default
+  // still takes one before every test and throws it away when the test passes: 1-14 s each on
+  // the hosted iOS simulator, ~30 s per run. With `takeWhen` Detox instead captures the screen at
+  // the moment a test or hook fails. Without that flag (locally) screenshots stay manual.
+  artifacts: {
+    plugins: {
+      screenshot: {
+        takeWhen: { testStart: false, testFailure: true, testDone: false },
+      },
     },
   },
   behavior: {

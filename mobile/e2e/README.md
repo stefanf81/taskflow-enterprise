@@ -86,7 +86,7 @@ is healthy; a later host probe passing can help distinguish a transient/device-s
 1. **Build iOS Simulator Release App Bundle:**
    ```bash
    npm run e2e:build
-   # Executes: EXPO_UNSTABLE_METRO_OPTIMIZE_GRAPH=1 EXPO_UNSTABLE_TREE_SHAKING=1 xcodebuild -workspace ios/TaskFlowMobile.xcworkspace -scheme TaskFlowMobile -configuration Release -sdk iphonesimulator -derivedDataPath ios/build ONLY_ACTIVE_ARCH=YES ARCHS=arm64
+   # Executes: EXPO_UNSTABLE_METRO_OPTIMIZE_GRAPH=1 EXPO_UNSTABLE_TREE_SHAKING=1 xcodebuild -workspace ios/TaskFlowMobile.xcworkspace -scheme TaskFlowMobile -configuration Release -sdk iphonesimulator -derivedDataPath ios/build -showBuildTimingSummary ONLY_ACTIVE_ARCH=YES ARCHS=arm64
    ```
 
 2. **Build Detox Framework Cache (First-Time Only):**
@@ -116,15 +116,19 @@ is healthy; a later host probe passing can help distinguish a transient/device-s
 
 ## 🧪 Test Suite Scope (`e2e/booking.e2e.test.ts`)
 
-The E2E suite validates critical guest user journeys end-to-end:
+The E2E suite validates critical guest user journeys end-to-end. Each flow launches the app once
+and its tests run in order, each continuing on the screen the previous one left (a cold launch per
+test cost 6-40 s on hosted macOS runners, and every wizard test walked the earlier steps again).
+When a step fails, the rest of its flow fails immediately with `Not run: the earlier step "…" did
+not pass`; the first failure is the one to read.
 
 ### 1. Guest Booking Flow (Wizard)
 - **Home Screen Launch:** Asserts `'LUXURY BARBER SCHEDULER'` header and `home-book-appointment-btn` CTA.
-- **Tab Navigation:** Taps `tab-booking` bottom tab to open `BookingScreen`.
-- **Step 1 (Treatment Selection):** Asserts `'BOOKING ASSISTANT'`, scrolls down `booking-scroll-view`, taps `Continue to Stylist`, and asserts `'SELECT BARBER'`.
+- **Tab Navigation:** Taps `tab-booking` bottom tab to open `BookingScreen` and waits for `'BOOKING ASSISTANT'`.
+- **Step 1 (Treatment Selection):** Scrolls down `booking-scroll-view`, taps `Continue to Stylist`, and asserts `'SELECT BARBER'`.
 - **Step 2 (Stylist Selection):** Scrolls down, taps `Continue` (No Preference), and asserts `'SELECT OPERATING DAY'`.
-- **Step 3 (Date/Time Slot Selection):** Scrolls down, taps `Continue`, and asserts `'4. Contact Details & Summary'`.
-- **Guest Booking Submission:** Picks the second displayed operating day (`booking-day-<yyyy-mm-dd>`) and its first `booking-slot-available-<HH:mm>`, fills `customer-name-input`, `customer-email-input` (a unique address per run) and `customer-phone-input` using `replaceText()`, taps `Confirm & Request Booking`, waits for `'Booking Confirmation'`, then cancels the booking through `PUT /api/v1/appointments/public/cancel/{publicId}` with the code from `receipt-booking-code`, so repeated runs do not use up slots.
+- **Step 3 (Date/Time Slot Selection):** Picks the second displayed operating day (`booking-day-<yyyy-mm-dd>`) and its first `booking-slot-available-<HH:mm>`, taps `Continue`, and asserts `'4. Contact Details & Summary'`.
+- **Guest Booking Submission:** Fills `customer-name-input`, `customer-email-input` (a unique address per run) and `customer-phone-input` using `replaceText()`, taps `Confirm & Request Booking`, waits for `'Booking Confirmation'`, then cancels the booking through `PUT /api/v1/appointments/public/cancel/{publicId}` with the code from `receipt-booking-code`, so repeated runs do not use up slots.
 
 ### 2. Guest Login Flow
 - **Navigation:** Scrolls `home-scroll-view` back to the top (see gotcha 5), taps `Sign In / Register` once it is fully visible and asserts `'Sign In to TaskFlow'` form header.
