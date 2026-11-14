@@ -1155,7 +1155,10 @@ jobs:
         with:
           jar-path: e2e-backend-jar/*.jar
           log-file: e2e-backend.log
-          java-options: -XX:TieredStopAtLevel=1
+          # A small fixed-ceiling heap keeps the backend's footprint down while the simulator's
+          # post-boot work pushes the runner into swap (BENCHMARKS §71): ~370 MB resident instead
+          # of ~505 MB for the Detox flows, with a live heap of ~57 MB after a full GC.
+          java-options: -XX:TieredStopAtLevel=1 -Xmx128m -XX:+UseSerialGC
           wait: "false"
 
       # Same setup as the `ios` job (its caches are restored, never saved here).
@@ -1322,21 +1325,25 @@ jobs:
       - name: Start sampling runner load
         env:
           LOAD_LOG: ${{ runner.temp }}/runner-load.log
+          BACKEND_PID: ${{ steps.backend.outputs.pid }}
         run: |
           # One line per sample: 1-min load average, free memory, swap in use,
-          # cumulative swap-ins/outs (pages), then the four busiest processes
-          # (CPU, resident memory, name). A failed probe leaves its field empty.
+          # cumulative swap-ins/outs (pages), the backend's CPU, resident memory and
+          # nice value, then the four busiest processes (CPU, resident memory, name).
+          # A failed probe leaves its field empty.
           sample() {
             set +e +o pipefail
             while :; do
               vm="$(vm_stat)"
-              printf '%s load=%s free=%s swap_used=%s swapins=%s swapouts=%s | %s\n' \
+              printf '%s load=%s free=%s swap_used=%s swapins=%s swapouts=%s backend=%s | %s\n' \
                 "$(date +%T)" \
                 "$(sysctl -n vm.loadavg | awk '{ print $2 }')" \
                 "$(memory_pressure -Q | awk -F': ' '/free percentage/ { print $2 }')" \
                 "$(sysctl -n vm.swapusage | awk '{ print $6 }')" \
                 "$(awk '$1 == "Swapins:" { print $2 + 0 }' <<< "${vm}")" \
                 "$(awk '$1 == "Swapouts:" { print $2 + 0 }' <<< "${vm}")" \
+                "$(ps -o pcpu=,rss=,nice= -p "${BACKEND_PID}" 2>/dev/null \
+                    | awk '{ printf "%s%%,%dM,nice%s", $1, $2 / 1024, $3 }')" \
                 "$(ps -Ao pcpu=,rss=,comm= -r 2>/dev/null | head -n 4 | awk '{
                     name = $0; sub(/^ *[^ ]+ +[^ ]+ +/, "", name); n = split(name, part, "/")
                     printf "%s%% %dM %s; ", $1, $2 / 1024, part[n] }')"
