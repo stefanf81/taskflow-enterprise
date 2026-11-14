@@ -2597,3 +2597,28 @@ The class now remembers the `CsrfFilter`'s token repository before each test and
 * **Within the noise of fresh boots.** Including the restore, the snapshot run (349 s) beat the best fresh run (355 s) by 6 s; fresh runs alone spread over 355–608 s.
 * **Cost:** a 1.09 GB cache entry (of the repository's 10 GB), and every runner-image update (about weekly) changes the key, so a nightly would pay a fresh boot plus ~12 min of settling (the load never fell below 37 in 12 min) and the upload.
 * The Keychain reset worked: the restored device started signed out and all 9 tests passed.
+
+### Follow-up: the E2E backend's heap and priority on the iOS runner (2026-11-14)
+
+**Goal:** keep the E2E backend responsive while the simulator's post-boot work (above) saturates the runner. Two `workflow_dispatch` runs before this change had backend requests of 13.95 s (a booking the app had already given up on, run [`43584461894`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43584461894)) and 61.6 s (busy-slots, run [`43586962405`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43586962405)); the backend log showed no slow query, and the runner was swapping.
+
+**Methodology:** six `workflow_dispatch` runs of the iOS Detox job, all with the cached and repacked app, on three variants of the backend launch. The runner-load sampler now also records the backend's CPU, resident memory and nice value every 5 s; request durations come from the Tomcat access log, stalls from Hikari's 2 s leak detection (`application.properties`). The heap size was chosen on the CI JAR locally: over 200 rounds of the Detox flows' API calls, the default heap used ~505 MB resident, `-Xmx128m -XX:+UseSerialGC` ~370 MB, with a live heap of ~57 MB after a full GC and no `OutOfMemoryError`.
+
+| Run | Heap | `renice -n -10` | Detox step | Slowest two requests | Leak warnings | Peak load / swap |
+| :--- | :---: | :---: | ---: | ---: | ---: | ---: |
+| `43584461894` (8/9) | default | – | 6:16 | 14.0 / 4.3 s | 0 | 567 / 1.18 GB |
+| `43586962405` | default | – | 7:23 | **61.6** / 27.9 s | 5 | 484 / 0.88 GB |
+| [`43591340468`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43591340468) | 128 MB serial | – | 5:44 | 12.4 / 12.0 s | 2 | 489 / 1.00 GB |
+| [`43591369782`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43591369782) | 128 MB serial | ✓ | 4:16 | **3.3** / 3.2 s | 0 | 457 / 0.63 GB |
+| [`43595795392`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43595795392) | 128 MB serial | ✓ | 5:02 | **7.3** / 4.9 s | 3 | **761** / 0.31 GB |
+| [`43595797733`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43595797733) | 128 MB serial | ✓ | 5:49 | **6.2** / 3.5 s | 2 | 479 / 0.54 GB |
+| [`43596919828`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43596919828) | default | ✓ | 8:44 | 24.2 / 18.5 s | 6 | 550 / 0.77 GB |
+| [`43598143347`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43598143347) | default | ✓ | 7:15 | 27.0 / 26.9 s | 0 | 702 / 0.42 GB |
+
+* **The small heap is what helps.** With it and `renice` the slowest request stayed at 3–7 s in three of three runs, including the most loaded run of all (761); with the default heap it was 14–62 s with or without `renice`, and the Detox step took 1.5–4 min longer.
+* **Not by keeping the backend resident.** Its resident memory fell to 19–57 MB in every variant once the simulator booted: macOS pages the idle backend out whatever its size. The likely mechanism is that a 128 MB serial-GC heap has far less to page back in before a stalled request (or a collection) can run; the sampler does not record page-ins per process, so this is inferred.
+* **`renice` alone did not help**, and the backend already started at nice −10 on the hosted runner (the step takes it to −20). Heap without `renice` had a single run (12.4 s), so whether `renice` adds anything on top of the heap is not separated; it is kept because the combination is what was measured.
+
+**Adopted:** the iOS Detox job starts the backend with `-XX:TieredStopAtLevel=1 -Xmx128m -XX:+UseSerialGC` and renices it right after; the runner-load samples include the backend's CPU, resident memory and nice value. The Android job is unchanged (its emulator does not starve the runner). This is the CI step's own launch, not the image `CMD` (AGENTS.md: JVM sizing belongs to the deployment).
+
+**Not adopted:** a longer client timeout (it would only hide stalls of a minute or more).

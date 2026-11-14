@@ -1155,8 +1155,24 @@ jobs:
         with:
           jar-path: e2e-backend-jar/*.jar
           log-file: e2e-backend.log
-          java-options: -XX:TieredStopAtLevel=1
+          # The simulator's post-boot work pushes the runner into swap and pages the idle backend
+          # out whatever its size (BENCHMARKS §71). A 128 MB serial-GC heap (live set ~57 MB) has
+          # far less to bring back: with it and the renice below the slowest request stayed at
+          # 3-7 s in three runs, against 14-62 s with the default heap, with or without renice.
+          java-options: -XX:TieredStopAtLevel=1 -Xmx128m -XX:+UseSerialGC
           wait: "false"
+
+      # The simulator's post-boot work runs hundreds of processes (load average 300-760 on
+      # 3 cores, BENCHMARKS §71); the backend is the one process the tests wait on. It starts at
+      # nice -10 on the hosted runner; this takes it to -20. Alone it did not help (§71); it is
+      # kept with the small heap above, the combination that was measured. The runner-load
+      # samples record the backend's nice value.
+      - name: Raise the backend's CPU priority
+        env:
+          BACKEND_PID: ${{ steps.backend.outputs.pid }}
+        run: |
+          sudo renice -n -10 -p "${BACKEND_PID}"
+          ps -o pid=,nice=,comm= -p "${BACKEND_PID}"
 
       # Same setup as the `ios` job (its caches are restored, never saved here).
       - *select-xcode
@@ -1322,21 +1338,25 @@ jobs:
       - name: Start sampling runner load
         env:
           LOAD_LOG: ${{ runner.temp }}/runner-load.log
+          BACKEND_PID: ${{ steps.backend.outputs.pid }}
         run: |
           # One line per sample: 1-min load average, free memory, swap in use,
-          # cumulative swap-ins/outs (pages), then the four busiest processes
-          # (CPU, resident memory, name). A failed probe leaves its field empty.
+          # cumulative swap-ins/outs (pages), the backend's CPU, resident memory and
+          # nice value, then the four busiest processes (CPU, resident memory, name).
+          # A failed probe leaves its field empty.
           sample() {
             set +e +o pipefail
             while :; do
               vm="$(vm_stat)"
-              printf '%s load=%s free=%s swap_used=%s swapins=%s swapouts=%s | %s\n' \
+              printf '%s load=%s free=%s swap_used=%s swapins=%s swapouts=%s backend=%s | %s\n' \
                 "$(date +%T)" \
                 "$(sysctl -n vm.loadavg | awk '{ print $2 }')" \
                 "$(memory_pressure -Q | awk -F': ' '/free percentage/ { print $2 }')" \
                 "$(sysctl -n vm.swapusage | awk '{ print $6 }')" \
                 "$(awk '$1 == "Swapins:" { print $2 + 0 }' <<< "${vm}")" \
                 "$(awk '$1 == "Swapouts:" { print $2 + 0 }' <<< "${vm}")" \
+                "$(ps -o pcpu=,rss=,nice= -p "${BACKEND_PID}" 2>/dev/null \
+                    | awk '{ printf "%s%%,%dM,nice%s", $1, $2 / 1024, $3 }')" \
                 "$(ps -Ao pcpu=,rss=,comm= -r 2>/dev/null | head -n 4 | awk '{
                     name = $0; sub(/^ *[^ ]+ +[^ ]+ +/, "", name); n = split(name, part, "/")
                     printf "%s%% %dM %s; ", $1, $2 / 1024, part[n] }')"
