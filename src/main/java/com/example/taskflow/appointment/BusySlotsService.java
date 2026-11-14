@@ -6,6 +6,7 @@ import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 
 import com.example.taskflow.core.LogSanitizer;
+import org.jspecify.annotations.Nullable;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -189,13 +190,8 @@ public class BusySlotsService {
      * bookings of the date) and evaluates every candidate in memory.
      */
     public Optional<Barber> findFirstAvailableBarber(LocalDate date, String bookingTime, int durationMinutes) {
-        if (date == null || bookingTime == null || bookingTime.isBlank()) {
-            return Optional.empty();
-        }
-        LocalTime requested;
-        try {
-            requested = LocalTime.parse(bookingTime.trim());
-        } catch (DateTimeParseException e) {
+        LocalTime requested = parseSlot(bookingTime);
+        if (date == null || requested == null) {
             return Optional.empty();
         }
         // Deterministic order (lowest id first) so the same slot consistently
@@ -210,16 +206,23 @@ public class BusySlotsService {
      */
     Optional<Barber> findFirstAvailableBarber(List<Barber> candidates, LocalDate date, String bookingTime,
                                               int durationMinutes) {
-        if (candidates == null || candidates.isEmpty() || date == null || bookingTime == null || bookingTime.isBlank()) {
-            return Optional.empty();
-        }
-        LocalTime requested;
-        try {
-            requested = LocalTime.parse(bookingTime.trim());
-        } catch (DateTimeParseException e) {
+        LocalTime requested = parseSlot(bookingTime);
+        if (candidates == null || candidates.isEmpty() || date == null || requested == null) {
             return Optional.empty();
         }
         return findFirstAvailableBarber(candidates, date, requested, durationMinutes);
+    }
+
+    /** {@code HH:mm} as a {@link LocalTime}, or null when it is missing or unparseable. */
+    private static @Nullable LocalTime parseSlot(String bookingTime) {
+        if (bookingTime == null || bookingTime.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalTime.parse(bookingTime.trim());
+        } catch (DateTimeParseException e) {
+            return null;
+        }
     }
 
     private Optional<Barber> findFirstAvailableBarber(List<Barber> candidates, LocalDate date, LocalTime requested,

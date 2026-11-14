@@ -126,7 +126,7 @@ export class ReschedulePicker {
   private readonly appointmentsApi = inject(AppointmentsApi);
 
   constructor() {
-    this.shopClock.watch?.(inject(DestroyRef));
+    this.shopClock.watch(inject(DestroyRef));
   }
 
   /** The booking to move; a guest also passes the email it was booked with. */
@@ -139,12 +139,25 @@ export class ReschedulePicker {
   readonly confirmed = output<RescheduleSelection>();
   readonly cancelled = output<void>();
 
-  protected readonly dates = computed(() =>
-    rescheduleDates(this.shopClock.now(), this.shopClock.rules(), DEFAULT_TIME_SLOTS),
+  protected readonly dates = computed(
+    () => rescheduleDates(this.shopClock.now(), this.shopClock.rules(), DEFAULT_TIME_SLOTS),
+    // `now()` is reactive to the minute tick of watch(), but the open days it yields change at
+    // most once a day. Without value equality every tick would publish an equal-but-new array and
+    // so re-run everything derived from it (the selection below, and its availability lookup).
+    { equal: sameDays },
   );
-  protected readonly selectedDate = linkedSignal(() => {
-    const dates = this.dates();
-    return dates.includes(this.currentDate()) ? this.currentDate() : (dates[0] ?? '');
+  /**
+   * The chosen day: the one the user picked for as long as it is still open (a tick that drops
+   * today's last slot, or midnight, must not silently move the booking somewhere else), otherwise
+   * the day the booking is on, otherwise the first open one.
+   */
+  protected readonly selectedDate = linkedSignal<string[], string>({
+    source: this.dates,
+    computation: (dates, previous) => {
+      const picked = previous?.value;
+      if (picked && dates.includes(picked)) return picked;
+      return dates.includes(this.currentDate()) ? this.currentDate() : (dates[0] ?? '');
+    },
   });
   protected readonly selectedTime = linkedSignal({
     source: this.selectedDate,
@@ -197,7 +210,7 @@ export class ReschedulePicker {
     const bookingDate = this.selectedDate();
     const bookingTime = this.selectedTime();
     if (!bookingDate || !bookingTime || this.saving()) return;
-    this.shopClock.tick?.();
+    this.shopClock.tick();
     if (isSlotInPast(bookingDate, bookingTime, this.shopClock.now())) {
       this.selectedTime.set('');
       return;
@@ -213,6 +226,11 @@ export class ReschedulePicker {
   protected formatTime12Hour(time24: string): string {
     return formatTime12Hour(time24);
   }
+}
+
+/** Equal open-day lists (same days, same order). */
+function sameDays(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((day, index) => day === b[index]);
 }
 
 const SHORT_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {

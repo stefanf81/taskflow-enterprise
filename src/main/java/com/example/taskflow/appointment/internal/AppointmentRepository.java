@@ -25,11 +25,26 @@ public interface AppointmentRepository
     @Query("SELECT a FROM Appointment a")
     Slice<Appointment> findPageWithoutCount(Pageable pageable);
 
-    /** One page of a status, without a count query (the caller has the total from the cached stats). */
+    /**
+     * One page of a status, without a count query. The caller pairs it with {@link #countByStatus}
+     * only where the page does not already settle its own total.
+     */
     Slice<Appointment> findByStatus(AppointmentStatus status, Pageable pageable);
+
+    /**
+     * Rows with one status: the exact total behind a status-filtered page, from
+     * {@code idx_appointment_status_date}'s leading column (V4) rather than a cached counter.
+     */
+    long countByStatus(AppointmentStatus status);
 
     /** One page of a status before a date (the OVERDUE view), without a count query. */
     Slice<Appointment> findByStatusAndBookingDateBefore(AppointmentStatus status, LocalDate date, Pageable pageable);
+
+    /**
+     * Rows with one status before a date: the exact total behind the OVERDUE page, matching
+     * {@code idx_appointment_status_date} (status, booking_date) from V4 exactly.
+     */
+    long countByStatusAndBookingDateBefore(AppointmentStatus status, LocalDate date);
 
     Appointment findByPublicId(String publicId);
 

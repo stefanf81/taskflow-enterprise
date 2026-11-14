@@ -2,6 +2,7 @@ import { Component, computed, output, signal, inject, DestroyRef, isDevMode } fr
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { A11yModule } from '@angular/cdk/a11y';
 import { form, required, FormField } from '@angular/forms/signals';
+import { PASSWORD_TOO_LONG_MESSAGE } from '@taskflow/schemas';
 import { AuthApi } from '../../../core/api/auth-api';
 import { AuthState } from '../../../core/auth/auth.state';
 import { NETWORK_ERROR_MESSAGE, extractApiError } from '../../../core/api/extract-api-error';
@@ -374,11 +375,12 @@ export class AuthModalComponent {
           this.errorMessage.set(null);
         },
         error: (err) => {
-          // A password-policy failure shows the whole policy, except >72-byte length errors which
-          // must explain the ceiling instead of telling a user with a long passphrase it is too short.
+          // A password-policy failure shows the whole policy, except the byte-length one, which
+          // must explain the ceiling instead of telling a user with a long passphrase it is too
+          // short. The schema owns that message, so it is compared, never pattern-matched.
           this.errorMessage.set(
             err instanceof RequestValidationError && err.field === 'password'
-              ? err.message.includes('72')
+              ? err.message === PASSWORD_TOO_LONG_MESSAGE
                 ? err.message
                 : this.passwordPolicy
               : extractApiError(err, 'Failed to create account.'),

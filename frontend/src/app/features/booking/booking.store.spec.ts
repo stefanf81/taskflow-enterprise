@@ -754,6 +754,39 @@ describe('BookingStore', () => {
       expect(store.showReceiptModal()).toBe(false);
       httpMock.match(() => true);
     });
+
+    it('keeps the booking a guest is making when they sign in to finish it', async () => {
+      // None of this is personal data, and signing in is exactly how a guest at the last step
+      // books under their account: losing the selections would send them back to step 1.
+      store.selectService('Beard Trim & Shave');
+      store.selectStylist('Sara the Stylist');
+      store.bookingModel.update((m) => ({ ...m, bookingDate: FUTURE, bookingTime: '10:00' }));
+      await answerBusySlots();
+      store.activeStep.set(4);
+
+      TestBed.inject(AuthState).applyRole('ROLE_CUSTOMER', 'bob@example.com');
+
+      expect(store.bookingService()).toBe('Beard Trim & Shave');
+      expect(store.bookingModel().barberName).toBe('Sara the Stylist');
+      expect(store.bookingModel().bookingDate).toBe(FUTURE);
+      expect(store.bookingModel().bookingTime).toBe('10:00');
+      expect(store.activeStep()).toBe(4);
+      httpMock.match(() => true);
+    });
+
+    it('keeps the receipt of a booking a guest has just made until they sign in', () => {
+      // The receipt carries the customer's name and booking code: it must go on sign-in (a shared
+      // device), but nothing else may close it behind the guest's back.
+      store.lastBookedAppointment.set({ id: 42 } as AppointmentItem);
+      store.showReceiptModal.set(true);
+
+      store.setStep(2);
+      expect(store.showReceiptModal()).toBe(true);
+
+      TestBed.inject(AuthState).applyRole('ROLE_CUSTOMER', 'bob@example.com');
+      expect(store.showReceiptModal()).toBe(false);
+      httpMock.match(() => true);
+    });
   });
 });
 

@@ -45,13 +45,24 @@ echo "🔨 Building frontend production bundle on the host..."
 # One install from the root for every workspace (README "Install"). `npm ci` inside frontend/
 # acts as `npm ci --workspace frontend`: it deletes the root node_modules and reinstalls only the
 # frontend, leaving mobile, shared/schemas and the root tooling uninstalled afterwards.
-# Skipped when the installed tree matches the lockfile: npm rewrites node_modules/.package-lock.json
-# on every install, so a lockfile newer than it means an install is due. verify.sh has just run
-# every lint and test against this tree; reinstalling it (~1 GB with React Native) cost 15-45 s.
-if [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
-    npm ci --prefer-offline --no-audit --no-fund
+# Skipped only when the tree was installed from THIS lockfile by a root install: the stamp below
+# records the lockfile's hash and lives inside node_modules, so a different lockfile and a
+# workspace-scoped `npm ci` (which wipes the root node_modules, stamp included) both bring the
+# install back. Modification times could not tell those apart: npm rewrites
+# node_modules/.package-lock.json on a partial install too, leaving it newer than the lockfile
+# while mobile, shared/* and the root tooling are missing. verify.sh has just run every lint and
+# test against a complete tree; reinstalling it (~1 GB with React Native) cost 15-45 s.
+INSTALL_STAMP="node_modules/.taskflow-root-install"
+if command -v sha256sum >/dev/null 2>&1; then
+    LOCK_HASH="$(sha256sum package-lock.json | cut -d' ' -f1)"
 else
-    echo "   node_modules matches package-lock.json; skipping npm ci (delete node_modules to force it)."
+    LOCK_HASH="$(shasum -a 256 package-lock.json | cut -d' ' -f1)"
+fi
+if [ ! -f "$INSTALL_STAMP" ] || [ "$(cat "$INSTALL_STAMP")" != "$LOCK_HASH" ]; then
+    npm ci --prefer-offline --no-audit --no-fund
+    printf '%s\n' "$LOCK_HASH" > "$INSTALL_STAMP"
+else
+    echo "   node_modules was installed from this package-lock.json; skipping npm ci (delete node_modules to force it)."
 fi
 npm --prefix frontend run build
 

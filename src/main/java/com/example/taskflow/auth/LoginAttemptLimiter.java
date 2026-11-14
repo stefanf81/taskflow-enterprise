@@ -32,7 +32,12 @@ import java.util.Locale;
  * shared by all replicas ({@link RedisLoginFailureCounter}), so N replicas do not multiply the limit
  * by N. Failures are also counted locally, and while Redis is failing the local counter (same limits)
  * decides: during an outage the effective limit is therefore per replica again, and a window that
- * began in Redis restarts locally.
+ * began in Redis restarts locally. Once Redis answers again it alone decides, except for one window
+ * after the outage, in which the local counter is still enforced as well so failures it recorded
+ * meanwhile are not forgiven by a Redis key that never saw them. Beyond that window the local copy
+ * is ignored while Redis is healthy: another replica clears the shared window on a successful login
+ * without this one hearing of it, and a stale local count would otherwise lock the account out
+ * here while every other replica let it in.
  */
 @Component
 class LoginAttemptLimiter {
@@ -41,6 +46,15 @@ class LoginAttemptLimiter {
     private final long windowMillis;
     private final FixedWindowCounter failures;
     private final RedisLoginFailureCounter shared;
+    /**
+     * While Redis is answering, the local counter is only a shadow copy of a window Redis owns, and
+     * other replicas reset it there (a successful login) without this JVM ever hearing about it.
+     * Enforcing it unconditionally therefore locked an account out on whichever replica happened to
+     * hold stale failures, with Redis saying the account was fine. It is enforced alongside Redis
+     * only until this instant: one window after the last time Redis could not answer, which is as
+     * long as the local counter can hold failures Redis never saw.
+     */
+    private volatile long enforceLocalUntilMillis;
 
     public LoginAttemptLimiter(int maxFailures, long windowSeconds) {
         this(maxFailures, windowSeconds, (RedisLoginFailureCounter) null);
@@ -73,17 +87,28 @@ class LoginAttemptLimiter {
                             ? failures.secondsUntilReset(key)
                             : retryAfter);
                 }
-                // Also consult the local fallback so failures recorded during a brief Redis outage
-                // are not forgiven the moment Redis reconnects with an empty key.
-                if (failures.current(key) >= maxFailures) {
+                // Redis is healthy and says the account is fine. The local copy only gets a say
+                // while it may still hold failures from an outage Redis knows nothing about;
+                // otherwise a count another replica has already cleared would lock this one out.
+                if (localEnforced() && failures.current(key) >= maxFailures) {
                     throw new TooManyLoginAttemptsException(failures.secondsUntilReset(key));
                 }
                 return;
             }
+            noteSharedOutage();
         }
         if (failures.current(key) >= maxFailures) {
             throw new TooManyLoginAttemptsException(failures.secondsUntilReset(key));
         }
+    }
+
+    private boolean localEnforced() {
+        return System.currentTimeMillis() < enforceLocalUntilMillis;
+    }
+
+    /** Redis could not answer: its window may now be missing failures only this JVM counted. */
+    private void noteSharedOutage() {
+        enforceLocalUntilMillis = System.currentTimeMillis() + windowMillis;
     }
 
     public void recordFailure(String username) {
@@ -91,8 +116,8 @@ class LoginAttemptLimiter {
             String key = key(username);
             // Always counted locally too, so the fallback is warm if Redis fails mid-window.
             failures.increment(key);
-            if (shared != null) {
-                shared.increment(key, windowMillis);
+            if (shared != null && shared.increment(key, windowMillis) == RedisLoginFailureCounter.UNAVAILABLE) {
+                noteSharedOutage();
             }
         }
     }

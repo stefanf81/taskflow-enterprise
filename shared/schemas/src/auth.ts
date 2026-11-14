@@ -17,6 +17,14 @@ import {
 
 const MAX_PASSWORD_UTF8_BYTES = 72;
 
+/**
+ * The one password message a client shows verbatim instead of the password policy: someone with a
+ * long passphrase must read the ceiling, not "at least 8 characters". Exported so the clients can
+ * recognise it by identity (`err.message === PASSWORD_TOO_LONG_MESSAGE`) rather than by searching
+ * the text for the limit, which any rewording would break.
+ */
+export const PASSWORD_TOO_LONG_MESSAGE = `Password must not exceed ${MAX_PASSWORD_UTF8_BYTES} UTF-8 bytes`;
+
 function utf8ByteLength(value: string): number {
   let bytes = 0;
   for (const character of value) {
@@ -60,7 +68,7 @@ export const registerSchema = object({
       "Password must be at least 8 characters long and contain both letters and numbers",
     ),
     refine((value) => utf8ByteLength(value) <= MAX_PASSWORD_UTF8_BYTES, {
-      message: "Password must not exceed 72 UTF-8 bytes",
+      message: PASSWORD_TOO_LONG_MESSAGE,
     }),
   ),
   phone: string().check(

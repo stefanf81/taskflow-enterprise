@@ -8,6 +8,7 @@ import com.example.taskflow.core.ConflictException;
 import com.example.taskflow.core.ResourceNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.SliceImpl;
 import org.springframework.data.jpa.domain.Specification;
@@ -75,34 +76,50 @@ class AppointmentQueryServiceTest extends AppointmentServiceTestSupport {
 
     @Test
     @SuppressWarnings("unchecked")
-    void testGetAllAppointments_StatusViewsTakeTheirTotalFromTheCachedStats() {
-        // total (not cancelled) 40 = 12 pending + 20 approved + 8 denied; 3 pending are overdue
+    void testGetAllAppointments_StatusViewsCountTheirOwnRowsRatherThanTrustTheCache() {
+        // The counters are stale (a dropped eviction, a Redis error: the caches fail open) and say
+        // 12 pending where there are 34. The pager divides the TOTAL into pages, so a total that
+        // does not match the rows the query returns hides rows behind a page count that is too low.
         when(statsService.getStatsCached()).thenReturn(new AppointmentStats(40L, 12L, 20L, 8L, 3L, 0, 0.0));
-        when(statsService.getTotalCountCached()).thenReturn(55L);
-        when(appointmentRepository.findByStatus(any(), any(Pageable.class))).thenReturn(new SliceImpl<>(List.of()));
+        when(appointmentRepository.findByStatus(eq(AppointmentStatus.PENDING), any(Pageable.class)))
+                .thenReturn(new SliceImpl<>(fullPageOfTen(), PageRequest.of(0, 10), true));
+        when(appointmentRepository.countByStatus(AppointmentStatus.PENDING)).thenReturn(34L);
         when(appointmentRepository.findByStatusAndBookingDateBefore(any(), any(), any(Pageable.class)))
-                .thenReturn(new SliceImpl<>(List.of()));
+                .thenReturn(new SliceImpl<>(fullPageOfTen(), PageRequest.of(0, 10), true));
+        when(appointmentRepository.countByStatusAndBookingDateBefore(
+                eq(AppointmentStatus.PENDING), eq(LocalDate.now(CLOCK)))).thenReturn(17L);
 
-        assertEquals(12, queryService.getAllAppointments("pending", null, 0, 10).page().getTotalElements());
-        assertEquals(20, queryService.getAllAppointments("APPROVED", null, 0, 10).page().getTotalElements());
-        assertEquals(8, queryService.getAllAppointments("DENIED", "  ", 0, 10).page().getTotalElements());
-        assertEquals(15, queryService.getAllAppointments("CANCELLED", null, 0, 10).page().getTotalElements());
-        assertEquals(3, queryService.getAllAppointments("OVERDUE", null, 0, 10).page().getTotalElements());
+        assertEquals(34, queryService.getAllAppointments("pending", null, 0, 10).page().getTotalElements());
+        assertEquals(4, queryService.getAllAppointments("pending", null, 0, 10).page().getTotalPages());
+        assertEquals(17, queryService.getAllAppointments("OVERDUE", null, 0, 10).page().getTotalElements());
 
-        verify(appointmentRepository).findByStatus(eq(AppointmentStatus.CANCELLED), any(Pageable.class));
-        verify(appointmentRepository).findByStatusAndBookingDateBefore(
-                eq(AppointmentStatus.PENDING), eq(LocalDate.now(CLOCK)), any(Pageable.class));
-        // no COUNT query for any of them
+        // Still no Specification/COUNT(*) pair: the count is the status index's own.
         verify(appointmentRepository, never()).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test
-    void testGetAllAppointments_CancelledCountNeverGoesNegative() {
+    void testGetAllAppointments_CancelledRowsAreCountedNotDerivedFromTheOtherCounters() {
+        // Cancelled rows used to be "every row minus the non-cancelled ones", from two separately
+        // cached values that could not be read as one consistent pair.
         when(statsService.getStatsCached()).thenReturn(new AppointmentStats(10L, 10L, 0L, 0L, 0L, 0, 0.0));
-        when(statsService.getTotalCountCached()).thenReturn(9L);
-        when(appointmentRepository.findByStatus(any(), any(Pageable.class))).thenReturn(new SliceImpl<>(List.of()));
+        when(appointmentRepository.findByStatus(eq(AppointmentStatus.CANCELLED), any(Pageable.class)))
+                .thenReturn(new SliceImpl<>(fullPageOfTen(), PageRequest.of(0, 10), true));
+        when(appointmentRepository.countByStatus(AppointmentStatus.CANCELLED)).thenReturn(12L);
 
-        assertEquals(0, queryService.getAllAppointments("CANCELLED", null, 0, 10).page().getTotalElements());
+        assertEquals(12, queryService.getAllAppointments("CANCELLED", null, 0, 10).page().getTotalElements());
+        verify(statsService, never()).getTotalCountCached();
+    }
+
+    @Test
+    void testGetAllAppointments_AStatusPageThatSettlesItsOwnTotalRunsNoCountQuery() {
+        // A first page the rows do not fill is the whole result: counting it again would be waste.
+        when(statsService.getStatsCached()).thenReturn(new AppointmentStats(40L, 12L, 20L, 8L, 3L, 0, 0.0));
+        when(appointmentRepository.findByStatus(eq(AppointmentStatus.PENDING), any(Pageable.class)))
+                .thenReturn(new SliceImpl<>(List.of(appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00")),
+                        PageRequest.of(0, 10), false));
+
+        assertEquals(1, queryService.getAllAppointments("PENDING", null, 0, 10).page().getTotalElements());
+        verify(appointmentRepository, never()).countByStatus(any());
     }
 
     @Test
@@ -139,18 +156,25 @@ class AppointmentQueryServiceTest extends AppointmentServiceTestSupport {
 
     @Test
     void testGetAllAppointments_SliceHasNextRaisesUnderstatedCachedTotal() {
-        List<Appointment> fullPage = java.util.stream.IntStream.rangeClosed(1, 10)
-                .mapToObj(id -> appointment(id, AppointmentStatus.PENDING, TOMORROW, "10:00"))
-                .toList();
+        // The unfiltered view is the whole table, so it keeps the cached row count — with the
+        // slice's own floor, so a stale count can never swallow the page that follows.
         when(statsService.getStatsCached()).thenReturn(new AppointmentStats(10L, 10L, 0L, 0L, 0L, 0, 0.0));
-        when(appointmentRepository.findByStatus(eq(AppointmentStatus.PENDING), any(Pageable.class)))
-                .thenReturn(new SliceImpl<>(fullPage, org.springframework.data.domain.PageRequest.of(0, 10), true));
+        when(statsService.getTotalCountCached()).thenReturn(10L);
+        when(appointmentRepository.findPageWithoutCount(any(Pageable.class)))
+                .thenReturn(new SliceImpl<>(fullPageOfTen(), PageRequest.of(0, 10), true));
 
-        AppointmentDashboardResponse response = queryService.getAllAppointments("PENDING", null, 0, 10);
+        AppointmentDashboardResponse response = queryService.getAllAppointments(null, null, 0, 10);
 
         assertEquals(11, response.page().getTotalElements());
         assertEquals(2, response.page().getTotalPages());
         assertTrue(response.page().hasNext());
+    }
+
+    /** Ten rows: a page that a size of 10 fills exactly, so a total has to come from somewhere. */
+    private List<Appointment> fullPageOfTen() {
+        return java.util.stream.IntStream.rangeClosed(1, 10)
+                .mapToObj(id -> appointment(id, AppointmentStatus.PENDING, TOMORROW, "10:00"))
+                .toList();
     }
 
     @Test
