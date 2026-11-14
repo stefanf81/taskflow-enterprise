@@ -1155,10 +1155,7 @@ jobs:
         with:
           jar-path: e2e-backend-jar/*.jar
           log-file: e2e-backend.log
-          # A small fixed-ceiling heap keeps the backend's footprint down while the simulator's
-          # post-boot work pushes the runner into swap (BENCHMARKS §71): ~370 MB resident instead
-          # of ~505 MB for the Detox flows, with a live heap of ~57 MB after a full GC.
-          java-options: -XX:TieredStopAtLevel=1 -Xmx128m -XX:+UseSerialGC
+          java-options: -XX:TieredStopAtLevel=1
           wait: "false"
 
       # The simulator's post-boot work runs hundreds of processes at the default priority
