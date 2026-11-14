@@ -1161,6 +1161,16 @@ jobs:
           java-options: -XX:TieredStopAtLevel=1 -Xmx128m -XX:+UseSerialGC
           wait: "false"
 
+      # The simulator's post-boot work runs hundreds of processes at the default priority
+      # (load average 300-680 on 3 cores, BENCHMARKS §71); the backend is the one process the
+      # tests wait on. The runner-load samples record its nice value, to show the change held.
+      - name: Raise the backend's CPU priority
+        env:
+          BACKEND_PID: ${{ steps.backend.outputs.pid }}
+        run: |
+          sudo renice -n -10 -p "${BACKEND_PID}"
+          ps -o pid=,nice=,comm= -p "${BACKEND_PID}"
+
       # Same setup as the `ios` job (its caches are restored, never saved here).
       - *select-xcode
       - *prebuild-ios
