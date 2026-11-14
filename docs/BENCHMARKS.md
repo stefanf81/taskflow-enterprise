@@ -2597,3 +2597,18 @@ The class now remembers the `CsrfFilter`'s token repository before each test and
 * **Within the noise of fresh boots.** Including the restore, the snapshot run (349 s) beat the best fresh run (355 s) by 6 s; fresh runs alone spread over 355–608 s.
 * **Cost:** a 1.09 GB cache entry (of the repository's 10 GB), and every runner-image update (about weekly) changes the key, so a nightly would pay a fresh boot plus ~12 min of settling (the load never fell below 37 in 12 min) and the upload.
 * The Keychain reset worked: the restored device started signed out and all 9 tests passed.
+
+### Follow-up: a booking that outlived the app's request timeout (2026-11-14)
+
+`workflow_dispatch` run [`43584461894`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43584461894) (cached, repacked iOS app): Android 9/9; iOS failed `submits a guest booking and displays its receipt` with `timeout of 10000ms exceeded` on the contact screen.
+
+| 43584461894 (iOS) | |
+| :--- | ---: |
+| App request to `POST /api/v1/appointments` in flight (Detox "app is busy") | 10:27:18 |
+| Tomcat access log: request received | 10:27:22 |
+| Tomcat access log: duration, status | **13.95 s**, 201 |
+| 1-min load average / swap in use at the time | 421–449 / 1.07–1.11 GB |
+
+* **The booking was created; the app had already given up.** The 10 s client timeout fired before the backend answered, so the wizard showed the error and the test waited out its 45 s for a receipt that could no longer appear. The backend log has no slow query, pool wait or error around the request: CPU starvation from the simulator's post-boot work (above), on the first booking request of a C1-only (`-XX:TieredStopAtLevel=1`) JVM. The JPA query and Hikari timeouts that keep the server's worst case under 10 s (§45) do not bound time spent waiting for a CPU.
+* **Adopted:** E2E builds (`EXPO_PUBLIC_E2E_LOCAL_API=true`) use a 30 s client timeout (`apiTimeoutMs`, `mobile/src/api/client.ts`); release builds keep 10 s, in line with the web app. The Detox waits already allow 45 s for the receipt and 30 s for the release.
+* **Not adopted here:** a longer timeout for booking creation in release builds. A guest on a slow network can see the same error for a booking that was saved, and a retry would find the slot taken. That is a product change (longer write timeout, or looking the booking up after a timeout), not a test fix.

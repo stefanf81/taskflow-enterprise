@@ -53,6 +53,17 @@ const getBaseUrl = () => {
   return 'http://localhost:4200';
 };
 
+/**
+ * Upper bound for one API request, like the web app's `DEFAULT_REQUEST_TIMEOUT_MS`: above the
+ * server's own worst case (5 s JPA query timeout + 4 s Hikari connection timeout, BENCHMARKS §45),
+ * so a slow backend answers with its own error first. Local E2E builds wait 30 s: on the hosted
+ * iOS runner the simulator's post-boot work starves the CPU, and the backend took 13.95 s to
+ * create a booking there (run 43584461894). The app gave up at 10 s, the booking existed anyway,
+ * and the receipt never appeared.
+ */
+export const apiTimeoutMs = (e2eLocalApi = process.env.EXPO_PUBLIC_E2E_LOCAL_API): number =>
+  e2eLocalApi === 'true' ? 30_000 : 10_000;
+
 export const apiClient = axios.create({
   baseURL: getBaseUrl(),
   headers: {
@@ -61,7 +72,7 @@ export const apiClient = axios.create({
   // Native auth uses an Authorization bearer header. Do not rely on a browser
   // cookie jar or send ambient cookies from the mobile runtime.
   withCredentials: false,
-  timeout: 10000,
+  timeout: apiTimeoutMs(),
 });
 
 /**
