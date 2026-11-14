@@ -2602,13 +2602,17 @@ The class now remembers the `CsrfFilter`'s token repository before each test and
 
 `workflow_dispatch` run [`43584461894`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43584461894) (cached, repacked iOS app): Android 9/9; iOS failed `submits a guest booking and displays its receipt` with `timeout of 10000ms exceeded` on the contact screen.
 
-| 43584461894 (iOS) | |
-| :--- | ---: |
-| App request to `POST /api/v1/appointments` in flight (Detox "app is busy") | 10:27:18 |
-| Tomcat access log: request received | 10:27:22 |
-| Tomcat access log: duration, status | **13.95 s**, 201 |
-| 1-min load average / swap in use at the time | 421–449 / 1.07–1.11 GB |
-
-* **The booking was created; the app had already given up.** The 10 s client timeout fired before the backend answered, so the wizard showed the error and the test waited out its 45 s for a receipt that could no longer appear. The backend log has no slow query, pool wait or error around the request: CPU starvation from the simulator's post-boot work (above), on the first booking request of a C1-only (`-XX:TieredStopAtLevel=1`) JVM. The JPA query and Hikari timeouts that keep the server's worst case under 10 s (§45) do not bound time spent waiting for a CPU.
+* **The booking was created; the app had already given up.** The access log has `POST /api/v1/appointments 201` taking **13.95 s**, at a 1-min load average of 421–449 with 1.07–1.11 GB swapped. The access-log timestamp lines up as the request's end, not its start: 10:27:22 − 13.95 s puts the start at 10:27:08, and the app's 10 s timeout then fires at 10:27:18, exactly when Detox's tap returned and its 45 s receipt wait began (the wait logged 46,035 ms ending 10:28:04). The second run below fits the same reading. So the app failed and the test waited out 45 s for a receipt that could no longer appear. The backend log has no slow query, pool wait or error around the request: CPU starvation from the simulator's post-boot work (above), on the first booking request of a C1-only (`-XX:TieredStopAtLevel=1`) JVM. The JPA query and Hikari timeouts that keep the server's worst case under 10 s (§45) do not bound time spent waiting for a CPU.
 * **Adopted:** E2E builds (`EXPO_PUBLIC_E2E_LOCAL_API=true`) use a 30 s client timeout (`apiTimeoutMs`, `mobile/src/api/client.ts`); release builds keep 10 s, in line with the web app. The Detox waits already allow 45 s for the receipt and 30 s for the release.
 * **Not adopted here:** a longer timeout for booking creation in release builds. A guest on a slow network can see the same error for a booking that was saved, and a retry would find the slot taken. That is a product change (longer write timeout, or looking the booking up after a timeout), not a test fix.
+
+**Second run with the 30 s timeout:** [`43586962405`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43586962405), green, 9/9 on both platforms. The booking POST took 4.49 s and the receipt appeared 1.7 s into its wait. The margin is thin elsewhere:
+
+| 43586962405 (iOS), access log | Duration | Start (end − duration) |
+| :--- | ---: | ---: |
+| `GET …/public/busy-slots` (Step 2 → Step 3) | **61.64 s** | 10:56:12 |
+| `GET …/public/busy-slots` (retry) | 27.85 s | 10:56:46 |
+| `GET …/public/busy-slots` | 4.55 s | 10:57:19 |
+| `POST /api/v1/appointments` | 4.49 s | 10:57:52 |
+
+The first busy-slots request outlived the new 30 s timeout too (load 412–484, up to 882 MB swapped); the step passed because TanStack Query retries a timed-out query once after 1 s (§45), and the retry finished in 27.85 s. A write is not retried. If this recurs, the next lever is the runner, not a longer client timeout: the post-boot load (above) is the cause, and a 60 s request is not something the app should wait for.
