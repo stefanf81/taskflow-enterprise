@@ -65,7 +65,7 @@ export class LandingPage {
   protected readonly skeletonRows = [0, 1, 2, 3, 4];
 
   constructor() {
-    this.shopClock.watch?.(inject(DestroyRef));
+    this.shopClock.watch(inject(DestroyRef));
 
     // A session that expired elsewhere in the app sends the user here with the
     // login modal requested (AuthState owns the "session expired" notice).

@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.support.PageableExecutionUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,25 +56,31 @@ class AppointmentQueryService {
 
         Page<Appointment> itemPage;
         if (term.isEmpty()) {
-            // Without a search term the total is already known: the unfiltered view takes it from the
-            // cached row count and a status view from the cached dashboard counters (both evicted on
-            // every booking and status change), instead of counting the table on each request.
-            Slice<Appointment> slice;
-            long total;
+            // A filtered view counts its own rows. The count is what the pager divides into pages,
+            // so it has to agree with the rows this query can actually return: the cached dashboard
+            // counters are evicted on every booking and status change, but a cache that fails open
+            // (a dropped eviction, a Redis error) would hide rows behind a page count that is too
+            // low, or offer empty pages when it is too high. PageableExecutionUtils skips the count
+            // query where the slice already settles the total (a first page that is not full).
             if (overdue) {
-                slice = appointmentRepository.findByStatusAndBookingDateBefore(
+                Slice<Appointment> slice = appointmentRepository.findByStatusAndBookingDateBefore(
                         AppointmentStatus.PENDING, today, pageable);
-                total = stats.overdue();
+                itemPage = PageableExecutionUtils.getPage(slice.getContent(), pageable,
+                        () -> appointmentRepository.countByStatusAndBookingDateBefore(
+                                AppointmentStatus.PENDING, today));
             } else if (parsed != null) {
-                slice = appointmentRepository.findByStatus(parsed, pageable);
-                total = countOf(parsed, stats);
+                Slice<Appointment> slice = appointmentRepository.findByStatus(parsed, pageable);
+                itemPage = PageableExecutionUtils.getPage(slice.getContent(), pageable,
+                        () -> appointmentRepository.countByStatus(parsed));
             } else {
-                slice = appointmentRepository.findPageWithoutCount(pageable);
-                total = statsService.getTotalCountCached();
+                // The unfiltered view is the whole table: its total is the cached row count, with
+                // the slice's own floor so a stale count can never swallow the next page.
+                Slice<Appointment> slice = appointmentRepository.findPageWithoutCount(pageable);
+                List<Appointment> content = slice.getContent();
+                long minTotal = pageable.getOffset() + content.size() + (slice.hasNext() ? 1L : 0L);
+                itemPage = new PageImpl<>(content, pageable,
+                        Math.max(statsService.getTotalCountCached(), minTotal));
             }
-            List<Appointment> content = slice.getContent();
-            long minTotal = pageable.getOffset() + content.size() + (slice.hasNext() ? 1L : 0L);
-            itemPage = new PageImpl<>(content, pageable, Math.max(total, minTotal));
         } else {
             List<Specification<Appointment>> filters = new ArrayList<>();
             if (overdue) {
@@ -94,20 +101,6 @@ class AppointmentQueryService {
         }
         Page<AppointmentResponse> responsePage = itemPage.map(AppointmentResponse::fromEntity);
         return new AppointmentDashboardResponse(responsePage, stats);
-    }
-
-    /**
-     * Rows with one status, from the dashboard counters. {@code total} counts every row except the
-     * cancelled ones, so those are the rest of the table's row count (never below zero: the two
-     * cached values are loaded separately and a booking may land in between).
-     */
-    private long countOf(AppointmentStatus status, AppointmentStats stats) {
-        return switch (status) {
-            case PENDING -> stats.pending();
-            case APPROVED -> stats.approved();
-            case DENIED -> stats.denied();
-            case CANCELLED -> Math.max(0, statsService.getTotalCountCached() - stats.total());
-        };
     }
 
     /**

@@ -133,6 +133,38 @@ class LoginAttemptLimiterRedisTest {
     }
 
     @Test
+    void aStaleLocalCountNeverLocksOutWhileRedisIsHealthy() {
+        when(redis.execute(ArgumentMatchers.<RedisScript<Long>>any(), anyList(), anyString())).thenReturn(1L, 2L, 3L);
+        for (int i = 0; i < 3; i++) {
+            limiter.recordFailure("a@x.com");
+        }
+
+        // Another replica served a successful login for this account and deleted the shared
+        // window. This JVM never hears about it and still holds three failures of its own: with
+        // Redis healthy and saying the account is fine, it must not be the one to lock it out.
+        when(values.get(anyString())).thenReturn(null);
+
+        assertDoesNotThrow(() -> limiter.checkAllowed("a@x.com"));
+    }
+
+    @Test
+    void failuresFromAnOutageAreStillEnforcedLocallyOnceRedisComesBack() {
+        when(redis.execute(ArgumentMatchers.<RedisScript<Long>>any(), anyList(), anyString()))
+                .thenThrow(new RedisConnectionFailureException("down"));
+        for (int i = 0; i < 3; i++) {
+            limiter.recordFailure("a@x.com");
+        }
+
+        // Redis answers again (the back-off window has passed) but its key never saw those
+        // failures, so an empty count must not forgive them for the rest of the window.
+        clock.addAndGet(10_000);
+        when(values.get(anyString())).thenReturn(null);
+
+        assertThrows(TooManyLoginAttemptsException.class, () -> limiter.checkAllowed("a@x.com"));
+        verify(values).get(anyString());
+    }
+
+    @Test
     void zeroStillDisablesTheThrottleWithoutTouchingRedis() {
         LoginAttemptLimiter disabled = new LoginAttemptLimiter(0, 300,
                 new RedisLoginFailureCounter(redis, new RedisBackoff("test", 5_000, clock::get)));

@@ -10,7 +10,6 @@ import {
 } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { merge } from 'rxjs';
 import { form, required } from '@angular/forms/signals';
 import { appointmentCreateSchema } from '@taskflow/schemas';
 import { NO_PREFERENCE_BARBER, closedDaysMessage, isWithinBookingWindow } from '@taskflow/domain';
@@ -20,7 +19,7 @@ import {
   type WallClock,
   computeEstimatedEndTime,
   isSlotInPast,
-  msUntilNextLocalMidnight,
+  msUntilNextMidnight,
   toLocalDateString,
 } from '../../core/time-utils';
 import { AppointmentsApi } from '../../core/api/appointments-api';
@@ -322,17 +321,33 @@ export class BookingStore {
       });
     });
 
-    // Nothing of a guest or finished session may linger across sign-in or sign-out on a shared
-    // device: contact details, receipt (carries the customer's name and code), search and form.
-    merge(this.sessionEvents.sessionEnded, this.sessionEvents.sessionStarted)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => {
-        this.sessionContact = NO_CONTACT;
-        this.showReceiptModal.set(false);
-        this.lastBookedAppointment.set(null);
-        this.lastBookedTotal.set(0);
-        this.resetBookingForm();
-      });
+    // Nothing of a guest or finished session may linger across sign-out on a shared device:
+    // contact details, receipt (carries the customer's name and code), search and form.
+    this.sessionEvents.sessionEnded.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      this.clearPersonalState();
+      this.resetBookingForm();
+    });
+
+    // Signing in drops the same personal leftovers, but NOT the booking being made: a guest who
+    // picks a service, a stylist and a slot and then signs in to book it under their account
+    // keeps all of it and stays on their step (none of it is anyone's personal data). Only the
+    // typed-in contact details go, so the previous visitor's name and e-mail cannot be submitted
+    // by whoever just signed in; the portal re-fills them from the new session.
+    this.sessionEvents.sessionStarted.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      this.clearPersonalState();
+      this.serviceSearchQuery.set('');
+      this.bookingModel.update((m) => ({ ...m, ...NO_CONTACT }));
+      // The emptied contact fields must not show "required" errors before they are touched.
+      this.bookingForm().reset();
+    });
+  }
+
+  /** Drops what belongs to the visitor who was here before: remembered contact details, receipt. */
+  private clearPersonalState(): void {
+    this.sessionContact = NO_CONTACT;
+    this.showReceiptModal.set(false);
+    this.lastBookedAppointment.set(null);
+    this.lastBookedTotal.set(0);
   }
 
   retryCatalog(): void {
@@ -447,7 +462,7 @@ export class BookingStore {
           this.refreshToday();
           arm();
         },
-        msUntilNextLocalMidnight(this.shopClock.now()) + 1000,
+        msUntilNextMidnight(this.shopClock.timeZone()) + 1000,
       );
     };
     this.rearmMidnight = arm;

@@ -131,6 +131,25 @@ describe('AdminEventsService', () => {
       expect(service.connected()).toBe(true);
     });
 
+    it('asks for a full reload when the dashboard is entered again after close()', () => {
+      // Leaving the dashboard closes the stream; the root-provided store keeps what it loaded and
+      // nothing else refetches it, so whatever happened while there was no stream is only picked
+      // up by the catch-up on this second open.
+      const reload = vi.fn();
+      service.appointmentChanges.subscribe(reload);
+
+      service.connect();
+      source(0).open();
+      expect(reload).not.toHaveBeenCalled();
+
+      service.close();
+      service.connect();
+      source(1).open();
+
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(service.connected()).toBe(true);
+    });
+
     it('reconnects after a permanent failure with exponential backoff capped at 30s', () => {
       service.connect();
       expect(factory).toHaveBeenCalledTimes(1);

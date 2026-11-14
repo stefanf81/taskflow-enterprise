@@ -8,7 +8,7 @@ import {
   formatTime12Hour,
   isOverdue,
   isSlotInPast,
-  msUntilNextLocalMidnight,
+  msUntilNextMidnight,
   parseTimeToMinutes,
   shopWallClock,
   toLocalDateString,
@@ -131,9 +131,39 @@ describe('time-utils', () => {
       expect(isSlotInPast('2026-10-12', '', monday)).toBe(false);
     });
 
-    it('computes the time left until local midnight', () => {
-      expect(msUntilNextLocalMidnight(new Date(2026, 9, 12, 23, 0, 0))).toBe(3_600_000);
-      expect(msUntilNextLocalMidnight(new Date(2026, 9, 12, 0, 0, 0))).toBe(86_400_000);
+    it('computes the time left until the device midnight without a shop zone', () => {
+      expect(msUntilNextMidnight(null, new Date(2026, 9, 12, 23, 0, 0))).toBe(3_600_000);
+      expect(msUntilNextMidnight(null, new Date(2026, 9, 12, 0, 0, 0))).toBe(86_400_000);
+    });
+
+    it('computes the time left until midnight in the shop zone', () => {
+      // 2026-10-12T23:00Z is 2026-10-13 08:00 in Tokyo (UTC+9, no DST): 16 h to go.
+      expect(msUntilNextMidnight('Asia/Tokyo', new Date('2026-10-12T23:00:00Z'))).toBe(
+        16 * 3_600_000,
+      );
+      // Seconds and milliseconds of the instant count against the remaining time.
+      expect(msUntilNextMidnight('Asia/Tokyo', new Date('2026-10-12T23:00:30.250Z'))).toBe(
+        16 * 3_600_000 - 30_250,
+      );
+    });
+
+    it('measures the real length of a DST transition day', () => {
+      // New York springs forward on 2026-03-08 (23 h) and falls back on 2026-11-01 (25 h).
+      // Both start at 05:00Z, so a 24 h assumption would be an hour out in each direction.
+      expect(msUntilNextMidnight('America/New_York', new Date('2026-03-08T05:00:00Z'))).toBe(
+        23 * 3_600_000,
+      );
+      expect(msUntilNextMidnight('America/New_York', new Date('2026-11-01T04:00:00Z'))).toBe(
+        25 * 3_600_000,
+      );
+    });
+
+    it('never returns a non-positive delay', () => {
+      for (const hour of [0, 5, 12, 23]) {
+        const instant = new Date(Date.UTC(2026, 2, 8, hour, 59, 59, 999));
+        expect(msUntilNextMidnight('America/New_York', instant)).toBeGreaterThan(0);
+        expect(msUntilNextMidnight('Australia/Lord_Howe', instant)).toBeGreaterThan(0);
+      }
     });
   });
 
