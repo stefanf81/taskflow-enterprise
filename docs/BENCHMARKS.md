@@ -2643,3 +2643,23 @@ The class now remembers the `CsrfFilter`'s token repository before each test and
 **Adopted:** the iOS Detox job starts the backend with `-XX:TieredStopAtLevel=1 -Xmx128m -XX:+UseSerialGC` and renices it right after; the runner-load samples include the backend's CPU, resident memory and nice value. The Android job is unchanged (its emulator does not starve the runner). This is the CI step's own launch, not the image `CMD` (AGENTS.md: JVM sizing belongs to the deployment).
 
 **Not adopted:** a longer client timeout (it would only hide stalls of a minute or more).
+
+### Follow-up: the first green iOS run under the manual `target` input (2026-11-14)
+
+Two `workflow_dispatch` runs on `main` (`ff6fa5a`) to verify #241's `target` input, both green. Run [`43606013640`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43606013640) (`target=native`) skipped all three E2E jobs and finished in 4 m 56 s; run [`43606049520`](https://github.com/stefanf81/taskflow-enterprise/actions/runs/43606049520) (`target=e2e`) skipped both native builds and ran the Detox suites, 9/9 on each platform. `Android build and test` and `iOS simulator build` reported success in both halves, so the input cannot make a pull request look green by skipping everything. The figures below are the first produced by `mobile-e2e-summary.sh` in CI; the job summary is not readable through the API (`check_run.output` is empty), so they were reproduced from each job's artifact.
+
+| 43606049520 | iOS | Android |
+| :--- | ---: | ---: |
+| Detox step | 6 m 00 s | 1 m 15 s |
+| Jest `Time` | 362.8 s | 33.0 s |
+| Slowest request | `GET /api/v1/appointments` **14.66 s** | `POST …/auth/mobile/login` **0.35 s** |
+| Next slowest | login 7.90 s, shop 6.43 s, barbers 6.15 s | readiness 0.17 s |
+| Leak warnings (>2 s) | 2 | 0 |
+| Peak 1-min load / lowest free memory | 569 / 23% | not sampled |
+| Peak swap / backend resident memory | 364 MB / 23–298 MB at nice −20 | not sampled |
+
+* **The 30 s E2E client timeout was load-bearing in this run, not a precaution.** `GET /api/v1/appointments` took 14.66 s, behind `signs in as admin and lands on the dashboard` (68.9 s end to end); the release builds' 10 s timeout would have aborted it and failed the step, exactly as 13.95 s did in `43584461894`. `submits a guest booking and displays its receipt` took 39.7 s. Of the five slowest requests, one exceeded the release timeout outright and the other four came within 4 s of it.
+* **The heap/priority mitigation holds, but the starvation is survived rather than fixed.** The backend ran at nice −20 as adopted, and the slowest request was 14.66 s against 61.6 s in `43586962405` — a 4× improvement — yet the runner still peaked at load 569 with 364 MB swapped, and the backend's resident memory still swung down to 23 MB. The margin to the 30 s timeout is about 2×, so a worse sample can still fail a step.
+* **Android is the control.** The same suite on the Linux emulator: slowest request 0.35 s, no leak warnings, 33 s of tests against 363 s. The 11× gap between the platforms is the runner, not the tests.
+* **`-no-metrics` works.** The emulator's `ACTION REQUIRED … metrics collection` warning no longer appears in the Android log (0 occurrences), and the flag is on the emulator's real command line.
+* **The iOS simulator selection is pinned.** The job logged `Detox simulator: iPhone 17 Pro on iOS 26.5 (FCC5F673-…)`, so the iOS version under test is the newest installed runtime rather than whichever `simctl` happened to list first.
