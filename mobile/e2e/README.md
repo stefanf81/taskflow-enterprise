@@ -123,7 +123,7 @@ When a step fails, the rest of its flow fails immediately with `Not run: the ear
 not pass`; the first failure is the one to read.
 
 ### 1. Guest Booking Flow (Wizard)
-- **Home Screen Launch:** Asserts `'LUXURY BARBER SCHEDULER'` header and `home-book-appointment-btn` CTA.
+- **Home Screen Launch:** Scrolls `home-scroll-view` to the top (see gotcha 5), asserts the `'LUXURY BARBER SCHEDULER'` header, then scrolls until the `home-book-appointment-btn` CTA is fully visible.
 - **Tab Navigation:** Taps `tab-booking` bottom tab to open `BookingScreen` and waits for `'BOOKING ASSISTANT'`.
 - **Step 1 (Treatment Selection):** Scrolls down `booking-scroll-view`, taps `Continue to Stylist`, and asserts `'SELECT BARBER'`.
 - **Step 2 (Stylist Selection):** Scrolls down, taps `Continue` (No Preference), and asserts `'SELECT OPERATING DAY'`.
@@ -166,7 +166,7 @@ not pass`; the first failure is the one to read.
    ```typescript
    await element(by.id('home-scroll-view')).scrollTo('top');
    ```
-   The first tap puts the device back in touch mode. `displays the home screen on launch` asserts the launch state as is and has passed so far; if it starts failing on Android, this is the cause.
+   The first tap puts the device back in touch mode. `displays the home screen on launch` used to assert the launch state as is; it failed this way on Android in run 43547244757 (the hero title less than 75% visible), so it scrolls to the top first as well.
 
 6. **HTTPS Bypass for Local Emulator Tests:**
    The release API client configuration (`src/api/client.ts`) allows `http://10.0.2.2` and `http://localhost` during local emulator testing (E2E builds keep `localhost` on Android; `.detoxrc.js` forwards port 8080 with `reversePorts`) while strictly enforcing `https://` for external production domains.

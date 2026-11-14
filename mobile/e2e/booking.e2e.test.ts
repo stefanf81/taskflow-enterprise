@@ -79,19 +79,24 @@ const AVAILABLE_SLOT = /^booking-slot-available-\d{2}:\d{2}$/;
 // ActivityTestRule(MainActivity, initialTouchMode = false)). Android then focuses the first
 // focusable view to appear, and the Home ScrollView scrolls to keep it on screen: when a lookbook
 // "Book This Look" button wins that race, the hero, Sign In included, starts ~4,200 px above the
-// viewport. A user is in touch mode and never sees this; scroll back to the top before tapping.
+// viewport (a button nearer the top can also leave it partly scrolled, cutting through the hero
+// title). A user is in touch mode and never sees this; scroll back to the top before using it.
+const scrollHomeToTop = () => element(by.id('home-scroll-view')).scrollTo('top');
+
 const openSignIn = async () => {
-  await element(by.id('home-scroll-view')).scrollTo('top');
+  await scrollHomeToTop();
   await scrollIntoView(by.text('Sign In / Register'), 'home-scroll-view');
   await element(by.text('Sign In / Register')).tap();
 };
 
 flow('Guest Booking Flow', (step) => {
   step('displays the home screen on launch', async () => {
+    // Android may start with Home scrolled to whichever button took focus at launch.
+    await scrollHomeToTop();
     // The Hero section title should be visible
     await expect(element(by.text('LUXURY BARBER SCHEDULER'))).toBeVisible();
     // The Book Appointment CTA on the home screen
-    await expect(element(by.id('home-book-appointment-btn'))).toBeVisible();
+    await scrollIntoView(by.id('home-book-appointment-btn'), 'home-scroll-view');
   });
 
   step('navigates to booking screen via Book tab', async () => {
