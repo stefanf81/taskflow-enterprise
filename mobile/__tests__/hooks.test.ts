@@ -211,12 +211,18 @@ describe('Hooks', () => {
     const openingHours = [{ dayOfWeek: 2, opens: '10:00', closes: '18:00' }];
 
     it('uses the server defaults until the shop info is known, then the server values', async () => {
-      mockGetShopInfoFn.mockResolvedValueOnce({ timeZone: 'Europe/Berlin', maxAdvanceDays: 30, openingHours });
+      // Held until the loading state has been checked: an already-resolved answer can reach the
+      // hook during renderHook's own act on a slow runner (CI run 43601061448).
+      let answer!: (info: unknown) => void;
+      mockGetShopInfoFn.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
 
       const { result } = await renderHook(() => useShopInfo(), { wrapper: createWrapper() });
       expect(result.current).toEqual({ timeZone: null, rules: DEFAULT_SHOP_RULES, loaded: false });
 
-      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+      await act(async () => {
+        answer({ timeZone: 'Europe/Berlin', maxAdvanceDays: 30, openingHours });
+        await new Promise((r) => setTimeout(r, 50));
+      });
 
       expect(result.current).toEqual({
         timeZone: 'Europe/Berlin',

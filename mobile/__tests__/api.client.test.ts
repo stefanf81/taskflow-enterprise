@@ -69,7 +69,7 @@ jest.mock('axios', () => {
   };
 });
 
-import { renewSession, setSessionEndedHandler } from '../src/api/client';
+import { apiTimeoutMs, renewSession, setSessionEndedHandler } from '../src/api/client';
 import { queryClient } from '../src/query/queryClient';
 import { SessionChangedError, SessionExpiredError } from '../src/utils/session';
 
@@ -116,6 +116,12 @@ describe('mobile api client', () => {
   it('does not enable native cookie credentials', () => {
     expect(capturedCreateConfig.withCredentials).toBe(false);
     expect(capturedCreateConfig.timeout).toBe(10000);
+  });
+
+  it('waits longer only in local E2E builds', () => {
+    expect(apiTimeoutMs(undefined)).toBe(10_000);
+    expect(apiTimeoutMs('false')).toBe(10_000);
+    expect(apiTimeoutMs('true')).toBe(30_000);
   });
 
   describe('request interceptor', () => {

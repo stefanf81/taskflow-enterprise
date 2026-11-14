@@ -29,15 +29,22 @@ Both Android and iOS share the exact same E2E test suite file (`e2e/booking.e2e.
 
 Both jobs also run on manual workflow dispatch. Before Detox, a bounded authentication preflight
 checks mobile login, bearer `/auth/me` and logout with the disposable dev admin. It fails rather
-than retries if any operation exceeds the app's existing 10-second request timeout; no app timeout
-or Detox assertion is relaxed. This verifies (and warms) the real authentication path, not just liveness.
+than retries if any operation exceeds 10 seconds, the release app's request timeout. This verifies
+(and warms) the real authentication path, not just liveness.
+
+E2E builds (`EXPO_PUBLIC_E2E_LOCAL_API=true`) give each app request 30 seconds instead of 10
+(`apiTimeoutMs` in `src/api/client.ts`). On the hosted iOS runner the simulator's post-boot work
+keeps the load average in the hundreds (BENCHMARKS §71), and the backend once took 13.95 s to
+create a booking: the app gave up at 10 s with the booking already saved, so the receipt never
+appeared. Release builds keep 10 seconds.
 
 The artifacts include `e2e-backend-diagnostics/`: preflight timings and CI-only Tomcat access logs
 (`timestamp method path status duration`, with `%D` in microseconds; no query strings, headers or
 bodies). On failure, a best-effort collector records process CPU/memory, bounded Java 25 platform
 and virtual-thread dumps, then another timed authentication probe. Use these with the simulator
-screenshot: a `timeout of 10000ms exceeded` message means the HTTP request already failed, so
-increasing Detox's wait for `Logout` cannot fix it. A host preflight does not prove simulator networking
+screenshot: a `timeout of 30000ms exceeded` message (10000 ms in a release build) means the HTTP
+request already failed, so increasing a Detox wait cannot fix it; compare the request's duration in
+the access log. A host preflight does not prove simulator networking
 is healthy; a later host probe passing can help distinguish a transient/device-side failure.
 
 ---
@@ -123,7 +130,7 @@ When a step fails, the rest of its flow fails immediately with `Not run: the ear
 not pass`; the first failure is the one to read.
 
 ### 1. Guest Booking Flow (Wizard)
-- **Home Screen Launch:** Asserts `'LUXURY BARBER SCHEDULER'` header and `home-book-appointment-btn` CTA.
+- **Home Screen Launch:** Scrolls `home-scroll-view` to the top (see gotcha 5), asserts the `'LUXURY BARBER SCHEDULER'` header, then scrolls until the `home-book-appointment-btn` CTA is fully visible.
 - **Tab Navigation:** Taps `tab-booking` bottom tab to open `BookingScreen` and waits for `'BOOKING ASSISTANT'`.
 - **Step 1 (Treatment Selection):** Scrolls down `booking-scroll-view`, taps `Continue to Stylist`, and asserts `'SELECT BARBER'`.
 - **Step 2 (Stylist Selection):** Scrolls down, taps `Continue` (No Preference), and asserts `'SELECT OPERATING DAY'`.
@@ -166,7 +173,7 @@ not pass`; the first failure is the one to read.
    ```typescript
    await element(by.id('home-scroll-view')).scrollTo('top');
    ```
-   The first tap puts the device back in touch mode. `displays the home screen on launch` asserts the launch state as is and has passed so far; if it starts failing on Android, this is the cause.
+   The first tap puts the device back in touch mode. `displays the home screen on launch` used to assert the launch state as is; it failed this way on Android in run 43547244757 (the hero title less than 75% visible), so it scrolls to the top first as well.
 
 6. **HTTPS Bypass for Local Emulator Tests:**
    The release API client configuration (`src/api/client.ts`) allows `http://10.0.2.2` and `http://localhost` during local emulator testing (E2E builds keep `localhost` on Android; `.detoxrc.js` forwards port 8080 with `reversePorts`) while strictly enforcing `https://` for external production domains.
