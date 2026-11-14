@@ -6,6 +6,7 @@ import { WritableSignal } from '@angular/core';
 import {
   DEFAULT_SHOP_RULES,
   DEFAULT_TIME_SLOTS,
+  addDays,
   rescheduleDates,
   shopWallClock,
 } from '@taskflow/domain';
@@ -90,9 +91,14 @@ describe('ReschedulePicker', () => {
     picker.selectedDate.set(days[1] as string);
     await answerAvailability();
 
-    // A shorter booking window (an admin changed it) genuinely shortens the list.
+    // A shorter booking window (an admin changed it) genuinely shortens the list. It ends on the
+    // chosen day: a fixed width would depend on the hour the suite runs, because once today's last
+    // slot has passed (and on closed days) the second open day lies further out than two days.
+    const today = shopWallClock(zone);
+    let maxAdvanceDays = 0;
+    while (addDays(today, maxAdvanceDays) !== days[1]) maxAdvanceDays++;
     shopClock.reload();
-    answerShopInfo({ ...DEFAULT_SHOP_RULES, maxAdvanceDays: 2 });
+    answerShopInfo({ ...DEFAULT_SHOP_RULES, maxAdvanceDays });
     await answerAvailability();
 
     expect(picker.dates().length).toBeLessThan(days.length);
