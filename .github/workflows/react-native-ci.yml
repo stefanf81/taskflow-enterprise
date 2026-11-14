@@ -199,6 +199,91 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Observation only, nothing is gated on it (docs/agents/ci.md). The native build gate below
+  # decides by changed paths and branch name; with one root lockfile every npm update matches the
+  # mobile filter, so a frontend-only update builds both apps, while a native dependency added on
+  # any other branch builds neither (and both required contexts still report success). Expo's
+  # native fingerprint — the hash the Detox jobs already key their app caches on — answers "does
+  # this pull request change the native build" directly. This job prints the base-vs-head
+  # comparison next to what the rule in force decided, so a handful of pull requests show whether
+  # they agree before the rule is replaced by it. Two `npm ci` runs (one per commit): the
+  # fingerprint covers the installed native packages and autolinking, not just the lockfile.
+  native-fingerprint:
+    name: Native fingerprint diff
+    needs: changes
+    if: |
+      github.event_name == 'pull_request' &&
+        needs.changes.outputs.mobile == 'true' &&
+        github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      # Full history: the base commit is checked out alongside the head commit, and a
+      # pull-request checkout is otherwise a shallow merge ref.
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - *setup-node
+      - *restore-npm-cache
+
+      # Base first, so the tree ends on the head commit and the report script below is the pull
+      # request's own; a base commit that predates it would break the last step.
+      - name: Check out the base commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git checkout --detach "$BASE_SHA"
+
+      - *install-dependencies
+
+      - name: Fingerprint the base commit
+        env:
+          TARGET: ${{ runner.temp }}/fp-base
+        run: |
+          set -euo pipefail
+          mkdir -p "$TARGET"
+          for platform in android ios; do
+            ../node_modules/.bin/fingerprint fingerprint:generate --platform "$platform" \
+              > "$TARGET/$platform.json"
+            echo "$platform $(jq -r .hash "$TARGET/$platform.json") ($(git rev-parse --short HEAD))"
+          done
+      - name: Check out the head commit
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: git checkout --detach "$HEAD_SHA"
+
+      - *install-dependencies
+
+      - name: Fingerprint the head commit
+        env:
+          TARGET: ${{ runner.temp }}/fp-head
+        run: |
+          set -euo pipefail
+          mkdir -p "$TARGET"
+          for platform in android ios; do
+            ../node_modules/.bin/fingerprint fingerprint:generate --platform "$platform" \
+              > "$TARGET/$platform.json"
+            echo "$platform $(jq -r .hash "$TARGET/$platform.json") ($(git rev-parse --short HEAD))"
+          done
+      - name: Report the comparison
+        working-directory: .
+        env:
+          # What the native build gate's branch rule decided for this pull request (its path
+          # condition is this job's own `needs.changes` guard).
+          CURRENT_RULE_BUILDS: >-
+            ${{ (startsWith(github.head_ref, 'renovate/') || github.head_ref == 'maintenance/expo-sdk')
+                && 'yes' || 'no' }}
+          BASE_DIR: ${{ runner.temp }}/fp-base
+          HEAD_DIR: ${{ runner.temp }}/fp-head
+        run: .github/scripts/native-fingerprint-report.sh "$BASE_DIR" "$HEAD_DIR"
+
   android:
     name: Android native build
     # JavaScript runs in parallel: the native builds only need the lockfiles,
