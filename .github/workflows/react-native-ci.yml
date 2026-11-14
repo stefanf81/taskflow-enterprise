@@ -1155,12 +1155,18 @@ jobs:
         with:
           jar-path: e2e-backend-jar/*.jar
           log-file: e2e-backend.log
-          java-options: -XX:TieredStopAtLevel=1
+          # The simulator's post-boot work pushes the runner into swap and pages the idle backend
+          # out whatever its size (BENCHMARKS §71). A 128 MB serial-GC heap (live set ~57 MB) has
+          # far less to bring back: with it and the renice below the slowest request stayed at
+          # 3-7 s in three runs, against 14-62 s with the default heap, with or without renice.
+          java-options: -XX:TieredStopAtLevel=1 -Xmx128m -XX:+UseSerialGC
           wait: "false"
 
-      # The simulator's post-boot work runs hundreds of processes at the default priority
-      # (load average 300-680 on 3 cores, BENCHMARKS §71); the backend is the one process the
-      # tests wait on. The runner-load samples record its nice value, to show the change held.
+      # The simulator's post-boot work runs hundreds of processes (load average 300-760 on
+      # 3 cores, BENCHMARKS §71); the backend is the one process the tests wait on. It starts at
+      # nice -10 on the hosted runner; this takes it to -20. Alone it did not help (§71); it is
+      # kept with the small heap above, the combination that was measured. The runner-load
+      # samples record the backend's nice value.
       - name: Raise the backend's CPU priority
         env:
           BACKEND_PID: ${{ steps.backend.outputs.pid }}
