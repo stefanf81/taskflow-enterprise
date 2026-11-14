@@ -34,7 +34,7 @@
 # full scan and known JRE risks outside Trivy's coverage. APT cannot update
 # Temurin. Track Renovate/upstream for the patched image, then rebuild the cache.
 # Production approval is operator-controlled, not a CI/publication interlock.
-ARG JAVA_IMAGE=eclipse-temurin:25-jre-resolute@sha256:b6e00330337143a2c1a20f1c1c693d4b6ce9a3c30ade8b9d03fc68cc9e3871e7
+ARG JAVA_IMAGE=eclipse-temurin:25-jre-resolute@sha256:480ef64e4540d45b0301e8afb7873bd3fa61ce93c5f66273eb569420718f38e2
 
 # JAR extraction is architecture-independent: run it natively on the build host
 # (Apple Silicon as well as amd64 CI). Compilation is performed by Gradle before

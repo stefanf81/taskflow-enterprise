@@ -10,6 +10,15 @@ sha256:41d9263c0d5b2a74d89af6e29e73b04298bc65e3cb705d03e9e2271ef49fef84
 Temurin 25.0.4.1+1 / Ubuntu 26.04
 ```
 
+**2026-11-14 digest refresh:** the Dockerfile now pins
+`sha256:480ef64e4540d45b0301e8afb7873bd3fa61ce93c5f66273eb569420718f38e2`
+(pushed 2026-11-12; previous pin
+`sha256:b6e00330337143a2c1a20f1c1c693d4b6ce9a3c30ade8b9d03fc68cc9e3871e7`). It is the same Temurin
+`25.0.5+8` / Ubuntu 26.04 build (the Docker Hub tag `25.0.5_8-jre-resolute` resolves to this digest), rebuilt
+with refreshed Ubuntu packages. Applied ahead of Renovate's 3-day soak at the maintainer's request. The scan
+results below were taken on an earlier digest and have **not** been repeated for this one; CI's image scan
+covers it on the next build.
+
 **2026-10-31 digest refresh:** the Dockerfile now pins
 `sha256:b6e00330337143a2c1a20f1c1c693d4b6ce9a3c30ade8b9d03fc68cc9e3871e7`
 (Temurin `25.0.5+8` / Ubuntu 26.04, built 2026-10-29; previous pin
