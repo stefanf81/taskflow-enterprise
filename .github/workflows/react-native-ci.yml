@@ -8,6 +8,7 @@ on:
       - "shared/schemas/**"
       - "shared/domain/**"
       - "api/**"
+      - "scripts/check-dependency-tree.js"
       - "scripts/sync-api-types.js"
       - "package.json"
       - "package-lock.json"
@@ -35,6 +36,17 @@ on:
     - cron: "32 22 * * *"
   workflow_dispatch:
     inputs:
+      target:
+        description: >-
+          Which jobs to run: all, native (the debug app builds) or e2e (the
+          Detox suites). A manual run otherwise starts both, and verifying one
+          of them paid for the other (~5 min of macOS and ~2.5 min of Linux).
+        type: choice
+        options:
+          - all
+          - native
+          - e2e
+        default: all
       native_scope:
         description: "Native build scope: fast (single arch) or full (all ABI/arches)"
         type: choice
@@ -95,6 +107,7 @@ jobs:
               - 'shared/schemas/**'
               - 'shared/domain/**'
               - 'api/**'
+              - 'scripts/check-dependency-tree.js'
               - 'scripts/sync-api-types.js'
               - 'package.json'
               - 'package-lock.json'
@@ -199,7 +212,7 @@ jobs:
     # not by itself proof that a backend-only Renovate PR needs a native build.
     if: &native-build-gate |
       github.event_name == 'schedule' ||
-        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'workflow_dispatch' && inputs.target != 'e2e') ||
         (
           github.event_name == 'pull_request' &&
           needs.changes.outputs.mobile == 'true' &&
@@ -796,7 +809,7 @@ jobs:
     # day for the schedule. Still outside the required gates.
     if: &e2e-gate |
       github.event_name == 'schedule' ||
-        github.event_name == 'workflow_dispatch'
+        (github.event_name == 'workflow_dispatch' && inputs.target != 'native')
     runs-on: ubuntu-26.04
     timeout-minutes: 15
 
@@ -1066,6 +1079,9 @@ jobs:
       # image without preinstalled apps and with background services that
       # tests do not need disabled.
       - name: Run Detox on the Android emulator
+        # The iOS step is bounded for the same reason: a hang inside Detox must fail well
+        # inside the job budget, or the diagnostics and artifact steps never run.
+        timeout-minutes: 30
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 35
@@ -1074,7 +1090,11 @@ jobs:
           profile: pixel_6
           avd-name: Pixel_6_API_35
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          # -no-metrics: every boot logs "ACTION REQUIRED ... In a future release this warning
+          # will turn into a one-time blocking prompt" for metrics consent. The job installs the
+          # latest emulator on every run, so that release would arrive unannounced and a prompt
+          # would hang the headless boot.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -no-metrics
           working-directory: mobile
           # The Google APIs images' setup wizard (com.google.android.googlesdksetup) can ANR on a
           # cold boot; its "isn't responding" dialog takes window focus and every Espresso action
@@ -1082,6 +1102,13 @@ jobs:
           script: |
             adb shell pm disable-user --user 0 com.google.android.googlesdksetup || true
             npx detox test --configuration android.emu.release --headless --take-screenshots failing --record-logs failing --artifacts-location artifacts/detox
+
+      - &e2e-summary
+        name: Summarise the backend and runner figures
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        working-directory: .
+        run: '"$GITHUB_WORKSPACE/.github/scripts/mobile-e2e-summary.sh"'
 
       - &mobile-backend-diagnostics
         name: Capture backend diagnostics on failure
@@ -1378,14 +1405,24 @@ jobs:
         id: simulator
         run: |
           set -euo pipefail
+
+          # Pick the newest available iOS runtime and a device *of that runtime*: the image
+          # ships an "iPhone 17 Pro" per installed runtime, and taking whichever one `simctl`
+          # listed first left the iOS version to the image's ordering. Printed so a run records
+          # which OS it tested (the app's deployment target is lower than the newest runtime).
+          runtime="$(xcrun simctl list runtimes available -j \
+            | jq -r '[.runtimes[] | select(.platform == "iOS")] | sort_by(.version | split(".") | map(tonumber)) | last')"
+          runtime_id="$(jq -r .identifier <<< "${runtime}")"
+          runtime_version="$(jq -r .version <<< "${runtime}")"
+
           udid="$(xcrun simctl list devices available -j \
-            | jq -r '[.devices[][] | select(.name == "iPhone 17 Pro")] | first | .udid // empty')"
+            | jq -r --arg rt "${runtime_id}" \
+              '(.devices[$rt] // []) | [.[] | select(.name == "iPhone 17 Pro")] | first | .udid // empty')"
           if [[ -z "$udid" ]]; then
-            runtime="$(xcrun simctl list runtimes available -j \
-              | jq -r '[.runtimes[] | select(.platform == "iOS")] | last | .identifier')"
-            udid="$(xcrun simctl create "iPhone 17 Pro" com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro "${runtime}")"
+            udid="$(xcrun simctl create "iPhone 17 Pro" com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro "${runtime_id}")"
           fi
           echo "udid=${udid}" >> "$GITHUB_OUTPUT"
+          echo "Detox simulator: iPhone 17 Pro on iOS ${runtime_version} (${udid})" | tee -a "$GITHUB_STEP_SUMMARY"
           xcrun simctl boot "${udid}"
 
       - name: Wait for the Detox simulator to finish booting
@@ -1437,6 +1474,7 @@ jobs:
           xcrun simctl spawn "${UDID}" log show --last 1h --info --style compact \
             --predicate 'process == "TaskFlowMobile"' > artifacts/detox/simulator-app.log
 
+      - *e2e-summary
       - *mobile-backend-diagnostics
 
       - name: Upload Detox artifacts, build log and backend log

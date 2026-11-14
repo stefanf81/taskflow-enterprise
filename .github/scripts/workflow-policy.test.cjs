@@ -92,3 +92,29 @@ test('the DAST API scan sends its token and proves it', () => {
   assert.match(api, /^\s+require-success: \/api\/v1\/\S+$/m);
   assert.match(api, /^\s+token: \$\{\{ steps\.auth\.outputs\.token \}\}$/m);
 });
+
+test("react-native-ci's two mobile path lists stay identical", () => {
+  // The push trigger's `paths:` and the `changes` job's dorny/paths-filter list decide the same
+  // thing for different events (a `main` push vs. a pull request). They were kept in sync by
+  // hand, so an input added to one (scripts/check-dependency-tree.js was missing from both)
+  // silently stops gating the other event.
+  const workflow = fs.readFileSync(path.join(workflowDir, 'react-native-ci.yml'), 'utf8');
+  const lines = workflow.split('\n');
+
+  const list = (startRegex, itemIndent) => {
+    const start = lines.findIndex((line) => startRegex.test(line));
+    assert.notEqual(start, -1, `not found: ${startRegex}`);
+    const items = [];
+    for (let i = start + 1; i < lines.length; i += 1) {
+      const item = lines[i].match(/^(\s*)- ['"](.+)['"]$/);
+      if (!item || item[1].length !== itemIndent) break;
+      items.push(item[2]);
+    }
+    assert.ok(items.length > 5, `only ${items.length} entries after ${startRegex}`);
+    return items;
+  };
+
+  // `paths:` under the push trigger (4 spaces, double quotes) and the `mobile:` filter inside
+  // the dorny `filters: |` block scalar (14 spaces, single quotes).
+  assert.deepEqual(list(/^ {4}paths:$/, 6), list(/^ {12}mobile:$/, 14));
+});
