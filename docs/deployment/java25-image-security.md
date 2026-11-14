@@ -15,9 +15,17 @@ Temurin 25.0.4.1+1 / Ubuntu 26.04
 (pushed 2026-11-12; previous pin
 `sha256:b6e00330337143a2c1a20f1c1c693d4b6ce9a3c30ade8b9d03fc68cc9e3871e7`). It is the same Temurin
 `25.0.5+8` / Ubuntu 26.04 build (the Docker Hub tag `25.0.5_8-jre-resolute` resolves to this digest), rebuilt
-with refreshed Ubuntu packages. Applied ahead of Renovate's 3-day soak at the maintainer's request. The scan
-results below were taken on an earlier digest and have **not** been repeated for this one; CI's image scan
-covers it on the next build.
+with refreshed Ubuntu packages. Applied ahead of Renovate's 3-day soak at the maintainer's request.
+
+CI result for this digest (PR #244, `Build Docker (backend)`, run 43614591185, linux/amd64): Trivy
+**0.76.2** scanned the backend application image built on it with `--severity HIGH,CRITICAL
+--ignore-unfixed --exit-code 1` (OS packages and the application JAR; Ubuntu 26.04, 109 OS packages) and
+found nothing to fail on, and the production image smoke test passed (readiness, `10001:10001`, 86 % of
+loaded classes served from the CDS archive, graceful shutdown). That is the pipeline's gate, not the
+all-severity, unfixed-included scan with `--ignorefile /dev/null` recorded below: it says nothing about the
+MEDIUM and LOW or unfixed findings, it covered the amd64 runner image only, and the native-amd64
+performance gate was not re-run for this digest. The scan results below were taken on an earlier digest and
+have **not** been repeated for this one.
 
 **2026-10-31 digest refresh:** the Dockerfile now pins
 `sha256:b6e00330337143a2c1a20f1c1c693d4b6ce9a3c30ade8b9d03fc68cc9e3871e7`
