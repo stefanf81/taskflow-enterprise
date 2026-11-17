@@ -210,6 +210,8 @@ html {
 }
 
 .btn-submit {
+  /* Containing block for the hover hit-area strip below. */
+  position: relative;
   background-color: var(--primary-gold);
   color: #000000;
   box-shadow: 0 2px 4px rgba(197, 160, 89, 0.15);
@@ -219,6 +221,16 @@ html {
   background-color: var(--primary-gold-hover);
   transform: translateY(-1px);
   box-shadow: 0 4px 10px rgba(197, 160, 89, 0.25);
+}
+
+/* The 1px lift moves the hit box off a pointer resting on the bottom edge: the button loses
+   :hover, drops back, regains it, and flickers forever (an E2E click on it then never sees a
+   stable box). This invisible strip fills the pixel the lift vacates, so the pointer stays
+   over the button. */
+.btn-submit:hover:not(:disabled)::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 -1px;
 }
 
 .btn-submit:disabled {
