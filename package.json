@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "TaskFlow Enterprise Monorepo Root Workspace",
-  "packageManager": "npm@12.2.2",
+  "packageManager": "npm@12.2.3",
   "workspaces": [
     "frontend",
     "mobile",
@@ -31,7 +31,7 @@
   },
   "devDependencies": {
     "jsdom": "31.0.1",
-    "knip": "6.45.1",
+    "knip": "6.46.1",
     "test-renderer": "1.3.1"
   },
   "overrides": {

@@ -45,7 +45,7 @@ in `package.json`. CI installs npm 12.2.2 (declared in `frontend/package.json`
 via `.github/actions/npm-ci`), so install the same version locally:
 
 ```bash
-npm install --global npm@12.2.2
+npm install --global npm@12.2.3
 ```
 
 Install the macOS tools with Homebrew when needed:
