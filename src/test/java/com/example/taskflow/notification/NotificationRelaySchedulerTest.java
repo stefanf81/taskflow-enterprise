@@ -9,6 +9,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Pageable;
+import org.springframework.mail.MailSendException;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -16,6 +17,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.LongStream;
 
@@ -159,6 +161,63 @@ class NotificationRelaySchedulerTest {
 
         verifyNoInteractions(sender);
         verify(outboxRepository).releaseIfClaimed(1L, "test-instance", NOW);
+    }
+
+    /**
+     * A mail server that cannot be reached: the rest of the run's claims go back without an attempt,
+     * no further batch is claimed, and delivery pauses (30 s, then 60 s, ...) until a run gets
+     * through; then the next outage starts at 30 s again.
+     */
+    @Test
+    void aTransportOutageReturnsTheRunsClaimsAndPausesDeliveryUntilItRecovers() {
+        AtomicLong nanos = new AtomicLong();
+        relay = new NotificationRelayScheduler(outboxRepository, sender, selfProvider, "test-instance",
+                Clock.fixed(NOW, ZoneOffset.UTC), true, Duration.ofSeconds(20), nanos::get);
+        when(outboxRepository.findClaimableForUpdate(anyInt(), any(), any()))
+                .thenAnswer(invocation -> pendingRows(0, NotificationRelayScheduler.CLAIM_BATCH_SIZE));
+        when(outboxRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(outboxRepository.findStaleProcessing(any(), any())).thenReturn(List.of());
+        TransportUnavailableException outage =
+                new TransportUnavailableException(new MailSendException("Mail server connection failed"), Map.of());
+        doThrow(outage).when(sender).process(anyList());
+
+        relay.relay();
+
+        // One chunk was tried; the other 40 claims went back without an attempt.
+        verify(sender, times(1)).process(anyList());
+        verify(outboxRepository, times(40)).releaseIfClaimed(anyLong(), eq("test-instance"), eq(NOW));
+        verify(outboxRepository, never()).releaseIfClaimed(eq(9L), any(), any());
+        verify(outboxRepository, times(1)).findClaimableForUpdate(anyInt(), any(), any());
+
+        // Paused for 30 s: nothing is claimed, stale claims are still recovered.
+        nanos.addAndGet(Duration.ofSeconds(29).toNanos());
+        relay.relay();
+        verify(outboxRepository, times(1)).findClaimableForUpdate(anyInt(), any(), any());
+        verify(outboxRepository, times(2)).findStaleProcessing(any(), any());
+
+        // After 30 s it probes again, fails again, and pauses for 60 s.
+        nanos.addAndGet(Duration.ofSeconds(2).toNanos());
+        relay.relay();
+        verify(outboxRepository, times(2)).findClaimableForUpdate(anyInt(), any(), any());
+        nanos.addAndGet(Duration.ofSeconds(59).toNanos());
+        relay.relay();
+        verify(outboxRepository, times(2)).findClaimableForUpdate(anyInt(), any(), any());
+
+        // The server is back (a short batch here, so the run ends): it goes out and the pause resets.
+        when(outboxRepository.findClaimableForUpdate(anyInt(), any(), any()))
+                .thenAnswer(invocation -> pendingRows(0, 5));
+        doNothing().when(sender).process(anyList());
+        nanos.addAndGet(Duration.ofSeconds(2).toNanos());
+        relay.relay();
+        verify(outboxRepository, times(3)).findClaimableForUpdate(anyInt(), any(), any());
+        verify(sender, times(3)).process(anyList());
+
+        // The next outage pauses for 30 s again, not 120 s.
+        doThrow(outage).when(sender).process(anyList());
+        relay.relay();
+        nanos.addAndGet(Duration.ofSeconds(31).toNanos());
+        relay.relay();
+        verify(outboxRepository, times(5)).findClaimableForUpdate(anyInt(), any(), any());
     }
 
     private static List<NotificationOutbox> pendingRows(long firstId, int count) {

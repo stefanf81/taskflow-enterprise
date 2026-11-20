@@ -3,6 +3,7 @@ package com.example.taskflow.notification;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
+import org.springframework.mail.MailAuthenticationException;
 import org.springframework.mail.MailPreparationException;
 import org.springframework.mail.MailSendException;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -57,7 +58,13 @@ final class SmtpNotificationGateway implements NotificationGateway {
         }
         try {
             mailSender.send(batch.toArray(MimeMessage[]::new));
+        } catch (MailAuthenticationException e) {
+            // Rejected credentials: no message was handed over, and none is at fault.
+            throw new TransportUnavailableException(e, failed);
         } catch (MailSendException e) {
+            if (neverConnected(e, batch.size())) {
+                throw new TransportUnavailableException(e, failed);
+            }
             // Keyed by the message object. A connection that failed part-way lists every message
             // from that point on; the ones before it were accepted.
             Map<Object, Exception> rejected = e.getFailedMessages();
@@ -87,6 +94,20 @@ final class SmtpNotificationGateway implements NotificationGateway {
             batch.forEach(mime -> failed.put(prepared.get(mime), e));
         }
         return failed;
+    }
+
+    /**
+     * Whether the transport was never reached. When {@code JavaMailSenderImpl} cannot connect, it
+     * lists every message not yet sent under the connection's own exception and throws "Mail server
+     * connection failed" with that exception as the cause; on the first connect that is the whole
+     * batch. A reconnect that fails part-way lists fewer messages, and a message the server rejected
+     * carries its own exception: those still count as attempts.
+     */
+    private static boolean neverConnected(MailSendException e, int batchSize) {
+        Throwable cause = e.getCause();
+        Map<Object, Exception> rejected = e.getFailedMessages();
+        return cause != null && rejected.size() == batchSize
+                && rejected.values().stream().allMatch(exception -> exception == cause);
     }
 
     private MimeMessage prepare(Message message) {

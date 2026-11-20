@@ -42,6 +42,13 @@ import java.util.function.LongSupplier;
  * exponential backoff - or to {@code FAILED} once the retry cap is reached, so a payload that
  * keeps killing the sender cannot be retried forever.
  *
+ * <p><b>Mail transport outage.</b> When the mail server cannot be reached at all (connection
+ * refused or timed out, credentials rejected), no message is at fault: the sender returns the
+ * chunk's claims without an attempt, the run returns its other claims the same way and stops, and
+ * delivery pauses for {@link #TRANSPORT_PAUSE_BASE}, doubled per consecutive failure up to
+ * {@link #TRANSPORT_PAUSE_MAX}. Counting those failures used to fail every queued message for
+ * good once an outage outlasted the retry budget (about three hours).
+ *
  * <p>Delivery itself is performed by {@link NotificationSender}.
  */
 @Component
@@ -66,6 +73,14 @@ class NotificationRelayScheduler {
      * claims are released without an attempt.
      */
     static final Duration DRAIN_BUDGET = Duration.ofSeconds(20);
+    /**
+     * Pause after the mail transport could not be reached at all, doubled per consecutive failure up
+     * to {@link #TRANSPORT_PAUSE_MAX}. Such a failure counts no attempt (BENCHMARKS.md §75), so
+     * without a pause every run would try a dead server again.
+     */
+    static final Duration TRANSPORT_PAUSE_BASE = Duration.ofSeconds(30);
+    /** Longest pause: a recovered mail server is found again within this. */
+    static final Duration TRANSPORT_PAUSE_MAX = Duration.ofMinutes(5);
 
     private final NotificationOutboxRepository outboxRepository;
     private final NotificationSender sender;
@@ -75,6 +90,10 @@ class NotificationRelayScheduler {
     private final boolean schedulersEnabled;
     private final long drainBudgetNanos;
     private final LongSupplier nanoTime;
+    /** Consecutive runs that found the mail transport unreachable; 0 while it works. */
+    private volatile int transportFailures;
+    /** {@link #nanoTime} before which no batch is claimed; meaningful while transportFailures > 0. */
+    private volatile long transportPausedUntil;
 
     @Autowired
     public NotificationRelayScheduler(NotificationOutboxRepository outboxRepository,
@@ -144,7 +163,8 @@ class NotificationRelayScheduler {
         long startedAt = nanoTime.getAsLong();
 
         List<NotificationSender.Claim> claims;
-        while (hasBudget(startedAt)) {
+        boolean transportDown = transportFailures > 0 && startedAt - transportPausedUntil < 0;
+        while (!transportDown && hasBudget(startedAt)) {
             claims = self != null ? self.claimBatch() : claimBatch();
             if (claims.isEmpty()) {
                 break;
@@ -165,13 +185,29 @@ class NotificationRelayScheduler {
                         claims.subList(index, Math.min(index + SEND_BATCH_SIZE, claims.size()));
                 try {
                     sender.process(chunk);
+                    transportReachable();
+                } catch (TransportUnavailableException e) {
+                    // The sender returned this chunk without an attempt; the rest of the run's
+                    // claims go back the same way, and no further batch is claimed.
+                    List<NotificationSender.Claim> unstarted =
+                            claims.subList(Math.min(index + SEND_BATCH_SIZE, claims.size()), claims.size());
+                    if (!unstarted.isEmpty()) {
+                        if (self != null) {
+                            self.releaseUnstartedClaims(unstarted);
+                        } else {
+                            releaseUnstartedClaims(unstarted);
+                        }
+                    }
+                    pauseAfterTransportFailure(e);
+                    transportDown = true;
+                    break;
                 } catch (Exception e) {
                     String safeMsg = LogSanitizer.safeMessage(e);
                     logger.error("Relay failed to process outbox ids {}..{}: {}", chunk.getFirst().id(),
                             chunk.getLast().id(), safeMsg);
                 }
             }
-            if (claims.size() < CLAIM_BATCH_SIZE) {
+            if (transportDown || claims.size() < CLAIM_BATCH_SIZE) {
                 break;
             }
         }
@@ -182,6 +218,30 @@ class NotificationRelayScheduler {
             self.reclaimStaleClaims();
         } else {
             reclaimStaleClaims();
+        }
+    }
+
+    /** Doubles the pause per consecutive failure, up to {@link #TRANSPORT_PAUSE_MAX}. */
+    private void pauseAfterTransportFailure(TransportUnavailableException e) {
+        int failures = transportFailures + 1;
+        Duration pause = TRANSPORT_PAUSE_BASE.multipliedBy(1L << Math.min(failures - 1, 20));
+        if (pause.compareTo(TRANSPORT_PAUSE_MAX) > 0) {
+            pause = TRANSPORT_PAUSE_MAX;
+        }
+        transportFailures = failures;
+        transportPausedUntil = nanoTime.getAsLong() + pause.toNanos();
+        // The cause's class only: mail exceptions can contain recipients or credentials.
+        logger.warn("Mail transport unavailable ({}); outbox delivery paused for {} s ({} failure(s) in a row). "
+                        + "No delivery attempt was counted.",
+                e.getCause() != null ? e.getCause().getClass().getSimpleName() : "unknown",
+                pause.toSeconds(), failures);
+    }
+
+    private void transportReachable() {
+        if (transportFailures > 0) {
+            logger.info("Mail transport reachable again after {} failed run(s); outbox delivery resumed.",
+                    transportFailures);
+            transportFailures = 0;
         }
     }
 

@@ -27,7 +27,12 @@ Connect, read and write timeouts default to 5,000 ms each; the corresponding
 `APP_NOTIFICATION_SMTP_CONNECT_TIMEOUT_MS`, `APP_NOTIFICATION_SMTP_READ_TIMEOUT_MS` and
 `APP_NOTIFICATION_SMTP_WRITE_TIMEOUT_MS` must each be 1–10,000 ms. Host and sender are required
 and validated only in SMTP mode. Context initialization does not connect or send mail. An SMTP
-outage is recovered by the outbox retry/backoff and stale-claim mechanisms, not by failing startup.
+outage is recovered by the outbox, not by failing startup. When the server cannot be reached at all
+(connection refused or timed out, credentials rejected), no attempt is counted: the claims return to
+PENDING and delivery pauses for 30 s, doubling up to 5 minutes, then resumes on its own. Before this,
+every such failure consumed one of a message's 10 attempts, so an outage longer than about three hours
+failed every queued message for good (BENCHMARKS §75). A message the server itself rejects still
+counts its attempts and stays FAILED after 10.
 
 For local testing, point SMTP at a separately started disposable Mailpit instance on loopback
 (port 1025), set a test-only sender address, omit username/password, and set

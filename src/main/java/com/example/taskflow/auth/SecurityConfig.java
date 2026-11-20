@@ -410,9 +410,15 @@ class SecurityConfig {
         };
     }
 
+    /**
+     * BCrypt on a bounded pool of platform threads, not on the requests' virtual threads: a hash
+     * never yields its carrier, so a login flood used to stall every other request
+     * ({@link BoundedPasswordEncoder}, BENCHMARKS.md §75). Spring calls {@code close()} on shutdown.
+     */
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        int threads = BoundedPasswordEncoder.defaultThreads();
+        return new BoundedPasswordEncoder(new BCryptPasswordEncoder(), threads, 16 * threads);
     }
 
     @Bean

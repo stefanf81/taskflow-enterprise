@@ -95,6 +95,9 @@ class NotificationSender {
         Map<Long, RuntimeException> failed;
         try {
             failed = gateway.sendAll(deliveries.stream().map(Delivery::message).toList());
+        } catch (TransportUnavailableException e) {
+            returnWithoutAttempt(deliveries, e.rejectedBeforeSending());
+            throw e;
         } catch (RuntimeException e) {
             failed = new HashMap<>();
             for (Delivery delivery : deliveries) {
@@ -120,6 +123,30 @@ class NotificationSender {
         }
         if (recordFailure != null) {
             throw recordFailure;
+        }
+    }
+
+    /**
+     * The transport was never reached: nothing was delivered and no message is at fault, so each
+     * claim goes back to PENDING with its retry count unchanged; a message that could not even be
+     * built still counts. Every row is attempted even if one write fails; a row whose write failed
+     * stays PROCESSING and the stale-claim recovery counts it later. The caller rethrows the
+     * transport failure, so a write failure here is only logged.
+     */
+    private void returnWithoutAttempt(List<Delivery> deliveries, Map<Long, RuntimeException> rejectedBeforeSending) {
+        for (Delivery delivery : deliveries) {
+            Claim claim = delivery.claim();
+            try {
+                if (rejectedBeforeSending.containsKey(claim.id())) {
+                    outcomeTransaction.executeWithoutResult(status -> recordOutcome(delivery, false));
+                } else {
+                    outcomeTransaction.executeWithoutResult(status ->
+                            outboxRepository.releaseIfClaimed(claim.id(), claim.claimedBy(), claim.claimedAt()));
+                }
+            } catch (RuntimeException e) {
+                logger.warn("Could not return outbox id={} after a transport failure ({})", claim.id(),
+                        e.getClass().getSimpleName());
+            }
         }
     }
 

@@ -27,6 +27,6 @@ Benchmark §32 (Virtual Threads vs Platform Threads, I/O-Bound Mixed Workload) a
 1. Virtual threads are explicitly enabled with `spring.threads.virtual.enabled=true`; this is an application decision, not a Spring Boot default.
 2. **Throughput scales linearly with HikariCP pool size under VT** — pool=50 delivers 5,648 req/s vs PT baseline of 1,908 req/s (2.96× improvement).
 3. **The original connection pool saturation concern is mitigated** by increasing `maximum-pool-size` from 10 to 25 for production PostgreSQL.
-4. **The CPU-bound `/login` (BCrypt) regression is absorbed** by the read-heavy workload mix in production (70% reads, 30% writes).
+4. **The CPU-bound `/login` (BCrypt) regression is absorbed** by the read-heavy workload mix in production (70% reads, 30% writes). *(Amended 2026-11-20, BENCHMARKS §75: that holds for the mix, not for a login flood. A virtual thread keeps its carrier while it hashes, so 64 logins in flight from distinct addresses took the cached catalog to p99 1.0–1.2 s on 4 cores. BCrypt now runs on `BoundedPasswordEncoder`: cores − 1 platform threads, a bounded queue, 503 + Retry-After beyond it; catalog p99 30 ms under the same flood.)*
 
 Because virtual-thread schedulers use daemon threads, `spring.main.keep-alive=true` is configured to keep the application alive when no other non-daemon thread is active.

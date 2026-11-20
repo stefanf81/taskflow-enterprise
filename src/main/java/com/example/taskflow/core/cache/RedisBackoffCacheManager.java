@@ -10,6 +10,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 /**
@@ -19,10 +20,12 @@ import java.util.function.Supplier;
  * (with the timeout on every read the catalog served about 2 % of its normal throughput). One read
  * per interval probes Redis and restores the cache once it answers.
  *
- * <p>Writes of loaded values are skipped while backing off. Evictions are always attempted: they are
- * rare, and skipping one would leave a stale entry behind once Redis is back; their errors propagate
- * to the callers, which already tolerate them ({@link FailOpenCacheErrorHandler}, the after-commit
- * eviction listener).
+ * <p>Writes of loaded values are skipped while backing off, and so are evictions: attempting each one
+ * cost every booking or status change a full command timeout (17 → 272 ms with Redis hung) plus an
+ * ERROR log line (BENCHMARKS.md §75). A cache that skipped (or failed) an eviction is marked, and
+ * the first call allowed to use Redis again clears that whole cache before anything else, so no
+ * stale entry outlives the outage; that also closes the stale-after-outage window ADR-018 accepted.
+ * A failed eviction is recorded like any other failure instead of being thrown.
  */
 final class RedisBackoffCacheManager implements CacheManager {
 
@@ -60,6 +63,8 @@ final class RedisBackoffCacheManager implements CacheManager {
         private final RedisBackoff backoff;
         /** Every Redis cache here disables null values, so a null from get(key, loader) means unreadable. */
         private final boolean nullValuesNotCached;
+        /** An eviction was skipped or failed: the whole cache is cleared before Redis is used again. */
+        private final AtomicBoolean missedEviction = new AtomicBoolean();
 
         BackoffCache(Cache delegate, RedisBackoff backoff) {
             this.delegate = delegate;
@@ -85,7 +90,7 @@ final class RedisBackoffCacheManager implements CacheManager {
 
         @Override
         public ValueWrapper get(Object key) {
-            if (!backoff.allowRequest()) {
+            if (!redisUsable()) {
                 return null;
             }
             try {
@@ -100,7 +105,7 @@ final class RedisBackoffCacheManager implements CacheManager {
 
         @Override
         public <T> T get(Object key, Class<T> type) {
-            if (!backoff.allowRequest()) {
+            if (!redisUsable()) {
                 return null;
             }
             try {
@@ -117,7 +122,7 @@ final class RedisBackoffCacheManager implements CacheManager {
 
         @Override
         public <T> T get(Object key, Callable<T> valueLoader) {
-            if (!backoff.allowRequest()) {
+            if (!redisUsable()) {
                 return load(key, valueLoader);
             }
             T value;
@@ -154,7 +159,7 @@ final class RedisBackoffCacheManager implements CacheManager {
 
         @Override
         public void put(Object key, Object value) {
-            if (!backoff.allowRequest()) {
+            if (!redisUsable()) {
                 return;
             }
             try {
@@ -177,22 +182,70 @@ final class RedisBackoffCacheManager implements CacheManager {
 
         @Override
         public void evict(Object key) {
-            delegate.evict(key);
+            evicting(() -> {
+                delegate.evict(key);
+                return false;
+            });
         }
 
         @Override
         public boolean evictIfPresent(Object key) {
-            return delegate.evictIfPresent(key);
+            return evicting(() -> delegate.evictIfPresent(key));
         }
 
         @Override
         public void clear() {
-            delegate.clear();
+            evicting(() -> {
+                delegate.clear();
+                return false;
+            });
         }
 
         @Override
         public boolean invalidate() {
-            return delegate.invalidate();
+            return evicting(delegate::invalidate);
+        }
+
+        /**
+         * Runs an eviction unless Redis is being skipped; a skipped or failed one marks the cache so
+         * it is cleared as a whole before Redis serves it again. Returns false when nothing was done.
+         */
+        private boolean evicting(java.util.function.BooleanSupplier eviction) {
+            if (!redisUsable()) {
+                missedEviction.set(true);
+                return false;
+            }
+            try {
+                boolean result = eviction.getAsBoolean();
+                backoff.recordSuccess();
+                return result;
+            } catch (RuntimeException e) {
+                missedEviction.set(true);
+                backoff.recordFailure(e);
+                return false;
+            }
+        }
+
+        /**
+         * Whether this call may use Redis now ({@link RedisBackoff#allowRequest()}). If an eviction was
+         * missed meanwhile, the cache is cleared first. The mark is taken before clearing, so an
+         * eviction skipped while the clear runs marks the cache again rather than being lost.
+         */
+        private boolean redisUsable() {
+            if (!backoff.allowRequest()) {
+                return false;
+            }
+            if (missedEviction.getAndSet(false)) {
+                try {
+                    delegate.invalidate();
+                    backoff.recordSuccess();
+                } catch (RuntimeException e) {
+                    missedEviction.set(true);
+                    backoff.recordFailure(e);
+                    return false;
+                }
+            }
+            return true;
         }
     }
 }

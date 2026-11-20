@@ -119,6 +119,35 @@ class NotificationSenderTest {
         verify(outboxRepository).markSentIfClaimed(2L, WORKER, CLAIMED_AT);
     }
 
+    /**
+     * The mail server was never reached: the claims go back to PENDING with their retry count
+     * unchanged, a message that could not be built still counts, and the outage is rethrown so the
+     * relay pauses.
+     */
+    @Test
+    void batchReturnsClaimsWithoutAnAttemptWhenTheTransportIsUnavailable() {
+        NotificationOutbox second = claimedRow(2L);
+        NotificationOutbox unbuildable = claimedRow(3L);
+        when(outboxRepository.findAllById(List.of(1L, 2L, 3L))).thenReturn(List.of(outbox, second, unbuildable));
+        TransportUnavailableException outage = new TransportUnavailableException(
+                new MailSendException("Mail server connection failed"),
+                Map.of(3L, new IllegalArgumentException("header injection")));
+        when(gateway.sendAll(anyList())).thenThrow(outage);
+        when(outboxRepository.markFailedIfClaimed(anyLong(), anyString(), any(), anyInt(), any())).thenReturn(1);
+
+        TransportUnavailableException thrown = assertThrows(TransportUnavailableException.class,
+                () -> sender.process(List.of(claim, new NotificationSender.Claim(2L, WORKER, CLAIMED_AT),
+                        new NotificationSender.Claim(3L, WORKER, CLAIMED_AT))));
+
+        assertSame(outage, thrown);
+        verify(outboxRepository).releaseIfClaimed(1L, WORKER, CLAIMED_AT);
+        verify(outboxRepository).releaseIfClaimed(2L, WORKER, CLAIMED_AT);
+        verify(outboxRepository, never()).releaseIfClaimed(eq(3L), any(), any());
+        verify(outboxRepository).markFailedIfClaimed(eq(3L), eq(WORKER), eq(CLAIMED_AT), eq(1), any());
+        verify(outboxRepository, never()).markFailedIfClaimed(eq(1L), any(), any(), anyInt(), any());
+        verify(outboxRepository, never()).markSentIfClaimed(anyLong(), any(), any());
+    }
+
     private NotificationOutbox claimedRow(long id) {
         NotificationOutbox row = new NotificationOutbox("row" + id + "@example.com", "EMAIL", "m" + id, SENT_AT, "PROCESSING");
         row.setId(id);

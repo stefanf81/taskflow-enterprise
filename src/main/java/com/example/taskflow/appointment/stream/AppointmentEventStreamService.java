@@ -249,8 +249,13 @@ public class AppointmentEventStreamService {
         });
     }
 
-    /** Scheduler entry point; a no-op when {@code app.schedulers.enabled=false}. */
-    @Scheduled(fixedDelayString = "${app.sse.heartbeat-interval-ms:" + SseProperties.DEFAULT_HEARTBEAT_INTERVAL_MS + "}")
+    /**
+     * Scheduler entry point; a no-op when {@code app.schedulers.enabled=false}. Fixed rate, not fixed
+     * delay: Boot's virtual-thread scheduler runs every fixed-delay task on one shared thread, so a
+     * mail relay stuck on an unreachable SMTP server held the heartbeat back too (20 s gaps grew to
+     * 40 s, BENCHMARKS.md §75). A fixed-rate tick gets its own thread; this one only queues writes.
+     */
+    @Scheduled(fixedRateString = "${app.sse.heartbeat-interval-ms:" + SseProperties.DEFAULT_HEARTBEAT_INTERVAL_MS + "}")
     void scheduledHeartbeat() {
         if (schedulersEnabled) {
             sendHeartbeats();

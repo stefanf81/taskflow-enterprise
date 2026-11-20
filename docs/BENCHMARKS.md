@@ -2755,3 +2755,39 @@ The other failure of that stress run ("Email is already registered.") was the te
 
 * **Reserving space for every validation message:** it would also stop the jump, for every button below a field, but it changes the spacing of the login modal, the contact step and the post-booking forms; the two buttons whose click is not a submit are the ones that lost something.
 
+## ⚡ 75. Backend Request-Path Audit: Login Flood, Mail Outage, Shared Scheduler Thread, Evictions During a Redis Outage (2026-11-20)
+
+**Goal:** fix the four findings of a read-only audit of the request path that were confirmed by measurement: password hashing stalling every request under a login flood, an SMTP outage failing queued mail for good, the mail relay delaying the admin stream's heartbeat, and cache evictions waiting out the Redis timeout during an outage.
+
+**Methodology:** one cloud container (4 vCPU). The boot JAR, prod profile, virtual threads on (the default), `-Xmx1g`, against PostgreSQL 18.7 and a local Redis; rate limits raised so the measurements are not throttled, the trusted proxy set to loopback so `X-Forwarded-For` gives each login its own client address. Login flood: N concurrent wrong-password `POST /auth/mobile/login`, each from a new address, while a probe sends `GET /catalog` (cached) every 50 ms; 15 s per phase. Mail outage: SMTP pointed at a local listener that accepts connections and never answers (each session waits the 5 s read timeout), 40 approvals queued, an admin SSE stream held open; recovery checked by replacing the listener with a minimal SMTP sink. Redis outage: `SIGSTOP` on the Redis process after the back-off engaged, 10 bookings timed.
+
+### Results
+
+| Measurement | Before | After |
+| :--- | ---: | ---: |
+| Catalog p99 / p50, 16 logins in flight | 239–374 / 64–91 ms | **15 / 4 ms** |
+| Catalog p99 / p50, 64 logins in flight | 1,009–1,207 / 153–376 ms | **30 / 9 ms** |
+| (same, virtual threads off, for reference) | 136 / 45 ms | — |
+| Logins served, 16 in flight | 55–61/s | 49/s |
+| Outbox after 3 min of a dead SMTP server | 40 FAILED, attempt 3 (of 10) | **40 PENDING, attempt 0** |
+| Connections to the dead server in that time | 12 | 3 (one probe per pause: 30, 60, 120 s) |
+| Mail delivered once the server is back | — (attempts burnt meanwhile) | 40 of 40 at the next probe, attempt 0 |
+| Admin SSE heartbeat gaps during that outage (20 s configured) | 20, 30, 40 s | **20.0 s every time** |
+| Booking with Redis frozen, after the back-off engaged | 272 ms, 1 ERROR log each | **11 ms, no log** |
+| Busy slot booked while Redis was frozen, read after recovery | stale "free" until the 2 min TTL (ADR-018) | **busy** |
+
+* **F1, BCrypt on virtual-thread carriers.** A hash is ~70 ms of CPU and never yields, so with as many logins in flight as carriers (4) every other request queued behind them. ADR-001 assumed the read-heavy mix absorbs it; a flood is not that mix, and the per-address limit (20 logins a minute) only means it takes ~200 addresses a minute to sustain 64 logins a second. `BoundedPasswordEncoder` (the `PasswordEncoder` bean) runs `encode`/`matches` on cores − 1 platform threads with a queue of 16 per thread; the virtual thread parks while it waits, and the OS time-slices the hashing threads with the carriers. A full queue answers at once with `PasswordHashingBusyException`, an `InternalAuthenticationServiceException`, so it takes the existing 503 + `Retry-After: 1` path and is not counted as a failed login. Trade-off: under a flood, excess logins are refused instead of queued (the test client, retrying at once, got ~25 logins/s served at 64 in flight), and peak hashing throughput is three cores' worth instead of four.
+* **F2, an SMTP outage longer than ~3 h failed queued mail for good.** A connection or authentication failure counted an attempt for every message of the batch; the backoff after the n-th attempt (30 s … 1 h) sums to about 3 h 4 min over 10 attempts, after which a row stays FAILED. The SMTP gateway now reports a transport that was never reached as `TransportUnavailableException`: `MailAuthenticationException`, or `JavaMailSenderImpl`'s connect failure, which lists every message of the batch under the connection's own exception (a reconnect that fails part-way lists fewer, and a recipient rejection carries its own exception: those still count). The sender returns such a chunk's claims to PENDING without an attempt (a message that could not even be built still counts), the relay returns the rest of the run's claims and pauses delivery 30 s, doubling to 5 min, and resets on the first chunk that gets through. Checked against the real `JavaMailSenderImpl` with a refused connection, not only a mock.
+* **F3, one thread for all fixed-delay jobs.** With virtual threads, Boot's `SimpleAsyncTaskScheduler` runs every fixed-delay task inline on a single `fixedDelayExecutor` thread (spring-context 7.0.10); fixed-rate ticks get their own. The relay (up to its 20 s budget plus an SMTP session in flight), the revocation restore, the refresh-session purge and the heartbeat shared it. The heartbeat is now `fixedRate` (it only enqueues writes). `HeartbeatSchedulingTest` pins both the scheduler behaviour (a stuck fixed-delay task: 0 ticks of another fixed-delay task, ≥ 10 of a fixed-rate one per second) and the annotation.
+* **F6.1, evictions during a Redis outage.** ADR-018 attempted every eviction so none would be skipped; with Redis hung each one waited the 250 ms command timeout, inside the booking's after-commit phase, and logged an ERROR with a stack trace. `RedisBackoffCacheManager` now skips evictions (and `clear`/`invalidate`) while backing off, records failed ones instead of throwing, and marks the cache; the first call allowed to use Redis again clears that whole cache before anything else. That also closes the stale-after-outage window ADR-018 documented, measured above with a slot booked during the freeze.
+
+### Not changed (from the same audit, lower impact or not confirmed here)
+
+* **One Redis `PTTL` per authenticated request** for the revocation check: consistent with the earlier per-request Redis counts (§58-style probe: `pttl` ×2 on authenticated requests, ×1 on anonymous ones, the other being the rate limiter's script). ADR-023 relies on it for immediate cross-replica denial; a 1–2 s per-`jti` "not revoked" cache would remove it. Not measured.
+* **No JDBC statement timeout** (`spring.jdbc.template.query-timeout` unset): the auth validators' `JdbcTemplate` queries are bounded only by the 30 s socket timeout.
+* **Unbounded `lock()` in `SingleFlightCacheManager` and the booking e-mail stripe lock** held across pool waits during a database brown-out; **O(n) scans of the in-memory rate-limit fallback** once it holds 50k keys; **one SSE event per booking a time off cancels**. Read in code by the audit, not reproduced.
+* **Rate-limit and login-throttle keys use the full client address**: if the production ingress forwards IPv6 clients, a /64 gives unlimited buckets. The image's nginx listens on IPv4 only; the ingress lives in the deployment repository.
+* **The "10 % inclusive" `StaleAccessTokenCookieFilter` in the earlier JFR profile** is not work: for a request without the cookie it only reads `getCookies()`. JFR's 64-frame stack limit cut the outer frames of deep samples (the outermost filter showed less inclusive time than the innermost); re-record with `stackdepth=256` before reading filter shares.
+
+**Verification:** `./gradlew check` (unit and H2 integration tests, coverage gate, container guards, SpotBugs); the new tests `BoundedPasswordEncoderTest`, `HeartbeatSchedulingTest`, and additions to `SmtpNotificationGatewayTest`, `NotificationSenderTest`, `NotificationRelaySchedulerTest` and `RedisBackoffCacheManagerTest`; the live measurements above against the rebuilt JAR.
+

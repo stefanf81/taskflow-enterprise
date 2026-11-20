@@ -14,6 +14,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -87,16 +90,55 @@ class RedisBackoffCacheManagerTest {
         assertThrows(Cache.ValueRetrievalException.class, () -> cache.get("k", failing));
     }
 
+    /**
+     * While backing off, an eviction does not wait for a hung Redis (it used to cost every booking a
+     * command timeout); the cache is cleared as a whole before Redis serves it again, so the entry the
+     * eviction was meant for is never served stale.
+     */
     @Test
-    void evictionsAreAlwaysAttempted() {
-        cache.put("k", "v");
+    void anEvictionDuringTheBackoffIsSkippedAndTheCacheIsClearedWhenRedisIsBack() {
+        cache.put("k", "stale");
+        cache.put("other", "stale too");
         store.down.set(true);
         cache.get("k");                       // trips the back-off
-        store.down.set(false);                // Redis is back, the interval is not over yet
+        int callsAfterFailure = store.calls.get();
 
+        assertFalse(cache.evictIfPresent("k"));
         cache.evict("k");
+        assertFalse(cache.invalidate());
 
-        assertNull(store.lookupRaw("k"), "the eviction reached the store despite the back-off");
+        assertEquals(callsAfterFailure, store.calls.get(), "no store calls while backing off");
+        store.down.set(false);
+        assertEquals("stale", store.lookupRaw("k"), "the skipped eviction left the entry in the store");
+        now.addAndGet(5_000);
+
+        assertEquals("value-1", cache.get("k", loader), "cleared before the first read: not the stale value");
+        assertNull(store.lookupRaw("other"), "the whole cache was cleared, not just one key");
+        assertEquals("value-1", cache.get("k", loader), "caching works again");
+    }
+
+    /** A failing eviction is recorded, not thrown (callers logged an ERROR for each one). */
+    @Test
+    void aFailedEvictionIsNotThrownAndTheCacheIsClearedOnRecovery() {
+        cache.put("k", "stale");
+        store.down.set(true);
+
+        assertDoesNotThrow(() -> cache.evictIfPresent("k"));
+
+        store.down.set(false);
+        now.addAndGet(5_000);
+        assertEquals("value-1", cache.get("k", loader), "the missed eviction cleared the cache on recovery");
+    }
+
+    @Test
+    void aHealthyEvictionRemovesOnlyItsKey() {
+        cache.put("k", "v");
+        cache.put("other", "kept");
+
+        assertTrue(cache.evictIfPresent("k"));
+
+        assertNull(store.lookupRaw("k"));
+        assertEquals("kept", store.lookupRaw("other"));
     }
 
     private static final class SingleCacheManager extends ConcurrentMapCacheManager {
@@ -186,6 +228,18 @@ class RedisBackoffCacheManagerTest {
         public void evict(Object key) {
             touch();
             super.evict(key);
+        }
+
+        @Override
+        public boolean evictIfPresent(Object key) {
+            touch();
+            return super.evictIfPresent(key);
+        }
+
+        @Override
+        public boolean invalidate() {
+            touch();
+            return super.invalidate();
         }
     }
 }
