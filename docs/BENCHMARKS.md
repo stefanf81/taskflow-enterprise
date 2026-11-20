@@ -2689,7 +2689,7 @@ Two `workflow_dispatch` runs on `main` (`ff6fa5a`) to verify #241's `target` inp
 
 * **Preloading the Inter font:** FCP +130 ms (724 → 856 ms at 390 px). It shortened LCP only while the fade was there (1,612 → 1,344 ms); without the fade LCP got 120 ms worse (720 → 840 ms).
 * **A minimum length for the admin search:** a 1–2 character term cannot use the V36 trigram indexes and scans the table (page and count ~90–130 ms here), but this table is a decade-plus of bookings, and those figures came from literal SQL, not the bind-parameter path the backend uses.
-* **The booking wizard's chunk round trip:** its `@defer` loads a 348-byte wrapper chunk first and the wizard code a round trip later (complete at ~2.2 s on slow 4G). Prerendering and event replay hide it. Not changed, nor the existing NG8021 build warning (`prefetch on idle` next to `on idle`) on the FAQ block.
+* **The booking wizard's chunk round trip:** its `@defer` loads a 348-byte wrapper chunk first and the wizard code a round trip later (complete at ~2.2 s on slow 4G). Prerendering and event replay hide it. Not changed, nor the existing NG8021 build warning (`prefetch on idle` next to `on idle`) on the FAQ block. Both addressed in §81.
 
 * **Fallback font metrics for the font swap:** `size-adjust`/`ascent-override` on a local fallback face would remove most of the remaining 0.02–0.03 at phone widths, but the fallback differs per platform (Roboto, San Francisco, DejaVu Sans) and the total is well inside the 0.1 "good" threshold. Left open.
 
@@ -2948,3 +2948,44 @@ A successful booking no longer refetches the wizard's free slots at once: the wi
 `__tests__/startup.test.tsx`: one restore (two with the old `RootNavigator`) and the shop info requested before `/me` answers.
 
 **Verification:** `./gradlew check` (827 tests, coverage, container guards, SpotBugs); mobile Jest 737/737 (twice), `npm run lint:all`, mobile lint.
+
+---
+
+## 🔬 81. Defer Triggers, and Two Measurements: the Revocation Lookup and Boot-Time Validation (2026-11-20)
+
+**Goal:** fix the FAQ block's NG8021 warning and start the booking wizard's chunks earlier, and measure two open items before deciding on them: the Redis revocation lookup on every signed-in request (§75), and validating the landing page's boot-time responses lazily (§76).
+
+### Defer triggers (`landing-page.html`)
+
+- **NG8021 was a false positive.** The compiler's check (`DeferTriggerMisconfiguration` in `@angular/compiler-cli`) only compares a prefetch trigger with the main trigger, and only for a block with exactly one main trigger; it does not look at `hydrate` triggers. At runtime, `shouldAttachTrigger` attaches prefetch triggers on the client whatever the hydration state, so the FAQ's `prefetch on idle` does warm the chunk for `hydrate on interaction`. The FAQ's main trigger is now `on viewport` (it only applies to client-side navigation to `/`, where the block is below the fold): the prefetch is meaningful to the compiler too, hydration is unchanged, and the build no longer reports NG8021 (the previous triggers still do).
+- **The wizard prefetches its chunks immediately** (`prefetch on immediate`, next to `on idle; hydrate on idle`): its two chunks (a small wrapper, then the wizard) start loading right after `main.js` instead of at idle.
+
+| Landing page at 390 px, 4× CPU, slow 4G (150 ms, 1.6 Mbit/s), median of 9 | FCP | TBT | Wizard hydrated | Load event |
+| :--- | ---: | ---: | ---: | ---: |
+| Previous triggers | 676 ms | 241 ms | 2,598 ms (2,494-2,684) | 1,544 ms |
+| New triggers | 712 ms | 256 ms | 2,544 ms (2,450-2,845) | 1,556 ms |
+
+The wizard hydrates about 50 ms earlier at the median, within the spread; FCP, TBT and the load event are unchanged within noise. "Hydrated" is when the last `jsaction` (event-replay) attribute inside `app-booking-wizard` is removed. E2E: `early-interaction`, `landing-stability`, `lost-clicks`, `appointment-flow` and `a11y` (17 tests) pass against the production build.
+
+### The revocation lookup: measured, not changed
+
+Production profile with PostgreSQL and Redis (the compose image) on one 4-core machine that also runs the load generator; one jar, run with and without the lookup (a scratch switch that skipped `RedisTokenRevocationStore.remainingMillis`), alternated twice, bearer token of one session.
+
+| Signed-in endpoint | With lookup (2 runs) | Without (2 runs) |
+| :--- | :--- | :--- |
+| `GET /auth/me`, 32 clients | 5,345 / 5,632 rps, p50 4.9-5.1 ms | 5,558 / 6,657 rps, p50 4.2-4.8 ms |
+| `GET /auth/me`, 128 clients | 8,036 / 7,966 rps, p99 35 ms | 9,089 / 8,998 rps, p99 29-32 ms |
+| `GET /appointments` (database), 32 clients | 1,537 / 1,552 rps | 1,712 / 1,711 rps |
+
+Redis counted exactly two `PTTL` per signed-in request with the lookup and one without (the other is the rate limiter's), at 0.18-0.28 µs each inside Redis: the cost is on the application side (a round trip on the shared connection), about 11-13% of throughput when the CPU is saturated, and one local round trip (~0.2 ms) of latency otherwise. Removing it without weakening "a logged-out token is denied everywhere at once" (ADR-023) needs a local "not revoked" cache that is trusted only while the revocation pub/sub subscription is up, emptied on every disconnect or resubscribe, and capped at a few seconds per entry. Not implemented: a decision on that design comes first.
+
+### Boot-time validation: measured, not worth changing
+
+zod (35 kB raw in the initial chunks) is reached from the guest landing through four modules, not three: the shop clock, the catalog store and `AuthApi` validate responses at boot, and `CatalogApi` (injected by the catalog store) imports the admin create/update schemas. A scratch build in which all four passed responses through unvalidated is the most lazy validation could save:
+
+| Median of 8, same conditions | Initial bundle | Script time | Main-thread tasks | TBT | Load event |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| Current | 437.4 kB raw / 120.0 kB transfer | 400 ms | 1,342 ms | 255 ms (184-370) | 1,541 ms |
+| No zod at boot | 405.6 kB / 111.3 kB | 378 ms | 1,295 ms | 227 ms (186-522) | 1,448 ms |
+
+Script time is Chrome's `ScriptDuration`, main-thread tasks `TaskDuration`, both at 4× CPU slowdown (so about a quarter of that on the test machine). FCP is unchanged (the page is prerendered). Lazy validation would also have to keep the prerendered data from re-rendering during hydration (it already passed validation on the server) and would still load zod shortly after; it would save less than the 22 ms of script time and 8.7 kB measured here. ADR-019 stays as it is.
