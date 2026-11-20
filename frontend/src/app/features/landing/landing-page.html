@@ -229,8 +229,11 @@
                list has to render before anyone touches the wizard, and the guest page's shared
                `.alert-error` / `.alert-success` banners live in its template. With
                `hydrate on interaction` none of that happened until the wizard itself was
-               clicked — four appointment-flow e2e tests caught it. -->
-          @defer (on idle; hydrate on idle) {
+               clicked — four appointment-flow e2e tests caught it.
+               `prefetch on immediate` starts its chunks as soon as the app has booted rather
+               than at idle: they load in two round trips (a small wrapper chunk, then the
+               wizard), and a click on the wizard before it has hydrated is lost (§81). -->
+          @defer (on idle; prefetch on immediate; hydrate on idle) {
             <app-booking-wizard />
           } @placeholder {
             <!-- Only shown on client-side navigation to `/` (the prerendered page renders the
@@ -242,8 +245,12 @@
       </div>
 
       <!-- Defer loading of non-critical FAQ sections to maximize First Contentful Paint speed
-           (prerendered; hydrated on interaction with its chunk prefetched, like the lookbook) -->
-      @defer (on idle; prefetch on idle; hydrate on interaction) {
+           (prerendered; hydrated on interaction with its chunk prefetched, like the lookbook).
+           `on viewport` only applies to client-side navigation to `/`: with `on idle` next to
+           `prefetch on idle` the compiler reported the prefetch as redundant (NG8021). It is
+           not: Angular attaches prefetch triggers to a dehydrated block too, and this one warms
+           the chunk for `hydrate on interaction` (BENCHMARKS.md §81). -->
+      @defer (on viewport; prefetch on idle; hydrate on interaction) {
         <app-faq-section />
       } @placeholder {
         <div
