@@ -2977,7 +2977,7 @@ Production profile with PostgreSQL and Redis (the compose image) on one 4-core m
 | `GET /auth/me`, 128 clients | 8,036 / 7,966 rps, p99 35 ms | 9,089 / 8,998 rps, p99 29-32 ms |
 | `GET /appointments` (database), 32 clients | 1,537 / 1,552 rps | 1,712 / 1,711 rps |
 
-Redis counted exactly two `PTTL` per signed-in request with the lookup and one without (the other is the rate limiter's), at 0.18-0.28 µs each inside Redis: the cost is on the application side (a round trip on the shared connection), about 11-13% of throughput when the CPU is saturated, and one local round trip (~0.2 ms) of latency otherwise. Removing it without weakening "a logged-out token is denied everywhere at once" (ADR-023) needs a local "not revoked" cache that is trusted only while the revocation pub/sub subscription is up, emptied on every disconnect or resubscribe, and capped at a few seconds per entry. Not implemented: a decision on that design comes first.
+Redis counted exactly two `PTTL` per signed-in request with the lookup and one without (the other is the rate limiter's), at 0.18-0.28 µs each inside Redis: the cost is on the application side (a round trip on the shared connection), about 11-13% of throughput when the CPU is saturated, and one local round trip (~0.2 ms) of latency otherwise. Removing it without weakening "a logged-out token is denied everywhere at once" (ADR-023) needs a local "not revoked" cache that a lost announcement cannot leave stale. Done in §82, with a revocation generation instead of subscription state: Lettuce re-subscribes by itself after a reconnect, so the application cannot tell that a message was lost.
 
 ### Boot-time validation: measured, not worth changing
 
@@ -2989,3 +2989,24 @@ zod (35 kB raw in the initial chunks) is reached from the guest landing through 
 | No zod at boot | 405.6 kB / 111.3 kB | 378 ms | 1,295 ms | 227 ms (186-522) | 1,448 ms |
 
 Script time is Chrome's `ScriptDuration`, main-thread tasks `TaskDuration`, both at 4× CPU slowdown (so about a quarter of that on the test machine). FCP is unchanged (the page is prerendered). Lazy validation would also have to keep the prerendered data from re-rendering during hydration (it already passed validation on the server) and would still load zod shortly after; it would save less than the 22 ms of script time and 8.7 kB measured here. ADR-019 stays as it is.
+
+---
+
+## ⚡ 82. "Not Revoked" Answers Cached Under the Revocation Generation (2026-11-20)
+
+**Goal:** remove the per-request Redis lookup measured in §81 without weakening ADR-023's "a logged-out token is denied everywhere at once".
+
+**Design.** A cache invalidated only by the pub/sub announcement is not enough: pub/sub delivers at most once, and Lettuce re-subscribes by itself after a reconnect, so the application cannot tell that a message was lost while the connection was down. Instead:
+
+- Every denylist write also increments `revocation-generation`, atomically with the `SET` (`RedisTokenRevocationStore.WRITE_SCRIPT`, one Lua script, one round trip); a restored batch increments it once, after its `SET`s on the same connection.
+- `TokenRevocationList` reads the generation in the background (a virtual thread, at most every 500 ms, never on a request's path; it also writes revocations left pending by a Redis outage). A "not revoked" answer is cached under the generation known before its lookup and trusted only while that is still the last generation read, the read is at most 1 s old, and the entry is under 30 s old. A new generation or a failed read drops the cache; without a fresh read every request asks Redis, as before.
+- Revocations are still denied at once on the replica that made them (local map, checked first) and on the others through the announcement (applied to the local map). A lost announcement is covered by the next generation read: within about 1 s.
+
+| Production profile, PostgreSQL + Redis, 4 cores shared with the load generator; 2 alternated runs each | Before | After | Change |
+| :--- | :--- | :--- | ---: |
+| `GET /auth/me`, 32 clients | 5,397 / 5,909 rps, p50 4.8-5.1 ms, p99 16-18 ms | 7,098 / 6,947 rps, p50 3.9-4.1 ms, p99 13 ms | +24% |
+| `GET /auth/me`, 128 clients | 8,460 / 8,773 rps | 9,330 / 9,525 rps | +9% |
+| `GET /appointments` (database), 32 clients | 1,400 / 1,632 rps | 1,664 / 1,667 rps | +10% |
+| Redis `PTTL` calls in the same 12 s loads | 393,699 / 423,139 | 235,146 / 233,927 | about one per request instead of two |
+
+**Tests.** `TokenRevocationListRedisTest`: an answer reused while the generation is unchanged; another replica's revocation found at the next generation read without its announcement; local and announced revocations denied at once despite a cached answer; no cache without a fresh read, after a failed read, or when Redis could not be asked; at most one generation read per interval; a generation that went back to 0 (Redis lost its data) is a change. The four write tests now check the atomic script. `AbstractRedisSecurityStateTest` (real Redis, `TASKFLOW_TEST_REDIS_URL`): replica B caches "not revoked", replica A revokes without announcing, B denies the token after its next read, and the generation went up by exactly one. ADR-023 amended; the rule for new denylist writes is in `docs/agents/security.md`.
