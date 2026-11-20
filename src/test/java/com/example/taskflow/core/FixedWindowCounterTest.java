@@ -76,6 +76,34 @@ class FixedWindowCounterTest {
         assertEquals(3, c.increment("victim"));
     }
 
+    /**
+     * Making room frees a batch (maxKeys / 64), the least active entries, so the next new keys are
+     * recorded without another pass over the map. Making room for each new key cost two passes over
+     * all 50,000 entries: 3.4 ms per new key against 18 µs now (BENCHMARKS.md §80).
+     */
+    @Test
+    void aFullMapFreesABatchOfTheLeastActiveEntriesAtOnce() {
+        FixedWindowCounter c = counter(60_000, 640); // batch of 10
+        for (int i = 0; i < 630; i++) {
+            c.increment("quiet-" + i);
+        }
+        for (int i = 0; i < 10; i++) {
+            c.increment("busy-" + i);
+            c.increment("busy-" + i);
+        }
+        assertEquals(640, c.size());
+
+        assertEquals(1, c.increment("new-0"));
+        assertEquals(631, c.size(), "ten quiet entries made room, and the new key was recorded");
+        for (int i = 1; i < 10; i++) {
+            c.increment("new-" + i);
+        }
+        assertEquals(640, c.size(), "the batch held the next nine new keys");
+        for (int i = 0; i < 10; i++) {
+            assertEquals(3, c.increment("busy-" + i), "the most active keys are never evicted first");
+        }
+    }
+
     @Test
     void expiredWindowsAreReclaimedWhenTheMapIsFull() {
         FixedWindowCounter c = counter(1_000, 2);

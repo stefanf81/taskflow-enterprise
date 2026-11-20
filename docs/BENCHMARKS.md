@@ -2897,3 +2897,54 @@ Verification: 4 new hook tests (the approved status is in the cache while the li
 Verification: mobile Jest 736/736 (twice), `npm run lint:all`, mobile lint, frontend unit tests 531/531 and `shared/domain` 24/24 (the USD formatter is shared with the web app).
 
 Not done: `useNow`'s timer keeps running in hidden tabs (each tick is now free unless the minute changed), and the reviewer's "could not determine" items (zod's compiled parsers on Hermes, module evaluation cost, `inlineRequires`) still need a device.
+
+---
+
+## ⚡ 80. Outage Convoys, Rate-Limit Fallback Cost, IPv6 Clients, and the Mobile Launch (2026-11-20)
+
+**Goal:** three follow-ups to §75 and §76: the locks that queue requests during a database outage and the cost of the in-memory rate-limit fallback once full, rate-limit keys for IPv6 clients, and the mobile launch path.
+
+### Requests queued behind a failing load (`SingleFlightCacheManager`)
+
+During a database outage the caller holding a key's lock waited out the pool's connection timeout (4 s in prod) and failed; the next waiter then took the lock, missed the cache and waited again. The waits ran one after another: the n-th caller of a key (the public catalog, barbers) waited n timeouts. Now one load ("flight") runs per key per JVM and every concurrent caller shares its outcome. A waiter whose flight failed joins one more (so one transient failure still does not fail every waiting caller, the property the previous design protected), and fails with the next failure. Different keys never wait for each other; a loader reading its own key loads it directly.
+
+| 12 callers, every load fails after 200 ms | Slowest caller | Loads |
+| :--- | ---: | ---: |
+| Before | 2,413 ms | 12 |
+| After | 407 ms | 2 |
+
+`SingleFlightCacheManagerTest`: the outage case (fails on the old code), waiters share one value, a loader reading its own key; the existing single-flight, failure and distributed-lease tests unchanged.
+
+### Bookings queued behind a stalled one (`EmailLockStripes`)
+
+The per-address booking lock (64 stripes, held for the booking's transaction) was taken without a bound, so during an outage every booking for that address (and about 1/64 of all others) queued behind the one waiting out its connection timeout. The stripe is now taken with a 5 s bound; past it the booking fails with `CannotAcquireLockException`, a `TransientDataAccessException`, so the existing 503 with `Retry-After: 1`. A healthy booking holds its stripe for milliseconds. `EmailLockStripesTest`: five bookings behind a stalled one each give up after the bound; a healthy one ahead is waited for.
+
+### The in-memory rate-limit fallback once full (`FixedWindowCounter`)
+
+Once full (50,000 keys for the rate limiter's Redis fallback, 10,000 for the login throttle), every new key cost two passes over the whole map: purge the expired windows, then find the single least active entry. Keys are client addresses and, for the login throttle, user-chosen login names, so a flood of new ones paid both passes per request. Making room now frees a batch: the expired windows and then the least active `maxKeys / 64` entries (at least one; a heap of that size, one pass), and only one thread makes room at a time (the others record their key; the map can exceed the cap by the number of concurrent callers).
+
+| Full 50,000-key counter, 20,000 new keys (3 rounds) | Per new key |
+| :--- | ---: |
+| Before | 3,405-3,477 µs |
+| After | 17.5-19.7 µs |
+
+`FixedWindowCounterTest`: a batch is freed at once and the most active keys survive (fails on the old code); the existing eviction and expiry tests unchanged.
+
+### IPv6 clients (`ClientAddresses`)
+
+The per-client rate-limit buckets and the login throttle keyed the full client address. An IPv6 subscriber is normally given a whole /64, so one client had 2^64 buckets. Both now key `ClientAddresses.rateLimitKey(getRemoteAddr())`: IPv4 unchanged, IPv6 as its /64 network (`2001:db8:1:2:0:0:0:0/64`), an IPv4-mapped address as its IPv4 address, brackets and zone ids ignored, anything else unchanged. It parses with `InetAddress.ofLiteral`, which never resolves a name. Tests: `ClientAddressesTest`, and two addresses of one /64 share the rate-limit bucket and the login throttle (both fail on the old code).
+
+### Mobile launch
+
+| Returning customer, each server answer 150 ms (from the start of `/me`) | Shop info requested | Shop info answered | First screen mounts |
+| :--- | ---: | ---: | ---: |
+| Before | +242 ms | +392 ms | +242 ms |
+| After | 0 ms | +245 ms | +245 ms |
+
+Measured in Jest with the real `App`, navigators, store and storage (MSW for the server). `App.tsx` calls `startApp()` (`core/startup.ts`) as the bundle loads: it starts the session restore and prefetches the public shop info (time zone, opening hours, booking window) together, so the first screen gets it as it mounts instead of one round trip later. `RootNavigator` restores on mount only when `startApp()` did not (`takeEarlyStart()`, true once), so the restore runs once. Starting the restore before React's first commit saves the time to that commit, which Jest cannot show: there the restore already started within the first render. A device would show it.
+
+A successful booking no longer refetches the wizard's free slots at once: the wizard leaves its time step right after it, so that GET was never seen. They are marked stale and reload when shown (`invalidateBookingQueries(..., { refetchBusySlots: false })`, booking only).
+
+`__tests__/startup.test.tsx`: one restore (two with the old `RootNavigator`) and the shop info requested before `/me` answers.
+
+**Verification:** `./gradlew check` (827 tests, coverage, container guards, SpotBugs); mobile Jest 737/737 (twice), `npm run lint:all`, mobile lint.

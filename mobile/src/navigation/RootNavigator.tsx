@@ -14,6 +14,7 @@ import { RegisterScreen } from '../features/auth/RegisterScreen';
 import { PublicActionsScreen } from '../features/landing/PublicActionsScreen';
 import { SessionNoticeBanner } from '../components/common/SessionNoticeBanner';
 import { useAuthStore } from '../core/auth/useAuthStore';
+import { takeEarlyStart } from '../core/startup';
 import { useShallow } from 'zustand/react/shallow';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
@@ -60,8 +61,9 @@ export const RootNavigator: React.FC = () => {
     role: null,
   });
 
+  // Restores the saved session, unless App.tsx already started it as the bundle loaded.
   useEffect(() => {
-    checkAuth();
+    if (!takeEarlyStart()) checkAuth();
   }, [checkAuth]);
 
   // Every Ionicons instance renders an empty <Text /> until the icon font is registered, so

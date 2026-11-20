@@ -96,6 +96,21 @@ class RateLimiterConfigTest {
     }
 
     @Test
+    void ipv6ClientsShareOneBucketPerSlash64Network() throws Exception {
+        // Every address of one /64 is one client (BENCHMARKS.md §80).
+        mockExecuteForKey("rate_limit:2001:db8:1:2:0:0:0:0/64:api", 101L);
+        for (String address : List.of("2001:db8:1:2::1", "2001:db8:1:2:dead:beef:0:7")) {
+            MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/catalog");
+            request.setRemoteAddr(address);
+            MockHttpServletResponse response = new MockHttpServletResponse();
+
+            filter.doFilter(request, response, mock(FilterChain.class));
+
+            assertEquals(429, response.getStatus(), address);
+        }
+    }
+
+    @Test
     void crossOriginRateLimitResponseCarriesCorsHeadersForAllowedOrigin() throws Exception {
         org.springframework.web.cors.CorsConfiguration cors = new org.springframework.web.cors.CorsConfiguration();
         cors.setAllowedOrigins(List.of("https://app.taskflow.example"));

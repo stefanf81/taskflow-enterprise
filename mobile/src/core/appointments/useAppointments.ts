@@ -79,7 +79,9 @@ export const useCreateAppointment = () => {
       data: AppointmentCreateRequest;
       idempotencyKey?: string;
     }) => appointmentsApi.createAppointment(data, idempotencyKey),
-    onSuccess: () => invalidateBookingQueries(queryClient),
+    // The wizard leaves its time step right after a booking, so its free slots are not refetched
+    // now (a GET nobody saw, once per booking): they reload when the step is shown again.
+    onSuccess: () => invalidateBookingQueries(queryClient, { refetchBusySlots: false }),
   });
 };
 

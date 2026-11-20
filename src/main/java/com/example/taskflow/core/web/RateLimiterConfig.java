@@ -1,4 +1,6 @@
 package com.example.taskflow.core.web;
+
+import com.example.taskflow.core.ClientAddresses;
 import com.example.taskflow.core.FixedWindowCounter;
 import com.example.taskflow.core.LogSanitizer;
 import com.example.taskflow.core.redis.RedisBackoff;
@@ -211,7 +213,8 @@ class RateLimiterConfig {
              * parsing is needed here.
              */
             private String getClientIp(HttpServletRequest request) {
-                return request.getRemoteAddr();
+                // IPv6 clients count per /64 network, not per address (ClientAddresses).
+                return ClientAddresses.rateLimitKey(request.getRemoteAddr());
             }
         };
     }

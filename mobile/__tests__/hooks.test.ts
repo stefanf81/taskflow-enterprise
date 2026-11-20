@@ -318,7 +318,8 @@ describe('Hooks', () => {
 
       expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['customerAppointments'] });
       expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['appointments'] });
-      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['busySlots'] });
+      // Stale, not refetched: the wizard has left its time step (BENCHMARKS.md §80).
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['busySlots'], refetchType: 'none' });
     });
   });
 

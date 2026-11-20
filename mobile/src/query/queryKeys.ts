@@ -48,10 +48,18 @@ export function invalidateCatalogQueries(queryClient: QueryClient): void {
  * the free slots); the ones on screen refetch at once. Not awaited by the callers: a mutation
  * resolves when the server accepted it, not after the lists have been reloaded.
  */
-export function invalidateBookingQueries(queryClient: QueryClient): void {
+export function invalidateBookingQueries(
+  queryClient: QueryClient,
+  { refetchBusySlots = true }: { refetchBusySlots?: boolean } = {},
+): void {
   queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
   queryClient.invalidateQueries({ queryKey: queryKeys.customerAppointments.all });
-  queryClient.invalidateQueries({ queryKey: queryKeys.busySlots.all });
+  if (refetchBusySlots) {
+    queryClient.invalidateQueries({ queryKey: queryKeys.busySlots.all });
+  } else {
+    // Marked stale only: each reloads when it is next shown.
+    queryClient.invalidateQueries({ queryKey: queryKeys.busySlots.all, refetchType: 'none' });
+  }
 }
 
 /** One booking, by its database id (admin endpoints) or its public id (customer endpoints). */

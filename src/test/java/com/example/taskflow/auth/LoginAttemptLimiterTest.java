@@ -76,6 +76,23 @@ class LoginAttemptLimiterTest {
         }
     }
 
+    @Test
+    void anotherAddressOfTheSameIpv6NetworkIsTheSameClient() {
+        LoginAttemptLimiter limiter = new LoginAttemptLimiter(2, 300);
+        try {
+            asClient("2001:db8:1:2::66");
+            limiter.recordFailure("admin");
+            asClient("2001:db8:1:2:ffff::1"); // a fresh address from the same /64
+            limiter.recordFailure("admin");
+            assertThrows(TooManyLoginAttemptsException.class, () -> limiter.checkAllowed("admin"));
+
+            asClient("2001:db8:9:9::1"); // another network
+            assertDoesNotThrow(() -> limiter.checkAllowed("admin"));
+        } finally {
+            org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes();
+        }
+    }
+
     private static void asClient(String address) {
         var request = new org.springframework.mock.web.MockHttpServletRequest();
         request.setRemoteAddr(address);

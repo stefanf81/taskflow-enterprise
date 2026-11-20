@@ -1,5 +1,6 @@
 package com.example.taskflow.auth;
 
+import com.example.taskflow.core.ClientAddresses;
 import com.example.taskflow.core.FixedWindowCounter;
 import com.example.taskflow.core.SharedStateStore;
 import org.springframework.beans.factory.ObjectProvider;
@@ -20,7 +21,8 @@ import java.util.Locale;
  * until the window ends. A successful login clears the account's count.
  *
  * <p>The counter is keyed on the username <em>and the client address</em>
- * ({@code getRemoteAddr()}, normalised by the trusted-proxy valve). Keying on the
+ * ({@code getRemoteAddr()}, normalised by the trusted-proxy valve; an IPv6 address counts as
+ * its /64 network, see {@link ClientAddresses}). Keying on the
  * username alone let anyone who knows an account name (e.g. the default
  * {@code admin}) keep its real owner locked out with a trickle of bad passwords;
  * now failures from one address only throttle that address for that account.
@@ -141,8 +143,8 @@ class LoginAttemptLimiter {
     /** The current request's client address, or empty outside a request (unit tests). */
     private static String clientAddress() {
         if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes) {
-            String address = attributes.getRequest().getRemoteAddr();
-            return address == null ? "" : address;
+            // IPv6 clients count per /64 network, not per address (ClientAddresses).
+            return ClientAddresses.rateLimitKey(attributes.getRequest().getRemoteAddr());
         }
         return "";
     }

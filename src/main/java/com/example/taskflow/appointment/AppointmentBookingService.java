@@ -25,9 +25,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Guest booking: creates appointments and answers the busy-slot lookups of the booking form.
@@ -37,7 +35,8 @@ import java.util.concurrent.locks.ReentrantLock;
  *       existing booking only for the same customer and payload, otherwise 409. The check runs
  *       before the attempt, after a unique-index collision and after a validation rejection.</li>
  *   <li><b>Per-email lock.</b> The per-address cap is a read-check-insert, so attempts for the same
- *       address are serialised (per JVM) until the attempt's transaction has committed.</li>
+ *       address are serialised (per JVM) until the attempt's transaction has committed; a caller
+ *       waits at most {@link EmailLockStripes#DEFAULT_MAX_WAIT} and then gets a 503.</li>
  *   <li><b>Deadlock retry.</b> A PostgreSQL deadlock victim (40P01) is retried once.</li>
  *   <li><b>No Preference (ADR-014).</b> {@link #NO_PREFERENCE_BARBER} is resolved to a concrete,
  *       available barber inside the booking transaction; the sentinel is never persisted.</li>
@@ -67,8 +66,8 @@ class AppointmentBookingService {
     private final TransactionTemplate createTransactionTemplate;
     private final TransactionTemplate idempotencyLookupTemplate;
 
-    /** Lock stripes for the per-email booking cap (bounded memory, independent addresses rarely share). */
-    private final ReentrantLock[] emailLocks = newEmailLocks(64);
+    /** Lock stripes for the per-email booking cap, with a bounded wait. */
+    private final EmailLockStripes emailLocks = new EmailLockStripes(64, EmailLockStripes.DEFAULT_MAX_WAIT);
 
     AppointmentBookingService(AppointmentRepository appointmentRepository,
                               AppointmentChangePublisher changes,
@@ -111,9 +110,9 @@ class AppointmentBookingService {
         // "session flushed after exception" / "current transaction is aborted".
         // The per-email cap is a read-check-insert: serialise attempts for the same address (until
         // the attempt's transaction has committed) so concurrent requests cannot all read the same
-        // count and overshoot it. Per JVM, matching the documented single-replica deployment.
-        Lock emailLock = emailLockFor(request.customerEmail());
-        emailLock.lock();
+        // count and overshoot it. Per JVM, matching the documented single-replica deployment. The
+        // wait is bounded (503 after it), so an outage does not queue every booking behind it.
+        Lock emailLock = emailLocks.acquire(request.customerEmail());
         try {
             return createAppointmentRetryingDeadlock(request, trimmedKey);
         } catch (IllegalArgumentException ex) {
@@ -167,19 +166,6 @@ class AppointmentBookingService {
         } finally {
             emailLock.unlock();
         }
-    }
-
-    private static ReentrantLock[] newEmailLocks(int stripes) {
-        ReentrantLock[] locks = new ReentrantLock[stripes];
-        for (int i = 0; i < stripes; i++) {
-            locks[i] = new ReentrantLock();
-        }
-        return locks;
-    }
-
-    private Lock emailLockFor(String email) {
-        String key = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
-        return emailLocks[Math.floorMod(key.hashCode(), emailLocks.length)];
     }
 
     /**

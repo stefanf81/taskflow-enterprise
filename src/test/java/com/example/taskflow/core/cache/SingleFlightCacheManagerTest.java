@@ -197,6 +197,84 @@ class SingleFlightCacheManagerTest {
         assertEquals("ok", cache.get("k", () -> "unused"));
     }
 
+    /**
+     * The database is down: every load waits out the pool's connection timeout (here 200 ms) and
+     * fails. Waiters used to load again one after another, so the last of 12 callers waited 12
+     * timeouts (BENCHMARKS.md §80). Now each waits for the load under way and one more.
+     */
+    @Test
+    void duringAnOutageNoCallerWaitsLongerThanTwoLoads() throws Exception {
+        Cache cache = new SingleFlightCacheManager(naiveManager()).getCache("barbers");
+        AtomicInteger loads = new AtomicInteger();
+        int callers = 12;
+        long loadMillis = 200;
+        CountDownLatch go = new CountDownLatch(1);
+        List<Future<Long>> waits = new ArrayList<>();
+        try (ExecutorService requests = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i < callers; i++) {
+                waits.add(requests.submit(() -> {
+                    go.await();
+                    long start = System.nanoTime();
+                    assertThrows(Cache.ValueRetrievalException.class, () -> cache.get("k", () -> {
+                        loads.incrementAndGet();
+                        Thread.sleep(loadMillis);
+                        throw new IllegalStateException("connection is not available");
+                    }));
+                    return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+                }));
+            }
+            go.countDown();
+            long longest = 0;
+            for (Future<Long> wait : waits) {
+                longest = Math.max(longest, wait.get(30, TimeUnit.SECONDS));
+            }
+
+            assertTrue(longest < 4 * loadMillis, "the slowest caller waited " + longest + " ms");
+            assertTrue(loads.get() <= 3, "loads: " + loads.get());
+        }
+        assertEquals(0, ((SingleFlightCacheManager.SingleFlightCache) cache).activeLockCount());
+    }
+
+    @Test
+    void waitersShareTheValueOfTheLoadUnderWay() throws Exception {
+        Cache cache = new SingleFlightCacheManager(naiveManager()).getCache("barbers");
+        AtomicInteger loads = new AtomicInteger();
+        CountDownLatch loading = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        try (ExecutorService requests = Executors.newVirtualThreadPerTaskExecutor()) {
+            Future<String> first = requests.submit(() -> cache.get("k", () -> {
+                loads.incrementAndGet();
+                loading.countDown();
+                release.await();
+                return "v";
+            }));
+            loading.await();
+            List<Future<String>> others = new ArrayList<>();
+            for (int i = 0; i < 5; i++) {
+                others.add(requests.submit(() -> cache.get("k", () -> {
+                    loads.incrementAndGet();
+                    return "other";
+                })));
+            }
+            Thread.sleep(100);
+            release.countDown();
+            assertEquals("v", first.get(5, TimeUnit.SECONDS));
+            for (Future<String> other : others) {
+                assertEquals("v", other.get(5, TimeUnit.SECONDS));
+            }
+        }
+        assertEquals(1, loads.get());
+    }
+
+    @Test
+    void aLoaderThatReadsItsOwnKeyDoesNotWaitForItself() {
+        Cache cache = new SingleFlightCacheManager(naiveManager()).getCache("barbers");
+
+        String value = cache.get("k", () -> "outer:" + cache.get("k", () -> "inner"));
+
+        assertEquals("outer:inner", value);
+    }
+
     @Test
     void cachedValuesAreServedWithoutRunningTheLoader() {
         Cache cache = new SingleFlightCacheManager(naiveManager()).getCache("services");

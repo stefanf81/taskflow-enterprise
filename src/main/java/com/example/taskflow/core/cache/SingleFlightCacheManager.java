@@ -9,7 +9,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Supplier;
 
 /**
@@ -23,16 +23,20 @@ import java.util.function.Supplier;
  * lock round-trip to every read and write (and locks the whole cache, not a key), so this decorator
  * serialises loads inside this JVM and, optionally, takes a per-key Redis lease on misses only.
  *
- * <p><b>How.</b> A hit is served without any locking. On a miss the caller takes a per-(cache, key)
- * lock, <em>re-checks</em> the cache (a concurrent loader may have filled it while this thread waited),
- * and only then invokes the loader through the delegate. The lock is released in a {@code finally}, so
- * a loader that throws never blocks later callers; different keys use different locks and never block
- * each other. {@link ReentrantLock} is used rather than {@code synchronized} so that waiting virtual
- * threads (enabled in this application) unmount instead of pinning a carrier thread.
+ * <p><b>How.</b> A hit is served without any coordination. On a miss the first caller for a
+ * (cache, key) becomes the <em>flight</em>: it re-checks the cache and runs the loader through the
+ * delegate. Callers that miss while a flight is under way wait for its outcome instead of loading:
+ * its value, or, if it failed, one more flight. A caller whose second flight fails too gets that
+ * failure. A waiter used to take the flight's lock after it failed and load again itself, one
+ * after another: while the database was down every load waited out the pool's connection timeout,
+ * so the n-th caller of a key waited n timeouts (BENCHMARKS.md §80). Now no caller waits longer
+ * than two loads, one transient failure still does not fail every waiting caller, and at most one
+ * load per key runs at a time. Different keys never wait for each other. Waiting parks a virtual
+ * thread (enabled in this application) without pinning its carrier.
  *
- * <p><b>Across replicas.</b> The local lock alone is per JVM: with N replicas each instance could
+ * <p><b>Across replicas.</b> A flight alone is per JVM: with N replicas each instance could
  * still run the loader once per expiry. When a {@link DistributedLoadLock} is configured
- * ({@code app.state.store=redis}, see {@link RedisCacheLoadLock}), the thread holding the local lock
+ * ({@code app.state.store=redis}, see {@link RedisCacheLoadLock}), the flight
  * additionally takes a Redis lease for the key before loading, so one JVM sends one lock attempt and
  * the whole deployment runs the loader once:
  * <ul>
@@ -43,8 +47,8 @@ import java.util.function.Supplier;
  *       expires; a winner slower than {@code maxWait} costs one extra load per waiting replica);</li>
  *   <li>any Redis error on the lock falls back to the local-only behaviour: load directly.</li>
  * </ul>
- * Hits never touch the lock; only misses of {@code get(key, loader)} ({@code @Cacheable(sync = true)})
- * do.
+ * Hits never touch a flight or the lease; only misses of {@code get(key, loader)}
+ * ({@code @Cacheable(sync = true)}) do.
  */
 class SingleFlightCacheManager implements CacheManager {
 
@@ -116,16 +120,16 @@ class SingleFlightCacheManager implements CacheManager {
     /** A {@link Cache} whose {@code get(key, loader)} runs the loader at most once per key at a time. */
     static final class SingleFlightCache implements Cache {
 
-        /** Reference-counted per-key lock; removed from the map when the last user leaves. */
-        private static final class KeyLock {
-            final ReentrantLock lock = new ReentrantLock();
-            int users;
+        /** One load of one key, and the thread running it; its outcome goes to every waiter. */
+        private static final class Flight {
+            final CompletableFuture<Object> outcome = new CompletableFuture<>();
+            final Thread loader = Thread.currentThread();
         }
 
         private final Cache delegate;
         private final DistributedLoadLock distributedLock;
         private final long maxWaitNanos;
-        private final ConcurrentMap<Object, KeyLock> locks = new ConcurrentHashMap<>();
+        private final ConcurrentMap<Object, Flight> flights = new ConcurrentHashMap<>();
 
         SingleFlightCache(Cache delegate, DistributedLoadLock distributedLock, long maxWaitNanos) {
             this.delegate = delegate;
@@ -142,45 +146,71 @@ class SingleFlightCacheManager implements CacheManager {
         public <T> T get(Object key, Callable<T> valueLoader) {
             ValueWrapper hit = delegate.get(key);
             if (hit != null) {
-                @SuppressWarnings("unchecked")
-                T value = (T) hit.get();
-                return value;
+                return cast(hit.get());
             }
-
-            KeyLock keyLock = locks.compute(key, (k, existing) -> {
-                KeyLock lock = existing != null ? existing : new KeyLock();
-                lock.users++;
-                return lock;
-            });
-            keyLock.lock.lock();
-            try {
-                // Re-check: a thread that waited for the lock must find the value stored by the
-                // previous holder instead of loading it again. Done here rather than relying on the
-                // delegate's get(key, loader) so correctness does not depend on its implementation.
-                ValueWrapper stored = delegate.get(key);
-                if (stored != null) {
-                    @SuppressWarnings("unchecked")
-                    T value = (T) stored.get();
-                    return value;
+            boolean retried = false;
+            while (true) {
+                Flight mine = new Flight();
+                Flight running = flights.putIfAbsent(key, mine);
+                if (running == null) {
+                    return fly(key, valueLoader, mine);
                 }
-                return distributedLock == null
-                        ? delegate.get(key, valueLoader)
-                        : loadUnderDistributedLock(key, valueLoader);
-            } finally {
-                keyLock.lock.unlock();
-                locks.compute(key, (k, existing) -> {
-                    if (existing == null) {
-                        return null;
+                if (running.loader == Thread.currentThread()) {
+                    // The loader asks for its own key: waiting for itself would never end.
+                    return delegate.get(key, valueLoader);
+                }
+                try {
+                    return cast(running.outcome.get());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new ValueRetrievalException(key, valueLoader, e);
+                } catch (ExecutionException e) {
+                    if (retried) {
+                        throw rethrow(e.getCause());
                     }
-                    existing.users--;
-                    return existing.users == 0 ? null : existing;
-                });
+                    retried = true; // one more flight; a value stored meanwhile is found by it
+                }
             }
         }
 
+        /** Runs the load as this key's flight and hands its outcome to everyone waiting for it. */
+        private <T> T fly(Object key, Callable<T> valueLoader, Flight flight) {
+            try {
+                // Re-check: the previous flight may have stored the value since this caller missed.
+                ValueWrapper stored = delegate.get(key);
+                T value = stored != null
+                        ? cast(stored.get())
+                        : distributedLock == null
+                                ? delegate.get(key, valueLoader)
+                                : loadUnderDistributedLock(key, valueLoader);
+                flight.outcome.complete(value);
+                return value;
+            } catch (RuntimeException | Error e) {
+                flight.outcome.completeExceptionally(e);
+                throw e;
+            } finally {
+                flights.remove(key, flight);
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        private static <T> T cast(Object value) {
+            return (T) value;
+        }
+
+        private static RuntimeException rethrow(Throwable failure) {
+            if (failure instanceof RuntimeException runtime) {
+                return runtime;
+            }
+            if (failure instanceof Error error) {
+                throw error;
+            }
+            return new IllegalStateException(failure);
+        }
+
         /**
-         * Runs with this JVM's per-key lock held, so at most one thread per JVM gets here per key.
-         * See the class comment for the protocol.
+         * Runs as this key's flight, so at most one thread per JVM gets here per key. See the class
+         * comment for the protocol.
          */
         private <T> T loadUnderDistributedLock(Object key, Callable<T> valueLoader) {
             String name = delegate.getName();
@@ -227,9 +257,9 @@ class SingleFlightCacheManager implements CacheManager {
             }
         }
 
-        /** Number of keys that currently have a lock entry (for tests: must return to 0). */
+        /** Number of keys with a load under way (for tests: must return to 0). */
         int activeLockCount() {
-            return locks.size();
+            return flights.size();
         }
 
         @Override
