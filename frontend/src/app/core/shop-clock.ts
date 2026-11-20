@@ -8,7 +8,7 @@ import {
   shopWallClock,
 } from '@taskflow/domain';
 import { shopInfoResponseSchema, type ShopInfoResponse } from '@taskflow/schemas';
-import { AppointmentsApi } from './api/appointments-api';
+import { SHOP_INFO_URL } from './api/shop-info';
 import { PUBLIC_REQUEST } from './http/public-request.token';
 import { isServerRender } from './platform';
 import { ReferenceDataEvents } from './reference-data-events';
@@ -26,8 +26,6 @@ import { refreshResource, safeResourceValue } from './resource-utils';
  */
 @Injectable({ providedIn: 'root' })
 export class ShopClock {
-  private readonly appointmentsApi = inject(AppointmentsApi);
-
   // Prerendering has no backend; the browser fetches it after hydration.
   private readonly prerendering = isServerRender();
   private readonly refreshTick = signal(0);
@@ -38,7 +36,7 @@ export class ShopClock {
       return this.prerendering
         ? undefined
         : {
-            url: this.appointmentsApi.shopInfoUrl,
+            url: SHOP_INFO_URL,
             context: new HttpContext().set(PUBLIC_REQUEST, true),
           };
     },

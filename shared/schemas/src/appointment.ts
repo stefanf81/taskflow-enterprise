@@ -13,32 +13,12 @@ import {
   object,
   optional,
   refine,
-  regex,
   string,
   trim,
   type infer as zInfer,
 } from "zod/mini";
 import { omittedAsEmptyString } from "./catalog";
-
-function isValidCalendarDate(dateStr: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return true;
-  const [yearStr = "", monthStr = "", dayStr = ""] = dateStr.split("-");
-  const year = Number(yearStr);
-  const month = Number(monthStr);
-  const day = Number(dayStr);
-  if (month < 1 || month > 12 || day < 1) return false;
-  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ?? 0;
-  return day <= daysInMonth;
-}
-
-const dateSchema = string().check(
-  regex(/^\d{4}-\d{2}-\d{2}$/, "Date must use YYYY-MM-DD format"),
-  refine(isValidCalendarDate, { message: "Date must be a valid calendar date" }),
-);
-const timeSchema = string().check(
-  regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Booking time must be in 24h HH:mm format"),
-);
+import { dateSchema, timeSchema } from "./formats";
 
 export const appointmentCreateSchema = object({
   customerName: string().check(
@@ -114,25 +94,6 @@ export type AppointmentResponse = zInfer<typeof appointmentResponseSchema>;
 
 /** GET /api/v1/appointments/public/busy-slots response (HH:mm strings). */
 export const busySlotsResponseSchema = array(string());
-
-/** One weekday's hours in the shop info: ISO weekday (1 = Monday) and HH:mm opening/closing times. */
-export const openingHoursSchema = object({
-  dayOfWeek: number().check(gte(1), lte(7)),
-  opens: timeSchema,
-  closes: timeSchema,
-});
-
-/**
- * GET /api/v1/appointments/public/shop response: the IANA time zone every booking is read in, how
- * many days ahead a booking may be made, and the weekdays the shop is open (a missing one is closed).
- */
-export const shopInfoResponseSchema = object({
-  timeZone: string().check(minLength(1)),
-  maxAdvanceDays: number().check(gte(1)),
-  openingHours: array(openingHoursSchema),
-});
-
-export type ShopInfoResponse = zInfer<typeof shopInfoResponseSchema>;
 
 export const pageMetadataSchema = object({
   number: number(),

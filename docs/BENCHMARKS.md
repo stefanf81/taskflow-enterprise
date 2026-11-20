@@ -2791,3 +2791,44 @@ The other failure of that stress run ("Email is already registered.") was the te
 
 **Verification:** `./gradlew check` (unit and H2 integration tests, coverage gate, container guards, SpotBugs); the new tests `BoundedPasswordEncoderTest`, `HeartbeatSchedulingTest`, and additions to `SmtpNotificationGatewayTest`, `NotificationSenderTest`, `NotificationRelaySchedulerTest` and `RedisBackoffCacheManagerTest`; the live measurements above against the rebuilt JAR.
 
+## ⚡ 76. Auth-Check Query Timeout, Initial-Bundle Headroom, and a Verified Mobile Runtime Audit (2026-11-20)
+
+**Goal:** three follow-ups to §75: the JdbcTemplate queries without a statement timeout, room under the web app's initial-bundle budget (444.5 of 450 kB), and a reviewed and verified audit of the mobile app's runtime.
+
+### F7: statement timeout for the refresh-session checks
+
+`RefreshSessionService` (the session check on every authenticated request, and the refresh transaction) runs on Boot's `JdbcTemplate`, which `spring.jpa.properties.jakarta.persistence.query.timeout` does not reach; its queries were bounded only by PgJDBC's `socketTimeout=30`. `application-prod.properties` now sets `spring.jdbc.template.query-timeout=5s`, equal to the JPA timeout; `StatementTimeoutPropertiesTest` pins that both exist and agree (and `PropertyKeysMetadataTest` that the key is known to Boot).
+
+Measured on the prod profile against PostgreSQL 18.7: a signed-in `GET /auth/me` while another session holds `LOCK TABLE refresh_sessions IN ACCESS EXCLUSIVE MODE`, with the session's cached check expired first:
+
+| | Response |
+| :--- | ---: |
+| Timeout overridden to 0 (the previous behaviour) | 200 after **30.0 s** (socket timeout) |
+| `query-timeout=5s` | 200 after **5.0 s**, then the existing fail-open path (one WARN) |
+
+### Initial bundle: 444.47 → 437.31 kB (−7.2 kB raw, −1.9 kB transfer)
+
+Bytes attributed per source module from the build's stats file. Angular itself (core, router, platform, the HTTP client) is about 350 kB of the initial JavaScript and none of it was avoidable: no `CommonModule` code, pipes or locale data ship (the 24.8 kB `@angular/common` chunk is the HTTP client), only the fetch backend ships, `app.css` has two unused classes (76 bytes) and the Tailwind theme no unused variables.
+
+| Change | Effect |
+| :--- | :--- |
+| `ShopClock` injected `AppointmentsApi` only to read the `/public/shop` URL | URL in `core/api/shop-info.ts`; `AppointmentsApi` (3.6 kB) leaves the initial bundle: −3.2 kB |
+| zod schemas are module-level calls the bundler cannot drop, so importing one schema kept its whole module | `@taskflow/schemas` declares `"sideEffects": false`; the shop schemas move to `shop.ts` and the shared formats to `formats.ts`; the appointment and review schemas leave the initial bundle: −3.0 kB |
+| The Web Vitals observers loaded on every page although telemetry is off by default | `TelemetryService.start` imports `web-vitals.ts` only when telemetry is active (a 1.25 kB chunk); the observers use `buffered: true`, so earlier entries are still reported: −1.0 kB |
+
+Not done: the remaining zod core (~31 kB) is in the initial bundle because the catalog, shop and session responses are validated at boot; validating those lazily would free about 35 kB but changes the API layer's synchronous parsing (ADR-019). Static landing sections (products, testimonials, footer) under `@defer (hydrate never)` would free about 2 kB at the cost of client-side placeholders. Marking `@taskflow/domain` side-effect free changed nothing (its shared chunk is used by lazy routes too) and was reverted.
+
+Verification: 3 new `TelemetryService` specs (observers start lazily when on, never when off, and not after an early teardown), `npm run lint:all`, `npm run test:all` (frontend 531, mobile 712, shared 24), `sync:api-types:check`, knip, and the Playwright suite against the production build (17/17 outside the nginx-only CSP specs).
+
+### Mobile runtime audit (findings verified, no code changed)
+
+A narrowly briefed review of startup, session restore, data fetching and list rendering; the top findings were checked by re-running its Jest test (real store, real navigators, MSW) and reading the code.
+
+| # | Finding | Verified by | Impact |
+| :--- | :--- | :--- | :--- |
+| 1 | `RootNavigator`'s auth-change reset fires on the first commit after a session restore (its remembered state starts as "signed out") and again after logout, though the navigator already shows the target; the reset's new route key remounts the whole tab navigator and first screen | Test: a restored customer's `customerAppointments` query starts fetching twice for one request; after logout each of the four public queries starts twice. Code: `prevAuthRef` initial value, reset effect | The heaviest tree of the session is built twice on every signed-in cold start and every logout |
+| 2 | `queryClient.clear()` on login, logout and expiry (6 call sites) also drops the public reference data (catalog, barbers, ratings, shop info) | Test: logout re-downloaded all four, cached moments earlier | Four avoidable GETs and an empty Home menu after each logout; shop info refetched after each login, and `useNow` runs in the phone's zone until it returns |
+| 3 | Mutation responses (status change, reschedule) are discarded; the row unlocks before the list has refetched | Code: every `onSuccess` only invalidates | For one round trip the old status shows with its buttons enabled again; a second tap sends a second request |
+| 4 | Launch reads token, expiry and refresh token one after another; a rotation writes its three values one after another | Code: `checkAuth`, `storage.rotateSession` | Up to six sequential secure-store operations around the refresh on a returning user's launch (cost needs a device) |
+| 5-9 | `Intl` formatters built at module scope; list rows re-rendering on each mutation state; `useNow` extra renders; contact form double render per keystroke; a late 401 causing a second rotation | Reviewer's reading only | Low |
+

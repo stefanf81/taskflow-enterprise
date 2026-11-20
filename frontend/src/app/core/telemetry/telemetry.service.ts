@@ -7,7 +7,6 @@ import {
   TelemetryRoute,
   telemetryOptionsFrom,
 } from './client-telemetry';
-import { observeWebVitals } from './web-vitals';
 
 /** Replaced at build time (`define` in angular.json); undeclared in the unit tests. */
 declare const TASKFLOW_TELEMETRY_SAMPLE_RATE: unknown;
@@ -54,7 +53,18 @@ export class TelemetryService {
   start(route: () => TelemetryRoute, initialRoute: Promise<TelemetryRoute>): () => void {
     this.currentRoute = route;
     if (!this.client.active || typeof window === 'undefined') return () => undefined;
-    return observeWebVitals(this.client, initialRoute, route);
+    // Loaded only when telemetry is on: it is off by default, and the observer code was 1.7 kB of
+    // every guest page's initial bundle (BENCHMARKS.md §76). The observers use `buffered: true`,
+    // so paints and shifts from before the chunk arrived are still reported.
+    let stopped = false;
+    let stop: (() => void) | undefined;
+    void import('./web-vitals').then(({ observeWebVitals }) => {
+      if (!stopped) stop = observeWebVitals(this.client, initialRoute, route);
+    });
+    return () => {
+      stopped = true;
+      stop?.();
+    };
   }
 
   reportError(): void {
