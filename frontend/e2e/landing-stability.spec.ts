@@ -9,31 +9,52 @@ test.describe('Landing page stability', () => {
     // Below 430 px the nav wraps once the badge is in it. The badge waits for /public/shop, so
     // on a slow link it used to arrive after first paint and push the page down 28 px (CLS 0.09).
     await page.setViewportSize({ width: 390, height: 844 });
+    let shopAnswered = false;
     await page.route('**/api/v1/appointments/public/shop', async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 1500));
+      shopAnswered = true;
       await route.continue();
     });
     await page.addInitScript(() => {
-      const w = window as unknown as { __cls: number };
-      w.__cls = 0;
+      const w = window as unknown as { __shifts: { at: number; value: number }[] };
+      w.__shifts = [];
       new PerformanceObserver((list) => {
         for (const entry of list.getEntries() as unknown as {
+          startTime: number;
           value: number;
           hadRecentInput: boolean;
         }[]) {
-          if (!entry.hadRecentInput) w.__cls += entry.value;
+          if (!entry.hadRecentInput) w.__shifts.push({ at: entry.startTime, value: entry.value });
         }
       }).observe({ type: 'layout-shift', buffered: true });
     });
+    /** Layout-shift entries are reported after the frame that caused them. */
+    const nextFrames = () =>
+      page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
 
     await page.goto('/');
-    await expect(page.locator('nav').getByText(/● (Shop Open|Closed Now)/)).toBeVisible();
-    // Layout-shift entries are reported after the frame that caused them.
-    await page.evaluate(
-      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
-    );
+    // Only what the shop answer moves is measured here. The web-font swap shifts the page too,
+    // by an amount that depends on the machine's fallback font (CLS 0.02-0.03 with DejaVu Sans,
+    // none where Inter is installed locally; BENCHMARKS.md §72), so it has to be over first.
+    const fontsSettledAt = await page.evaluate(async () => {
+      await document.fonts.ready;
+      return performance.now();
+    });
+    await nextFrames();
+    expect(shopAnswered, 'the shop hours arrived before the web font had loaded').toBe(false);
 
-    const cls = await page.evaluate(() => (window as unknown as { __cls: number }).__cls);
+    await expect(page.locator('nav').getByText(/● (Shop Open|Closed Now)/)).toBeVisible();
+    await nextFrames();
+
+    const cls = await page.evaluate(
+      (since) =>
+        (window as unknown as { __shifts: { at: number; value: number }[] }).__shifts
+          .filter((shift) => shift.at >= since)
+          .reduce((sum, shift) => sum + shift.value, 0),
+      fontsSettledAt,
+    );
     expect(cls).toBeLessThan(0.01);
   });
 
