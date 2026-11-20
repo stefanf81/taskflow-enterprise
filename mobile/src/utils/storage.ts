@@ -17,9 +17,10 @@ const memoryStore = new Map<string, string>();
 let cachedToken: string | null | undefined;
 let cachedExpiry: number | null | undefined;
 let cachedRefreshToken: string | null | undefined;
-// Bumped by every credential write and removal: a read that was in flight
-// meanwhile must not cache the value it saw (a logout racing a request).
-let credentialGeneration = 0;
+// Bumped by every write and removal of that credential: a read that was in flight meanwhile
+// must not cache the value it saw (a logout racing a request). One counter per credential, so
+// the writes of one batch, which run together, do not void each other's cached values.
+const generation = { token: 0, expiry: 0, refreshToken: 0 };
 
 // Bumped when a session starts (sign-in) or ends (sign-out, rejection), at the moment that is
 // requested rather than when its writes finish. Anything begun under an older value belongs to a
@@ -40,18 +41,25 @@ function exclusive<T>(batch: () => Promise<T>): Promise<T> {
 /** A token change also drops the cached expiry: an old expiry says nothing about a new token. */
 function invalidateCachedToken(): number {
   cachedToken = undefined;
-  cachedExpiry = undefined;
-  return ++credentialGeneration;
+  invalidateCachedExpiry();
+  return ++generation.token;
 }
 
 function invalidateCachedExpiry(): number {
   cachedExpiry = undefined;
-  return ++credentialGeneration;
+  return ++generation.expiry;
 }
 
 function invalidateCachedRefreshToken(): number {
   cachedRefreshToken = undefined;
-  return ++credentialGeneration;
+  return ++generation.refreshToken;
+}
+
+/** Runs writes together, waits for all of them, then fails with the first failure. */
+async function allOrFirstFailure(writes: Promise<void>[]): Promise<void> {
+  const results = await Promise.allSettled(writes);
+  const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+  if (failed) throw failed.reason;
 }
 
 export const storage = {
@@ -76,13 +84,15 @@ export const storage = {
     sessionEpoch++;
     return exclusive(async () => {
       try {
+        // The token first: if the app dies halfway, an earlier session's token is never left
+        // beside this session's refresh token. The other two are independent of each other.
         await storage.setToken(session.token);
-        await storage.setTokenExpiry(session.expiresAt);
-        if (session.refreshToken) {
-          await storage.setRefreshToken(session.refreshToken);
-        } else {
-          await storage.removeRefreshToken();
-        }
+        await allOrFirstFailure([
+          storage.setTokenExpiry(session.expiresAt),
+          session.refreshToken
+            ? storage.setRefreshToken(session.refreshToken)
+            : storage.removeRefreshToken(),
+        ]);
       } catch (err) {
         await Promise.allSettled([
           storage.removeToken(),
@@ -98,7 +108,8 @@ export const storage = {
    * Stores the credentials of a renewal begun under `epoch`, unless a sign-in or sign-out has
    * replaced that session since; resolves whether they were stored. The refresh token goes
    * first: the server has already retired the old one, so it is the credential that must
-   * survive the app being killed halfway (an old access token is merely renewed again).
+   * survive the app being killed halfway (an old access token is merely renewed again). The
+   * token and its expiry then go together: either half without the other only renews early.
    */
   rotateSession(
     epoch: number,
@@ -107,8 +118,10 @@ export const storage = {
     return exclusive(async () => {
       if (epoch !== sessionEpoch) return false;
       await storage.setRefreshToken(session.refreshToken);
-      await storage.setToken(session.token);
-      await storage.setTokenExpiry(session.expiresAt);
+      await allOrFirstFailure([
+        storage.setToken(session.token),
+        storage.setTokenExpiry(session.expiresAt),
+      ]);
       return true;
     });
   },
@@ -117,7 +130,7 @@ export const storage = {
   // sign-in or renewal goes through startSession / rotateSession, never through these.
 
   async setToken(token: string): Promise<void> {
-    const generation = invalidateCachedToken();
+    const written = invalidateCachedToken();
     try {
       if (Platform.OS === 'web') {
         memoryStore.set(TOKEN_KEY, token);
@@ -135,13 +148,13 @@ export const storage = {
       );
       memoryStore.set(TOKEN_KEY, token);
     }
-    if (generation === credentialGeneration) cachedToken = token;
+    if (written === generation.token) cachedToken = token;
   },
 
   async getToken(): Promise<string | null> {
     await credentialQueue;
     if (cachedToken !== undefined) return cachedToken;
-    const generation = credentialGeneration;
+    const readAt = generation.token;
     let token: string | null;
     try {
       token =
@@ -158,7 +171,7 @@ export const storage = {
       );
       token = memoryStore.get(TOKEN_KEY) || null;
     }
-    if (generation === credentialGeneration) cachedToken = token;
+    if (readAt === generation.token) cachedToken = token;
     return token;
   },
 
@@ -183,7 +196,7 @@ export const storage = {
   },
 
   async setRefreshToken(refreshToken: string): Promise<void> {
-    const generation = invalidateCachedRefreshToken();
+    const written = invalidateCachedRefreshToken();
     try {
       if (Platform.OS === 'web') {
         memoryStore.set(REFRESH_TOKEN_KEY, refreshToken);
@@ -196,7 +209,7 @@ export const storage = {
       }
       memoryStore.set(REFRESH_TOKEN_KEY, refreshToken);
     }
-    if (generation === credentialGeneration) cachedRefreshToken = refreshToken;
+    if (written === generation.refreshToken) cachedRefreshToken = refreshToken;
   },
 
   /**
@@ -206,7 +219,7 @@ export const storage = {
   async getRefreshToken(): Promise<string | null> {
     await credentialQueue;
     if (cachedRefreshToken !== undefined) return cachedRefreshToken;
-    const generation = credentialGeneration;
+    const readAt = generation.refreshToken;
     let refreshToken: string | null;
     try {
       refreshToken =
@@ -216,7 +229,7 @@ export const storage = {
     } catch {
       throw new Error('Secure credential storage is unavailable.');
     }
-    if (generation === credentialGeneration) cachedRefreshToken = refreshToken ?? null;
+    if (readAt === generation.refreshToken) cachedRefreshToken = refreshToken ?? null;
     return refreshToken ?? null;
   },
 
@@ -258,7 +271,7 @@ export const storage = {
   /** Persist the absolute expiry (epoch ms) of the stored bearer token. */
   async setTokenExpiry(expiresAtMs: number): Promise<void> {
     const value = String(Math.trunc(expiresAtMs));
-    const generation = invalidateCachedExpiry();
+    const written = invalidateCachedExpiry();
     try {
       if (Platform.OS === 'web') {
         memoryStore.set(EXPIRY_KEY, value);
@@ -275,14 +288,14 @@ export const storage = {
       );
       memoryStore.set(EXPIRY_KEY, value);
     }
-    if (generation === credentialGeneration) cachedExpiry = Number(value);
+    if (written === generation.expiry) cachedExpiry = Number(value);
   },
 
   /** Absolute expiry (epoch ms) of the stored token, or null when unknown (e.g. pre-upgrade installs). */
   async getTokenExpiry(): Promise<number | null> {
     await credentialQueue;
     if (cachedExpiry !== undefined) return cachedExpiry;
-    const generation = credentialGeneration;
+    const readAt = generation.expiry;
     let raw: string | null;
     try {
       raw =
@@ -295,7 +308,7 @@ export const storage = {
     }
     const parsed = raw ? Number(raw) : NaN;
     const expiry = Number.isFinite(parsed) ? parsed : null;
-    if (generation === credentialGeneration) cachedExpiry = expiry;
+    if (readAt === generation.expiry) cachedExpiry = expiry;
     return expiry;
   },
 
@@ -325,14 +338,12 @@ export const storage = {
   clearSession(): Promise<void> {
     sessionEpoch++;
     return exclusive(async () => {
-      const results = await Promise.allSettled([
+      await allOrFirstFailure([
         storage.removeToken(),
         storage.removeRefreshToken(),
         storage.removeTokenExpiry(),
         storage.removeUserData(),
       ]);
-      const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
-      if (failed) throw failed.reason;
     });
   },
 };

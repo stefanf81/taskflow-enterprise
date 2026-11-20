@@ -384,13 +384,98 @@ describe('storage', () => {
 
       await expect(storage.rotateSession(storage.getSessionEpoch(), rotation)).resolves.toBe(true);
 
-      expect(mockSetItemAsync.mock.calls.map(([key]) => key)).toEqual([
-        'taskflow_refresh_token',
-        'taskflow_auth_token',
-        'taskflow_token_expires_at',
-      ]);
+      expect(mockSetItemAsync.mock.calls.map(([key]) => key)[0]).toBe('taskflow_refresh_token');
       expect(disk.get('taskflow_auth_token')).toBe('renewed');
       await expect(storage.getRefreshToken()).resolves.toBe('n'.repeat(43));
+    });
+
+    /**
+     * SecureStore as a map whose every call takes a few milliseconds, logging when each write
+     * starts and ends: which writes overlap, and which waited for which.
+     */
+    const useSlowDisk = () => {
+      const disk = new Map<string, string>();
+      const log: string[] = [];
+      const slow = async <T,>(label: string, run: () => T): Promise<T> => {
+        log.push(`start ${label}`);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        log.push(`end ${label}`);
+        return run();
+      };
+      mockSetItemAsync.mockImplementation((key: string, value: string) =>
+        slow(key, () => {
+          disk.set(key, value);
+        }),
+      );
+      mockDeleteItemAsync.mockImplementation((key: string) =>
+        slow(key, () => {
+          disk.delete(key);
+        }),
+      );
+      mockGetItemAsync.mockImplementation(async (key: string) => disk.get(key) ?? null);
+      return { disk, log };
+    };
+
+    it('writes a renewal in two steps: the refresh token, then the token and its expiry together', async () => {
+      const { log } = useSlowDisk();
+
+      await storage.rotateSession(storage.getSessionEpoch(), rotation);
+
+      // One after another, the three writes were three native round trips (BENCHMARKS.md §78).
+      expect(log).toEqual([
+        'start taskflow_refresh_token',
+        'end taskflow_refresh_token',
+        'start taskflow_auth_token',
+        'start taskflow_token_expires_at',
+        'end taskflow_auth_token',
+        'end taskflow_token_expires_at',
+      ]);
+    });
+
+    it('writes a sign-in in two steps: the token, then its expiry and the refresh token together', async () => {
+      const { log } = useSlowDisk();
+
+      await storage.startSession({ token: 'login', expiresAt: 1_786_000_000_000, refreshToken: 'a'.repeat(43) });
+
+      expect(log).toEqual([
+        'start taskflow_auth_token',
+        'end taskflow_auth_token',
+        'start taskflow_token_expires_at',
+        'start taskflow_refresh_token',
+        'end taskflow_token_expires_at',
+        'end taskflow_refresh_token',
+      ]);
+    });
+
+    it('serves the credentials of a renewal from memory, although its writes ran together', async () => {
+      useSlowDisk();
+      await storage.rotateSession(storage.getSessionEpoch(), rotation);
+
+      await expect(storage.getToken()).resolves.toBe('renewed');
+      await expect(storage.getTokenExpiry()).resolves.toBe(rotation.expiresAt);
+      await expect(storage.getRefreshToken()).resolves.toBe(rotation.refreshToken);
+      expect(mockGetItemAsync).not.toHaveBeenCalled();
+    });
+
+    it('removes a sign-in that could not be stored completely, after its other write has finished', async () => {
+      const { disk, log } = useSlowDisk();
+      mockSetItemAsync.mockImplementation(async (key: string, value: string) => {
+        log.push(`start ${key}`);
+        await new Promise((resolve) => setTimeout(resolve, key === 'taskflow_refresh_token' ? 15 : 5));
+        log.push(`end ${key}`);
+        if (key === 'taskflow_token_expires_at') throw new Error('keychain');
+        disk.set(key, value);
+      });
+
+      await expect(
+        storage.startSession({ token: 'login', expiresAt: 1, refreshToken: 'a'.repeat(43) }),
+      ).rejects.toThrow('Secure credential storage is unavailable.');
+
+      // The slower refresh-token write landed before the cleanup started, so it is removed too.
+      expect(log.indexOf('end taskflow_refresh_token')).toBeLessThan(
+        log.lastIndexOf('start taskflow_refresh_token'),
+      );
+      expect([...disk.keys()]).toEqual([]);
     });
 
     it('stores nothing from a renewal of a session a sign-out already ended', async () => {

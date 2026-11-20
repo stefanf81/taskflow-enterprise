@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customerApi } from './customer';
-import { invalidateBookingQueries, queryKeys } from '../../query/queryKeys';
+import { invalidateBookingQueries, queryKeys, updateCachedBooking } from '../../query/queryKeys';
 
 export const useCustomerAppointments = (
   page = 0,
@@ -22,8 +22,12 @@ export const useCancelCustomerAppointment = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (publicId: string) => customerApi.cancelAppointment(publicId),
-    // The cancelled slot is free again, and the admin list changed too.
-    onSuccess: () => invalidateBookingQueries(queryClient),
+    // The cancelled slot is free again, and the admin list changed too. A soft cancel: the
+    // booking stays, as CANCELLED.
+    onSuccess: (_, publicId) => {
+      updateCachedBooking(queryClient, { publicId }, { status: 'CANCELLED' });
+      invalidateBookingQueries(queryClient);
+    },
   });
 };
 
@@ -39,6 +43,9 @@ export const useRescheduleCustomerAppointment = () => {
       bookingDate: string;
       bookingTime: string;
     }) => customerApi.rescheduleAppointment(publicId, { bookingDate, bookingTime }),
-    onSuccess: () => invalidateBookingQueries(queryClient),
+    onSuccess: (updated) => {
+      updateCachedBooking(queryClient, { publicId: updated.publicId }, updated);
+      invalidateBookingQueries(queryClient);
+    },
   });
 };

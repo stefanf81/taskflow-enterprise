@@ -1,4 +1,9 @@
 import type { QueryClient } from '@tanstack/react-query';
+import type {
+  AppointmentDashboardResponse,
+  AppointmentItem,
+  AppointmentPage,
+} from '../types/api';
 
 /**
  * Query keys for booking data, which several features read and write. Hooks build their keys
@@ -47,6 +52,47 @@ export function invalidateBookingQueries(queryClient: QueryClient): void {
   queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
   queryClient.invalidateQueries({ queryKey: queryKeys.customerAppointments.all });
   queryClient.invalidateQueries({ queryKey: queryKeys.busySlots.all });
+}
+
+/** One booking, by its database id (admin endpoints) or its public id (customer endpoints). */
+export type BookingRef = { id: number } | { publicId: string };
+
+/**
+ * Writes what a booking mutation answered into every cached page of the admin list and of the
+ * customer's bookings that shows it: the server's updated booking, or the status a cancellation
+ * set (its 204 has no body). Called in the hook's onSuccess, which runs before `mutate` and
+ * `mutateAsync` settle, so the row shows its new status in the render that unlocks it. Before,
+ * the mutation only invalidated: for one round trip the row showed the old status with its
+ * buttons enabled again, and a second tap sent a second request (BENCHMARKS.md §78).
+ * Invalidate afterwards: the counts, a status filter and the free slots still need the server.
+ */
+export function updateCachedBooking(
+  queryClient: QueryClient,
+  booking: BookingRef,
+  changes: Partial<AppointmentItem>,
+): void {
+  const matches = (item: AppointmentItem) =>
+    'id' in booking ? item.id === booking.id : item.publicId === booking.publicId;
+  const update = (content: AppointmentItem[]) =>
+    content.some(matches)
+      ? content.map((item) => (matches(item) ? { ...item, ...changes } : item))
+      : content;
+  queryClient.setQueriesData<AppointmentDashboardResponse>(
+    { queryKey: queryKeys.appointments.all },
+    (old) => {
+      if (!old) return old;
+      const content = update(old.page.content);
+      return content === old.page.content ? old : { ...old, page: { ...old.page, content } };
+    },
+  );
+  queryClient.setQueriesData<AppointmentPage>(
+    { queryKey: queryKeys.customerAppointments.all },
+    (old) => {
+      if (!old) return old;
+      const content = update(old.content);
+      return content === old.content ? old : { ...old, content };
+    },
+  );
 }
 
 /**

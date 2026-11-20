@@ -5,7 +5,7 @@ import {
   AppointmentUpdateRequest,
   GuestRescheduleRequest,
 } from '../../types/api';
-import { invalidateBookingQueries, queryKeys } from '../../query/queryKeys';
+import { invalidateBookingQueries, queryKeys, updateCachedBooking } from '../../query/queryKeys';
 
 export const useAppointments = (
   filter?: string,
@@ -88,15 +88,22 @@ export const useUpdateAppointmentStatus = () => {
   return useMutation({
     mutationFn: ({ id, status }: { id: number; status: AppointmentUpdateRequest['status'] }) =>
       appointmentsApi.updateAppointmentStatus(id, status),
-    onSuccess: () => invalidateBookingQueries(queryClient),
+    onSuccess: (updated) => {
+      updateCachedBooking(queryClient, { id: updated.id }, updated);
+      invalidateBookingQueries(queryClient);
+    },
   });
 };
 
 export const useDeleteAppointment = () => {
   const queryClient = useQueryClient();
   return useMutation({
+    // A soft cancel: the booking stays, as CANCELLED.
     mutationFn: (id: number) => appointmentsApi.deleteAppointment(id),
-    onSuccess: () => invalidateBookingQueries(queryClient),
+    onSuccess: (_, id) => {
+      updateCachedBooking(queryClient, { id }, { status: 'CANCELLED' });
+      invalidateBookingQueries(queryClient);
+    },
   });
 };
 
@@ -116,6 +123,9 @@ export const usePublicRescheduleAppointment = () => {
     mutationFn: ({ publicId, ...request }: { publicId: string } & GuestRescheduleRequest) =>
       appointmentsApi.publicRescheduleAppointment(publicId, request),
     // The old slot is free again and the new one taken.
-    onSuccess: () => invalidateBookingQueries(queryClient),
+    onSuccess: (updated) => {
+      updateCachedBooking(queryClient, { publicId: updated.publicId }, updated);
+      invalidateBookingQueries(queryClient);
+    },
   });
 };

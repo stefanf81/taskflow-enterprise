@@ -54,10 +54,12 @@ jest.mock('../src/core/catalog/catalog', () => ({
 
 const mockCustomerGetAppointmentsFn = jest.fn();
 const mockCustomerCancelAppointmentFn = jest.fn();
+const mockCustomerRescheduleAppointmentFn = jest.fn();
 jest.mock('../src/features/customer/customer', () => ({
   customerApi: {
     getAppointments: (...args: unknown[]) => mockCustomerGetAppointmentsFn(...args),
     cancelAppointment: (...args: unknown[]) => mockCustomerCancelAppointmentFn(...args),
+    rescheduleAppointment: (...args: unknown[]) => mockCustomerRescheduleAppointmentFn(...args),
   },
 }));
 
@@ -102,7 +104,7 @@ import { useShopInfo } from '../src/core/shop/useShopInfo';
 import { DEFAULT_SHOP_RULES } from '@taskflow/domain';
 import { usePublicBarbers, useAdminBarbers, useBarberTimeOff, useAddTimeOff } from '../src/core/barbers/useBarbers';
 import { useCatalog, useRestoreService, useRetiredServices } from '../src/core/catalog/useCatalog';
-import { useCustomerAppointments, useCancelCustomerAppointment } from '../src/features/customer/useCustomer';
+import { useCustomerAppointments, useCancelCustomerAppointment, useRescheduleCustomerAppointment } from '../src/features/customer/useCustomer';
 import { useNotifications } from '../src/features/admin/useNotifications';
 import { useBarberRatings, useSubmitReview } from '../src/features/landing/useReviews';
 
@@ -510,6 +512,121 @@ describe('Hooks', () => {
       expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['customerAppointments'] });
       expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['busySlots'] });
       expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['appointments'] });
+    });
+  });
+
+  // ==================== BOOKING MUTATION RESULTS ====================
+  describe('booking mutations write their result into the cached lists', () => {
+    const booking = (id: number, publicId: string, status: string) => ({
+      id,
+      publicId,
+      customerName: 'Jane',
+      customerEmail: 'jane@example.com',
+      customerPhone: '+15550000000',
+      barberName: 'Alex',
+      bookingDate: '2026-11-23',
+      bookingTime: '10:00',
+      serviceType: 'Classic Haircut',
+      status,
+      createdAt: '2026-11-20T10:00:00Z',
+      updatedAt: '2026-11-20T10:00:00Z',
+    });
+    const page = (...content: ReturnType<typeof booking>[]) => ({
+      content,
+      page: { number: 0, size: 10, totalElements: content.length, totalPages: 1 },
+    });
+    const dashboard = (...content: ReturnType<typeof booking>[]) => ({
+      page: page(...content),
+      stats: { total: 0, pending: 0, approved: 0, denied: 0, overdue: 0, progress: 0, approvedRevenue: 0 },
+    });
+    const adminKey = ['appointments', undefined, undefined, 0, 10];
+    const customerKey = ['customerAppointments', 0, 10];
+    /**
+     * The wrapper's gcTime 0 would collect a list no component observes before the mutation
+     * settles: keep the seeded lists for these tests.
+     */
+    const keepLists = (queryClient: QueryClient) => {
+      queryClient.setQueryDefaults(['appointments'], { gcTime: Infinity });
+      queryClient.setQueryDefaults(['customerAppointments'], { gcTime: Infinity });
+      return queryClient;
+    };
+    const statuses = (queryClient: QueryClient) => ({
+      admin: queryClient
+        .getQueryData<ReturnType<typeof dashboard>>(adminKey)
+        ?.page.content.map((item) => item.status),
+      customer: queryClient
+        .getQueryData<ReturnType<typeof page>>(customerKey)
+        ?.content.map((item) => item.status),
+    });
+
+    it('shows the approved status when the approval resolves, while the list is still refetching', async () => {
+      // The row unlocks when mutateAsync resolves. Before, the list still held PENDING then and
+      // showed the Approve button again for the refetch's round trip (BENCHMARKS.md §78).
+      mockGetAllAppointmentsFn.mockResolvedValueOnce(
+        dashboard(booking(1, 'pub-1', 'PENDING'), booking(2, 'pub-2', 'PENDING')),
+      );
+      const { result } = await renderHook(
+        () => ({ list: useAppointments(undefined, undefined, 0, 10), update: useUpdateAppointmentStatus() }),
+        { wrapper: createWrapper() },
+      );
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(result.current.list.data?.page.content[0]?.status).toBe('PENDING');
+
+      mockGetAllAppointmentsFn.mockReturnValue(new Promise(() => undefined)); // refetch never ends
+      mockUpdateAppointmentStatusFn.mockResolvedValueOnce(booking(1, 'pub-1', 'APPROVED'));
+      await act(async () => {
+        await result.current.update.mutateAsync({ id: 1, status: 'APPROVED' });
+      });
+
+      // Read from the cache: the hook's result is re-rendered by a batched notify a moment later.
+      expect(lastQueryClient!.getQueryState(adminKey)?.fetchStatus).toBe('fetching');
+      expect(statuses(lastQueryClient!).admin).toEqual(['APPROVED', 'PENDING']);
+    });
+
+    it('marks an admin-cancelled booking CANCELLED in the admin and customer lists', async () => {
+      const { result } = await renderHook(() => useDeleteAppointment(), { wrapper: createWrapper() });
+      const queryClient = keepLists(lastQueryClient!);
+      queryClient.setQueryData(adminKey, dashboard(booking(1, 'pub-1', 'APPROVED'), booking(2, 'pub-2', 'PENDING')));
+      queryClient.setQueryData(customerKey, page(booking(1, 'pub-1', 'APPROVED')));
+      mockDeleteAppointmentFn.mockResolvedValueOnce(undefined);
+
+      await act(async () => {
+        await result.current.mutateAsync(1);
+      });
+
+      expect(statuses(queryClient)).toEqual({ admin: ['CANCELLED', 'PENDING'], customer: ['CANCELLED'] });
+    });
+
+    it('marks a customer-cancelled booking CANCELLED, and leaves pages without it as they are', async () => {
+      const { result } = await renderHook(() => useCancelCustomerAppointment(), { wrapper: createWrapper() });
+      const queryClient = keepLists(lastQueryClient!);
+      queryClient.setQueryData(customerKey, page(booking(1, 'pub-1', 'PENDING'), booking(2, 'pub-2', 'APPROVED')));
+      const otherPage = page(booking(3, 'pub-3', 'PENDING'));
+      queryClient.setQueryData(['customerAppointments', 1, 10], otherPage);
+      mockCustomerCancelAppointmentFn.mockResolvedValueOnce(undefined);
+
+      await act(async () => {
+        await result.current.mutateAsync('pub-1');
+      });
+
+      expect(statuses(queryClient).customer).toEqual(['CANCELLED', 'APPROVED']);
+      expect(queryClient.getQueryData(['customerAppointments', 1, 10])).toBe(otherPage);
+    });
+
+    it('writes a reschedule’s new time and status into the customer’s list', async () => {
+      const { result } = await renderHook(() => useRescheduleCustomerAppointment(), { wrapper: createWrapper() });
+      const queryClient = keepLists(lastQueryClient!);
+      queryClient.setQueryData(customerKey, page(booking(1, 'pub-1', 'APPROVED')));
+      const moved = { ...booking(1, 'pub-1', 'PENDING'), bookingTime: '14:30' };
+      mockCustomerRescheduleAppointmentFn.mockResolvedValueOnce(moved);
+
+      await act(async () => {
+        await result.current.mutateAsync({ publicId: 'pub-1', bookingDate: '2026-11-23', bookingTime: '14:30' });
+      });
+
+      expect(queryClient.getQueryData<ReturnType<typeof page>>(customerKey)?.content).toEqual([moved]);
     });
   });
 

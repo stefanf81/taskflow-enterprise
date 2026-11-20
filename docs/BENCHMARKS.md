@@ -2853,4 +2853,29 @@ Measured with the real `RootNavigator`, auth store, storage and query client, re
 
 Verification: new tests count the tab-navigator mounts for a restore and for a sign-in followed by a sign-out (both fail on the old navigator: 2 and 3 mounts), unit-test the helper (public roots kept, 9 private and unknown roots and the mutations dropped; fails with `clear()` semantics), and check that logout keeps shop info. Mobile Jest 716/716, `npm run lint:all`, mobile lint.
 
-Still open from §76: findings 3 (mutation responses discarded), 4 (sequential secure-store operations) and 5-9.
+Findings 3 and 4 follow in §78; 5-9 are still open.
+
+---
+
+## 📱 78. Mobile Booking Mutations Show Their Result at Once; Launch Credential Calls Overlap (2026-11-20)
+
+**Goal:** fix §76's mobile findings 3 and 4.
+
+### Booking mutations (finding 3)
+
+The status change, admin cancel, customer cancel and both reschedules only invalidated the lists. The admin row unlocks when `mutateAsync` resolves, so for the refetch's round trip it showed the old status with its buttons enabled again, and a second tap sent a second request. `updateCachedBooking` (`query/queryKeys.ts`) now writes the answer into every cached page of the admin list and of the customer's bookings that shows the booking: the server's updated booking, or `CANCELLED` for the two cancel endpoints (soft cancels that answer 204). It runs in the hook's `onSuccess`, before `mutate`/`mutateAsync` settle, so the row unlocks in the render that shows its new status. The lists are still invalidated afterwards: the counts, a status filter and the free slots come from the server. Pages without the booking keep their identity (no re-render).
+
+### Credential calls at launch (finding 4)
+
+| Returning user, expired access token (renewal path), each secure-store call 20 ms | Native calls | Sequential steps | `checkAuth` |
+| :--- | ---: | ---: | ---: |
+| Before | 6 | 6 | 151-156 ms |
+| After | 6 | 3 | 88-91 ms |
+
+Measured in Jest with the real auth store, storage and API client (MSW for the refresh endpoint, ~30 ms of the total). Device latency of the Keychain/Keystore was not measured; the saving is three of its round trips.
+
+- `checkAuth` starts the token, expiry and refresh-token reads together. The refresh token still counts only when the access token has expired; its read error is swallowed until then, so an unreadable refresh token beside a valid token restores the session as before. A guest launch now also reads the two (absent) values, in parallel with the token read.
+- `rotateSession` writes the refresh token first (the server has retired the old one), then the token and its expiry together. `startSession` writes the token first (a half-stored sign-in never leaves an earlier session's token beside the new refresh token), then the expiry and the refresh token together. A batch waits for all of its writes before failing (`allOrFirstFailure`), so a sign-in's cleanup never races a write still in flight.
+- The read cache's guard against a concurrent write is now one generation per credential instead of one counter: with one counter, the token and expiry writes of a rotation voided each other's cached value and the next request read the token from the Keychain again. A token write still voids the cached expiry.
+
+Verification: 4 new hook tests (the approved status is in the cache while the list's refetch is still running; both cancels; a reschedule; pages without the booking untouched), 4 new storage tests (write order of a rotation and a sign-in, credentials served from memory after a rotation, cleanup after the slower write of a failed sign-in) and 2 auth-store tests (the three reads start before the first answers; an unreadable refresh token beside a valid token). The 8 order and result tests fail on the old code. Mobile Jest 726/726 (four runs), `npm run lint:all`, mobile lint.

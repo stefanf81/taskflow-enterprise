@@ -325,6 +325,43 @@ describe('useAuthStore', () => {
       expect(useAuthStore.getState().isBootstrapping).toBe(false);
     });
 
+    it('starts the three credential reads together on launch', async () => {
+      // One after another, they were three Keychain/Keystore round trips (BENCHMARKS.md §78).
+      let answerToken!: (token: string) => void;
+      (storage.getToken as jest.Mock).mockReturnValueOnce(
+        new Promise<string>((resolve) => (answerToken = resolve)),
+      );
+      (storage.getTokenExpiry as jest.Mock).mockResolvedValueOnce(Date.now() + 60_000);
+      (authApi.me as jest.Mock).mockResolvedValueOnce({ username: 'admin', role: 'ROLE_ADMIN' });
+
+      const restoring = useAuthStore.getState().checkAuth();
+      const startedBeforeTheTokenArrived = [
+        (storage.getTokenExpiry as jest.Mock).mock.calls.length,
+        (storage.getRefreshToken as jest.Mock).mock.calls.length,
+      ];
+      answerToken('stored-jwt');
+      await restoring;
+
+      expect(startedBeforeTheTokenArrived).toEqual([1, 1]);
+      expect(useAuthStore.getState().isAuthenticated).toBe(true);
+    });
+
+    it('restores a valid token although the refresh token cannot be read', async () => {
+      // The refresh token only matters once the access token has expired.
+      (storage.getToken as jest.Mock).mockResolvedValueOnce('stored-jwt');
+      (storage.getTokenExpiry as jest.Mock).mockResolvedValueOnce(Date.now() + 60_000);
+      // Not ...Once: beforeEach resets a persistent mock, an unconsumed Once value would leak.
+      (storage.getRefreshToken as jest.Mock).mockRejectedValue(
+        new Error('Secure credential storage is unavailable.'),
+      );
+      (authApi.me as jest.Mock).mockResolvedValueOnce({ username: 'admin', role: 'ROLE_ADMIN' });
+
+      await useAuthStore.getState().checkAuth();
+
+      expect(useAuthStore.getState().isAuthenticated).toBe(true);
+      expect(useAuthStore.getState().storageUnavailable).toBe(false);
+    });
+
     describe('with an expired access token and a refresh token', () => {
       const expiredSignIn = () => {
         (storage.getToken as jest.Mock).mockResolvedValueOnce('expired-jwt');
@@ -485,7 +522,8 @@ describe('useAuthStore', () => {
     it('keeps an expired sign-in whose refresh token cannot be read, and offers a retry', async () => {
       (storage.getToken as jest.Mock).mockResolvedValueOnce('expired-jwt');
       (storage.getTokenExpiry as jest.Mock).mockResolvedValueOnce(Date.now() - 60_000);
-      (storage.getRefreshToken as jest.Mock).mockRejectedValueOnce(
+      // Not ...Once: beforeEach resets a persistent mock, an unconsumed Once value would leak.
+      (storage.getRefreshToken as jest.Mock).mockRejectedValue(
         new Error('Secure credential storage is unavailable.'),
       );
 

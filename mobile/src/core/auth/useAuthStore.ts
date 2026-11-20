@@ -192,9 +192,17 @@ export const useAuthStore = create<AuthState>((set) => ({
       version !== bootstrapVersion || storage.getSessionEpoch() !== epoch;
 
     set({ isBootstrapping: true });
+    // Each read is a call into the Keychain/Keystore, and none depends on another: start them
+    // together instead of one after another on every launch (BENCHMARKS.md §78). The refresh
+    // token is only consulted below when the access token has expired; until then a failure to
+    // read it must not surface (or count as an unhandled rejection).
+    const tokenRead = storage.getToken();
+    const expiryRead = storage.getTokenExpiry();
+    const refreshTokenRead = storage.getRefreshToken();
+    refreshTokenRead.catch(() => undefined);
     let token: string | null;
     try {
-      token = await storage.getToken();
+      token = await tokenRead;
     } catch {
       if (isSuperseded()) return;
       set(STORAGE_UNAVAILABLE);
@@ -213,8 +221,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     let tokenExpired: boolean;
     let expiredForGood: boolean;
     try {
-      tokenExpired = isTokenExpired(await storage.getTokenExpiry());
-      expiredForGood = tokenExpired && !(await storage.getRefreshToken());
+      tokenExpired = isTokenExpired(await expiryRead);
+      expiredForGood = tokenExpired && !(await refreshTokenRead);
     } catch {
       if (isSuperseded()) return;
       set(STORAGE_UNAVAILABLE);
