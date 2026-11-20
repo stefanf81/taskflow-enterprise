@@ -43,8 +43,9 @@ export interface UpcomingDay {
 
 /** How many calendar days (from `from`) the day list searches for open days. */
 const LOOKAHEAD_DAYS = 14;
-const SHORT_WEEKDAY_FORMAT = new Intl.DateTimeFormat('en-US', { weekday: 'short' });
-const SHORT_MONTH_FORMAT = new Intl.DateTimeFormat('en-US', { month: 'short' });
+// Built on first use: this module is on every launch's import graph (BENCHMARKS.md §79).
+let shortWeekdayFormat: Intl.DateTimeFormat | undefined;
+let shortMonthFormat: Intl.DateTimeFormat | undefined;
 
 /**
  * The next `count` open days starting at `from`: days the shop's opening hours leave out are
@@ -64,9 +65,13 @@ export function getUpcomingDays(
     if (!isOpenOn(dateStr, rules)) continue;
     days.push({
       dateStr,
-      dayName: SHORT_WEEKDAY_FORMAT.format(nextDate),
+      dayName: (shortWeekdayFormat ??= new Intl.DateTimeFormat('en-US', { weekday: 'short' })).format(
+        nextDate,
+      ),
       dayNum: nextDate.getDate(),
-      monthName: SHORT_MONTH_FORMAT.format(nextDate),
+      monthName: (shortMonthFormat ??= new Intl.DateTimeFormat('en-US', { month: 'short' })).format(
+        nextDate,
+      ),
     });
   }
   return days;

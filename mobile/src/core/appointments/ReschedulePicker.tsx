@@ -34,15 +34,14 @@ interface ReschedulePickerProps {
   onClose: () => void;
 }
 
-const SHORT_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
-  weekday: 'short',
-  month: 'short',
-  day: 'numeric',
-});
+// Built on first use: the picker is on every launch's import graph (BENCHMARKS.md §79).
+let shortDateFormat: Intl.DateTimeFormat | undefined;
 
 function shortDate(dateStr: string): string {
   const date = parseLocalDate(dateStr);
-  return Number.isNaN(date.getTime()) ? dateStr : SHORT_DATE_FORMAT.format(date);
+  if (Number.isNaN(date.getTime())) return dateStr;
+  shortDateFormat ??= new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  return shortDateFormat.format(date);
 }
 
 /**
@@ -64,6 +63,9 @@ export const ReschedulePicker: React.FC<ReschedulePickerProps> = ({
   onClose,
 }) => {
   const dates = rescheduleDates(now, rules, DEFAULT_TIME_SLOTS);
+  // Its own statement, so the compiler keeps the labels per `dates`: inside the chip block they
+  // were formatted again for all 14 chips on every date tap.
+  const dateLabels = dates.map(shortDate);
   const [chosenDate, setChosenDate] = useState(() =>
     dates.includes(currentDate) ? currentDate : (dates[0] ?? ''),
   );
@@ -87,7 +89,7 @@ export const ReschedulePicker: React.FC<ReschedulePickerProps> = ({
       <Text style={styles.label}>New date</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {dates.length === 0 && <Text style={styles.hint}>No open days in the booking window.</Text>}
-        {dates.map((date) => {
+        {dates.map((date, index) => {
           const selected = date === selectedDate;
           return (
             <TouchableOpacity
@@ -101,7 +103,7 @@ export const ReschedulePicker: React.FC<ReschedulePickerProps> = ({
               }}
             >
               <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                {shortDate(date)}
+                {dateLabels[index]}
               </Text>
             </TouchableOpacity>
           );

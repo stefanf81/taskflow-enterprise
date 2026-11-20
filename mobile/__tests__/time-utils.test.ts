@@ -376,3 +376,53 @@ describe('booking-window helpers (MOB-4)', () => {
     });
   });
 });
+
+describe('Intl formatters', () => {
+  const RealDateTimeFormat = Intl.DateTimeFormat;
+  const RealNumberFormat = Intl.NumberFormat;
+  let built: string[];
+
+  beforeEach(() => {
+    built = [];
+    // Counting subclasses: every construction is recorded, formatting is unchanged.
+    Intl.DateTimeFormat = class extends RealDateTimeFormat {
+      constructor(...args: ConstructorParameters<typeof RealDateTimeFormat>) {
+        super(...args);
+        built.push('DateTimeFormat');
+      }
+    } as typeof Intl.DateTimeFormat;
+    Intl.NumberFormat = class extends RealNumberFormat {
+      constructor(...args: ConstructorParameters<typeof RealNumberFormat>) {
+        super(...args);
+        built.push('NumberFormat');
+      }
+    } as typeof Intl.NumberFormat;
+  });
+
+  afterEach(() => {
+    Intl.DateTimeFormat = RealDateTimeFormat;
+    Intl.NumberFormat = RealNumberFormat;
+  });
+
+  it('are built on first use, not when the modules load', () => {
+    // Four were built at module scope, on every launch's import graph (BENCHMARKS.md §79).
+    jest.isolateModules(() => {
+      require('../src/utils/time-utils');
+      require('../src/core/appointments/ReschedulePicker');
+      require('@taskflow/domain');
+    });
+    expect(built).toEqual([]);
+  });
+
+  it('are built once and reused', () => {
+    jest.isolateModules(() => {
+      const { formatUsd, getUpcomingDays } = require('../src/utils/time-utils');
+      expect(formatUsd(1234.5)).toBe('$1,234.50');
+      expect(formatUsd(30)).toBe('$30.00');
+      const days = getUpcomingDays(new Date(2026, 10, 20, 9, 0), 3);
+      getUpcomingDays(new Date(2026, 10, 20, 9, 0), 3);
+      expect(days[0]).toEqual(expect.objectContaining({ dayName: 'Fri', monthName: 'Nov' }));
+    });
+    expect(built.sort()).toEqual(['DateTimeFormat', 'DateTimeFormat', 'NumberFormat']);
+  });
+});

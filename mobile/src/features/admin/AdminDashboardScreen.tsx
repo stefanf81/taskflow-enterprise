@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { memo, useState, useEffect, useRef } from 'react';
 import { useIsFocused } from '@react-navigation/native';
 import {
   View,
@@ -32,6 +32,7 @@ import { formatTime12Hour, formatUsd, isOverdue } from '../../utils/time-utils';
 import { useShopInfo } from '../../core/shop/useShopInfo';
 import { useNow } from '../../core/shop/useNow';
 import { getApiErrorMessage } from '../../utils/errors';
+import type { AppointmentItem } from '../../types/api';
 
 const FILTERS = ['all', 'pending', 'approved', 'overdue', 'denied', 'cancelled'];
 
@@ -51,8 +52,10 @@ export const AdminDashboardScreen: React.FC = () => {
 
   const { data, isLoading, isError, isSuccess, isPlaceholderData, isFetching, refetch } =
     useAppointments(filter, debouncedSearch, page, 10, { subscribed: isFocused });
-  const updateStatusMutation = useUpdateAppointmentStatus();
-  const deleteMutation = useDeleteAppointment();
+  // The stable functions, not the mutation results: those change identity at every state
+  // (idle, pending, success), and every row's handlers with them (BENCHMARKS.md §79).
+  const { mutateAsync: updateStatus } = useUpdateAppointmentStatus();
+  const { mutateAsync: cancelAppointment } = useDeleteAppointment();
   const { timeZone } = useShopInfo();
   const now = useNow(60_000, timeZone);
   const actionLocks = useRef(new Set<number>());
@@ -131,22 +134,23 @@ export const AdminDashboardScreen: React.FC = () => {
 
   const handleApprove = (id: number) => runAction(
     id,
-    () => updateStatusMutation.mutateAsync({ id, status: 'APPROVED' }),
+    () => updateStatus({ id, status: 'APPROVED' }),
     'Appointment APPROVED! Client notification email queued.',
     'Failed to approve appointment.',
   );
 
   const handleDeny = (id: number) => runAction(
     id,
-    () => updateStatusMutation.mutateAsync({ id, status: 'DENIED' }),
+    () => updateStatus({ id, status: 'DENIED' }),
     'Appointment DECLINED. Client notification email queued.',
     'Failed to decline appointment.',
   );
 
-  const handleCancel = (id: number) => {
-    const appointment = data?.page.content.find((item) => item.id === id);
+  // Takes the row's booking rather than finding it in `data`, which changes on every refetch.
+  const handleCancel = (appointment: AppointmentItem) => {
+    const id = appointment.id;
     if (actionLocks.current.has(id) ||
-      (appointment?.status !== 'PENDING' && appointment?.status !== 'APPROVED')) return;
+      (appointment.status !== 'PENDING' && appointment.status !== 'APPROVED')) return;
     Alert.alert('Cancel Booking', 'Are you sure you want to cancel this booking?', [
       { text: 'Keep Booking', style: 'cancel' },
       {
@@ -154,7 +158,7 @@ export const AdminDashboardScreen: React.FC = () => {
         style: 'destructive',
         onPress: () => { void runAction(
           id,
-          () => deleteMutation.mutateAsync(id),
+          () => cancelAppointment(id),
           'Booking cancelled.',
           'Failed to cancel booking.',
         ); },
@@ -301,78 +305,16 @@ export const AdminDashboardScreen: React.FC = () => {
                 data={appointments}
                 keyExtractor={(item) => item.id.toString()}
                 contentContainerStyle={styles.listContent}
-                renderItem={({ item }) => {
-                  const overdue = item.status === 'PENDING' && isOverdue(item.bookingDate, now);
-                  const isBusy = busyIds.includes(item.id);
-                  // Cancelled bookings are final: no approve/decline actions.
-                  const isCancelled = item.status.toUpperCase() === 'CANCELLED';
-                  return (
-                    <Card style={[styles.appCard, overdue && styles.overdueCard]}>
-                      <View style={styles.cardTop}>
-                        <Text style={styles.publicId}>{item.publicId}</Text>
-                        {overdue ? (
-                          <View style={styles.overdueBadge}>
-                            <Text style={styles.overdueBadgeText}>OVERDUE</Text>
-                          </View>
-                        ) : (
-                          <Badge status={item.status} />
-                        )}
-                      </View>
-
-                      <Text style={styles.custName}>{item.customerName}</Text>
-                      <Text style={styles.custContact}>
-                        {item.customerEmail} • {item.customerPhone}
-                      </Text>
-
-                      <View style={styles.infoRow}>
-                        <Text style={styles.infoLbl}>Service:</Text>
-                        <Text style={styles.infoVal}>{item.serviceType}</Text>
-                      </View>
-                      <View style={styles.infoRow}>
-                        <Text style={styles.infoLbl}>Barber:</Text>
-                        <Text style={styles.infoVal}>{item.barberName}</Text>
-                      </View>
-                      <View style={styles.infoRow}>
-                        <Text style={styles.infoLbl}>Date & Time:</Text>
-                        <Text style={[styles.infoVal, overdue && { color: colors.status.denied }]}>
-                          {item.bookingDate} @ {formatTime12Hour(item.bookingTime)}
-                        </Text>
-                      </View>
-
-                      {/* Actions */}
-                      <View style={styles.actionRow}>
-                        {!isCancelled && item.status !== 'APPROVED' && (
-                          <Button
-                            title="Approve"
-                            variant="primary"
-                            size="sm"
-                             onPress={() => handleApprove(item.id)}
-                             disabled={isBusy}
-                            style={styles.actionBtn}
-                          />
-                        )}
-                        {!isCancelled && item.status !== 'DENIED' && (
-                          <Button
-                            title="Decline"
-                            variant="danger"
-                            size="sm"
-                             onPress={() => handleDeny(item.id)}
-                             disabled={isBusy}
-                            style={styles.actionBtn}
-                          />
-                        )}
-                        {(item.status === 'PENDING' || item.status === 'APPROVED') && <Button
-                          title="Cancel"
-                          variant="secondary"
-                          size="sm"
-                          onPress={() => handleCancel(item.id)}
-                          disabled={isBusy}
-                          style={styles.actionBtn}
-                        />}
-                      </View>
-                    </Card>
-                  );
-                }}
+                renderItem={({ item }) => (
+                  <AppointmentRow
+                    item={item}
+                    overdue={item.status === 'PENDING' && isOverdue(item.bookingDate, now)}
+                    isBusy={busyIds.includes(item.id)}
+                    onApprove={handleApprove}
+                    onDeny={handleDeny}
+                    onCancel={handleCancel}
+                  />
+                )}
               />
             )}
 
@@ -403,6 +345,98 @@ export const AdminDashboardScreen: React.FC = () => {
     </SafeAreaView>
   );
 };
+
+interface AppointmentRowProps {
+  item: AppointmentItem;
+  overdue: boolean;
+  isBusy: boolean;
+  onApprove: (id: number) => void;
+  onDeny: (id: number) => void;
+  onCancel: (appointment: AppointmentItem) => void;
+}
+
+/**
+ * One booking of the list. Memoised with primitive props, so a tap re-renders only its own row:
+ * built inline in `renderItem`, every row re-rendered at each step of one action (lock, pending,
+ * success, unlock, refetch) and on every clock tick (BENCHMARKS.md §79).
+ */
+const AppointmentRow = memo(function AppointmentRow({
+  item,
+  overdue,
+  isBusy,
+  onApprove,
+  onDeny,
+  onCancel,
+}: AppointmentRowProps) {
+  // Cancelled bookings are final: no approve/decline actions.
+  const isCancelled = item.status.toUpperCase() === 'CANCELLED';
+  return (
+    <Card style={[styles.appCard, overdue && styles.overdueCard]}>
+      <View style={styles.cardTop}>
+        <Text style={styles.publicId}>{item.publicId}</Text>
+        {overdue ? (
+          <View style={styles.overdueBadge}>
+            <Text style={styles.overdueBadgeText}>OVERDUE</Text>
+          </View>
+        ) : (
+          <Badge status={item.status} />
+        )}
+      </View>
+
+      <Text style={styles.custName}>{item.customerName}</Text>
+      <Text style={styles.custContact}>
+        {item.customerEmail} • {item.customerPhone}
+      </Text>
+
+      <View style={styles.infoRow}>
+        <Text style={styles.infoLbl}>Service:</Text>
+        <Text style={styles.infoVal}>{item.serviceType}</Text>
+      </View>
+      <View style={styles.infoRow}>
+        <Text style={styles.infoLbl}>Barber:</Text>
+        <Text style={styles.infoVal}>{item.barberName}</Text>
+      </View>
+      <View style={styles.infoRow}>
+        <Text style={styles.infoLbl}>Date & Time:</Text>
+        <Text style={[styles.infoVal, overdue && { color: colors.status.denied }]}>
+          {item.bookingDate} @ {formatTime12Hour(item.bookingTime)}
+        </Text>
+      </View>
+
+      {/* Actions */}
+      <View style={styles.actionRow}>
+        {!isCancelled && item.status !== 'APPROVED' && (
+          <Button
+            title="Approve"
+            variant="primary"
+            size="sm"
+            onPress={() => onApprove(item.id)}
+            disabled={isBusy}
+            style={styles.actionBtn}
+          />
+        )}
+        {!isCancelled && item.status !== 'DENIED' && (
+          <Button
+            title="Decline"
+            variant="danger"
+            size="sm"
+            onPress={() => onDeny(item.id)}
+            disabled={isBusy}
+            style={styles.actionBtn}
+          />
+        )}
+        {(item.status === 'PENDING' || item.status === 'APPROVED') && <Button
+          title="Cancel"
+          variant="secondary"
+          size="sm"
+          onPress={() => onCancel(item)}
+          disabled={isBusy}
+          style={styles.actionBtn}
+        />}
+      </View>
+    </Card>
+  );
+});
 
 const styles = StyleSheet.create({
   safeArea: {

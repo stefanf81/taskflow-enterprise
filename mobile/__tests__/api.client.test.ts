@@ -376,6 +376,11 @@ describe('mobile api client', () => {
   });
 
   describe('response interceptor', () => {
+    // Unless a test says otherwise, no newer token than the one a request carried is stored.
+    beforeEach(() => {
+      mockGetToken.mockResolvedValue(null);
+    });
+
     it('clears credentials when a protected request returns 401', async () => {
       const error = {
         response: { status: 401 },
@@ -529,6 +534,65 @@ describe('mobile api client', () => {
         expect.objectContaining({ sessionRetried: true, sessionEpoch: 0 }),
       );
       expect(mockClearSession).not.toHaveBeenCalled();
+    });
+
+    it('replays a late 401 with the token another renewal already stored, without renewing again', async () => {
+      // The renewal for an earlier 401 has finished; this request went out with the old token.
+      mockGetRefreshToken.mockResolvedValue(REFRESH);
+      mockGetToken.mockResolvedValue('renewed-jwt');
+      mockRequest.mockResolvedValueOnce({ status: 200 });
+      const config = {
+        url: '/api/v1/appointments',
+        method: 'get',
+        headers: { Authorization: 'Bearer old-jwt' },
+        sessionEpoch: 0,
+      };
+
+      await expect(responseErrorHandler({ response: { status: 401 }, config })).resolves.toEqual({
+        status: 200,
+      });
+      // It used to rotate the session a second time: a POST and three Keychain writes (§79).
+      expect(mockPost).not.toHaveBeenCalled();
+      expect(mockRotateSession).not.toHaveBeenCalled();
+      expect(mockRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionRetried: true, sessionEpoch: 0 }),
+      );
+    });
+
+    it('ends the session when the replay with the newer token is rejected too', async () => {
+      mockGetToken.mockResolvedValue('renewed-jwt');
+      const error = {
+        response: { status: 401 },
+        config: {
+          url: '/api/v1/appointments',
+          method: 'get',
+          headers: { Authorization: 'Bearer renewed-jwt' },
+          sessionEpoch: 0,
+          sessionRetried: true,
+        },
+      };
+
+      await expect(responseErrorHandler(error)).rejects.toBe(error);
+      expect(mockPost).not.toHaveBeenCalled();
+      expect(mockClearSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('renews as before when the stored token cannot be read', async () => {
+      mockGetRefreshToken.mockResolvedValue(REFRESH);
+      mockGetToken.mockRejectedValue(new Error('Secure credential storage is unavailable.'));
+      mockPost.mockResolvedValueOnce(renewed);
+      mockRequest.mockResolvedValueOnce({ status: 200 });
+      const config = {
+        url: '/api/v1/appointments',
+        method: 'get',
+        headers: { Authorization: 'Bearer old-jwt' },
+        sessionEpoch: 0,
+      };
+
+      await expect(responseErrorHandler({ response: { status: 401 }, config })).resolves.toEqual({
+        status: 200,
+      });
+      expect(mockPost).toHaveBeenCalledTimes(1);
     });
 
     it('never renews a request that went out without a bearer token', async () => {

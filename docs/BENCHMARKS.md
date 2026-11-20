@@ -2853,7 +2853,7 @@ Measured with the real `RootNavigator`, auth store, storage and query client, re
 
 Verification: new tests count the tab-navigator mounts for a restore and for a sign-in followed by a sign-out (both fail on the old navigator: 2 and 3 mounts), unit-test the helper (public roots kept, 9 private and unknown roots and the mutations dropped; fails with `clear()` semantics), and check that logout keeps shop info. Mobile Jest 716/716, `npm run lint:all`, mobile lint.
 
-Findings 3 and 4 follow in §78; 5-9 are still open.
+Findings 3 and 4 follow in §78, 5-9 in §79.
 
 ---
 
@@ -2879,3 +2879,21 @@ Measured in Jest with the real auth store, storage and API client (MSW for the r
 - The read cache's guard against a concurrent write is now one generation per credential instead of one counter: with one counter, the token and expiry writes of a rotation voided each other's cached value and the next request read the token from the Keychain again. A token write still voids the cached expiry.
 
 Verification: 4 new hook tests (the approved status is in the cache while the list's refetch is still running; both cancels; a reschedule; pages without the booking untouched), 4 new storage tests (write order of a rotation and a sign-in, credentials served from memory after a rotation, cleanup after the slower write of a failed sign-in) and 2 auth-store tests (the three reads start before the first answers; an unreadable refresh token beside a valid token). The 8 order and result tests fail on the old code. Mobile Jest 726/726 (four runs), `npm run lint:all`, mobile lint.
+
+---
+
+## 📱 79. Mobile: Fewer Renders, Lazy Formatters, No Second Rotation for a Late 401 (2026-11-20)
+
+**Goal:** fix §76's low-impact mobile findings 5-9 (the reviewer's reading, verified here).
+
+| # | Before | After | Verified by |
+| :--- | :--- | :--- | :--- |
+| 5 | Four `Intl` formatters built at module scope (USD in `@taskflow/domain`, weekday and month in `time-utils`, short date in `ReschedulePicker`), on every launch's import graph; the picker formatted all 14 date chips again on every date tap | Each built on first use and reused; the chip labels are their own statement, which the compiler keeps per `dates` | Test: loading the three modules builds no formatter (fails on the old code); first use builds each once |
+| 6 | One Approve tap re-rendered every row of the admin list: the handlers captured the whole `useMutation` result, whose identity changes at each state | Rows are `memo` components with primitive props; the handlers use the stable `mutateAsync`/`mutate`; cancel takes the row's booking instead of reading `data`. The customer portal's rows get the same treatment, and only the row with the open reschedule picker receives the clock | Measured with the React Compiler on (as Metro builds the app), 5 bookings, one approval: 22 `Button` and 10 `Badge` renders before, 6 and 0 after (only the tapped row's three buttons, locked and unlocked). Not a repository test: the repository's Jest transform runs without the compiler. The portal was not measured |
+| 7 | `useNow` returned a new clock object on every check: each caller (dashboard, portal, wizard, `HomeHeader`, `PublicRescheduleModal`) rendered twice on mount and on every return to the app | The previous object is kept while date, hour and minute are unchanged (every caller reads minutes) | Tests: one render on mount, none for an app return within the same minute (both fail on the old code), one when the minute changed |
+| 8 | A signed-in customer's contact form rendered twice per keystroke: the effect that merges the account's details depended on the set of edited fields, which was new on every keystroke | The effect reads the edited fields through `useEffectEvent` and runs only when the account's details change; the set is kept when the field was already edited | Test: 1 render per keystroke (2 on the old code) |
+| 9 | A 401 that arrived after another request's renewal had settled started a second full rotation (a POST and three Keychain writes) | It is replayed with the token that renewal stored when that differs from the one it carried; a renewal still in flight is shared as before, an unreadable Keychain renews as before, and a second 401 still ends the session | Test: the late 401 replays without a POST or rotation (fails on the old code), plus the two unchanged paths |
+
+Verification: mobile Jest 736/736 (twice), `npm run lint:all`, mobile lint, frontend unit tests 531/531 and `shared/domain` 24/24 (the USD formatter is shared with the web app).
+
+Not done: `useNow`'s timer keeps running in hidden tabs (each tick is now free unless the minute changed), and the reviewer's "could not determine" items (zod's compiled parsers on Hermes, module evaluation cost, `inlineRequires`) still need a device.

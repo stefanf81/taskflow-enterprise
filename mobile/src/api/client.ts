@@ -182,13 +182,29 @@ export function renewSessionWithIdentity(
   return current.promise;
 }
 
-function carriedBearer(config: { headers?: unknown } | undefined): boolean {
+/** The bearer token the request was sent with, or null when it carried none. */
+function carriedBearerToken(config: { headers?: unknown } | undefined): string | null {
   const headers = config?.headers as
     | { get?: (name: string) => unknown; Authorization?: unknown }
     | undefined;
   const value =
     typeof headers?.get === 'function' ? headers.get('Authorization') : headers?.Authorization;
-  return typeof value === 'string' && value.startsWith('Bearer ');
+  return typeof value === 'string' && value.startsWith('Bearer ') ? value.slice(7) : null;
+}
+
+/**
+ * Whether another request's renewal has already replaced the token this request carried. A 401
+ * that arrived after that renewal settled is about the old token: the replay presents the stored
+ * one instead of rotating the session a second time (a POST and three Keychain writes). An
+ * unreadable Keychain proves nothing either way, so it renews as before.
+ */
+async function renewedSince(carried: string): Promise<boolean> {
+  try {
+    const stored = await storage.getToken();
+    return stored !== null && stored !== carried;
+  } catch {
+    return false;
+  }
 }
 
 function isSessionRejection(error: unknown): boolean {
@@ -295,11 +311,17 @@ apiClient.interceptors.response.use(
         // without a bearer token (signed out) must never be signed back in by a 401.
         // Spring rejects the token before any handler runs, so replaying any method once
         // after a successful rotation cannot repeat a side effect.
-        if (config.sessionRetried || !carriedBearer(config)) {
+        const carried = carriedBearerToken(config);
+        if (config.sessionRetried || carried === null) {
           await endLocalSession(epoch);
           return Promise.reject(error);
         }
         config.sessionRetried = true;
+        // A renewal still in flight has stored nothing yet, so this request shares it below.
+        if (await renewedSince(carried)) {
+          if (epoch !== storage.getSessionEpoch()) return Promise.reject(error);
+          return apiClient.request(config);
+        }
         try {
           await renewSession(epoch);
         } catch (renewalError) {

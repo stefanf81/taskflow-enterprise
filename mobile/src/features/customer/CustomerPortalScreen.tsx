@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { memo, useState, useEffect, useRef } from 'react';
 import { useIsFocused } from '@react-navigation/native';
 import {
   View,
@@ -29,9 +29,10 @@ import { shareCalendarFile } from '../../core/calendar/shareCalendarFile';
 import { useAuthStore } from '../../core/auth/useAuthStore';
 import { useShallow } from 'zustand/react/shallow';
 import { colors } from '../../theme/colors';
-import { isCustomerCancellable } from '@taskflow/domain';
+import { isCustomerCancellable, type ShopRules } from '@taskflow/domain';
+import type { AppointmentItem } from '../../types/api';
 import { useShopInfo } from '../../core/shop/useShopInfo';
-import { formatTime12Hour, shopWallClock } from '../../utils/time-utils';
+import { formatTime12Hour, shopWallClock, type WallClock } from '../../utils/time-utils';
 import { getApiErrorMessage } from '../../utils/errors';
 import { useNow } from '../../core/shop/useNow';
 
@@ -40,12 +41,17 @@ export const CustomerPortalScreen: React.FC = () => {
   const [page, setPage] = useState(0);
   const { data, isLoading, isError, isSuccess, isPlaceholderData, isFetching, refetch } =
     useCustomerAppointments(page, 10, { subscribed: isFocused });
-  const cancelMutation = useCancelCustomerAppointment();
-  const rescheduleMutation = useRescheduleCustomerAppointment();
+  // The stable functions and plain values, not the mutation results: those change identity at
+  // every state, and every row's handlers with them (BENCHMARKS.md §79).
+  const {
+    mutate: cancelBooking,
+    isPending: cancelPending,
+    variables: cancellingId,
+  } = useCancelCustomerAppointment();
+  const { mutate: rescheduleBooking, isPending: rescheduling } = useRescheduleCustomerAppointment();
   const cancelLock = useRef(false);
   const [rescheduleId, setRescheduleId] = useState<string | null>(null);
   const [exportingId, setExportingId] = useState<string | null>(null);
-  const rescheduling = rescheduleMutation.isPending;
   // Only an upcoming PENDING or APPROVED booking can be cancelled, the rule the server applies.
   const { timeZone: shopTimeZone, rules: shopRules } = useShopInfo();
   const now = useNow(60_000, shopTimeZone);
@@ -71,8 +77,9 @@ export const CustomerPortalScreen: React.FC = () => {
     }
   };
 
-  const handleCancel = (publicId: string) => {
-    if (cancelLock.current || cancelMutation.isPending) return;
+  // Takes the row's booking rather than finding it in `data`, which changes on every refetch.
+  const handleCancel = (appointment: AppointmentItem) => {
+    if (cancelLock.current || cancelPending) return;
     Alert.alert(
       'Cancel Appointment',
       'Are you sure you want to cancel this booking?',
@@ -82,11 +89,11 @@ export const CustomerPortalScreen: React.FC = () => {
           text: 'Yes, Cancel',
           style: 'destructive',
           onPress: () => {
-            const appointment = data?.content.find((item) => item.publicId === publicId);
-            if (cancelLock.current || !appointment ||
+            // The time may have moved past the cancellation window while the dialog was open.
+            if (cancelLock.current ||
               !isCustomerCancellable(appointment, shopWallClock(shopTimeZone))) return;
             cancelLock.current = true;
-            cancelMutation.mutate(publicId, {
+            cancelBooking(appointment.publicId, {
               onSuccess: () => {
                 showSuccess('Appointment cancelled successfully.');
               },
@@ -120,7 +127,7 @@ export const CustomerPortalScreen: React.FC = () => {
 
   const handleReschedule = (publicId: string, slot: RescheduleSelection) => {
     if (rescheduling) return;
-    rescheduleMutation.mutate(
+    rescheduleBooking(
       { publicId, ...slot },
       {
         onSuccess: () => {
@@ -131,6 +138,8 @@ export const CustomerPortalScreen: React.FC = () => {
       },
     );
   };
+
+  const closeReschedule = () => setRescheduleId(null);
 
   const appointments = data?.content || [];
   const totalPages = data?.page?.totalPages ?? 0;
@@ -186,71 +195,23 @@ export const CustomerPortalScreen: React.FC = () => {
             keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={styles.listContent}
             renderItem={({ item }) => (
-              <Card style={styles.itemCard}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.publicId}>{item.publicId}</Text>
-                  <Badge status={item.status} />
-                </View>
-
-                <Text style={styles.serviceTitle}>{item.serviceType}</Text>
-
-                <View style={styles.detailRow}>
-                  <Ionicons name="person-outline" size={14} color={colors.gold.main} />
-                  <Text style={styles.detailText}>Barber: {item.barberName}</Text>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <Ionicons name="time-outline" size={14} color={colors.gold.main} />
-                  <Text style={styles.detailText}>
-                    Date: {item.bookingDate} @ {formatTime12Hour(item.bookingTime)}
-                  </Text>
-                </View>
-
-                {isCustomerCancellable(item, now) && (
-                  <View>
-                    <View style={styles.actionRow}>
-                      <Button
-                        title="Add to Calendar"
-                        variant="secondary"
-                        size="sm"
-                        loading={exportingId === item.publicId}
-                        disabled={exportingId !== null}
-                        onPress={() => handleExportCalendar(item.publicId)}
-                        style={styles.cancelBtn}
-                      />
-                      <Button
-                        title="Reschedule"
-                        variant="secondary"
-                        size="sm"
-                        disabled={cancelMutation.isPending || rescheduling}
-                        onPress={() => setRescheduleId(item.publicId)}
-                        style={styles.cancelBtn}
-                      />
-                      <Button
-                        title="Cancel Booking"
-                        variant="outline"
-                        size="sm"
-                        loading={cancelMutation.isPending && cancelMutation.variables === item.publicId}
-                        disabled={cancelMutation.isPending || rescheduling}
-                        onPress={() => handleCancel(item.publicId)}
-                        style={styles.cancelBtn}
-                      />
-                    </View>
-                    {rescheduleId === item.publicId && (
-                      <ReschedulePicker
-                        now={now}
-                        rules={shopRules}
-                        publicId={item.publicId}
-                        currentDate={item.bookingDate}
-                        currentTime={item.bookingTime}
-                        saving={rescheduling}
-                        onConfirm={(slot) => handleReschedule(item.publicId, slot)}
-                        onClose={() => setRescheduleId(null)}
-                      />
-                    )}
-                  </View>
-                )}
-              </Card>
+              <CustomerAppointmentRow
+                item={item}
+                cancellable={isCustomerCancellable(item, now)}
+                exporting={exportingId === item.publicId}
+                exportLocked={exportingId !== null}
+                actionsLocked={cancelPending || rescheduling}
+                cancelling={cancelPending && cancellingId === item.publicId}
+                // Only the open picker needs the clock: the other rows skip the minute tick.
+                pickerNow={rescheduleId === item.publicId ? now : null}
+                rules={shopRules}
+                rescheduling={rescheduling}
+                onExport={handleExportCalendar}
+                onOpenReschedule={setRescheduleId}
+                onCancel={handleCancel}
+                onReschedule={handleReschedule}
+                onClosePicker={closeReschedule}
+              />
             )}
           />
         )}
@@ -281,6 +242,114 @@ export const CustomerPortalScreen: React.FC = () => {
     </SafeAreaView>
   );
 };
+
+interface CustomerAppointmentRowProps {
+  item: AppointmentItem;
+  cancellable: boolean;
+  exporting: boolean;
+  exportLocked: boolean;
+  actionsLocked: boolean;
+  cancelling: boolean;
+  /** The clock for the open reschedule picker; null on every other row. */
+  pickerNow: WallClock | null;
+  rules: ShopRules;
+  rescheduling: boolean;
+  onExport: (publicId: string) => void;
+  onOpenReschedule: (publicId: string) => void;
+  onCancel: (appointment: AppointmentItem) => void;
+  onReschedule: (publicId: string, slot: RescheduleSelection) => void;
+  onClosePicker: () => void;
+}
+
+/**
+ * One booking. Memoised with primitive props, so an action re-renders only the rows whose state
+ * it changes: built inline in `renderItem`, every row re-rendered at each mutation state and on
+ * every clock tick (BENCHMARKS.md §79).
+ */
+const CustomerAppointmentRow = memo(function CustomerAppointmentRow({
+  item,
+  cancellable,
+  exporting,
+  exportLocked,
+  actionsLocked,
+  cancelling,
+  pickerNow,
+  rules,
+  rescheduling,
+  onExport,
+  onOpenReschedule,
+  onCancel,
+  onReschedule,
+  onClosePicker,
+}: CustomerAppointmentRowProps) {
+  return (
+    <Card style={styles.itemCard}>
+      <View style={styles.cardHeader}>
+        <Text style={styles.publicId}>{item.publicId}</Text>
+        <Badge status={item.status} />
+      </View>
+
+      <Text style={styles.serviceTitle}>{item.serviceType}</Text>
+
+      <View style={styles.detailRow}>
+        <Ionicons name="person-outline" size={14} color={colors.gold.main} />
+        <Text style={styles.detailText}>Barber: {item.barberName}</Text>
+      </View>
+
+      <View style={styles.detailRow}>
+        <Ionicons name="time-outline" size={14} color={colors.gold.main} />
+        <Text style={styles.detailText}>
+          Date: {item.bookingDate} @ {formatTime12Hour(item.bookingTime)}
+        </Text>
+      </View>
+
+      {cancellable && (
+        <View>
+          <View style={styles.actionRow}>
+            <Button
+              title="Add to Calendar"
+              variant="secondary"
+              size="sm"
+              loading={exporting}
+              disabled={exportLocked}
+              onPress={() => onExport(item.publicId)}
+              style={styles.cancelBtn}
+            />
+            <Button
+              title="Reschedule"
+              variant="secondary"
+              size="sm"
+              disabled={actionsLocked}
+              onPress={() => onOpenReschedule(item.publicId)}
+              style={styles.cancelBtn}
+            />
+            <Button
+              title="Cancel Booking"
+              variant="outline"
+              size="sm"
+              loading={cancelling}
+              disabled={actionsLocked}
+              onPress={() => onCancel(item)}
+              style={styles.cancelBtn}
+            />
+          </View>
+          {pickerNow && (
+            <ReschedulePicker
+              now={pickerNow}
+              rules={rules}
+              publicId={item.publicId}
+              currentDate={item.bookingDate}
+              currentTime={item.bookingTime}
+              saving={rescheduling}
+              onConfirm={(slot) => onReschedule(item.publicId, slot)}
+              onClose={onClosePicker}
+            />
+          )}
+        </View>
+      )}
+    </Card>
+  );
+});
 
 const styles = StyleSheet.create({
   safeArea: {

@@ -167,14 +167,26 @@ export function useBookingWizard() {
     resetSessionContact();
   }, [isAuthenticated, role, username]);
 
+  // Fills in what the account knows when it becomes known, keeping the fields already typed.
+  // Reads the edited fields through an effect event: as a dependency, the first keystroke in
+  // each field re-ran the effect and rendered the form twice (BENCHMARKS.md §79).
+  const mergeSessionContact = useEffectEvent((known: ContactDetails) => {
+    setContact((current) => {
+      const next = {
+        name: editedContact.has('name') ? current.name : known.name,
+        email: editedContact.has('email') ? current.email : known.email,
+        phone: editedContact.has('phone') ? current.phone : known.phone,
+      };
+      // Unchanged: keep the object, so React skips the render.
+      return next.name === current.name && next.email === current.email && next.phone === current.phone
+        ? current
+        : next;
+    });
+  });
   useEffect(() => {
     if (!sessionContact.name && !sessionContact.email && !sessionContact.phone) return;
-    setContact((current) => ({
-      name: editedContact.has('name') ? current.name : sessionContact.name,
-      email: editedContact.has('email') ? current.email : sessionContact.email,
-      phone: editedContact.has('phone') ? current.phone : sessionContact.phone,
-    }));
-  }, [sessionContact, editedContact]);
+    mergeSessionContact(sessionContact);
+  }, [sessionContact]);
 
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<BookingReceipt | null>(null);
@@ -331,7 +343,8 @@ export function useBookingWizard() {
   };
 
   const setContactField = (field: keyof ContactDetails, value: string) => {
-    setEditedContact((current) => new Set([...current, field]));
+    // A new Set only for a field edited the first time (BENCHMARKS.md §79).
+    setEditedContact((current) => (current.has(field) ? current : new Set([...current, field])));
     setContact((current) => ({ ...current, [field]: value }));
   };
 
