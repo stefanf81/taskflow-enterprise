@@ -1,0 +1,216 @@
+name: GHCR - approve public base image
+
+# Jobs, in order of privilege:
+#   precheck   read   is the pinned digest already approved under an accepted policy version?
+#   quarantine WRITE  copy the pinned upstream digest into quarantine/ (no parsing, no scanning)
+#   evaluate   read   diff/scan/inventory the untrusted image; produces the decision
+#   promote    WRITE  re-check, (human review if REVIEW), copy to approved/, sign, attest, tag
+# Every action is pinned to a full commit SHA (tag in the trailing comment).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - catalog/Dockerfile.temurin
+      - policy/**
+      - scripts/**
+      - ci/base_*.sh
+      - .github/workflows/base-image-approval.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ghcr-base-temurin-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  GHCR_HOST: ghcr.io
+  GHCR_NAMESPACE: ${{ vars.GHCR_NAMESPACE }}
+  GHCR_APPROVED_REPO: ghcr.io/${{ vars.GHCR_NAMESPACE }}/approved/eclipse-temurin
+  GHCR_QUARANTINE_REPO: ghcr.io/${{ vars.GHCR_NAMESPACE }}/quarantine/eclipse-temurin
+  APPROVAL_PREDICATE_TYPE: https://example.org/ghcr-base-approval/v1
+  COSIGN_OFFLINE_VERIFY: --insecure-ignore-tlog=true
+
+jobs:
+  precheck:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      status: ${{ steps.check.outputs.status }}
+    env:
+      GHCR_USER: ${{ github.actor }}
+      GHCR_PASS: ${{ github.token }}
+      APPROVAL_PUBKEY_B64: ${{ secrets.APPROVAL_PUBKEY_B64 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install exact SHA-256-pinned security tools (promote)
+        shell: bash
+        run: python3 -I ci/install_verified_tools.py --kind promote
+      - name: Skip digests that are already approved under the current policy
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          bash ci/require_tools.sh promote
+          printf '%s' "$APPROVAL_PUBKEY_B64" | base64 -d > "$RUNNER_TEMP/approval.pub"
+          printf '%s' "$GHCR_PASS" | crane auth login "$GHCR_HOST" --username "$GHCR_USER" --password-stdin
+          status="$(APPROVAL_PUBKEY="$RUNNER_TEMP/approval.pub" bash ci/base_precheck.sh)"
+          case "$status" in approved|needed) ;; *) exit 1 ;; esac
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          if [[ "$status" = approved ]]; then
+            echo 'Pinned digest is already approved under an accepted policy version; nothing to do.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  quarantine:
+    needs: precheck
+    if: github.ref == 'refs/heads/main' && needs.precheck.outputs.status == 'needed'
+    runs-on: ubuntu-24.04
+    environment: ghcr-quarantine
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    env:
+      GHCR_USER: ${{ github.actor }}
+      GHCR_PASS: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install exact SHA-256-pinned security tools (promote)
+        shell: bash
+        run: python3 -I ci/install_verified_tools.py --kind promote
+      - name: Copy pinned upstream digest into quarantine (no parsing or scanning here)
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ci/require_tools.sh promote
+          printf '%s' "$GHCR_PASS" | crane auth login "$GHCR_HOST" --username "$GHCR_USER" --password-stdin
+          bash ci/base_quarantine.sh
+
+  evaluate:
+    needs: quarantine
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    # READ-ONLY: this job parses untrusted image content (diffoci, Syft, Grype, inventory).
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      decision: ${{ steps.outcome.outputs.decision }}
+    env:
+      VERIFY_UPSTREAM_SIGNATURE: 'false'
+      GHCR_USER: ${{ github.actor }}
+      GHCR_PASS: ${{ github.token }}
+      APPROVAL_PUBKEY_B64: ${{ secrets.APPROVAL_PUBKEY_B64 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install exact SHA-256-pinned security tools (base)
+        shell: bash
+        run: python3 -I ci/install_verified_tools.py --kind base
+      - name: Verify every pinned tool resolves to the checksum-verified copy
+        run: bash ci/require_tools.sh base
+      - name: Login (read-only token) and load public key
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$APPROVAL_PUBKEY_B64" | base64 -d > "$RUNNER_TEMP/approval.pub"
+          printf '%s' "$GHCR_PASS" | crane auth login "$GHCR_HOST" --username "$GHCR_USER" --password-stdin
+      - name: Independently evaluate all platforms
+        id: outcome
+        shell: bash
+        env:
+          APPROVAL_PUBKEY: ${{ runner.temp }}/approval.pub
+        run: |
+          set -euo pipefail
+          bash ci/base_evaluate.sh
+          decision="$(python3 -I scripts/evaluate.py --report-dir reports --decision-only)"
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+          case "$decision" in BLOCK|REVIEW|AUTO_PASS) ;; *) exit 1 ;; esac
+          echo "Decision: $decision" >> "$GITHUB_STEP_SUMMARY"
+          echo "Reports, diffoci and all-platform evidence attached as 'base-evidence'." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: base-evidence
+          path: reports/
+          if-no-files-found: warn
+          retention-days: 30
+
+  promote:
+    needs: evaluate
+    if: github.ref == 'refs/heads/main' && needs.evaluate.outputs.decision != 'BLOCK'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    # Configure required reviewers (with "Prevent self-review") on base-manual-approval.
+    # No reviewer for the auto environment. Both environments protect the Cosign approval key;
+    # configure GHCR package Actions access. The GITHUB_TOKEN is NOT package-scoped.
+    environment: ${{ needs.evaluate.outputs.decision == 'REVIEW' && 'base-manual-approval' || 'base-auto-promotion' }}
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GHCR_USER: ${{ github.actor }}
+      GHCR_PASS: ${{ github.token }}
+      APPROVAL_PUBKEY_B64: ${{ secrets.APPROVAL_PUBKEY_B64 }}
+      APPROVAL_PRIVATE_KEY_B64: ${{ secrets.APPROVAL_PRIVATE_KEY_B64 }}
+      COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+      EVALUATED_DECISION: ${{ needs.evaluate.outputs.decision }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install exact SHA-256-pinned security tools (promote)
+        shell: bash
+        run: python3 -I ci/install_verified_tools.py --kind promote
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: base-evidence
+          path: reports
+      - name: Require decision, reviewer and matching commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ci/require_tools.sh promote
+          test "$(python3 -I scripts/evaluate.py --report-dir reports --decision-only)" = "$EVALUATED_DECISION"
+          if [[ "$EVALUATED_DECISION" = REVIEW ]]; then
+            # The approval of THIS environment by someone other than the run initiator.
+            approver="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/approvals" |
+              python3 -I ci/environment_approver.py --environment base-manual-approval \
+                --triggering-actor "$GITHUB_TRIGGERING_ACTOR" --actor "$GITHUB_ACTOR")"
+          else
+            test "$EVALUATED_DECISION" = AUTO_PASS
+            approver=automatic-policy
+          fi
+          echo "APPROVER_ID=$approver" >> "$GITHUB_ENV"
+      - name: Recheck, promote, sign, attest and publish tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$APPROVAL_PUBKEY_B64" | base64 -d > "$RUNNER_TEMP/approval.pub"
+          printf '%s' "$APPROVAL_PRIVATE_KEY_B64" | base64 -d > "$RUNNER_TEMP/approval.key"
+          printf '%s' "$GHCR_PASS" | crane auth login "$GHCR_HOST" --username "$GHCR_USER" --password-stdin
+          APPROVAL_PUBKEY="$RUNNER_TEMP/approval.pub" COSIGN_KEY="$RUNNER_TEMP/approval.key" \
+            bash ci/base_promote.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: approved-base-evidence
+          path: reports/
+          if-no-files-found: warn
+          retention-days: 90

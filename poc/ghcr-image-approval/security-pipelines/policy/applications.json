@@ -1,0 +1,10 @@
+{
+  "schema": "https://example.org/ghcr-application-allowlist/v1",
+  "applications": {
+    "example-app": {
+      "source_repo": "stefanf81/ghcr-approval-poc-app",
+      "dockerfile": "Dockerfile",
+      "build_outputs": "target/app.jar"
+    }
+  }
+}

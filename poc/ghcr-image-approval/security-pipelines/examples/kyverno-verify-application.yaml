@@ -1,0 +1,109 @@
+# Kyverno 1.20+ ImageValidatingPolicy for application images.
+#
+# Before use:
+#   1. REPLACE the public key with the APPLICATION signing public key (not the approval key).
+#   2. Create the GHCR dockerconfigjson Secret `ghcr-kyverno-pull` in Kyverno's namespace.
+#   3. First validate examples/audit/* on a STAGING cluster, including negative tests.
+#      This file is DENY-mode and must not be applied with placeholder keys/settings.
+#
+# Signatures and attestations are created with `cosign ... --tlog-upload=false`, so there is
+# no Rekor entry or SCT to verify: `ctlog.insecureIgnoreTlog/insecureIgnoreSCT` must be true,
+# otherwise EVERY application pod fails verification.
+#
+# The build record is attested with a custom predicate-type URI, so cosign stores the
+# predicate as a plain JSON object (no string-wrapped `Data` field, which only
+# `--type custom` produces). Kyverno's extractPayload() returns the in-toto statement,
+# so claims are read from `.predicate.<field>`.
+#
+# This policy applies to EVERY image under applications/ and therefore does not name one
+# application's Git repository: the source repository only has to be on the organisation's
+# Git host. To pin one image repository to one exact source repository, add a copy of
+# kyverno-per-app-source-binding.yaml per application.
+#
+# Coverage: validations 1-2 use Kyverno's `images.containers` (documented for Pods and pod
+# templates). Validations 3-4 cover initContainers and ephemeralContainers via the Pod spec,
+# because the docs only describe `images.containers`. TEST 3-4 on your exact Kyverno version
+# (Pods AND Deployments, i.e. autogen) while in Audit. `pods/ephemeralcontainers` is matched
+# so `kubectl debug` is covered. This policy ALONE does not restrict registries: see
+# kyverno-allowlist.yaml.
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: verify-company-application-images
+spec:
+  validationActions: [Deny]
+  failurePolicy: Fail
+  webhookConfiguration:
+    timeoutSeconds: 15
+  evaluation:
+    background:
+      enabled: false
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ['']
+        apiVersions: ['v1']
+        operations: ['CREATE', 'UPDATE']
+        resources: ['pods', 'pods/ephemeralcontainers']
+  matchImageReferences:
+    - glob: 'ghcr.io/example-org/applications/*'
+  validationConfigurations:
+    mutateDigest: false
+    required: true
+    verifyDigest: true
+  credentials:
+    secrets:
+      - ghcr-kyverno-pull
+  variables:
+    - name: otherAppImages
+      expression: >-
+        (object.spec.?initContainers.orValue([]) + object.spec.?ephemeralContainers.orValue([]))
+          .map(c, c.image)
+          .filter(i, i.startsWith('ghcr.io/example-org/applications/'))
+  attestors:
+    - name: appSigner
+      cosign:
+        key:
+          data: |
+            -----BEGIN PUBLIC KEY-----
+            REPLACE_WITH_APPLICATION_SIGNING_PUBLIC_KEY
+            -----END PUBLIC KEY-----
+        ctlog:
+          insecureIgnoreTlog: true
+          insecureIgnoreSCT: true
+  attestations:
+    - name: buildRecord
+      intoto:
+        type: https://example.org/github-actions-build-record/v1
+  validations:
+    - expression: >-
+        images.containers.map(image, verifyImageSignatures(image, [attestors.appSigner])).all(n, n > 0)
+      message: 'Application container images must carry the application signer signature'
+    - expression: >-
+        images.containers.all(image,
+          verifyAttestationSignatures(image, attestations.buildRecord, [attestors.appSigner]) > 0 &&
+          extractPayload(image, attestations.buildRecord).predicate.schema == 'https://example.org/github-actions-build-record/v1' &&
+          extractPayload(image, attestations.buildRecord).predicate.sourceRepository.matches('^https://github[.]com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+[.]git$') &&
+          extractPayload(image, attestations.buildRecord).predicate.buildJob == 'ORG/SECURITY_REPO/.github/workflows/application-release.yml' &&
+          extractPayload(image, attestations.buildRecord).predicate.image == image &&
+          extractPayload(image, attestations.buildRecord).predicate.gitCommit.matches('^[0-9a-f]{40}$') &&
+          extractPayload(image, attestations.buildRecord).predicate.releaseAuthorizationSha256.matches('^[0-9a-f]{64}$') &&
+          extractPayload(image, attestations.buildRecord).predicate.finalBase.matches('^ghcr[.]io/example-org/approved/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$') &&
+          extractPayload(image, attestations.buildRecord).predicate.baseImages.all(ref,
+            ref.matches('^ghcr[.]io/example-org/approved/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$')))
+      message: 'Application image must have signed build record with expected repo, job, source commit, base images and release authorization'
+    - expression: >-
+        variables.otherAppImages.all(image, verifyImageSignatures(image, [attestors.appSigner]) > 0)
+      message: 'Application init/ephemeral container images must carry the application signer signature'
+    - expression: >-
+        variables.otherAppImages.all(image,
+          verifyAttestationSignatures(image, attestations.buildRecord, [attestors.appSigner]) > 0 &&
+          extractPayload(image, attestations.buildRecord).predicate.schema == 'https://example.org/github-actions-build-record/v1' &&
+          extractPayload(image, attestations.buildRecord).predicate.sourceRepository.matches('^https://github[.]com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+[.]git$') &&
+          extractPayload(image, attestations.buildRecord).predicate.buildJob == 'ORG/SECURITY_REPO/.github/workflows/application-release.yml' &&
+          extractPayload(image, attestations.buildRecord).predicate.image == image &&
+          extractPayload(image, attestations.buildRecord).predicate.gitCommit.matches('^[0-9a-f]{40}$') &&
+          extractPayload(image, attestations.buildRecord).predicate.releaseAuthorizationSha256.matches('^[0-9a-f]{64}$') &&
+          extractPayload(image, attestations.buildRecord).predicate.finalBase.matches('^ghcr[.]io/example-org/approved/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$') &&
+          extractPayload(image, attestations.buildRecord).predicate.baseImages.all(ref,
+            ref.matches('^ghcr[.]io/example-org/approved/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$')))
+      message: 'Application init/ephemeral images must carry a verified and policy-compliant signed build record'

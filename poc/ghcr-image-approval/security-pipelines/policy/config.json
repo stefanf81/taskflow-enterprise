@@ -1,0 +1,75 @@
+{
+  "version": "2026-11-ghcr-v6",
+  "allow_self_approval": true,
+  "accepted_approval_policy_versions": [
+    "2026-11-ghcr-v6"
+  ],
+  "approval_max_age_hours": 720,
+  "verification_max_age_minutes": 30,
+  "review_package_downgrades": true,
+  "review_removed_packages": true,
+  "require_manual_review_if_upstream_identity_unverified": true,
+  "require_manual_review_if_provenance_unverified": true,
+  "always_review_code_prefixes": [
+    "tmp/",
+    "var/tmp/",
+    "dev/shm/",
+    "run/",
+    "root/",
+    "home/",
+    "etc/",
+    "usr/local/",
+    "srv/"
+  ],
+  "suspicious_link_target_prefixes": [
+    "tmp/",
+    "var/tmp/",
+    "dev/shm/",
+    "run/",
+    "root/",
+    "home/"
+  ],
+  "world_writable_directory_block_prefixes": [
+    "etc",
+    "usr",
+    "bin",
+    "sbin",
+    "lib",
+    "lib64",
+    "opt",
+    "root",
+    "var/lib"
+  ],
+  "vendor_managed_prefixes": {
+    "opt/java/openjdk/": "JAVA_VERSION"
+  },
+  "expected_changing_env": [
+    "JAVA_VERSION"
+  ],
+  "expected_changing_labels": [],
+  "changed_config_review_fields": [
+    "User",
+    "Entrypoint",
+    "Cmd",
+    "WorkingDir",
+    "Healthcheck",
+    "OnBuild",
+    "Shell",
+    "StopSignal",
+    "Volumes",
+    "ExposedPorts"
+  ],
+  "block_new_critical": true,
+  "review_new_high": true,
+  "review_all_modified_files": true,
+  "review_all_added_removed_files": true,
+  "review_all_link_changes": true,
+  "review_package_changes": true,
+  "critical_exceptions": [],
+  "historical_baseline_policy_versions": [
+    "2026-11-ghcr-v6",
+    "2026-11-ghcr-v5",
+    "2026-11-ghcr-v4"
+  ],
+  "historical_baseline_max_age_hours": 8760
+}

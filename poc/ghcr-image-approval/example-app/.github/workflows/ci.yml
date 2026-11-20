@@ -1,0 +1,29 @@
+name: Application tests (no publishing secrets)
+
+# The release gate (stefanf81/ghcr-approval-poc-gate) issues a grant only for the exact main
+# HEAD whose `test` check-run succeeded, so this runs on pushes to main as well as on PRs.
+# Publishing happens elsewhere: the central release workflow builds this repository from a
+# hash-pinned source archive. Do not add signing keys, GHCR write credentials or privileged
+# workflow_run / pull_request_target jobs here.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Reproducible build and tests
+        run: |
+          set -euo pipefail
+          test -x ci/build_and_test.sh
+          ./ci/build_and_test.sh

@@ -1,0 +1,89 @@
+name: GHCR - bootstrap first approved base (PoC)
+
+# PoC addition, not part of the kit. The kit needs an existing signed baseline in
+# ghcr.io/<owner>/approved/eclipse-temurin and leaves its creation to "a separate
+# operator-controlled bootstrap". This is that bootstrap, run once:
+#   bootstrap  WRITE  copy the catalog pin into approved/, sign a record marked
+#                     "bootstrap": true WITHOUT the policy fingerprint, set the tracking tag
+# The record is a comparison baseline only: ci/base_precheck.sh and scripts/verify_bases.sh
+# require the fingerprint, so applications can use the digest only after
+# base-image-approval.yml has evaluated it and a reviewer approved that run.
+# Refuses to run when the tracking tag already exists. Every action is pinned to a full
+# commit SHA (tag in the trailing comment).
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_digest:
+        description: The sha256 digest pinned in catalog/Dockerfile.temurin (sha256:<64 hex>)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ghcr-base-temurin-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  GHCR_HOST: ghcr.io
+  GHCR_NAMESPACE: ${{ vars.GHCR_NAMESPACE }}
+  GHCR_APPROVED_REPO: ghcr.io/${{ vars.GHCR_NAMESPACE }}/approved/eclipse-temurin
+  GHCR_QUARANTINE_REPO: ghcr.io/${{ vars.GHCR_NAMESPACE }}/quarantine/eclipse-temurin
+  APPROVAL_PREDICATE_TYPE: https://example.org/ghcr-base-approval/v1
+
+jobs:
+  bootstrap:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Same environment, reviewer and signing key as the manual base promotion.
+    environment: base-manual-approval
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GHCR_USER: ${{ github.actor }}
+      GHCR_PASS: ${{ github.token }}
+      APPROVAL_PUBKEY_B64: ${{ secrets.APPROVAL_PUBKEY_B64 }}
+      APPROVAL_PRIVATE_KEY_B64: ${{ secrets.APPROVAL_PRIVATE_KEY_B64 }}
+      COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+      CONFIRM_DIGEST: ${{ inputs.confirm_digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install exact SHA-256-pinned security tools (promote)
+        shell: bash
+        run: python3 -I ci/install_verified_tools.py --kind promote
+      - name: Require the reviewer of base-manual-approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ci/require_tools.sh promote
+          [[ "$CONFIRM_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo 'confirm_digest must be sha256:<64 hex>'; exit 1; }
+          approver="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/approvals" |
+            python3 -I ci/environment_approver.py --environment base-manual-approval \
+              --triggering-actor "$GITHUB_TRIGGERING_ACTOR" --actor "$GITHUB_ACTOR")"
+          echo "APPROVER_ID=$approver" >> "$GITHUB_ENV"
+      - name: Import, sign and tag the first baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$APPROVAL_PUBKEY_B64" | base64 -d > "$RUNNER_TEMP/approval.pub"
+          printf '%s' "$APPROVAL_PRIVATE_KEY_B64" | base64 -d > "$RUNNER_TEMP/approval.key"
+          printf '%s' "$GHCR_PASS" | crane auth login "$GHCR_HOST" --username "$GHCR_USER" --password-stdin
+          APPROVAL_PUBKEY="$RUNNER_TEMP/approval.pub" COSIGN_KEY="$RUNNER_TEMP/approval.key" \
+            bash ci/bootstrap_base.sh
+          echo "Bootstrapped $(cat reports/approved-ref.txt) as comparison baseline (approver: $APPROVER_ID)." >> "$GITHUB_STEP_SUMMARY"
+          echo 'Next: dispatch base-image-approval.yml and approve its promote job.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: bootstrap-evidence
+          path: reports/
+          if-no-files-found: warn
+          retention-days: 90

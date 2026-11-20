@@ -1,0 +1,15 @@
+{
+  "schema": "https://example.org/release-approval/v1",
+  "issuer": "organization-protected-release-gate",
+  "image": "ghcr.io/example-org/applications/myapp@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "decision": "APPROVED",
+  "checks": {
+    "dast": "PASS",
+    "staging-smoke": "PASS"
+  },
+  "dastReport": "https://dast.example.internal/reports/12345",
+  "approvedAt": "2026-11-13T22:00:00Z",
+  "repository": "https://github.com/example-org/myapp.git",
+  "policyVersion": "2026-11-ghcr-v6"
+}

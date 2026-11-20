@@ -1,0 +1,69 @@
+name: Release gate (PoC)
+
+# Stand-in for the external, independently secured release-authorization service the GHCR
+# image approval kit requires but does not supply. Dispatch it for the exact main HEAD of an
+# allowlisted application BEFORE dispatching the release in stefanf81/ghcr-approval-poc, and
+# keep it running until that release has signed:
+#   grant    re-issues a signed grant every 60 s while the commit is still main HEAD and its
+#            required check-runs have succeeded; publishes it on the orphan `grants` branch
+#   (always) withdraws the grant when the run ends, fails or is cancelled (= revocation)
+# The private key lives only in the `release-gate` environment (deployment branch: main).
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: Application repository (OWNER/NAME) listed in allowlist.json
+        type: string
+        required: true
+        default: stefanf81/ghcr-approval-poc-app
+      commit:
+        description: Full 40-hex SHA of that repository's current main HEAD
+        type: string
+        required: true
+      minutes:
+        description: How long to keep re-issuing the grant (1-90)
+        type: string
+        required: true
+        default: '45'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-gate-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  grant:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: release-gate
+    timeout-minutes: 100
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      APP_REPOSITORY: ${{ inputs.repository }}
+      APP_COMMIT: ${{ inputs.commit }}
+      GRANT_MINUTES: ${{ inputs.minutes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          [[ "$APP_REPOSITORY" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || { echo 'repository must be OWNER/NAME'; exit 1; }
+          [[ "$APP_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo 'commit must be a full lowercase SHA'; exit 1; }
+      - name: Re-issue the grant every minute
+        env:
+          GATE_PRIVATE_KEY_B64: ${{ secrets.GATE_PRIVATE_KEY_B64 }}
+        run: |
+          {
+            echo "Grant URL: https://raw.githubusercontent.com/$GITHUB_REPOSITORY/refs/heads/grants/$APP_COMMIT"
+            echo "Cancel this run to revoke the grant."
+          } >> "$GITHUB_STEP_SUMMARY"
+          bash serve_grants.sh serve
+      - name: Withdraw the grant
+        if: always()
+        run: bash serve_grants.sh withdraw

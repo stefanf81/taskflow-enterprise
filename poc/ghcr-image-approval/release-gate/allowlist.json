@@ -1,0 +1,11 @@
+{
+  "issuer": "stefanf81-poc-release-gate",
+  "record_schema": "https://example.org/verified-release/v1",
+  "repositories": {
+    "stefanf81/ghcr-approval-poc-app": {
+      "checks": {
+        "tests": ["test"]
+      }
+    }
+  }
+}
