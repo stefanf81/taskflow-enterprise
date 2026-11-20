@@ -2724,5 +2724,34 @@ The first version of this section reported CLS 0.002 after the change, and the f
 
 ### Not changed
 
-* **One more intermittent failure in the same gate:** once in 12 runs on 4 workers, the "Need an account? Register" click did not open the registration form within 30 s. Not investigated here.
+* **One more intermittent failure in the same gate:** once in 12 runs on 4 workers, the "Need an account? Register" click did not open the registration form within 30 s. *(Found and fixed in §74: the click was lost to a validation message.)*
+
+## 🖱️ 74. Clicks Lost to a Validation Message — The Login Modal's Mode Toggle and the Wizard's Back Button (2026-11-20)
+
+**Goal:** the intermittent failure §73 left open: in `e2e/a11y.spec.ts` the "Need an account? Register" click sometimes did not open the registration form.
+
+**Methodology:** the accessibility spec 40 times on 4 workers (production build, prod-profile backend on an empty PostgreSQL 18.7) with traces kept for failures; then a scripted human-speed click: press at a given height of the button, let two frames render, release.
+
+### Mechanism
+
+The login modal focuses its empty username field when it opens. Pressing the mouse on "Need an account? Register" moves the focus, the field is marked touched, and "Username is required." renders under it in the next frame. That pushes the toggle down 11 px, so the release lands beside it and no click event fires. The trace of a failing run shows exactly that: the click was "done", and the next screenshot shows the modal still in Sign In mode with the new message under the field. A human click always spans a rendered frame, so for real users a press in the top 11 of the link's 16 px was lost: about two thirds of first clicks after opening the modal. The booking wizard's **Back** button has the same problem below the contact step: an empty, focused field's message moves it 19 px, so a press in its top half (19 of 37 px) was lost.
+
+| Press height (from the top) | Before | After |
+| :--- | :--- | :--- |
+| Login toggle, 1–8 px of 16 | click lost (toggle moved 11 px) | registration form |
+| Login toggle, 10–12 px of 16 | registration form | registration form |
+| Wizard Back, 2–14 px of 37 | click lost (Back moved 19 px) | step 3 |
+| Wizard Back, 20–26 px of 37 | step 3 | step 3 |
+| `e2e/a11y.spec.ts`, 40 runs on 4 workers | 38 passed | **40 passed** |
+
+The other failure of that stress run ("Email is already registered.") was the test's own: two parallel workers built the same `Date.now()` e-mail. The specs that register now use `crypto.randomUUID()`.
+
+### Adopted
+
+* **Secondary actions do not take the focus on mouse press.** The toggle and Back have `(mousedown)="$event.preventDefault()"`: the focused field is not blurred, shows no message, and nothing moves. Keyboard users are unaffected (Tab still focuses the buttons; Enter and Space still activate them). The forms' own submit buttons keep the default: a lost click there shows the same message that submitting would.
+* **Guard:** `e2e/lost-clicks.spec.ts` presses 2 px below the top edge of each button, lets two frames render and releases. Before the fix both tests failed 3 of 3 times; after it they pass 3 of 3.
+
+### Not adopted
+
+* **Reserving space for every validation message:** it would also stop the jump, for every button below a field, but it changes the spacing of the login modal, the contact step and the post-booking forms; the two buttons whose click is not a submit are the ones that lost something.
 

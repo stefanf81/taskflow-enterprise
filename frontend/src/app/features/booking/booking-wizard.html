@@ -142,10 +142,14 @@
   <div
     class="wizard-footer-controls flex justify-between items-center mt-8 border-t border-white/5 pt-5"
   >
+    <!-- (mousedown) keeps the focus in the step: blurring an empty contact field showed its
+         "required" message and moved Back 19 px down before the mouse was released, so the click
+         was lost (BENCHMARKS.md §74). -->
     <button
       type="button"
       class="btn btn-secondary text-xs wizard-back-btn"
       [disabled]="store.activeStep() === 1"
+      (mousedown)="$event.preventDefault()"
       (click)="store.goToPrevStep()"
     >
       &larr; Back

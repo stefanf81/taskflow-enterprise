@@ -113,7 +113,7 @@ test.describe('Signed-in pages', () => {
     expect(await animatedAround(heading)).toEqual([]);
 
     await page.context().clearCookies();
-    const email = `stability-${Date.now()}@example.com`;
+    const email = `stability-${crypto.randomUUID()}@example.com`;
     const password = 'stability-password-123';
     await postAuth(page, 'register', {
       fullName: 'Stability Tester',

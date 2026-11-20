@@ -205,9 +205,13 @@ interface AuthFormModel {
         </form>
 
         <div class="mt-4 text-center">
+          <!-- (mousedown) keeps the focus where it is. Taking it blurred the focused field, which
+               then showed its "required" message and pushed this button down 11 px before the
+               mouse was released, so the click was lost (BENCHMARKS.md §74). -->
           <button
             type="button"
             class="text-xs text-gold font-bold hover:text-white"
+            (mousedown)="$event.preventDefault()"
             (click)="toggleMode()"
           >
             {{

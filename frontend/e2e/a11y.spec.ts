@@ -120,7 +120,7 @@ test.describe('Accessibility (axe-core, WCAG 2.x AA)', () => {
       await page.click('.btn-logout');
       await expect(page.locator('h1').first()).toContainText('Luxury Barber Scheduler');
 
-      const email = `a11y-customer-${Date.now()}@example.com`;
+      const email = `a11y-customer-${crypto.randomUUID()}@example.com`;
       const password = 'a11y-password-123';
 
       await page.click('button:has-text("Owner Portal")');
