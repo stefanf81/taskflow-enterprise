@@ -28,7 +28,7 @@ Access tokens are short-lived JWTs (1 h): an HttpOnly `access_token` cookie on t
 
 ### Negative
 - One indexed query per authenticated request and family every 10 s per replica (cached), plus a write per renewal.
-- A revocation reaches other replicas within the 10 s cache TTL; the presented token of a logout is denied everywhere at once through `TokenRevocationList`.
+- A revocation reaches other replicas within the 10 s cache TTL; the presented token of a logout is denied at once on the replica that revoked it, and on the others at once through the revocation announcement, or, should that message be lost, within about one second: `TokenRevocationList` trusts a cached "not revoked" only under the revocation generation it last read, at most 1 s ago, and every revocation write increments that generation (amended 2026-11, BENCHMARKS.md §82).
 - The 30 s grace lets a credential stolen within that window fork a chain of the same family; the family deadline still bounds it.
 - A device whose renewal response is lost and that does not retry within the grace is signed out at its next renewal.
 

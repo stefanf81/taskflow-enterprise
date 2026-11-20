@@ -5,6 +5,8 @@ import com.example.taskflow.core.SharedStateStore;
 import org.springframework.data.redis.connection.SetCondition;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.data.redis.core.types.Expiration;
 
 import java.nio.charset.StandardCharsets;
@@ -22,6 +24,11 @@ import java.util.UUID;
  *       key without TTL, so the denylist cannot outgrow the set of still-valid tokens.</li>
  *   <li>Lookup is a single {@code PTTL revoked:<jti>}: it answers "revoked?" and "until when?" in one
  *       round trip, which lets the caller cache a hit locally until the token's own expiry.</li>
+ *   <li>Every write also increments {@link #GENERATION_KEY}, atomically with the {@code SET}. A
+ *       replica may answer "not revoked" from memory only for the generation it last read (see
+ *       {@link TokenRevocationList}), so any revocation, on any replica, invalidates those answers
+ *       everywhere within one read interval, whether or not its announcement arrives. The two keys
+ *       are written by one script, so a cluster deployment would need them in one hash slot.</li>
  *   <li>Revocations are also announced on {@link #CHANNEL} as {@code <instanceId>|<expMillis>|<jti>}
  *       so other replicas can close admin event streams opened with that token. Messages carrying
  *       this instance's id are ignored on receipt, and a received revocation is only applied
@@ -36,6 +43,14 @@ final class RedisTokenRevocationStore {
 
     static final String KEY_PREFIX = "revoked:";
     static final String CHANNEL = "taskflow:token-revoked";
+    /** Incremented by every revocation write (not under {@link #KEY_PREFIX}: no jti can collide). */
+    static final String GENERATION_KEY = "revocation-generation";
+    /** {@link #generation} result: Redis could not be asked. */
+    static final long GENERATION_UNAVAILABLE = Long.MIN_VALUE;
+
+    /** SET the denylist entry and bump the generation, as one atomic step. */
+    static final RedisScript<Long> WRITE_SCRIPT = new DefaultRedisScript<>(
+            "redis.call('SET', KEYS[1], '1', 'PX', ARGV[1]) return redis.call('INCR', KEYS[2])", Long.class);
     /** Floor for the key TTL so a token that is about to expire is still denied across clock skew. */
     static final long MIN_TTL_MILLIS = 5_000;
     /** {@link #remainingMillis} result: not revoked. */
@@ -73,7 +88,7 @@ final class RedisTokenRevocationStore {
         }
         long ttlMillis = Math.max(MIN_TTL_MILLIS, Duration.between(now, expiresAt).toMillis());
         try {
-            redis.opsForValue().set(key(jti), "1", Duration.ofMillis(ttlMillis));
+            redis.execute(WRITE_SCRIPT, List.of(key(jti), GENERATION_KEY), String.valueOf(ttlMillis));
             backoff.recordSuccess();
             return true;
         } catch (RuntimeException e) {
@@ -86,10 +101,12 @@ final class RedisTokenRevocationStore {
     static final int WRITE_BATCH = 500;
 
     private static final byte[] PRESENT = "1".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] GENERATION_BYTES = GENERATION_KEY.getBytes(StandardCharsets.UTF_8);
 
     /**
      * Writes many denylist entries (the periodic restore of the durable copy) in pipelined batches of
-     * {@link #WRITE_BATCH}, the same {@code SET ... PX} as {@link #write} each. One by one, a restore
+     * {@link #WRITE_BATCH}, the same {@code SET ... PX} as {@link #write} each, and one generation
+     * increment per batch (an entry Redis had lost may be cached as "not revoked" elsewhere). One by one, a restore
      * of 10,000 revocations was 10,000 sequential round trips every minute. Returns {@code false} at
      * the first batch that fails (Redis unavailable); the batches before it are written.
      */
@@ -106,6 +123,9 @@ final class RedisTokenRevocationStore {
                         connection.stringCommands().set(key(entry.getKey()).getBytes(StandardCharsets.UTF_8), PRESENT,
                                 SetCondition.upsert(), Expiration.milliseconds(ttlMillis));
                     }
+                    // After the batch's SETs on the same connection: a replica that sees the new
+                    // generation also sees every entry of the batch.
+                    connection.stringCommands().incr(GENERATION_BYTES);
                     return null;
                 });
                 backoff.recordSuccess();
@@ -142,6 +162,27 @@ final class RedisTokenRevocationStore {
         } catch (RuntimeException e) {
             backoff.recordFailure(e);
             return UNAVAILABLE;
+        }
+    }
+
+    /**
+     * The current revocation generation ({@code 0} when the key is missing, e.g. after a Redis
+     * restart without persistence, which is a change like any other), or
+     * {@link #GENERATION_UNAVAILABLE}.
+     */
+    long generation() {
+        if (!backoff.allowRequest()) {
+            return GENERATION_UNAVAILABLE;
+        }
+        try {
+            String value = redis.opsForValue().get(GENERATION_KEY);
+            backoff.recordSuccess();
+            return value == null ? 0 : Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            return GENERATION_UNAVAILABLE;
+        } catch (RuntimeException e) {
+            backoff.recordFailure(e);
+            return GENERATION_UNAVAILABLE;
         }
     }
 

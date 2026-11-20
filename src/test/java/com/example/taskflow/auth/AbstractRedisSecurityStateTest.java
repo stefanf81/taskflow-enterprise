@@ -96,6 +96,29 @@ abstract class AbstractRedisSecurityStateTest {
         assertTrue(new TokenRevocationList(null, new RedisTokenRevocationStore(redisB)).isRevoked(jti));
     }
 
+    /**
+     * Replica B caches "not revoked" under the current revocation generation. Replica A's revocation
+     * bumps the generation atomically with the denylist entry; B is not subscribed here, so the
+     * announcement is lost, and B still denies the token after its next generation read (§82).
+     */
+    @Test
+    void aCachedNotRevokedIsDroppedAtTheNextGenerationReadWithoutTheAnnouncement() throws Exception {
+        TokenRevocationList replicaA = new TokenRevocationList(null, new RedisTokenRevocationStore(redisA));
+        TokenRevocationList replicaB = new TokenRevocationList(null, new RedisTokenRevocationStore(redisB));
+        replicaB.readGenerationWith(Runnable::run);
+        String jti = freshJti();
+        assertFalse(replicaB.isRevoked(jti));
+        assertEquals(1, replicaB.notRevokedCount(), "cached under the current generation");
+        String before = redisA.opsForValue().get(RedisTokenRevocationStore.GENERATION_KEY);
+
+        replicaA.revoke(jti, Instant.now().plusSeconds(120));
+
+        long bumped = Long.parseLong(redisA.opsForValue().get(RedisTokenRevocationStore.GENERATION_KEY));
+        assertEquals((before == null ? 0 : Long.parseLong(before)) + 1, bumped, "one increment per write");
+        Thread.sleep(TokenRevocationList.GENERATION_READ_MILLIS + 50);
+        assertTrue(replicaB.isRevoked(jti));
+    }
+
     @Test
     void aRestoreWritesEveryRevocationBackInPipelinedBatchesWithItsRemainingLifetime() {
         TokenRevocationList restarted = new TokenRevocationList(null, new RedisTokenRevocationStore(redisA));

@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Denylist of revoked JWT ids ({@code jti}).
@@ -25,8 +27,19 @@ import java.util.concurrent.ConcurrentHashMap;
  * ({@link RedisTokenRevocationStore}: {@code revoked:<jti>} with a TTL of the token's remaining
  * lifetime), so it is shared by all replicas and survives a restart of the backend. The local map
  * stays in front as a write-through and positive cache: it is checked first, and a hit found in Redis
- * is cached locally until the token's expiry, so only not-revoked tokens cost a Redis round trip
- * (one {@code PTTL} per request; the request-scoped decoder already avoids a second one).
+ * is cached locally until the token's expiry.
+ *
+ * <p><b>"Not revoked" answers</b> are cached too, but only under the <em>revocation generation</em>
+ * they were looked up under: a counter in Redis that every revocation write increments, atomically
+ * with the denylist entry ({@link RedisTokenRevocationStore#GENERATION_KEY}). This replica reads it
+ * in the background at most every {@link #GENERATION_READ_MILLIS}, and trusts a cached "not revoked"
+ * only while the last successful read is at most {@link #GENERATION_MAX_AGE_MILLIS} old and still
+ * shows the generation the answer was cached under. A revocation on another replica therefore
+ * reaches this one at once through its announcement (below), and within about one second even if
+ * the announcement is lost; one on this replica is in the local map at once. Without a fresh
+ * generation (Redis failing, reads late) every request asks Redis, as before. This replaced one
+ * {@code PTTL} round trip on every authenticated request: 11-13% of throughput with the CPU
+ * saturated (BENCHMARKS.md §81, §82).
  *
  * <p><b>Redis failures</b> never reject tokens wholesale and never throw out of the decoder: lookups
  * fall back to the local map only (revocations made on this replica keep working; ones made on other
@@ -57,6 +70,33 @@ class TokenRevocationList {
     static final int MAX_FLUSH_PER_CALL = 100;
     /** Local cache lifetime for a Redis entry without TTL (never written by this code). */
     private static final long NO_TTL_CACHE_MILLIS = 60_000;
+    /** How often the revocation generation is read, at most (on demand, never on a request's path). */
+    static final long GENERATION_READ_MILLIS = 500;
+    /** A cached "not revoked" is trusted only while the last generation read is at most this old. */
+    static final long GENERATION_MAX_AGE_MILLIS = 1_000;
+    /** A cached "not revoked" is looked up again after this long, whatever the generation. */
+    static final long NOT_REVOKED_TTL_MILLIS = 30_000;
+    /** Caps the "not revoked" cache; beyond it, answers are simply not cached. */
+    static final int MAX_NOT_REVOKED_ENTRIES = 100_000;
+    private static final long NO_GENERATION = Long.MIN_VALUE;
+
+    /** A cached "not revoked": valid for {@code generation} until {@code untilMillis}. */
+    private record NotRevoked(long generation, long untilMillis) {
+    }
+
+    private final ConcurrentHashMap<String, NotRevoked> notRevoked = new ConcurrentHashMap<>();
+    /** The last generation read successfully, and when that read started; NO_GENERATION if none. */
+    private volatile long generation = NO_GENERATION;
+    private volatile long generationReadAt;
+    /** When the last read was started, successful or not: at most one per GENERATION_READ_MILLIS. */
+    private volatile long generationAttemptAt;
+    private final AtomicBoolean readingGeneration = new AtomicBoolean();
+    /**
+     * Runs the generation reads off the request path. The Spring constructor uses a virtual thread;
+     * the others never read it (no "not revoked" cache), unless a test sets one.
+     */
+    private volatile Executor generationReader = task -> {
+    };
 
     private final ConcurrentHashMap<String, Instant> revoked = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Instant> pendingSync = new ConcurrentHashMap<>();
@@ -72,6 +112,7 @@ class TokenRevocationList {
                                ObjectProvider<RedisTokenRevocationStore> shared,
                                ObjectProvider<PersistentTokenRevocations> persistent) {
         this(events, shared.getIfAvailable(), persistent.getIfAvailable(), TokenProvider.TOKEN_CLOCK);
+        this.generationReader = task -> Thread.ofVirtual().name("revocation-generation").start(task);
     }
 
     TokenRevocationList(ApplicationEventPublisher events, RedisTokenRevocationStore shared) {
@@ -108,6 +149,7 @@ class TokenRevocationList {
         }
         revoked.values().removeIf(expiry -> !expiry.isAfter(now));
         revoked.put(jti, expiresAt);
+        notRevoked.remove(jti);
         if (persistent != null) {
             persistent.save(jti, expiresAt);
         }
@@ -142,6 +184,17 @@ class TokenRevocationList {
         if (shared == null) {
             return false;
         }
+        long nowMillis = now.toEpochMilli();
+        readGenerationIfDue(nowMillis);
+        // Taken before the lookup: a revocation between the two changes the generation later and so
+        // invalidates the answer cached below.
+        long knownGeneration = trustedGeneration(nowMillis);
+        if (knownGeneration != NO_GENERATION) {
+            NotRevoked cached = notRevoked.get(jti);
+            if (cached != null && cached.generation() == knownGeneration && cached.untilMillis() > nowMillis) {
+                return false;
+            }
+        }
         try {
             flushPending(now);
             long remaining = shared.remainingMillis(jti);
@@ -153,10 +206,87 @@ class TokenRevocationList {
                 cacheLocally(jti, now.plusMillis(NO_TTL_CACHE_MILLIS), now);
                 return true;
             }
+            if (remaining == RedisTokenRevocationStore.NOT_REVOKED && knownGeneration != NO_GENERATION) {
+                cacheNotRevoked(jti, knownGeneration, nowMillis);
+            }
             return false; // not revoked, or Redis unavailable: the local answer stands
         } catch (RuntimeException e) {
             return false;
         }
+    }
+
+    /** The generation a cached "not revoked" may be trusted for now, or NO_GENERATION. */
+    private long trustedGeneration(long nowMillis) {
+        long known = generation;
+        return known != NO_GENERATION && nowMillis - generationReadAt <= GENERATION_MAX_AGE_MILLIS
+                ? known
+                : NO_GENERATION;
+    }
+
+    private void readGenerationIfDue(long nowMillis) {
+        if (nowMillis - generationAttemptAt >= GENERATION_READ_MILLIS && readingGeneration.compareAndSet(false, true)) {
+            generationAttemptAt = nowMillis;
+            try {
+                generationReader.execute(() -> {
+                    try {
+                        readGeneration();
+                    } finally {
+                        readingGeneration.set(false);
+                    }
+                });
+            } catch (RuntimeException e) {
+                readingGeneration.set(false);
+            }
+        }
+    }
+
+    /**
+     * Reads the revocation generation; a change, or a failed read, drops every cached "not revoked".
+     * Also writes revocations still pending from a Redis outage, which used to happen only on a
+     * request's lookup.
+     */
+    void readGeneration() {
+        if (shared == null) {
+            return;
+        }
+        Instant now = Instant.now(clock);
+        try {
+            flushPending(now);
+        } catch (RuntimeException e) {
+            // the generation is read regardless
+        }
+        long readAt = now.toEpochMilli();
+        long current = shared.generation();
+        if (current == RedisTokenRevocationStore.GENERATION_UNAVAILABLE) {
+            generation = NO_GENERATION;
+            notRevoked.clear();
+            return;
+        }
+        if (current != generation) {
+            notRevoked.clear();
+        }
+        generation = current;
+        generationReadAt = readAt;
+    }
+
+    /** Lets a test run the generation reads (for example on the calling thread). */
+    void readGenerationWith(Executor reader) {
+        this.generationReader = reader;
+    }
+
+    /** Number of cached "not revoked" answers (for tests). */
+    int notRevokedCount() {
+        return notRevoked.size();
+    }
+
+    private void cacheNotRevoked(String jti, long knownGeneration, long nowMillis) {
+        if (notRevoked.size() >= MAX_NOT_REVOKED_ENTRIES) {
+            notRevoked.values().removeIf(entry -> entry.untilMillis() <= nowMillis || entry.generation() != knownGeneration);
+            if (notRevoked.size() >= MAX_NOT_REVOKED_ENTRIES) {
+                return;
+            }
+        }
+        notRevoked.put(jti, new NotRevoked(knownGeneration, nowMillis + NOT_REVOKED_TTL_MILLIS));
     }
 
     /**

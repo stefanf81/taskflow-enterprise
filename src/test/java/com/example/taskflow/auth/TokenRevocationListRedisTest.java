@@ -10,8 +10,8 @@ import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
-import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -54,6 +55,24 @@ class TokenRevocationListRedisTest {
         when(redis.execute(any(RedisCallback.class))).thenReturn(ttl);
     }
 
+    private void writesFail() {
+        org.mockito.Mockito.doThrow(new RedisConnectionFailureException("down"))
+                .when(redis).execute(eq(RedisTokenRevocationStore.WRITE_SCRIPT), anyList(), any());
+    }
+
+    private void writesSucceed() {
+        org.mockito.Mockito.doReturn(1L)
+                .when(redis).execute(eq(RedisTokenRevocationStore.WRITE_SCRIPT), anyList(), any());
+    }
+
+    /** The TTL (ms, as the script's argument) of the one denylist write for {@code jti}. */
+    private long writtenTtlMillis(String jti) {
+        ArgumentCaptor<Object> ttl = ArgumentCaptor.forClass(Object.class);
+        verify(redis).execute(eq(RedisTokenRevocationStore.WRITE_SCRIPT),
+                eq(List.of("revoked:" + jti, RedisTokenRevocationStore.GENERATION_KEY)), ttl.capture());
+        return Long.parseLong((String) ttl.getValue());
+    }
+
     @SuppressWarnings("unchecked")
     private void redisLookupFails() {
         when(redis.execute(any(RedisCallback.class))).thenThrow(new RedisConnectionFailureException("down"));
@@ -63,9 +82,9 @@ class TokenRevocationListRedisTest {
     void revokeWritesTheJtiWithTheTokensRemainingLifetimeAndAnnouncesIt() {
         list.revoke("jti-1", Instant.now().plusSeconds(600));
 
-        ArgumentCaptor<Duration> ttl = ArgumentCaptor.forClass(Duration.class);
-        verify(values).set(eq("revoked:jti-1"), eq("1"), ttl.capture());
-        assertTrue(ttl.getValue().toMillis() > 590_000 && ttl.getValue().toMillis() <= 600_000, ttl.getValue().toString());
+        // One script: the denylist entry and the revocation generation, atomically.
+        long ttl = writtenTtlMillis("jti-1");
+        assertTrue(ttl > 590_000 && ttl <= 600_000, String.valueOf(ttl));
         verify(redis).convertAndSend(eq(RedisTokenRevocationStore.CHANNEL), anyString());
         verify(events).publishEvent(new TokenRevokedEvent("jti-1"));
     }
@@ -74,9 +93,7 @@ class TokenRevocationListRedisTest {
     void theKeyTtlHasAFloorSoAnAlmostExpiredTokenIsStillDenied() {
         list.revoke("jti-1", Instant.now().plusMillis(200));
 
-        ArgumentCaptor<Duration> ttl = ArgumentCaptor.forClass(Duration.class);
-        verify(values).set(eq("revoked:jti-1"), eq("1"), ttl.capture());
-        assertEquals(RedisTokenRevocationStore.MIN_TTL_MILLIS, ttl.getValue().toMillis());
+        assertEquals(RedisTokenRevocationStore.MIN_TTL_MILLIS, writtenTtlMillis("jti-1"));
     }
 
     @Test
@@ -127,8 +144,7 @@ class TokenRevocationListRedisTest {
     @Test
     @SuppressWarnings("unchecked")
     void revocationsMadeWhileRedisIsDownAreKeptAndWrittenOnceItAnswersAgain() {
-        org.mockito.Mockito.doThrow(new RedisConnectionFailureException("down"))
-                .when(values).set(anyString(), anyString(), any(Duration.class));
+        writesFail();
 
         list.revoke("jti-1", Instant.now().plusSeconds(600));
 
@@ -138,12 +154,13 @@ class TokenRevocationListRedisTest {
         verify(redis, never()).convertAndSend(anyString(), anyString());
 
         // Redis is back after the back-off.
-        org.mockito.Mockito.reset(values);
+        writesSucceed();
+        org.mockito.Mockito.clearInvocations(redis);
         clock.addAndGet(5_001);
         redisTtlIs(-2L);
         assertFalse(list.isRevoked("jti-2"));
 
-        verify(values).set(eq("revoked:jti-1"), eq("1"), any(Duration.class));
+        writtenTtlMillis("jti-1");
         verify(redis).convertAndSend(eq(RedisTokenRevocationStore.CHANNEL), anyString());
         assertEquals(0, list.pendingCount());
     }
@@ -151,22 +168,22 @@ class TokenRevocationListRedisTest {
     @Test
     @SuppressWarnings("unchecked")
     void aBacklogOfPendingRevocationsIsWrittenInBoundedBatches() {
-        org.mockito.Mockito.doThrow(new RedisConnectionFailureException("down"))
-                .when(values).set(anyString(), anyString(), any(Duration.class));
+        writesFail();
         list.revoke("first", Instant.now().plusSeconds(600)); // opens the back-off
         for (int i = 0; i < 149; i++) {
             list.revoke("jti-" + i, Instant.now().plusSeconds(600));
         }
         assertEquals(150, list.pendingCount());
 
-        org.mockito.Mockito.reset(values);
+        writesSucceed();
+        org.mockito.Mockito.clearInvocations(redis);
         clock.addAndGet(5_001);
         redisTtlIs(-2L);
         list.isRevoked("x");
         assertEquals(50, list.pendingCount(), "one request writes at most " + TokenRevocationList.MAX_FLUSH_PER_CALL);
         list.isRevoked("y");
         assertEquals(0, list.pendingCount());
-        verify(values, times(150)).set(anyString(), eq("1"), any(Duration.class));
+        verify(redis, times(150)).execute(eq(RedisTokenRevocationStore.WRITE_SCRIPT), anyList(), any());
     }
 
     @Test
@@ -177,7 +194,7 @@ class TokenRevocationListRedisTest {
 
         assertTrue(list.isRevoked("jti-remote"));
         verify(events).publishEvent(new TokenRevokedEvent("jti-remote"));
-        verify(values, never()).set(anyString(), anyString(), any(Duration.class));
+        verify(redis, never()).execute(eq(RedisTokenRevocationStore.WRITE_SCRIPT), anyList(), any());
         verify(redis, never()).convertAndSend(anyString(), anyString());
     }
 
@@ -213,7 +230,7 @@ class TokenRevocationListRedisTest {
                 new RevokedToken("jti-10", Instant.now().plusSeconds(600))));
 
         verify(redis, times(1)).executePipelined(any(RedisCallback.class));
-        verify(values, never()).set(anyString(), anyString(), any(Duration.class));
+        verify(redis, never()).execute(eq(RedisTokenRevocationStore.WRITE_SCRIPT), anyList(), any());
         verify(redis, never()).convertAndSend(anyString(), anyString());
         verify(events, never()).publishEvent(any());
         assertTrue(list.isRevoked("jti-9"));
@@ -249,5 +266,172 @@ class TokenRevocationListRedisTest {
         redisLookupFails();
         assertTrue(list.isRevoked("j0"));
         assertTrue(list.isRevoked("j1199"));
+    }
+
+    // ---- "not revoked" answers, cached under the revocation generation (BENCHMARKS.md §82) ----
+
+    /** A clock the tests move by hand. */
+    private static final class ManualClock extends java.time.Clock {
+        long millis = 1_800_000_000_000L;
+
+        @Override
+        public java.time.ZoneId getZone() {
+            return java.time.ZoneOffset.UTC;
+        }
+
+        @Override
+        public java.time.Clock withZone(java.time.ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return Instant.ofEpochMilli(millis);
+        }
+    }
+
+    private final ManualClock tokenClock = new ManualClock();
+
+    /** A list whose generation reads run on the calling thread, at the generation Redis holds. */
+    private TokenRevocationList cachingList(String generation) {
+        generationIs(generation);
+        TokenRevocationList caching = new TokenRevocationList(events, store, tokenClock);
+        caching.readGenerationWith(Runnable::run);
+        return caching;
+    }
+
+    private void generationIs(String generation) {
+        when(values.get(RedisTokenRevocationStore.GENERATION_KEY)).thenReturn(generation);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void verifyLookups(int count) {
+        verify(redis, times(count)).execute(any(RedisCallback.class));
+    }
+
+    @Test
+    void aNotRevokedAnswerIsReusedWhileTheGenerationIsUnchanged() {
+        TokenRevocationList caching = cachingList("5");
+        redisTtlIs(-2L);
+
+        assertFalse(caching.isRevoked("jti-1"));
+        tokenClock.millis += 400;
+        assertFalse(caching.isRevoked("jti-1"));
+        tokenClock.millis += 400; // a new read, the same generation
+        assertFalse(caching.isRevoked("jti-1"));
+
+        verifyLookups(1);
+        verify(values, times(2)).get(RedisTokenRevocationStore.GENERATION_KEY);
+    }
+
+    /**
+     * A revocation on another replica whose announcement never arrived: the next generation read
+     * (at most {@link TokenRevocationList#GENERATION_READ_MILLIS} later) sees the new generation,
+     * drops the cached answer, and the lookup finds the revocation.
+     */
+    @Test
+    void anotherReplicasRevocationIsFoundAtTheNextGenerationReadEvenWithoutItsAnnouncement() {
+        TokenRevocationList caching = cachingList("5");
+        redisTtlIs(-2L);
+        assertFalse(caching.isRevoked("jti-1"));
+
+        generationIs("6");
+        redisTtlIs(600_000L);
+        tokenClock.millis += TokenRevocationList.GENERATION_READ_MILLIS;
+
+        assertTrue(caching.isRevoked("jti-1"));
+        assertEquals(0, caching.notRevokedCount());
+    }
+
+    @Test
+    void anAnnouncedRevocationIsDeniedAtOnceDespiteACachedAnswer() {
+        TokenRevocationList caching = cachingList("5");
+        redisTtlIs(-2L);
+        assertFalse(caching.isRevoked("jti-1"));
+
+        caching.onRemoteRevocation("other-replica|" + tokenClock.instant().plusSeconds(600).toEpochMilli() + "|jti-1");
+
+        assertTrue(caching.isRevoked("jti-1"));
+    }
+
+    @Test
+    void aRevocationOnThisReplicaIsDeniedAtOnceDespiteACachedAnswer() {
+        TokenRevocationList caching = cachingList("5");
+        redisTtlIs(-2L);
+        writesSucceed();
+        assertFalse(caching.isRevoked("jti-1"));
+
+        caching.revoke("jti-1", tokenClock.instant().plusSeconds(600));
+
+        assertTrue(caching.isRevoked("jti-1"));
+    }
+
+    @Test
+    void withoutAFreshGenerationEveryRequestAsksRedis() {
+        TokenRevocationList caching = cachingList("5");
+        redisTtlIs(-2L);
+        assertFalse(caching.isRevoked("jti-1"));
+        caching.readGenerationWith(task -> { }); // reads stop arriving
+
+        tokenClock.millis += TokenRevocationList.GENERATION_MAX_AGE_MILLIS + 1;
+        assertFalse(caching.isRevoked("jti-1"));
+        assertFalse(caching.isRevoked("jti-1"));
+
+        verifyLookups(3);
+    }
+
+    @Test
+    void aFailedGenerationReadDropsTheCachedAnswers() {
+        TokenRevocationList caching = cachingList("5");
+        redisTtlIs(-2L);
+        assertFalse(caching.isRevoked("jti-1"));
+        assertEquals(1, caching.notRevokedCount());
+
+        when(values.get(RedisTokenRevocationStore.GENERATION_KEY)).thenThrow(new RedisConnectionFailureException("down"));
+        tokenClock.millis += TokenRevocationList.GENERATION_READ_MILLIS;
+        assertFalse(caching.isRevoked("jti-1"));
+
+        assertEquals(0, caching.notRevokedCount());
+        // The failure also opened the store's back-off: like any Redis outage, the request is then
+        // answered from the local map only (fail open), without a lookup.
+        verifyLookups(1);
+    }
+
+    @Test
+    void anAnswerIsNotCachedWhenRedisCouldNotBeAsked() {
+        TokenRevocationList caching = cachingList("5");
+        redisLookupFails();
+
+        assertFalse(caching.isRevoked("jti-1"), "fails open, as before");
+
+        assertEquals(0, caching.notRevokedCount());
+    }
+
+    @Test
+    void theGenerationIsReadAtMostOncePerInterval() {
+        TokenRevocationList caching = cachingList("5");
+        redisTtlIs(-2L);
+
+        for (int i = 0; i < 50; i++) {
+            caching.isRevoked("jti-" + i);
+            tokenClock.millis += 5;
+        }
+
+        verify(values, times(1)).get(RedisTokenRevocationStore.GENERATION_KEY);
+    }
+
+    @Test
+    void theGenerationIsBumpedTogetherWithEveryRestoredBatch() {
+        // restore() writes through executePipelined: covered by the pipeline tests below; here the
+        // read side: a generation that went back to 0 (Redis lost its data) is a change too.
+        TokenRevocationList caching = cachingList("7");
+        redisTtlIs(-2L);
+        assertFalse(caching.isRevoked("jti-1"));
+
+        generationIs(null);
+        tokenClock.millis += TokenRevocationList.GENERATION_READ_MILLIS;
+        caching.isRevoked("jti-2");
+
+        assertEquals(1, caching.notRevokedCount(), "only the answer cached under generation 0");
     }
 }
