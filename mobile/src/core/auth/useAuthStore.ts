@@ -4,6 +4,7 @@ import { authApi } from './auth';
 import { renewSessionWithIdentity, setSessionEndedHandler } from '../../api/client';
 import { LoginRequest, LoginResponse, RegisterRequest } from '../../types/api';
 import { queryClient } from '../../query/queryClient';
+import { clearSessionQueries } from '../../query/queryKeys';
 import { getApiErrorMessage, getHttpStatus } from '../../utils/errors';
 import {
   SESSION_EXPIRED_MESSAGE,
@@ -89,7 +90,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         expiresAt: computeExpiryMs(res.expiresIn),
         refreshToken: res.refreshToken,
       });
-      queryClient.clear();
+      clearSessionQueries(queryClient);
 
       set({
         isAuthenticated: true,
@@ -156,7 +157,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       (cleanupError: unknown) => ({ cleanupError }),
     );
     const clearedEpoch = storage.getSessionEpoch();
-    queryClient.clear();
+    clearSessionQueries(queryClient);
     set({ ...SIGNED_OUT, isBootstrapping: false, error: null, sessionNotice: null });
 
     const accessToken = token && !isTokenExpired(expiresAt) ? token : null;
@@ -227,7 +228,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         // in-memory state is cleared below regardless
       }
       if (version !== bootstrapVersion) return;
-      queryClient.clear();
+      clearSessionQueries(queryClient);
       set({
         ...SIGNED_OUT,
         isBootstrapping: false,
@@ -293,7 +294,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
     }
     if (version !== bootstrapVersion) return;
-    queryClient.clear();
+    clearSessionQueries(queryClient);
     set({
       ...SIGNED_OUT,
       isBootstrapping: false,
@@ -309,7 +310,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {
       // the in-memory state below is cleared regardless
     }
-    queryClient.clear();
+    clearSessionQueries(queryClient);
     set({ ...SIGNED_OUT, isBootstrapping: false, error: null, sessionNotice: null });
   },
 

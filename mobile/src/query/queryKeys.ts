@@ -48,3 +48,26 @@ export function invalidateBookingQueries(queryClient: QueryClient): void {
   queryClient.invalidateQueries({ queryKey: queryKeys.customerAppointments.all });
   queryClient.invalidateQueries({ queryKey: queryKeys.busySlots.all });
 }
+
+/**
+ * Roots of the queries that read public endpoints (api/publicEndpoints.ts: sent without a token,
+ * so the answer is the same for every user): the shop's hours and booking window, the service
+ * menu, the barbers and their ratings. Everything else is, or may be, the signed-in user's.
+ */
+const PUBLIC_QUERY_ROOTS: ReadonlySet<unknown> = new Set([
+  'shopInfo',
+  queryKeys.catalog.all[0],
+  'publicBarbers',
+  'barberRatings',
+]);
+
+/**
+ * Drops what belonged to the previous session when one starts or ends: every query except the
+ * public reference data, and every mutation. `queryClient.clear()` used to drop the public data
+ * too, so each sign-in, sign-out and expiry downloaded the shop, menu, barbers and ratings again
+ * while the screens showed their loading state (BENCHMARKS.md §77).
+ */
+export function clearSessionQueries(queryClient: QueryClient): void {
+  queryClient.removeQueries({ predicate: (query) => !PUBLIC_QUERY_ROOTS.has(query.queryKey[0]) });
+  queryClient.getMutationCache().clear();
+}

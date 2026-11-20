@@ -2832,3 +2832,25 @@ A narrowly briefed review of startup, session restore, data fetching and list re
 | 4 | Launch reads token, expiry and refresh token one after another; a rotation writes its three values one after another | Code: `checkAuth`, `storage.rotateSession` | Up to six sequential secure-store operations around the refresh on a returning user's launch (cost needs a device) |
 | 5-9 | `Intl` formatters built at module scope; list rows re-rendering on each mutation state; `useNow` extra renders; contact form double render per keystroke; a late 401 causing a second rotation | Reviewer's reading only | Low |
 
+
+---
+
+## 📱 77. Mobile Session Changes: One Tab-Navigator Mount, Public Data Kept (2026-11-20)
+
+**Goal:** fix §76's mobile findings 1 and 2, which cost a returning user's launch and every sign-out a rebuilt tab tree and re-downloaded public data.
+
+| | Before | After |
+| :--- | :--- | :--- |
+| Restored customer session: tab navigator mounts / `customerAppointments` fetch starts | 2 / 2 | 1 / 1 |
+| Sign-out: requests | `logout` + shop, catalog, barbers, ratings | `logout` |
+| Sign-out: query fetch starts | 8 (each public query twice) | 0 |
+| Sign-out: guest tab navigator mounts | 2 | 1 |
+
+Measured with the real `RootNavigator`, auth store, storage and query client, real tab navigators and MSW (Jest; requests counted at the mock server, fetch starts from the query cache's `fetch` actions).
+
+- **Navigator reset** (`RootNavigator`): the auth-change effect dispatched `CommonActions.reset` whenever auth differed from a ref that starts as "signed out". A reset gives the route a new key, which remounts it, so it rebuilt the tabs that `initialRouteName` had just mounted after a restore, and the `GuestTabs` the stack had already put in place of the removed signed-in screen after a sign-out. The reset now runs only when the stack is not already exactly `[target]` (after a sign-in it is `[GuestTabs, Login]`), and not before the container is ready (it then mounts with the right `initialRouteName`).
+- **Cache clear** (`clearSessionQueries` in `query/queryKeys.ts`, all 6 former `queryClient.clear()` call sites): removes every query except the roots read from public endpoints (`shopInfo`, `catalog`, `publicBarbers`, `barberRatings`; sent without a token, so the same for every user) and clears the mutation cache. Anything else, including a query root added later, is still dropped: a new public query is refetched, never a private one kept.
+
+Verification: new tests count the tab-navigator mounts for a restore and for a sign-in followed by a sign-out (both fail on the old navigator: 2 and 3 mounts), unit-test the helper (public roots kept, 9 private and unknown roots and the mutations dropped; fails with `clear()` semantics), and check that logout keeps shop info. Mobile Jest 716/716, `npm run lint:all`, mobile lint.
+
+Still open from §76: findings 3 (mutation responses discarded), 4 (sequential secure-store operations) and 5-9.

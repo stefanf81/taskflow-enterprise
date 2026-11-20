@@ -87,26 +87,26 @@ export const RootNavigator: React.FC = () => {
     }
   }, [hasAuthorizedRole, isAuthenticated, logout]);
 
-  // Reset navigation stack when auth state changes
+  // Show the navigator for the new auth state. Only when the stack shows something else (the
+  // Login screen on top of GuestTabs after a sign-in): a reset gives the route a new key, which
+  // remounts the whole tab navigator and refetches its screens. A restored session already
+  // starts on its tabs (initialRouteName), and on sign-out the stack replaces the removed
+  // CustomerTabs/AdminTabs with GuestTabs itself, so both used to mount their tabs twice.
   useEffect(() => {
     const prev = prevAuthRef.current;
-    if (
-      prev.isAuthenticated !== isAuthenticated ||
-      prev.role !== role
-    ) {
-      prevAuthRef.current = { isAuthenticated, role };
+    if (prev.isAuthenticated === isAuthenticated && prev.role === role) return;
+    prevAuthRef.current = { isAuthenticated, role };
 
-      // Route to the correct navigator based on new auth state,
-      // rather than always resetting to GuestTabs (which caused a UX flash).
-      const targetRoute = isCustomer ? 'CustomerTabs' : isAdmin ? 'AdminTabs' : 'GuestTabs';
-
-      navigationRef.current?.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: targetRoute as keyof RootStackParamList }],
-        }),
-      );
-    }
+    const navigation = navigationRef.current;
+    if (!navigation?.isReady()) return; // it mounts with initialRouteName for this state
+    const targetRoute: keyof RootStackParamList = isCustomer
+      ? 'CustomerTabs'
+      : isAdmin
+        ? 'AdminTabs'
+        : 'GuestTabs';
+    const routes = navigation.getRootState()?.routes ?? [];
+    if (routes.length === 1 && routes[0]?.name === targetRoute) return;
+    navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: targetRoute }] }));
   }, [isAdmin, isAuthenticated, isCustomer, role]);
 
   // Splash only while the stored session is being restored. Sign-in/registration

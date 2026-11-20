@@ -1,4 +1,5 @@
 import { queryClient, queryRetryDelay, shouldRetryQuery } from '../src/query/queryClient';
+import { clearSessionQueries } from '../src/query/queryKeys';
 import { ApiContractError } from '../src/api/contracts';
 import { SessionChangedError, SessionExpiredError } from '../src/utils/session';
 
@@ -70,5 +71,41 @@ describe('queryRetryDelay', () => {
   it('waits for the Retry-After the server sent', () => {
     expect(queryRetryDelay(0, httpError(429, { 'Retry-After': '3' }))).toBe(3000);
     expect(queryRetryDelay(0, httpError(503, { 'Retry-After': '120' }))).toBe(30_000);
+  });
+});
+
+describe('clearSessionQueries', () => {
+  afterEach(() => queryClient.clear());
+
+  it('keeps the public reference data and drops everything that may be the user’s', () => {
+    const publicKeys = [['shopInfo'], ['catalog'], ['publicBarbers'], ['barberRatings']];
+    const privateKeys = [
+      ['appointments', undefined, undefined, 0, 10],
+      ['customerAppointments', 0, 10],
+      ['retiredServices'],
+      ['busySlots', 'move', 'public-id', '2026-11-20', 'guest@example.com'],
+      ['adminBarbers'],
+      ['barberTimeOff', 1],
+      ['barberSchedule', 1],
+      ['notifications'],
+      ['somethingAddedLater'],
+    ];
+    for (const key of [...publicKeys, ...privateKeys]) queryClient.setQueryData(key, { key });
+
+    clearSessionQueries(queryClient);
+
+    expect(queryClient.getQueryCache().getAll().map((query) => query.queryKey)).toEqual(publicKeys);
+  });
+
+  it('drops the previous session’s mutations', async () => {
+    await queryClient
+      .getMutationCache()
+      .build(queryClient, { mutationFn: async () => 'booked' })
+      .execute(undefined);
+    expect(queryClient.getMutationCache().getAll()).toHaveLength(1);
+
+    clearSessionQueries(queryClient);
+
+    expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
   });
 });

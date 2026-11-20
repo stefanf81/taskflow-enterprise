@@ -2,6 +2,7 @@ import axios, { type InternalAxiosRequestConfig } from 'axios';
 import { Platform } from 'react-native';
 import { storage } from '../utils/storage';
 import { queryClient } from '../query/queryClient';
+import { clearSessionQueries } from '../query/queryKeys';
 import { isPublicEndpoint } from './publicEndpoints';
 import {
   SessionChangedError,
@@ -106,7 +107,7 @@ export function setSessionEndedHandler(handler: SessionEndedHandler | null): voi
 async function endLocalSession(epoch: number): Promise<void> {
   if (storage.getSessionEpoch() !== epoch) return;
   const cleared = storage.clearSession();
-  queryClient.clear();
+  clearSessionQueries(queryClient);
   sessionEndedHandler?.();
   try {
     await cleared;

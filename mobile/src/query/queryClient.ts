@@ -74,8 +74,9 @@ export function queryRetryDelay(attemptIndex: number, error: unknown): number {
   return Math.min(1000 * 2 ** attemptIndex, MAX_RETRY_DELAY_MS);
 }
 
-// One cache instance is shared by the app and auth lifecycle. Clearing it on
-// logout/expiry prevents one user's cached data appearing for the next user.
+// One cache instance is shared by the app and auth lifecycle. Sign-in, logout and
+// expiry drop everything but the public reference data (clearSessionQueries), so
+// one user's cached data never appears for the next user.
 //
 // networkMode 'always' keeps the fetch behaviour the app had while TanStack
 // assumed it was always online: an offline request fails fast and the screens

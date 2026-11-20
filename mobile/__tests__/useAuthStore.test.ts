@@ -210,6 +210,7 @@ describe('useAuthStore', () => {
     it('revokes the token server-side, then clears local credentials and caches', async () => {
       useAuthStore.setState({ isAuthenticated: true, username: 'admin', role: 'ROLE_ADMIN' });
       queryClient.setQueryData(['customerAppointments', 0, 10], { content: ['private appointment'] });
+      queryClient.setQueryData(['shopInfo'], { timeZone: 'Europe/Berlin' });
 
       await useAuthStore.getState().logout();
 
@@ -219,6 +220,8 @@ describe('useAuthStore', () => {
       expect(useAuthStore.getState().username).toBeNull();
       expect(useAuthStore.getState().sessionNotice).toBeNull();
       expect(queryClient.getQueryData(['customerAppointments', 0, 10])).toBeUndefined();
+      // Public reference data is the same for the next user: the guest screens keep it.
+      expect(queryClient.getQueryData(['shopInfo'])).toEqual({ timeZone: 'Europe/Berlin' });
     });
 
     it('still signs out locally when the revoke call fails (offline)', async () => {

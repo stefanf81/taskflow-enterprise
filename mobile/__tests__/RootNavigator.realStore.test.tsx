@@ -25,13 +25,20 @@ jest.mock('expo-secure-store', () => {
   };
 });
 
+// How often each tab navigator mounted: a remount refetches every screen in it.
+const mockMounts = { guest: 0, customer: 0, admin: 0 };
+
 // Replace only the heavy tab navigators; Login/Register and the Root stack are real.
 jest.mock('../src/navigation/GuestTabNavigator', () => {
+  const { useEffect } = require('react');
   const { View, Text, TouchableOpacity } = require('react-native');
   const { useNavigation } = require('@react-navigation/native');
   return {
     GuestTabNavigator: () => {
       const navigation = useNavigation();
+      useEffect(() => {
+        mockMounts.guest++;
+      }, []);
       return (
         <View>
           <Text>GUEST HOME</Text>
@@ -47,12 +54,28 @@ jest.mock('../src/navigation/GuestTabNavigator', () => {
   };
 });
 jest.mock('../src/navigation/CustomerTabNavigator', () => {
+  const { useEffect } = require('react');
   const { Text } = require('react-native');
-  return { CustomerTabNavigator: () => <Text>CUSTOMER AREA</Text> };
+  return {
+    CustomerTabNavigator: () => {
+      useEffect(() => {
+        mockMounts.customer++;
+      }, []);
+      return <Text>CUSTOMER AREA</Text>;
+    },
+  };
 });
 jest.mock('../src/navigation/AdminTabNavigator', () => {
+  const { useEffect } = require('react');
   const { Text } = require('react-native');
-  return { AdminTabNavigator: () => <Text>ADMIN AREA</Text> };
+  return {
+    AdminTabNavigator: () => {
+      useEffect(() => {
+        mockMounts.admin++;
+      }, []);
+      return <Text>ADMIN AREA</Text>;
+    },
+  };
 });
 jest.mock('../src/features/landing/PublicActionsScreen', () => {
   const { Text } = require('react-native');
@@ -301,5 +324,55 @@ describe('session lifecycle in RootNavigator (MOB-8/9)', () => {
 
     expect(await screen.findByText('GUEST HOME')).toBeTruthy();
     expect(secureMemory.size).toBe(0);
+  });
+});
+
+describe('tab navigator mounts across session changes', () => {
+  beforeEach(async () => {
+    await storage.clearSession();
+    secureMemory.clear();
+    queryClient.clear();
+    resetStore();
+    mockMounts.guest = mockMounts.customer = mockMounts.admin = 0;
+  });
+
+  /** Lets any late reset (a navigation action after the auth change) take effect. */
+  const settle = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+  it('mounts the restored session’s tabs once', async () => {
+    // The reset after the restore gave the already-shown route a new key, so the tabs mounted
+    // twice and every screen in them fetched twice (BENCHMARKS.md §77).
+    secureMemory.set('taskflow_auth_token', 'stored-jwt');
+    server.use(
+      http.get('*/api/v1/auth/me', () =>
+        HttpResponse.json({ username: 'jane@example.com', role: 'ROLE_CUSTOMER' }),
+      ),
+    );
+
+    await render(<RootNavigator />);
+    await screen.findByText('CUSTOMER AREA');
+    await settle();
+
+    expect(mockMounts).toEqual({ guest: 0, customer: 1, admin: 0 });
+  });
+
+  it('mounts the signed-in tabs once after a sign-in, and the guest tabs once after sign-out', async () => {
+    await render(<RootNavigator />);
+    await openLogin();
+    await submitLogin('admin', 'admin-password');
+    await screen.findByText('ADMIN AREA');
+    await settle();
+    expect(mockMounts).toEqual({ guest: 1, customer: 0, admin: 1 });
+
+    await act(async () => {
+      await useAuthStore.getState().logout();
+    });
+    await screen.findByText('GUEST HOME');
+    await settle();
+
+    expect(mockMounts).toEqual({ guest: 2, customer: 0, admin: 1 });
   });
 });
