@@ -275,6 +275,47 @@ class SingleFlightCacheManagerTest {
         assertEquals("outer:inner", value);
     }
 
+    /**
+     * A waiter woken by the failure of the flight it waited for must not find that finished flight
+     * again and take it for a second failure. With the flight removed only after its outcome was
+     * published, 345 of 500 such rounds failed more than one caller (BENCHMARKS.md §80).
+     */
+    @Test
+    void aFailedFlightIsNeverJoinedAgainByTheWaitersItWoke() throws Exception {
+        for (int round = 0; round < 200; round++) {
+            Cache cache = new SingleFlightCacheManager(naiveManager()).getCache("barbers");
+            AtomicInteger attempts = new AtomicInteger();
+            CountDownLatch go = new CountDownLatch(1);
+            List<Future<String>> results = new ArrayList<>();
+            try (ExecutorService pool = Executors.newFixedThreadPool(8)) {
+                for (int i = 0; i < 8; i++) {
+                    results.add(pool.submit(() -> {
+                        go.await();
+                        try {
+                            return cache.get("k", () -> {
+                                if (attempts.incrementAndGet() == 1) {
+                                    Thread.sleep(5);
+                                    throw new IllegalStateException("first load fails");
+                                }
+                                return "ok";
+                            });
+                        } catch (Cache.ValueRetrievalException e) {
+                            return "failed";
+                        }
+                    }));
+                }
+                go.countDown();
+                int failed = 0;
+                for (Future<String> result : results) {
+                    if ("failed".equals(result.get(10, TimeUnit.SECONDS))) {
+                        failed++;
+                    }
+                }
+                assertEquals(1, failed, "round " + round);
+            }
+        }
+    }
+
     @Test
     void cachedValuesAreServedWithoutRunningTheLoader() {
         Cache cache = new SingleFlightCacheManager(naiveManager()).getCache("services");

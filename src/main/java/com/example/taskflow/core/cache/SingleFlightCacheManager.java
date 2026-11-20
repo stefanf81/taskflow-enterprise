@@ -173,24 +173,30 @@ class SingleFlightCacheManager implements CacheManager {
             }
         }
 
-        /** Runs the load as this key's flight and hands its outcome to everyone waiting for it. */
+        /**
+         * Runs the load as this key's flight and hands its outcome to everyone waiting for it. The
+         * flight leaves the map before its outcome is published: a waiter woken by a failure must
+         * find either no flight or the next one, never this finished one again, which it would
+         * count as a second failure.
+         */
         private <T> T fly(Object key, Callable<T> valueLoader, Flight flight) {
+            T value;
             try {
                 // Re-check: the previous flight may have stored the value since this caller missed.
                 ValueWrapper stored = delegate.get(key);
-                T value = stored != null
+                value = stored != null
                         ? cast(stored.get())
                         : distributedLock == null
                                 ? delegate.get(key, valueLoader)
                                 : loadUnderDistributedLock(key, valueLoader);
-                flight.outcome.complete(value);
-                return value;
             } catch (RuntimeException | Error e) {
+                flights.remove(key, flight);
                 flight.outcome.completeExceptionally(e);
                 throw e;
-            } finally {
-                flights.remove(key, flight);
             }
+            flights.remove(key, flight);
+            flight.outcome.complete(value);
+            return value;
         }
 
         @SuppressWarnings("unchecked")

@@ -2913,7 +2913,7 @@ During a database outage the caller holding a key's lock waited out the pool's c
 | Before | 2,413 ms | 12 |
 | After | 407 ms | 2 |
 
-`SingleFlightCacheManagerTest`: the outage case (fails on the old code), waiters share one value, a loader reading its own key; the existing single-flight, failure and distributed-lease tests unchanged.
+`SingleFlightCacheManagerTest`: the outage case (fails on the old code), waiters share one value, a loader reading its own key; the existing single-flight, failure and distributed-lease tests unchanged. The first version published a failed flight's outcome before removing it from the map, so a woken waiter could find the finished flight again and count it as its second failure: CI's run of the existing "one failure, the others retry" test failed 4 callers instead of 1, and a 500-round stress of that case failed 345 rounds (with a `Thread.yield()` widening the gap). The flight now leaves the map first (0 of 500); `aFailedFlightIsNeverJoinedAgainByTheWaitersItWoke` repeats the case 200 times.
 
 ### Bookings queued behind a stalled one (`EmailLockStripes`)
 
