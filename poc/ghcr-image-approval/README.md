@@ -21,9 +21,9 @@ reviewers are only available for public repositories.
 Verified in the session container:
 
 - The kit's own suite (`ci/validate-local.sh` content) passes before and after the changes:
-  227 tests, 5 skipped. The skipped ones need a Docker daemon with the containerd image store,
+  228 tests, 5 skipped. The skipped ones need a Docker daemon with the containerd image store,
   or cosign.
-- That includes 17 new tests, among them `ci/bootstrap_base.sh` run end to end against stub
+- That includes 18 new tests, among them `ci/bootstrap_base.sh` run end to end against stub
   crane/cosign. Its record is then accepted as a comparison baseline, while the real precheck
   answers `needed` and `scripts/verify_bases.sh` refuses it for applications.
 - Gate: grants produced by `serve_grants.sh` are accepted by the kit's
@@ -65,7 +65,8 @@ for pair in security-pipelines:ghcr-approval-poc example-app:ghcr-approval-poc-a
 done
 ```
 
-`git subtree split` keeps file modes. This matters because `ci/build_and_test.sh` must stay
+If git asks for credentials, the token needs the `workflow` scope, because the pushes contain
+workflow files. `git subtree split` keeps file modes. This matters because `ci/build_and_test.sh` must stay
 executable: the release pipeline runs it from a `git archive`.
 
 **Expected:** pushing the security repository triggers `base-image-approval.yml`, which fails
@@ -187,10 +188,14 @@ commit again. The build is reproducible, so the digest is identical:
  "image_ref": "ghcr.io/stefanf81/applications/example-app@sha256:…"}
 ```
 
-Prefer `image_ref` over `base_image_ref`. A base-scoped exception changes the base policy
-fingerprint, and then the base digest has to be re-approved (steps 3–4) before any release.
+Instead of `image_ref` you can scope the exception to the approved base with
+`"base_image_ref": "ghcr.io/stefanf81/approved/eclipse-temurin@sha256:577acb7a…"`. It then
+also covers later commits of the toy app, because its image only adds files on top of the
+base. Neither form changes the base policy fingerprint, so the base approval stays valid.
 
-**Verify the result** (with `app.pub`):
+**Verify the result** (with `app.pub`). The `applications/example-app` package is private
+until you change it: either make it public first, or `docker login ghcr.io` with a classic
+token that has `read:packages` (cosign uses the same Docker credentials):
 
 ```bash
 IMAGE=ghcr.io/stefanf81/applications/example-app@sha256:<digest from the sign job summary>
@@ -218,7 +223,8 @@ docker run --rm "$IMAGE"
 | --- | --- |
 | Run any of the three security workflows from a branch other than `main` | Jobs skipped; environments refuse the branch |
 | Release (step 7) after step 1 but before step 3 | `image_build` fails in `verify_bases.sh`: "signed policy content hash does not match" |
-| Release with the gate not running, or cancelled during `independent_verification` | `authorize` or `sign` fails: 404 or "not freshly issued" (after up to 10 minutes) |
+| Release with the gate not running | `authorize` fails (404 from the grant URL) |
+| Revocation: add yourself as required reviewer to `ghcr-application-signing`, start a release, cancel the gate when `sign` is waiting, approve `sign` more than 10 minutes later | `sign` fails: 404 or "not freshly issued". Approving sooner can still succeed: a cached grant stays valid for up to 10 minutes after the cancel. Remove the reviewer afterwards |
 | Release a commit that is not the app's `main` HEAD | Gate refuses; `authorize` fails "not the exact protected main HEAD" |
 | `app_name` not in `policy/applications.json` | `authorize`: "APPLICATION NOT ALLOWED" |
 | App change: add `RUN date > /stamp` to its Dockerfile, release the new HEAD | `scan` refuses: the two independent builders produce different layers |

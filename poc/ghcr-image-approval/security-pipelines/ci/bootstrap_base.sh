@@ -29,14 +29,24 @@ digest="$(python3 -I scripts/parse_from.py catalog/Dockerfile.temurin --field di
 [[ "$APPROVER_ID" != automatic-policy ]] || exit 1
 [[ "$(crane digest "$upstream_digest_ref")" = "$digest" ]] || { echo 'Upstream digest mismatch' >&2; exit 1; }
 
-# A job with packages: write can always read, so a failed lookup means "no baseline yet".
+# Refuse when a baseline exists. A FAILED tag lookup is not proof of absence (the package may
+# not exist yet, but it can also be a transient registry error), so it is only the cheap
+# first answer; the tag list below is the one that counts.
 if existing="$(crane digest "$GHCR_APPROVED_REPO:$tag" 2>/dev/null)"; then
   echo "$GHCR_APPROVED_REPO:$tag already points at $existing; use base-image-approval.yml" >&2
   exit 1
 fi
 
 approved_ref="$GHCR_APPROVED_REPO@$digest"
+# Adds only the tag bootstrap-<digest>; the tracking tag is untouched until the end.
 copy_exact "$upstream_digest_ref" "$GHCR_APPROVED_REPO" "bootstrap-${digest#sha256:}" "$digest" reports/approved.digest
+# The package exists now, so listing its tags must succeed (a failure aborts the script) and
+# the tracking tag must not be among them.
+tags="$(crane ls "$GHCR_APPROVED_REPO")"
+if grep -Fxq -- "$tag" <<<"$tags"; then
+  echo "$GHCR_APPROVED_REPO:$tag already exists; use base-image-approval.yml" >&2
+  exit 1
+fi
 crane manifest "$approved_ref" > reports/bootstrap-index.json
 policy_version="$(python3 -I scripts/policy_info.py --field version)"
 python3 - "$policy_version" "$upstream_ref" "$digest" "$GITHUB_SHA" <<'PY'

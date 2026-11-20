@@ -226,6 +226,13 @@ if cmd == 'digest':
             print(pinned); sys.exit(0)
         print('MANIFEST_UNKNOWN', file=sys.stderr); sys.exit(1)
     print(pinned)
+elif cmd == 'ls':
+    if os.environ.get('FAKE_LS_FAILS'):
+        print('transient registry error', file=sys.stderr); sys.exit(1)
+    if (state / 'copied').exists():
+        print('bootstrap-' + pinned[7:])
+    if (state / 'tagged').exists() or os.environ.get('FAKE_LS_HAS_TAG'):
+        print('21-jre-resolute')
 elif cmd == 'manifest':
     sys.stdout.buffer.write((state / 'index.json').read_bytes())
 elif cmd == 'copy':
@@ -325,6 +332,18 @@ class BootstrapScriptTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('already points at', result.stderr)
         self.assertFalse((self.state / 'copied').exists())
+
+    def test_failed_tag_lookup_is_not_proof_of_absence(self):
+        """The tag lookup fails (as for a transient registry error) although a baseline exists:
+        the tag list must stop the script before anything is signed or the tag is moved."""
+        for extra, message in (({'FAKE_LS_HAS_TAG': '1'}, 'already exists'),
+                               ({'FAKE_LS_FAILS': '1'}, 'transient registry error')):
+            with self.subTest(extra=extra):
+                result = self.run_bash('ci/bootstrap_base.sh', **extra)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.assertFalse((self.state / 'signed').exists())
+                self.assertFalse((self.state / 'tagged').exists())
 
     def test_refuses_unconfirmed_digest(self):
         result = self.run_bash('ci/bootstrap_base.sh', CONFIRM_DIGEST='sha256:' + 'c' * 64)
