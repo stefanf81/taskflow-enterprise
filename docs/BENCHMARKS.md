@@ -2700,3 +2700,29 @@ The first version of this section reported CLS 0.002 after the change, and the f
 ### Guards
 
 `e2e/landing-stability.spec.ts` loads `/` at 390 px with `/public/shop` held back 1.5 s, waits until the web font has loaded (and checks that the shop hours have not arrived yet), and fails if the shifts after that point add up to 0.01 or more. It no longer counts the font swap, whose size depends on the machine's fonts (the cause of the failed CI run above). A second test fails if the hero header or any element in it has a CSS animation. Run three times each with and without Inter installed: the previous build failed every time (badge CLS 0.055–0.090; `header… animate-fadeIn`), this one passed every time. `landing-page.spec.ts` checks that the badge is in the layout, invisible, before the shop hours load and visible afterwards. `AppointmentControllerIntegrationTest.shouldCountStatusAndOverdueTotalsForFullPages` runs both count queries on H2 through full first pages (a page that is not full settles its own total and skips them).
+
+## ⚡ 73. Signed-In Pages Hidden From FCP/LCP by a Page Fade, and the Accessibility Gate's Contrast Race (2026-11-20)
+
+**Goal:** two follow-ups to §72: the same entrance animation on the signed-in pages, and an intermittent `color-contrast` failure of `e2e/a11y.spec.ts` on the booking wizard's Next button, seen on the old build and the new one alike.
+
+**Methodology:** as in §72 (Inter hidden from fontconfig; the production build behind a Node static server; the boot JAR on the prod profile against an empty PostgreSQL 18.7, as in CI). Signed-in pages: each load in a fresh tab of a signed-in context with the browser cache cleared, median of 5, 1280 × 800.
+
+### Results
+
+| Page (slow 4G / fast 4G) | FCP before | FCP after | LCP element before → after |
+| :--- | ---: | ---: | :--- |
+| `/admin` | 2,220 / 504 ms | **2,088 / 456 ms** | an empty-state line → an info list item of the dashboard |
+| `/customer` | 2,108 / 472 ms | **1,940 / 424 ms** | the empty-state heading → the page's `h1` |
+| `/customer/book` | 2,268 / 492 ms | **2,156 / 468 ms** | a service card's description (unchanged) |
+
+* **A whole-page fade hid the first render from both metrics.** The admin dashboard, the customer portal and the customer booking page wrapped everything in `animate-fadeIn`, so the header and heading painted at opacity 0 and were never reported. FCP and LCP were both the first paint after the API had answered (an empty-state line here; with data, the first table rows), so the telemetry timed the data, not the page. The three wrappers no longer animate; FCP now reports the page's first paint, 50–170 ms earlier. On `/customer/book` LCP stays on the catalog cards, which genuinely paint last. Interaction-driven fades (modals, alerts, wizard steps, admin tabs, FAQ panels) are unchanged: they do not run on a page load.
+* **The accessibility gate scanned a half-finished transition.** When the catalog arrives, the preselected service makes the wizard's step 1 valid: the Next button becomes enabled while still drawn at the disabled opacity (0.5) and fades to 1 over the 200 ms `.btn` transition. That happens about 250 ms after the test sees the landing heading. The gate's wait for running animations returned before the transition had started, and axe sometimes evaluated the enabled, half-transparent button. Recorded frame by frame at 1×, 4× and 6× CPU: enabled at opacity 0.50, 0.51 … 1.00 over 200 ms in every run. The gate now waits until no request has been in flight (the admin SSE stream excepted) and no finite animation or transition has run for 300 ms. With the catalog response held back 140–320 ms, the old wait let axe flag the button in 15 of 40 scans and the new one in none; across 0–1,200 ms, 2 of 24 against 0 of 24. The real spec passed 12 of 12 times on 4 workers afterwards, at the same duration (31 s). This was a test race, not an accessibility defect: WCAG judges the settled state, and a 200 ms fade is not one.
+
+### Guards
+
+`e2e/landing-stability.spec.ts` signs in as the admin and as a new customer (through the API, CSRF cookie and header like the web app) and fails if the `h1` of `/admin`, `/customer` or `/customer/book`, or any element around it, runs a CSS animation. It failed on the build with the page fades (`div.w-full … animate-fadeIn`, 3 of 3) and passes without them (3 of 3). The hero check uses the same helper, now including the hero's ancestors.
+
+### Not changed
+
+* **One more intermittent failure in the same gate:** once in 12 runs on 4 workers, the "Need an account? Register" click did not open the registration form within 30 s. Not investigated here.
+

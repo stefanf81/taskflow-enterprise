@@ -15,7 +15,7 @@ import { BookingStore } from '../booking/booking.store';
   selector: 'app-customer-booking',
   imports: [BookingWizard, RouterLink],
   template: `
-    <div class="w-full px-4 sm:px-8 lg:px-16 pt-12 pb-24 animate-fadeIn">
+    <div class="w-full px-4 sm:px-8 lg:px-16 pt-12 pb-24">
       <header class="flex justify-between items-center mb-10 pb-6 border-b border-white/10">
         <div class="flex items-center gap-3">
           <span class="text-3xl">✂️</span>
