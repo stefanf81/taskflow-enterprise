@@ -29,18 +29,21 @@
           >
         </div>
         <div class="flex items-center gap-4">
-          @if (openNow() !== null) {
-            <span
-              class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border"
-              [class]="
-                openNow()
+          <!-- Always in the layout: until /public/shop has answered (and in the prerendered page)
+               the badge keeps its place invisibly. Below 430 px the nav wraps around it, so adding
+               it late pushed the whole page down 28 px (CLS 0.09, BENCHMARKS.md §72). -->
+          <span
+            class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border"
+            [class]="
+              openNow() === null
+                ? 'invisible border-transparent'
+                : openNow()
                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                   : 'bg-zinc-800/60 text-zinc-400 border-white/10'
-              "
-            >
-              {{ openNow() ? '● Shop Open' : '● Closed Now' }}
-            </span>
-          }
+            "
+          >
+            {{ openNow() ? '● Shop Open' : '● Closed Now' }}
+          </span>
           <button
             (click)="showAdminLoginModal.set(true)"
             class="text-xs font-bold text-zinc-400 hover:text-gold tracking-wide uppercase transition-colors"
@@ -50,8 +53,9 @@
         </div>
       </nav>
 
-      <!-- HERO INTRO HEADER -->
-      <header class="text-center mb-16 max-w-2xl mx-auto animate-fadeIn">
+      <!-- HERO INTRO HEADER. No entrance animation: its heading and intro are the LCP element,
+           which Chrome does not report while it is transparent (BENCHMARKS.md §72). -->
+      <header class="text-center mb-16 max-w-2xl mx-auto">
         <span
           class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-gold/10 text-gold border border-gold/20 uppercase tracking-widest mb-4"
         >

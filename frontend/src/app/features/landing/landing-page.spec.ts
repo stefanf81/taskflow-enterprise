@@ -13,6 +13,36 @@ import { FlashMessages } from '../../core/ui/flash-messages';
 import '../booking/booking-wizard';
 import { DEFAULT_SHOP_RULES } from '@taskflow/domain';
 
+/** The open/closed badge in the guest navigation. */
+function openClosedBadge(root: HTMLElement): HTMLElement | undefined {
+  return Array.from(root.querySelectorAll<HTMLElement>('nav span')).find((span) =>
+    span.textContent?.includes('●'),
+  );
+}
+
+describe('LandingPage before the shop hours are known', () => {
+  it('keeps the open/closed badge in the layout, invisible', () => {
+    // /public/shop is never answered: the state of the prerendered page and of a slow first load.
+    // The badge must already take its space, or the nav wraps when it appears and on a phone the
+    // whole page moves down (BENCHMARKS.md §72).
+    TestBed.configureTestingModule({
+      imports: [LandingPage],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: DashboardPrefetch, useValue: { prefetch: vi.fn() } },
+      ],
+    });
+    const pending = TestBed.createComponent(LandingPage);
+    pending.detectChanges();
+
+    const badge = openClosedBadge(pending.nativeElement);
+    expect(badge).toBeTruthy();
+    expect(badge?.classList).toContain('invisible');
+  });
+});
+
 describe('LandingPage', () => {
   let fixture: ComponentFixture<LandingPage>;
   let httpMock: HttpTestingController;
@@ -85,6 +115,7 @@ describe('LandingPage', () => {
     expect(text).toContain('9:00 AM - 5:00 PM');
     expect(text).toMatch(/Sunday\s*CLOSED/);
     expect(text).toMatch(/● (Shop Open|Closed Now)/);
+    expect(openClosedBadge(fixture.nativeElement)?.classList).not.toContain('invisible');
   });
 
   it('renders the public navigation, hero and booking wizard', () => {

@@ -268,6 +268,43 @@ class AppointmentControllerIntegrationTest {
                 .andExpect(jsonPath("$.stats.approved", is(1)));
     }
 
+    /**
+     * A full first page cannot settle its own total, so these pages run the repository's count
+     * queries ({@code countByStatus}, {@code countByStatusAndBookingDateBefore}) on the real
+     * database rather than a mock.
+     */
+    @Test
+    void shouldCountStatusAndOverdueTotalsForFullPages() throws Exception {
+        LocalDate future = getNextWorkingDate();
+        String[] times = {"09:00", "10:00", "11:00"};
+        for (int i = 0; i < times.length; i++) {
+            Appointment approved = new Appointment("Approved " + i, "approved" + i + "@test.com", "123",
+                    "Barber Alex", future, times[i], "Haircut");
+            approved.setStatus("APPROVED");
+            appointmentRepository.save(approved);
+        }
+        appointmentRepository.save(new Appointment("Pending", "pending@test.com", "123",
+                "Barber Sara", future, "09:00", "Haircut"));
+        appointmentRepository.save(new Appointment("Overdue 1", "overdue1@test.com", "123",
+                "Barber Sara", LocalDate.now().minusDays(3), "10:00", "Haircut"));
+        appointmentRepository.save(new Appointment("Overdue 2", "overdue2@test.com", "123",
+                "Barber Sara", LocalDate.now().minusDays(2), "10:00", "Haircut"));
+
+        mockMvc.perform(get("/api/v1/appointments?status=APPROVED&page=0&size=1")
+                        .header("Authorization", authHeader))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.content", hasSize(1)))
+                .andExpect(jsonPath("$.page.page.totalElements", is(3)))
+                .andExpect(jsonPath("$.page.page.totalPages", is(3)));
+
+        mockMvc.perform(get("/api/v1/appointments?status=OVERDUE&page=0&size=1")
+                        .header("Authorization", authHeader))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.content", hasSize(1)))
+                .andExpect(jsonPath("$.page.content[0].customerName", is("Overdue 2")))
+                .andExpect(jsonPath("$.page.page.totalElements", is(2)));
+    }
+
     @Test
     void shouldSerializeDashboardPaginationAsPagedModel() throws Exception {
         Appointment item1 = new Appointment("Client 1", "client1@test.com", "123", "Barber Alex", LocalDate.now(), "10:00", "Haircut");

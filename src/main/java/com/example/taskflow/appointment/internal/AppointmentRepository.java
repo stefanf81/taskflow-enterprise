@@ -32,19 +32,25 @@ public interface AppointmentRepository
     Slice<Appointment> findByStatus(AppointmentStatus status, Pageable pageable);
 
     /**
-     * Rows with one status: the exact total behind a status-filtered page, from
-     * {@code idx_appointment_status_date}'s leading column (V4) rather than a cached counter.
+     * Rows with one status: the exact total behind a status-filtered page, rather than a cached
+     * counter. {@code COUNT(*)}, not the derived query's {@code COUNT(a.id)}: PostgreSQL then answers
+     * from {@code idx_appointment_status_date} (V4) with an index-only scan, while counting the id
+     * column read the heap (APPROVED at 287k rows: 22-25 ms vs 12-15 ms, BENCHMARKS.md §72).
      */
-    long countByStatus(AppointmentStatus status);
+    @Query("SELECT COUNT(*) FROM Appointment a WHERE a.status = :status")
+    long countByStatus(@Param("status") AppointmentStatus status);
 
     /** One page of a status before a date (the OVERDUE view), without a count query. */
     Slice<Appointment> findByStatusAndBookingDateBefore(AppointmentStatus status, LocalDate date, Pageable pageable);
 
     /**
      * Rows with one status before a date: the exact total behind the OVERDUE page, matching
-     * {@code idx_appointment_status_date} (status, booking_date) from V4 exactly.
+     * {@code idx_appointment_status_date} (status, booking_date) from V4 exactly. {@code COUNT(*)}
+     * for the same index-only scan as {@link #countByStatus}.
      */
-    long countByStatusAndBookingDateBefore(AppointmentStatus status, LocalDate date);
+    @Query("SELECT COUNT(*) FROM Appointment a WHERE a.status = :status AND a.bookingDate < :date")
+    long countByStatusAndBookingDateBefore(@Param("status") AppointmentStatus status,
+                                           @Param("date") LocalDate date);
 
     Appointment findByPublicId(String publicId);
 
