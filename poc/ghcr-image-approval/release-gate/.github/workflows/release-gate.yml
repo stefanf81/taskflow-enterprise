@@ -6,7 +6,8 @@ name: Release gate (PoC)
 # keep it running until that release has signed:
 #   grant    re-issues a signed grant every 60 s while the commit is still main HEAD and its
 #            required check-runs have succeeded; publishes it on the orphan `grants` branch
-#   (always) withdraws the grant when the run ends, fails or is cancelled (= revocation)
+#   (always) stops the loop and withdraws the grant when the run ends, fails or is
+#            cancelled (= revocation)
 # The private key lives only in the `release-gate` environment (deployment branch: main).
 on:
   workflow_dispatch:
@@ -63,7 +64,8 @@ jobs:
             echo "Grant URL: https://raw.githubusercontent.com/$GITHUB_REPOSITORY/refs/heads/grants/$APP_COMMIT"
             echo "Cancel this run to revoke the grant."
           } >> "$GITHUB_STEP_SUMMARY"
-          bash serve_grants.sh serve
+          # exec: the cancel signal must reach the loop itself, not a parent shell.
+          exec bash serve_grants.sh serve
       - name: Withdraw the grant
         if: always()
         run: bash serve_grants.sh withdraw

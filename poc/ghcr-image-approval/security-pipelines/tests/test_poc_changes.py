@@ -50,11 +50,13 @@ def approvals(*items):
 class SelfApprovalSwitchTests(unittest.TestCase):
     ENV = 'base-manual-approval'
 
-    def test_shipped_policy_enables_it_and_it_is_fingerprinted(self):
+    def test_shipped_policy_states_it_and_it_is_fingerprinted(self):
+        # Either value is fine (turning it off must not break this suite); it must be explicit.
         config = json.loads((ROOT / 'policy/config.json').read_text())
-        self.assertIs(config['allow_self_approval'], True)
+        self.assertIsInstance(config['allow_self_approval'], bool)
+        self.assertIs(approver.self_approval_allowed(ROOT / 'policy/config.json'), config['allow_self_approval'])
         self.assertNotIn('allow_self_approval', fp.APPLICATION_ONLY_KEYS)
-        flipped = dict(config, allow_self_approval=False)
+        flipped = dict(config, allow_self_approval=not config['allow_self_approval'])
         self.assertNotEqual(fp.base_policy_view(config), fp.base_policy_view(flipped))
 
     def test_self_approval_is_labelled_not_hidden(self):
@@ -102,7 +104,7 @@ class SelfApprovalSwitchTests(unittest.TestCase):
             policy.unlink()                                                          # unreadable: refuse
             self.assertNotEqual(subprocess.run(cmd, input=stdin, capture_output=True, text=True).returncode, 0)
 
-    def test_self_label_passes_every_downstream_record_check(self):
+    def test_self_label_is_accepted_as_high_finding_approver(self):
         vulns = load('poc_vulns', 'scripts/check_application_vulnerabilities.py')
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / 'high-approval.json'
@@ -165,6 +167,34 @@ class SoloAuditTests(unittest.TestCase):
                 failures = without(fn)
                 self.assertTrue(any(fragment.strip() in f for f in failures), failures)
 
+    def test_stale_review_dismissal_stays_required_with_approvals(self):
+        s = self.solo()
+        s['rulesets'][-1]['rules'][0]['parameters'] = {'required_approving_review_count': 1}
+        self.assertTrue(any('main branch update protection missing' in f
+                            for f in audit.audit(s, allow_self_approval=True)))
+        s['rulesets'][-1]['rules'][0]['parameters']['dismiss_stale_reviews_on_push'] = True
+        self.assertEqual(audit.audit(s, allow_self_approval=True), [])
+
+    def test_classic_branch_protection_alternative(self):
+        def classic(**reviews):
+            s = self.solo()
+            s['rulesets'].pop()                                   # no main ruleset: classic protection only
+            s['main_branch_protection'] = {
+                'required_status_checks': {'checks': [{'context': 'unit-tests'}]},
+                'enforce_admins': {'enabled': True},
+                'allow_force_pushes': {'enabled': False}, 'allow_deletions': {'enabled': False}}
+            s['main_branch_protection']['required_pull_request_reviews'] = reviews
+            return s
+        self.assertEqual(audit.audit(classic(required_approving_review_count=0), allow_self_approval=True), [])
+        self.assertTrue(audit.audit(classic(required_approving_review_count=0)))            # strict: refused
+        self.assertTrue(audit.audit(classic(required_approving_review_count=1), allow_self_approval=True))
+        self.assertEqual(audit.audit(classic(required_approving_review_count=1, dismiss_stale_reviews=True),
+                                     allow_self_approval=True), [])
+        no_pr = classic()
+        del no_pr['main_branch_protection']['required_pull_request_reviews']
+        self.assertTrue(any('main branch update protection missing' in f
+                            for f in audit.audit(no_pr, allow_self_approval=True)))
+
     def test_note_is_printed(self):
         self.assertEqual(audit.self_approval_notes(False), [])
         self.assertIn('self:<login>', audit.self_approval_notes(True)[0])
@@ -202,6 +232,14 @@ class BootstrapRecordTests(unittest.TestCase):
             self.make(decision='AUTO_PASS', approver_id='automatic-policy')
         with self.assertRaisesRegex(ValueError, 'no human approver'):
             self.make(approver_id='')
+
+    def test_normal_approval_next_to_the_bootstrap_record_is_consumable(self):
+        """After the first normal approval the digest carries BOTH records (runbook steps 4, 7)."""
+        text = self.as_attestation(self.make()) + '\n' + self.as_attestation(self.make(bootstrap=False))
+        chosen = attestation.check(text, PTYPE, 'sha256:' + 'a' * 64, self.REF, '2026-11-ghcr-v6',
+                                   max_age_hours=720, expected_policy_sha256=fp.fingerprint())
+        self.assertNotIn('bootstrap', chosen)
+        self.assertEqual(chosen['policy_sha256'], fp.fingerprint())
 
     def test_baseline_yes_consumable_no(self):
         text = self.as_attestation(self.make())
@@ -320,6 +358,7 @@ class BootstrapScriptTests(unittest.TestCase):
         # The normal pipeline must still evaluate it ...
         precheck = self.run_bash('ci/base_precheck.sh')
         self.assertEqual((precheck.returncode, precheck.stdout.strip()), (0, 'needed'), precheck.stderr)
+        self.assertIn('policy content hash', precheck.stderr)                # refused for THAT reason
         # ... and no application may build on it.
         bases = self.dir / 'bases.txt'
         bases.write_text(predicate['approved_ref'] + '\n')

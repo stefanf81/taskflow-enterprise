@@ -4,16 +4,50 @@
 #   https://raw.githubusercontent.com/<this repo>/refs/heads/grants/<commit>
 #
 #   serve_grants.sh serve     re-issue a fresh grant every 60 s for GRANT_MINUTES, then stop
-#   serve_grants.sh withdraw  publish an empty branch (run on success, failure and cancel)
+#   serve_grants.sh withdraw  stop a serve loop that is still running, then publish an empty
+#                             branch (run on success, failure and cancel)
 #
 # The release pipeline requires a grant issued at most 10 minutes before EACH of its two
 # fetches, and raw.githubusercontent.com caches for up to 5 minutes, hence the re-issuing.
-# The branch always holds a single commit (force-pushed), so it does not grow. One grant at a
-# time: a new grant replaces the previous application commit's grant.
+# The branch always holds a single commit (force-pushed), so it does not grow. It holds one
+# grant at a time; the workflow's concurrency group queues a second dispatch, so cancel the
+# running one before granting another commit.
+#
+# Run `serve` with `exec` from the workflow step, so that a cancel signal reaches this
+# process: it stops at once (the trap below) instead of sleeping on as an orphan that could
+# publish a new grant after the withdrawal.
 set -Eeuo pipefail
 : "${APP_REPOSITORY:?}" "${APP_COMMIT:?}" "${GH_TOKEN:?}" "${GITHUB_REPOSITORY:?}" "${RUNNER_TEMP:?}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-work="$RUNNER_TEMP/grants-branch"
+mode="${1:-}"
+work="$RUNNER_TEMP/grants-branch-$mode"      # serve and withdraw never share a directory
+pidfile="$RUNNER_TEMP/serve-grants.pid"
+
+retry() {   # three attempts for calls that can fail transiently (git push)
+  local attempt
+  for attempt in 1 2 3; do
+    "$@" && return 0
+    [[ "$attempt" = 3 ]] || sleep 5
+  done
+  return 1
+}
+
+fetch() {   # fetch OUTFILE COMMAND...: like retry, and OUTFILE holds only the last attempt's output
+  local out="$1" attempt
+  shift
+  for attempt in 1 2 3; do
+    if "$@" > "$out"; then return 0; fi
+    [[ "$attempt" = 3 ]] || sleep 5
+  done
+  return 1
+}
+
+push_branch() {
+  local auth
+  auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+  git -C "$work" -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+    push -q --force "https://github.com/$GITHUB_REPOSITORY.git" HEAD:refs/heads/grants
+}
 
 publish() {   # publish [GRANT_FILE]; without a file the branch holds no grant
   rm -rf "$work"
@@ -28,14 +62,26 @@ publish() {   # publish [GRANT_FILE]; without a file the branch holds no grant
   git -C "$work" -c user.name='github-actions[bot]' \
     -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
     commit -q -m "release grants $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  local auth
-  auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
-  git -C "$work" -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
-    push -q --force "https://github.com/$GITHUB_REPOSITORY.git" HEAD:refs/heads/grants
+  retry push_branch
 }
 
-case "${1:-}" in
+stop_serve_loop() {   # make sure no serve loop can publish after the withdrawal
+  local pid i
+  [[ -f "$pidfile" ]] || return 0
+  pid="$(cat "$pidfile")"
+  rm -f "$pidfile"
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 0
+  kill -TERM "$pid" 2>/dev/null || return 0
+  for i in $(seq 1 50); do
+    kill -0 "$pid" 2>/dev/null || return 0
+    sleep 0.2
+  done
+  kill -KILL "$pid" 2>/dev/null || true
+}
+
+case "$mode" in
   withdraw)
+    stop_serve_loop
     publish
     echo "Grant withdrawn: refs/heads/grants holds no grant"
     ;;
@@ -43,13 +89,17 @@ case "${1:-}" in
     : "${GRANT_MINUTES:?}" "${GATE_PRIVATE_KEY_B64:?}"
     [[ "$GRANT_MINUTES" =~ ^[0-9]+$ ]] && (( GRANT_MINUTES >= 1 && GRANT_MINUTES <= 90 )) || {
       echo 'minutes must be 1..90' >&2; exit 1; }
+    echo "$$" > "$pidfile"
+    sleeper=''
+    trap 'echo "Gate stopped by signal" >&2; [[ -z "$sleeper" ]] || kill "$sleeper" 2>/dev/null; exit 130' INT TERM
     umask 077
     key="$RUNNER_TEMP/gate.key"
     printf '%s' "$GATE_PRIVATE_KEY_B64" | base64 -d > "$key"
     end=$((SECONDS + GRANT_MINUTES * 60))
     while :; do
-      head="$(gh api "repos/$APP_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
-      gh api "repos/$APP_REPOSITORY/commits/$APP_COMMIT/check-runs?per_page=100" > "$RUNNER_TEMP/check-runs.json"
+      fetch "$RUNNER_TEMP/head.txt" gh api "repos/$APP_REPOSITORY/git/ref/heads/main" --jq .object.sha
+      head="$(cat "$RUNNER_TEMP/head.txt")"
+      fetch "$RUNNER_TEMP/check-runs.json" gh api "repos/$APP_REPOSITORY/commits/$APP_COMMIT/check-runs?per_page=100"
       if ! python3 -I "$here/issue_grant.py" --repository "$APP_REPOSITORY" --commit "$APP_COMMIT" \
           --head-sha "$head" --check-runs "$RUNNER_TEMP/check-runs.json" \
           --allowlist "$here/allowlist.json" --key "$key" --output "$RUNNER_TEMP/grant.json"; then
@@ -59,9 +109,16 @@ case "${1:-}" in
       fi
       publish "$RUNNER_TEMP/grant.json"
       echo "$(date -u +%H:%M:%S) grant for $APP_REPOSITORY@$APP_COMMIT re-issued"
-      (( SECONDS + 60 < end )) || break
-      sleep 60
+      remaining=$((end - SECONDS))
+      (( remaining > 0 )) || break
+      # In the background and waited for, so the trap runs at once instead of after the sleep.
+      sleep "$(( remaining < 60 ? remaining : 60 ))" &
+      sleeper="$!"
+      wait "$sleeper"
+      sleeper=''
+      (( SECONDS < end )) || break
     done
+    rm -f "$pidfile"
     ;;
   *) echo 'Usage: serve_grants.sh {serve|withdraw}' >&2; exit 2 ;;
 esac

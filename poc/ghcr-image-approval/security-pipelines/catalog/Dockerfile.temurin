@@ -1,5 +1,6 @@
 # Renovate pins this FROM to an exact sha256 digest in its first PR.
 # Java 21 LTS on Ubuntu 26.04 LTS (Resolute). Java 26 is NOT an LTS release.
 # PoC: pinned by hand to the multi-platform index digest Docker Hub served for this tag on
-# 2026-11-20 (OCI image index). Renovate keeps it current from here.
+# 2026-11-20 (OCI image index). Update it by pull request; Renovate (renovate.json) can
+# propose new digests once it is installed and allowed to create branches.
 FROM eclipse-temurin:21-jre-resolute@sha256:577acb7ab9893a6dfd6bcb138a25a4fb579ef1f3abcd197e24d9752e33457d85

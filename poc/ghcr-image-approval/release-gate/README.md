@@ -22,8 +22,11 @@ The pipeline reads it from
 so `RELEASE_GATE_URL` is that URL without `/<commit>`. raw.githubusercontent.com caches for up
 to 5 minutes; with the 60-second re-issue a fetched grant is at most about 6.5 minutes old.
 
-When the run ends, fails or is **cancelled**, a final step publishes an empty branch: that is
-revocation. One grant at a time: dispatching for another commit replaces the previous grant.
+When the run ends, fails or is **cancelled**, a final step stops the loop and publishes an
+empty branch: that is revocation. The gate holds one grant at a time, and a second dispatch
+waits until the running one has ended, so cancel the running one before granting another
+commit. A GitHub API call or push that fails is retried twice; after that the run stops and the
+grant is withdrawn.
 
 ## Setup
 
@@ -46,13 +49,17 @@ revocation. One grant at a time: dispatching for another commit replaces the pre
 
 ## Tests
 
-`python3 -m unittest discover -s tests` (needs python3 and openssl only); the same runs in
-`test.yml`.
+`python3 -m unittest discover -s tests` (needs python3, openssl, bash and git; about half a
+minute); the same runs in `test.yml`. `tests/test_serve_grants.py` runs the publishing loop
+against a local repository and a stub `gh`, including the cancel path.
 
 ## Limits (PoC)
 
 - The grant is public; it only says "this commit may be released" and carries no secret.
 - The key sits in a GitHub environment of a repository you control: this separates duties
   from the security repository, but it is not an independently operated service.
-- A newer cached `404` (fetched before the first grant was pushed) can be served for up to
+- A cached `404` (fetched before the first grant was pushed) can be served for up to
   5 minutes: wait for the first "re-issued" log line before dispatching the release.
+- Withdrawal empties the branch at once, but a copy cached by raw.githubusercontent.com can
+  be served for up to 5 minutes more, and the pipeline accepts a grant for 10 minutes after it
+  was issued.

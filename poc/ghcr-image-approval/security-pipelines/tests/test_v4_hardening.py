@@ -152,7 +152,7 @@ class PinnedInstallerTests(unittest.TestCase):
             tools.validate_lock(lock, {'crane'})
 
     def test_workflow_installs_tools_before_use(self):
-        for f in ('base-image-approval.yml','application-release.yml'):
+        for f in ('base-image-approval.yml','base-bootstrap.yml','application-release.yml'):
             text=(ROOT/'.github/workflows'/f).read_text()
             self.assertIn('ci/install_verified_tools.py --kind',text)
 

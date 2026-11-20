@@ -37,7 +37,8 @@ ci/environment_approver.py), two requirements nobody can meet alone are relaxed 
 as NOTE lines instead: reviewer environments may allow self-review (they still need a
 required reviewer, so the run still pauses), and main may require a pull request with ZERO
 approvals (the pull request, the required checks, deletion protection and the empty bypass
-list stay mandatory). Every other check is unchanged.
+list stay mandatory; with one or more required approvals, stale-review dismissal too). Every
+other check is unchanged.
 """
 import argparse
 import json
@@ -168,7 +169,8 @@ def _main_is_protected(settings, min_approvals=1):
         checks = kinds.get('required_status_checks')
         if (pr is not None and checks is not None
                 and pr.get('required_approving_review_count', 0) >= min_approvals
-                and (min_approvals == 0 or pr.get('dismiss_stale_reviews_on_push', False))
+                and (pr.get('required_approving_review_count', 0) == 0
+                     or pr.get('dismiss_stale_reviews_on_push', False))
                 and checks.get('required_status_checks')
                 and kinds.get('deletion') is not None):
             return True
@@ -182,7 +184,8 @@ def _main_is_protected(settings, min_approvals=1):
         return False   # named people/apps may merge without the required review
     if (branch.get('required_pull_request_reviews') is not None
             and reviews.get('required_approving_review_count', 0) >= min_approvals
-            and (min_approvals == 0 or reviews.get('dismiss_stale_reviews', False))
+            and (reviews.get('required_approving_review_count', 0) == 0
+                 or reviews.get('dismiss_stale_reviews', False))
             and (statuses.get('checks') or statuses.get('contexts')) and enforced
             and (branch.get('allow_force_pushes') or {}).get('enabled') is not True
             and (branch.get('allow_deletions') or {}).get('enabled') is not True):

@@ -13,6 +13,9 @@
 #     evaluated it (against itself) and a reviewer has approved that run.
 # It refuses to run when the tracking tag already exists: every later approval belongs to the
 # normal pipeline.
+# Caveat: the digest also gets a plain cosign SIGNATURE from the approval key (the next
+# evaluation requires one on its baseline). Only the attestation tells a bootstrapped digest
+# from an approved one, so never accept base images on the signature alone.
 set -Eeuo pipefail
 : "${GHCR_HOST:?}" "${GHCR_APPROVED_REPO:?}" "${GHCR_QUARANTINE_REPO:?}" "${APPROVAL_PUBKEY:?}" \
   "${COSIGN_KEY:?}" "${APPROVAL_PREDICATE_TYPE:?}" "${GITHUB_SHA:?}" "${APPROVER_ID:?}" "${CONFIRM_DIGEST:?}"
@@ -82,7 +85,9 @@ if python3 -I scripts/check_approval_attestation.py reports/bootstrap-attestatio
      --predicate-type "$APPROVAL_PREDICATE_TYPE" --digest "$digest" --expected-ref "$approved_ref" \
      --accepted-policy-versions "$policy_version" \
      --expected-policy-sha256 "$(python3 -I scripts/policy_info.py --field policy_sha256)" >/dev/null 2>&1; then
-  echo 'Bootstrap record would be consumable by applications; refusing to publish the tracking tag' >&2
+  echo "$approved_ref already carries an approval that applications can consume (not from this run)." >&2
+  echo 'Refusing to bootstrap over it. If only the tracking tag is missing, restore it by hand:' >&2
+  echo "  crane tag $approved_ref $tag" >&2
   exit 1
 fi
 crane tag "$approved_ref" "$tag"

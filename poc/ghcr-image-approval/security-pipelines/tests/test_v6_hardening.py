@@ -120,7 +120,7 @@ class ApprovalSecurityTests(unittest.TestCase):
         self.assertEqual(environment_approver.approver(record,'base-manual-approval','bob','carol'),'Alice')
 
     def test_workflows_pass_both_actors(self):
-        for name in ('base-image-approval.yml','application-release.yml'):
+        for name in ('base-image-approval.yml','base-bootstrap.yml','application-release.yml'):
             wf=(ROOT/'.github/workflows'/name).read_text()
             self.assertIn('--actor "$GITHUB_ACTOR"', wf)
             self.assertIn('--triggering-actor "$GITHUB_TRIGGERING_ACTOR"', wf)

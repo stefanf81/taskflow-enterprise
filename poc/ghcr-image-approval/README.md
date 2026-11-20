@@ -12,7 +12,10 @@ be merged into taskflow-enterprise.
 | `release-gate/` | `stefanf81/ghcr-approval-poc-gate` | Stand-in for the external release-authorization service the kit needs but does not supply |
 
 Repository names are defaults. If you choose others, update `policy/applications.json`, the
-`FROM` in `example-app/Dockerfile`, `release-gate/allowlist.json` and the variables below.
+`FROM` in `example-app/Dockerfile`, `release-gate/allowlist.json`, the default input in
+`release-gate.yml` and the variables below. The names are also asserted in
+`security-pipelines/tests/test_v3_fixes.py` and in both test files under `release-gate/tests/`;
+change them there too or the test checks turn red.
 All three must be **public**: on a free personal account, artifact attestations and environment
 reviewers are only available for public repositories.
 
@@ -21,15 +24,17 @@ reviewers are only available for public repositories.
 Verified in the session container:
 
 - The kit's own suite (`ci/validate-local.sh` content) passes before and after the changes:
-  228 tests, 5 skipped. The skipped ones need a Docker daemon with the containerd image store,
+  231 tests, 5 skipped. The skipped ones need a Docker daemon with the containerd image store,
   or cosign.
-- That includes 18 new tests, among them `ci/bootstrap_base.sh` run end to end against stub
+- That includes 21 new tests, among them `ci/bootstrap_base.sh` run end to end against stub
   crane/cosign. Its record is then accepted as a comparison baseline, while the real precheck
   answers `needed` and `scripts/verify_bases.sh` refuses it for applications.
 - Gate: grants produced by `serve_grants.sh` are accepted by the kit's
   `scripts/verify_release_authorization.py`. That script rejects them for another commit or
-  when they are 11 minutes old, and the gate itself refuses and withdraws when the app's HEAD
-  moves.
+  when they are 11 minutes old. The gate's own 14 tests run the publishing loop against a
+  local repository: it refuses and withdraws when the app's HEAD moves, retries a transient
+  API error, and after a cancel signal or a withdrawal no loop is left that could publish
+  again.
 - The toy app's jar is byte-identical across two clean builds (normal and `CI_SKIP_TESTS=1`).
   Its Dockerfile passes the kit's `scripts/check_dockerfile_bases.py`.
 - All workflows pass the kit's pinned actionlint 1.7.12. shellcheck was not installed, so
@@ -175,12 +180,13 @@ check-run of that run.
 | 5 | App repo: note the `main` HEAD SHA; its `test` check is green | |
 | 6 | Gate repo: run **Release gate (PoC)** with that SHA, minutes `45` | The log shows "re-issued" every minute. `curl -s https://raw.githubusercontent.com/stefanf81/ghcr-approval-poc-gate/refs/heads/grants/<SHA>` returns JSON. Wait for that before step 7: a 404 fetched earlier can stay cached for 5 minutes. |
 | 7 | Security repo: run **GHCR - protected application release** with `app_name=example-app` and `app_commit=<SHA>` | `authorize` → `compile` a/b → `image_build` a/b (attested) → `scan` → `push_candidate` → (`high_review` only on High findings: approve it) → `promote` → `independent_rescan` → `independent_verification` → `sign`. |
-| 8 | Cancel the gate run | The grant is withdrawn. |
+| 8 | Cancel the gate run | The grant is withdrawn (the `grants` branch holds only a README). A copy already cached by raw.githubusercontent.com can still be served for up to 5 minutes. |
 
 **If `scan` ends in BLOCK** (a Critical or unrated finding in the Ubuntu base): the job summary
 prints the "Release digest". Add an exception scoped to that exact image to
 `critical_exceptions` in `policy/config.json` (via a pull request), then dispatch the same
-commit again. The build is reproducible, so the digest is identical:
+commit again, with the gate running again for it (step 6). The build is reproducible, so the
+digest is identical:
 
 ```json
 {"id": "CVE-…", "package": "…", "package_version": "…", "platform": "linux/amd64",
@@ -227,11 +233,11 @@ docker run --rm "$IMAGE"
 | Revocation: add yourself as required reviewer to `ghcr-application-signing`, start a release, cancel the gate when `sign` is waiting, approve `sign` more than 10 minutes later | `sign` fails: 404 or "not freshly issued". Approving sooner can still succeed: a cached grant stays valid for up to 10 minutes after the cancel. Remove the reviewer afterwards |
 | Release a commit that is not the app's `main` HEAD | Gate refuses; `authorize` fails "not the exact protected main HEAD" |
 | `app_name` not in `policy/applications.json` | `authorize`: "APPLICATION NOT ALLOWED" |
-| App change: add `RUN date > /stamp` to its Dockerfile, release the new HEAD | `scan` refuses: the two independent builders produce different layers |
+| App change: add `RUN date > /stamp` to its Dockerfile **above** the `USER` line (below it the write is denied and the build simply fails), release the new HEAD | `scan` refuses: the two independent builders produce different layers |
 | Run the bootstrap again | "already points at …" |
-| Set `allow_self_approval` to `false`, rerun step 3 | `promote`: "… started or reran this workflow and cannot approve" |
+| Set `allow_self_approval` to `false` (this changes the fingerprint, so the push starts a new base run) | `promote`: "… started or reran this workflow and cannot approve" |
 | Touch `scripts/evaluate.py` on `main`, rerun step 4 | `precheck`: `needed` (fingerprint changed) |
-| Blank `APP_COSIGN_KEY_B64` | `sign` fails closed; the image stays unsigned |
+| Delete the secret `APP_COSIGN_KEY_B64` (GitHub does not store empty values), release, then restore it | `sign` fails closed; the image stays unsigned |
 | Download artifact `image-a`, change one byte, `gh attestation verify` it against the security repo | Verification fails |
 
 ## 6. Known risks the live run has to settle

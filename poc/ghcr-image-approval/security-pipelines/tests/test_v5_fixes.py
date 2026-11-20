@@ -182,7 +182,7 @@ class Finding1InstallerTests(unittest.TestCase):
 
     @unittest.skipIf(yaml is None, 'PyYAML required')
     def test_workflow_jobs_install_before_checking_and_with_the_same_kind(self):
-        for name in ('application-release.yml', 'base-image-approval.yml'):
+        for name in ('application-release.yml', 'base-bootstrap.yml', 'base-image-approval.yml'):
             for job_name, job in yaml.safe_load((WF / name).read_text())['jobs'].items():
                 text = json.dumps(job['steps'])
                 installed = re.findall(r'install_verified_tools\.py --kind ([a-z-]+)', text)
