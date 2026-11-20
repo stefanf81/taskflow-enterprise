@@ -37,7 +37,9 @@
   "rebaseWhen": "auto",
   "schedule": ["on monday"],
   "updateNotScheduled": false,
-  "dependencyDashboard": true,
+  "dependencyDashboard": {
+    "enabled": true
+  },
   "labels": ["dependencies"],
   "gitAuthor": "stefanf81 <17823566+stefanf81@users.noreply.github.com>",
   "prHourlyLimit": 0,
