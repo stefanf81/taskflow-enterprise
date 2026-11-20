@@ -84,7 +84,7 @@ once ESLint, Expo and Jest's `test-exclude` declare the fixed major themselves. 
 re-resolve a lockfile entry that still satisfies its range when an override is added; check
 `npm ls glob minimatch --all` afterwards, since a nested copy can stay on the old version.
 
-### Backend (Spring Boot 4.1.2)
+### Backend (Spring Boot 4.1.3)
 
 ```bash
 ./gradlew test           # Fast H2-backed tests; Docker is not required
