@@ -10,6 +10,14 @@ sha256:41d9263c0d5b2a74d89af6e29e73b04298bc65e3cb705d03e9e2271ef49fef84
 Temurin 25.0.4.1+1 / Ubuntu 26.04
 ```
 
+**2026-11-21 digest refresh:** the Dockerfile now pins
+`sha256:a0862ac8790c648f6b5db8a113b9990d24fbe8e65f3c4ba8d68b0302d270c1e6`
+(pushed 2026-11-20; previous pin
+`sha256:480ef64e4540d45b0301e8afb7873bd3fa61ce93c5f66273eb569420718f38e2`). Unlike the 2026-11-14
+refresh this is a new JDK build: the image ships `JAVA_VERSION=jdk-25.0.5.1+2` (previously `25.0.5+8`) on
+Ubuntu 26.04. Applied ahead of Renovate's 3-day soak at the maintainer's request. No Trivy scan, image
+smoke test or performance gate has been run on this digest yet; CI's image scan covers it on the next build.
+
 **2026-11-14 digest refresh:** the Dockerfile now pins
 `sha256:480ef64e4540d45b0301e8afb7873bd3fa61ce93c5f66273eb569420718f38e2`
 (pushed 2026-11-12; previous pin
