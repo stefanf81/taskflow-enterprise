@@ -329,6 +329,12 @@ tasks.register("testcontainersTest", Test) {
 	testClassesDirs = sourceSets.test.output.classesDirs
 	classpath = sourceSets.test.runtimeClasspath
 	maxParallelForks = 1
+	// The PostgreSQL containers take their image from the compose `db` service
+	// (PostgresTestServer.IMAGE), so an image update must rerun the suite
+	// instead of restoring its result from the build cache.
+	inputs.file("docker-compose.yml")
+			.withPropertyName("composeFile")
+			.withPathSensitivity(PathSensitivity.RELATIVE)
 	// jacocoTestReport/-Verification read `test` only, so the agent here only
 	// slowed every Spring context start (see the `test` task).
 	jacoco {
