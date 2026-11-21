@@ -25,6 +25,16 @@ on:
         description: Run all tests
         type: boolean
         default: true
+      # Maintenance switch: a dependency lookup that failed once (e.g. a Gradle Plugin
+      # Portal outage) can be stored in the shared `backend` Gradle entry, and every job
+      # restoring it then fails the same way (2026-11-21: kotlin-bom 2.4.21 "not found"
+      # in Backend build, Backend Package and Dependency Submission, while
+      # `backend-integration`, which keeps its own entry, resolved it). Dispatching on
+      # `main` with this on re-resolves every dependency and saves a fresh entry.
+      refresh_dependencies:
+        description: Re-resolve all Gradle dependencies and rewrite the shared backend Gradle cache
+        type: boolean
+        default: false
 
 # NOTE: Docker image pushing has been moved to the dedicated, manually-triggered
 # workflow at `.github/workflows/pushdockerimage.yml`. This CI workflow only
@@ -384,10 +394,11 @@ jobs:
       # --no-build-cache, so an entry saved there (on a SHA a frontend-only push left without
       # one) carried no build outputs and served every reader an empty build cache until the
       # next backend push. `backend-integration` has the same rule for its own entry.
+      # A dispatch with refresh_dependencies writes it (with --build-cache, see below).
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
-          cache-read-only: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+          cache-read-only: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.refresh_dependencies != true) }}
 
       # `testcontainersTest` and `spotbugsMain` run in `backend-integration`:
       # on one 4-vCPU runner they competed with the unit-test forks for CPU,
@@ -401,12 +412,15 @@ jobs:
           # `test` FROM-CACHE and no test actually runs (verified: manual
           # dispatch completed in ~18s with every test task FROM-CACHE). PR/push
           # runs keep the cache for speed; the nightly remains the authoritative
-          # full execution.
-          GRADLE_CACHE_FLAG: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_tests == true)) && '--no-build-cache' || '--build-cache' }}
+          # full execution. A refresh_dependencies dispatch keeps the build
+          # cache: the entry it saves must still carry build outputs.
+          GRADLE_CACHE_FLAG: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_tests == true && inputs.refresh_dependencies != true)) && '--no-build-cache' || '--build-cache' }}
+          GRADLE_REFRESH_FLAG: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_dependencies == true && '--refresh-dependencies' || '' }}
         run: |
           ./gradlew \
             --parallel \
             "$GRADLE_CACHE_FLAG" \
+            ${GRADLE_REFRESH_FLAG:+"$GRADLE_REFRESH_FLAG"} \
             assemble \
             test \
             containerConfigTest \
@@ -416,10 +430,13 @@ jobs:
 
       - name: Build (packaging only)
         if: env.RUN_TESTS != 'true'
+        env:
+          GRADLE_REFRESH_FLAG: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_dependencies == true && '--refresh-dependencies' || '' }}
         run: |
           ./gradlew \
             --parallel \
             --build-cache \
+            ${GRADLE_REFRESH_FLAG:+"$GRADLE_REFRESH_FLAG"} \
             assemble \
             --stacktrace
 
