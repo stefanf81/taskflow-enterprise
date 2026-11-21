@@ -84,20 +84,30 @@ class TrustedProxyConfigTest {
     }
 
     @Test
-    void theFilterExistsOnlyWithTheNativeForwardedHeaderStrategy() {
+    void theFilterExistsOnlyWithTheWebServerForwardedHeaderStrategy() {
         WebApplicationContextRunner runner = new WebApplicationContextRunner()
                 .withUserConfiguration(TrustedProxyConfig.class)
                 .withConfiguration(AutoConfigurations.of());
+        String proxies = TrustedProxyConfig.PROXIES_PROPERTY + "=" + COMPOSE_REGEX;
+        Class<org.springframework.boot.web.servlet.FilterRegistrationBean> filter =
+                org.springframework.boot.web.servlet.FilterRegistrationBean.class;
 
-        runner.run(context -> assertTrue(context.getBeansOfType(
-                org.springframework.boot.web.servlet.FilterRegistrationBean.class).isEmpty()));
-        runner.withPropertyValues("server.forward-headers-strategy=native",
-                        TrustedProxyConfig.PROXIES_PROPERTY + "=" + COMPOSE_REGEX)
-                .run(context -> assertEquals(1, context.getBeansOfType(
-                        org.springframework.boot.web.servlet.FilterRegistrationBean.class).size()));
-        runner.withPropertyValues("server.forward-headers-strategy=native",
+        runner.run(context -> assertTrue(context.getBeansOfType(filter).isEmpty()));
+        // The prod profile's key since Boot 4.2.
+        runner.withPropertyValues("server.request.header.forwarded.strategy=web-server", proxies)
+                .run(context -> assertEquals(1, context.getBeansOfType(filter).size()));
+        // The key it replaced still selects the same strategy (e.g. an older deployment env var).
+        runner.withPropertyValues("server.forward-headers-strategy=native", proxies)
+                .run(context -> assertEquals(1, context.getBeansOfType(filter).size()));
+        runner.withPropertyValues("server.request.header.forwarded.strategy=framework", proxies)
+                .run(context -> assertTrue(context.getBeansOfType(filter).isEmpty()));
+        runner.withPropertyValues("server.request.header.forwarded.strategy=web-server",
                         TrustedProxyConfig.PROXIES_PROPERTY + "=^172\\\\.30\\\\.0\\\\.\\\\d{1,3}$")
                 .run(context -> assertTrue(context.getStartupFailure() != null,
                         "a doubled backslash must stop the start"));
+        runner.withPropertyValues("server.request.header.forwarded.strategy=web-server",
+                        "server.forward-headers-strategy=native", proxies)
+                .run(context -> assertTrue(context.getStartupFailure() != null,
+                        "Boot refuses both keys at once"));
     }
 }

@@ -7,9 +7,10 @@ on:
 
   workflow_dispatch:
 
+# Read-only by default; each job grants itself what it needs (CodeQL and Trivy:
+# security-events: write), so a job added without a block cannot upload alerts.
 permissions:
   contents: read
-  security-events: write
 
 # Prevent a manual workflow_dispatch run from colliding with the nightly
 # schedule (and vice-versa). cancel-in-progress: false keeps both runs

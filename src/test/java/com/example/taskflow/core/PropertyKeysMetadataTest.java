@@ -33,8 +33,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * (needs the absent {@code spring-boot-h2console} module) and the Hibernate setting
  * {@code hibernate.query.plan_parameter_metadata_max_size} (deprecated, never read by Hibernate 7).
  *
- * <p>Every key in the application property files must therefore exist, and not be removed
- * (deprecation level {@code error}), in the configuration metadata of the classpath; keys under
+ * <p>Every key in the application property files must therefore exist, and not be deprecated at
+ * all, in the configuration metadata of the classpath: a deprecated key still binds, but is removed
+ * two minor releases later (Boot 4.2 deprecated {@code server.forward-headers-strategy}, which the
+ * prod profile used and which {@code TrustedProxyConfig} was conditional on). Keys under
  * {@code spring.jpa.properties.} must be non-deprecated Hibernate or Jakarta Persistence settings.
  * The application's own {@code app.*} keys are checked too: the configuration processor generates
  * their metadata from the {@code @ConfigurationProperties} records, and
@@ -85,12 +87,14 @@ class PropertyKeysMetadataTest {
     void flagsTheKeysThatWereSilentlyIgnored() {
         for (String ignored : List.of("management.metrics.distribution.sla.http.server.requests",
                 "server.error.include-message", "management.endpoint.prometheus.enabled",
-                "spring.h2.console.enabled", "spring.jpa.properties.hibernate.query.plan_parameter_metadata_max_size")) {
+                "spring.h2.console.enabled", "spring.jpa.properties.hibernate.query.plan_parameter_metadata_max_size",
+                "server.forward-headers-strategy")) {
             assertNotNull(check(ignored), ignored);
         }
         for (String bound : List.of("management.metrics.distribution.slo.http.server.requests",
                 "spring.web.error.include-message", "management.endpoint.prometheus.access",
-                "spring.datasource.driverClassName", "spring.jpa.properties.hibernate.jdbc.batch_size")) {
+                "spring.datasource.driverClassName", "spring.jpa.properties.hibernate.jdbc.batch_size",
+                "server.request.header.forwarded.strategy")) {
             assertNull(check(bound), bound);
         }
     }
@@ -133,10 +137,14 @@ class PropertyKeysMetadataTest {
             entry = PROPERTIES.get(mapProperty);
         }
         JsonNode deprecation = entry.path("deprecation");
-        if ("error".equals(deprecation.path("level").asString(""))) {
-            return "no longer supported, replacement: " + deprecation.path("replacement").asString("none");
+        if (deprecation.isMissingNode()) {
+            return null;
         }
-        return null;
+        String replacement = deprecation.path("replacement").asString("none");
+        if ("error".equals(deprecation.path("level").asString(""))) {
+            return "no longer supported, replacement: " + replacement;
+        }
+        return "deprecated since " + deprecation.path("since").asString("?") + ", replacement: " + replacement;
     }
 
     /** The relaxed-binding canonical form: {@code driverClassName} -> {@code driver-class-name}. */
