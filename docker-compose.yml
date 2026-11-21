@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:18.7-alpine
+    image: postgres:19.0-alpine
     container_name: taskflow-db
     command:
       - "postgres"
@@ -37,8 +37,6 @@ services:
       - "log_min_duration_statement=1000"
       - "-c"
       - "autovacuum_work_mem=128MB"
-      - "-c"
-      - "jit=off"
       - "-c"
       # Parity with production (application-prod.properties: one replica, pool 25 of 50).
       - "max_connections=50"

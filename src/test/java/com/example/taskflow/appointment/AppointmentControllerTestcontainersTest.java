@@ -1,5 +1,6 @@
 package com.example.taskflow.appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
+import com.example.taskflow.testsupport.PostgresTestServer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,7 +61,7 @@ public class AppointmentControllerTestcontainersTest {
 
     // Define the PostgreSQL container matching production.
     @Container
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.7-alpine")
+    static PostgreSQLContainer postgres = new PostgreSQLContainer(PostgresTestServer.IMAGE)
             .withDatabaseName("taskflow_test")
             .withUsername("postgres")
             .withPassword("postgres-password");

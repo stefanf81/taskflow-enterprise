@@ -25,6 +25,14 @@
       "datasourceTemplate": "docker"
     },
     {
+      "description": "PostgreSQL image of the documented pre-sync Job, which no built-in manager reads. It follows the same postgres rules as docker-compose.yml and the workflows (the PostgreSQL tests read their image from docker-compose.yml)",
+      "customType": "regex",
+      "managerFilePatterns": ["/^docs/deployment/.+\\.ya?ml$/"],
+      "matchStrings": ["image: postgres:(?<currentValue>[^\\s\"@]+)"],
+      "depNameTemplate": "postgres",
+      "datasourceTemplate": "docker"
+    },
+    {
       "description": "Update the BuildKit image tag and digest together in the prepull-buildkit action",
       "customType": "regex",
       "managerFilePatterns": ["/^\\.github/actions/prepull-buildkit/action\\.yml$/"],
@@ -170,10 +178,10 @@
       "allowedVersions": "/^3\\.24\\./"
     },
     {
-      "description": "Keep PostgreSQL container images on version 18 to avoid incompatible data directory upgrades",
+      "description": "Keep PostgreSQL container images on version 19: a new major cannot start on the previous major's data directory, so a major is a planned change. Raise this bound and every pin together once the PostgreSQL suite passes on the new major, then upgrade production (homelab/TF) with its dump-and-restore procedure (docs/agents/gotchas.md)",
       "matchDatasources": ["docker"],
       "matchPackageNames": ["postgres"],
-      "allowedVersions": "/^18\\./"
+      "allowedVersions": "/^19\\./"
     },
     {
       "description": "Keep TypeScript on major version 6",
