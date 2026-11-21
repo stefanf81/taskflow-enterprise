@@ -1,6 +1,7 @@
 package com.example.taskflow.testsupport;
 
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -21,9 +22,12 @@ public final class PostgresTestServer {
     /**
      * The image of the compose {@code db} service. Every PostgreSQL test container uses it, so the
      * local stack and the tests run the same server, and Renovate updates one pin: it ignores
-     * {@code src/test}, so an image named in a test would stay behind.
+     * {@code src/test}, so an image named in a test would stay behind. The compose image is pinned
+     * as {@code postgres:<tag>@sha256:<digest>}, a name Testcontainers does not recognise as a
+     * postgres image on its own, hence the declared substitute.
      */
-    public static final String IMAGE = composeImage();
+    public static final DockerImageName IMAGE =
+            DockerImageName.parse(composeImage()).asCompatibleSubstituteFor("postgres");
 
     private static final String URL = System.getenv("TASKFLOW_TEST_POSTGRES_URL");
 
