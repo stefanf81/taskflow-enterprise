@@ -31,14 +31,14 @@ Verified in the session container (no GitHub, GHCR or Docker daemon available):
     comparison baseline, while the real precheck answers `needed` and `scripts/verify_bases.sh`
     refuses it for applications.
   - It refuses before any write when the digest already carries a usable approval.
-- **Gate:** 16 tests run the publishing loop against a local repository:
+- **Gate:** 19 tests run the publishing loop against a local repository:
   - it refuses and withdraws when the app's HEAD moves, and retries a transient API error;
   - the real workflow step stops on the runner's first signal;
   - a loop that survives a withdrawal cannot publish again (lease-protected pushes).
   - Its grants are accepted by the kit's `scripts/verify_release_authorization.py`, which
     rejects them for another commit or when they are more than 10 minutes old.
 - **Mutation checks:** undoing any of the review fixes, one at a time, makes its test fail
-  (10 kit checks, 5 gate checks).
+  (10 kit checks, 6 gate checks).
 - **buildx:** reproduced locally with buildx 0.39.0. `--builder default` fails ("use `docker
   --context=default buildx` …") once another context is current, which is what
   `docker/setup-docker-action` does. The PoC now builds on the current context's builder.
@@ -207,7 +207,7 @@ commit to have succeeded.
 | 3 | Run **GHCR - approve public base image** | See the walkthrough below the table. |
 | 4 | Run it again | `precheck`: `approved`; every other job is skipped. |
 | 5 | App repo: note the `main` HEAD SHA | Its **Application tests (no publishing secrets)** run on `main` is green. |
-| 6 | Gate repo: run **Release gate (PoC)** with that SHA, minutes `90` (the default) | The log shows "re-issued" every minute. `curl -s https://raw.githubusercontent.com/stefanf81/ghcr-approval-poc-gate/refs/heads/grants/<SHA>` returns JSON. Wait for that line in the log before you curl, and before step 7: a 404 fetched too early can stay cached for 5 minutes. |
+| 6 | Gate repo: run **Release gate (PoC)** with that SHA, minutes `90` (the default) | The log shows "re-issued" every minute. `curl -s https://raw.githubusercontent.com/stefanf81/ghcr-approval-poc-gate/refs/heads/grants/<SHA>` returns JSON. Wait for that line in the log before you curl, and before step 7: a 404 fetched too early can stay cached for 5 minutes. If the app's CI is still running (or is re-run later), the log says "not finished: no new grant this round" and the gate waits; it only gives up on a failed run or a new `main` HEAD. |
 | 7 | Security repo: run **GHCR - protected application release** with `app_name=example-app` and `app_commit=<SHA>` | `authorize` → `compile` a/b → `image_build` a/b (attested) → `scan` → `push_candidate` → (`high_review` only on High findings: approve it) → `promote` → `independent_rescan` → `independent_verification` → `sign`. |
 | 8 | Cancel the gate run | The grant is withdrawn (the `grants` branch holds only a README). A copy already cached by raw.githubusercontent.com can still be served for up to 5 minutes. |
 
@@ -223,7 +223,8 @@ commit to have succeeded.
     directories, symlinks into watched locations, and Critical/High/unknown vulnerabilities.
 - Read them before you approve `promote`. Expect, for a stock Temurin/Ubuntu image:
   - the usual setuid tools (`su`, `passwd`, `mount`, …);
-  - world-writable only for sticky temp directories (`tmp`, `var/tmp`);
+  - world-writable only for sticky temp directories (`tmp`, `var/tmp`, `run/lock`);
+  - among the symlinks into watched locations, `var/lock` (pointing to `/run/lock`);
   - no Critical vulnerabilities.
 
   Anything else needs a reason before you approve. The full lists are in `decision.json` of
@@ -288,7 +289,6 @@ finish each one's undo step before the next, or later tests fail for unrelated r
 | --- | --- |
 | Dispatch the bootstrap, the base approval or the application release from a branch other than `main` | Every job is skipped (`if: github.ref == 'refs/heads/main'`) |
 | Release with the gate not running | `authorize` fails: curl 404 from the grant URL |
-| Push a new commit to the app, then grant and release the **previous** SHA | The gate refuses ("… is not the main HEAD …") and withdraws; a release fails in `authorize` with "Requested commit is not the exact protected main HEAD (… main is <new SHA>)" |
 | Release with an `app_name` that is not in `policy/applications.json` | `authorize`: "APPLICATION NOT ALLOWED" |
 | Run the bootstrap again | "… already points at sha256:…; use base-image-approval.yml" |
 | Download the `image-a` artifact of a release run, change one byte of `application-image.tar`, run `gh attestation verify application-image.tar --repo stefanf81/ghcr-approval-poc` | Verification fails |
@@ -301,6 +301,7 @@ finish each one's undo step before the next, or later tests fail for unrelated r
 | **Non-reproducible build.** In the app's `Dockerfile`, add `RUN cat /proc/sys/kernel/random/uuid > /stamp` above the `USER` line (below it, the write is denied). Push, grant and release the new HEAD. | `scan` refuses: "Independent builder archives have different verified layer sequences" | Revert the commit. The revert is a new HEAD; grant and release that one if you need a green release. |
 | **Self-approval off.** PR that sets `allow_self_approval` to `false`; merge it. | The merge changes the base fingerprint and starts a base run: `precheck` says `needed`. Approve its `promote` deployment: the job then refuses you ("… started or reran this workflow and cannot approve 'base-manual-approval'") and fails. Meanwhile releases fail in `image_build` ("signed policy content hash does not match"). | PR back to `true`. The fingerprint is the approved one again, and the merge's base run stops at `precheck`: `approved`. |
 | **Fingerprint change.** PR that adds a comment line to `scripts/evaluate.py`; merge it. | The merge starts a base run: `precheck` says `needed`, and `evaluate` reviews the digest against itself again. | Approve its `promote` (a new record with the new fingerprint), or cancel the run and revert the PR. Releases fail until one of the two is done. |
+| **Stale commit.** Push a new commit to the app (e.g. an edit to its README), then grant and release the **previous** SHA. | The gate refuses ("… is not the main HEAD …") and withdraws; a release fails in `authorize` with "Requested commit is not the exact protected main HEAD (… main is <new SHA>)". | None needed, but every later test must use the **new** HEAD SHA (wait for its Application tests run to go green first). |
 | **Deleted signing key.** Delete the secret `APP_COSIGN_KEY_B64` (GitHub stores no empty values). Grant and release. | `sign` fails closed at `cosign sign`; the promoted image stays unsigned. | Restore the secret. |
 
 ## 6. Known risks the live run has to settle

@@ -14,6 +14,10 @@
 # grant at a time; the workflow's concurrency group queues a second dispatch, so cancel the
 # running one before granting another commit.
 #
+# A required CI run that has not finished yet (a re-run, or the gate started before CI was
+# done) is not a refusal: the loop issues no new grant that round and asks again. A finished
+# run that did not succeed, or a moved main HEAD, withdraws the grant and ends the run.
+#
 # Revocation must not be undone by a push that was still in flight when the run was cancelled
 # (the runner kills only the step's process; a running `git push` child can outlive it). So the
 # serve loop pushes with --force-with-lease against the commit it pushed last: once withdraw has
@@ -129,16 +133,28 @@ case "$mode" in
       head="$(cat "$RUNNER_TEMP/head.txt")"
       fetch "$RUNNER_TEMP/workflow-runs.json" \
         gh api "repos/$APP_REPOSITORY/actions/runs?head_sha=$APP_COMMIT&event=push&branch=main&per_page=100"
-      if ! python3 -I "$here/issue_grant.py" --repository "$APP_REPOSITORY" --commit "$APP_COMMIT" \
-          --head-sha "$head" --workflow-runs "$RUNNER_TEMP/workflow-runs.json" \
-          --allowlist "$here/allowlist.json" --key "$key" --output "$RUNNER_TEMP/grant.json"; then
-        publish '' "$lease"
-        echo 'Grant refused and withdrawn' >&2
-        exit 1
-      fi
-      publish "$RUNNER_TEMP/grant.json" "$lease"
-      lease="$(git -C "$work" rev-parse HEAD)"
-      echo "$(date -u +%H:%M:%S) grant for $APP_REPOSITORY@$APP_COMMIT re-issued"
+      verdict=0
+      python3 -I "$here/issue_grant.py" --repository "$APP_REPOSITORY" --commit "$APP_COMMIT" \
+        --head-sha "$head" --workflow-runs "$RUNNER_TEMP/workflow-runs.json" \
+        --allowlist "$here/allowlist.json" --key "$key" --output "$RUNNER_TEMP/grant.json" || verdict=$?
+      case "$verdict" in
+        0)
+          publish "$RUNNER_TEMP/grant.json" "$lease"
+          lease="$(git -C "$work" rev-parse HEAD)"
+          echo "$(date -u +%H:%M:%S) grant for $APP_REPOSITORY@$APP_COMMIT re-issued"
+          ;;
+        3)
+          # CI still running (a re-run, or the gate started early): issue nothing new and ask
+          # again next round. A grant published earlier is left alone; it ages out of the
+          # pipeline's 10-minute window by itself if CI stays unfinished.
+          echo "$(date -u +%H:%M:%S) CI run for $APP_COMMIT not finished: no new grant this round"
+          ;;
+        *)
+          publish '' "$lease"
+          echo 'Grant refused and withdrawn' >&2
+          exit 1
+          ;;
+      esac
       remaining=$((end - SECONDS))
       (( remaining > 0 )) || break
       # In the background and waited for, so the trap runs at once instead of after the sleep.

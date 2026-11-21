@@ -37,10 +37,11 @@ if failures.exists() and int(failures.read_text()) > 0:
 if path.endswith('/git/ref/heads/main'):
     print((state / 'head').read_text().strip())
 elif '/actions/runs?' in path:
+    ci = ((state / 'ci').read_text().split() if (state / 'ci').exists() else ['completed', 'success']) + [None]
     assert 'head_sha=' + os.environ['APP_COMMIT'] in path and 'event=push' in path and 'branch=main' in path, path
     print(json.dumps({'total_count': 1, 'workflow_runs': [
         {'id': 7, 'path': '.github/workflows/ci.yml', 'head_sha': os.environ['APP_COMMIT'], 'event': 'push',
-         'head_branch': 'main', 'status': 'completed', 'conclusion': 'success',
+         'head_branch': 'main', 'status': ci[0], 'conclusion': ci[1],
          'created_at': '2026-11-20T10:00:00Z', 'repository': {'full_name': os.environ['APP_REPOSITORY']}}]}))
 else:
     sys.exit(9)
@@ -190,6 +191,26 @@ class ServeGrantsTests(unittest.TestCase):
         self.assertEqual(withdrawn.returncode, 0, withdrawn.stderr)
         self.assertEqual(proc.wait(timeout=40), 1)             # its next push was rejected
         self.assertIn('stale info', proc.stderr.read())
+        self.assertEqual(self.branch_files(), ['README.md'])
+
+    def test_unfinished_ci_waits_instead_of_refusing(self):
+        """CI re-run (or still running when the gate starts): no grant yet, the loop keeps going,
+        and the grant appears once the run has succeeded."""
+        (self.state / 'ci').write_text('in_progress')
+        proc = self.start_serve(GRANT_INTERVAL_SECONDS='1')
+        time.sleep(4)
+        self.assertIsNone(proc.poll(), 'the loop ended while CI was still running')
+        self.assertIsNone(self.branch_files())                      # nothing granted yet
+        (self.state / 'ci').write_text('completed success')
+        self.wait_for_grant()
+        self.assertIsNone(proc.poll())
+
+    def test_failed_ci_is_refused_and_withdrawn(self):
+        proc = self.start_serve(GRANT_INTERVAL_SECONDS='1')
+        self.wait_for_grant()
+        (self.state / 'ci').write_text('completed failure')
+        self.assertEqual(proc.wait(timeout=20), 1)
+        self.assertIn('Grant refused and withdrawn', proc.stderr.read())
         self.assertEqual(self.branch_files(), ['README.md'])
 
     def test_moved_head_is_refused_and_withdrawn(self):

@@ -47,12 +47,27 @@ class EvaluateTests(unittest.TestCase):
             'full lowercase': (REPO, SHA.upper(), SHA.upper(), answer(run())),
             'no push run of .github/workflows/ci.yml': (REPO, SHA, SHA, answer()),
             'is completed/failure': (REPO, SHA, SHA, answer(run(conclusion='failure'))),
-            'is in_progress/None': (REPO, SHA, SHA, answer(run(status='in_progress', conclusion=None))),
             'partial list': (REPO, SHA, SHA, {'total_count': 101, 'workflow_runs': [run()]}),
         }
         for message, args in cases.items():
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
                 gate.evaluate(*args, self.allowlist)
+
+    def test_unfinished_run_is_pending_not_refused(self):
+        for status in ('queued', 'in_progress', 'waiting'):
+            with self.subTest(status=status), self.assertRaisesRegex(gate.Pending, f'is still {status}'):
+                gate.evaluate(REPO, SHA, SHA, answer(run(status=status, conclusion=None)), self.allowlist)
+        # A re-run of a run that had succeeded is pending again until it finishes.
+        rerun = run(status='in_progress', conclusion=None, run_attempt=2)
+        with self.assertRaises(gate.Pending):
+            gate.evaluate(REPO, SHA, SHA, answer(rerun), self.allowlist)
+        # Other refusals are not Pending.
+        try:
+            gate.evaluate(REPO, SHA, SHA, answer(run(conclusion='failure')), self.allowlist)
+        except gate.Pending:
+            self.fail('a failed run must be refused, not pending')
+        except ValueError:
+            pass
 
     def test_only_the_named_workflows_push_run_on_main_counts(self):
         """What a name-only check-run match accepted: another workflow's job called `test`, a PR run,
@@ -140,8 +155,13 @@ class SignedGrantTests(unittest.TestCase):
         self.assertEqual(json.loads(base64.b64decode(json.loads(out.read_text())['payload']))['commit'], SHA)
         out.unlink()
         refused = subprocess.run(cmd + ['--head-sha', 'b' * 40], capture_output=True, text=True)
-        self.assertNotEqual(refused.returncode, 0)
+        self.assertNotIn(refused.returncode, (0, gate.EXIT_PENDING))
         self.assertIn('GRANT REFUSED', refused.stderr)
+        self.assertFalse(out.exists())
+        runs.write_text(json.dumps(answer(run(status='in_progress', conclusion=None))))
+        pending = subprocess.run(cmd + ['--head-sha', SHA], capture_output=True, text=True)
+        self.assertEqual(pending.returncode, gate.EXIT_PENDING, pending.stderr)
+        self.assertIn('GRANT PENDING', pending.stderr)
         self.assertFalse(out.exists())
 
 

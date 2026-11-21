@@ -22,6 +22,13 @@ for the whole release, cancel it once the release has signed). Every 60 seconds 
 3. signs a fresh record (`issue_grant.py`, `openssl dgst -sha256 -sign`, valid 15 minutes) and
    pushes it as the single file `<commit>` on the orphan `grants` branch.
 
+A required run that has **not finished** yet is not a refusal. This covers CI re-run during a
+release, or the gate started before CI was done. The gate issues no new grant that round and
+asks again a minute later. A grant published earlier is left as it is; the pipeline stops
+accepting it 10 minutes after it was issued, so a long-running re-run still leads to a refusal
+at the release's next fetch. Only a finished run that did not succeed, or a moved `main` HEAD,
+withdraws the grant and ends the run.
+
 The pipeline reads it from
 `https://raw.githubusercontent.com/stefanf81/ghcr-approval-poc-gate/refs/heads/grants/<commit>`,
 so `RELEASE_GATE_URL` is that URL without `/<commit>`. raw.githubusercontent.com caches for up
@@ -64,6 +71,7 @@ against a local repository and a stub `gh`. It covers:
 - the real workflow step stopping on SIGINT;
 - withdraw stopping a running loop;
 - a loop that survives the withdrawal failing to publish again;
+- waiting through an unfinished CI run, and refusing a failed one;
 - strict `minutes` validation.
 
 `GRANT_INTERVAL_SECONDS` (1–60, default 60) exists only so the tests can run the loop quickly.

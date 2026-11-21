@@ -19,6 +19,10 @@ workflow FILE on main for that commit has succeeded. Runs are matched by workflo
 job or check-run name: a check-run anyone's workflow can create, or another workflow's job that
 happens to have the same name, never counts.
 
+Exit codes: 0 granted, 3 PENDING (the newest run has not finished yet, e.g. CI was re-run or
+the gate was started before CI completed: no grant this round, ask again later), anything else
+REFUSED.
+
 Usage: issue_grant.py --repository OWNER/NAME --commit SHA --head-sha SHA
                       --workflow-runs FILE --allowlist allowlist.json --key KEY.pem --output FILE
                       [--ttl-minutes 15]
@@ -30,6 +34,7 @@ import json
 import pathlib
 import re
 import subprocess
+import sys
 import tempfile
 
 SHA = re.compile(r'^[0-9a-f]{40}$')
@@ -37,6 +42,11 @@ REPOSITORY = re.compile(r'^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$')
 WORKFLOW_FILE = re.compile(r'^\.github/workflows/[A-Za-z0-9._-]+\.ya?ml$')
 PAYLOAD_TYPE = 'application/vnd.example.verified-release+json'
 MAX_TTL_MINUTES = 60
+EXIT_PENDING = 3
+
+
+class Pending(ValueError):
+    """Not refused: the newest run of a required workflow has not finished yet."""
 
 
 def load_allowlist(path):
@@ -85,7 +95,9 @@ def evaluate(repository, commit, head_sha, workflow_runs, allowlist):
         # A re-run keeps its run id and reports its latest attempt; a second push of the same
         # commit creates a newer run. The newest run counts.
         latest = max(matching, key=lambda r: (r.get('created_at') or '', r.get('id') or 0))
-        if latest.get('status') != 'completed' or latest.get('conclusion') != 'success':
+        if latest.get('status') != 'completed':
+            raise Pending(f'{workflow} run {latest.get("id")} for {commit} is still {latest.get("status")}')
+        if latest.get('conclusion') != 'success':
             raise ValueError(f'{workflow} run {latest.get("id")} for {commit} is '
                              f'{latest.get("status")}/{latest.get("conclusion")}')
         result[gate_check] = 'PASS'
@@ -139,6 +151,9 @@ def main():
         data = record_bytes(a.repository, a.commit, checks, allowlist,
                             dt.datetime.now(dt.timezone.utc), a.ttl_minutes)
         pathlib.Path(a.output).write_text(envelope(data, sign(data, a.key)))
+    except Pending as exc:
+        print(f'GRANT PENDING: {exc}', file=sys.stderr)
+        sys.exit(EXIT_PENDING)
     except (ValueError, OSError, json.JSONDecodeError) as exc:
         raise SystemExit(f'GRANT REFUSED: {exc}')
     print(f'Granted {a.repository}@{a.commit}: {", ".join(sorted(checks))}')
