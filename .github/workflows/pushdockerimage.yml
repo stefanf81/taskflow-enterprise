@@ -654,14 +654,18 @@ jobs:
             -a "scan=${SCAN}" \
             > /dev/null
 
+          # gh prints nothing on success when not attached to a terminal (its
+          # status output is TTY-only; errors still print), so say it here.
           retry gh attestation verify "oci://${IMAGE}@${DIGEST}" \
             --repo "$REPOSITORY" \
             --cert-identity "$IDENTITY"
+          echo "Attestation verified (GitHub API copy) for ${IMAGE}@${DIGEST}"
 
           retry gh attestation verify "oci://${IMAGE}@${DIGEST}" \
             --repo "$REPOSITORY" \
             --cert-identity "$IDENTITY" \
             --bundle-from-oci
+          echo "Attestation verified (GHCR copy) for ${IMAGE}@${DIGEST}"
 
       ##########################################################
       # Promote (only runs if all previous steps succeeded — meaning
