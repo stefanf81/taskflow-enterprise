@@ -250,5 +250,22 @@ or Kyverno.
 # PoC changes, applied after v6 (2026-11-20)
 
 Applied to the v6 kit for a first live run on a personal account; see the "PoC changes"
-table in README.md. Kit behaviour is unchanged when `allow_self_approval` is false, except
-that a bootstrap workflow now exists for the first baseline.
+table in README.md for every file touched. When `allow_self_approval` is false, approval and
+audit behave as in the kit. Additions: a bootstrap workflow for the first baseline.
+
+## Review fixes (2026-11-21)
+
+- `scripts/reproducible_build.sh`: builds on the current docker context's builder;
+  `--builder default` is refused by buildx after `docker/setup-docker-action` switched the
+  context, so no application image could be built on GitHub-hosted runners.
+- `scripts/evaluate.py`: absolute findings (SUID/SGID, world-writable, watched symlinks,
+  Critical/High/unknown) are review reasons when the candidate is the baseline itself; before,
+  the first approval after a bootstrap examined nothing.
+- `base-image-approval.yml`: every fingerprinted file triggers a base run; the evaluate summary
+  shows the reasons.
+- `examples/Dockerfile.application`: the jar is copied world-readable (`image_build` runs under
+  `umask 077`).
+- `ci/audit_repo_settings.py`: the switch comes from the audited repository's `main`.
+- `ci/bootstrap_base.sh`: refuses before any write when a usable approval exists (with the
+  consumers' age and version limits); upstream lookups fail with the tool's own error.
+- `application-release.yml`: `authorize` reports a failed HEAD lookup as such.

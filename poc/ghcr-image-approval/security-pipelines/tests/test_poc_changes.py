@@ -5,19 +5,29 @@
   * first-baseline bootstrap (scripts/approval_record.py --bootstrap, ci/bootstrap_base.sh,
     .github/workflows/base-bootstrap.yml), run end to end against stub crane/cosign and fed
     into the real precheck and application base verification.
+  * second review round: absolute findings when the candidate is the baseline itself
+    (scripts/evaluate.py), every fingerprinted file triggering a base run, the image build
+    using the current docker context's builder, a world-readable jar in the example
+    Dockerfile, and the audit reading its switch from the audited repository.
 """
 import base64
+import contextlib
+import datetime
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import pathlib
+import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import types
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WF = ROOT / '.github/workflows'
@@ -40,6 +50,8 @@ audit = load('poc_audit', 'ci/audit_repo_settings.py')
 record = load('poc_record', 'scripts/approval_record.py')
 attestation = load('poc_attestation', 'scripts/check_approval_attestation.py')
 fp = load('poc_fp', 'scripts/policy_fingerprint.py')
+evaluate_mod = load('poc_evaluate', 'scripts/evaluate.py')
+dockerfile_bases = load('poc_dockerfile_bases', 'scripts/check_dockerfile_bases.py')
 
 
 def approvals(*items):
@@ -200,6 +212,56 @@ class SoloAuditTests(unittest.TestCase):
         self.assertIn('self:<login>', audit.self_approval_notes(True)[0])
 
 
+class AuditPolicySourceTests(unittest.TestCase):
+    """The switch that relaxes the audit comes from the AUDITED repository's main branch."""
+
+    def run_main(self, argv, policy_on_main):
+        contents_calls = []
+
+        def fake_gh(path):
+            if path == 'repos/acme/sec/contents/policy/config.json?ref=main':
+                contents_calls.append(path)
+                if policy_on_main is None:
+                    return None
+                return {'encoding': 'base64',
+                        'content': base64.encodebytes(json.dumps(policy_on_main).encode()).decode()}
+            raise AssertionError(f'unexpected API call {path}')
+
+        out = io.StringIO()
+        with mock.patch.object(audit, '_gh', fake_gh), \
+                mock.patch.object(audit, 'collect', lambda repo: SoloAuditTests().solo()), \
+                mock.patch.object(sys, 'argv', ['audit_repo_settings.py', '--repo', 'acme/sec', *argv]), \
+                contextlib.redirect_stdout(out):
+            try:
+                audit.main()
+                code = 0
+            except SystemExit as e:
+                code = e.code
+        return code, out.getvalue(), contents_calls
+
+    def test_switch_on_main_decides(self):
+        code, out, calls = self.run_main([], {'allow_self_approval': True})
+        self.assertEqual(code, 0, out)
+        self.assertIn('read from policy/config.json on main of acme/sec', out)
+        self.assertEqual(len(calls), 1)
+        code, out, _ = self.run_main([], {'allow_self_approval': False})   # solo settings now fail
+        self.assertEqual(code, 1)
+        self.assertIn('Prevent self-review', out)
+
+    def test_local_override_is_announced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            local = pathlib.Path(tmp) / 'config.json'
+            local.write_text(json.dumps({'allow_self_approval': True}))
+            code, out, calls = self.run_main(['--policy', str(local)], {'allow_self_approval': False})
+        self.assertEqual(code, 0, out)
+        self.assertIn('LOCAL file', out)
+        self.assertEqual(calls, [])
+
+    def test_unreadable_or_invalid_switch_refuses(self):
+        self.assertIn('cannot read policy/config.json', str(self.run_main([], None)[0]))
+        self.assertIn('true or false', str(self.run_main([], {'allow_self_approval': 'yes'})[0]))
+
+
 class BootstrapRecordTests(unittest.TestCase):
     REF = 'ghcr.io/acme/approved/eclipse-temurin@sha256:' + 'a' * 64
 
@@ -251,27 +313,44 @@ class BootstrapRecordTests(unittest.TestCase):
 
 
 CRANE_STUB = r'''#!/usr/bin/env python3
+# Models what the bootstrap relies on, as GHCR answers it: the approved/ package does not
+# exist (NAME_UNKNOWN for ls, manifest and digest) until the copy, unless FAKE_DIGEST_PRESENT
+# says the digest is already there.
 import os, pathlib, sys
 state = pathlib.Path(os.environ['FAKE_STATE'])
 pinned, args = os.environ['FAKE_PINNED'], sys.argv[1:]
+approved = 'ghcr.io/acme/approved/eclipse-temurin'
+present = (state / 'copied').exists() or bool(os.environ.get('FAKE_DIGEST_PRESENT'))
+def unknown():
+    print('NAME_UNKNOWN: repository name not known to registry', file=sys.stderr); sys.exit(1)
 cmd = args[0]
 if cmd == 'digest':
     ref = args[1]
-    if ref.endswith(':21-jre-resolute') and '/approved/' in ref:
+    if ref == approved + ':21-jre-resolute':
         if os.environ.get('FAKE_EXISTING'):
             print(os.environ['FAKE_EXISTING']); sys.exit(0)
         if (state / 'tagged').exists():
             print(pinned); sys.exit(0)
         print('MANIFEST_UNKNOWN', file=sys.stderr); sys.exit(1)
-    print(pinned)
+    if ref.startswith(approved):
+        if not present:
+            unknown()
+        print(pinned); sys.exit(0)
+    if os.environ.get('FAKE_UPSTREAM_FAILS'):
+        print('GET https://index.docker.io/v2/: unexpected status code 503', file=sys.stderr); sys.exit(1)
+    print(os.environ.get('FAKE_UPSTREAM_DIGEST', pinned))
 elif cmd == 'ls':
     if os.environ.get('FAKE_LS_FAILS'):
         print('transient registry error', file=sys.stderr); sys.exit(1)
+    if not present and not os.environ.get('FAKE_LS_HAS_TAG'):
+        unknown()
     if (state / 'copied').exists():
         print('bootstrap-' + pinned[7:])
     if (state / 'tagged').exists() or os.environ.get('FAKE_LS_HAS_TAG'):
         print('21-jre-resolute')
 elif cmd == 'manifest':
+    if args[1].startswith(approved) and not present:
+        unknown()
     sys.stdout.buffer.write((state / 'index.json').read_bytes())
 elif cmd == 'copy':
     (state / 'copied').write_text(' '.join(args[1:]))
@@ -282,21 +361,31 @@ else:
 '''
 
 COSIGN_STUB = r'''#!/usr/bin/env python3
+# Like cosign: attest ADDS an attestation to the ones already on the digest, verify-attestation
+# prints every one and fails when there is none, verify fails without a signature.
 import base64, json, os, pathlib, sys
 state = pathlib.Path(os.environ['FAKE_STATE'])
+envelopes = state / 'envelope.json'
 args = sys.argv[1:]
 if args[0] == 'attest':
     predicate = json.loads(pathlib.Path(args[args.index('--predicate') + 1]).read_text())
     ref = args[-1]
     statement = {'predicateType': args[args.index('--type') + 1], 'predicate': predicate,
                  'subject': [{'name': ref.split('@')[0], 'digest': {'sha256': ref.split('@sha256:')[1]}}]}
-    (state / 'envelope.json').write_text(json.dumps(
-        {'payloadType': 'application/vnd.in-toto+json',
-         'payload': base64.b64encode(json.dumps(statement).encode()).decode()}) + '\n')
+    with envelopes.open('a') as f:
+        f.write(json.dumps({'payloadType': 'application/vnd.in-toto+json',
+                            'payload': base64.b64encode(json.dumps(statement).encode()).decode()}) + '\n')
 elif args[0] == 'verify-attestation':
-    sys.stdout.write((state / 'envelope.json').read_text())
-elif args[0] in ('sign', 'verify'):
-    (state / ('signed' if args[0] == 'sign' else 'verified')).touch()
+    text = envelopes.read_text() if envelopes.exists() else ''
+    if not text.strip():
+        print('Error: none of the attestations matched the predicate type', file=sys.stderr); sys.exit(1)
+    sys.stdout.write(text)
+elif args[0] == 'sign':
+    (state / 'signed').touch()
+    print('{}')
+elif args[0] == 'verify':
+    if not (state / 'signed').exists() and not os.environ.get('FAKE_SIGNED'):
+        print('Error: no matching signatures', file=sys.stderr); sys.exit(1)
     print('{}')
 else:
     sys.exit(42)
@@ -341,8 +430,33 @@ class BootstrapScriptTests(unittest.TestCase):
                               capture_output=True, text=True)
 
     def predicate(self):
-        statement = json.loads(base64.b64decode(json.loads((self.state / 'envelope.json').read_text())['payload']))
-        return statement['predicate']
+        """The newest attestation on the digest (the stub appends, like cosign)."""
+        last = (self.state / 'envelope.json').read_text().strip().splitlines()[-1]
+        return json.loads(base64.b64decode(json.loads(last)['payload']))['predicate']
+
+    def envelope_line(self, predicate):
+        ref = 'ghcr.io/acme/approved/eclipse-temurin@' + self.digest
+        statement = {'predicateType': PTYPE, 'predicate': predicate,
+                     'subject': [{'name': ref.split('@')[0], 'digest': {'sha256': self.digest[7:]}}]}
+        return json.dumps({'payloadType': 'application/vnd.in-toto+json',
+                           'payload': base64.b64encode(json.dumps(statement).encode()).decode()}) + '\n'
+
+    def normal_approval(self, age):
+        """A normal (consumable) approval record of the pinned digest, `age` old."""
+        evidence = self.dir / 'old-evidence'
+        evidence.mkdir(exist_ok=True)
+        version = json.loads((self.repo / 'policy/config.json').read_text())['version']
+        (evidence / 'decision.json').write_text(json.dumps({'decision': 'REVIEW', 'policy_version': version}))
+        args = types.SimpleNamespace(
+            decision_file=str(evidence / 'decision.json'), evidence_dir=str(evidence),
+            upstream_ref='docker.io/library/eclipse-temurin:21-jre-resolute@' + self.digest,
+            approved_ref='ghcr.io/acme/approved/eclipse-temurin@' + self.digest, approver='self:stefan',
+            build_url='https://github.com/acme/security/actions/runs/1', git_commit='3' * 40,
+            predicate_type=PTYPE, output=str(evidence / 'out.json'), bootstrap=False)
+        predicate = record.build_record(args)
+        predicate['policy_sha256'] = fp.fingerprint(self.repo)
+        predicate['timestamp_utc'] = (datetime.datetime.now(datetime.timezone.utc) - age).isoformat()
+        return predicate
 
     def test_bootstrap_then_precheck_and_application_refuse_it(self):
         result = self.run_bash('ci/bootstrap_base.sh')
@@ -384,6 +498,37 @@ class BootstrapScriptTests(unittest.TestCase):
                 self.assertFalse((self.state / 'signed').exists())
                 self.assertFalse((self.state / 'tagged').exists())
 
+    def test_refuses_over_a_consumable_approval_before_writing(self):
+        """Only the tracking tag is gone; the digest still carries a normal approval, 10 days old
+        (older than the checker's 168 h default, well inside approval_max_age_hours = 720)."""
+        (self.state / 'envelope.json').write_text(
+            self.envelope_line(self.normal_approval(datetime.timedelta(days=10))))
+        result = self.run_bash('ci/bootstrap_base.sh', FAKE_DIGEST_PRESENT='1', FAKE_SIGNED='1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('already carries an approval that applications can consume', result.stderr)
+        self.assertIn(f'crane tag ghcr.io/acme/approved/eclipse-temurin@{self.digest} 21-jre-resolute',
+                      result.stderr)
+        for name in ('copied', 'signed', 'tagged'):
+            self.assertFalse((self.state / name).exists(), f'{name} before the refusal')
+        self.assertEqual(len((self.state / 'envelope.json').read_text().splitlines()), 1)   # nothing attested
+
+    def test_expired_approval_does_not_block_the_bootstrap(self):
+        (self.state / 'envelope.json').write_text(
+            self.envelope_line(self.normal_approval(datetime.timedelta(days=40))))
+        result = self.run_bash('ci/bootstrap_base.sh', FAKE_DIGEST_PRESENT='1', FAKE_SIGNED='1')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIs(self.predicate()['bootstrap'], True)
+
+    def test_failed_upstream_lookup_is_not_reported_as_a_mismatch(self):
+        failed = self.run_bash('ci/bootstrap_base.sh', FAKE_UPSTREAM_FAILS='1')
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn('unexpected status code 503', failed.stderr)
+        self.assertNotIn('Upstream digest mismatch', failed.stderr)
+        moved = self.run_bash('ci/bootstrap_base.sh', FAKE_UPSTREAM_DIGEST='sha256:' + 'd' * 64)
+        self.assertNotEqual(moved.returncode, 0)
+        self.assertIn('Upstream digest mismatch', moved.stderr)
+        self.assertFalse((self.state / 'copied').exists())
+
     def test_refuses_unconfirmed_digest(self):
         result = self.run_bash('ci/bootstrap_base.sh', CONFIRM_DIGEST='sha256:' + 'c' * 64)
         self.assertNotEqual(result.returncode, 0)
@@ -415,6 +560,116 @@ class BootstrapWorkflowTests(unittest.TestCase):
         self.assertIn('bash ci/bootstrap_base.sh', text)
         self.assertEqual(text.count('${{ inputs.'), 1)                       # input reaches scripts via env only
         self.assertEqual(job['env']['CONFIRM_DIGEST'], '${{ inputs.confirm_digest }}')
+
+
+class SelfComparisonTests(unittest.TestCase):
+    """The first approval after the bootstrap compares a digest with itself, so every diff check
+    is silent: the candidate's absolute findings must be put in front of the reviewer."""
+    DIGEST = 'sha256:' + 'e' * 64
+    CANDIDATE = 'ghcr.io/acme/quarantine/eclipse-temurin@' + DIGEST
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        self.policy = json.loads((ROOT / 'policy/config.json').read_text())
+        cfg = {'config': {'User': '', 'Env': ['PATH=/usr/bin', 'JAVA_VERSION=jdk-21']}}
+        sbom = {'artifacts': [{'name': 'login', 'version': '1:4.16', 'type': 'deb',
+                               'metadata': {'files': [{'path': '/usr/bin/su'}]}}]}
+        fs = {'files': {'usr/bin/su': {'sha256': 'a', 'mode': '0o4755', 'suid_or_sgid': True,
+                                       'exec_bits': True, 'size': 1},
+                        'opt/data.bin': {'sha256': 'b', 'mode': '0o666', 'suid_or_sgid': False,
+                                         'exec_bits': False, 'size': 1}},
+              'directories': {'tmp': {'mode': '0o1777'}, 'usr': {'mode': '0o755'}},
+              'sensitive_files': {}, 'symlinks': {'etc/evil': '/tmp/x'}}
+        scan = {'matches': [{'vulnerability': {'id': 'CVE-2026-0001', 'severity': 'Critical'},
+                             'artifact': {'name': 'libfoo', 'version': '1.0'}},
+                            {'vulnerability': {'id': 'CVE-2026-0002', 'severity': 'High'},
+                             'artifact': {'name': 'libbar', 'version': '2.0'}}]}
+        for kind in ('old', 'candidate'):
+            for ext, data in (('config', cfg), ('syft', sbom), ('fs', fs), ('grype', scan)):
+                (self.root / f'{kind}-linux-amd64.{ext}.json').write_text(json.dumps(data))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_evaluate(self, **kw):
+        return evaluate_mod.evaluate(self.root, ['linux/amd64'], 'not_verified', 'not_verified', self.policy,
+                                     candidate_ref=self.CANDIDATE, **kw)
+
+    def test_diff_alone_sees_nothing(self):
+        result = self.run_evaluate()
+        self.assertEqual(result['decision'], 'REVIEW')
+        self.assertFalse([r for r in result['review_reasons'] if 'absolute review' in r])
+
+    def test_absolute_findings_are_review_reasons_never_blocks(self):
+        result = self.run_evaluate(self_comparison=True)
+        self.assertEqual(result['decision'], 'REVIEW')               # Critical listed, not blocking
+        reasons = '\n'.join(result['review_reasons'])
+        for fragment in ('approved baseline itself', 'SUID/SGID files', 'usr/bin/su', 'world-writable files',
+                         'opt/data.bin', 'world-writable directories', "'tmp'", 'symlinks into watched',
+                         'etc/evil', 'Critical vulnerabilities', 'CVE-2026-0001', 'High vulnerabilities',
+                         'CVE-2026-0002'):
+            self.assertIn(fragment, reasons)
+        absolute = result['platforms']['linux/amd64']['absolute']
+        self.assertEqual(absolute['critical'], [['CVE-2026-0001', 'libfoo', '1.0']])
+        self.assertEqual(absolute['suid_or_sgid_files'], ['usr/bin/su'])
+
+    def test_cli_detects_it_and_promote_recheck_matches(self):
+        def run_cli():
+            subprocess.run([sys.executable, '-I', str(ROOT / 'scripts/evaluate.py'), '--report-dir', str(self.root),
+                            '--platforms', 'linux/amd64', '--candidate-ref', self.CANDIDATE,
+                            '--policy', str(ROOT / 'policy/config.json')], check=True, capture_output=True)
+            return (self.root / 'decision.json').read_bytes()
+        self.assertNotIn(b'absolute review', run_cli())                       # no previous.digest
+        (self.root / 'previous.digest').write_text('sha256:' + 'f' * 64 + '\n')
+        self.assertNotIn(b'absolute review', run_cli())                       # an update: diff only
+        (self.root / 'previous.digest').write_text(self.DIGEST + '\n')
+        first = run_cli()
+        self.assertIn(b'absolute review', first)
+        self.assertEqual(first, run_cli())          # ci/base_promote.sh re-runs it and compares the hash
+
+
+@unittest.skipIf(yaml is None, 'PyYAML required')
+class TriggerPathTests(unittest.TestCase):
+    @staticmethod
+    def matches(path, pattern):
+        """GitHub path filters: ** crosses directories, * does not."""
+        regex, i = '', 0
+        while i < len(pattern):
+            if pattern.startswith('**', i):
+                regex, i = regex + '.*', i + 2
+            elif pattern[i] == '*':
+                regex, i = regex + '[^/]*', i + 1
+            else:
+                regex, i = regex + re.escape(pattern[i]), i + 1
+        return re.fullmatch(regex, path) is not None
+
+    def test_every_fingerprinted_file_starts_a_base_run(self):
+        data = yaml.safe_load((WF / 'base-image-approval.yml').read_text())
+        patterns = data.get('on', data.get(True))['push']['paths']
+        self.assertTrue(self.matches('scripts/x/y.py', 'scripts/**'))
+        self.assertFalse(self.matches('ci/common.sh', 'ci/base_*.sh'))
+        missing = [f for f in fp.BASE_FILES if not any(self.matches(f, p) for p in patterns)]
+        self.assertEqual(missing, [], 'fingerprinted files that would not trigger a base re-approval')
+
+
+class ImageBuildTests(unittest.TestCase):
+    def test_build_uses_the_current_context_builder(self):
+        text = (ROOT / 'scripts/reproducible_build.sh').read_text()
+        code = '\n'.join(line for line in text.splitlines() if not line.lstrip().startswith('#'))
+        self.assertNotIn('--builder default', code)                 # refused after a context switch
+        self.assertIn("docker context inspect --format '{{.Name}}'", code)
+        self.assertIn('--builder "$builder"', code)
+
+    def test_example_jar_is_readable_by_the_runtime_user(self):
+        text = (ROOT / 'examples/Dockerfile.application').read_text().replace(
+            'REPLACE_WITH_64_HEX_CHARACTERS', 'a' * 64)
+        dockerfile_bases.analyse(text, 'ghcr.io/example-org/approved/')     # still an allowed Dockerfile
+        copies = [line for line in text.splitlines() if line.startswith('COPY') and 'app.jar' in line]
+        self.assertEqual(len(copies), 1)
+        mode = re.search(r'--chmod=([0-7]{3,4})\b', copies[0])
+        self.assertTrue(mode and int(mode.group(1), 8) & 0o004, f'jar not world-readable: {copies[0]}')
+        self.assertIn('USER 10001:10001', text)
 
 
 if __name__ == '__main__':

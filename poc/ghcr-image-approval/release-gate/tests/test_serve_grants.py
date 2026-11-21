@@ -1,8 +1,10 @@
 """serve_grants.sh against a local bare repository and a stub `gh` (needs bash, git, openssl).
 
 Covers what the unit tests of issue_grant.py cannot: publishing, refusing when the
-application's HEAD moves, retrying a transient API error, and above all the cancel path:
-after a signal or a withdrawal no loop may be left that publishes a grant again.
+application's HEAD moves, retrying a transient API error, input validation, and above all the
+cancel path: the real workflow step must stop on the runner's first signal, withdraw must stop
+a loop that is still running, and a loop that somehow survives the withdrawal must not be able
+to publish a grant again.
 """
 import base64
 import json
@@ -13,6 +15,7 @@ import signal
 import stat
 import subprocess
 import tempfile
+import threading
 import time
 import unittest
 
@@ -29,16 +32,33 @@ failures = state / 'fail-next'
 if failures.exists() and int(failures.read_text()) > 0:
     failures.write_text(str(int(failures.read_text()) - 1))
     print('{"message": "Bad Gateway"}')          # gh prints the error body on stdout
+    print('gh: Bad Gateway (HTTP 502)', file=sys.stderr)
     sys.exit(1)
 if path.endswith('/git/ref/heads/main'):
     print((state / 'head').read_text().strip())
-elif '/check-runs' in path:
-    print(json.dumps({'total_count': 1, 'check_runs': [
-        {'id': 1, 'name': 'test', 'head_sha': os.environ['APP_COMMIT'], 'status': 'completed',
-         'conclusion': 'success', 'started_at': '2026-11-20T10:00:00Z', 'app': {'slug': 'github-actions'}}]}))
+elif '/actions/runs?' in path:
+    assert 'head_sha=' + os.environ['APP_COMMIT'] in path and 'event=push' in path and 'branch=main' in path, path
+    print(json.dumps({'total_count': 1, 'workflow_runs': [
+        {'id': 7, 'path': '.github/workflows/ci.yml', 'head_sha': os.environ['APP_COMMIT'], 'event': 'push',
+         'head_branch': 'main', 'status': 'completed', 'conclusion': 'success',
+         'created_at': '2026-11-20T10:00:00Z', 'repository': {'full_name': os.environ['APP_REPOSITORY']}}]}))
 else:
     sys.exit(9)
 '''
+
+
+def workflow_step_script(name):
+    """The `run: |` block of a step in release-gate.yml, as the runner writes it to a file."""
+    lines = (ROOT / '.github/workflows/release-gate.yml').read_text().splitlines()
+    start = next(i for i, line in enumerate(lines) if line.strip() == f'- name: {name}')
+    run_at = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == 'run: |')
+    indent = len(lines[run_at]) - len(lines[run_at].lstrip())
+    body = []
+    for line in lines[run_at + 1:]:
+        if line.strip() and len(line) - len(line.lstrip()) <= indent:
+            break
+        body.append(line[indent + 2:] if line.strip() else '')
+    return '\n'.join(body) + '\n'
 
 
 @unittest.skipUnless(all(shutil.which(t) for t in ('bash', 'git', 'openssl')), 'needs bash, git and openssl')
@@ -63,11 +83,13 @@ class ServeGrantsTests(unittest.TestCase):
             os.environ, PATH=f'{self.dir / "bin"}:{os.environ["PATH"]}', FAKE_STATE=str(self.state),
             APP_REPOSITORY=APP_REPO, APP_COMMIT=SHA, GH_TOKEN='dummy', GITHUB_REPOSITORY=GATE_REPO,
             RUNNER_TEMP=str(self.dir / 'runner'), GRANT_MINUTES='5',
+            GITHUB_STEP_SUMMARY=str(self.dir / 'summary.md'),
             GATE_PRIVATE_KEY_B64=base64.b64encode(key.read_bytes()).decode(),
             # Hermetic git: no user/system config, and the GitHub URL points at the local remote.
             GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull, GIT_CONFIG_COUNT='1',
             GIT_CONFIG_KEY_0=f'url.file://{self.remote}.insteadOf',
             GIT_CONFIG_VALUE_0=f'https://github.com/{GATE_REPO}.git')
+        self.env.pop('GRANT_INTERVAL_SECONDS', None)
         self.procs = []
 
     def tearDown(self):
@@ -88,11 +110,14 @@ class ServeGrantsTests(unittest.TestCase):
         return subprocess.run(['bash', str(ROOT / 'serve_grants.sh'), mode], env=dict(self.env, **extra),
                               capture_output=True, text=True, timeout=120)
 
-    def start_serve(self):
-        proc = subprocess.Popen(['bash', str(ROOT / 'serve_grants.sh'), 'serve'], env=self.env,
+    def start(self, argv, cwd=None, **extra):
+        proc = subprocess.Popen(argv, cwd=cwd, env=dict(self.env, **extra),
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         self.procs.append(proc)
         return proc
+
+    def start_serve(self, **extra):
+        return self.start(['bash', str(ROOT / 'serve_grants.sh'), 'serve'], **extra)
 
     def branch_files(self):
         result = subprocess.run(['git', f'--git-dir={self.remote}', 'ls-tree', '--name-only', 'grants'],
@@ -112,25 +137,59 @@ class ServeGrantsTests(unittest.TestCase):
                               capture_output=True, text=True, check=True).stdout
         return json.loads(base64.b64decode(json.loads(text)['payload']))
 
-    def test_serve_publishes_then_signal_stops_it_for_good(self):
+    def test_serve_publishes_then_signal_stops_it_at_once(self):
         proc = self.start_serve()
         self.wait_for_grant()
         self.assertEqual(self.grant()['commit'], SHA)
         self.assertEqual(self.grant()['repository'], f'https://github.com/{APP_REPO}.git')
-        proc.send_signal(signal.SIGTERM)                       # what a cancelled workflow step receives
-        self.assertEqual(proc.wait(timeout=10), 130)           # at once, not after the 60 s sleep
+        self.assertEqual(self.grant()['checks'], {'tests': 'PASS'})
+        proc.send_signal(signal.SIGTERM)
+        self.assertEqual(proc.wait(timeout=5), 130)            # at once, not after the 60 s sleep
+        self.assertFalse((self.dir / 'runner/serve-grants.pid').exists())
         withdrawn = self.script('withdraw')
         self.assertEqual(withdrawn.returncode, 0, withdrawn.stderr)
         self.assertEqual(self.branch_files(), ['README.md'])
-        time.sleep(1.5)
-        self.assertEqual(self.branch_files(), ['README.md'])    # nothing publishes after the withdrawal
+
+    def test_workflow_step_stops_on_the_runners_first_signal(self):
+        """The runner signals only the step's own process, SIGINT first. Run the step exactly as
+        the runner does (a script file under `bash -e`): only its `exec` lets the signal reach
+        the loop; without it the shell would wait for a loop that never heard the signal."""
+        step = self.dir / 'step.sh'
+        step.write_text(workflow_step_script('Re-issue the grant every minute'))
+        self.assertIn('exec bash serve_grants.sh serve', step.read_text())
+        proc = self.start(['bash', '-e', str(step)], cwd=ROOT)
+        self.wait_for_grant()
+        proc.send_signal(signal.SIGINT)
+        self.assertEqual(proc.wait(timeout=5), 130)
+        self.assertIn('Cancel this run to revoke the grant.', (self.dir / 'summary.md').read_text())
 
     def test_withdraw_stops_a_loop_that_got_no_signal(self):
         proc = self.start_serve()
         self.wait_for_grant()
+        reaper = threading.Thread(target=proc.wait)            # reap it, as the runner would
+        reaper.start()
+        started = time.monotonic()
         withdrawn = self.script('withdraw')
+        elapsed = time.monotonic() - started
+        reaper.join(timeout=10)
         self.assertEqual(withdrawn.returncode, 0, withdrawn.stderr)
-        self.assertIsNotNone(proc.wait(timeout=10))
+        self.assertEqual(proc.returncode, 130)                 # stopped by withdraw's SIGTERM
+        self.assertLess(elapsed, 8)                            # no 10 s wait for a process that is gone
+        self.assertEqual(self.branch_files(), ['README.md'])
+
+    def test_a_loop_that_survives_the_withdrawal_cannot_publish_again(self):
+        """A push still in flight at cancel, or a loop withdraw could not stop: once withdraw has
+        replaced the branch, the lease makes every later serve push fail and the loop exits."""
+        first = self.script('withdraw')                        # the branch already exists: lease = its commit
+        self.assertEqual(first.returncode, 0, first.stderr)
+        proc = self.start_serve(GRANT_INTERVAL_SECONDS='1')
+        self.wait_for_grant()
+        other_temp = self.dir / 'other-runner'
+        other_temp.mkdir()
+        withdrawn = self.script('withdraw', RUNNER_TEMP=str(other_temp))   # cannot see the loop's pid file
+        self.assertEqual(withdrawn.returncode, 0, withdrawn.stderr)
+        self.assertEqual(proc.wait(timeout=40), 1)             # its next push was rejected
+        self.assertIn('stale info', proc.stderr.read())
         self.assertEqual(self.branch_files(), ['README.md'])
 
     def test_moved_head_is_refused_and_withdrawn(self):
@@ -156,11 +215,16 @@ class ServeGrantsTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIsNone(self.branch_files())                  # nothing was ever published
 
-    def test_minutes_are_validated(self):
-        for value in ('0', '91', 'ten', ''):
-            with self.subTest(value=value):
-                self.assertNotEqual(self.script('serve', GRANT_MINUTES=value).returncode, 0)
-                self.assertIsNone(self.branch_files())
+    def test_minutes_and_interval_are_strict_decimals(self):
+        for value in ('0', '91', 'ten', '', '060', '045', '08', '090', '1.5'):
+            with self.subTest(minutes=value):
+                result = self.script('serve', GRANT_MINUTES=value)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn('value too great for base', result.stderr)
+        for value in ('0', '61', '010', 'x'):
+            with self.subTest(interval=value):
+                self.assertNotEqual(self.script('serve', GRANT_INTERVAL_SECONDS=value).returncode, 0)
+        self.assertIsNone(self.branch_files())
 
 
 if __name__ == '__main__':

@@ -1,7 +1,8 @@
 name: Application tests (no publishing secrets)
 
 # The release gate (stefanf81/ghcr-approval-poc-gate) issues a grant only for the exact main
-# HEAD whose `test` check-run succeeded, so this runs on pushes to main as well as on PRs.
+# HEAD whose newest push run of THIS workflow file succeeded, so it runs on pushes to main as
+# well as on PRs. Renaming or moving the file means updating the gate's allowlist.json.
 # Publishing happens elsewhere: the central release workflow builds this repository from a
 # hash-pinned source archive. Do not add signing keys, GHCR write credentials or privileged
 # workflow_run / pull_request_target jobs here.

@@ -27,6 +27,7 @@ import re
 
 DECISIONS = ('BLOCK', 'REVIEW', 'AUTO_PASS')
 IMAGE_REF_RE = re.compile(r'[a-z0-9.-]+(?::[0-9]+)?/[a-z0-9._/-]+@sha256:[a-f0-9]{64}')
+DIGEST_RE = re.compile(r'sha256:[a-f0-9]{64}')
 LIST_LIMIT = 15
 DETAIL_LIMIT = 80
 
@@ -253,9 +254,16 @@ def critical_exceptions(settings, today):
     return result
 
 
-def evaluate(report_dir, platforms, signature, provenance, settings, today=None, candidate_ref=None):
+def evaluate(report_dir, platforms, signature, provenance, settings, today=None, candidate_ref=None,
+             self_comparison=False):
     """Return the decision. review_reasons lists findings that need attention FIRST, then the
-    routine reasons every update produces (also available separately as attention_reasons)."""
+    routine reasons every update produces (also available separately as attention_reasons).
+
+    self_comparison (PoC): the candidate IS the approved baseline (the first approval after the
+    bootstrap, or a re-approval of the same digest after a policy change). Every check above is
+    a diff against the baseline and cannot fire, so the candidate's ABSOLUTE SUID/SGID files,
+    world-writable paths, symlinks into watched locations and Critical/High/unknown findings
+    are listed as review reasons. They never BLOCK: a stock Ubuntu image has setuid binaries."""
     report_dir = pathlib.Path(report_dir)
     today = today or dt.datetime.now(dt.timezone.utc).date()
     platforms = [p for p in platforms if p]
@@ -266,6 +274,10 @@ def evaluate(report_dir, platforms, signature, provenance, settings, today=None,
         routine.append('No verified upstream publisher signature (human review required)')
     if settings['require_manual_review_if_provenance_unverified'] and provenance != 'verified':
         routine.append('No independently validated upstream build provenance')
+    if self_comparison:
+        attention.append('Candidate is the approved baseline itself (first approval after the bootstrap, '
+                         'or re-approval after a policy change): diff checks cannot fire, review the '
+                         'absolute findings listed for each platform')
 
     watch = tuple(settings.get('always_review_code_prefixes', []))
     link_watch = tuple(settings.get('suspicious_link_target_prefixes', []))
@@ -485,6 +497,33 @@ def evaluate(report_dir, platforms, signature, provenance, settings, today=None,
         if newly_high and settings.get('review_new_high', True):
             attention.append(f'{platform}: new High vulnerabilities, including unfixed: {newly_high[:LIST_LIMIT]}')
 
+        absolute = {}
+        if self_comparison:
+            absolute = {
+                'suid_or_sgid_files': sorted(p for p, d in new_files.items() if d.get('suid_or_sgid')),
+                'world_writable_files': sorted(p for p, d in new_files.items() if _mode(d) & 0o002),
+                'world_writable_directories': sorted(p for p, d in new_dirs.items()
+                                                     if isinstance(d, dict) and _mode(d) & 0o002),
+                'symlinks_into_watched_locations': sorted(
+                    p for p, target in new_links.items() if _resolve_link(p, target).startswith(link_watch)),
+                'critical': sorted(_vulnerabilities(new_scan, 'critical')),
+                'high': sorted(_vulnerabilities(new_scan, 'high')),
+                'unknown_severity': sorted(_vulnerabilities(new_scan, 'unknown')),
+            }
+            labels = {
+                'suid_or_sgid_files': 'SUID/SGID files',
+                'world_writable_files': 'world-writable files',
+                'world_writable_directories': 'world-writable directories',
+                'symlinks_into_watched_locations': 'symlinks into watched locations',
+                'critical': 'Critical vulnerabilities',
+                'high': 'High vulnerabilities',
+                'unknown_severity': 'findings with unknown severity',
+            }
+            for key, label in labels.items():
+                if absolute[key]:
+                    attention.append(f'{platform}: absolute review: {len(absolute[key])} {label}: '
+                                     f'{absolute[key][:LIST_LIMIT]}')
+
         details[platform] = {
             'config_changes': config_changes,
             'env_changed': env_changed,
@@ -518,6 +557,9 @@ def evaluate(report_dir, platforms, signature, provenance, settings, today=None,
             'new_high': [list(v) for v in newly_high][:DETAIL_LIMIT],
             'unknown_severity': [list(v) for v in unknown_severity][:DETAIL_LIMIT],
         }
+        if self_comparison:
+            details[platform]['absolute'] = {k: [list(v) if isinstance(v, tuple) else v for v in items][:DETAIL_LIMIT]
+                                             for k, items in absolute.items()}
     review = attention + routine
     decision = 'BLOCK' if block else ('REVIEW' if review else 'AUTO_PASS')
     return {'decision': decision, 'block_reasons': block, 'review_reasons': review,
@@ -525,6 +567,17 @@ def evaluate(report_dir, platforms, signature, provenance, settings, today=None,
             'critical_exceptions_applied': exceptions_applied,
             'platforms': details, 'policy_version': settings['version'],
             'upstream_signature': signature, 'upstream_provenance': provenance}
+
+
+def is_self_comparison(report_dir, candidate_ref):
+    """True when the candidate digest equals the approved baseline's (reports/previous.digest,
+    written by ci/base_evaluate.sh). The promote job re-runs this script on the same reports,
+    so both runs reach the same answer and the decision hash still matches."""
+    previous = pathlib.Path(report_dir) / 'previous.digest'
+    if not candidate_ref or not previous.is_file():
+        return False
+    digest = previous.read_text().strip()
+    return bool(DIGEST_RE.fullmatch(digest)) and candidate_ref.endswith('@' + digest)
 
 
 class _cmp_key:
@@ -556,7 +609,8 @@ def main():
     if not args.platforms:
         p.error('--platforms is required')
     result = evaluate(path, args.platforms.split(','), args.upstream_signature,
-                      args.upstream_provenance, load(args.policy), candidate_ref=args.candidate_ref)
+                      args.upstream_provenance, load(args.policy), candidate_ref=args.candidate_ref,
+                      self_comparison=is_self_comparison(path, args.candidate_ref))
     (path / 'decision.json').write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
     print(json.dumps({'decision': result['decision'],
                       'block_reasons': result['block_reasons'],

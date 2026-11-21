@@ -10,11 +10,20 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    # Every file of the base policy fingerprint (scripts/policy_fingerprint.py BASE_FILES) must
+    # be listed: a change to an unlisted one would invalidate the approval without a re-run
+    # (PoC fix; tests/test_poc_changes.py checks the two lists against each other).
     paths:
       - catalog/Dockerfile.temurin
       - policy/**
       - scripts/**
       - ci/base_*.sh
+      - ci/common.sh
+      - ci/environment_approver.py
+      - ci/install_verified_tools.py
+      - ci/require_ghcr_config.sh
+      - ci/require_tools.sh
+      - ci/toolchain.lock.json
       - .github/workflows/base-image-approval.yml
 
 permissions:
@@ -139,8 +148,16 @@ jobs:
           decision="$(python3 -I scripts/evaluate.py --report-dir reports --decision-only)"
           echo "decision=$decision" >> "$GITHUB_OUTPUT"
           case "$decision" in BLOCK|REVIEW|AUTO_PASS) ;; *) exit 1 ;; esac
-          echo "Decision: $decision" >> "$GITHUB_STEP_SUMMARY"
-          echo "Reports, diffoci and all-platform evidence attached as 'base-evidence'." >> "$GITHUB_STEP_SUMMARY"
+          # The reasons are what the promote reviewer approves; show them on the run page
+          # (PoC). Backticks are replaced so image paths cannot end the code block.
+          {
+            echo "Decision: $decision"
+            echo "Reports, diffoci and all-platform evidence attached as 'base-evidence'."
+            echo '```text'
+            jq -r '(.block_reasons[]? | "BLOCK: " + .), (.review_reasons[]? | "REVIEW: " + .) | gsub("`"; "'"'"'")' \
+              reports/decision.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

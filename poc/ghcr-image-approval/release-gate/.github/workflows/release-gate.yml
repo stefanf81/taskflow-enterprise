@@ -4,11 +4,14 @@ name: Release gate (PoC)
 # image approval kit requires but does not supply. Dispatch it for the exact main HEAD of an
 # allowlisted application BEFORE dispatching the release in stefanf81/ghcr-approval-poc, and
 # keep it running until that release has signed:
-#   grant    re-issues a signed grant every 60 s while the commit is still main HEAD and its
-#            required check-runs have succeeded; publishes it on the orphan `grants` branch
+#   grant    re-issues a signed grant every 60 s while the commit is still main HEAD and the
+#            newest push run of the workflow file named in allowlist.json (ci.yml) succeeded;
+#            publishes it on the orphan `grants` branch with lease-protected pushes
 #   (always) stops the loop and withdraws the grant when the run ends, fails or is
-#            cancelled (= revocation)
+#            cancelled (= revocation); a grant push still in flight cannot land afterwards
 # The private key lives only in the `release-gate` environment (deployment branch: main).
+# Keep `minutes` long enough for the whole release (90, the maximum, by default) and cancel the
+# run once the release has signed.
 on:
   workflow_dispatch:
     inputs:
@@ -22,10 +25,10 @@ on:
         type: string
         required: true
       minutes:
-        description: How long to keep re-issuing the grant (1-90)
+        description: How long to keep re-issuing the grant, in minutes (1-90)
         type: string
         required: true
-        default: '45'
+        default: '90'
 
 permissions:
   contents: read

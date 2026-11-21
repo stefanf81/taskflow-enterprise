@@ -111,8 +111,9 @@ How it judges bypass lists:
 **PoC (solo maintainer):** with `"allow_self_approval": true` in `policy/config.json`, the
 reviewer environments keep a required reviewer (you) but *Prevent self-review* stays off, and
 `ci/environment_approver.py` records an approval by the initiator as `self:<login>`. The audit
-then also accepts a `main` ruleset that requires a pull request with zero approvals. Set the
-switch to `false` as soon as a second reviewer exists.
+then also accepts a `main` ruleset that requires a pull request with zero approvals; it reads
+the switch from `policy/config.json` on the audited repository's `main`, not from your working
+directory. Set the switch to `false` as soon as a second reviewer exists.
 
 ## 5. Pinned tools
 
@@ -164,9 +165,14 @@ A Critical (or unrated) finding blocks the release unless `policy/config.json` h
 to the catalog pin and approve it in `base-manual-approval`. It copies that digest into
 `approved/`, signs a record marked `"bootstrap": true` without the policy fingerprint, and
 sets the tracking tag; it refuses to run when the tag exists. Then dispatch
-`base-image-approval.yml`: the precheck answers `needed`, the digest is evaluated against itself
-and, after your review, signed with the current fingerprint. Only that record lets
-applications build on it.
+`base-image-approval.yml`: the precheck answers `needed` and the digest is evaluated against
+itself. No diff can show anything then, so `scripts/evaluate.py` lists the image's absolute
+SUID/SGID files, world-writable paths, symlinks into watched locations and Critical/High
+findings as review reasons (shown in the evaluate job summary). Review those before you approve
+`promote`, which signs a record with the current fingerprint. Only that record lets
+applications build on it. To start over (approval key rotated, baseline older than
+`historical_baseline_max_age_hours`), delete the `approved/eclipse-temurin` package and run the
+bootstrap again.
 
 ## 7. Kyverno and Flux
 

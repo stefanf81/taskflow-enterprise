@@ -6,18 +6,26 @@ This is a **GHCR adaptation** of the GitHub Actions / Harbor reference. What cha
 
 ## PoC changes (stefanf81 proof of concept)
 
-This copy runs the v6 kit unchanged except for what a first live run on a personal GitHub
-account needs. The setup runbook and run order are in the hand-off README of the folder this
-repository was exported from (`poc/ghcr-image-approval/README.md` in taskflow-enterprise).
+This copy runs the v6 kit with the changes below and nothing else. They are what a first live
+run on a personal GitHub account needs, plus fixes from two code reviews. The setup runbook and
+run order are in the hand-off README of the folder this repository was exported from
+(`poc/ghcr-image-approval/README.md` in taskflow-enterprise). Every file listed differs from the
+kit; every other file is byte-identical.
 
 | Change | Why |
 |---|---|
 | `catalog/Dockerfile.temurin` pins `eclipse-temurin:21-jre-resolute@sha256:577acb7a…` | The kit shipped it unpinned, which stops the precheck |
 | `policy/applications.json`: `example-app` comes from `stefanf81/ghcr-approval-poc-app` | The toy application repository |
 | `policy/config.json`: `"allow_self_approval": true`; `ci/environment_approver.py --policy` | Solo maintainer. The initiator may approve; the approver is recorded as `self:<login>` in every signed record. Part of the base fingerprint; default strict |
-| `ci/audit_repo_settings.py` | With the switch on, "Prevent self-review" and a PR approval count of at least 1 are not demanded (nobody can meet them alone); everything else is |
-| `.github/workflows/base-bootstrap.yml`, `ci/bootstrap_base.sh`, `scripts/approval_record.py --bootstrap` | The first approved baseline. Its record has `"bootstrap": true` and no fingerprint, so it is a comparison baseline only: the precheck and `scripts/verify_bases.sh` refuse it until the normal pipeline has evaluated and approved the digest |
-| `tests/test_poc_changes.py`; two count assertions in `tests/test_gha_workflows.py` and `tests/test_v5_fixes.py`; allowlist value in `tests/test_v3_fixes.py` | Regression tests for the above |
+| `ci/audit_repo_settings.py` | With the switch on, "Prevent self-review" and a PR approval count of 0 are accepted (nobody can meet them alone); stale-review dismissal stays required whenever approvals are required, everything else is unchanged. The switch is read from `policy/config.json` on the audited repository's `main`; `--policy FILE` overrides that and says so |
+| `.github/workflows/base-bootstrap.yml`, `ci/bootstrap_base.sh`, `scripts/approval_record.py --bootstrap` | The first approved baseline. Its record has `"bootstrap": true` and no fingerprint, so it is a comparison baseline only: the precheck and `scripts/verify_bases.sh` refuse it until the normal pipeline has evaluated and approved the digest. Refuses, before writing anything, when a baseline or a usable approval already exists |
+| `scripts/evaluate.py` | When the candidate IS the approved baseline (first approval after the bootstrap, or a re-approval after a policy change), every diff check is silent, so the candidate's absolute SUID/SGID files, world-writable paths, symlinks into watched locations and Critical/High/unknown findings become review reasons (never blocks) |
+| `.github/workflows/base-image-approval.yml` | The push trigger lists every fingerprinted file (six were missing: a change to them invalidated the approval without a re-run), and the `evaluate` summary shows all block and review reasons |
+| `scripts/reproducible_build.sh` | Builds with the current docker context's builder. The kit named `default`, which buildx refuses once `docker/setup-docker-action` has switched the context |
+| `.github/workflows/application-release.yml` | `authorize` captures main's HEAD before comparing, so a failed API call (e.g. an expired token) reports gh's error, not "not the exact protected main HEAD" |
+| `examples/Dockerfile.application` | `COPY --chmod=0444` for the jar: `image_build` runs under `umask 077`, so a plain COPY leaves it unreadable for the non-root user |
+| `tests/test_poc_changes.py` (new); `tests/test_gha_workflows.py` (workflow set and list), `tests/test_v4_hardening.py`, `tests/test_v5_fixes.py`, `tests/test_v6_hardening.py` (`base-bootstrap.yml` added to their workflow lists; cosign call count 5 → 7); `tests/test_v3_fixes.py` (allowlist value) | Regression tests for the above |
+| `README.md` (this table), `CHANGES.md`, `docs/SETUP.md` | Documentation of the above |
 | `SHA256SUMS.txt` removed | It described the unmodified kit |
 
 ## Architecture

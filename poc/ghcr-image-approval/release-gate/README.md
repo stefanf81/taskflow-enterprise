@@ -7,15 +7,20 @@ and accepts only a signed grant issued at most 10 minutes earlier.
 
 ## What it does
 
-`release-gate.yml` (manual dispatch: `repository`, `commit`, `minutes`) runs in the
-`release-gate` environment, which holds the signing key. Every 60 seconds it:
+`release-gate.yml` runs in the `release-gate` environment, which holds the signing key. It is
+dispatched by hand with `repository`, `commit` and `minutes` (1–90, default 90: long enough
+for the whole release, cancel it once the release has signed). Every 60 seconds it:
 
-1. reads the application's `main` HEAD and the commit's check-runs from the GitHub API;
-2. refuses, and withdraws any published grant, unless the commit **is** `main` HEAD and every
-   check-run required by `allowlist.json` succeeded (only check-runs created by GitHub Actions
-   count; for a re-run the latest one counts);
+1. reads the application's `main` HEAD and the commit's push workflow runs on `main` from the
+   GitHub API (`actions/runs?head_sha=…&event=push&branch=main`);
+2. refuses, and withdraws any published grant, unless:
+   - the commit **is** `main` HEAD;
+   - for every gate check in `allowlist.json`, the newest push run of the named workflow
+     **file** (`.github/workflows/ci.yml`) on `main` of that repository succeeded. Matching the
+     file, not a job or check-run name, means another workflow's `test` job or a check-run
+     created through the API never counts;
 3. signs a fresh record (`issue_grant.py`, `openssl dgst -sha256 -sign`, valid 15 minutes) and
-   force-pushes it as the single file `<commit>` on the orphan `grants` branch.
+   pushes it as the single file `<commit>` on the orphan `grants` branch.
 
 The pipeline reads it from
 `https://raw.githubusercontent.com/stefanf81/ghcr-approval-poc-gate/refs/heads/grants/<commit>`,
@@ -23,10 +28,14 @@ so `RELEASE_GATE_URL` is that URL without `/<commit>`. raw.githubusercontent.com
 to 5 minutes; with the 60-second re-issue a fetched grant is at most about 6.5 minutes old.
 
 When the run ends, fails or is **cancelled**, a final step stops the loop and publishes an
-empty branch: that is revocation. The gate holds one grant at a time, and a second dispatch
-waits until the running one has ended, so cancel the running one before granting another
-commit. A GitHub API call or push that fails is retried twice; after that the run stops and the
-grant is withdrawn.
+empty branch: that is revocation.
+- **Late pushes:** the loop pushes with `--force-with-lease` against the commit it pushed last.
+  So a grant push that was still in flight when the run was cancelled cannot land after the
+  withdrawal: GitHub rejects it and the loop exits.
+- **One grant at a time:** a second dispatch waits until the running one has ended, so cancel
+  the running one before granting another commit.
+- **Retries:** a GitHub API call or push that fails is retried twice; after that the run stops
+  and the grant is withdrawn.
 
 ## Setup
 
@@ -51,7 +60,13 @@ grant is withdrawn.
 
 `python3 -m unittest discover -s tests` (needs python3, openssl, bash and git; about half a
 minute); the same runs in `test.yml`. `tests/test_serve_grants.py` runs the publishing loop
-against a local repository and a stub `gh`, including the cancel path.
+against a local repository and a stub `gh`. It covers:
+- the real workflow step stopping on SIGINT;
+- withdraw stopping a running loop;
+- a loop that survives the withdrawal failing to publish again;
+- strict `minutes` validation.
+
+`GRANT_INTERVAL_SECONDS` (1–60, default 60) exists only so the tests can run the loop quickly.
 
 ## Limits (PoC)
 

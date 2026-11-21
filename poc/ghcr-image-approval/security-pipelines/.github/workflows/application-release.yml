@@ -78,8 +78,11 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$(command -v gh)" == "$VERIFIED_TOOLS_DIR/gh" ]]
-          test "$(gh api "repos/$APP_SOURCE_REPO/git/ref/heads/main" --jq .object.sha)" = "$APP_COMMIT" || {
-            echo 'Requested commit is not the exact protected main HEAD'; exit 1;
+          # Captured first (PoC fix): a failed API call (expired token, 401, network) stops here
+          # with gh's own error instead of being reported as the wrong commit.
+          main_head="$(gh api "repos/$APP_SOURCE_REPO/git/ref/heads/main" --jq .object.sha)"
+          test "$main_head" = "$APP_COMMIT" || {
+            echo "Requested commit is not the exact protected main HEAD ($APP_SOURCE_REPO main is $main_head)"; exit 1;
           }
           umask 077
           printf '%s' "$GATE_PUBLIC_KEY_B64" | base64 -d > "$RUNNER_TEMP/release-gate.pub"

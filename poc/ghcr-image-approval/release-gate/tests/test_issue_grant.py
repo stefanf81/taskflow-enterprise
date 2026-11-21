@@ -15,46 +15,62 @@ spec.loader.exec_module(gate)
 
 REPO = 'stefanf81/ghcr-approval-poc-app'
 SHA = 'a' * 40
+CI = '.github/workflows/ci.yml'
 
 
-def run(conclusion='success', name='test', sha=SHA, slug='github-actions', status='completed', **extra):
-    return dict({'id': 1, 'name': name, 'head_sha': sha, 'status': status, 'conclusion': conclusion,
-                 'started_at': '2026-11-20T10:00:00Z', 'app': {'slug': slug}}, **extra)
+def run(conclusion='success', path=CI, sha=SHA, status='completed', event='push', branch='main',
+        repo=REPO, **extra):
+    """One entry of GET /repos/{repo}/actions/runs (fields the gate reads)."""
+    return dict({'id': 1, 'name': 'Application tests', 'path': path, 'head_sha': sha, 'event': event,
+                 'head_branch': branch, 'status': status, 'conclusion': conclusion,
+                 'created_at': '2026-11-20T10:00:00Z', 'repository': {'full_name': repo}}, **extra)
 
 
 def answer(*runs):
-    return {'total_count': len(runs), 'check_runs': list(runs)}
+    return {'total_count': len(runs), 'workflow_runs': list(runs)}
 
 
 class EvaluateTests(unittest.TestCase):
     def setUp(self):
         self.allowlist = gate.load_allowlist(ROOT / 'allowlist.json')
 
-    def test_passes_for_main_head_with_successful_checks(self):
+    def test_passes_for_main_head_with_successful_ci_run(self):
         self.assertEqual(gate.evaluate(REPO, SHA, SHA, answer(run()), self.allowlist), {'tests': 'PASS'})
+        # GitHub may report the path with a ref suffix.
+        self.assertEqual(gate.evaluate(REPO, SHA, SHA, answer(run(path=CI + '@refs/heads/main')), self.allowlist),
+                         {'tests': 'PASS'})
 
     def test_refusals(self):
         cases = {
             'not the main HEAD': (REPO, SHA, 'b' * 40, answer(run())),
             'not in the gate allowlist': ('someone/else', SHA, SHA, answer(run())),
             'full lowercase': (REPO, SHA.upper(), SHA.upper(), answer(run())),
-            "no GitHub Actions check-run 'test'": (REPO, SHA, SHA, answer(run(name='lint'))),
+            'no push run of .github/workflows/ci.yml': (REPO, SHA, SHA, answer()),
             'is completed/failure': (REPO, SHA, SHA, answer(run(conclusion='failure'))),
             'is in_progress/None': (REPO, SHA, SHA, answer(run(status='in_progress', conclusion=None))),
-            'partial list': (REPO, SHA, SHA, {'total_count': 101, 'check_runs': [run()]}),
+            'partial list': (REPO, SHA, SHA, {'total_count': 101, 'workflow_runs': [run()]}),
         }
         for message, args in cases.items():
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
                 gate.evaluate(*args, self.allowlist)
 
-    def test_ignores_other_apps_and_other_commits(self):
-        spoofed = answer(run(slug='some-other-app'), run(sha='c' * 40))
-        with self.assertRaisesRegex(ValueError, 'no GitHub Actions check-run'):
-            gate.evaluate(REPO, SHA, SHA, spoofed, self.allowlist)
+    def test_only_the_named_workflows_push_run_on_main_counts(self):
+        """What a name-only check-run match accepted: another workflow's job called `test`, a PR run,
+        a push to another branch, a run in another repository, a run for another commit."""
+        failing_ci = run(conclusion='failure', created_at='2026-11-20T10:00:00Z', id=1)
+        impostors = [run(path='.github/workflows/nightly.yml', created_at='2026-11-20T10:05:00Z', id=2),
+                     run(event='pull_request', created_at='2026-11-20T10:06:00Z', id=3),
+                     run(branch='feature', created_at='2026-11-20T10:07:00Z', id=4),
+                     run(repo='someone/fork', created_at='2026-11-20T10:08:00Z', id=5),
+                     run(sha='c' * 40, created_at='2026-11-20T10:09:00Z', id=6)]
+        with self.assertRaisesRegex(ValueError, 'is completed/failure'):
+            gate.evaluate(REPO, SHA, SHA, answer(failing_ci, *impostors), self.allowlist)
+        with self.assertRaisesRegex(ValueError, 'no push run'):
+            gate.evaluate(REPO, SHA, SHA, answer(*impostors), self.allowlist)
 
-    def test_latest_rerun_counts(self):
-        old_fail = run(conclusion='failure', id=1, started_at='2026-11-20T10:00:00Z')
-        new_pass = run(conclusion='success', id=2, started_at='2026-11-20T11:00:00Z')
+    def test_newest_run_counts(self):
+        old_fail = run(conclusion='failure', id=1, created_at='2026-11-20T10:00:00Z')
+        new_pass = run(conclusion='success', id=2, created_at='2026-11-20T11:00:00Z')
         self.assertEqual(gate.evaluate(REPO, SHA, SHA, answer(old_fail, new_pass), self.allowlist),
                          {'tests': 'PASS'})
         with self.assertRaises(ValueError):
@@ -65,7 +81,9 @@ class EvaluateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / 'a.json'
             for bad in ({'issuer': 'i', 'record_schema': 's', 'repositories': {REPO: {'checks': {}}}},
-                        {'issuer': 'i', 'record_schema': 's', 'repositories': {'no-slash': {'checks': {'t': ['t']}}}},
+                        {'issuer': 'i', 'record_schema': 's', 'repositories': {'no-slash': {'checks': {'t': CI}}}},
+                        {'issuer': 'i', 'record_schema': 's', 'repositories': {REPO: {'checks': {'t': ['test']}}}},
+                        {'issuer': 'i', 'record_schema': 's', 'repositories': {REPO: {'checks': {'t': 'ci.yml'}}}},
                         {'record_schema': 's', 'repositories': {}}):
                 path.write_text(json.dumps(bad))
                 with self.subTest(bad=bad), self.assertRaises(ValueError):
@@ -115,7 +133,7 @@ class SignedGrantTests(unittest.TestCase):
         runs.write_text(json.dumps(answer(run())))
         out = self.dir / 'grant.json'
         cmd = ['python3', '-I', str(ROOT / 'issue_grant.py'), '--repository', REPO, '--commit', SHA,
-               '--check-runs', str(runs), '--allowlist', str(ROOT / 'allowlist.json'), '--key', str(self.key),
+               '--workflow-runs', str(runs), '--allowlist', str(ROOT / 'allowlist.json'), '--key', str(self.key),
                '--output', str(out)]
         ok = subprocess.run(cmd + ['--head-sha', SHA], capture_output=True, text=True)
         self.assertEqual(ok.returncode, 0, ok.stderr)

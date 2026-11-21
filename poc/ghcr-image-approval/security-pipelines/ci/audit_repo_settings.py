@@ -38,13 +38,19 @@ as NOTE lines instead: reviewer environments may allow self-review (they still n
 required reviewer, so the run still pauses), and main may require a pull request with ZERO
 approvals (the pull request, the required checks, deletion protection and the empty bypass
 list stay mandatory; with one or more required approvals, stale-review dismissal too). Every
-other check is unchanged.
+other check is unchanged. The switch is read from policy/config.json on the AUDITED
+repository's main branch, not from the working directory; `--policy FILE` overrides that for
+offline use and says so in the output.
 """
 import argparse
+import base64
+import binascii
 import json
 import pathlib
 import subprocess
 import sys
+
+POLICY_PATH = 'policy/config.json'
 
 ENVIRONMENTS = (
     'ghcr-quarantine', 'base-manual-approval', 'base-auto-promotion',
@@ -234,6 +240,24 @@ def collect(repo):
     return settings
 
 
+def remote_policy(repo, ref='main'):
+    """policy/config.json as committed on `ref` of the audited repository."""
+    data = _gh(f'repos/{repo}/contents/{POLICY_PATH}?ref={ref}')
+    if not isinstance(data, dict) or data.get('encoding') != 'base64' or not isinstance(data.get('content'), str):
+        raise SystemExit(f'cannot read {POLICY_PATH} on {ref} of {repo}')
+    try:
+        return json.loads(base64.b64decode(data['content']))
+    except (ValueError, binascii.Error) as e:
+        raise SystemExit(f'{POLICY_PATH} on {ref} of {repo} is not valid JSON: {e}')
+
+
+def self_approval_setting(config):
+    value = config.get('allow_self_approval', False) if isinstance(config, dict) else None
+    if not isinstance(value, bool):
+        raise SystemExit('allow_self_approval must be true or false')
+    return value
+
+
 def self_approval_notes(allow_self_approval):
     if not allow_self_approval:
         return []
@@ -245,17 +269,22 @@ def self_approval_notes(allow_self_approval):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--repo', required=True, help='OWNER/SECURITY_REPO')
-    p.add_argument('--policy', default='policy/config.json',
-                   help='protected policy holding allow_self_approval (default: %(default)s)')
+    p.add_argument('--policy', metavar='FILE',
+                   help=f'read allow_self_approval from this local file instead of {POLICY_PATH} on the '
+                        "audited repository's main (offline use; the output says so)")
     a = p.parse_args()
-    config = json.loads(pathlib.Path(a.policy).read_text())
-    allow_self = config.get('allow_self_approval', False)
-    if not isinstance(allow_self, bool):
-        raise SystemExit('allow_self_approval must be true or false')
+    if a.policy:
+        config = json.loads(pathlib.Path(a.policy).read_text())
+        source = f'the LOCAL file {a.policy}, which may differ from main of {a.repo}'
+    else:
+        config = remote_policy(a.repo)
+        source = f'{POLICY_PATH} on main of {a.repo}'
+    allow_self = self_approval_setting(config)
     settings = collect(a.repo)
     failures = audit(settings, allow_self_approval=allow_self)
     for f in failures:
         print('FAIL ' + f)
+    print(f'NOTE allow_self_approval={str(allow_self).lower()} was read from {source}')
     for n in self_approval_notes(allow_self):
         print('NOTE ' + n)
     for m in list(MANUAL) + bypass_notes(settings):

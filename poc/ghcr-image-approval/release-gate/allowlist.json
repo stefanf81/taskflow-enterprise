@@ -4,7 +4,7 @@
   "repositories": {
     "stefanf81/ghcr-approval-poc-app": {
       "checks": {
-        "tests": ["test"]
+        "tests": ".github/workflows/ci.yml"
       }
     }
   }

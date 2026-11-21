@@ -30,7 +30,9 @@ digest="$(python3 -I scripts/parse_from.py catalog/Dockerfile.temurin --field di
 [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo 'Pin a digest in catalog/Dockerfile.temurin first' >&2; exit 1; }
 [[ "$CONFIRM_DIGEST" = "$digest" ]] || { echo "confirm_digest $CONFIRM_DIGEST is not the catalog pin $digest" >&2; exit 1; }
 [[ "$APPROVER_ID" != automatic-policy ]] || exit 1
-[[ "$(crane digest "$upstream_digest_ref")" = "$digest" ]] || { echo 'Upstream digest mismatch' >&2; exit 1; }
+# Captured first: a failed lookup stops here with crane's own error, not as a "mismatch".
+upstream_now="$(crane digest "$upstream_digest_ref")"
+[[ "$upstream_now" = "$digest" ]] || { echo "Upstream digest mismatch: $upstream_digest_ref is $upstream_now" >&2; exit 1; }
 
 # Refuse when a baseline exists. A FAILED tag lookup is not proof of absence (the package may
 # not exist yet, but it can also be a transient registry error), so it is only the cheap
@@ -41,6 +43,38 @@ if existing="$(crane digest "$GHCR_APPROVED_REPO:$tag" 2>/dev/null)"; then
 fi
 
 approved_ref="$GHCR_APPROVED_REPO@$digest"
+policy_version="$(python3 -I scripts/policy_info.py --field version)"
+accepted_versions="$(python3 -I scripts/policy_info.py --field accepted_versions)"
+max_age_hours="$(python3 -I scripts/policy_info.py --field approval_max_age_hours)"
+policy_sha256="$(python3 -I scripts/policy_info.py --field policy_sha256)"
+
+consumable() {   # consumable ATTESTATIONS: true when an application could build on $approved_ref
+  # The same parameters scripts/verify_bases.sh applies, so the two cannot disagree.
+  python3 -I scripts/check_approval_attestation.py "$1" \
+    --predicate-type "$APPROVAL_PREDICATE_TYPE" --digest "$digest" --expected-ref "$approved_ref" \
+    --accepted-policy-versions "$accepted_versions" --max-age-hours "$max_age_hours" \
+    --expected-policy-sha256 "$policy_sha256" >/dev/null 2>&1
+}
+refuse_consumable() {
+  echo "$approved_ref already carries an approval that applications can consume." >&2
+  echo 'Refusing to bootstrap over it. If only the tracking tag is missing, restore it by hand:' >&2
+  echo "  crane tag $approved_ref $tag" >&2
+  exit 1
+}
+
+# Before writing anything: is this digest already in approved/ with a usable approval (for
+# example, only the tracking tag was deleted)? A failed lookup here means "nothing usable
+# found"; the check after signing below repeats it on the attestations we then hold.
+existing="$(mktemp)"
+if crane digest "$approved_ref" >/dev/null 2>&1 \
+   && cosign verify-attestation --insecure-ignore-tlog=true --key "$APPROVAL_PUBKEY" \
+        --type "$APPROVAL_PREDICATE_TYPE" "$approved_ref" > "$existing" 2>/dev/null \
+   && consumable "$existing"; then
+  rm -f "$existing"
+  refuse_consumable
+fi
+rm -f "$existing"
+
 # Adds only the tag bootstrap-<digest>; the tracking tag is untouched until the end.
 copy_exact "$upstream_digest_ref" "$GHCR_APPROVED_REPO" "bootstrap-${digest#sha256:}" "$digest" reports/approved.digest
 # The package exists now, so listing its tags must succeed (a failure aborts the script) and
@@ -51,7 +85,6 @@ if grep -Fxq -- "$tag" <<<"$tags"; then
   exit 1
 fi
 crane manifest "$approved_ref" > reports/bootstrap-index.json
-policy_version="$(python3 -I scripts/policy_info.py --field version)"
 python3 - "$policy_version" "$upstream_ref" "$digest" "$GITHUB_SHA" <<'PY'
 import json, pathlib, sys
 version, upstream_ref, digest, git_sha = sys.argv[1:]
@@ -80,15 +113,11 @@ python3 -I scripts/check_approval_attestation.py reports/bootstrap-attestation-v
   --predicate-type "$APPROVAL_PREDICATE_TYPE" --digest "$digest" --expected-ref "$approved_ref" \
   --accepted-policy-versions "$(python3 -I scripts/policy_info.py --field historical_baseline_versions)" \
   --max-age-hours "$(python3 -I scripts/policy_info.py --field historical_baseline_max_age_hours)"
-# ... and NOT as a consumable approval: the current fingerprint must be missing.
-if python3 -I scripts/check_approval_attestation.py reports/bootstrap-attestation-verified.json \
-     --predicate-type "$APPROVAL_PREDICATE_TYPE" --digest "$digest" --expected-ref "$approved_ref" \
-     --accepted-policy-versions "$policy_version" \
-     --expected-policy-sha256 "$(python3 -I scripts/policy_info.py --field policy_sha256)" >/dev/null 2>&1; then
-  echo "$approved_ref already carries an approval that applications can consume (not from this run)." >&2
-  echo 'Refusing to bootstrap over it. If only the tracking tag is missing, restore it by hand:' >&2
-  echo "  crane tag $approved_ref $tag" >&2
-  exit 1
+# ... and NOT as a consumable approval: no attestation on the digest may pass the application
+# check (ours has no fingerprint; another one would have to come from an earlier approval that
+# the check before the copy could not read).
+if consumable reports/bootstrap-attestation-verified.json; then
+  refuse_consumable
 fi
 crane tag "$approved_ref" "$tag"
 [[ "$(crane digest "$GHCR_APPROVED_REPO:$tag")" = "$digest" ]] || exit 1
