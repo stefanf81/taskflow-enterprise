@@ -77,23 +77,77 @@ test('the BuildKit image is pinned to a version and index digest', () => {
   ));
 });
 
-test('published images are signed and attested before they are promoted', () => {
+// The lines of one job: from its key to the next job key (or the end of the file).
+function jobBlock(workflow, name) {
+  const lines = workflow.split('\n');
+  const start = lines.indexOf(`  ${name}:`);
+  assert.notEqual(start, -1, `job not found: ${name}`);
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (/^ {2}[A-Za-z_][\w-]*:\s*$/.test(lines[i])) {
+      end = i;
+      break;
+    }
+  }
+  return lines.slice(start, end);
+}
+
+test('published images are signed, attested and verified before they are promoted', () => {
   // A final tag must never point at an unsigned digest: once the cluster verifies signatures,
   // an image promoted before a failed signing step could not be deployed.
-  const push = fs.readFileSync(path.join(workflowDir, 'pushdockerimage.yml'), 'utf8');
-  const sign = push.indexOf('cosign sign --yes "${IMAGE}@${DIGEST}"');
-  const attest = push.indexOf('uses: actions/attest@');
-  const promote = push.indexOf('docker buildx imagetools create');
-  assert.notEqual(sign, -1, 'the push job signs the image digest with cosign');
-  assert.notEqual(attest, -1, 'the push job attests build provenance');
-  assert.notEqual(promote, -1);
-  assert.ok(sign < promote && attest < promote, 'sign and attest before promoting');
+  const workflow = fs.readFileSync(path.join(workflowDir, 'pushdockerimage.yml'), 'utf8');
+  const promote = jobBlock(workflow, 'promote');
+  const stepStarts = promote.flatMap((line, i) => (/^ {6}- /.test(line) ? [i] : []));
+  const steps = stepStarts.map((start, n) => promote.slice(start, stepStarts[n + 1] ?? promote.length));
+  const names = steps.map((step) => (step[0].match(/^ {6}- name: (.+)$/) ?? [])[1]);
 
-  // Keyless signing and the attestation need these tokens; only the push job holds them.
-  const job = push.slice(push.indexOf('\n  push:'));
-  assert.match(job, /^ {6}id-token: write$/m);
-  assert.match(job, /^ {6}attestations: write$/m);
-  assert.doesNotMatch(push.slice(0, push.indexOf('\n  push:')), /id-token|attestations: write/);
+  const order = [
+    'Sign Image',
+    'Attest Build Provenance',
+    'Verify Signature and Attestation',
+    'Promote Image to Final Tags',
+  ];
+  const positions = order.map((name) => names.indexOf(name));
+  assert.ok(!positions.includes(-1), `promote needs the steps ${order.join(', ')}`);
+  assert.deepEqual(positions, [...positions].sort((x, y) => x - y), 'sign, attest, verify, then promote');
+
+  // A skipped or tolerated signing step would promote an unsigned digest.
+  for (const position of positions) {
+    const step = steps[position].join('\n');
+    assert.doesNotMatch(step, /^ {8}(if|continue-on-error):/m, `${names[position]} must not be conditional`);
+  }
+
+  const body = (name) => steps[names.indexOf(name)].join('\n');
+  assert.ok(body('Sign Image').includes('cosign sign --yes -a "scan=${SCAN}" "${IMAGE}@${DIGEST}"'));
+  assert.match(body('Attest Build Provenance'), /^ {8}uses: actions\/attest@/m);
+  assert.ok(body('Verify Signature and Attestation').includes('cosign verify "${IMAGE}@${DIGEST}"'));
+  assert.ok(body('Verify Signature and Attestation').includes('gh attestation verify "oci://${IMAGE}@${DIGEST}"'));
+
+  // Tags are written by the promote step only, and `latest` only for a run from main: any other
+  // run is signed with its own ref, which a verifier pinned to main rejects.
+  const tagging = names.filter((name, i) => steps[i].some((line) => line.includes('imagetools create')));
+  assert.deepEqual(tagging, ['Promote Image to Final Tags']);
+  assert.match(
+    body('Promote Image to Final Tags'),
+    /if \[\[ "\$REF" == "refs\/heads\/main" \]\]; then\n\s+published\+=\("\$\{IMAGE\}:latest"\)/,
+  );
+  assert.doesNotMatch(jobBlock(workflow, 'push').join('\n'), /imagetools create|:latest/);
+});
+
+test('only the promote job can sign, and it runs no build or third-party step', () => {
+  // A step that holds `id-token: write` can obtain a certificate with this workflow's identity,
+  // so the token stays away from the image build, the scanner and their actions.
+  const workflow = fs.readFileSync(path.join(workflowDir, 'pushdockerimage.yml'), 'utf8');
+  const promote = jobBlock(workflow, 'promote').join('\n');
+  assert.match(promote, /^ {6}id-token: write$/m);
+  assert.match(promote, /^ {6}attestations: write$/m);
+
+  const elsewhere = workflow.replace(promote, '');
+  assert.notEqual(elsewhere, workflow);
+  assert.doesNotMatch(elsewhere, /^\s*(id-token|attestations):/m);
+
+  const uses = [...promote.matchAll(/^\s*(?:- )?uses: ([^@\s]+)@/gm)].map((match) => match[1]);
+  assert.deepEqual(uses, ['sigstore/cosign-installer', 'actions/attest']);
 });
 
 test('the DAST API scan sends its token and proves it', () => {
