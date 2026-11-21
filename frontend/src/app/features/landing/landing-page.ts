@@ -86,7 +86,7 @@ export class LandingPage {
     effect(() => {
       const role = this.authState.role();
       if (role) {
-        this.router.navigateByUrl(this.authState.dashboardPathFor(role));
+        void this.router.navigateByUrl(this.authState.dashboardPathFor(role));
       }
     });
   }
@@ -103,6 +103,6 @@ export class LandingPage {
     // The sign-in itself already wiped the banner (FlashMessages clears on sessionStarted), so a
     // guest's failed cancel or review cannot follow the user into the dashboard as a role="alert".
     this.flash.showSuccess(role === 'ROLE_ADMIN' ? 'Welcome back, Owner!' : 'Welcome back!');
-    this.router.navigateByUrl(this.authState.dashboardPathFor(role));
+    void this.router.navigateByUrl(this.authState.dashboardPathFor(role));
   }
 }

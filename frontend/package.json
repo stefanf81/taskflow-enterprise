@@ -7,7 +7,7 @@
     "format": "prettier --write --cache --cache-location node_modules/.cache/prettier/scripts .",
     "format:check": "prettier --check --cache --cache-location node_modules/.cache/prettier/scripts .",
     "build": "ng build",
-    "lint": "node scripts/generate-theme.mjs --check && eslint --cache --cache-location node_modules/.cache/eslint/ --cache-strategy content . && tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc/app.tsbuildinfo -p tsconfig.app.json && tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc/spec.tsbuildinfo -p tsconfig.spec.json",
+    "lint": "node scripts/generate-theme.mjs --check && eslint --cache --cache-location node_modules/.cache/eslint/ --cache-strategy content . && eslint --config eslint.typed.config.mjs src && tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc/app.tsbuildinfo -p tsconfig.app.json && tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc/spec.tsbuildinfo -p tsconfig.spec.json",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "e2e": "playwright test",

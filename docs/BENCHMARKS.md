@@ -3030,3 +3030,18 @@ Script time is Chrome's `ScriptDuration`, main-thread tasks `TaskDuration`, both
 * **Caching trade-off:** the framework code was a separate ~200 kB chunk that stayed cached across deploys that only changed application code. It is now part of `main.js`, so any change to `main.js` re-downloads it.
 * **Verified:** the Playwright suite, `landing-stability` and `early-interaction` included, passed against the production frontend image in CI (`main` dispatch at `0f80fe2`, run 44855485326).
 * **Not measured:** FCP/LCP on slow 4G. Re-measure the §60/§63 slow-4G numbers before treating the change as neutral.
+
+## 🔍 84. Type-Aware ESLint, Narrowly (2026-11-21)
+
+**Question:** typescript-eslint now recommends type-aware linting (`projectService` + `recommendedTypeChecked`), but `npm run lint` caches ESLint results per file (`--cache-strategy content`), which is only sound while no rule depends on other files' types.
+
+| Frontend ESLint, this container | Time |
+| :--- | ---: |
+| Main config, no cache | 2.7 s |
+| Main config, warm content cache | 0.6 s |
+| Main config + `recommendedTypeChecked` on `src/`, no cache | 7.7 s |
+| Type-aware pass with only the two promise rules (`eslint.typed.config.mjs`) | 5.6 s |
+
+* **Findings of the full preset:** 92 in 19 files; 79 in spec files, mostly `no-unsafe-*` on test doubles. In production code 11 were `any`-typed `catchError` errors (typing, not bugs) and 3 were unhandled `router.navigateByUrl()` Promises (already reported through `provideBrowserGlobalErrorListeners()` → `TelemetryErrorHandler`). 4 more unhandled Promises were in specs, where a test called `addTimeOff()` without awaiting the result.
+* **Adopted:** `no-floating-promises` and `no-misused-promises` only, in a separate uncached pass, so the cached main pass keeps its guarantee. The navigations are marked `void`; the specs now await the save after flushing its request and assert its `true`/`false` result. Cost: ~5 s per `npm run lint`.
+* **Not adopted:** the rest of `recommendedTypeChecked` (mostly spec noise; `no-unsafe-*` would need typed test doubles first).

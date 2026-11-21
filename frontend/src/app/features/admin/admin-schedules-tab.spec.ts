@@ -52,8 +52,8 @@ describe('AdminSchedulesTab', () => {
     expect(card().classList).toContain('p-4');
   });
 
-  it('requires both dates before submitting time off', () => {
-    component.addTimeOff();
+  it('requires both dates before submitting time off', async () => {
+    await component.addTimeOff();
     expect(component.timeOffActionError()).toBe('Start and end dates are required.');
     httpMock.expectNone((r) => r.url.includes('/time-off') && r.method === 'POST');
   });

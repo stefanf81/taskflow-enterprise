@@ -159,7 +159,7 @@ describe('BarberStore', () => {
   it('should add time-off via the API and reload the time-offs list', async () => {
     const newTimeOff = { startDate: '2026-10-01', endDate: '2026-10-03', reason: 'Personal' };
 
-    store.addTimeOff(newTimeOff);
+    const saving = store.addTimeOff(newTimeOff);
 
     // POST to create time-off (subscribe-based, synchronous)
     const postReq = httpMock.expectOne(
@@ -178,18 +178,24 @@ describe('BarberStore', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
+    expect(await saving).toBe(true);
     expect(store.actionSuccessMessage()).toBe('Time off added successfully.');
     expect(store.isSaving()).toBe(false);
   });
 
-  it('should surface a time-off write error on actionErrorMessage', () => {
-    store.addTimeOff({ startDate: '2026-10-01', endDate: '2026-10-01', reason: 'Test' });
+  it('should surface a time-off write error on actionErrorMessage', async () => {
+    const saving = store.addTimeOff({
+      startDate: '2026-10-01',
+      endDate: '2026-10-01',
+      reason: 'Test',
+    });
 
     const req = httpMock.expectOne(
       (r) => r.url.includes('/api/v1/barbers/1/time-off') && r.method === 'POST',
     );
     req.error(new ProgressEvent('error'), { status: 400, statusText: 'Bad Request' });
 
+    expect(await saving).toBe(false);
     expect(store.actionErrorMessage()).toBeTruthy();
     expect(store.actionErrorMessage()).not.toBeNull();
     expect(store.isSaving()).toBe(false);
@@ -213,10 +219,12 @@ describe('BarberStore', () => {
     expect(store.barbers().length).toBe(1);
   });
 
-  it('should not add time-off if no barber is selected', () => {
+  it('should not add time-off if no barber is selected', async () => {
     // Clear the selected barber.
     store.selectedBarberId.set(null);
-    store.addTimeOff({ startDate: '2026-10-01', endDate: '2026-10-03', reason: 'Test' });
+    expect(
+      await store.addTimeOff({ startDate: '2026-10-01', endDate: '2026-10-03', reason: 'Test' }),
+    ).toBe(false);
 
     // The method returns early when no barber is selected, so no HTTP request.
     httpMock.expectNone((req) => req.url.includes('/api/v1/barbers'));

@@ -32,7 +32,7 @@ class NotFoundComponent {
     effect(() => {
       const role = this.auth.role();
       if (role === 'ROLE_ADMIN' || role === 'ROLE_CUSTOMER') {
-        this.router.navigateByUrl(this.auth.dashboardPathFor(role), { replaceUrl: true });
+        void this.router.navigateByUrl(this.auth.dashboardPathFor(role), { replaceUrl: true });
       }
       // Guests stay on the 404 page
     });
