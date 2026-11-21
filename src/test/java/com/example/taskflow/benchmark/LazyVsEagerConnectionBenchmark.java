@@ -10,7 +10,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.*;
 import org.springframework.jdbc.datasource.LazyConnectionDataSourceProxy;
 import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
 
 import com.example.taskflow.auth.TestSecurityConfig;
 
@@ -65,7 +64,7 @@ class LazyVsEagerConnectionBenchmark {
     @Autowired private DataSource dataSource;
     @LocalServerPort private int port;
 
-    private RestTemplate http;
+    private BenchmarkHttp http;
     private String baseUrl;
 
     // =========================================================================
@@ -186,7 +185,7 @@ class LazyVsEagerConnectionBenchmark {
      */
     @Test
     void mixedWorkloadABTest() throws Exception {
-        http = new RestTemplate();
+        http = new BenchmarkHttp();
         baseUrl = "http://localhost:" + port;
 
         // Set pool to production-like size
@@ -247,7 +246,7 @@ class LazyVsEagerConnectionBenchmark {
      */
     @Test
     void concurrencySweep() throws Exception {
-        http = new RestTemplate();
+        http = new BenchmarkHttp();
         baseUrl = "http://localhost:" + port;
 
         HikariDataSource hikari = getHikariDataSource();

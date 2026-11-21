@@ -20,7 +20,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.*;
-import org.springframework.web.client.RestTemplate;
 
 import com.example.taskflow.auth.TestSecurityConfig;
 
@@ -109,7 +108,7 @@ class HikariPoolSweepBenchmarkTest {
     // -----------------------------------------------------------------------
     //  MUTABLE STATE
     // -----------------------------------------------------------------------
-    private RestTemplate http;
+    private BenchmarkHttp http;
     private String baseUrl;
     private String accessToken;
     private final Random random = new Random(42);
@@ -124,7 +123,7 @@ class HikariPoolSweepBenchmarkTest {
     @BeforeEach
     void setUp() {
         baseUrl = "http://localhost:" + port;
-        http = new RestTemplate();
+        http = new BenchmarkHttp();
 
         // Initial seed + login (reseeding happens per-size in the sweep loop)
         seedDatabase();
