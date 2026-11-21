@@ -16,7 +16,10 @@ images are read and paired by repository:
 Identical (old, new) pairs found in several files are compared once.
 
 Every external FROM must be pinned by digest; an unpinned one cannot be compared and fails
-the plan. Stage names and `scratch` are skipped.
+the plan. Stage names and `scratch` are skipped. Nothing is compared when there is no
+baseline: on the first push (`before` is all zeros), or when the baseline commit has no
+base-gate/config.json yet (the change introduces the gate). A candidate without the config
+fails.
 
 Usage: plan.py --base-rev SHA [--config base-gate/config.json] [--output plan.json]
 """
@@ -111,11 +114,16 @@ def plan(base_rev, config_path=CONFIG):
     check = subprocess.run(['git', 'cat-file', '-e', f'{base_rev}^{{commit}}'], cwd=ROOT, capture_output=True)
     if check.returncode != 0:
         raise ValueError(f'baseline commit {base_rev} is not in this clone (fetch-depth: 0 needed)')
-    head_config = (ROOT / config_path).read_text()
+    head_config = (ROOT / config_path).read_text()   # deleting the config fails closed here
     base_config = git_show(base_rev, config_path)
     files = set(dockerfiles(head_config, 'candidate config'))
-    if base_config is not None:
-        files |= set(dockerfiles(base_config, 'baseline config'))
+    if base_config is None:
+        # The baseline predates the gate (e.g. the first push onto a repository created with a
+        # README): there is no accepted pin set to compare with yet.
+        return {'base': base_rev, 'skipped': f'{config_path} does not exist at the baseline '
+                f'{base_rev} (this change introduces the gate)',
+                'comparisons': [], 'unchanged': [], 'removed': []}
+    files |= set(dockerfiles(base_config, 'baseline config'))
     comparisons, unchanged, removed = {}, [], []
     for path in sorted(files):
         old_text = git_show(base_rev, path)

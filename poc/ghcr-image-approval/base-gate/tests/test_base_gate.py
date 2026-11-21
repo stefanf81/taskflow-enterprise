@@ -160,6 +160,19 @@ class PlanTests(unittest.TestCase):
         self.assertIn('first push', result['skipped'])
         self.assertEqual(result['comparisons'], [])
 
+    def test_baseline_without_the_gate_is_skipped(self):
+        self.git('rm', '-q', 'base-gate/config.json')
+        before = self.commit()
+        self.git('checkout', '-q', self.base, '--', 'base-gate/config.json')
+        self.write({'catalog/Dockerfile.temurin': catalog(B)})
+        result = self.plan(before)
+        self.assertIn('introduces the gate', result['skipped'])
+        self.assertEqual(result['comparisons'], [])
+
+    def test_deleting_the_config_fails(self):
+        (self.repo / 'base-gate/config.json').unlink()
+        self.assertNotEqual(self.run_plan().returncode, 0)
+
     def test_fails_closed(self):
         self.assertIn('not in this clone', self.run_plan('d' * 40).stderr)
         self.assertIn('40-hex', self.run_plan('HEAD').stderr)

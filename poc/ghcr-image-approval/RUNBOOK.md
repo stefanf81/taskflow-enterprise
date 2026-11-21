@@ -26,7 +26,7 @@ Verified in the session container (no GitHub, GHCR or Docker daemon available):
     comparison baseline, while the real precheck answers `needed` and `scripts/verify_bases.sh`
     refuses it for applications.
   - The bootstrap refuses before any write when the digest already carries a usable approval.
-- **CI base-image gate:** 33 tests.
+- **CI base-image gate:** 35 tests.
   - The planner runs against a real temporary git history: changed, added and removed pins;
     a Dockerfile dropped from the list is still watched; unpinned `FROM` fails.
   - `compare_all.sh` runs the kit's real `compare.sh` and `evaluate.py` against stub tools.
@@ -79,8 +79,9 @@ release pipeline runs it from a `git archive`.
 **Expected on the first push:**
 - `base-image-approval.yml` fails in `precheck`: no baseline yet, and no variables until step 3.
   This is harmless.
-- **Example app tests**: `base-image-gate` skips ("no previous commit"), then `test` builds
-  the app.
+- **Example app tests**: `base-image-gate` skips, because there is no baseline yet ("no
+  previous commit", or "this change introduces the gate" when the repository was created with
+  a README). Then `test` builds the app.
 
 ## 3. Configure
 

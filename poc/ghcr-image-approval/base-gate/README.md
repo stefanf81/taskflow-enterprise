@@ -31,7 +31,9 @@ the gate from watching a Dockerfile by deleting it from the list.
 | removed | reported only |
 | not pinned by digest, or `FROM $VAR` | the plan fails |
 
-The first push to a new repository has no baseline and is skipped.
+The gate skips when there is no baseline: on the first push to a new repository, or when the
+baseline commit has no `base-gate/config.json` yet (the change introduces the gate). Deleting
+the config fails the gate.
 
 `compare_all.sh` runs, for each moved pin:
 1. `crane digest` checks that both references resolve to their pinned digest;
