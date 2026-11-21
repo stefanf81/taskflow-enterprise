@@ -34,14 +34,14 @@ Spring Boot Backend
 | Tool | Version | Verify |
 |------|---------|--------|
 | Node.js | 26.13.1 (`mobile/.nvmrc`) | `node -v` |
-| npm | 12.2.2 (CI pin; enforces `allowScripts`) | `npm -v` |
+| npm | 12.2.3 (CI pin; enforces `allowScripts`) | `npm -v` |
 | Java | 21 for local Android/Detox builds | `java -version` |
 | Xcode | >=16 | `xcodebuild -version` |
 | CocoaPods | >=1.15 | `pod --version` |
 | Docker | (for backend) | `docker ps` |
 
 Node 26 bundles npm 11.20.0, which silently ignores the `allowScripts` allowlist
-in `package.json`. CI installs npm 12.2.2 (declared in `frontend/package.json`
+in `package.json`. CI installs npm 12.2.3 (declared in `frontend/package.json`
 via `.github/actions/npm-ci`), so install the same version locally:
 
 ```bash
