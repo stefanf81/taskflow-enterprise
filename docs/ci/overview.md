@@ -228,7 +228,7 @@ Compiles secure, production-grade container images for the backend and frontend 
 - **One Job per Image:** The former matrix is split so each image starts as soon as its own input exists. `docker-backend` needs only `package` (the JAR); `docker-frontend` needs only `frontend` (the bundle). The job names `Build Docker (backend)` and `Build Docker (frontend)` keep the former matrix check contexts. The jobs are independent, so a hard-gate CVE in one image never cancels the other's scan.
 - **Deduplicated Multi-Tag Builds:** Both the unique commit SHA (`IMAGE_TAG`) and `latest` tags are defined simultaneously in the `docker/build-push-action` step. This ensures a single build graph, tagging the resulting local image under both tags at once.
 - **Lowercase GHCR Owner Guard:** GHCR rejects mixed/uppercase repository owners (`repository name must be lowercase`). A `Compute Image Refs` step lowercases `github.repository_owner` once and emits the fully resolved `ghcr.io/<owner>/taskflow-<component>` ref as a step output, which `build-push-action` and the Trivy `image-ref` both consume. This prevents hard-failures for forks/orgs whose casing doesn't match the package's lowercase requirement.
-- **Local Load Only:** Images in CI (`ci.yml`) are built with `load: true`, `push: false`, `provenance: false`, `sbom: false`. GHA Buildx local loading does not support image index structures containing supply-chain annotations, so attestations are omitted. The `pushdockerimage.yml` workflow builds once to a temporary registry scan tag (`:<tag>-scan`) with `provenance: true` / `sbom: true`, scans the pushed **digest** (`steps.build.outputs.digest`, not the mutable staging tag) on GHCR, promotes that digest to `:<tag>` and `:latest` using `docker buildx imagetools create` without rebuilding, and fails the run unless both tags resolve to the scanned digest. The job summary prints the `image@digest` reference to deploy. Runs are serialized repository-wide (concurrency group without the ref), so two publications cannot race on `latest`. The build also sets release labels (`org.opencontainers.image.version` = tag, `revision` = commit SHA, `created` = build time), which override the Ubuntu version/date the backend inherits from its base image, and an index annotation `org.opencontainers.image.description`, which is where GHCR reads the description of an image index.
+- **Local Load Only:** Images in CI (`ci.yml`) are built with `load: true`, `push: false`, `provenance: false`, `sbom: false`. GHA Buildx local loading does not support image index structures containing supply-chain annotations, so attestations are omitted. The `pushdockerimage.yml` workflow builds once to a temporary registry scan tag (`:<tag>-scan`) with `provenance: true` / `sbom: true`, scans the pushed **digest** (`steps.build.outputs.digest`, not the mutable staging tag) on GHCR, signs that digest with cosign and attests its build provenance (see [Verifying a published image](#verifying-a-published-image)), promotes it to `:<tag>` and `:latest` using `docker buildx imagetools create` without rebuilding, and fails the run unless both tags resolve to the scanned digest. The job summary prints the `image@digest` reference to deploy. Runs are serialized repository-wide (concurrency group without the ref), so two publications cannot race on `latest`. The build also sets release labels (`org.opencontainers.image.version` = tag, `revision` = commit SHA, `created` = build time), which override the Ubuntu version/date the backend inherits from its base image, and an index annotation `org.opencontainers.image.description`, which is where GHCR reads the description of an image index.
 - **Change-Driven Execution:** The `changes` job emits `build_backend_image` / `build_frontend_image` booleans, so only images that actually had changes are built and scanned.
 - **Artifact-Driven Fan-In:** Each job pulls its input from the producing job's artifact (`backend-jar`, `frontend-dist`), so image build and Trivy scan never wait for the backend test suites.
 - **Smart Job-Level Gating (Skip Optimization):** Job-level conditions respect path filters on both pull requests and ordinary `main` pushes. Documentation-only changes skip heavyweight runners, while scheduled and manual runs retain full coverage.
@@ -269,7 +269,7 @@ Our Docker build configurations (the backend `Dockerfile` with its shared stages
 
 ## 12. Repository & GHCR Setup
 
-The Docker push workflow (`.github/workflows/pushdockerimage.yml`) pushes images to the GitHub Container Registry (GHCR) using the default `GITHUB_TOKEN`. The workflow default is `contents: read`; only the `push` job is granted `packages: write` and `security-events: write`, so the jobs that run Gradle and npm hold no write token. The `image_tag` input is passed through `env` and validated against Docker tag syntax (and must not end in `-scan`, the staging suffix) before use.
+The Docker push workflow (`.github/workflows/pushdockerimage.yml`) pushes images to the GitHub Container Registry (GHCR) using the default `GITHUB_TOKEN`. The workflow default is `contents: read`; only the `push` job is granted `packages: write`, `security-events: write`, `id-token: write` (the OIDC token for keyless signing) and `attestations: write`, so the jobs that run Gradle and npm hold no write token and cannot sign. The `image_tag` input is passed through `env` and validated against Docker tag syntax (and must not end in `-scan`, the staging suffix) before use.
 
 ### Workflow permissions
 
@@ -283,6 +283,26 @@ If you previously pushed `taskflow-backend` / `taskflow-frontend` manually (e.g.
 
 1. On your GitHub profile, open **Packages → taskflow-backend** (and `taskflow-frontend`).
 2. **Package settings → Manage Actions access → Add repository**, select this repository, and grant **Write**.
+
+### Verifying a published image
+
+Every image `pushdockerimage.yml` publishes is signed with cosign (keyless) and carries a signed SLSA build provenance attestation. Both are made for the image **digest**, after the Trivy gate and before promotion, so `:<tag>` and `:latest` never point at an unsigned digest. The run summary prints both commands with the digest filled in.
+
+```bash
+cosign verify ghcr.io/<owner>/taskflow-backend@sha256:<digest> \
+  --certificate-identity "https://github.com/<owner>/<repo>/.github/workflows/pushdockerimage.yml@refs/heads/main" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+```bash
+gh attestation verify oci://ghcr.io/<owner>/taskflow-backend@sha256:<digest> --repo <owner>/<repo>
+```
+
+- **Pin the ref.** The workflow can be dispatched from any branch and the certificate records which one. A verifier that pins `@refs/heads/main` accepts only images built from `main`; one that matches the workflow path alone accepts a build from any branch.
+- **What the signature says.** It proves the digest was built by this workflow in this repository. It does not prove the image was scanned: a `skip_scan` run is signed too.
+- **What it covers.** The signed digest is the image index, which references the BuildKit provenance and SBOM by digest, so those are covered as well. The attestation from `actions/attest` is the one `gh attestation verify` and admission controllers read.
+- **Where it is stored.** Signature and attestation live in the same GHCR package as the image, as extra `sha256-…` entries. A package cleanup must keep them (see the [2026-08-20 audit](audit-2026-08-20.md)).
+- **Enforcement.** Nothing rejects an unsigned image until the cluster checks; that policy belongs with the production manifests, not in this repository.
 
 ### Personal Access Token fallback (`CR_PAT`)
 

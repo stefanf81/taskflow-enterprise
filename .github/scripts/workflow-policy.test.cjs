@@ -77,6 +77,25 @@ test('the BuildKit image is pinned to a version and index digest', () => {
   ));
 });
 
+test('published images are signed and attested before they are promoted', () => {
+  // A final tag must never point at an unsigned digest: once the cluster verifies signatures,
+  // an image promoted before a failed signing step could not be deployed.
+  const push = fs.readFileSync(path.join(workflowDir, 'pushdockerimage.yml'), 'utf8');
+  const sign = push.indexOf('cosign sign --yes "${IMAGE}@${DIGEST}"');
+  const attest = push.indexOf('uses: actions/attest@');
+  const promote = push.indexOf('docker buildx imagetools create');
+  assert.notEqual(sign, -1, 'the push job signs the image digest with cosign');
+  assert.notEqual(attest, -1, 'the push job attests build provenance');
+  assert.notEqual(promote, -1);
+  assert.ok(sign < promote && attest < promote, 'sign and attest before promoting');
+
+  // Keyless signing and the attestation need these tokens; only the push job holds them.
+  const job = push.slice(push.indexOf('\n  push:'));
+  assert.match(job, /^ {6}id-token: write$/m);
+  assert.match(job, /^ {6}attestations: write$/m);
+  assert.doesNotMatch(push.slice(0, push.indexOf('\n  push:')), /id-token|attestations: write/);
+});
+
 test('the DAST API scan sends its token and proves it', () => {
   const dast = fs.readFileSync(path.join(workflowDir, 'dast.yml'), 'utf8');
   // ZAP adds the auth header when the request's host name contains this value. A URL never
