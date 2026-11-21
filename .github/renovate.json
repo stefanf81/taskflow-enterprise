@@ -190,7 +190,7 @@
       "allowedVersions": "/^6\\./"
     },
     {
-      "description": "Keep Vitest and its coverage provider on the Angular 22.2-compatible 5.x release line",
+      "description": "Keep Vitest and its coverage provider on the 5.x release line that @angular/build 22 accepts (22.3 peers vitest ^4 || ^5)",
       "matchManagers": ["npm"],
       "matchFileNames": ["frontend/package.json"],
       "matchPackageNames": ["vitest", "@vitest/coverage-v8"],

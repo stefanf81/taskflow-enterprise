@@ -15,8 +15,15 @@ Temurin 25.0.4.1+1 / Ubuntu 26.04
 (pushed 2026-11-20; previous pin
 `sha256:480ef64e4540d45b0301e8afb7873bd3fa61ce93c5f66273eb569420718f38e2`). Unlike the 2026-11-14
 refresh this is a new JDK build: the image ships `JAVA_VERSION=jdk-25.0.5.1+2` (previously `25.0.5+8`) on
-Ubuntu 26.04. Applied ahead of Renovate's 3-day soak at the maintainer's request. No Trivy scan, image
-smoke test or performance gate has been run on this digest yet; CI's image scan covers it on the next build.
+Ubuntu 26.04. Applied ahead of Renovate's 3-day soak at the maintainer's request.
+
+CI result for this digest (`main` dispatch at `0f80fe2`, `Build Docker (backend)`, run 44855485326,
+linux/amd64): Trivy **0.76.2** scanned the backend application image built on it with `--severity
+HIGH,CRITICAL --ignore-unfixed --exit-code 1` (OS packages and the application JAR; Ubuntu 26.04, 109 OS
+packages) and found nothing to fail on, and the production image smoke test passed (readiness, `10001:10001`,
+86 % of loaded classes served from the CDS archive (24,326 of 28,072), graceful shutdown; started in 8.8 s).
+The same limits as for the 2026-11-14 digest apply: the gate says nothing about MEDIUM/LOW or unfixed
+findings, it covered amd64 only, and the native-amd64 performance gate was not re-run.
 
 **2026-11-14 digest refresh:** the Dockerfile now pins
 `sha256:480ef64e4540d45b0301e8afb7873bd3fa61ce93c5f66273eb569420718f38e2`

@@ -3028,4 +3028,5 @@ Script time is Chrome's `ScriptDuration`, main-thread tasks `TaskDuration`, both
 
 * The per-file `any` budget (250/300 kB) failed on `main.js`; it is now **420/450 kB**. The `initial` budget (450/470 kB) is what bounds first-load size, and the initial total is 7 kB under its warning. The `any` budget now allows a lazy chunk to reach 450 kB before the build fails.
 * **Caching trade-off:** the framework code was a separate ~200 kB chunk that stayed cached across deploys that only changed application code. It is now part of `main.js`, so any change to `main.js` re-downloads it.
-* Not measured here: FCP/LCP on slow 4G and the `landing-stability` / `early-interaction` Playwright specs (they need the full stack). Re-measure the §60/§63 slow-4G numbers before treating the change as neutral.
+* **Verified:** the Playwright suite, `landing-stability` and `early-interaction` included, passed against the production frontend image in CI (`main` dispatch at `0f80fe2`, run 44855485326).
+* **Not measured:** FCP/LCP on slow 4G. Re-measure the §60/§63 slow-4G numbers before treating the change as neutral.
