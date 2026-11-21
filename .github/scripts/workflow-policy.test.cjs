@@ -77,6 +77,99 @@ test('the BuildKit image is pinned to a version and index digest', () => {
   ));
 });
 
+// The lines of one job: from its key to the next job key (or the end of the file).
+function jobBlock(workflow, name) {
+  const lines = workflow.split('\n');
+  const start = lines.indexOf(`  ${name}:`);
+  assert.notEqual(start, -1, `job not found: ${name}`);
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (/^ {2}[A-Za-z_][\w-]*:\s*$/.test(lines[i])) {
+      end = i;
+      break;
+    }
+  }
+  return lines.slice(start, end);
+}
+
+test('published images are signed, attested and verified before they are promoted', () => {
+  // A final tag must never point at an unsigned digest: once the cluster verifies signatures,
+  // an image promoted before a failed signing step could not be deployed.
+  const workflow = fs.readFileSync(path.join(workflowDir, 'pushdockerimage.yml'), 'utf8');
+  const job = jobBlock(workflow, 'promote');
+  // Only the `steps:` list: `needs:` items sit at the same indentation.
+  const promote = job.slice(job.indexOf('    steps:') + 1);
+  assert.notEqual(job.indexOf('    steps:'), -1);
+  const stepStarts = promote.flatMap((line, i) => (/^ {6}- /.test(line) ? [i] : []));
+  const steps = stepStarts.map((start, n) => promote.slice(start, stepStarts[n + 1] ?? promote.length));
+  const names = steps.map((step) => (step[0].match(/^ {6}- name: (.+)$/) ?? [])[1]);
+
+  const order = [
+    'Sign Image',
+    'Attest Build Provenance',
+    'Verify Signature and Attestation',
+    'Promote Image to Final Tags',
+  ];
+  const positions = order.map((name) => names.indexOf(name));
+  assert.ok(!positions.includes(-1), `promote needs the steps ${order.join(', ')}`);
+  assert.deepEqual(positions, [...positions].sort((x, y) => x - y), 'sign, attest, verify, then promote');
+
+  // A skipped or tolerated signing step would promote an unsigned digest.
+  for (const position of positions) {
+    const step = steps[position].join('\n');
+    assert.doesNotMatch(step, /^ {8}(if|continue-on-error):/m, `${names[position]} must not be conditional`);
+  }
+
+  const body = (name) => steps[names.indexOf(name)].join('\n');
+  assert.match(body('Sign Image'), /cosign sign --yes .*-a "scan=\$\{SCAN\}" "\$\{IMAGE\}@\$\{DIGEST\}"/);
+  assert.match(body('Attest Build Provenance'), /^ {8}uses: actions\/attest@/m);
+  assert.ok(body('Verify Signature and Attestation').includes('cosign verify "${IMAGE}@${DIGEST}"'));
+  assert.ok(body('Verify Signature and Attestation').includes('gh attestation verify "oci://${IMAGE}@${DIGEST}"'));
+
+  // Tags are written by the promote step only, and `latest` only for a run from main: any other
+  // run is signed with its own ref, which a verifier pinned to main rejects.
+  const tagging = names.filter((name, i) => steps[i].some((line) => line.includes('imagetools create')));
+  assert.deepEqual(tagging, ['Promote Image to Final Tags']);
+  assert.match(
+    body('Promote Image to Final Tags'),
+    /if \[\[ "\$REF" == "refs\/heads\/main" \]\]; then\n\s+published\+=\("\$\{IMAGE\}:latest"\)/,
+  );
+  assert.doesNotMatch(jobBlock(workflow, 'push').join('\n'), /imagetools create|:latest/);
+
+  // The operator's tag would otherwise be a second way to move `latest` from any ref.
+  assert.match(
+    jobBlock(workflow, 'resolve').join('\n'),
+    /if \[\[ "\$tag" == "latest" \]\]; then\n\s+echo "::error::[^"]*"\n\s+exit 1/,
+  );
+
+  // `a && x || y` falls through to y when x is empty, which would hand one component the
+  // other's digest when its own scan failed.
+  const digestLines = job.filter((line) => line.includes('needs.push.outputs'));
+  assert.notDeepEqual(digestLines, []);
+  for (const line of digestLines) {
+    assert.doesNotMatch(line, /&&|\|\|/, `pick the digest by component, not with && / ||: ${line.trim()}`);
+  }
+});
+
+test('only the promote job can sign, and it runs no build or third-party step', () => {
+  // A step that holds `id-token: write` can obtain a certificate with this workflow's identity,
+  // so the token stays away from the image build, the scanner and their actions.
+  const workflow = fs.readFileSync(path.join(workflowDir, 'pushdockerimage.yml'), 'utf8');
+  const promote = jobBlock(workflow, 'promote').join('\n');
+  assert.match(promote, /^ {6}id-token: write$/m);
+  assert.match(promote, /^ {6}attestations: write$/m);
+
+  const elsewhere = workflow.replace(promote, '');
+  assert.notEqual(elsewhere, workflow);
+  assert.doesNotMatch(elsewhere, /^\s*(id-token|attestations):/m);
+  // `write-all` grants `id-token: write` too, in any job or at the top level.
+  assert.doesNotMatch(workflow, /^\s*permissions:\s*write-all\b/m);
+
+  // Every `uses:`, including local composite actions and docker:// images, which have no `@`.
+  const uses = [...promote.matchAll(/^\s*(?:- )?uses:\s*(\S+)/gm)].map((match) => match[1].split('@')[0]);
+  assert.deepEqual(uses, ['sigstore/cosign-installer', 'actions/attest']);
+});
+
 test('the DAST API scan sends its token and proves it', () => {
   const dast = fs.readFileSync(path.join(workflowDir, 'dast.yml'), 'utf8');
   // ZAP adds the auth header when the request's host name contains this value. A URL never
