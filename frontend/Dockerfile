@@ -207,63 +207,69 @@ RUN addgroup \
 #
 # Therefore, do not insert load_module directives manually.
 
-# Create the static HTML root and pre-create temp directories with correct
-# ownership. At runtime, the /var/cache/nginx tmpfs mount in docker-compose
-# hides these directories, so docker-entrypoint.sh recreates them on every
-# container start.
+# Temp root owned by the runtime user. nginx creates its *_temp directories
+# (nginx-main.conf) itself at startup, owned by the worker user, so they need not
+# exist in the image: docker-compose's tmpfs and the Kubernetes emptyDir over
+# /var/cache/nginx start empty anyway. Without either mount (a plain
+# `docker run`), this directory is where nginx creates them.
 # Note: Static assets in /usr/share/nginx/html remain owned by root:root (default)
 # with read-only permissions for defense-in-depth, ensuring the unprivileged
 # worker cannot modify or tamper with web assets even if exploited.
-RUN mkdir -p \
-        /usr/share/nginx/html \
-        /var/cache/nginx/client_temp \
-        /var/cache/nginx/proxy_temp \
-        /var/cache/nginx/fastcgi_temp \
-        /var/cache/nginx/uwsgi_temp \
-        /var/cache/nginx/scgi_temp \
-    && chown -R "${NGINX_UID}:${NGINX_GID}" \
-        /var/cache/nginx
-
 # Alpine's Brotli module file uses relative paths that resolve through
 # /var/lib/nginx. Replace them with the package's absolute, world-readable
 # module location so the unprivileged runtime user can load them.
-RUN sed -i \
+RUN install -d -o "${NGINX_UID}" -g "${NGINX_GID}" -m 0755 /var/cache/nginx \
+    && sed -i \
         -e 's#"modules/ngx_http_brotli_filter_module.so"#"/usr/lib/nginx/modules/ngx_http_brotli_filter_module.so"#' \
         -e 's#"modules/ngx_http_brotli_static_module.so"#"/usr/lib/nginx/modules/ngx_http_brotli_static_module.so"#' \
         /etc/nginx/modules/10_http_brotli.conf
 
+# The COPY instructions below use --link: each one becomes an independent layer
+# that BuildKit can reuse when an earlier layer changes. CI changes APK_BUST on
+# every build, which re-runs the package layer above; with --link the asset and
+# config layers keep their digests instead of being re-created on top of it.
+
 # Static web assets remain owned by root:root with read-only permissions for defense-in-depth.
-COPY --from=compression \
+COPY --link --from=compression \
     /assets/ \
     /usr/share/nginx/html/
 
 # Main process-level NGINX configuration
-COPY nginx-main.conf /etc/nginx/nginx.conf
+COPY --link nginx-main.conf /etc/nginx/nginx.conf
 
 # Your existing HTTP server block
-COPY nginx.conf /etc/nginx/http.d/default.conf
+COPY --link nginx.conf /etc/nginx/http.d/default.conf
 
 # CSP snippet generated in the compression stage. It carries the sha384 hashes of
 # the exact inline scripts baked into this image; nginx.conf includes it once, at
 # server level (add_header_inherit merge reaches every location). `RUN nginx -t` below fails the build if
 # this include is missing or the snippet is malformed.
-COPY --from=compression /csp.conf /etc/nginx/csp.conf
+COPY --link --from=compression /csp.conf /etc/nginx/csp.conf
 
 # Backend address and its resolver (Docker's embedded DNS by default). CI mounts a
 # static alternative over this file when the backend runs directly on the runner host.
-COPY nginx-upstream-server.conf /etc/nginx/upstream-server.conf
+COPY --link nginx-upstream-server.conf /etc/nginx/upstream-server.conf
 
 # Empty by default; a deployment behind an ingress mounts its own over this file
 # (see the comment at the top of nginx.conf's server block).
-COPY nginx-real-ip.conf /etc/nginx/real-ip.conf
+COPY --link nginx-real-ip.conf /etc/nginx/real-ip.conf
 
-# Startup entrypoint: recreates temp directories on every container start
-# (the /var/cache/nginx tmpfs mount hides image-layer directories), then
-# execs nginx. PID 1 becomes nginx so it receives signals correctly.
-COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/
+# Startup entrypoint: execs nginx (PID 1 becomes nginx so it receives signals
+# correctly), adding the `user` directive only when started as root.
+COPY --link --chmod=755 docker-entrypoint.sh /usr/local/bin/
 
 # Validate module loading and the complete configuration during the build.
-RUN nginx -t
+# The tmpfs keeps the temp directories nginx -t creates out of the image: run as
+# root, it created them owned by Alpine's `nginx` user (UID 100), which the
+# 10001 runtime user cannot write into when no volume is mounted over
+# /var/cache/nginx (large proxied responses then fail).
+RUN --mount=type=tmpfs,target=/var/cache/nginx nginx -t
+
+# The base image's labels describe Alpine; replace them with this image's
+# identity. The publish workflow adds version, revision and created.
+LABEL org.opencontainers.image.title="TaskFlow Frontend" \
+      org.opencontainers.image.description="TaskFlow Angular frontend served by Nginx" \
+      org.opencontainers.image.source="https://github.com/stefanf81/taskflow-enterprise"
 
 EXPOSE 8080
 
