@@ -151,7 +151,7 @@ dependencies {
 	implementation libs.log4j2.to.slf4j
 	// Netty (incl. netty-codec-dns, GHSA-mfg7-5gfp-c4w3), Tomcat embed (CVE-2026-68525,
 	// CVE-2026-65905, CVE-2026-65182), Hibernate, PgJDBC, SLF4J and Byte Buddy are no longer
-	// pinned here: the Spring Boot 4.1.3 BOM manages exactly the versions these overrides
+	// pinned here: the Spring Boot 4.2.0 BOM manages exactly the versions these overrides
 	// pinned (Netty 4.2.20.Final, Tomcat 11.0.27, Hibernate 7.4.15.Final, PgJDBC 42.7.14,
 	// SLF4J 2.0.20, Byte Buddy 1.18.17). Re-add a pin only if a fix lands before the BOM.
 	// Jackson — explicit pins so dependency tooling sees the correct versions
@@ -207,8 +207,8 @@ dependencies {
 	runtimeOnly libs.h2
 	// Transitive dependency pins — override versions brought in by the Spring Boot BOM or
 	// other transitive paths. Explicit declarations keep dependency tooling accurate.
-	//   - HikariCP:           BOM ships 7.0.2; pinned to 7.1.0.
-	//   - Lettuce:            BOM ships 7.5.2.RELEASE; pinned to the version catalog's release.
+	//   - HikariCP:           BOM ships 7.1.0, the same release; kept explicit.
+	//   - Lettuce:            BOM ships 7.8.0.RELEASE; pinned to the version catalog's release.
 	//   - semconv:            transitive via opentelemetry-exporter-otlp (BOM ships 1.41.1).
 	//   - nimbus-jose-jwt:    transitive via spring-security-oauth2-resource-server; pinned at
 	//                         or above the 10.9.1 security patch (BOM ships 10.9).
