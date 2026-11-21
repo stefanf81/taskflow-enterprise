@@ -14,6 +14,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 APP_SOURCE_REPO="$(python3 -I ci/app_config.py --name "$APP_NAME" --field source_repo)"
 APP_DOCKERFILE="$(python3 -I ci/app_config.py --name "$APP_NAME" --field dockerfile)"
 APP_BUILD_OUTPUTS="$(python3 -I ci/app_config.py --name "$APP_NAME" --field build_outputs)"
+# PoC: the application's folder inside its source repository ('.' = the root, as in the kit).
+APP_DIR="$(python3 -I ci/app_config.py --name "$APP_NAME" --field directory)"
+[[ "$APP_DIR" =~ ^[A-Za-z0-9_./-]+$ && "$APP_DIR" != /* && "$APP_DIR" != *..* ]] || exit 1
+APP_ROOT="application/$APP_DIR"
 [[ "$APP_COMMIT" =~ ^[a-f0-9]{40}$ ]] || { echo 'Expected full 40-character SHA1 commit' >&2; exit 1; }
 [[ "$APP_SOURCE_REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || exit 1
 [[ "$APP_DOCKERFILE" =~ ^[A-Za-z0-9_./-]+$ && "$APP_DOCKERFILE" != /* && "$APP_DOCKERFILE" != *../* ]] || exit 1
@@ -33,9 +37,9 @@ extract_source() {
 app_build() {
   : "${SOURCE_DATE_EPOCH:?}" "${BUILD_OUTPUT_TIMESTAMP:?}"
   extract_source
-  ( cd application && CI_SKIP_TESTS="${CI_SKIP_TESTS:-0}" ./ci/build_and_test.sh )
-  python3 -I scripts/artifact_manifest.py --root application --paths "$APP_BUILD_OUTPUTS" --output manifest.json
-  python3 -I ci/pack_outputs.py pack --root application --manifest manifest.json --tar outputs.tar
+  ( cd "$APP_ROOT" && CI_SKIP_TESTS="${CI_SKIP_TESTS:-0}" ./ci/build_and_test.sh )
+  python3 -I scripts/artifact_manifest.py --root "$APP_ROOT" --paths "$APP_BUILD_OUTPUTS" --output manifest.json
+  python3 -I ci/pack_outputs.py pack --root "$APP_ROOT" --manifest manifest.json --tar outputs.tar
 }
 
 image_build() {
@@ -44,13 +48,13 @@ image_build() {
   test -f compiled/manifest.json && test -f other/manifest.json
   cmp compiled/manifest.json other/manifest.json || { echo 'Independent source builds produced different artifacts' >&2; exit 1; }
   extract_source
-  python3 -I ci/pack_outputs.py unpack --root application --manifest compiled/manifest.json --tar compiled/outputs.tar
+  python3 -I ci/pack_outputs.py unpack --root "$APP_ROOT" --manifest compiled/manifest.json --tar compiled/outputs.tar
   mkdir -p image-evidence
-  python3 -I scripts/check_dockerfile_bases.py "application/$APP_DOCKERFILE" \
+  python3 -I scripts/check_dockerfile_bases.py "$APP_ROOT/$APP_DOCKERFILE" \
     --approved-prefix "$APPROVED_PREFIX" \
     --final-base-output image-evidence/final-base.txt > image-evidence/base-images.txt
   bash scripts/verify_bases.sh image-evidence/base-images.txt image-evidence
-  bash scripts/reproducible_build.sh application "application/$APP_DOCKERFILE" \
+  bash scripts/reproducible_build.sh "$APP_ROOT" "$APP_ROOT/$APP_DOCKERFILE" \
     "$LOCAL_IMAGE" "$SOURCE_DATE_EPOCH" image-evidence
   docker save -o application-image.tar "$LOCAL_IMAGE"
   (sha256sum application-image.tar > application-image.tar.sha256)

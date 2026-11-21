@@ -1,4 +1,4 @@
-"""Regression tests for the proof-of-concept changes (see README.md, "PoC changes").
+"""Regression tests for the proof-of-concept changes (see docs/KIT.md, "PoC changes").
 
   * self-approval switch (policy/config.json `allow_self_approval`, ci/environment_approver.py)
   * settings audit relaxed for a solo maintainer (ci/audit_repo_settings.py)

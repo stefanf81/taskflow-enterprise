@@ -1,15 +1,18 @@
 name: Release gate (PoC)
 
 # Stand-in for the external, independently secured release-authorization service the GHCR
-# image approval kit requires but does not supply. Dispatch it for the exact main HEAD of an
-# allowlisted application BEFORE dispatching the release in
-# stefanf81/base-image-gatekeeper-pipeline, and keep it running until that release has signed:
+# image approval kit requires but does not supply (code in release-gate/). Dispatch it for the
+# exact main HEAD BEFORE dispatching application-release.yml, and keep it running until that
+# release has signed:
 #   grant    re-issues a signed grant every 60 s while the commit is still main HEAD and the
-#            newest push run of the workflow file named in allowlist.json (ci.yml) succeeded;
+#            newest push run of the workflow file named in release-gate/allowlist.json
+#            (example-app-ci.yml) succeeded;
 #            publishes it on the orphan `grants` branch with lease-protected pushes
 #   (always) stops the loop and withdraws the grant when the run ends, fails or is
 #            cancelled (= revocation); a grant push still in flight cannot land afterwards
 # The private key lives only in the `release-gate` environment (deployment branch: main).
+# PoC: the gate shares this repository with the pipeline and the app, so whoever can change
+# main can also change the gate; an independent gate would live elsewhere.
 # Keep `minutes` long enough for the whole release (90, the maximum, by default) and cancel the
 # run once the release has signed.
 on:
@@ -19,7 +22,7 @@ on:
         description: Application repository (OWNER/NAME) listed in allowlist.json
         type: string
         required: true
-        default: stefanf81/base-image-gatekeeper-app
+        default: stefanf81/base-image-gatekeeper
       commit:
         description: Full 40-hex SHA of that repository's current main HEAD
         type: string
@@ -44,7 +47,8 @@ jobs:
     environment: release-gate
     timeout-minutes: 100
     permissions:
-      contents: write
+      contents: write   # push the grants branch
+      actions: read     # read the commit's CI workflow runs
     env:
       GH_TOKEN: ${{ github.token }}
       APP_REPOSITORY: ${{ inputs.repository }}
@@ -68,7 +72,7 @@ jobs:
             echo "Cancel this run to revoke the grant."
           } >> "$GITHUB_STEP_SUMMARY"
           # exec: the cancel signal must reach the loop itself, not a parent shell.
-          exec bash serve_grants.sh serve
+          exec bash release-gate/serve_grants.sh serve
       - name: Withdraw the grant
         if: always()
-        run: bash serve_grants.sh withdraw
+        run: bash release-gate/serve_grants.sh withdraw

@@ -20,8 +20,9 @@ import time
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-GATE_REPO = 'stefanf81/base-image-gatekeeper-release-gate'
-APP_REPO = 'stefanf81/base-image-gatekeeper-app'
+REPO_ROOT = ROOT.parent
+# One repository holds the pipeline, the app and the gate.
+GATE_REPO = APP_REPO = 'stefanf81/base-image-gatekeeper'
 SHA = 'a' * 40
 
 GH_STUB = r'''#!/usr/bin/env python3
@@ -40,7 +41,7 @@ elif '/actions/runs?' in path:
     ci = ((state / 'ci').read_text().split() if (state / 'ci').exists() else ['completed', 'success']) + [None]
     assert 'head_sha=' + os.environ['APP_COMMIT'] in path and 'event=push' in path and 'branch=main' in path, path
     print(json.dumps({'total_count': 1, 'workflow_runs': [
-        {'id': 7, 'path': '.github/workflows/ci.yml', 'head_sha': os.environ['APP_COMMIT'], 'event': 'push',
+        {'id': 7, 'path': '.github/workflows/example-app-ci.yml', 'head_sha': os.environ['APP_COMMIT'], 'event': 'push',
          'head_branch': 'main', 'status': ci[0], 'conclusion': ci[1],
          'created_at': '2026-11-20T10:00:00Z', 'repository': {'full_name': os.environ['APP_REPOSITORY']}}]}))
 else:
@@ -50,7 +51,7 @@ else:
 
 def workflow_step_script(name):
     """The `run: |` block of a step in release-gate.yml, as the runner writes it to a file."""
-    lines = (ROOT / '.github/workflows/release-gate.yml').read_text().splitlines()
+    lines = (REPO_ROOT / '.github/workflows/release-gate.yml').read_text().splitlines()
     start = next(i for i, line in enumerate(lines) if line.strip() == f'- name: {name}')
     run_at = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == 'run: |')
     indent = len(lines[run_at]) - len(lines[run_at].lstrip())
@@ -157,8 +158,8 @@ class ServeGrantsTests(unittest.TestCase):
         the loop; without it the shell would wait for a loop that never heard the signal."""
         step = self.dir / 'step.sh'
         step.write_text(workflow_step_script('Re-issue the grant every minute'))
-        self.assertIn('exec bash serve_grants.sh serve', step.read_text())
-        proc = self.start(['bash', '-e', str(step)], cwd=ROOT)
+        self.assertIn('exec bash release-gate/serve_grants.sh serve', step.read_text())
+        proc = self.start(['bash', '-e', str(step)], cwd=REPO_ROOT)
         self.wait_for_grant()
         proc.send_signal(signal.SIGINT)
         self.assertEqual(proc.wait(timeout=5), 130)

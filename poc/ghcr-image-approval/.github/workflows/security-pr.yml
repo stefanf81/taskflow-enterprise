@@ -45,3 +45,5 @@ jobs:
         run: |
           source .venv/bin/activate
           python3 -m unittest discover -s tests -p 'test_*.py' -v
+          python3 -m unittest discover -s release-gate/tests -v
+          python3 -m unittest discover -s base-gate/tests -v

@@ -1,24 +1,30 @@
-# base-image-gatekeeper-release-gate
+# Release gate (PoC)
 
 PoC stand-in for the **external release-authorization service** that the GHCR image approval
-kit (`stefanf81/base-image-gatekeeper-pipeline`) requires and does not supply. Its release workflow fetches
+kit requires and does not supply. The release workflow (`application-release.yml`) fetches
 `$RELEASE_GATE_URL/<commit>` twice, when the release starts and again just before it signs,
 and accepts only a signed grant issued at most 10 minutes earlier.
 
+It lives in the same repository as the pipeline and the app (`stefanf81/base-image-gatekeeper`).
+That weakens separation of duties: whoever can change `main` can also change the gate. An
+independent gate would live in a repository, or a service, of its own.
+
 ## What it does
 
-`release-gate.yml` runs in the `release-gate` environment, which holds the signing key. It is
-dispatched by hand with `repository`, `commit` and `minutes` (1–90, default 90: long enough
-for the whole release, cancel it once the release has signed). Every 60 seconds it:
+`.github/workflows/release-gate.yml` runs in the `release-gate` environment, which holds the
+signing key. It is dispatched by hand with `repository` (default: this repository), `commit`
+and `minutes` (1–90, default 90: long enough for the whole release, cancel it once the release
+has signed). Every 60 seconds it:
 
 1. reads the application's `main` HEAD and the commit's push workflow runs on `main` from the
    GitHub API (`actions/runs?head_sha=…&event=push&branch=main`);
 2. refuses, and withdraws any published grant, unless:
    - the commit **is** `main` HEAD;
    - for every gate check in `allowlist.json`, the newest push run of the named workflow
-     **file** (`.github/workflows/ci.yml`) on `main` of that repository succeeded. Matching the
-     file, not a job or check-run name, means another workflow's `test` job or a check-run
-     created through the API never counts;
+     **file** (`.github/workflows/example-app-ci.yml`: the CI base-image gate and the app's
+     tests) on `main` of that repository succeeded. Matching the file, not a job or check-run
+     name, means another workflow's `test` job or a check-run created through the API never
+     counts;
 3. signs a fresh record (`issue_grant.py`, `openssl dgst -sha256 -sign`, valid 15 minutes) and
    pushes it as the single file `<commit>` on the orphan `grants` branch.
 
@@ -30,7 +36,7 @@ at the release's next fetch. Only a finished run that did not succeed, or a move
 withdraws the grant and ends the run.
 
 The pipeline reads it from
-`https://raw.githubusercontent.com/stefanf81/base-image-gatekeeper-release-gate/refs/heads/grants/<commit>`,
+`https://raw.githubusercontent.com/stefanf81/base-image-gatekeeper/refs/heads/grants/<commit>`,
 so `RELEASE_GATE_URL` is that URL without `/<commit>`. raw.githubusercontent.com caches for up
 to 5 minutes; with the 60-second re-issue a fetched grant is at most about 6.5 minutes old.
 
@@ -52,21 +58,24 @@ empty branch: that is revocation.
    openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out gate.key
    openssl pkey -in gate.key -pubout -out gate.pub
    base64 -w0 gate.key   # -> secret GATE_PRIVATE_KEY_B64 of environment release-gate
-   base64 -w0 gate.pub   # -> secret RELEASE_GATE_PUBKEY_B64 of stefanf81/base-image-gatekeeper-pipeline
+   base64 -w0 gate.pub   # -> repository secret RELEASE_GATE_PUBKEY_B64
    ```
 
 2. Environment `release-gate`: deployment branches = custom policy `main`; secret
    `GATE_PRIVATE_KEY_B64`. Optionally a required reviewer, if each grant should need a click.
-3. *Settings → Actions → General → Workflow permissions*: leave read-only; the job asks for
-   `contents: write` itself (it only pushes the `grants` branch).
-4. Values the security repository needs: `RELEASE_GATE_ISSUER=base-image-gatekeeper-release-gate`,
+3. *Settings → Actions → General → Workflow permissions*: leave read-only. The job asks for
+   `contents: write` (it only pushes the `grants` branch) and `actions: read` (the CI runs)
+   itself.
+4. If a ruleset restricts branch creation, create the `grants` branch once by hand (any
+   content: the gate replaces it), or the first push is refused.
+5. Repository variables the release needs: `RELEASE_GATE_ISSUER=base-image-gatekeeper-release-gate`,
    `RELEASE_GATE_SCHEMA=https://example.org/verified-release/v1`,
    `RELEASE_REQUIRED_CHECKS=tests` (the gate check names in `allowlist.json`).
 
 ## Tests
 
-`python3 -m unittest discover -s tests` (needs python3, openssl, bash and git; about half a
-minute); the same runs in `test.yml`. `tests/test_serve_grants.py` runs the publishing loop
+`python3 -m unittest discover -s release-gate/tests` from the repository root (needs python3,
+openssl, bash and git; about half a minute); `security-pr.yml` runs the same. `tests/test_serve_grants.py` runs the publishing loop
 against a local repository and a stub `gh`. It covers:
 - the real workflow step stopping on SIGINT;
 - withdraw stopping a running loop;
@@ -79,8 +88,10 @@ against a local repository and a stub `gh`. It covers:
 ## Limits (PoC)
 
 - The grant is public; it only says "this commit may be released" and carries no secret.
-- The key sits in a GitHub environment of a repository you control: this separates duties
-  from the security repository, but it is not an independently operated service.
+- The key sits in a GitHub environment of the same repository as the pipeline: it is not an
+  independently operated service.
+- A merge to `main` moves the HEAD, so the gate refuses and withdraws. Do not merge anything
+  while a release is running.
 - A cached `404` (fetched before the first grant was pushed) can be served for up to
   5 minutes: wait for the first "re-issued" log line before dispatching the release.
 - Withdrawal empties the branch at once, but a copy cached by raw.githubusercontent.com can

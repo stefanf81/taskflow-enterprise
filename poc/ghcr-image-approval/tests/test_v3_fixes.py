@@ -398,7 +398,7 @@ class Finding5ApplicationAllowlistTests(unittest.TestCase):
 
     def test_shipped_allowlist_resolves(self):
         result = appcfg.resolve(ROOT / 'policy/applications.json', 'example-app')
-        self.assertEqual(result['source_repo'], 'stefanf81/base-image-gatekeeper-app')
+        self.assertEqual(result['source_repo'], 'stefanf81/base-image-gatekeeper')
 
     def test_rejections(self):
         good = {'source_repo': 'acme/one', 'dockerfile': 'Dockerfile', 'build_outputs': 'target/one.jar'}

@@ -733,11 +733,11 @@ class Finding9DocumentationTests(unittest.TestCase):
         self.assertIn(f'`{policy["version"]}` (current)', migration)
         self.assertNotIn('`2026-11-ghcr-v3` (current)', migration)
         self.assertNotIn('only accepts `2026-11-ghcr-v4`', migration)
-        self.assertTrue((ROOT / 'README.md').read_text().startswith(
+        self.assertTrue((ROOT / 'docs/KIT.md').read_text().startswith(
             '# GitHub Actions + GitHub Container Registry (GHCR) image approval — v6'))
 
     def test_docs_do_not_ask_for_removed_steps(self):
-        for name in ('README.md', 'docs/SETUP.md', 'docs/V4-HARDENING.md'):
+        for name in ('README.md', 'docs/KIT.md', 'RUNBOOK.md', 'docs/SETUP.md', 'docs/V4-HARDENING.md'):
             text = (ROOT / name).read_text()
             self.assertNotIn('REPLACE_WITH', text)
             self.assertNotRegex(text, r'(?i)populate \*\*crane\*\*|supplying independently checked release asset URLs')

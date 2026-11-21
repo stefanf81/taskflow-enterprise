@@ -11,10 +11,15 @@ Every job of the release run checks out the same security-repository commit, so 
 resolves the same entry itself; nothing about the application travels between jobs as
 unchecked text.
 
+PoC: an optional `directory` names the application's folder inside source_repo (default `.`,
+the repository root, as in the kit). It lets the application live in the same repository as
+this pipeline; `dockerfile` and `build_outputs` are relative to that folder, and its
+`ci/build_and_test.sh` is run from there.
+
 Usage: app_config.py --name APP [--allowlist policy/applications.json]
-                     [--field source_repo|dockerfile|build_outputs] [--github-output FILE]
+                     [--field source_repo|dockerfile|build_outputs|directory] [--github-output FILE]
 Without --field prints (and appends to --github-output) lines name=..., source_repo=...,
-dockerfile=..., build_outputs=...; with --field prints only that value.
+dockerfile=..., build_outputs=..., directory=...; with --field prints only that value.
 """
 import argparse
 import json
@@ -39,9 +44,15 @@ def resolve(allowlist, name):
     entry = data['applications'].get(name)
     if not isinstance(entry, dict):
         raise ValueError(f'application {name!r} is not in the protected allowlist')
-    if set(entry) != {'source_repo', 'dockerfile', 'build_outputs'}:
-        raise ValueError('allowlist entry must have exactly source_repo, dockerfile and build_outputs')
+    required = {'source_repo', 'dockerfile', 'build_outputs'}
+    if not required <= set(entry) or set(entry) - required - {'directory'}:
+        raise ValueError('allowlist entry must have exactly source_repo, dockerfile and build_outputs '
+                         '(and optionally directory)')
     repo, dockerfile, outputs = entry['source_repo'], entry['dockerfile'], entry['build_outputs']
+    directory = entry.get('directory', '.')
+    if (not isinstance(directory, str) or not OUTPUT.fullmatch(directory) or directory.startswith('/')
+            or '..' in directory.split('/') or directory.endswith('/')):
+        raise ValueError('directory must be a relative path inside the repository')
     if not isinstance(repo, str) or not REPO.fullmatch(repo):
         raise ValueError('source_repo must be owner/name')
     if (not isinstance(dockerfile, str) or not OUTPUT.fullmatch(dockerfile) or dockerfile.startswith('/')
@@ -53,7 +64,7 @@ def resolve(allowlist, name):
         if not OUTPUT.fullmatch(path) or path.startswith('/') or '..' in path.split('/'):
             raise ValueError(f'unsafe build output path {path!r}')
     return {'name': name, 'source_repo': repo, 'dockerfile': dockerfile,
-            'build_outputs': ' '.join(re.split(r'[,\s]+', outputs.strip()))}
+            'build_outputs': ' '.join(re.split(r'[,\s]+', outputs.strip())), 'directory': directory}
 
 
 def main():
@@ -61,7 +72,7 @@ def main():
     p.add_argument('--name', required=True)
     p.add_argument('--allowlist', default='policy/applications.json')
     p.add_argument('--github-output')
-    p.add_argument('--field', choices=['source_repo', 'dockerfile', 'build_outputs'])
+    p.add_argument('--field', choices=['source_repo', 'dockerfile', 'build_outputs', 'directory'])
     a = p.parse_args()
     try:
         result = resolve(a.allowlist, a.name)

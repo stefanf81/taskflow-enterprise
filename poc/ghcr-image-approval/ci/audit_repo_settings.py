@@ -57,6 +57,7 @@ ENVIRONMENTS = (
     'application-source-read', 'ghcr-read-only', 'ghcr-candidate-writer',
     'application-high-cve-review', 'ghcr-application-promoter',
     'independent-verification', 'ghcr-application-signing',
+    'release-gate',   # PoC: the release gate's signing key (release-gate.yml)
 )
 REVIEWER_ENVIRONMENTS = ('base-manual-approval', 'application-high-cve-review')
 ADMIN_REPOSITORY_ROLE_ID = 5   # built-in "admin" repository role in ruleset bypass lists

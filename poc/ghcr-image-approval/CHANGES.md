@@ -250,7 +250,7 @@ or Kyverno.
 # PoC changes, applied after v6 (2026-11-20)
 
 Applied to the v6 kit for a first live run on a personal account; see the "PoC changes"
-table in README.md for every file touched. When `allow_self_approval` is false, approval and
+table in docs/KIT.md for every file touched. When `allow_self_approval` is false, approval and
 audit behave as in the kit. Additions: a bootstrap workflow for the first baseline.
 
 ## Review fixes (2026-11-21)
@@ -269,3 +269,24 @@ audit behave as in the kit. Additions: a bootstrap workflow for the first baseli
 - `ci/bootstrap_base.sh`: refuses before any write when a usable approval exists (with the
   consumers' age and version limits); upstream lookups fail with the tool's own error.
 - `application-release.yml`: `authorize` reports a failed HEAD lookup as such.
+
+## Single repository and CI base-image gate (2026-11-21)
+
+- One repository, `stefanf81/base-image-gatekeeper`, now holds the kit (at the root, as in
+  the kit), `example-app/` and `release-gate/`. The kit README moved to `docs/KIT.md`.
+- `ci/app_config.py`, `ci/application_pipeline.sh`: an application entry may name a
+  `directory` inside its source repository (default `.`). The app is built and checked from
+  `application/<directory>`.
+- `application-release.yml`: `authorize` uses `APPLICATION_READ_TOKEN` when set, else the
+  job's `GITHUB_TOKEN`.
+- `ci/audit_repo_settings.py`: the `release-gate` environment is audited too.
+- New `base-gate/` with the job `base-image-gate` in `example-app-ci.yml`:
+  - It runs on every pull request and push to `main`, and compares each digest-pinned base
+    with the one pinned on `main`, using the unchanged `scripts/compare.sh`,
+    `scripts/evaluate.py` and `policy/config.json`.
+  - Block or attention findings fail the build; the `test` job needs the gate. Only an
+    unexpired acceptance in `base-gate/config.json` for the exact new image clears attention
+    findings, never blocks.
+- `release-gate.yml`: the grant job asks for `actions: read` to read the CI runs.
+- `security-pr.yml`, `ci/validate-local.sh`: also run the `base-gate/` and `release-gate/`
+  suites.

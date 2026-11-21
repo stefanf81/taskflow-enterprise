@@ -44,7 +44,8 @@ env:
 jobs:
   # The ONLY job holding APPLICATION_READ_TOKEN: resolves the allowlisted app, checks the
   # commit is the app's main HEAD, verifies the release gate and hands the exact source on
-  # as a hash-pinned `git archive`.
+  # as a hash-pinned `git archive`. PoC: the example app lives in THIS public repository, so
+  # without that secret the job's own read-only token is used.
   authorize:
     environment: application-source-read
     if: github.ref == 'refs/heads/main'
@@ -72,7 +73,7 @@ jobs:
       - name: Verify source HEAD and external release-gate signature
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.APPLICATION_READ_TOKEN }}
+          GH_TOKEN: ${{ secrets.APPLICATION_READ_TOKEN || github.token }}
           GATE_PUBLIC_KEY_B64: ${{ secrets.RELEASE_GATE_PUBKEY_B64 }}
           APP_SOURCE_REPO: ${{ steps.app.outputs.source_repo }}
         run: |
@@ -104,7 +105,7 @@ jobs:
           repository: ${{ steps.app.outputs.source_repo }}
           ref: ${{ inputs.app_commit }}
           path: application
-          token: ${{ secrets.APPLICATION_READ_TOKEN }}
+          token: ${{ secrets.APPLICATION_READ_TOKEN || github.token }}
           persist-credentials: false
       - name: Archive the exact authorized source
         id: source

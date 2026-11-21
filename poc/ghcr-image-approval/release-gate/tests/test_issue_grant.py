@@ -13,9 +13,9 @@ spec = importlib.util.spec_from_file_location('issue_grant', ROOT / 'issue_grant
 gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 
-REPO = 'stefanf81/base-image-gatekeeper-app'
+REPO = 'stefanf81/base-image-gatekeeper'
 SHA = 'a' * 40
-CI = '.github/workflows/ci.yml'
+CI = '.github/workflows/example-app-ci.yml'
 
 
 def run(conclusion='success', path=CI, sha=SHA, status='completed', event='push', branch='main',
@@ -45,7 +45,7 @@ class EvaluateTests(unittest.TestCase):
             'not the main HEAD': (REPO, SHA, 'b' * 40, answer(run())),
             'not in the gate allowlist': ('someone/else', SHA, SHA, answer(run())),
             'full lowercase': (REPO, SHA.upper(), SHA.upper(), answer(run())),
-            'no push run of .github/workflows/ci.yml': (REPO, SHA, SHA, answer()),
+            'no push run of .github/workflows/example-app-ci.yml': (REPO, SHA, SHA, answer()),
             'is completed/failure': (REPO, SHA, SHA, answer(run(conclusion='failure'))),
             'partial list': (REPO, SHA, SHA, {'total_count': 101, 'workflow_runs': [run()]}),
         }

@@ -71,6 +71,11 @@ Set repository **variables** (not credentials):
 - `APPLICATION_READ_TOKEN`: read-only token for **private application source checkout**, **only** in the `application-source-read` environment (used by the `authorize` job alone). It must be able to read every allowlisted application repository - a fine-grained token limited to those repositories with `Contents: read`. Rotate it in that one place. Later jobs receive the source as a hash-checked `git archive` (no `.git`); builds read `APP_COMMIT`, `SOURCE_DATE_EPOCH` and `BUILD_OUTPUT_TIMESTAMP` instead of running git.
 - `RELEASE_GATE_PUBKEY_B64`, `VERIFIER_PRIVATE_KEY_B64`, `VERIFIER_PUBLIC_KEY_B64`: gate and independently protected scanner decision.
 - `APP_COSIGN_KEY_B64`, `APP_COSIGN_PUBKEY_B64`: application signing keys.
+- `GATE_PRIVATE_KEY_B64` (PoC): the release gate's signing key, only in the `release-gate`
+  environment used by `.github/workflows/release-gate.yml` (code in `release-gate/`). Its public
+  half is `RELEASE_GATE_PUBKEY_B64`. In this single-repository PoC, `APPLICATION_READ_TOKEN` is
+  optional: without it `authorize` reads the example app (in this same public repository) with
+  the job's own read-only token.
 
 Do **not** create Harbor-style `GHCR_*_USER/PASS` secrets: this GHCR variant uses job-specific GitHub tokens. The approval and signing keys are **not** supplied to image builders or the candidate scanner.
 

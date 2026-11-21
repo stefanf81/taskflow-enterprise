@@ -19,7 +19,8 @@ class WorkflowSecurityTests(unittest.TestCase):
         cls.files={f.name:yaml.safe_load(f.read_text()) for f in WF.glob('*.yml')}
 
     def test_every_workflow_parses(self):
-        self.assertEqual(set(self.files),{'application-release.yml','base-bootstrap.yml','base-image-approval.yml','security-pr.yml'})
+        self.assertEqual(set(self.files),{'application-release.yml','base-bootstrap.yml','base-image-approval.yml','example-app-ci.yml',
+                                             'release-gate.yml','security-pr.yml'})
         for name,d in self.files.items():
             self.assertTrue(d['jobs'],name)
 

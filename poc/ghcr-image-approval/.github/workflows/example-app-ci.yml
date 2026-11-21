@@ -1,0 +1,103 @@
+name: Example app tests (no publishing secrets)
+
+# Two jobs, on every pull request and every push to main:
+#   base-image-gate  compares every digest-pinned base image (base-gate/config.json) of this
+#                    commit with the one on main and FAILS on block or attention findings
+#                    (base-gate/README.md). Unchanged pins cost a few seconds.
+#   test             builds and tests example-app/; needs the gate, so a failed gate fails
+#                    the build.
+# The release gate (release-gate/) issues a grant only for the exact main HEAD whose newest
+# push run of THIS workflow file succeeded, so it runs on EVERY push to main (no path filter:
+# a commit without a run here cannot be released). Renaming or moving the file means updating
+# release-gate/allowlist.json.
+# Publishing happens elsewhere: application-release.yml builds the app from a hash-pinned
+# source archive of the released commit. Do not add signing keys, GHCR write credentials or
+# privileged workflow_run / pull_request_target jobs here.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  base-image-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    # READ-ONLY: this job parses untrusted image content (diffoci, Syft, Grype, inventory).
+    permissions:
+      contents: read
+      packages: read
+    env:
+      GHCR_HOST: ghcr.io
+      GHCR_USER: ${{ github.actor }}
+      GHCR_PASS: ${{ github.token }}
+      EVENT_NAME: ${{ github.event_name }}
+      PUSH_BEFORE: ${{ github.event.before }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The baseline commit must be in the clone (a push can span several commits).
+          fetch-depth: 0
+      - name: Plan (which base-image pins does this change move?)
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Pull request: actions/checkout tests the merge commit; its first parent is the
+          # main it would land on. Push to main: the commit before the push.
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            base="$(git rev-parse HEAD^1)"
+          else
+            base="$PUSH_BEFORE"
+          fi
+          python3 -I base-gate/plan.py --base-rev "$base" --output "$RUNNER_TEMP/plan.json"
+          count="$(jq '.comparisons | length' "$RUNNER_TEMP/plan.json")"
+          echo "compare=$([[ "$count" -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Install exact SHA-256-pinned security tools (base)
+        if: steps.plan.outputs.compare == 'true'
+        shell: bash
+        run: python3 -I ci/install_verified_tools.py --kind base
+      - name: Compare moved pins with their baseline (never runs image contents)
+        if: steps.plan.outputs.compare == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          bash ci/require_tools.sh base
+          printf '%s' "$GHCR_PASS" | crane auth login "$GHCR_HOST" --username "$GHCR_USER" --password-stdin
+          bash base-gate/compare_all.sh "$RUNNER_TEMP/plan.json" reports
+      - name: Decide (block or attention findings fail the build)
+        if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I base-gate/decide.py --plan "$RUNNER_TEMP/plan.json" --reports reports \
+            --summary "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() && steps.plan.outputs.compare == 'true' }}
+        with:
+          name: base-image-gate-evidence
+          path: reports/
+          if-no-files-found: warn
+          retention-days: 30
+
+  test:
+    needs: base-image-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: example-app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Reproducible build and tests
+        run: |
+          set -euo pipefail
+          test -x ci/build_and_test.sh
+          ./ci/build_and_test.sh
