@@ -8,8 +8,8 @@ This is a **GHCR adaptation** of the GitHub Actions / Harbor reference. What cha
 
 This copy runs the v6 kit with the changes below and nothing else. They are what a first live
 run on a personal GitHub account needs, plus fixes from two code reviews. The setup runbook and
-run order are in the hand-off README of the folder this repository was exported from
-(`poc/ghcr-image-approval/README.md` in taskflow-enterprise). Every file listed differs from the
+run order are in the README of the source repository this one was exported from
+(`stefanf81/ghcr-approval-poc-source`). Every file listed differs from the
 kit; every other file is byte-identical.
 
 | Change | Why |

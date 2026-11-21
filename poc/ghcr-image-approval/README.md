@@ -1,9 +1,10 @@
 # GHCR image approval: proof of concept
 
-A live test of the uploaded kit `ghcr-image-approval-github-actions-v6-fixed` on GitHub
-Actions and GHCR, in three new public repositories. Nothing in TaskFlow uses it. The folders
-here are a hand-off: export each one into its own repository (step 2). They are not meant to
-be merged into taskflow-enterprise.
+A live test of the kit `ghcr-image-approval-github-actions-v6-fixed` on GitHub Actions and
+GHCR, releasing a small example Java app. The pipeline needs three repositories: the release
+job must check the app out from a repository of its own, and the release gate holds its own
+key. This source repository (`stefanf81/ghcr-approval-poc-source`) keeps all three side by side
+with their history. Step 2 exports each folder into its working repository.
 
 | Folder | Repository | What it is |
 | --- | --- | --- |
@@ -69,7 +70,7 @@ Create three **empty public** repositories with the names above: no README, no l
 in a scratch directory:
 
 ```bash
-git clone --branch claude/nice-knuth-o684a3 https://github.com/stefanf81/taskflow-enterprise.git poc-export
+git clone https://github.com/stefanf81/ghcr-approval-poc-source.git poc-export
 ```
 
 ```bash
@@ -79,7 +80,7 @@ cd poc-export
 ```bash
 for pair in security-pipelines:ghcr-approval-poc example-app:ghcr-approval-poc-app release-gate:ghcr-approval-poc-gate; do
   folder="${pair%%:*}"; repo="${pair##*:}"
-  git subtree split --prefix="poc/ghcr-image-approval/$folder" -b "export-$folder"
+  git subtree split --prefix="$folder" -b "export-$folder"
   git push "https://github.com/stefanf81/$repo.git" "export-$folder:main"
 done
 ```
@@ -349,16 +350,3 @@ tag.
 | Date | Step / test | Run URL | Result | Notes |
 | --- | --- | --- | --- | --- |
 | | | | | |
-
-## 9. What this would mean for TaskFlow
-
-Only after the toy run is green, and as a separate decision:
-
-- **Backend:** possible only as a reduced release image, a separate `Dockerfile.release` built
-  offline on an approved Temurin 25 base. It would have no tini, no build-time `apt-get
-  upgrade`, no AOT cache (unlikely to be byte-identical across two builders) and no `useradd`.
-  The jar would be the fat bootJar rather than the layered extract, copied with `--chmod`. The
-  kit's single-base catalog would move to `25-jre-resolute`.
-- **Frontend:** not feasible with the kit as is. Hashed bundle names cannot be listed as
-  `build_outputs`, and nginx, brotli and the package refresh need `apk` with network.
-- Today's `pushdockerimage.yml` and Dockerfiles would stay as they are until that decision.
