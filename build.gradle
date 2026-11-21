@@ -209,9 +209,10 @@ dependencies {
 	// other transitive paths. Explicit declarations keep dependency tooling accurate.
 	//   - HikariCP:           BOM ships 7.1.0, the same release; kept explicit.
 	//   - Lettuce:            BOM ships 7.8.0.RELEASE; pinned to the version catalog's release.
-	//   - semconv:            transitive via opentelemetry-exporter-otlp (BOM ships 1.41.1).
-	//   - nimbus-jose-jwt:    transitive via spring-security-oauth2-resource-server; pinned at
-	//                         or above the 10.9.1 security patch (BOM ships 10.9).
+	//   - semconv:            transitive via micrometer-tracing-bridge-otel (Micrometer Tracing
+	//                         1.8.0 brings 1.45.0, the same release); kept explicit.
+	//   - nimbus-jose-jwt:    transitive via spring-security-oauth2-jose; pinned at or above the
+	//                         10.9.1 security patch (Spring Security 7.2.0 brings 10.9.1).
 	//   - error_prone_*:      transitive annotation lib (not managed by the Boot BOM); pinned
 	//                         so every path resolves the same release.
 	implementation libs.hikari

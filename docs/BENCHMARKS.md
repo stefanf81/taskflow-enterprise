@@ -3010,3 +3010,22 @@ Script time is Chrome's `ScriptDuration`, main-thread tasks `TaskDuration`, both
 | Redis `PTTL` calls in the same 12 s loads | 393,699 / 423,139 | 235,146 / 233,927 | about one per request instead of two |
 
 **Tests.** `TokenRevocationListRedisTest`: an answer reused while the generation is unchanged; another replica's revocation found at the next generation read without its announcement; local and announced revocations denied at once despite a cached answer; no cache without a fresh read, after a failed read, or when Redis could not be asked; at most one generation read per interval; a generation that went back to 0 (Redis lost its data) is a change. The four write tests now check the atomic script. `AbstractRedisSecurityStateTest` (real Redis, `TASKFLOW_TEST_REDIS_URL`): replica B caches "not revoked", replica A revokes without announcing, B denies the token after its next read, and the generation went up by exactly one. ADR-023 amended; the rule for new denylist writes is in `docs/agents/security.md`.
+
+## 📦 83. Angular 22.3 Folds the Initial Chunks into `main.js` (2026-11-21)
+
+**Change.** Angular 22.3.0's chunk optimizer (`@angular/build`, rolldown 1.3.1) now puts every module statically reachable from the initial entry point into the `main` chunk (`codeSplitting.groups: [{ name: 'main', tags: ['$initial'] }]`), to avoid initial chunks the browser only discovers after another one has loaded. Shared chunks used only by lazy routes stay separate.
+
+| `npm run build`, production configuration | Angular 22.2.7 | Angular 22.3.0 |
+| :--- | ---: | ---: |
+| Initial files | `main` + 3 shared chunks + styles | `main` + styles |
+| `main.js`, raw | 121.01 kB | 397.08 kB |
+| Largest initial file, raw | 201.20 kB (shared chunk) | 397.08 kB (`main.js`) |
+| Initial total, raw | 437.42 kB | 443.11 kB (+1.3%) |
+| Initial total, estimated transfer | 120.00 kB | 116.38 kB (−3.0%) |
+| Lazy chunks (admin dashboard, customer portal, modals, FAQ, lookbook, ...) | 69.86 kB largest | 69.51 kB largest, otherwise unchanged |
+
+**Consequences.**
+
+* The per-file `any` budget (250/300 kB) failed on `main.js`; it is now **420/450 kB**. The `initial` budget (450/470 kB) is what bounds first-load size, and the initial total is 7 kB under its warning. The `any` budget now allows a lazy chunk to reach 450 kB before the build fails.
+* **Caching trade-off:** the framework code was a separate ~200 kB chunk that stayed cached across deploys that only changed application code. It is now part of `main.js`, so any change to `main.js` re-downloads it.
+* Not measured here: FCP/LCP on slow 4G and the `landing-stability` / `early-interaction` Playwright specs (they need the full stack). Re-measure the §60/§63 slow-4G numbers before treating the change as neutral.
