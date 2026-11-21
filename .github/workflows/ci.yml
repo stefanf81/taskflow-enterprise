@@ -301,6 +301,9 @@ jobs:
         run: node --test .github/scripts/workflow-policy.test.cjs
 
       - name: Lint workflows
+        env:
+          # actionlint-image: tracked by the dedicated regex manager in .github/renovate.json
+          ACTIONLINT_IMAGE: "rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
         run: |
           set -euo pipefail
           # `-shellcheck=` disables actionlint's optional shellcheck pass on
@@ -311,7 +314,7 @@ jobs:
           docker run --rm \
             --volume "$PWD:/repo" \
             --workdir /repo \
-            rhysd/actionlint:1.7.12 \
+            "$ACTIONLINT_IMAGE" \
             -color \
             -shellcheck=
 

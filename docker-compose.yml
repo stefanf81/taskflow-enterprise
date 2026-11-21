@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:18.7-alpine
+    image: postgres:18.7-alpine@sha256:ff64c9e3bdf8e2120107d3559de8db314e8305f7e38c5105903c6295876738ff
     container_name: taskflow-db
     command:
       - "postgres"
@@ -217,7 +217,7 @@ services:
         max-file: "3"
 
   redis:
-    image: redis:8.10.3-alpine
+    image: redis:8.10.3-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
     container_name: taskflow-redis
     command:
       - "redis-server"
@@ -297,7 +297,7 @@ services:
         max-file: "3"
 
   jaeger:
-    image: jaegertracing/jaeger:2.23.0
+    image: jaegertracing/jaeger:2.23.0@sha256:3823829974ccfc2485d2e48b165579091f32295022ae80ca49704e2f4834116e
     container_name: taskflow-jaeger
     profiles: ["observability"]
     # Loopback only. The compose backend exports to jaeger:4318 over backend-tier; the

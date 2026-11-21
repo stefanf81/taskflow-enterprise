@@ -115,10 +115,6 @@ jobs:
               - '**/*.test.ts'
               - '**/*.test.tsx'
 
-      - name: Autobuild
-        if: matrix.build-mode == 'autobuild'
-        uses: github/codeql-action/autobuild@v4
-
       # Manual build for java-kotlin: the same compile tasks autobuild runs
       # (`testClasses`), but in a single Gradle invocation. Autobuild spends a
       # full extra `--no-daemon` JVM + configuration phase (~13 s) on a
