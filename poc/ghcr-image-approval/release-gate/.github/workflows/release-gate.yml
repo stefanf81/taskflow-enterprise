@@ -2,8 +2,8 @@ name: Release gate (PoC)
 
 # Stand-in for the external, independently secured release-authorization service the GHCR
 # image approval kit requires but does not supply. Dispatch it for the exact main HEAD of an
-# allowlisted application BEFORE dispatching the release in stefanf81/ghcr-approval-poc, and
-# keep it running until that release has signed:
+# allowlisted application BEFORE dispatching the release in
+# stefanf81/base-image-gatekeeper-pipeline, and keep it running until that release has signed:
 #   grant    re-issues a signed grant every 60 s while the commit is still main HEAD and the
 #            newest push run of the workflow file named in allowlist.json (ci.yml) succeeded;
 #            publishes it on the orphan `grants` branch with lease-protected pushes
@@ -19,7 +19,7 @@ on:
         description: Application repository (OWNER/NAME) listed in allowlist.json
         type: string
         required: true
-        default: stefanf81/ghcr-approval-poc-app
+        default: stefanf81/base-image-gatekeeper-app
       commit:
         description: Full 40-hex SHA of that repository's current main HEAD
         type: string

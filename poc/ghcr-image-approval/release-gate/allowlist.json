@@ -1,8 +1,8 @@
 {
-  "issuer": "stefanf81-poc-release-gate",
+  "issuer": "base-image-gatekeeper-release-gate",
   "record_schema": "https://example.org/verified-release/v1",
   "repositories": {
-    "stefanf81/ghcr-approval-poc-app": {
+    "stefanf81/base-image-gatekeeper-app": {
       "checks": {
         "tests": ".github/workflows/ci.yml"
       }

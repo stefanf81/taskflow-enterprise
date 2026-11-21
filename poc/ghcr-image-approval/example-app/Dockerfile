@@ -1,4 +1,4 @@
-# Built ONLY by the central release pipeline (stefanf81/ghcr-approval-poc,
+# Built ONLY by the central release pipeline (stefanf81/base-image-gatekeeper-pipeline,
 # application-release.yml), offline and twice, from an approved and signed base.
 # The digest is the one pinned in that repository's catalog/Dockerfile.temurin: base approval
 # copies the upstream index byte for byte, so the approved digest equals the upstream one.

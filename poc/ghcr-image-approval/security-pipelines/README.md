@@ -9,13 +9,13 @@ This is a **GHCR adaptation** of the GitHub Actions / Harbor reference. What cha
 This copy runs the v6 kit with the changes below and nothing else. They are what a first live
 run on a personal GitHub account needs, plus fixes from two code reviews. The setup runbook and
 run order are in the README of the source repository this one was exported from
-(`stefanf81/ghcr-approval-poc-source`). Every file listed differs from the
+(`stefanf81/base-image-gatekeeper`). Every file listed differs from the
 kit; every other file is byte-identical.
 
 | Change | Why |
 |---|---|
 | `catalog/Dockerfile.temurin` pins `eclipse-temurin:21-jre-resolute@sha256:577acb7a…` | The kit shipped it unpinned, which stops the precheck |
-| `policy/applications.json`: `example-app` comes from `stefanf81/ghcr-approval-poc-app` | The toy application repository |
+| `policy/applications.json`: `example-app` comes from `stefanf81/base-image-gatekeeper-app` | The toy application repository |
 | `policy/config.json`: `"allow_self_approval": true`; `ci/environment_approver.py --policy` | Solo maintainer. The initiator may approve; the approver is recorded as `self:<login>` in every signed record. Part of the base fingerprint; default strict |
 | `ci/audit_repo_settings.py` | With the switch on, "Prevent self-review" and a PR approval count of 0 are accepted (nobody can meet them alone); stale-review dismissal stays required whenever approvals are required, everything else is unchanged. The switch is read from `policy/config.json` on the audited repository's `main`; `--policy FILE` overrides that and says so |
 | `.github/workflows/base-bootstrap.yml`, `ci/bootstrap_base.sh`, `scripts/approval_record.py --bootstrap` | The first approved baseline. Its record has `"bootstrap": true` and no fingerprint, so it is a comparison baseline only: the precheck and `scripts/verify_bases.sh` refuse it until the normal pipeline has evaluated and approved the digest. Refuses, before writing anything, when a baseline or a usable approval already exists |

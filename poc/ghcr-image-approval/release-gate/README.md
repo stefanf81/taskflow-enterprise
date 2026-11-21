@@ -1,7 +1,7 @@
-# ghcr-approval-poc-gate
+# base-image-gatekeeper-release-gate
 
 PoC stand-in for the **external release-authorization service** that the GHCR image approval
-kit (`stefanf81/ghcr-approval-poc`) requires and does not supply. Its release workflow fetches
+kit (`stefanf81/base-image-gatekeeper-pipeline`) requires and does not supply. Its release workflow fetches
 `$RELEASE_GATE_URL/<commit>` twice, when the release starts and again just before it signs,
 and accepts only a signed grant issued at most 10 minutes earlier.
 
@@ -30,7 +30,7 @@ at the release's next fetch. Only a finished run that did not succeed, or a move
 withdraws the grant and ends the run.
 
 The pipeline reads it from
-`https://raw.githubusercontent.com/stefanf81/ghcr-approval-poc-gate/refs/heads/grants/<commit>`,
+`https://raw.githubusercontent.com/stefanf81/base-image-gatekeeper-release-gate/refs/heads/grants/<commit>`,
 so `RELEASE_GATE_URL` is that URL without `/<commit>`. raw.githubusercontent.com caches for up
 to 5 minutes; with the 60-second re-issue a fetched grant is at most about 6.5 minutes old.
 
@@ -52,14 +52,14 @@ empty branch: that is revocation.
    openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out gate.key
    openssl pkey -in gate.key -pubout -out gate.pub
    base64 -w0 gate.key   # -> secret GATE_PRIVATE_KEY_B64 of environment release-gate
-   base64 -w0 gate.pub   # -> secret RELEASE_GATE_PUBKEY_B64 of stefanf81/ghcr-approval-poc
+   base64 -w0 gate.pub   # -> secret RELEASE_GATE_PUBKEY_B64 of stefanf81/base-image-gatekeeper-pipeline
    ```
 
 2. Environment `release-gate`: deployment branches = custom policy `main`; secret
    `GATE_PRIVATE_KEY_B64`. Optionally a required reviewer, if each grant should need a click.
 3. *Settings → Actions → General → Workflow permissions*: leave read-only; the job asks for
    `contents: write` itself (it only pushes the `grants` branch).
-4. Values the security repository needs: `RELEASE_GATE_ISSUER=stefanf81-poc-release-gate`,
+4. Values the security repository needs: `RELEASE_GATE_ISSUER=base-image-gatekeeper-release-gate`,
    `RELEASE_GATE_SCHEMA=https://example.org/verified-release/v1`,
    `RELEASE_REQUIRED_CHECKS=tests` (the gate check names in `allowlist.json`).
 

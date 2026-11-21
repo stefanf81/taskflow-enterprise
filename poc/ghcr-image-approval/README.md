@@ -1,16 +1,26 @@
-# GHCR image approval: proof of concept
+# base-image-gatekeeper
 
-A live test of the kit `ghcr-image-approval-github-actions-v6-fixed` on GitHub Actions and
-GHCR, releasing a small example Java app. The pipeline needs three repositories: the release
+A proof of concept for **defending container builds against supply-chain attacks through their
+base images**. An upstream base image (here `eclipse-temurin`) never goes straight into a build:
+- its pinned digest is copied into a quarantine package;
+- it is compared file by file, package by package and CVE by CVE with the last approved
+  digest;
+- a person reviews it and it is signed;
+- only then may applications build on it, and only from that signed digest.
+
+Applications are then built twice, compared, scanned and signed before release.
+
+It runs the kit `ghcr-image-approval-github-actions-v6-fixed` on GitHub Actions and GHCR,
+releasing a small example Java app. The pipeline needs three repositories: the release
 job must check the app out from a repository of its own, and the release gate holds its own
-key. This source repository (`stefanf81/ghcr-approval-poc-source`) keeps all three side by side
+key. This source repository (`stefanf81/base-image-gatekeeper`) keeps all three side by side
 with their history. Step 2 exports each folder into its working repository.
 
 | Folder | Repository | What it is |
 | --- | --- | --- |
-| `security-pipelines/` | `stefanf81/ghcr-approval-poc` | The kit with the changes a live run needs (its README lists them under "PoC changes") |
-| `example-app/` | `stefanf81/ghcr-approval-poc-app` | Toy Java app the kit releases |
-| `release-gate/` | `stefanf81/ghcr-approval-poc-gate` | Stand-in for the external release-authorization service the kit needs but does not supply |
+| `security-pipelines/` | `stefanf81/base-image-gatekeeper-pipeline` | The kit with the changes a live run needs (its README lists them under "PoC changes") |
+| `example-app/` | `stefanf81/base-image-gatekeeper-app` | Toy Java app the kit releases |
+| `release-gate/` | `stefanf81/base-image-gatekeeper-release-gate` | Stand-in for the external release-authorization service the kit needs but does not supply |
 
 All three must be **public**: on a free personal account, artifact attestations and environment
 reviewers are only available for public repositories.
@@ -70,7 +80,7 @@ Create three **empty public** repositories with the names above: no README, no l
 in a scratch directory:
 
 ```bash
-git clone https://github.com/stefanf81/ghcr-approval-poc-source.git poc-export
+git clone https://github.com/stefanf81/base-image-gatekeeper.git poc-export
 ```
 
 ```bash
@@ -78,7 +88,7 @@ cd poc-export
 ```
 
 ```bash
-for pair in security-pipelines:ghcr-approval-poc example-app:ghcr-approval-poc-app release-gate:ghcr-approval-poc-gate; do
+for pair in security-pipelines:base-image-gatekeeper-pipeline example-app:base-image-gatekeeper-app release-gate:base-image-gatekeeper-release-gate; do
   folder="${pair%%:*}"; repo="${pair##*:}"
   git subtree split --prefix="$folder" -b "export-$folder"
   git push "https://github.com/stefanf81/$repo.git" "export-$folder:main"
@@ -128,7 +138,7 @@ openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out gate.key && 
 
 Each `*_B64` secret below is `base64 -w0 <file>` (on macOS: `base64 -i <file>`).
 
-### `stefanf81/ghcr-approval-poc` (security repository)
+### `stefanf81/base-image-gatekeeper-pipeline` (security repository)
 
 **Settings → Actions → General:**
 - Workflow permissions: **Read repository contents and packages permissions**.
@@ -139,8 +149,8 @@ Each `*_B64` secret below is `base64 -w0 <file>` (on macOS: `base64 -i <file>`).
 | Name | Value |
 | --- | --- |
 | `GHCR_NAMESPACE` | `stefanf81` |
-| `RELEASE_GATE_URL` | `https://raw.githubusercontent.com/stefanf81/ghcr-approval-poc-gate/refs/heads/grants` |
-| `RELEASE_GATE_ISSUER` | `stefanf81-poc-release-gate` |
+| `RELEASE_GATE_URL` | `https://raw.githubusercontent.com/stefanf81/base-image-gatekeeper-release-gate/refs/heads/grants` |
+| `RELEASE_GATE_ISSUER` | `base-image-gatekeeper-release-gate` |
 | `RELEASE_GATE_SCHEMA` | `https://example.org/verified-release/v1` |
 | `RELEASE_REQUIRED_CHECKS` | `tests` |
 
@@ -164,7 +174,7 @@ branches → `main`*. Do not use "Protected branches only": the audit refuses it
 **`APPLICATION_READ_TOKEN`:** a fine-grained personal access token. It is needed even though
 the app repository is public, because the `authorize` job always uses it.
 - Resource owner: you.
-- Repository access: only `ghcr-approval-poc-app`.
+- Repository access: only `base-image-gatekeeper-app`.
 - Permissions: Contents **read-only**.
 - Short expiry. When it expires, `authorize` fails with gh's own error (`HTTP 401`).
 
@@ -184,16 +194,16 @@ admin rights to it). It reads `allow_self_approval` from `policy/config.json` on
 repository's `main`, not from your clone:
 
 ```bash
-GH_TOKEN="$(gh auth token)" python3 ci/audit_repo_settings.py --repo stefanf81/ghcr-approval-poc
+GH_TOKEN="$(gh auth token)" python3 ci/audit_repo_settings.py --repo stefanf81/base-image-gatekeeper-pipeline
 ```
 
-### `stefanf81/ghcr-approval-poc-gate`
+### `stefanf81/base-image-gatekeeper-release-gate`
 
 - Workflow permissions read-only.
 - Environment `release-gate` with deployment branch `main` and secret
   `GATE_PRIVATE_KEY_B64` (gate.key).
 
-### `stefanf81/ghcr-approval-poc-app`
+### `stefanf81/base-image-gatekeeper-app`
 
 Nothing to configure. Its `ci.yml` ("Application tests (no publishing secrets)") runs on every
 push to `main`. The gate requires the newest push run of exactly that workflow file for the
@@ -208,7 +218,7 @@ commit to have succeeded.
 | 3 | Run **GHCR - approve public base image** | See the walkthrough below the table. |
 | 4 | Run it again | `precheck`: `approved`; every other job is skipped. |
 | 5 | App repo: note the `main` HEAD SHA | Its **Application tests (no publishing secrets)** run on `main` is green. |
-| 6 | Gate repo: run **Release gate (PoC)** with that SHA, minutes `90` (the default) | The log shows "re-issued" every minute. `curl -s https://raw.githubusercontent.com/stefanf81/ghcr-approval-poc-gate/refs/heads/grants/<SHA>` returns JSON. Wait for that line in the log before you curl, and before step 7: a 404 fetched too early can stay cached for 5 minutes. If the app's CI is still running (or is re-run later), the log says "not finished: no new grant this round" and the gate waits; it only gives up on a failed run or a new `main` HEAD. |
+| 6 | Gate repo: run **Release gate (PoC)** with that SHA, minutes `90` (the default) | The log shows "re-issued" every minute. `curl -s https://raw.githubusercontent.com/stefanf81/base-image-gatekeeper-release-gate/refs/heads/grants/<SHA>` returns JSON. Wait for that line in the log before you curl, and before step 7: a 404 fetched too early can stay cached for 5 minutes. If the app's CI is still running (or is re-run later), the log says "not finished: no new grant this round" and the gate waits; it only gives up on a failed run or a new `main` HEAD. |
 | 7 | Security repo: run **GHCR - protected application release** with `app_name=example-app` and `app_commit=<SHA>` | `authorize` → `compile` a/b → `image_build` a/b (attested) → `scan` → `push_candidate` → (`high_review` only on High findings: approve it) → `promote` → `independent_rescan` → `independent_verification` → `sign`. |
 | 8 | Cancel the gate run | The grant is withdrawn (the `grants` branch holds only a README). A copy already cached by raw.githubusercontent.com can still be served for up to 5 minutes. |
 
@@ -275,7 +285,7 @@ cosign verify-attestation --insecure-ignore-tlog=true --key app.pub --type https
 docker run --rm "$IMAGE"
 ```
 
-The last command prints `ghcr-approval-poc-app: released through the signed GHCR pipeline`.
+The last command prints `base-image-gatekeeper-app: released through the signed GHCR pipeline`.
 
 ## 5. Negative tests (no cluster needed)
 
@@ -292,7 +302,7 @@ finish each one's undo step before the next, or later tests fail for unrelated r
 | Release with the gate not running | `authorize` fails: curl 404 from the grant URL |
 | Release with an `app_name` that is not in `policy/applications.json` | `authorize`: "APPLICATION NOT ALLOWED" |
 | Run the bootstrap again | "… already points at sha256:…; use base-image-approval.yml" |
-| Download the `image-a` artifact of a release run, change one byte of `application-image.tar`, run `gh attestation verify application-image.tar --repo stefanf81/ghcr-approval-poc` | Verification fails |
+| Download the `image-a` artifact of a release run, change one byte of `application-image.tar`, run `gh attestation verify application-image.tar --repo stefanf81/base-image-gatekeeper-pipeline` | Verification fails |
 
 ### State-changing tests
 

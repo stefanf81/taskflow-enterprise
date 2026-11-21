@@ -13,7 +13,7 @@ spec = importlib.util.spec_from_file_location('issue_grant', ROOT / 'issue_grant
 gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 
-REPO = 'stefanf81/ghcr-approval-poc-app'
+REPO = 'stefanf81/base-image-gatekeeper-app'
 SHA = 'a' * 40
 CI = '.github/workflows/ci.yml'
 
@@ -125,7 +125,7 @@ class SignedGrantTests(unittest.TestCase):
         self.assertEqual(record, {
             'schema': 'https://example.org/verified-release/v1',
             'repository': f'https://github.com/{REPO}.git', 'commit': SHA,
-            'issuer': 'stefanf81-poc-release-gate', 'decision': 'APPROVED', 'checks': {'tests': 'PASS'},
+            'issuer': 'base-image-gatekeeper-release-gate', 'decision': 'APPROVED', 'checks': {'tests': 'PASS'},
             'issuedAt': '2026-11-20T12:00:00Z', 'expiresAt': '2026-11-20T12:15:00Z'})
         for ttl in (0, 61):
             with self.subTest(ttl=ttl), self.assertRaises(ValueError):

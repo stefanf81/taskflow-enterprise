@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Issue one signed release grant for an application commit (PoC release gate).
 
-The central release workflow (stefanf81/ghcr-approval-poc, application-release.yml) fetches
+The central release workflow (stefanf81/base-image-gatekeeper-pipeline, application-release.yml) fetches
 `$RELEASE_GATE_URL/<commit>` at authorization AND again right before signing, and its
 scripts/verify_release_authorization.py accepts only a grant that
 

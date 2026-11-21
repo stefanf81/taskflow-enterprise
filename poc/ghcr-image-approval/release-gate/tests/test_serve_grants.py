@@ -20,8 +20,8 @@ import time
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-GATE_REPO = 'stefanf81/ghcr-approval-poc-gate'
-APP_REPO = 'stefanf81/ghcr-approval-poc-app'
+GATE_REPO = 'stefanf81/base-image-gatekeeper-release-gate'
+APP_REPO = 'stefanf81/base-image-gatekeeper-app'
 SHA = 'a' * 40
 
 GH_STUB = r'''#!/usr/bin/env python3
