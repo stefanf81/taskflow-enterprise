@@ -2,7 +2,6 @@ import { Component } from '@angular/core';
 
 @Component({
   selector: 'app-announcement-bar',
-  standalone: true,
   imports: [],
   template: `
     <div

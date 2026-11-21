@@ -8,7 +8,7 @@ import { AppointmentPage } from '../../types/api';
 import { AppointmentsApi } from '../api/appointments-api';
 import { AuthState } from '../auth/auth.state';
 
-@Component({ standalone: true, template: '' })
+@Component({ template: '' })
 class TestHost {
   readonly store = inject(CustomerStore);
 }

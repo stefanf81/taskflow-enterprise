@@ -27,7 +27,7 @@ const NEXT_SUNDAY = (() => {
   return toLocalDateString(d);
 })();
 
-@Component({ standalone: true, template: '' })
+@Component({ template: '' })
 class TestHost {
   readonly store = inject(BookingStore);
 }

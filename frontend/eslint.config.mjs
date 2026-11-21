@@ -2,7 +2,7 @@
 import eslint from '@eslint/js';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import angular from 'angular-eslint';
-import prettier from 'eslint-config-prettier';
+import prettier from 'eslint-config-prettier/flat';
 import tseslint from 'typescript-eslint';
 
 // The router already pulls @angular/common's shared chunk into the initial bundle, so a template
@@ -108,6 +108,12 @@ export default defineConfig(
   {
     files: ['**/*.html'],
     extends: [...angular.configs.templateRecommended, ...angular.configs.templateAccessibility],
+    rules: {
+      // style-src has no 'unsafe-inline' (#224): a static style="…" in a prerendered template is
+      // markup the browser refuses. Browser-only [style.*] bindings go through the CSSOM and stay
+      // allowed (docs/agents/frontend.md).
+      '@angular-eslint/template/no-inline-styles': ['error', { allowBindToStyle: true }],
+    },
   },
   prettier,
 );

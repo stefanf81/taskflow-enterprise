@@ -191,7 +191,7 @@ vulnerability fixes bypass the quarantine soak to ensure prompt patching.
 
 The following ecosystems are intentionally grouped because their members are
 version-coupled: Angular/toolchain, Tailwind CSS, Zod across workspaces, Spring Boot
-plugin/BOM, Flyway, Hibernate, Netty, Log4j, Jackson (including BOMs), Tomcat Embed,
+plugin/BOM, Flyway, Hibernate, Log4j, Jackson (including BOMs), Tomcat Embed,
 OpenTelemetry, Testcontainers, Byte Buddy, SLF4J, React Navigation, React Native test
 tooling, and GitHub Actions.
 

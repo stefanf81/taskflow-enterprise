@@ -9,7 +9,6 @@ import { Component, output } from '@angular/core';
  */
 @Component({
   selector: 'app-lookbook',
-  standalone: true,
   imports: [],
   template: `
     <section class="card bg-zinc-950 border border-white/10 rounded-3xl p-8 mb-16">

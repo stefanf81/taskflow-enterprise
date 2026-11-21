@@ -7,9 +7,10 @@ on:
 
   workflow_dispatch:
 
+# Read-only by default; each job grants itself what it needs (CodeQL and Trivy:
+# security-events: write), so a job added without a block cannot upload alerts.
 permissions:
   contents: read
-  security-events: write
 
 # Prevent a manual workflow_dispatch run from colliding with the nightly
 # schedule (and vice-versa). cancel-in-progress: false keeps both runs
@@ -113,10 +114,6 @@ jobs:
               - '**/*.spec.ts'
               - '**/*.test.ts'
               - '**/*.test.tsx'
-
-      - name: Autobuild
-        if: matrix.build-mode == 'autobuild'
-        uses: github/codeql-action/autobuild@v4
 
       # Manual build for java-kotlin: the same compile tasks autobuild runs
       # (`testClasses`), but in a single Gradle invocation. Autobuild spends a

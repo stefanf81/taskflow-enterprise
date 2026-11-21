@@ -25,7 +25,6 @@ const STATUS_BADGE_CLASSES: Readonly<Record<string, string>> = {
 
 @Component({
   selector: 'app-customer-portal',
-  standalone: true,
   imports: [RouterLink, ReschedulePicker],
   templateUrl: './customer-portal.html',
 })

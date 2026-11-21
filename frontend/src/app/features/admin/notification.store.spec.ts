@@ -7,7 +7,7 @@ import { NotificationStore } from './notification.store';
 import { NotificationItem } from '../../types/api';
 import { AuthState } from '../../core/auth/auth.state';
 
-@Component({ standalone: true, template: '' })
+@Component({ template: '' })
 class TestHost {
   readonly store = inject(NotificationStore);
 }

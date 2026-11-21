@@ -12,7 +12,8 @@ import org.apache.catalina.Globals;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.web.server.autoconfigure.ConditionalOnForwardedHeaderStrategy;
+import org.springframework.boot.web.server.autoconfigure.ForwardedHeaderStrategy;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -29,7 +30,8 @@ import java.util.regex.PatternSyntaxException;
  * Guards the trusted-proxy setting behind the rate limiter
  * (https://github.com/stefanf81/taskflow-enterprise/issues/219).
  *
- * <p>With {@code server.forward-headers-strategy=native} (the prod profile) Tomcat's
+ * <p>With the {@code WEB_SERVER} forwarded-header strategy (the prod profile sets
+ * {@code server.request.header.forwarded.strategy=web-server}) Tomcat's
  * {@code RemoteIpValve} takes the client address from {@code X-Forwarded-For} only when the peer
  * matches {@code server.tomcat.remoteip.internal-proxies} ({@code APP_TRUSTED_PROXY_REGEX}). When it
  * matches nothing, nothing fails: every request simply carries the proxy's address, and all clients
@@ -48,7 +50,10 @@ import java.util.regex.PatternSyntaxException;
  * </ul>
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(name = "server.forward-headers-strategy", havingValue = "native")
+// Boot's own condition, so the guard follows the strategy Tomcat actually applies: it reads
+// server.request.header.forwarded.strategy and the key it replaced in 4.2,
+// server.forward-headers-strategy (native maps to WEB_SERVER), and fails the start if both are set.
+@ConditionalOnForwardedHeaderStrategy(ForwardedHeaderStrategy.WEB_SERVER)
 class TrustedProxyConfig {
 
     static final String PROXIES_PROPERTY = "server.tomcat.remoteip.internal-proxies";

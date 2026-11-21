@@ -200,7 +200,8 @@ dependencies {
 	// Database migration
 	implementation libs.spring.boot.starter.flyway
 	implementation libs.flyway.postgresql
-	// Pin flyway-core to match flyway-database-postgresql (the earlier BOM shipped 12.4.0).
+	// Pin flyway-core to match flyway-database-postgresql: the Boot 4.2 BOM manages Flyway 12.11.0,
+	// the catalog pins the 13.x line for both.
 	implementation libs.flyway.core
 	// Runtime
 	runtimeOnly libs.postgresql

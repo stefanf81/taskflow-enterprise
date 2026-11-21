@@ -2,7 +2,6 @@ import { Component, signal } from '@angular/core';
 
 @Component({
   selector: 'app-faq-section',
-  standalone: true,
   imports: [],
   template: `
     <section class="card bg-zinc-950 border border-white/10 rounded-3xl p-8 mt-16">

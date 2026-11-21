@@ -6,7 +6,7 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { ServiceCatalogStore } from './service-catalog.store';
 import { ServiceItem } from '../../types/api';
 
-@Component({ standalone: true, template: '' })
+@Component({ template: '' })
 class TestHost {
   readonly store = inject(ServiceCatalogStore);
 }

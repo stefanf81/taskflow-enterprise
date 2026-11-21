@@ -102,6 +102,9 @@ class AuthCookieTest {
 
         assertTrue(metrics.contains("jvm_memory_used_bytes"));
         assertTrue(metrics.contains("http_server_requests_seconds"));
+        // In-flight requests: opt-in since Boot 4.2 (include-active-long-task-timer).
+        assertTrue(metrics.contains("http_server_requests_active_seconds"),
+                "the active-requests long task timer is exported");
         assertTrue(metrics.contains("hikaricp_connections_active"));
 
         mockMvc.perform(get("/actuator/info"))

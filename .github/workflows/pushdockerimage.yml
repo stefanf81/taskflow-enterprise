@@ -344,7 +344,7 @@ jobs:
           cache-to: |
             type=gha,mode=max,scope=${{ matrix.component }}-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }},ignore-error=true
 
-          provenance: true
+          provenance: mode=max
           sbom: true
 
           # Cache-busting: force the runtime package refresh to run on every

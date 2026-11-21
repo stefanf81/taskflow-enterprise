@@ -204,7 +204,7 @@ class RateLimiterConfig {
 
             /**
              * Tomcat's RemoteIpValve (configured via
-             * {@code server.forward-headers-strategy=native} in prod
+             * {@code server.request.header.forwarded.strategy=web-server} in prod
              * properties) normalizes the request so that {@code getRemoteAddr()}
              * returns the real client IP from the {@code X-Forwarded-For}
              * header set by the trusted Nginx reverse proxy. The

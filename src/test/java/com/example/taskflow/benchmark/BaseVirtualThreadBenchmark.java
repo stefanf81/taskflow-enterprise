@@ -17,7 +17,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.*;
-import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -93,10 +92,10 @@ abstract class BaseVirtualThreadBenchmark {
     //  INJECTED DEPENDENCIES
     // =========================================================================
 
-    /** HTTP client — plain RestTemplate backed by Java HttpURLConnection.
+    /** HTTP client — {@link BenchmarkHttp}, backed by Java HttpURLConnection.
      *  We don't use pooled clients (Apache HttpClient) because their default
      *  2-connections-per-route limit would artificially cap concurrency. */
-    private RestTemplate http;
+    private BenchmarkHttp http;
 
     @Autowired
     private BarberRepository barberRepository;
@@ -145,10 +144,10 @@ abstract class BaseVirtualThreadBenchmark {
         baseUrl = "http://localhost:" + port;
         modeName = detectModeName();
 
-        // Use a plain RestTemplate with Java's HttpURLConnection to avoid
+        // Use plain HttpURLConnection (BenchmarkHttp) to avoid
         // connection-pool limits.  The static block above set http.maxConnections
         // to 100 so our CONCURRENCY=50 is not artificially capped.
-        http = new RestTemplate();
+        http = new BenchmarkHttp();
 
         // Print header
         System.out.println("\n" + "=" .repeat(90));
