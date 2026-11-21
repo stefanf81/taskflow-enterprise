@@ -1,9 +1,0 @@
-# In a real application repo Renovate tracks this internal tag + digest.
-# Replace the placeholder with the digest of an image already signed in GHCR.
-FROM ghcr.io/example-org/approved/eclipse-temurin:21-jre-resolute@sha256:REPLACE_WITH_64_HEX_CHARACTERS
-WORKDIR /opt/app
-# PoC fix: application-release.yml's image_build runs under `umask 077`, so the jar in the build
-# context is 0600 and COPY would keep that; without --chmod the non-root user cannot read it.
-COPY --chmod=0444 target/app.jar /opt/app/app.jar
-USER 10001:10001
-ENTRYPOINT ["java", "-jar", "/opt/app/app.jar"]

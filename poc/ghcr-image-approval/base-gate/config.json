@@ -1,7 +1,0 @@
-{
-  "dockerfiles": [
-    "catalog/Dockerfile.temurin",
-    "example-app/Dockerfile"
-  ],
-  "acceptances": []
-}
