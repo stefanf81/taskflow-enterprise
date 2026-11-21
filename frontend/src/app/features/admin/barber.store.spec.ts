@@ -7,7 +7,7 @@ import { BarberStore } from './barber.store';
 import { BarbersApi } from '../../core/api/barbers-api';
 import { AuthState } from '../../core/auth/auth.state';
 
-@Component({ standalone: true, template: '' })
+@Component({ template: '' })
 class TestHost {
   readonly store = inject(BarberStore);
 }

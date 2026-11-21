@@ -9,7 +9,7 @@ import { AppointmentsApi } from '../../core/api/appointments-api';
 import { AuthApi } from '../../core/api/auth-api';
 import { AuthState } from '../../core/auth/auth.state';
 
-@Component({ standalone: true, template: '' })
+@Component({ template: '' })
 class TestHost {
   readonly store = inject(AppointmentStore);
 }

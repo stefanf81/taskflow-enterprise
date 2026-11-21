@@ -16,7 +16,7 @@ import { DEFAULT_SHOP_RULES, isOpenAt } from '@taskflow/domain';
 /** Monday 2026-10-12, 14:30 local time. */
 const MONDAY_AFTERNOON = new Date(2026, 9, 12, 14, 30);
 
-@Component({ standalone: true, template: '' })
+@Component({ template: '' })
 class TestHost {
   readonly store = inject(BookingStore);
 }

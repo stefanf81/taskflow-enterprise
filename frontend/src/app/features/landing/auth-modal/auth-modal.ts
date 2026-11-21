@@ -30,7 +30,6 @@ interface AuthFormModel {
  */
 @Component({
   selector: 'app-auth-modal',
-  standalone: true,
   imports: [FormField, A11yModule],
   template: `
     <div class="modal-overlay" tabindex="-1" (keydown.escape)="closeModal()">

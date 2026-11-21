@@ -11,7 +11,6 @@ export interface StylistProfile {
 
 @Component({
   selector: 'app-stylist-card',
-  standalone: true,
   imports: [],
   template: `
     <button

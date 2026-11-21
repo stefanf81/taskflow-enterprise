@@ -6,7 +6,7 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { PublicBarberStore } from './public-barber.store';
 import { PublicBarber } from '../../types/api';
 
-@Component({ standalone: true, template: '' })
+@Component({ template: '' })
 class TestHost {
   readonly store = inject(PublicBarberStore);
 }

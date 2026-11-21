@@ -11,7 +11,6 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
 
 @Component({
   selector: 'app-receipt-modal',
-  standalone: true,
   imports: [A11yModule],
   template: `
     <div

@@ -6,7 +6,7 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { ReviewStore } from './review.store';
 import { BarberRating } from '../../types/api';
 
-@Component({ standalone: true, template: '' })
+@Component({ template: '' })
 class TestHost {
   readonly store = inject(ReviewStore);
 }
