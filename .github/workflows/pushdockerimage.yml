@@ -114,6 +114,13 @@ jobs:
             echo "::error::image_tag must not end in '-scan' (reserved for staging)"
             exit 1
           fi
+          # `latest` is moved by the promote job, and only for a run from main
+          # (a run from any other ref is signed with that ref's identity, which
+          # a verifier pinned to main rejects). Typing it here would bypass that.
+          if [[ "$tag" == "latest" ]]; then
+            echo "::error::image_tag must not be 'latest': runs from main move it on their own"
+            exit 1
+          fi
           echo "image_tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Build component matrix
@@ -356,7 +363,7 @@ jobs:
             type=gha,scope=${{ matrix.component }}-pr
 
           # ignore-error: a transient GHA cache-export blip must not fail a
-          # publication run; the scan + promotion steps below are the gate.
+          # publication run; the scan below and the `promote` job are the gate.
           cache-to: |
             type=gha,mode=max,scope=${{ matrix.component }}-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }},ignore-error=true
 
@@ -399,9 +406,10 @@ jobs:
       # Hard-gate scan (HIGH/CRITICAL, exit-code: 1)
       #
       # Scans the published scan image BEFORE promoting. If the scan
-      # fails with exit-code: 1, the Promote step below is automatically
-      # skipped. Set `skip_scan: true` on workflow_dispatch only in
-      # exceptional circumstances.
+      # fails with exit-code: 1, `Record Scanned Digest` is skipped, so
+      # this component's `promote` leg gets no digest and fails without
+      # signing or tagging anything. Set `skip_scan: true` on
+      # workflow_dispatch only in exceptional circumstances.
       ##########################################################
 
       - name: Install Trivy
@@ -499,7 +507,10 @@ jobs:
     if: ${{ !cancelled() && (needs.push.result == 'success' || needs.push.result == 'failure') }}
 
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    # Above the worst case of the retries below (cosign sign: 3 x 2 min + 1 min
+    # of back-off; cosign verify: 3 x 1 min + 30 s; plus the attestation), so
+    # a hanging Sigstore service ends in the step's own error, not a timeout.
+    timeout-minutes: 20
 
     # The only job that can sign. `id-token` lets it request the OIDC token
     # Sigstore exchanges for a short-lived signing certificate; `attestations`
@@ -530,9 +541,17 @@ jobs:
         env:
           OWNER: ${{ github.repository_owner }}
           COMPONENT: ${{ matrix.component }}
-          DIGEST: ${{ matrix.component == 'backend' && needs.push.outputs.backend_digest || needs.push.outputs.frontend_digest }}
+          # Both, and picked below: an `a && x || y` expression would fall
+          # through to the other component's digest when this one is empty.
+          BACKEND_DIGEST: ${{ needs.push.outputs.backend_digest }}
+          FRONTEND_DIGEST: ${{ needs.push.outputs.frontend_digest }}
         run: |
           set -euo pipefail
+          case "$COMPONENT" in
+            backend) DIGEST="$BACKEND_DIGEST" ;;
+            frontend) DIGEST="$FRONTEND_DIGEST" ;;
+            *) echo "::error::unknown component '$COMPONENT'"; exit 1 ;;
+          esac
           if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
             echo "::error::no scanned digest for ${COMPONENT}: its build or scan did not succeed"
             exit 1
@@ -543,6 +562,10 @@ jobs:
             echo "digest=${DIGEST}"
           } >> "$GITHUB_OUTPUT"
 
+      # cosign, `actions/attest` (push-to-registry) and `imagetools` read this
+      # login. Not docker/login-action: this job runs no third-party action
+      # besides the cosign installer. With the CR_PAT fallback (docs/ci/
+      # overview.md), swap the token here as well as in the `push` job.
       - name: Login to GHCR
         env:
           ACTOR: ${{ github.actor }}
@@ -573,7 +596,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
-            if cosign sign --yes -a "scan=${SCAN}" "${IMAGE}@${DIGEST}"; then
+            if cosign sign --yes --timeout 2m -a "scan=${SCAN}" "${IMAGE}@${DIGEST}"; then
               exit 0
             fi
             echo "::warning::cosign sign failed (attempt ${attempt} of 3)"
@@ -595,9 +618,13 @@ jobs:
           push-to-registry: true
           create-storage-record: false
 
-      # After both writes to the package, so this is the state operators and
-      # admission controllers will read. Same commands, identity and
-      # annotation as the summary below tells operators to use.
+      # After both writes to the package. Same identity and annotation as the
+      # summary below tells operators to use. `-a` is what makes `cosign
+      # verify` check the cosign signature: in bundle mode it accepts any
+      # Sigstore bundle on the digest, and the provenance attestation has the
+      # same identity. The attestation is checked twice: from the GitHub API
+      # (what `gh attestation verify` reads by default) and from the registry
+      # (what admission controllers read).
       - name: Verify Signature and Attestation
         env:
           IMAGE: ${{ steps.image.outputs.image }}
@@ -621,6 +648,7 @@ jobs:
           }
 
           retry cosign verify "${IMAGE}@${DIGEST}" \
+            --timeout 1m \
             --certificate-identity "$IDENTITY" \
             --certificate-oidc-issuer "$OIDC_ISSUER" \
             -a "scan=${SCAN}" \
@@ -629,6 +657,11 @@ jobs:
           retry gh attestation verify "oci://${IMAGE}@${DIGEST}" \
             --repo "$REPOSITORY" \
             --cert-identity "$IDENTITY"
+
+          retry gh attestation verify "oci://${IMAGE}@${DIGEST}" \
+            --repo "$REPOSITORY" \
+            --cert-identity "$IDENTITY" \
+            --bundle-from-oci
 
       ##########################################################
       # Promote (only runs if all previous steps succeeded — meaning

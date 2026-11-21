@@ -96,7 +96,10 @@ test('published images are signed, attested and verified before they are promote
   // A final tag must never point at an unsigned digest: once the cluster verifies signatures,
   // an image promoted before a failed signing step could not be deployed.
   const workflow = fs.readFileSync(path.join(workflowDir, 'pushdockerimage.yml'), 'utf8');
-  const promote = jobBlock(workflow, 'promote');
+  const job = jobBlock(workflow, 'promote');
+  // Only the `steps:` list: `needs:` items sit at the same indentation.
+  const promote = job.slice(job.indexOf('    steps:') + 1);
+  assert.notEqual(job.indexOf('    steps:'), -1);
   const stepStarts = promote.flatMap((line, i) => (/^ {6}- /.test(line) ? [i] : []));
   const steps = stepStarts.map((start, n) => promote.slice(start, stepStarts[n + 1] ?? promote.length));
   const names = steps.map((step) => (step[0].match(/^ {6}- name: (.+)$/) ?? [])[1]);
@@ -118,7 +121,7 @@ test('published images are signed, attested and verified before they are promote
   }
 
   const body = (name) => steps[names.indexOf(name)].join('\n');
-  assert.ok(body('Sign Image').includes('cosign sign --yes -a "scan=${SCAN}" "${IMAGE}@${DIGEST}"'));
+  assert.match(body('Sign Image'), /cosign sign --yes .*-a "scan=\$\{SCAN\}" "\$\{IMAGE\}@\$\{DIGEST\}"/);
   assert.match(body('Attest Build Provenance'), /^ {8}uses: actions\/attest@/m);
   assert.ok(body('Verify Signature and Attestation').includes('cosign verify "${IMAGE}@${DIGEST}"'));
   assert.ok(body('Verify Signature and Attestation').includes('gh attestation verify "oci://${IMAGE}@${DIGEST}"'));
@@ -132,6 +135,20 @@ test('published images are signed, attested and verified before they are promote
     /if \[\[ "\$REF" == "refs\/heads\/main" \]\]; then\n\s+published\+=\("\$\{IMAGE\}:latest"\)/,
   );
   assert.doesNotMatch(jobBlock(workflow, 'push').join('\n'), /imagetools create|:latest/);
+
+  // The operator's tag would otherwise be a second way to move `latest` from any ref.
+  assert.match(
+    jobBlock(workflow, 'resolve').join('\n'),
+    /if \[\[ "\$tag" == "latest" \]\]; then\n\s+echo "::error::[^"]*"\n\s+exit 1/,
+  );
+
+  // `a && x || y` falls through to y when x is empty, which would hand one component the
+  // other's digest when its own scan failed.
+  const digestLines = job.filter((line) => line.includes('needs.push.outputs'));
+  assert.notDeepEqual(digestLines, []);
+  for (const line of digestLines) {
+    assert.doesNotMatch(line, /&&|\|\|/, `pick the digest by component, not with && / ||: ${line.trim()}`);
+  }
 });
 
 test('only the promote job can sign, and it runs no build or third-party step', () => {
@@ -145,8 +162,11 @@ test('only the promote job can sign, and it runs no build or third-party step', 
   const elsewhere = workflow.replace(promote, '');
   assert.notEqual(elsewhere, workflow);
   assert.doesNotMatch(elsewhere, /^\s*(id-token|attestations):/m);
+  // `write-all` grants `id-token: write` too, in any job or at the top level.
+  assert.doesNotMatch(workflow, /^\s*permissions:\s*write-all\b/m);
 
-  const uses = [...promote.matchAll(/^\s*(?:- )?uses: ([^@\s]+)@/gm)].map((match) => match[1]);
+  // Every `uses:`, including local composite actions and docker:// images, which have no `@`.
+  const uses = [...promote.matchAll(/^\s*(?:- )?uses:\s*(\S+)/gm)].map((match) => match[1].split('@')[0]);
   assert.deepEqual(uses, ['sigstore/cosign-installer', 'actions/attest']);
 });
 
