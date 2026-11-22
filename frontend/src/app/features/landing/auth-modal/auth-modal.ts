@@ -21,7 +21,7 @@ interface AuthFormModel {
  *
  * Displays an overlay dialog with sign-in and create-account forms.
  * Designed for @defer lazy-loading since the modal only appears on-demand
- * when the user clicks "Owner Portal".
+ * when the user clicks "Sign in" in the landing page's nav.
  *
  * Migrated to Angular 22 Signal Forms (`@angular/forms/signals`) to match
  * the booking wizard in `app.ts`: a single signal-backed model is bound to
@@ -106,6 +106,7 @@ interface AuthFormModel {
               <input
                 type="text"
                 id="regName"
+                autocomplete="name"
                 [formField]="authForm.fullName"
                 placeholder="John Doe"
                 class="form-control"
@@ -121,7 +122,7 @@ interface AuthFormModel {
                 "
               />
               @if (authForm.fullName().touched() && !authModel().fullName.trim()) {
-                <span id="regName-error" class="text-rose-400 text-[10px]">
+                <span id="regName-error" class="text-rose-400 text-sm">
                   Full name is required.
                 </span>
               }
@@ -131,8 +132,9 @@ interface AuthFormModel {
                 >Phone</label
               >
               <input
-                type="text"
+                type="tel"
                 id="regPhone"
+                autocomplete="tel"
                 [formField]="authForm.phone"
                 placeholder="555-1234"
                 class="form-control"
@@ -147,9 +149,12 @@ interface AuthFormModel {
             <input
               type="text"
               id="username"
+              autocomplete="username"
+              autocapitalize="none"
+              spellcheck="false"
               cdkFocusInitial
               [formField]="authForm.username"
-              placeholder="e.g., admin"
+              placeholder="you@example.com"
               class="form-control"
               [attr.aria-invalid]="
                 authForm.username().touched() && authForm.username().invalid() ? 'true' : null
@@ -161,9 +166,7 @@ interface AuthFormModel {
               "
             />
             @if (authForm.username().touched() && authForm.username().invalid()) {
-              <span id="username-error" class="text-rose-400 text-[10px]">
-                Username is required.
-              </span>
+              <span id="username-error" class="text-rose-400 text-sm"> Username is required. </span>
             }
           </div>
 
@@ -174,8 +177,8 @@ interface AuthFormModel {
             <input
               type="password"
               id="password"
+              [attr.autocomplete]="isRegisterMode() ? 'new-password' : 'current-password'"
               [formField]="authForm.password"
-              placeholder="e.g., admin-password"
               class="form-control"
               [attr.aria-invalid]="
                 authForm.password().touched() && authForm.password().invalid() ? 'true' : null
@@ -183,12 +186,10 @@ interface AuthFormModel {
               [attr.aria-describedby]="passwordDescribedBy()"
             />
             @if (authForm.password().touched() && authForm.password().invalid()) {
-              <span id="password-error" class="text-rose-400 text-[10px]">
-                Password is required.
-              </span>
+              <span id="password-error" class="text-rose-400 text-sm"> Password is required. </span>
             }
             @if (isRegisterMode()) {
-              <span id="password-policy" class="text-zinc-500 text-[10px]">
+              <span id="password-policy" class="text-zinc-500 text-xs">
                 {{ passwordPolicy }}
               </span>
             }

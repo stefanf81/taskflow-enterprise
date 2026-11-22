@@ -88,7 +88,7 @@ test.describe('Content-Security-Policy (nginx image)', () => {
     await expect(page.locator('#cancelEmail')).toBeAttached();
     await expect(page.locator('#rescheduleEmail')).toBeAttached();
     await expect(page.locator('#reviewEmail')).toBeAttached();
-    await page.getByRole('button', { name: 'Owner Portal' }).click();
+    await page.getByRole('button', { name: /^sign in$/i }).click();
     await page.locator('#username').fill('admin');
     await page.locator('#password').fill('admin-password');
     await page.locator('.modal-card button[type="submit"]').click();
@@ -138,7 +138,7 @@ test.describe('Content-Security-Policy (nginx image)', () => {
     // The sign-in dialog uses cdkTrapFocus, whose .cdk-visually-hidden stylesheet the CDK injects as
     // an inline <style> at runtime; the Dockerfile authorizes it by hash. Applied, the focus-trap
     // anchors are positioned out of the flow.
-    await page.getByRole('button', { name: 'Owner Portal' }).click();
+    await page.getByRole('button', { name: /^sign in$/i }).click();
     const anchor = page.locator('.cdk-focus-trap-anchor').first();
     await expect(anchor).toBeAttached();
     expect(await anchor.evaluate((element) => getComputedStyle(element).position)).toBe('absolute');

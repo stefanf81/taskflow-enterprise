@@ -8,10 +8,19 @@ import { AuthState, SESSION_EXPIRED_MESSAGE } from '../../core/auth/auth.state';
 import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
 import { DashboardPrefetch } from '../../dashboard-loaders';
 import { FlashMessages } from '../../core/ui/flash-messages';
+import { ReviewStore } from '../../core/reviews/review.store';
 // Imported for its side effect only: the wizard is behind `@defer`, whose dynamic import would
 // otherwise have to be transformed mid-test, taking longer than the settle loop below waits.
 import '../booking/booking-wizard';
 import { DEFAULT_SHOP_RULES } from '@taskflow/domain';
+
+/** The body of the "Client Ratings" card (the box that holds its height while loading). */
+function ratingsBody(root: HTMLElement): HTMLElement | undefined {
+  const heading = Array.from(root.querySelectorAll<HTMLElement>('h3')).find((h) =>
+    h.textContent?.includes('Client Ratings'),
+  );
+  return (heading?.nextElementSibling as HTMLElement | null) ?? undefined;
+}
 
 /** The open/closed badge in the guest navigation. */
 function openClosedBadge(root: HTMLElement): HTMLElement | undefined {
@@ -40,6 +49,12 @@ describe('LandingPage before the shop hours are known', () => {
     const badge = openClosedBadge(pending.nativeElement);
     expect(badge).toBeTruthy();
     expect(badge?.classList).toContain('invisible');
+
+    // The ratings are not answered either: the card keeps its box, empty rather than claiming
+    // "No reviews yet" (which the prerendered page would otherwise show to everyone).
+    const ratings = ratingsBody(pending.nativeElement);
+    expect(ratings?.classList).toContain('min-h-12');
+    expect(ratings?.textContent?.trim()).toBe('');
   });
 });
 
@@ -140,16 +155,42 @@ describe('LandingPage', () => {
     expect(flash.successMessage()).toBe('Welcome back, Owner!');
   });
 
-  it('opens the owner portal login modal only when triggered', () => {
+  it('opens the login modal only when the nav\'s "Sign in" is clicked', () => {
     const page = fixture.componentInstance;
-    const button = (fixture.nativeElement as HTMLElement).querySelector(
-      'button',
-    ) as HTMLButtonElement;
+    const button = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('nav button'),
+    ).find((b) => b.textContent?.trim() === 'Sign in');
+    expect(button).toBeTruthy();
     expect(page.showAdminLoginModal()).toBe(false);
 
-    button.click();
+    button?.click();
 
     expect(page.showAdminLoginModal()).toBe(true);
+  });
+
+  it('says so when nobody has been reviewed yet', () => {
+    // beforeEach answered /reviews/public/barber-ratings with an empty list.
+    expect(ratingsBody(fixture.nativeElement)?.textContent).toContain('No reviews yet');
+  });
+
+  it('shows the real shop rating instead of a hand-picked quote', async () => {
+    TestBed.inject(ReviewStore).loadRatings();
+    fixture.detectChanges();
+    httpMock
+      .expectOne((req) => req.url.includes('/api/v1/reviews/public/barber-ratings'))
+      .flush([
+        { barberName: 'Alex the Barber', averageRating: 4.5, reviewCount: 10 },
+        { barberName: 'Sara the Stylist', averageRating: 5, reviewCount: 30 },
+      ]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const text = ratingsBody(fixture.nativeElement)?.textContent?.replace(/\s+/g, ' ') ?? '';
+    // (4.5 × 10 + 5 × 30) / 40 = 4.875
+    expect(text).toContain('4.9 out of 5');
+    expect(text).toContain('from 40 reviews');
+    expect(text).toContain('Top rated: Sara the Stylist · 5.0');
+    expect(fixture.nativeElement.textContent).not.toContain('Liam K.');
   });
 
   it('prefetches the dashboard chunks when the login modal opens, not before', () => {

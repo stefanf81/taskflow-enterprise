@@ -130,7 +130,7 @@
               <div class="flex items-center gap-3 mb-2">
                 <h3 class="text-zinc-100 font-extrabold text-base">{{ appt.serviceType }}</h3>
                 <span
-                  class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider"
+                  class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider"
                   [class]="statusBadgeClass(appt.status)"
                 >
                   {{ statusLabel(appt.status) }}
@@ -139,11 +139,11 @@
               <p class="text-xs text-zinc-400 font-light">
                 With <strong class="text-zinc-100">{{ appt.barberName }}</strong>
               </p>
-              <p class="text-[10px] font-bold text-gold uppercase tracking-wider mt-2">
+              <p class="text-xs font-bold text-gold uppercase tracking-wider mt-2">
                 📅 {{ formatLocalDate(appt.bookingDate) }} at
                 {{ formatTime12Hour(appt.bookingTime) }}
               </p>
-              <p class="text-[10px] text-zinc-400 mt-1">
+              <p class="text-xs text-zinc-400 mt-1">
                 Booking Code: <span class="font-mono select-all">{{ appt.publicId }}</span>
               </p>
             </div>

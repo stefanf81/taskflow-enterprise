@@ -101,7 +101,7 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
           </div>
         </div>
 
-        <div class="text-center text-[11px] text-zinc-500 leading-relaxed font-light mb-6">
+        <div class="text-center text-xs text-zinc-500 leading-relaxed font-light mb-6">
           <p class="font-bold text-zinc-300 mb-1">📝 What happens next?</p>
           <p>
             The shop owner will review your slot request and confirm it. Keep your booking code:
@@ -119,7 +119,7 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
             {{ exportingCalendar() ? 'Exporting Calendar…' : '📅 Download .ics Calendar' }}
           </button>
           @if (calendarError(); as message) {
-            <p role="alert" class="text-center text-[11px] text-rose-400">{{ message }}</p>
+            <p role="alert" class="text-center text-sm text-rose-400">{{ message }}</p>
           }
           <button
             type="button"

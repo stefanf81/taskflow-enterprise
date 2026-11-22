@@ -8,6 +8,7 @@
     <input
       id="admin-appointment-search"
       type="text"
+      autocomplete="off"
       [value]="searchQuery()"
       (input)="onSearchChange($any($event.target).value)"
       placeholder="Search customers..."
@@ -134,33 +135,33 @@
             <!-- Badges -->
             @if (appt.status === 'APPROVED') {
               <span
-                class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider"
+                class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider"
                 >Approved</span
               >
             } @else if (appt.status === 'DENIED') {
               <span
-                class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase tracking-wider"
+                class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase tracking-wider"
                 >Denied</span
               >
             } @else if (appt.status === 'CANCELLED') {
               <span
-                class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 uppercase tracking-wider"
+                class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 uppercase tracking-wider"
                 >Cancelled</span
               >
             } @else if (isOverdue(appt)) {
               <span
-                class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold bg-red-600 text-white uppercase tracking-wider"
+                class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-600 text-white uppercase tracking-wider"
                 >Overdue</span
               >
             } @else {
               <span
-                class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider"
+                class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider"
                 >Pending</span
               >
             }
           </div>
 
-          <div class="flex gap-4 text-[10px] text-zinc-500 font-light mt-1.5">
+          <div class="flex gap-4 text-xs text-zinc-500 font-light mt-1.5">
             <span>📧 {{ appt.customerEmail }}</span>
             <span>📞 {{ appt.customerPhone }}</span>
           </div>
@@ -173,7 +174,7 @@
           </p>
 
           <div
-            class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mt-2 flex items-center gap-1.5"
+            class="text-xs font-bold text-zinc-500 uppercase tracking-wider mt-2 flex items-center gap-1.5"
             [class.text-rose-400]="appt.status === 'PENDING' && isOverdue(appt)"
           >
             <span

@@ -35,7 +35,7 @@ export interface StylistProfile {
             <span class="m-0 text-zinc-100 font-extrabold text-sm">{{ profile().name }}</span>
             @if (profile().badge) {
               <span
-                class="text-[9px] uppercase font-black tracking-wider px-1.5 py-0.5 rounded bg-gold/20 text-gold border border-gold/30"
+                class="text-xs uppercase font-black tracking-wider px-1.5 py-0.5 rounded bg-gold/20 text-gold border border-gold/30"
               >
                 {{ profile().badge }}
               </span>
@@ -43,12 +43,10 @@ export interface StylistProfile {
           </span>
           <span class="text-xs font-bold text-gold"
             >{{ profile().rating }}
-            <span class="text-[10px] text-zinc-500 font-light"
-              >({{ profile().reviews }})</span
-            ></span
+            <span class="text-xs text-zinc-500 font-light">({{ profile().reviews }})</span></span
           >
         </span>
-        <span class="block m-0 text-[11px] font-semibold text-gold mt-0.5">
+        <span class="block m-0 text-xs font-semibold text-gold mt-0.5">
           {{ profile().title }}
         </span>
         <span class="block m-0 text-xs text-zinc-500 font-light mt-1 leading-normal">

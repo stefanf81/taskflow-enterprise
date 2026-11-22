@@ -13,6 +13,7 @@
     <input
       id="service-search-input"
       type="text"
+      autocomplete="off"
       [value]="store.serviceSearchQuery()"
       (input)="store.serviceSearchQuery.set($any($event.target).value)"
       placeholder="Search treatments (e.g., fade, trim, shave)..."
@@ -67,7 +68,7 @@
           </span>
           <span class="text-gold text-lg">{{ formatUsd(service.price) }}</span>
         </span>
-        <span class="block text-[10px] font-bold text-zinc-500 uppercase mt-0.5">
+        <span class="block text-xs font-bold text-zinc-500 uppercase mt-0.5">
           ⏱️ Duration: {{ service.durationMinutes }} mins
         </span>
         <span class="block text-xs text-zinc-400 leading-relaxed font-light mt-1">
@@ -94,7 +95,7 @@
               <div class="h-5 w-44 rounded bg-white/10"></div>
               <div class="h-5 w-14 rounded bg-white/10"></div>
             </div>
-            <div class="h-2.5 w-28 rounded bg-white/5 mt-1.5"></div>
+            <div class="h-3 w-28 rounded bg-white/5 mt-1.5"></div>
             <div class="h-3 w-full rounded bg-white/5 mt-2"></div>
           </div>
         }

@@ -66,6 +66,9 @@ interface ReviewFormModel {
               <input
                 type="text"
                 id="cancelBookingId"
+                autocomplete="off"
+                autocapitalize="none"
+                spellcheck="false"
                 [formField]="cancelForm.publicId"
                 placeholder="e.g., 8f8d9b..."
                 class="form-control"
@@ -76,7 +79,7 @@ interface ReviewFormModel {
               />
               <span
                 id="cancelBookingId-error"
-                class="text-rose-400 text-[10px]"
+                class="text-rose-400 text-sm"
                 [class.block]="cancelForm.publicId().invalid() && cancelForm.publicId().touched()"
                 [class.hidden]="
                   !(cancelForm.publicId().invalid() && cancelForm.publicId().touched())
@@ -94,6 +97,7 @@ interface ReviewFormModel {
               <input
                 type="email"
                 id="cancelEmail"
+                autocomplete="email"
                 [formField]="cancelForm.email"
                 placeholder="e.g., john@example.com"
                 class="form-control"
@@ -104,7 +108,7 @@ interface ReviewFormModel {
               />
               <span
                 id="cancelEmail-error"
-                class="text-rose-400 text-[10px]"
+                class="text-rose-400 text-sm"
                 [class.block]="cancelForm.email().invalid() && cancelForm.email().touched()"
                 [class.hidden]="!(cancelForm.email().invalid() && cancelForm.email().touched())"
               >
@@ -150,6 +154,9 @@ interface ReviewFormModel {
             <input
               type="text"
               id="rescheduleBookingId"
+              autocomplete="off"
+              autocapitalize="none"
+              spellcheck="false"
               [formField]="rescheduleForm.publicId"
               placeholder="e.g., 8f8d9b..."
               class="form-control"
@@ -169,6 +176,7 @@ interface ReviewFormModel {
             <input
               type="email"
               id="rescheduleEmail"
+              autocomplete="email"
               [formField]="rescheduleForm.email"
               placeholder="e.g., john@example.com"
               class="form-control"
@@ -220,6 +228,9 @@ interface ReviewFormModel {
               <input
                 type="text"
                 id="reviewPublicId"
+                autocomplete="off"
+                autocapitalize="none"
+                spellcheck="false"
                 [formField]="reviewForm.publicId"
                 placeholder="e.g., 8f8d9b..."
                 class="form-control"
@@ -230,7 +241,7 @@ interface ReviewFormModel {
               />
               <span
                 id="reviewPublicId-error"
-                class="text-rose-400 text-[10px]"
+                class="text-rose-400 text-sm"
                 [class.block]="reviewForm.publicId().invalid() && reviewForm.publicId().touched()"
                 [class.hidden]="
                   !(reviewForm.publicId().invalid() && reviewForm.publicId().touched())
@@ -248,6 +259,7 @@ interface ReviewFormModel {
               <input
                 type="email"
                 id="reviewEmail"
+                autocomplete="email"
                 [formField]="reviewForm.email"
                 placeholder="e.g., john@example.com"
                 class="form-control"
@@ -258,7 +270,7 @@ interface ReviewFormModel {
               />
               <span
                 id="reviewEmail-error"
-                class="text-rose-400 text-[10px]"
+                class="text-rose-400 text-sm"
                 [class.block]="reviewForm.email().invalid() && reviewForm.email().touched()"
                 [class.hidden]="!(reviewForm.email().invalid() && reviewForm.email().touched())"
               >
@@ -283,7 +295,7 @@ interface ReviewFormModel {
               />
               <span
                 id="reviewRating-error"
-                class="text-rose-400 text-[10px]"
+                class="text-rose-400 text-sm"
                 [class.block]="reviewForm.rating().invalid() && reviewForm.rating().touched()"
                 [class.hidden]="!(reviewForm.rating().invalid() && reviewForm.rating().touched())"
               >

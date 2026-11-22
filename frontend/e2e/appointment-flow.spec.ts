@@ -91,7 +91,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
 
   test('should support new customer account registration flow', async ({ page }) => {
     // 1. Open the Admin Login Modal
-    await page.click('button:has-text("Owner Portal")');
+    await page.getByRole('button', { name: /^sign in$/i }).click();
     await expect(page.locator('.modal-overlay')).toBeVisible();
 
     // 2. Switch from Sign In mode to Register Account mode
@@ -116,7 +116,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
 
   test('should show error alert on invalid admin login credentials', async ({ page }) => {
     // 1. Open the Admin Login Modal
-    await page.click('button:has-text("Owner Portal")');
+    await page.getByRole('button', { name: /^sign in$/i }).click();
     await expect(page.locator('.modal-overlay')).toBeVisible();
 
     // 2. Input invalid credentials
@@ -178,8 +178,8 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     // ----------------------------------------------------
     // PHASE 2: ADMINISTRATIVE PANEL CONTROL PLANE
     // ----------------------------------------------------
-    // Open Owner Portal and Log In as Admin
-    await page.click('button:has-text("Owner Portal")');
+    // Open the sign-in modal and log in as admin
+    await page.getByRole('button', { name: /^sign in$/i }).click();
     await page.fill('#username', 'admin');
     await page.fill('#password', 'admin-password');
     await page.click('.modal-card button[type="submit"]');

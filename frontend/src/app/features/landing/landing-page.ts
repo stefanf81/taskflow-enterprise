@@ -6,6 +6,7 @@ import { DashboardPrefetch } from '../../dashboard-loaders';
 import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
 import { FlashMessages } from '../../core/ui/flash-messages';
 import { ShopClock } from '../../core/shop-clock';
+import { ReviewStore } from '../../core/reviews/review.store';
 import { isOpenAt, openingHoursRows } from '@taskflow/domain';
 import { AnnouncementBarComponent } from './announcement-bar/announcement-bar';
 import { AuthModalComponent } from './auth-modal/auth-modal';
@@ -43,6 +44,7 @@ export class LandingPage {
   private readonly router = inject(Router);
   private readonly dashboardPrefetch = inject(DashboardPrefetch);
   private readonly shopClock = inject(ShopClock);
+  private readonly reviewStore = inject(ReviewStore);
 
   /**
    * The week's hours from the barbers' schedules (`/public/shop`). The prerendered page shows the
@@ -63,6 +65,10 @@ export class LandingPage {
   protected readonly servicesLoaded = this.catalogStore.hasLoaded;
   /** Placeholder rows shown until the catalog arrives; the seeded catalog has five services. */
   protected readonly skeletonRows = [0, 1, 2, 3, 4];
+  /** The shop's real rating (every barber's reviews), shown instead of a hand-picked quote. */
+  protected readonly ratingSummary = this.reviewStore.shopSummary;
+  protected readonly ratingsLoaded = this.reviewStore.hasLoaded;
+  protected readonly ratingsError = this.reviewStore.errorMessage;
 
   constructor() {
     this.shopClock.watch(inject(DestroyRef));

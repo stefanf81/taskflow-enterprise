@@ -44,12 +44,12 @@ export interface RescheduleSelection {
       aria-label="Choose a new date and time"
     >
       <div>
-        <p class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">New date</p>
+        <p class="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">New date</p>
         <div class="flex flex-wrap gap-1.5">
           @for (date of dates(); track date) {
             <button
               type="button"
-              class="px-2.5 py-1.5 rounded-lg text-[11px] border transition-all"
+              class="px-2.5 py-1.5 rounded-lg text-xs border transition-all"
               [class]="
                 date === selectedDate()
                   ? 'bg-gold/20 border-gold text-gold'
@@ -67,13 +67,13 @@ export interface RescheduleSelection {
       </div>
 
       <div>
-        <p class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">New time</p>
+        <p class="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">New time</p>
         @if (loadingSlots()) {
           <p class="text-xs text-zinc-500" role="status">Checking availability…</p>
         } @else if (slotsError()) {
           <div class="flex items-center gap-2" role="alert">
             <p class="text-xs text-rose-400">{{ slotsError() }}</p>
-            <button type="button" class="btn btn-secondary py-1 px-2 text-[11px]" (click)="retry()">
+            <button type="button" class="btn btn-secondary py-1 px-2 text-xs" (click)="retry()">
               Retry
             </button>
           </div>
@@ -82,7 +82,7 @@ export interface RescheduleSelection {
             @for (slot of slots(); track slot) {
               <button
                 type="button"
-                class="px-2.5 py-1.5 rounded-lg text-[11px] border transition-all"
+                class="px-2.5 py-1.5 rounded-lg text-xs border transition-all"
                 [class]="
                   slot === selectedTime()
                     ? 'bg-gold/20 border-gold text-gold'

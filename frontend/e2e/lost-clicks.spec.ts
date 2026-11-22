@@ -34,7 +34,7 @@ async function animationsSettled(page: Page): Promise<void> {
 test.describe('Clicks next to a field that validates on blur', () => {
   test('the login modal switches to registration', async ({ page }) => {
     await page.goto('/');
-    await page.click('button:has-text("Owner Portal")');
+    await page.getByRole('button', { name: /^sign in$/i }).click();
     // The modal focuses the empty username field; leaving it shows "Username is required."
     await expect(page.locator('#username')).toBeFocused();
     await animationsSettled(page);

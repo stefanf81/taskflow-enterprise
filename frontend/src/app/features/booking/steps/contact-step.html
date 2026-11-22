@@ -15,6 +15,7 @@
       <input
         type="text"
         id="customerName"
+        autocomplete="name"
         placeholder="e.g., John Doe"
         class="form-control"
         [formField]="store.bookingForm.customerName"
@@ -22,7 +23,7 @@
         [attr.aria-describedby]="store.nameError() ? 'customerName-error' : null"
       />
       @if (store.nameError(); as nameProblem) {
-        <span id="customerName-error" role="alert" class="text-rose-400 text-[10px] mt-1 block">
+        <span id="customerName-error" role="alert" class="text-rose-400 text-sm mt-1 block">
           {{ nameProblem }}
         </span>
       }
@@ -34,6 +35,7 @@
         <input
           type="email"
           id="customerEmail"
+          autocomplete="email"
           placeholder="e.g., john@example.com"
           class="form-control"
           [formField]="store.bookingForm.customerEmail"
@@ -41,7 +43,7 @@
           [attr.aria-describedby]="store.visibleEmailError() ? 'customerEmail-error' : null"
         />
         @if (store.visibleEmailError(); as emailProblem) {
-          <span id="customerEmail-error" role="alert" class="text-rose-400 text-[10px] mt-1 block">
+          <span id="customerEmail-error" role="alert" class="text-rose-400 text-sm mt-1 block">
             {{ emailProblem }}
           </span>
         }
@@ -50,8 +52,9 @@
       <div class="form-group">
         <label for="customerPhone">Phone Number <span class="required">*</span></label>
         <input
-          type="text"
+          type="tel"
           id="customerPhone"
+          autocomplete="tel"
           placeholder="e.g., 555-0199"
           class="form-control"
           [formField]="store.bookingForm.customerPhone"
@@ -59,7 +62,7 @@
           [attr.aria-describedby]="store.phoneError() ? 'customerPhone-error' : null"
         />
         @if (store.phoneError(); as phoneProblem) {
-          <span id="customerPhone-error" role="alert" class="text-rose-400 text-[10px] mt-1 block">
+          <span id="customerPhone-error" role="alert" class="text-rose-400 text-sm mt-1 block">
             {{ phoneProblem }}
           </span>
         }

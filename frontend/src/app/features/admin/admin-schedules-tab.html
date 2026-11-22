@@ -40,7 +40,7 @@
           >
             {{ barber.name }}
           </p>
-          <p class="text-[10px] text-zinc-500 mt-1">{{ barber.email }}</p>
+          <p class="text-xs text-zinc-500 mt-1">{{ barber.email }}</p>
         </div>
       }
 
@@ -49,6 +49,7 @@
         <h4 class="text-zinc-200 text-xs font-extrabold uppercase tracking-wider">Add Barber</h4>
         <input
           type="text"
+          autocomplete="off"
           aria-label="New barber name"
           placeholder="Name *"
           [value]="newBarberName()"
@@ -57,6 +58,7 @@
         />
         <input
           type="email"
+          autocomplete="off"
           aria-label="New barber email"
           placeholder="Email"
           [value]="newBarberEmail()"
@@ -64,7 +66,8 @@
           class="form-control w-full p-2 rounded-xl text-xs bg-zinc-950 border border-white/10 text-white"
         />
         <input
-          type="text"
+          type="tel"
+          autocomplete="off"
           aria-label="New barber phone"
           placeholder="Phone"
           [value]="newBarberPhone()"
@@ -135,7 +138,7 @@
           <div>
             <label
               for="timeOffStartDate"
-              class="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2"
+              class="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2"
               >Start Date</label
             >
             <input
@@ -148,7 +151,7 @@
           <div>
             <label
               for="timeOffEndDate"
-              class="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2"
+              class="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2"
               >End Date</label
             >
             <input
@@ -162,7 +165,7 @@
         <div class="mb-5">
           <label
             for="timeOffReason"
-            class="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2"
+            class="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2"
             >Reason</label
           >
           <input
@@ -200,7 +203,7 @@
                     ⛔ {{ formatLocalDate(to.startDate) }} &rarr;
                     {{ formatLocalDate(to.endDate) }}
                   </p>
-                  <p class="text-[11px] text-zinc-400 mt-1 font-light">
+                  <p class="text-xs text-zinc-400 mt-1 font-light">
                     {{ to.reason }}
                   </p>
                 </div>

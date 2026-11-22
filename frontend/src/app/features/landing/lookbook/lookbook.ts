@@ -34,7 +34,7 @@ import { Component, output } from '@angular/core';
             Executive Pompadour
           </span>
           <span
-            class="inline-block bg-white/10 text-zinc-400 text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
+            class="inline-block bg-white/10 text-zinc-400 text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
             >Classic Crop</span
           >
           <span class="block text-xs text-zinc-500 font-light leading-relaxed">
@@ -55,7 +55,7 @@ import { Component, output } from '@angular/core';
             Midnight Skin Fade
           </span>
           <span
-            class="inline-block bg-white/10 text-zinc-400 text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
+            class="inline-block bg-white/10 text-zinc-400 text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
             >Textured Crop</span
           >
           <span class="block text-xs text-zinc-500 font-light leading-relaxed">
@@ -76,7 +76,7 @@ import { Component, output } from '@angular/core';
             Bespoke Beard Sculpt
           </span>
           <span
-            class="inline-block bg-white/10 text-zinc-400 text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
+            class="inline-block bg-white/10 text-zinc-400 text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
             >Beard Design</span
           >
           <span class="block text-xs text-zinc-500 font-light leading-relaxed">
@@ -97,7 +97,7 @@ import { Component, output } from '@angular/core';
             Royal Executive
           </span>
           <span
-            class="inline-block bg-white/10 text-zinc-400 text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
+            class="inline-block bg-white/10 text-zinc-400 text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
             >Combo Elite</span
           >
           <span class="block text-xs text-zinc-500 font-light leading-relaxed">

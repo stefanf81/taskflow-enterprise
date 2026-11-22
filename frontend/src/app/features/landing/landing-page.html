@@ -48,7 +48,7 @@
             (click)="showAdminLoginModal.set(true)"
             class="text-xs font-bold text-zinc-400 hover:text-gold tracking-wide uppercase transition-colors"
           >
-            Owner Portal
+            Sign in
           </button>
         </div>
       </nav>
@@ -118,7 +118,7 @@
                     <span class="text-zinc-100">{{ service.name }}</span>
                     <span class="text-gold">{{ formatUsd(service.price) }}</span>
                   </div>
-                  <p class="text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-2">
+                  <p class="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
                     ⏱️ Duration: {{ service.durationMinutes }} mins
                   </p>
                   <p class="text-xs text-zinc-400 font-light leading-relaxed">
@@ -147,7 +147,7 @@
                         <div class="h-4 w-40 rounded bg-white/10"></div>
                         <div class="h-4 w-12 rounded bg-white/10"></div>
                       </div>
-                      <div class="h-2.5 w-28 rounded bg-white/5 mb-2.5"></div>
+                      <div class="h-3 w-28 rounded bg-white/5 mb-3"></div>
                       <div class="h-3 w-full rounded bg-white/5 mb-1.5"></div>
                       <div class="h-3 w-3/4 rounded bg-white/5"></div>
                     </div>
@@ -200,19 +200,43 @@
               </div>
             </div>
 
-            <!-- Customer Social Proof -->
+            <!-- Client ratings from the real reviews (/reviews/public/barber-ratings). They load
+                 after hydration, so the body keeps its height (min-h-12) from first paint and the
+                 prerendered page shows the same empty box as the browser while it loads. -->
             <div class="mt-6 rounded-xl border border-white/5 bg-zinc-900/5 p-5">
               <h3 class="text-zinc-100 font-bold text-xs uppercase tracking-wider mb-3">
-                ⭐️ Client Social Proof
+                ⭐️ Client Ratings
               </h3>
-              <p class="text-xs text-zinc-400 leading-relaxed font-light italic">
-                "The best skin fade I have ever had. Sara is incredibly meticulous and the royal
-                steam towel shave is pure heaven. I will never go anywhere else!"
-              </p>
-              <div
-                class="text-right text-[10px] font-bold text-zinc-300 uppercase tracking-wider mt-3"
-              >
-                — Liam K. (5/5 ★)
+              <div class="min-h-12">
+                @if (ratingSummary(); as summary) {
+                  <p class="flex items-baseline gap-2">
+                    <span class="text-2xl font-black text-gold leading-none">{{
+                      summary.averageRating.toFixed(1)
+                    }}</span>
+                    <span class="sr-only"> out of 5</span>
+                    <span aria-hidden="true" class="text-gold text-sm leading-none">★</span>
+                    <span class="text-xs text-zinc-400"
+                      >from {{ summary.reviewCount }}
+                      {{ summary.reviewCount === 1 ? 'review' : 'reviews' }}</span
+                    >
+                  </p>
+                  <p class="text-xs text-zinc-400 mt-2">
+                    Top rated:
+                    <span class="font-medium text-zinc-200">{{
+                      summary.topBarber.barberName
+                    }}</span>
+                    · {{ summary.topBarber.averageRating.toFixed(1) }}
+                    <span aria-hidden="true">★</span>
+                  </p>
+                } @else if (ratingsError()) {
+                  <p class="text-xs text-zinc-400 font-light leading-relaxed">
+                    Ratings are unavailable right now.
+                  </p>
+                } @else if (ratingsLoaded()) {
+                  <p class="text-xs text-zinc-400 font-light leading-relaxed">
+                    No reviews yet. After your visit you can rate your barber below.
+                  </p>
+                }
               </div>
             </div>
           </section>
