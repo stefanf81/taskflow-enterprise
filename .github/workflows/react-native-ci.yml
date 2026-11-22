@@ -93,7 +93,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -133,14 +133,14 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       # The Node/npm steps below are YAML anchors reused by the native jobs.
       - &setup-node
         name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: mobile/.nvmrc
           # npm's download cache is managed by the restore/save steps below.
@@ -156,7 +156,7 @@ jobs:
       - &restore-npm-cache
         name: Restore npm download cache
         id: npm-cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.npm
           key: npm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
@@ -174,7 +174,7 @@ jobs:
         # Best effort: the JavaScript and Android jobs share the Linux key and
         # may race to save it.
         continue-on-error: true
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.npm
           key: ${{ steps.npm-cache.outputs.cache-primary-key }}
@@ -192,7 +192,7 @@ jobs:
 
       - name: Upload Jest coverage
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: jest-coverage
           path: mobile/coverage/
@@ -225,7 +225,7 @@ jobs:
       # Full history: the base commit is checked out alongside the head commit, and a
       # pull-request checkout is otherwise a shallow merge ref.
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
@@ -330,7 +330,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -338,7 +338,7 @@ jobs:
       - *restore-npm-cache
 
       - name: Set up Java
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
@@ -406,7 +406,7 @@ jobs:
       # dependency graph is fixed by the root package-lock.json, so the key is
       # stable across runs and independent of the regenerated android/ tree.
       - name: Cache Android Gradle project state
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: mobile/android/.gradle
           key: android-gradle-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -442,7 +442,7 @@ jobs:
             :app:assembleDebug
 
       - name: Upload Android debug APK
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: taskflow-android-debug
           path: mobile/android/app/build/outputs/apk/debug/*.apk
@@ -452,7 +452,7 @@ jobs:
 
       - name: Upload Android reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-reports
           path: |
@@ -558,7 +558,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -595,7 +595,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -637,7 +637,7 @@ jobs:
 
       - &cache-cocoapods-gems
         name: Cache CocoaPods gems
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/.gem
           key: cocoapods-${{ runner.os }}-ruby${{ steps.ruby.outputs.version }}-${{ env.COCOAPODS_VERSION }}
@@ -652,7 +652,7 @@ jobs:
       # and saving its PR-scoped copy cost ~9 s while evicting main's caches.
       - name: Restore CocoaPods download cache
         id: pods-cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/Library/Caches/CocoaPods
           key: cocoapods-specs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -683,7 +683,8 @@ jobs:
       - &configure-cocoapods
         name: Configure CocoaPods
         shell: bash
-        run: |
+        # Installs the exact COCOAPODS_VERSION (tracked by Renovate).
+        run: | # zizmor: ignore[adhoc-packages]
           set -euo pipefail
 
           # Install into the cached GEM_HOME (no sudo) and expose its binaries
@@ -727,7 +728,7 @@ jobs:
       - &restore-expo-modules-jsi
         name: Restore ExpoModulesJSI xcframework
         id: jsi-cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.jsi-path.outputs.path }}
           key: expo-modules-jsi-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
@@ -748,7 +749,7 @@ jobs:
       - name: Save CocoaPods download cache
         if: github.event_name != 'pull_request' && steps.pods-cache.outputs.cache-hit != 'true'
         continue-on-error: true
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/Library/Caches/CocoaPods
           key: ${{ steps.pods-cache.outputs.cache-primary-key }}
@@ -820,13 +821,13 @@ jobs:
       - name: Save ExpoModulesJSI xcframework
         if: github.event_name != 'pull_request' && steps.jsi-cache.outputs.cache-hit != 'true'
         continue-on-error: true
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.jsi-path.outputs.path }}
           key: ${{ steps.jsi-cache.outputs.cache-primary-key }}
 
       - name: Upload iOS simulator application
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: taskflow-ios-simulator
           path: mobile/ios/build/DerivedData/Build/Products/Debug-iphonesimulator/*.app
@@ -836,7 +837,7 @@ jobs:
 
       - name: Upload Xcode result bundle
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ios-xcresult
           path: mobile/ios/build/TaskFlowMobile.xcresult
@@ -845,7 +846,7 @@ jobs:
 
       - name: Upload raw xcodebuild log
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ios-xcodebuild-log
           path: ${{ runner.temp }}/xcodebuild.log
@@ -864,7 +865,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -900,7 +901,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -936,7 +937,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -947,7 +948,7 @@ jobs:
       # default JAVA_HOME for the app build: the local Detox builds use 21 and
       # JDK 25 fails React Native's CMake configuration (mobile/e2e/README.md).
       - name: Set up Java
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: |
@@ -972,7 +973,7 @@ jobs:
             > /dev/null 2>&1 &
 
       - name: Download backend JAR
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: e2e-backend-jar
           path: e2e-backend-jar
@@ -1020,7 +1021,7 @@ jobs:
 
       - name: Restore the Detox APKs for this fingerprint
         id: apk-cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: &detox-apks |
             mobile/android/app/build/outputs/apk/release/app-release.apk
@@ -1116,7 +1117,7 @@ jobs:
       - name: Save the Detox APKs for this fingerprint
         if: steps.repack-check.outputs.equal == 'true'
         continue-on-error: true
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: *detox-apks
           key: *detox-apk-key
@@ -1209,7 +1210,7 @@ jobs:
 
       - name: Upload Detox artifacts and backend log
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-e2e-artifacts
           path: |
@@ -1238,7 +1239,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -1248,14 +1249,14 @@ jobs:
       - *save-npm-cache
 
       - name: Set up Java
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           # Only runs the backend JAR (build.gradle toolchain).
           java-version: "25"
 
       - name: Download backend JAR
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: e2e-backend-jar
           path: e2e-backend-jar
@@ -1300,7 +1301,7 @@ jobs:
 
       - name: Restore the Detox app for this fingerprint
         id: app-cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: &detox-app mobile/ios/build/Build/Products/Release-iphonesimulator/TaskFlowMobile.app
           key: &detox-app-key detox-app-v1-${{ runner.os }}-${{ steps.fingerprint.outputs.toolchain }}-${{ steps.fingerprint.outputs.hash }}-${{ hashFiles('mobile/.detoxrc.js') }}
@@ -1323,7 +1324,7 @@ jobs:
 
       - name: Restore CocoaPods download cache
         if: steps.repack.outputs.repacked != 'true'
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/Library/Caches/CocoaPods
           key: cocoapods-specs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -1426,7 +1427,7 @@ jobs:
       - name: Save the Detox app for this fingerprint
         if: steps.repack-check.outputs.equal == 'true'
         continue-on-error: true
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: *detox-app
           key: *detox-app-key
@@ -1564,7 +1565,7 @@ jobs:
 
       - name: Upload Detox artifacts, build log and backend log
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ios-e2e-artifacts
           path: |

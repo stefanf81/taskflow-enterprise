@@ -1,0 +1,10 @@
+# zizmor configuration (https://docs.zizmor.sh/configuration/), read by the
+# `Audit workflows` step of ci.yml's workflow-lint job. Exceptions for single
+# lines are inline `# zizmor: ignore[<audit>]` comments with their reason.
+rules:
+  # Suggests GitHub's `$/` self-repository syntax for local actions. actionlint
+  # 1.7.12 (the other workflow linter in CI) does not parse it yet; the `./`
+  # form resolves to the same checked-out files. Revisit with workflow
+  # lockfiles, which treat `$/` references differently.
+  self-repository:
+    disable: true

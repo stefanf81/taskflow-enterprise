@@ -7,3 +7,12 @@
 self-hosted-runner:
   labels:
     - ubuntu-26.04
+
+# `cache-mode` (GitHub Actions workflow key, generally available since
+# 2026-09-10) postdates actionlint 1.7.12's workflow schema, which reports it as
+# an unknown key. Only the publish workflow sets it. Remove this entry once
+# actionlint knows the key.
+paths:
+  .github/workflows/pushdockerimage.yml:
+    ignore:
+      - 'unexpected key "cache-mode" for "workflow" section'

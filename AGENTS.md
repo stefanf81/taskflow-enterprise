@@ -75,7 +75,7 @@ Containers
 - Default-profile startup must stay offline: the AOT cache training boots the app under `--network=none`.
 
 CI
-- Pin every third-party action to a full commit SHA with a `# vX.Y.Z` comment; GitHub-owned `actions/*` stay on tags.
+- Pin every action, GitHub-owned `actions/*` and `github/*` included, to a full commit SHA with a `# vX.Y.Z` comment; zizmor in CI fails on a tag ref.
 - A job that must run after a skipped `needs` starts with `!cancelled()`, never `always()`.
 - DAST: ZAP exits 0 for a scan the app never saw. Keep `dast.yml`'s rate-limit overrides, `ZAP_AUTH_HEADER_SITE: localhost` (a host name, not a URL) and the `zap-report` gate (BENCHMARKS §69).
 

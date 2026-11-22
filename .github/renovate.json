@@ -41,6 +41,16 @@
       ],
       "depNameTemplate": "rhysd/actionlint",
       "datasourceTemplate": "docker"
+    },
+    {
+      "description": "Update the zizmor image tag and digest together in ci.yml",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
+      "matchStrings": [
+        "# zizmor-image: tracked by the dedicated regex manager in \\.github/renovate\\.json\\s+ZIZMOR_IMAGE: \\\"ghcr\\.io/zizmorcore/zizmor:(?<currentValue>[^@\\\"]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\\""
+      ],
+      "depNameTemplate": "ghcr.io/zizmorcore/zizmor",
+      "datasourceTemplate": "docker"
     }
   ],
   "branchPrefix": "renovate/",
@@ -327,9 +337,8 @@
       "groupName": "React Native test tooling"
     },
     {
-      "description": "Pin third-party GitHub Actions to commit digests: CodeQL's security-extended actions/unpinned-tag rule flags mutable tag refs for non-GitHub actions, and only a digest prevents a retargeted tag from running with the workflow's credentials. GitHub-owned actions (actions/*, github/*) stay on tag refs. Renovate keeps each pin current from its '# vX.Y.Z' comment.",
+      "description": "Pin every GitHub Action to a commit digest, GitHub-owned actions (actions/*, github/*) included: a tag can be moved to other code (76 of 77 aquasecurity/trivy-action tags were force-pushed to malicious commits in March 2026), and only a digest keeps a retargeted tag from running with the workflow's credentials. zizmor's unpinned-uses audit in CI fails on any tag ref. Renovate keeps each pin current from its '# vX.Y.Z' comment.",
       "matchManagers": ["github-actions"],
-      "matchPackageNames": ["!actions/*", "!github/*"],
       "pinDigests": true
     },
     {
