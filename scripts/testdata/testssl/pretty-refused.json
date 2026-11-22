@@ -1,0 +1,21 @@
+{
+          "clientProblem1" : [
+                            {
+                                "id"           : "engine_problem",
+                                "severity"     : "WARN",
+                                "finding"      : "No engine or GOST support via engine with your /home/testssl/bin/openssl.Linux.x86_64"
+                           }
+          ],
+          "Invocation"  : "testssl.sh --warnings batch --quiet --ip 127.0.0.1 --jsonfile-pretty /data/refused-pretty.json localhost:18999",
+          "at"          : "vm:/home/testssl/bin/openssl.Linux.x86_64",
+          "version"     : "3.2.5 ",
+          "openssl"     : "OpenSSL 1.0.2-bad from Fri Mar 28 16:54:51 2025",
+          "startTime"   : "1795295062",
+          "scanResult"  : [
+                            {
+                                "id"           : "scanProblem",
+                                "severity"     : "FATAL",
+                                "finding"      : "Can't connect to '127.0.0.1:18999' Make sure a firewall is not between you and your scanning target!"
+                           }          ],
+                    "scanTime"  : "Scan interrupted"
+}

@@ -140,6 +140,9 @@ jobs:
               - '.github/renovate.json'
               - 'scripts/prepare-nuclei-sarif.py'
               - 'scripts/test_nuclei_sarif.py'
+              - 'scripts/testssl_gate.py'
+              - 'scripts/test_testssl_gate.py'
+              - 'scripts/testdata/**'
               - 'scripts/zap2sarif.py'
               - 'scripts/test_zap_sarif.py'
               - 'scripts/zap_scan_health.py'
@@ -279,7 +282,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Test SARIF converters and the DAST scan-health check
+      - name: Test SARIF converters, the DAST scan-health check and the testssl.sh gate
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
       - name: Set up Node.js for verification script tests
