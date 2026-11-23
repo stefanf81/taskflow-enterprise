@@ -347,6 +347,28 @@ and digest updates enable platform automerge after required CI checks pass and
 a 3-day release quarantine soak expires to protect against supply-chain attacks.
 Minor updates require manual review (also holding for 3 days to catch immediate
 regressions). Major updates are held for 30 days and require manual review.
+`internalChecksFilter: "strict"` (Renovate's default, set explicitly) keeps a
+branch from being created before its soak has passed.
+
+Three kinds of update are never merged unattended, whatever their type:
+
+- **A digest-only change of a pinned action** (group "GitHub Actions whose tag
+  was moved"). Every pin carries its full `# vX.Y.Z` comment, so a regular
+  release is a patch, minor or major update; a new commit under the same version
+  means the tag was moved. Renovate ages such an update against the tag's
+  original release date, so the 3-day soak does not hold it back. Compare the
+  two commits before merging.
+- **Actions that publish, sign or attest the release images, hand the scan
+  report to the signing job, or run Renovate** (group "Privileged GitHub
+  Actions": the Renovate action, the cosign installer, `actions/attest`,
+  `actions/upload-artifact`, `actions/download-artifact`, and the Docker login,
+  build-push and Buildx actions). No check of the update PR runs the new
+  version with those credentials.
+- **The Renovate image** (see `docs/agents/ci.md`).
+
+These rules sit below the automerge rule and the "GitHub Actions" group in
+`.github/renovate.json`: Renovate applies `packageRules` in order and a later
+match overrides an earlier one, so a rule moved above them would lose.
 
 Tool versions pinned in workflow `env` blocks are tracked through the
 `customManagers:githubActionsVersions` preset: put a
