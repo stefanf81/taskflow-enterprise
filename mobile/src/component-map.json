@@ -226,8 +226,9 @@
   "platformContracts": {
     "webApiTypes": "frontend/src/app/types/api.ts",
     "mobileApiTypes": "mobile/src/types/api.ts",
-    "webThemeTokens": "frontend/src/theme/tokens.json",
-    "mobileThemeTokens": "mobile/src/theme/tokens.json",
+    "sharedThemeTokens": "shared/theme/tokens.json",
+    "webThemeGenerated": "frontend/src/theme/tokens.generated.css",
+    "mobileThemeColors": "mobile/src/theme/colors.ts",
     "webTimeUtils": "frontend/src/app/core/time-utils.ts",
     "mobileTimeUtils": "mobile/src/utils/time-utils.ts"
   }

@@ -4,7 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { isOpenAt } from '@taskflow/domain';
 import { useNow } from '../../core/shop/useNow';
 import { useShopInfo } from '../../core/shop/useShopInfo';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 
 interface HomeHeaderProps {
   /** Shown to guests only; opens the sign-in screen (customers and the owner alike). */
@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderBottomColor: withAlpha(semantic['fg-strong'], 0.1),
     marginBottom: 16,
   },
   navBrand: {
@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   navTitle: {
-    color: '#f4f4f5',
+    color: semantic.fg,
     fontSize: 18,
     fontWeight: '800',
     letterSpacing: 1,
@@ -80,9 +80,9 @@ const styles = StyleSheet.create({
   shopBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(52, 211, 153, 0.1)',
+    backgroundColor: withAlpha(semantic.success, 0.1),
     borderWidth: 1,
-    borderColor: 'rgba(52, 211, 153, 0.2)',
+    borderColor: withAlpha(semantic.success, 0.2),
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -92,25 +92,25 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#34d399',
+    backgroundColor: semantic.success,
   },
   shopText: {
-    color: '#34d399',
+    color: semantic.success,
     fontSize: 10,
     fontWeight: '700',
   },
   shopBadgeClosed: {
-    backgroundColor: 'rgba(161, 161, 170, 0.1)',
-    borderColor: 'rgba(161, 161, 170, 0.2)',
+    backgroundColor: withAlpha(semantic['fg-muted'], 0.1),
+    borderColor: withAlpha(semantic['fg-muted'], 0.2),
   },
   shopDotClosed: {
-    backgroundColor: '#a1a1aa',
+    backgroundColor: semantic['fg-muted'],
   },
   shopTextClosed: {
-    color: '#a1a1aa',
+    color: semantic['fg-muted'],
   },
   ownerLink: {
-    color: '#a1a1aa',
+    color: semantic['fg-muted'],
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1,

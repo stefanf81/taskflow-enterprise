@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 import { formatRating, openingHoursRows, summarizeShopRatings } from '@taskflow/domain';
 import { useBarberRatings } from './useReviews';
 import { useShopInfo } from '../../core/shop/useShopInfo';
@@ -117,21 +117,21 @@ const styles = StyleSheet.create({
     marginTop: 20,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(24,24,27,0.5)',
+    borderColor: withAlpha(semantic['fg-strong'], 0.1),
+    backgroundColor: withAlpha(semantic.raised, 0.5),
     padding: 16,
   },
   hoursDay: {
-    color: '#a1a1aa',
+    color: semantic['fg-muted'],
     fontSize: 12,
   },
   hoursTime: {
-    color: '#d4d4d8',
+    color: semantic.fg,
     fontSize: 12,
     fontWeight: '600',
   },
   closedDay: {
-    color: '#f87171',
+    color: semantic.danger,
     fontWeight: '700',
   },
 
@@ -140,12 +140,12 @@ const styles = StyleSheet.create({
     marginTop: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(229, 193, 133, 0.05)',
+    borderColor: withAlpha(semantic['fg-strong'], 0.1),
+    backgroundColor: withAlpha(semantic['accent-soft'], 0.05),
     padding: 16,
   },
   productName: {
-    color: '#a1a1aa',
+    color: semantic['fg-muted'],
     fontSize: 12,
   },
   productPrice: {
@@ -159,8 +159,8 @@ const styles = StyleSheet.create({
     marginTop: 16,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-    backgroundColor: 'rgba(24,24,27,0.3)',
+    borderColor: withAlpha(semantic['fg-strong'], 0.05),
+    backgroundColor: withAlpha(semantic.raised, 0.3),
     padding: 16,
   },
   // Holds its height while the ratings load, so the sections below do not jump.
@@ -182,20 +182,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   ratingCount: {
-    color: '#a1a1aa',
+    color: semantic['fg-muted'],
     fontSize: 12,
   },
   topRated: {
-    color: '#a1a1aa',
+    color: semantic['fg-muted'],
     fontSize: 12,
     marginTop: 8,
   },
   topRatedName: {
-    color: '#e4e4e7',
+    color: semantic.fg,
     fontWeight: '600',
   },
   ratingNote: {
-    color: '#a1a1aa',
+    color: semantic['fg-muted'],
     fontSize: 12,
     lineHeight: 17,
   },

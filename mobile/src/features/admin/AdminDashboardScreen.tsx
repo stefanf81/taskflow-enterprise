@@ -27,7 +27,7 @@ import {
 } from '../../core/appointments/useAppointments';
 import { useAuthStore } from '../../core/auth/useAuthStore';
 import { useShallow } from 'zustand/react/shallow';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 import { formatTime12Hour, formatUsd, isOverdue } from '../../utils/time-utils';
 import { useShopInfo } from '../../core/shop/useShopInfo';
 import { useNow } from '../../core/shop/useNow';
@@ -483,9 +483,9 @@ const styles = StyleSheet.create({
   successBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(52, 211, 153, 0.12)',
+    backgroundColor: withAlpha(semantic.success, 0.12),
     borderWidth: 1,
-    borderColor: 'rgba(52, 211, 153, 0.3)',
+    borderColor: withAlpha(semantic.success, 0.3),
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: 6,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: withAlpha(semantic['fg-strong'], 0.05),
     borderRadius: 3,
     overflow: 'hidden',
   },
@@ -619,7 +619,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   overdueBadgeText: {
-    color: '#ffffff',
+    color: semantic['fg-strong'],
     fontSize: 9,
     fontWeight: '800',
   },

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { ErrorState } from '../../components/common/ErrorState';
 import { useCatalog } from '../../core/catalog/useCatalog';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 
 /** The service catalog as a price list; a failed load shows a retry in place of the list only. */
 export const GroomingMenu: React.FC = () => {
@@ -44,11 +44,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    borderBottomColor: withAlpha(semantic['fg-strong'], 0.05),
   },
   menuItem: {
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    borderBottomColor: withAlpha(semantic['fg-strong'], 0.05),
     paddingBottom: 12,
     marginBottom: 12,
   },

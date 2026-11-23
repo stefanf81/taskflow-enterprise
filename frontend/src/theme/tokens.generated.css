@@ -1,12 +1,14 @@
 /* GENERATED FILE — do not edit.
- * Source: src/theme/tokens.json
+ * Source: shared/theme/tokens.json
  * Regenerate with: npm run theme:build
  */
 @theme {
   --color-page: #000000;
   --color-surface: #09090b;
   --color-raised: #18181b;
+  --color-border: #27272a;
   --color-fg: #f4f4f5;
+  --color-fg-strong: #ffffff;
   --color-fg-muted: #a1a1aa;
   --color-fg-subtle: #8a8a93;
   --color-fg-disabled: #7e7e8a;

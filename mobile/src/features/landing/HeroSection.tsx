@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from '../../components/common/Button';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 
 interface HeroSectionProps {
   isAuthenticated: boolean;
@@ -85,9 +85,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   squireBadge: {
-    backgroundColor: 'rgba(197, 160, 89, 0.1)',
+    backgroundColor: withAlpha(semantic.accent, 0.1),
     borderWidth: 1,
-    borderColor: 'rgba(197, 160, 89, 0.2)',
+    borderColor: withAlpha(semantic.accent, 0.2),
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   heroTitle: {
-    color: '#ffffff',
+    color: semantic['fg-strong'],
     fontSize: 30,
     fontWeight: '900',
     textAlign: 'center',
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
     color: colors.gold.main,
   },
   heroSubtitle: {
-    color: '#a1a1aa',
+    color: semantic['fg-muted'],
     fontSize: 13,
     textAlign: 'center',
     marginTop: 10,

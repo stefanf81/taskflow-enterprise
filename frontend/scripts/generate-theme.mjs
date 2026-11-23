@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Generates the Tailwind v4 @theme block from src/theme/tokens.json.
+ * Generates the Tailwind v4 @theme block from shared/theme/tokens.json (@taskflow/theme, the
+ * tokens the mobile app renders with too).
  *
  * The JSON file stays the single source of truth for the design system;
  * `styles.css` imports the generated CSS instead of hand-maintaining hex
@@ -15,14 +16,14 @@ import prettier from 'prettier';
 import { evaluateContrast } from './theme-contrast.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const tokensPath = resolve(root, 'src/theme/tokens.json');
+const tokensPath = resolve(root, '../shared/theme/tokens.json');
 const outputPath = resolve(root, 'src/theme/tokens.generated.css');
 
 const tokens = JSON.parse(readFileSync(tokensPath, 'utf8'));
 
 const contrastFailures = evaluateContrast(tokens).filter((result) => !result.pass);
 if (contrastFailures.length > 0) {
-  console.error('src/theme/tokens.json fails WCAG AA contrast:');
+  console.error('shared/theme/tokens.json fails WCAG AA contrast:');
   for (const { fg, bg, ratio, min } of contrastFailures) {
     console.error(`  ${fg} on ${bg}: ${ratio.toFixed(2)}:1 (needs ${min}:1)`);
   }
@@ -53,7 +54,7 @@ const variables = [
 const generated = await prettier.format(
   [
     '/* GENERATED FILE — do not edit.',
-    ' * Source: src/theme/tokens.json',
+    ' * Source: shared/theme/tokens.json',
     ' * Regenerate with: npm run theme:build',
     ' */',
     '@theme {',

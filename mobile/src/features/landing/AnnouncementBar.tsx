@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Animated, useAnimatedValue } from 'react-native';
-import { colors } from '../../theme/colors';
+import { colors, semantic } from '../../theme/colors';
 
 interface AnnouncementBarProps {
   /**
@@ -63,9 +63,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#18181b',
+    backgroundColor: semantic.raised,
     borderBottomWidth: 1,
-    borderBottomColor: '#27272a',
+    borderBottomColor: semantic.border,
     paddingVertical: 8,
     paddingHorizontal: 12,
     marginHorizontal: -16,

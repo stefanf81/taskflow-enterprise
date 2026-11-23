@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../../theme/colors';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 import { BOOKING_STEPS, BookingStep } from './bookingWizard';
 
 const STEP_LABELS: Record<BookingStep, string> = {
@@ -46,7 +47,11 @@ export const BookingHeader: React.FC<BookingHeaderProps> = ({ step }) => {
                     isCompleted && styles.stepNodeTextCompleted,
                   ]}
                 >
-                  {isCompleted ? '✓' : s}
+                  {isCompleted ? (
+                    <Ionicons name="checkmark" size={14} color={colors.text.dark} />
+                  ) : (
+                    s
+                  )}
                 </Text>
               </View>
             );
@@ -87,7 +92,7 @@ const styles = StyleSheet.create({
     right: 0,
     top: 16,
     height: 3,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: withAlpha(semantic['fg-strong'], 0.05),
     borderRadius: 2,
   },
   timelineProgress: {

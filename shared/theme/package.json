@@ -1,0 +1,12 @@
+{
+  "name": "@taskflow/theme",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Design tokens both clients render with: tokens.json (palette, semantic colours, radii, shadows, font) and typed helpers. Plain TypeScript, no dependencies; tests and type check run on the frontend workspace's vitest and TypeScript, like @taskflow/domain.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

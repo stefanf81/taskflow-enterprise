@@ -9,7 +9,7 @@ import { Card } from '../../components/common/Card';
 import { useAuthStore } from '../../core/auth/useAuthStore';
 import { useShallow } from 'zustand/react/shallow';
 import { RootStackParamList, GuestTabParamList } from '../../types/navigation';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 import { AnnouncementBar } from './AnnouncementBar';
 import { HomeHeader } from './HomeHeader';
 import { HeroSection } from './HeroSection';
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     marginTop: 32,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: withAlpha(semantic['fg-strong'], 0.1),
     alignItems: 'center',
   },
   footerText: {

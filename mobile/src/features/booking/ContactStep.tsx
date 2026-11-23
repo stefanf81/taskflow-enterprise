@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Card } from '../../components/common/Card';
 import { Input } from '../../components/common/Input';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 import { formatTime12Hour } from '../../utils/time-utils';
 import { BookingSummary, ContactDetails } from './bookingWizard';
 import { StepNavigation } from './StepNavigation';
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: withAlpha(semantic['fg-strong'], 0.1),
     marginVertical: 8,
   },
   totalRow: {

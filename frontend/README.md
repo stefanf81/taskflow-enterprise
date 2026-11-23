@@ -2,7 +2,7 @@
 
 Welcome to the **TaskFlow Enterprise Frontend**! This client application is engineered with **Angular 22** utilizing the state-of-the-art **Angular Signals** architecture for Zone-free, lightweight, and modern state management.
 
-The UI is custom-styled with **Tailwind CSS v4** in a premium enterprise **gold & obsidian** design system defined by the frontend-local `src/theme/tokens.json`.
+The UI is custom-styled with **Tailwind CSS v4** in a premium enterprise **gold & obsidian** design system defined by `shared/theme/tokens.json` (`@taskflow/theme`, shared with the mobile app).
 
 ---
 
@@ -20,7 +20,7 @@ This project uses **Tailwind CSS v4** (`^4.3.3`) natively within Angular 22's mo
       }
     }
     ```
-2.  **Theme tokens (`src/theme/tokens.json` → `src/theme/tokens.generated.css`):** `npm run theme:build` turns the JSON's `semantic` colours, `radius`, `shadow` and `font` into a Tailwind `@theme` block that `src/styles.css` imports, and fails when a text colour drops below WCAG AA on the dark surfaces (`scripts/theme-contrast.mjs`). The semantic names are what templates and CSS use:
+2.  **Theme tokens (`shared/theme/tokens.json` → `src/theme/tokens.generated.css`):** `npm run theme:build` turns the JSON's `semantic` colours, `radius`, `shadow` and `font` into a Tailwind `@theme` block that `src/styles.css` imports, and fails when a text colour drops below WCAG AA on the dark surfaces (`scripts/theme-contrast.mjs`). The semantic names are what templates and CSS use:
 
     ```css
     @theme {
@@ -53,7 +53,7 @@ The frontend owns its contract files under `src/`:
 
 - **API Types (`src/app/types/api.ts`)**: Re-exports the types generated once into `shared/schemas/src/generated/api-types.ts` from the reviewed root-level `api/openapi.json` baseline. Do not edit manually; use the workspace contract commands.
 - **Pure Time Utilities (`src/app/core/time-utils.ts`)**: Owns pure time formatting and date validation functions.
-- **Design Tokens (`src/theme/tokens.json`)**: The palette and the semantic colours, radii, shadows and font that `npm run theme:build` generates into `src/theme/tokens.generated.css`.
+- **Design Tokens (`shared/theme/tokens.json`, shared with mobile)**: The palette and the semantic colours, radii, shadows and font that `npm run theme:build` generates into `src/theme/tokens.generated.css`.
 
 ---
 

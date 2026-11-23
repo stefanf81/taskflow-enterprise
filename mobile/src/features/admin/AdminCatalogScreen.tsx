@@ -12,7 +12,7 @@ import { EmptyState } from '../../components/common/EmptyState';
 import { ErrorState } from '../../components/common/ErrorState';
 import { useCatalog, useRestoreService, useRetiredServices, useCreateService, useUpdateService, useRetireService } from '../../core/catalog/useCatalog';
 import { ServiceItem } from '../../types/api';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 import { getApiErrorMessage } from '../../utils/errors';
 
 type CatalogTab = 'active' | 'retired';
@@ -264,9 +264,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: withAlpha(semantic['fg-strong'], 0.05),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: withAlpha(semantic['fg-strong'], 0.05),
   },
   tabSelected: {
     backgroundColor: colors.obsidian.card,
@@ -282,9 +282,9 @@ const styles = StyleSheet.create({
     color: colors.gold.main,
   },
   successBanner: {
-    backgroundColor: 'rgba(52, 211, 153, 0.12)',
+    backgroundColor: withAlpha(semantic.success, 0.12),
     borderWidth: 1,
-    borderColor: 'rgba(52, 211, 153, 0.3)',
+    borderColor: withAlpha(semantic.success, 0.3),
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,

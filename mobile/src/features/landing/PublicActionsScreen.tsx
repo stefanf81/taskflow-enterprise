@@ -9,7 +9,7 @@ import { PublicCancelModal } from './PublicCancelModal';
 import { PublicRescheduleModal } from './PublicRescheduleModal';
 import { PublicReviewModal } from './PublicReviewModal';
 import { RootStackParamList } from '../../types/navigation';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 
 type RouteProps = RouteProp<RootStackParamList, 'PublicActions'>;
 
@@ -130,9 +130,9 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   toast: {
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    backgroundColor: withAlpha(semantic.success, 0.15),
     borderWidth: 1,
-    borderColor: 'rgba(34, 197, 94, 0.3)',
+    borderColor: withAlpha(semantic.success, 0.3),
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,

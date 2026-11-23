@@ -1,6 +1,6 @@
 /* TaskFlow's shared component classes (dark "obsidian & gold" theme).
 
-   Every colour, radius, shadow and the font come from src/theme/tokens.json, generated into
+   Every colour, radius, shadow and the font come from shared/theme/tokens.json, generated into
    tokens.generated.css as Tailwind theme variables (`--color-accent`, `--radius-md`,
    `--shadow-ring`, …). Nothing here defines its own palette: change a colour in the JSON.
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 
 interface BadgeProps {
   status: string;
@@ -13,13 +13,13 @@ export const Badge: React.FC<BadgeProps> = ({ status }) => {
   let text = colors.text.secondary;
 
   if (normalized === 'APPROVED') {
-    bg = 'rgba(34, 197, 94, 0.15)';
+    bg = withAlpha(semantic.success, 0.15);
     text = colors.status.approved;
   } else if (normalized === 'PENDING') {
-    bg = 'rgba(234, 179, 8, 0.15)';
+    bg = withAlpha(semantic.warning, 0.15);
     text = colors.status.pending;
   } else if (normalized === 'DENIED' || normalized === 'CANCELLED') {
-    bg = 'rgba(239, 68, 68, 0.15)';
+    bg = withAlpha(semantic.danger, 0.15);
     text = colors.status.denied;
   }
 

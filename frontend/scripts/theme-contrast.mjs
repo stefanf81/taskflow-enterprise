@@ -1,5 +1,5 @@
 /**
- * WCAG 2.x AA colour-contrast rules for src/theme/tokens.json.
+ * WCAG 2.x AA colour-contrast rules for shared/theme/tokens.json (used by web and mobile).
  *
  * `generate-theme.mjs` runs these on every `theme:build` / `theme:check` (and so on
  * `npm run lint`), so a token edit that drops a text/background pair below AA fails CI

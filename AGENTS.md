@@ -89,7 +89,7 @@ Frontend
 - A prerendered `@defer` block that only reacts to clicks hydrates `on interaction` (with `prefetch on idle`), not `on idle`: idle hydration loses clicks made before the page has loaded (`e2e/early-interaction.spec.ts`).
 - No `@angular/common` pipes, `NgClass` or `CommonModule` (ESLint enforces it): they ship ~22 kB to every guest page; use `core/format.ts` and `[class]` bindings.
 - Build screens from the `core/ui` blocks (`appButton`, `app-alert`, `app-empty-state`, `app-icon`, …); a missing `Button` import fails silently. Icons, not emoji: import each from `core/ui/icons/<name>` (no barrel).
-- Edit `src/theme/tokens.json`, not `tokens.generated.css`. Schemas use `zod/mini`; keep the check order, since it decides `issues[0]`.
+- Colours live in `shared/theme/tokens.json` (web + mobile); never edit `tokens.generated.css` or hard-code one. Schemas use `zod/mini`; keep the check order, since it decides `issues[0]`.
 - Prettier: 100 columns, single quotes, run from `frontend/`.
 
 Mobile
