@@ -101,7 +101,8 @@ class SecurityConfig {
         MetricsScrapeAuthorization prometheusAccess = new MetricsScrapeAuthorization(metrics.scrapeToken());
         if (!prometheusAccess.protectsTheEndpoint() && environment.acceptsProfiles(Profiles.of("prod"))) {
             logger.warn("/actuator/prometheus is unauthenticated: app.metrics.scrape-token (APP_METRICS_SCRAPE_TOKEN) "
-                    + "is not set, so only the network keeps the metrics internal");
+                    + "is not set, so only the network keeps the metrics internal. Set the token and "
+                    + "APP_REQUIRE_METRICS_SCRAPE_TOKEN=true to make a missing token fail the start");
         }
 
         JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
@@ -467,11 +468,51 @@ class SecurityConfig {
         }
     }
 
+    /** Smallest modulus accepted for a configured signing key; Nimbus refuses to sign RS256 below it. */
+    static final int MIN_RSA_KEY_BITS = 2048;
+
+    /**
+     * Refuses a configured pair this instance could not use. Each half parses on its own, so two
+     * halves of different pairs (one of the two secrets rotated or pasted from another environment)
+     * used to start: every login then returned a token the decoder rejected, and
+     * {@link StaleAccessTokenCookieFilter} expired the cookie on the next request. A key below
+     * {@link #MIN_RSA_KEY_BITS} started too and failed at the first login, when Nimbus refused to
+     * sign with it. The messages name the variable, never key material.
+     *
+     * <p>The modulus comparison names the usual mistake; signing and verifying a fixed probe also
+     * rejects a private key whose own parameters are inconsistent (about a millisecond, once).
+     */
+    static void requireUsableKeyPair(RSAPrivateKey privateKey, RSAPublicKey publicKey)
+            throws java.security.GeneralSecurityException {
+        int bits = publicKey.getModulus().bitLength();
+        if (bits < MIN_RSA_KEY_BITS) {
+            throw new java.security.InvalidKeyException("APP_RSA_PUBLIC_KEY is a " + bits + "-bit RSA key; at least "
+                    + MIN_RSA_KEY_BITS + " bits are required");
+        }
+        if (!publicKey.getModulus().equals(privateKey.getModulus())) {
+            throw new java.security.InvalidKeyException(
+                    "APP_RSA_PUBLIC_KEY is not the public key of APP_RSA_PRIVATE_KEY (the moduli differ)");
+        }
+        byte[] probe = "taskflow-jwt-key-pair-check".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        java.security.Signature signer = java.security.Signature.getInstance("SHA256withRSA");
+        signer.initSign(privateKey);
+        signer.update(probe);
+        byte[] signature = signer.sign();
+        java.security.Signature verifier = java.security.Signature.getInstance("SHA256withRSA");
+        verifier.initVerify(publicKey);
+        verifier.update(probe);
+        if (!verifier.verify(signature)) {
+            throw new java.security.InvalidKeyException(
+                    "APP_RSA_PUBLIC_KEY does not verify a signature made with APP_RSA_PRIVATE_KEY");
+        }
+    }
+
     /**
      * Load a persistent RSA keypair from APP_RSA_PRIVATE_KEY / APP_RSA_PUBLIC_KEY
      * environment variables (base64-encoded DER). Falls back to a freshly generated
      * ephemeral key when the env vars are absent (logged at WARN — JWT tokens become
-     * invalid on restart in this case).
+     * invalid on restart in this case). A pair that does not belong together or is too
+     * short ({@link #requireUsableKeyPair}) counts as one that could not be loaded.
      */
     private static KeyPair loadOrGenerateRsaKeyPair(
             String privateKeyB64, String publicKeyB64, boolean requirePersistentKeys) {
@@ -487,7 +528,8 @@ class SecurityConfig {
                 java.security.KeyFactory keyFactory = java.security.KeyFactory.getInstance("RSA");
                 RSAPrivateKey privateKey = (RSAPrivateKey) keyFactory.generatePrivate(privateSpec);
                 RSAPublicKey publicKey = (RSAPublicKey) keyFactory.generatePublic(publicSpec);
-                
+                requireUsableKeyPair(privateKey, publicKey);
+
                 logger.info("Loaded persistent RSA key pair from environment variables");
                 return new KeyPair(publicKey, privateKey);
             } catch (Exception e) {
@@ -504,7 +546,7 @@ class SecurityConfig {
         
         try {
             KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
-            keyPairGenerator.initialize(2048);
+            keyPairGenerator.initialize(MIN_RSA_KEY_BITS);
             KeyPair kp = keyPairGenerator.generateKeyPair();
             logger.warn("*** EPHEMERAL RSA KEY IN USE *** All JWT tokens invalidated on restart. "
                     + "Set APP_RSA_PRIVATE_KEY and APP_RSA_PUBLIC_KEY env vars for persistent signing.");
