@@ -112,6 +112,10 @@ services:
       # set both in .env: COMPOSE_PROFILES=observability and
       # MANAGEMENT_TRACING_EXPORT_OTLP_ENABLED=true (CI's smoke test disables it the same way).
       - MANAGEMENT_TRACING_EXPORT_OTLP_ENABLED=${MANAGEMENT_TRACING_EXPORT_OTLP_ENABLED:-false}
+      # Plain console log lines for `docker compose logs`, although the prod profile writes ECS JSON:
+      # nothing parses this stack's logs. Set LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs in .env to see
+      # exactly what production writes (CI's image smoke test runs with the prod default).
+      - LOGGING_STRUCTURED_FORMAT_CONSOLE=${LOGGING_STRUCTURED_FORMAT_CONSOLE:-}
       # CORS: same-origin SPA→nginx→backend requests bypass CORS entirely, but
       # state-changing POST/PUT still carry an Origin header that Spring checks
       # against this list. Whitelist both loopback hostnames so the E2E stack

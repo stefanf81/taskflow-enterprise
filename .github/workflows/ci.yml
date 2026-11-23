@@ -1503,7 +1503,9 @@ jobs:
           echo "CDS: ${shared:-0} of ${total:-0} loaded classes from the shared archive (${percent}%)"
           (( percent >= 80 )) || fail "the CDS archive served only ${percent}% of loaded classes"
 
-          if docker logs smoke-backend 2>&1 | grep -E ' ERROR ' > /dev/null; then
+          # ' ERROR ' is the plain pattern's level column; the prod profile writes ECS JSON
+          # ("log":{"level":"ERROR",...}), where only the JSON member can match.
+          if docker logs smoke-backend 2>&1 | grep -E ' ERROR |"level":"ERROR"' > /dev/null; then
             fail "the application log contains ERROR lines"
           fi
 
