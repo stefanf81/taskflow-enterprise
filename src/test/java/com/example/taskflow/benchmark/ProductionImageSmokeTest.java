@@ -50,6 +50,42 @@ class ProductionImageSmokeTest {
         assertEquals(42, runShutdownCheck("docker() { printf 'Graceful shutdown complete\\n'; return 42; }"));
     }
 
+    /** The prod image logs ECS JSON; the ERROR check must see an error in either format. */
+    @Test
+    void errorLogCheck_matchesPlainAndEcsErrorsOnly() throws Exception {
+        String plainError = "2026-11-23 10:00:00.000 [main] [,] ERROR o.s.boot.SpringApplication - boom";
+        String ecsError = "{\"@timestamp\":\"2026-11-23T10:00:00Z\",\"log\":{\"level\":\"ERROR\",\"logger\":\"x\"},"
+                + "\"message\":\"boom\",\"ecs\":{\"version\":\"8.11\"}}";
+        String ecsInfo = "{\"@timestamp\":\"2026-11-23T10:00:00Z\",\"log\":{\"level\":\"INFO\",\"logger\":\"x\"},"
+                + "\"message\":\"Started TaskflowApplication\",\"ecs\":{\"version\":\"8.11\"}}";
+        assertEquals(0, runErrorCheck(plainError), "plain ERROR line must be found");
+        assertEquals(0, runErrorCheck(ecsError), "ECS ERROR record must be found");
+        assertEquals(1, runErrorCheck(ecsInfo), "an INFO record must not count as an error");
+    }
+
+    /** Exit 0 = the workflow's ERROR condition matched (the step would fail), 1 = clean log. */
+    private int runErrorCheck(String logLine) throws Exception {
+        String workflow = Files.readString(Path.of(".github/workflows/ci.yml"));
+        String condition = workflow.lines()
+                .map(String::strip)
+                .filter(line -> line.startsWith("if docker logs smoke-backend") && line.contains("ERROR"))
+                .findFirst().orElseThrow()
+                .replaceFirst("^if ", "").replaceFirst("; then$", "");
+        String stub = "docker() { printf '%s\\n' '" + logLine.replace("'", "'\\''") + "'; }";
+        Process process = new ProcessBuilder(BASH_BINARY, "-c", "set -euo pipefail\n" + stub + "\n" + condition)
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .start();
+        try {
+            assertTrue(process.waitFor(10, TimeUnit.SECONDS), "error log check must not hang");
+            return process.exitValue();
+        } finally {
+            if (process.isAlive()) {
+                process.destroyForcibly();
+            }
+        }
+    }
+
     private int runShutdownCheck(String dockerStub) throws Exception {
         String workflow = Files.readString(Path.of(".github/workflows/ci.yml"));
         String check = workflow.lines()
