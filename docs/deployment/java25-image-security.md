@@ -18,12 +18,13 @@ refresh this is a new JDK build: the image ships `JAVA_VERSION=jdk-25.0.5.1+2` (
 Ubuntu 26.04. Applied ahead of Renovate's 3-day soak at the maintainer's request.
 
 CI result for this digest (`main` dispatch at `0f80fe2`, `Build Docker (backend)`, run 44855485326,
-linux/amd64): Trivy **0.76.2** scanned the backend application image built on it with `--severity
-HIGH,CRITICAL --ignore-unfixed --exit-code 1` (OS packages and the application JAR; Ubuntu 26.04, 109 OS
-packages) and found nothing to fail on, and the production image smoke test passed (readiness, `10001:10001`,
+linux/amd64): Trivy **0.76.2** scanned the backend application image built on it with `--ignore-unfixed
+--exit-code 1` and SARIF output, which keeps every severity (corrected 2026-11-23: the step's `severity:
+HIGH,CRITICAL` input did not apply), over OS packages and the application JAR (Ubuntu 26.04, 109 OS
+packages), and found nothing to fail on, and the production image smoke test passed (readiness, `10001:10001`,
 86 % of loaded classes served from the CDS archive (24,326 of 28,072), graceful shutdown; started in 8.8 s).
-The same limits as for the 2026-11-14 digest apply: the gate says nothing about MEDIUM/LOW or unfixed
-findings, it covered amd64 only, and the native-amd64 performance gate was not re-run.
+The same limits as for the 2026-11-14 digest apply: the gate says nothing about unfixed findings, it
+covered amd64 only, and the native-amd64 performance gate was not re-run.
 
 **2026-11-14 digest refresh:** the Dockerfile now pins
 `sha256:480ef64e4540d45b0301e8afb7873bd3fa61ce93c5f66273eb569420718f38e2`
@@ -33,12 +34,13 @@ findings, it covered amd64 only, and the native-amd64 performance gate was not r
 with refreshed Ubuntu packages. Applied ahead of Renovate's 3-day soak at the maintainer's request.
 
 CI result for this digest (PR #244, `Build Docker (backend)`, run 43614591185, linux/amd64): Trivy
-**0.76.2** scanned the backend application image built on it with `--severity HIGH,CRITICAL
---ignore-unfixed --exit-code 1` (OS packages and the application JAR; Ubuntu 26.04, 109 OS packages) and
+**0.76.2** scanned the backend application image built on it with `--ignore-unfixed --exit-code 1` and
+SARIF output, which keeps every severity (corrected 2026-11-23: the step's `severity: HIGH,CRITICAL`
+input did not apply), over OS packages and the application JAR (Ubuntu 26.04, 109 OS packages), and
 found nothing to fail on, and the production image smoke test passed (readiness, `10001:10001`, 86 % of
 loaded classes served from the CDS archive, graceful shutdown). That is the pipeline's gate, not the
-all-severity, unfixed-included scan with `--ignorefile /dev/null` recorded below: it says nothing about the
-MEDIUM and LOW or unfixed findings, it covered the amd64 runner image only, and the native-amd64
+all-severity, unfixed-included scan with `--ignorefile /dev/null` recorded below: it says nothing about
+unfixed or `.trivyignore`d findings, it covered the amd64 runner image only, and the native-amd64
 performance gate was not re-run for this digest. The scan results below were taken on an earlier digest and
 have **not** been repeated for this one.
 

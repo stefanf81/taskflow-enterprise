@@ -19,7 +19,9 @@ runs:
       shell: bash
       env:
         TRIVY_VERSION: ${{ inputs.version }}
-      run: |
+      # The GITHUB_PATH entry is this step's own directory under RUNNER_TEMP,
+      # holding only the checksum-verified binary.
+      run: | # zizmor: ignore[github-env]
         set -euo pipefail
         version="${TRIVY_VERSION#v}"
         case "$(uname -m)" in

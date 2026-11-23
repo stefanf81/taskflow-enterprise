@@ -134,7 +134,7 @@ To shift security left, TaskFlow integrates a multi-layered local DevSecOps pipe
 Before any application runs, three layers of security check your code, configurations, and containers:
 1. **FindSecBugs (Java SAST):** Integrated directly into `build.gradle` via the **SpotBugs** plugin. It scans the Spring Boot bytecode for OWASP Top 10 vulnerabilities (e.g. SQL Injection, insecure cryptography) on every `./gradlew check` run.
 2. **Hadolint (Dockerfile Linter):** Integrates automatically into `./start-docker.sh`. Pipes the backend and frontend `Dockerfiles` through a lightweight `hadolint` container to detect non-optimal or insecure operations (e.g., running as root, missing pinned package versions).
-3. **Trivy (Image Scanning):** Runs in CI, not in `./start-docker.sh`: `ci.yml` scans the backend image it smoke-tests, and `pushdockerimage.yml` scans the exact pushed digest (HIGH/CRITICAL hard gate) before promoting it.
+3. **Trivy (Image Scanning):** Runs in CI, not in `./start-docker.sh`: `ci.yml` scans the backend image it smoke-tests, and `pushdockerimage.yml` scans the exact pushed digest (hard gate, in a job that can only pull) and attests the report before promoting it.
 
 ---
 

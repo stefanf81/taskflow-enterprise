@@ -93,7 +93,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -137,9 +137,13 @@ jobs:
               - '.github/actions/**'
               - '.github/scripts/**'
               - '.github/actionlint.yaml'
+              - '.github/zizmor.yml'
               - '.github/renovate.json'
               - 'scripts/prepare-nuclei-sarif.py'
               - 'scripts/test_nuclei_sarif.py'
+              - 'scripts/testssl_gate.py'
+              - 'scripts/test_testssl_gate.py'
+              - 'scripts/testdata/**'
               - 'scripts/zap2sarif.py'
               - 'scripts/test_zap_sarif.py'
               - 'scripts/zap_scan_health.py'
@@ -230,7 +234,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -275,15 +279,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Test SARIF converters and the DAST scan-health check
+      - name: Test SARIF converters, the DAST scan-health check and the testssl.sh gate
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
       - name: Set up Node.js for verification script tests
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           package-manager-cache: false
@@ -317,6 +321,28 @@ jobs:
             "$ACTIONLINT_IMAGE" \
             -color \
             -shellcheck=
+
+      # Security audit of the workflows and actions (actionlint checks syntax
+      # and types): unpinned or impostor action commits, template injection,
+      # dangerous triggers, cache poisoning in release workflows, excessive
+      # permissions. GH_TOKEN turns on the online audits (impostor commits,
+      # known-vulnerable actions); the job's read-only token is enough.
+      # Exceptions: .github/zizmor.yml and inline `# zizmor: ignore[<audit>]`
+      # YAML comments, each with its reason.
+      - name: Audit workflows with zizmor
+        env:
+          # zizmor-image: tracked by the dedicated regex manager in .github/renovate.json
+          ZIZMOR_IMAGE: "ghcr.io/zizmorcore/zizmor:1.32.0@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d"
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --volume "$PWD:/repo:ro" \
+            --workdir /repo \
+            --env GH_TOKEN \
+            "$ZIZMOR_IMAGE" \
+            --format github \
+            .
 
       # renovate.yml no longer validates before each run (a validator warning
       # from a newer image would block every update), so the config is checked
@@ -372,12 +398,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Java
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
@@ -442,7 +468,7 @@ jobs:
 
       - name: Upload Test Reports
         if: always() && env.RUN_TESTS == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: backend-test-results
           path: |
@@ -477,12 +503,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Java
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
@@ -518,7 +544,7 @@ jobs:
 
       - name: Upload Test Reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: backend-integration-results
           path: |
@@ -540,7 +566,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -582,7 +608,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -617,12 +643,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Java
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
@@ -632,13 +658,13 @@ jobs:
       # field and saves an empty ~/.npm under the key other setup-node jobs
       # would restore.
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           package-manager-cache: false
 
       - name: Download Backend JAR
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: backend-jar
           path: backend-jar-dir
@@ -668,7 +694,9 @@ jobs:
 
       - name: Stop contract-verification backend
         if: always()
-        run: kill "${{ steps.contract_backend.outputs.pid }}" 2>/dev/null || true
+        env:
+          BACKEND_PID: ${{ steps.contract_backend.outputs.pid }}
+        run: kill "$BACKEND_PID" 2>/dev/null || true
 
   ###########################################################
   # Dependency Submission
@@ -696,12 +724,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Java
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
@@ -753,14 +781,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       # No setup-node cache: the npm-ci action below restores ~/.npm itself,
       # and only when its node_modules cache misses (a hit downloads nothing).
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           package-manager-cache: false
@@ -797,7 +825,7 @@ jobs:
           npm test
 
       - name: Cache Angular Build
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: frontend/.angular/cache
           key: angular-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -832,7 +860,7 @@ jobs:
           fi
 
       - name: Upload Frontend Bundle
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: frontend-dist
           path: frontend/dist/frontend/browser
@@ -841,7 +869,7 @@ jobs:
       - name: Upload Coverage
         if: always() && env.RUN_TESTS == 'true'
 
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
 
         with:
           name: frontend-coverage
@@ -858,7 +886,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -956,12 +984,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Java
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
@@ -971,7 +999,7 @@ jobs:
       ##########################################################
 
       - name: Download Backend JAR
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: backend-jar
           path: backend-jar-dir
@@ -999,7 +1027,7 @@ jobs:
       # No setup-node cache: the npm-ci action below restores ~/.npm itself,
       # and only when its node_modules cache misses (a hit downloads nothing).
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           package-manager-cache: false
@@ -1013,7 +1041,7 @@ jobs:
           cache-node-modules: "true"
 
       - name: Download Frontend Bundle
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: frontend-dist
           path: frontend/dist/frontend/browser
@@ -1040,7 +1068,7 @@ jobs:
 
       - name: Cache Playwright Browsers
         id: playwright-cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           # Key on the pinned image, not runner.os: the browser bundles are
@@ -1128,7 +1156,7 @@ jobs:
 
       - name: Upload Playwright Report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-report
           path: |
@@ -1149,7 +1177,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -1165,8 +1193,8 @@ jobs:
   # One job per image (formerly a matrix) so each starts as soon as its own
   # input exists: the backend image needs only the JAR, the frontend image only
   # the bundle. Job names keep the former matrix check contexts. The jobs are
-  # independent, so a HIGH/CRITICAL CVE (exit-code: 1) in one image's Trivy
-  # scan never cancels the other — both scan results surface in the same run.
+  # independent, so a fixable CVE (exit-code: 1) in one image's Trivy scan
+  # never cancels the other — both scan results surface in the same run.
   #
   # Both build locally (load only) — never push from CI; use
   # pushdockerimage.yml to publish images to GHCR.
@@ -1196,7 +1224,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -1214,7 +1242,7 @@ jobs:
           echo "image=ghcr.io/${owner}/taskflow-backend" >> "$GITHUB_OUTPUT"
 
       - name: Download Backend JAR
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: backend-jar
           path: build/libs
@@ -1362,7 +1390,7 @@ jobs:
 
       - name: Restore Trivy Java DB cache
         id: trivy-java-db-cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/.cache/trivy/java-db
           # Never an exact hit: the prefix restores the newest download.
@@ -1376,12 +1404,18 @@ jobs:
           version: ${{ env.TRIVY_VERSION }}
 
       # NOTE ON SEVERITY GATING (intentional asymmetry):
-      # This is the HARD GATE — exit-code: 1 with severity HIGH,CRITICAL
-      # fails the build. This scan targets the actual image that gets
-      # deployed, unlike the source/filesystem Trivy scan in
-      # `.github/workflows/security.yml`, which is report-only (exit-code: 0)
-      # by design. Do not align the two exit-codes without deliberately
-      # reconsidering both.
+      # This is the HARD GATE — exit-code: 1 fails the build. This scan
+      # targets the actual image that gets deployed, unlike the
+      # source/filesystem Trivy scan in `.github/workflows/security.yml`,
+      # which is report-only (exit-code: 0) by design. Do not align the two
+      # exit-codes without deliberately reconsidering both.
+      #
+      # Which findings fail it: trivy-action drops the severity filter for
+      # SARIF output unless `limit-severities-for-sarif: true` (the log says
+      # "Building SARIF report with all severities"), so the gate fails on a
+      # fixed vulnerability (`ignore-unfixed`) of any severity, or on a
+      # secret — the same rule as the publish gate in pushdockerimage.yml.
+      # No `severity:` input, since it would not apply.
       - name: Scan Docker Image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -1401,7 +1435,6 @@ jobs:
           format: sarif
           output: trivy-results.sarif
 
-          severity: HIGH,CRITICAL
           ignore-unfixed: true
 
           exit-code: 1
@@ -1428,7 +1461,7 @@ jobs:
           github.event_name != 'pull_request' &&
           steps.trivy-java-db-key.outputs.key != '' &&
           steps.trivy-java-db-key.outputs.key != steps.trivy-java-db-cache.outputs.cache-matched-key
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/.cache/trivy/java-db
           key: ${{ steps.trivy-java-db-key.outputs.key }}
@@ -1484,7 +1517,9 @@ jobs:
           echo "CDS: ${shared:-0} of ${total:-0} loaded classes from the shared archive (${percent}%)"
           (( percent >= 80 )) || fail "the CDS archive served only ${percent}% of loaded classes"
 
-          if docker logs smoke-backend 2>&1 | grep -E ' ERROR ' > /dev/null; then
+          # ' ERROR ' is the plain pattern's level column; the prod profile writes ECS JSON
+          # ("log":{"level":"ERROR",...}), where only the JSON member can match.
+          if docker logs smoke-backend 2>&1 | grep -E ' ERROR |"level":"ERROR"' > /dev/null; then
             fail "the application log contains ERROR lines"
           fi
 
@@ -1521,7 +1556,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -1535,7 +1570,7 @@ jobs:
           echo "image=ghcr.io/${owner}/taskflow-frontend" >> "$GITHUB_OUTPUT"
 
       - name: Download Frontend Bundle
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: frontend-dist
           path: frontend/dist/frontend/browser
@@ -1572,7 +1607,8 @@ jobs:
         with:
           version: ${{ env.TRIVY_VERSION }}
 
-      # HARD GATE — see the severity-gating note in `docker-backend`. No DB
+      # HARD GATE — see the severity-gating note in `docker-backend` (any
+      # fixed vulnerability, of any severity, or a secret fails it). No DB
       # cache: the nginx image needs no Java DB, and a restored vulnerability
       # DB is stale on almost every run (see the cache note in `docker-backend`).
       - name: Scan Docker Image
@@ -1592,7 +1628,6 @@ jobs:
           format: sarif
           output: trivy-results.sarif
 
-          severity: HIGH,CRITICAL
           ignore-unfixed: true
 
           exit-code: 1

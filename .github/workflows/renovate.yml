@@ -76,7 +76,7 @@ jobs:
     steps:
       # Only the config file is needed: Renovate clones the repository itself.
       - name: Checkout Renovate config
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           sparse-checkout: .github/renovate.json
@@ -85,7 +85,7 @@ jobs:
       - name: Restore Renovate cache
         id: cache-restore
         if: github.event.inputs.repoCache != 'disabled' && github.event.inputs.repoCache != 'reset'
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.cache_dir }}
           key: ${{ env.cache_key }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -123,7 +123,7 @@ jobs:
       # and the next run restores the newest one via the prefix.
       - name: Save Renovate cache
         if: github.event.inputs.repoCache != 'disabled'
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.cache_dir }}
           key: ${{ env.cache_key }}-${{ github.run_id }}-${{ github.run_attempt }}

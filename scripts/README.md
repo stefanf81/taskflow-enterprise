@@ -10,6 +10,8 @@ This directory contains utility, benchmarking, and CI/CD security automation scr
 | `sync-api-types.js` | Node.js | Deterministically generates the API DTO types (`shared/schemas/src/generated/api-types.ts`, re-exported by both clients' `types/api.ts`) and the response contracts (`api-responses.ts`) from `api/openapi.json`. |
 | `prepare-nuclei-sarif.py` | Python 3 | Ingests raw Nuclei scanner output and formats it into strict GitHub Code Scanning SARIF format with deterministic run metadata and error handling. |
 | `test_nuclei_sarif.py` | Python 3 | Unit tests covering `prepare-nuclei-sarif.py` SARIF translation logic. |
+| `testssl_gate.py` | Python 3 | Evaluates the external scan's testssl.sh JSON reports (`--jsonfile` and `--jsonfile-pretty` shapes) for the job summary and the HIGH/CRITICAL TLS gate; exits 2 when a report is missing, unparseable, empty or records a failed scan. |
+| `test_testssl_gate.py` | Python 3 | Unit tests for `testssl_gate.py` against unedited testssl.sh 3.2.5 reports in `testdata/testssl/`. |
 | `zap2sarif.py` | Python 3 | Parses OWASP ZAP DAST API and Web JSON reports and converts them to SARIF format for GitHub Advanced Security ingestion. |
 | `zap_scan_health.py` | Python 3 | Reads the scanned backend's `http_server_requests` counters after a DAST run and reports whether the scan exercised the application (enough requests served, an admin-only URI answered 2xx) and how many requests ended in 5xx. Used by the `zap-report` action. |
 | `benchmark-cds-startup.sh` | Bash | Measures Spring Boot cold-start latency with and without the Java 25 AOT cache (`application.aot`); also supports older CDS images. |
