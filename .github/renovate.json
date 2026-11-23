@@ -9,6 +9,14 @@
   ],
   "customManagers": [
     {
+      "description": "Update the Trivy release and the SHA-256 of its Linux x86_64 tarball together in the install-trivy action. github-release-attachments finds the pinned checksum in the release's checksums file and takes the same file's line from the new release.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/actions/install-trivy/action\\.yml$/"],
+      "matchStrings": ["# trivy-release: tracked by the dedicated regex manager in \\.github/renovate\\.json\\s+TRIVY_PINNED_VERSION: \\\"(?<currentValue>v[^\\\"]+)\\\"\\s+TRIVY_LINUX_64BIT_SHA256: \\\"(?<currentDigest>[a-f0-9]{64})\\\""],
+      "depNameTemplate": "aquasecurity/trivy",
+      "datasourceTemplate": "github-release-attachments"
+    },
+    {
       "description": "Update the Renovate image tag and digest together in both workflows",
       "customType": "regex",
       "managerFilePatterns": ["/^\\.github/workflows/(ci|renovate)\\.yml$/"],
@@ -226,6 +234,12 @@
       "matchFileNames": ["frontend/package.json"],
       "matchPackageNames": ["@angular/**", "rxjs", "typescript"],
       "groupName": "Angular framework and toolchain"
+    },
+    {
+      "description": "Trivy: the workflows' TRIVY_VERSION and the version and checksum pinned in the install-trivy action must move in one pull request (the action refuses a version it has no checksum for). Must stay below the catch-all groups.",
+      "matchPackageNames": ["aquasecurity/trivy"],
+      "groupName": "Trivy",
+      "groupSlug": "trivy"
     },
     {
       "description": "Keep Tailwind CSS and PostCSS plugin aligned",
