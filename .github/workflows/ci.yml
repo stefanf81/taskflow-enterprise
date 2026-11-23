@@ -1186,8 +1186,8 @@ jobs:
   # One job per image (formerly a matrix) so each starts as soon as its own
   # input exists: the backend image needs only the JAR, the frontend image only
   # the bundle. Job names keep the former matrix check contexts. The jobs are
-  # independent, so a HIGH/CRITICAL CVE (exit-code: 1) in one image's Trivy
-  # scan never cancels the other — both scan results surface in the same run.
+  # independent, so a fixable CVE (exit-code: 1) in one image's Trivy scan
+  # never cancels the other — both scan results surface in the same run.
   #
   # Both build locally (load only) — never push from CI; use
   # pushdockerimage.yml to publish images to GHCR.
@@ -1397,12 +1397,18 @@ jobs:
           version: ${{ env.TRIVY_VERSION }}
 
       # NOTE ON SEVERITY GATING (intentional asymmetry):
-      # This is the HARD GATE — exit-code: 1 with severity HIGH,CRITICAL
-      # fails the build. This scan targets the actual image that gets
-      # deployed, unlike the source/filesystem Trivy scan in
-      # `.github/workflows/security.yml`, which is report-only (exit-code: 0)
-      # by design. Do not align the two exit-codes without deliberately
-      # reconsidering both.
+      # This is the HARD GATE — exit-code: 1 fails the build. This scan
+      # targets the actual image that gets deployed, unlike the
+      # source/filesystem Trivy scan in `.github/workflows/security.yml`,
+      # which is report-only (exit-code: 0) by design. Do not align the two
+      # exit-codes without deliberately reconsidering both.
+      #
+      # Which findings fail it: trivy-action drops the severity filter for
+      # SARIF output unless `limit-severities-for-sarif: true` (the log says
+      # "Building SARIF report with all severities"), so the gate fails on a
+      # fixed vulnerability (`ignore-unfixed`) of any severity, or on a
+      # secret — the same rule as the publish gate in pushdockerimage.yml.
+      # No `severity:` input, since it would not apply.
       - name: Scan Docker Image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -1422,7 +1428,6 @@ jobs:
           format: sarif
           output: trivy-results.sarif
 
-          severity: HIGH,CRITICAL
           ignore-unfixed: true
 
           exit-code: 1
@@ -1505,7 +1510,9 @@ jobs:
           echo "CDS: ${shared:-0} of ${total:-0} loaded classes from the shared archive (${percent}%)"
           (( percent >= 80 )) || fail "the CDS archive served only ${percent}% of loaded classes"
 
-          if docker logs smoke-backend 2>&1 | grep -E ' ERROR ' > /dev/null; then
+          # ' ERROR ' is the plain pattern's level column; the prod profile writes ECS JSON
+          # ("log":{"level":"ERROR",...}), where only the JSON member can match.
+          if docker logs smoke-backend 2>&1 | grep -E ' ERROR |"level":"ERROR"' > /dev/null; then
             fail "the application log contains ERROR lines"
           fi
 
@@ -1593,7 +1600,8 @@ jobs:
         with:
           version: ${{ env.TRIVY_VERSION }}
 
-      # HARD GATE — see the severity-gating note in `docker-backend`. No DB
+      # HARD GATE — see the severity-gating note in `docker-backend` (any
+      # fixed vulnerability, of any severity, or a secret fails it). No DB
       # cache: the nginx image needs no Java DB, and a restored vulnerability
       # DB is stale on almost every run (see the cache note in `docker-backend`).
       - name: Scan Docker Image
@@ -1613,7 +1621,6 @@ jobs:
           format: sarif
           output: trivy-results.sarif
 
-          severity: HIGH,CRITICAL
           ignore-unfixed: true
 
           exit-code: 1

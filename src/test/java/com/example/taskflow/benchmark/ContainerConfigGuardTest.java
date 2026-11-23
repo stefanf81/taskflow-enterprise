@@ -438,6 +438,18 @@ class ContainerConfigGuardTest {
         System.out.println("=".repeat(80));
     }
 
+    /**
+     * The compose backend runs the prod profile, which writes ECS JSON to the console; nothing parses
+     * this stack's logs, so it keeps the plain pattern unless .env sets the format.
+     */
+    @Test
+    void compose_backend_keeps_plain_console_logs_unless_env_opts_in() throws Exception {
+        String compose = Files.readString(Path.of("docker-compose.yml"));
+        assertTrue(compose.contains("- SPRING_PROFILES_ACTIVE=prod"));
+        assertTrue(compose.contains("- LOGGING_STRUCTURED_FORMAT_CONSOLE=${LOGGING_STRUCTURED_FORMAT_CONSOLE:-}"),
+                "docker-compose.yml must default the backend's console log to the plain pattern");
+    }
+
     @Test
     void single_dockerfile_two_targets_builder_owned_platform() throws Exception {
         System.out.println("\n" + "=".repeat(80));

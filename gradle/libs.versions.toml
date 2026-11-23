@@ -14,8 +14,13 @@ opentelemetry = "1.68.0"
 prometheus = "1.10.0"
 commons-lang3 = "3.22.0"
 # Pinned to the 1.6 line (Spring Boot 4.2 ships 1.6.6); 1.6.x includes the
-# hardening for disallowed conditional configuration references.
+# hardening for disallowed conditional configuration references. checkBomOverrides
+# fails once the BOM manages this release or a later one.
 logback = "1.6.8"
+# Ahead of the Spring Boot 4.2.0 BOM (11.0.27) for the fixes in 11.0.29; applied as dependency
+# constraints in build.gradle. checkBomOverrides fails once the BOM manages this release or a later
+# one; then remove this entry and the three constraints.
+tomcat = "11.0.29"
 # Jackson 2.x and 3.x remain separate families and must stay internally aligned.
 jackson2 = "2.23.0"
 jackson-annotations = "2.23"
@@ -62,6 +67,9 @@ spring-boot-configuration-processor = { module = "org.springframework.boot:sprin
 
 commons-lang3 = { module = "org.apache.commons:commons-lang3", version.ref = "commons-lang3" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+tomcat-embed-core = { module = "org.apache.tomcat.embed:tomcat-embed-core", version.ref = "tomcat" }
+tomcat-embed-el = { module = "org.apache.tomcat.embed:tomcat-embed-el", version.ref = "tomcat" }
+tomcat-embed-websocket = { module = "org.apache.tomcat.embed:tomcat-embed-websocket", version.ref = "tomcat" }
 log4j2-api = { module = "org.apache.logging.log4j:log4j-api", version.ref = "log4j2" }
 log4j2-to-slf4j = { module = "org.apache.logging.log4j:log4j-to-slf4j", version.ref = "log4j2" }
 jackson2-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson2" }
