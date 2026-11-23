@@ -446,7 +446,8 @@ class ContainerConfigGuardTest {
     void compose_backend_keeps_plain_console_logs_unless_env_opts_in() throws Exception {
         String compose = Files.readString(Path.of("docker-compose.yml"));
         assertTrue(compose.contains("- SPRING_PROFILES_ACTIVE=prod"));
-        assertTrue(compose.contains("- LOGGING_STRUCTURED_FORMAT_CONSOLE=${LOGGING_STRUCTURED_FORMAT_CONSOLE:-}"),
+        assertTrue(
+                compose.contains("- LOGGING_STRUCTURED_FORMAT_CONSOLE=${LOGGING_STRUCTURED_FORMAT_CONSOLE:-}"),
                 "docker-compose.yml must default the backend's console log to the plain pattern");
     }
 

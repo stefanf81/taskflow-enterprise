@@ -68,8 +68,10 @@ class ProductionImageSmokeTest {
         String condition = workflow.lines()
                 .map(String::strip)
                 .filter(line -> line.startsWith("if docker logs smoke-backend") && line.contains("ERROR"))
-                .findFirst().orElseThrow()
-                .replaceFirst("^if ", "").replaceFirst("; then$", "");
+                .findFirst()
+                .orElseThrow()
+                .replaceFirst("^if ", "")
+                .replaceFirst("; then$", "");
         String stub = "docker() { printf '%s\\n' '" + logLine.replace("'", "'\\''") + "'; }";
         Process process = new ProcessBuilder(BASH_BINARY, "-c", "set -euo pipefail\n" + stub + "\n" + condition)
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
