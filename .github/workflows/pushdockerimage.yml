@@ -17,12 +17,13 @@ name: TaskFlow Push Docker Images
 #      with Trivy (hard gate, exit-code: 1; see the scan step for which
 #      findings fail it) and keeps the report in Trivy's cosign-vuln format.
 #   4. In a separate job that holds the signing token and runs no build or
-#      scan step: signs that digest with cosign (keyless: the certificate
-#      names this workflow and the ref it was dispatched from) and attaches a
-#      signed SLSA build provenance attestation and the scan report as a signed
-#      vulnerability attestation, only if the scan passes (or skip_scan is set,
-#      which publishes no scan attestation). The signature carries a signed
-#      `scan=passed` or `scan=skipped` annotation.
+#      scan step: takes the digest from the build job, requires the scan job
+#      to report that same digest, signs it with cosign (keyless: the
+#      certificate names this workflow and the ref it was dispatched from) and
+#      attaches a signed SLSA build provenance attestation and the scan report
+#      as a signed vulnerability attestation, only if the scan passes (or
+#      skip_scan is set, which publishes no scan attestation). The signature
+#      carries a signed `scan=passed` or `scan=skipped` annotation.
 #   5. Verifies the signature and the attestations, then promotes the digest
 #      to :<tag> (and to :latest when dispatched from main) with the buildx
 #      imagetools command and checks that the tags resolve to the scanned
@@ -561,15 +562,21 @@ jobs:
 
   promote:
     name: Sign and Promote (${{ matrix.component }})
+    # `push` for the digest that was built, `scan` for the digest that passed:
+    # the first step below signs nothing unless the two are the same.
     needs:
       - resolve
+      - push
       - scan
 
     # `failure` too: the components are independent, so one component's failed
-    # scan must not keep the other from being published. A leg whose own
-    # build or scan did not finish finds no digest below and fails.
+    # build or scan must not keep the other from being published. A leg whose
+    # own build or scan did not finish finds no digest below and fails.
     # `!cancelled()`, not `always()`: a cancelled run must not keep promoting.
-    if: ${{ !cancelled() && (needs.scan.result == 'success' || needs.scan.result == 'failure') }}
+    if: >-
+      ${{ !cancelled()
+      && (needs.push.result == 'success' || needs.push.result == 'failure')
+      && (needs.scan.result == 'success' || needs.scan.result == 'failure') }}
 
     runs-on: ubuntu-26.04
     # Above the worst case of the retries below (cosign sign: 3 x 2 min + 1 min
@@ -604,7 +611,8 @@ jobs:
       SCAN_PREDICATE: https://cosign.sigstore.dev/attestation/vuln/v1
 
     steps:
-      # No checkout: this job only acts on the digest the `push` job scanned.
+      # No checkout: this job only acts on the digest the `push` job built,
+      # and only once the `scan` job has reported that same digest.
       - name: Resolve Scanned Digest
         id: image
         env:
@@ -612,17 +620,31 @@ jobs:
           COMPONENT: ${{ matrix.component }}
           # Both, and picked below: an `a && x || y` expression would fall
           # through to the other component's digest when this one is empty.
-          BACKEND_DIGEST: ${{ needs.scan.outputs.backend_digest }}
-          FRONTEND_DIGEST: ${{ needs.scan.outputs.frontend_digest }}
+          BACKEND_DIGEST: ${{ needs.push.outputs.backend_digest }}
+          FRONTEND_DIGEST: ${{ needs.push.outputs.frontend_digest }}
+          BACKEND_SCANNED: ${{ needs.scan.outputs.backend_digest }}
+          FRONTEND_SCANNED: ${{ needs.scan.outputs.frontend_digest }}
         run: |
           set -euo pipefail
           case "$COMPONENT" in
-            backend) DIGEST="$BACKEND_DIGEST" ;;
-            frontend) DIGEST="$FRONTEND_DIGEST" ;;
+            backend) DIGEST="$BACKEND_DIGEST"; SCANNED="$BACKEND_SCANNED" ;;
+            frontend) DIGEST="$FRONTEND_DIGEST"; SCANNED="$FRONTEND_SCANNED" ;;
             *) echo "::error::unknown component '$COMPONENT'"; exit 1 ;;
           esac
           if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "::error::no scanned digest for ${COMPONENT}: its build or scan did not succeed"
+            echo "::error::no built digest for ${COMPONENT}: its build did not succeed"
+            exit 1
+          fi
+          # The digest to sign comes from the build job. The scan job runs the
+          # third-party scanner, so its outputs only confirm: were they the
+          # source, a compromised scanner could name another digest in the
+          # package (an older release, a staged image that failed its scan)
+          # with a clean report for it, and this job would sign it, attest
+          # provenance saying this run built it, and tag it, all with the
+          # identity the cluster's admission policy trusts. With skip_scan the scan job still reports the
+          # digest it was handed, so this holds for both values of SCAN.
+          if [[ "$SCANNED" != "$DIGEST" ]]; then
+            echo "::error::the scan job reported '${SCANNED:-nothing}' for ${COMPONENT}, not the built digest ${DIGEST}: its scan did not pass, or did not scan this build"
             exit 1
           fi
           owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"

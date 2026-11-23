@@ -167,12 +167,72 @@ test('published images are signed, attested and verified before they are promote
 
   // `a && x || y` falls through to y when x is empty, which would hand one component the
   // other's digest when its own build or scan failed.
-  for (const [consumer, producer] of [['scan', 'push'], ['promote', 'scan']]) {
+  for (const [consumer, producer] of [['scan', 'push'], ['promote', 'push'], ['promote', 'scan']]) {
     const digestLines = jobBlock(workflow, consumer).filter((line) => line.includes(`needs.${producer}.outputs`));
     assert.notDeepEqual(digestLines, [], `${consumer} reads the digests from ${producer}`);
     for (const line of digestLines) {
       assert.doesNotMatch(line, /&&|\|\|/, `pick the digest by component, not with && / ||: ${line.trim()}`);
     }
+  }
+});
+
+test('promote signs the digest the build pushed, and only if the scan reported that same digest', () => {
+  // The scan job runs a third-party scanner and writes its own outputs and report. If promote
+  // took the digest from it, a compromised scanner could name another digest of the package
+  // (an older release, a staged image that failed its scan) with a clean report, and promote
+  // would sign, attest and tag it under the identity the cluster trusts. Admission checks that
+  // the attestations name the deployed digest, not that this run built it.
+  const workflow = fs.readFileSync(path.join(workflowDir, 'pushdockerimage.yml'), 'utf8');
+  const job = jobBlock(workflow, 'promote');
+  const needsAt = job.indexOf('    needs:');
+  assert.notEqual(needsAt, -1, 'promote lists its needs');
+  const needs = [];
+  for (let i = needsAt + 1; i < job.length && /^ {6}- /.test(job[i]); i += 1) needs.push(job[i].trim().slice(2));
+  assert.ok(needs.includes('push') && needs.includes('scan'), `promote needs push and scan, not [${needs}]`);
+  // Both tolerated as success or failure (the components are independent), never skipped.
+  const condition = job.join('\n').match(/^ {4}if: (?:>-\n)?([\s\S]*?)\n {4}\S/m)?.[1] ?? '';
+  for (const producer of ['push', 'scan']) {
+    assert.match(
+      condition,
+      new RegExp(`needs\\.${producer}\\.result == 'success' \\|\\| needs\\.${producer}\\.result == 'failure'`),
+      `promote runs after a finished ${producer}`,
+    );
+  }
+
+  const steps = job.slice(job.indexOf('    steps:') + 1);
+  const stepStarts = steps.flatMap((line, i) => (/^ {6}- /.test(line) ? [i] : []));
+  const blocks = stepStarts.map((start, n) => steps.slice(start, stepStarts[n + 1] ?? steps.length));
+  const names = blocks.map((block) => (block[0].match(/^ {6}- name: (.+)$/) ?? [])[1]);
+  const resolveAt = names.indexOf('Resolve Scanned Digest');
+  assert.equal(resolveAt, 0, 'the digest is resolved and compared before any other step');
+  const resolve = blocks[resolveAt].join('\n');
+  assert.match(resolve, /^ {8}id: image$/m);
+  assert.doesNotMatch(resolve, /^ {8}(if|continue-on-error):/m, 'the digest comparison must not be skippable');
+
+  // DIGEST (what is signed) from push; SCANNED (the confirmation) from scan.
+  for (const component of ['backend', 'frontend']) {
+    const upper = component.toUpperCase();
+    assert.match(resolve, new RegExp(`^ {10}${upper}_DIGEST: \\$\\{\\{ needs\\.push\\.outputs\\.${component}_digest \\}\\}$`, 'm'));
+    assert.match(resolve, new RegExp(`^ {10}${upper}_SCANNED: \\$\\{\\{ needs\\.scan\\.outputs\\.${component}_digest \\}\\}$`, 'm'));
+    assert.match(resolve, new RegExp(`${component}\\) DIGEST="\\$${upper}_DIGEST"; SCANNED="\\$${upper}_SCANNED" ;;`));
+  }
+  assert.doesNotMatch(resolve, /_DIGEST: \$\{\{ needs\.scan\./, 'the signed digest must not come from the scan job');
+  // Unconditional, not only for SCAN == passed: with skip_scan the scan job still reports it.
+  assert.match(resolve, /^ {10}if \[\[ "\$SCANNED" != "\$DIGEST" \]\]; then\n\s+echo "::error::[^"]*"\n\s+exit 1\n\s+fi$/m);
+  assert.match(resolve, /echo "digest=\$\{DIGEST\}"/);
+  assert.ok(
+    resolve.indexOf('"$SCANNED" != "$DIGEST"') < resolve.indexOf('>> "$GITHUB_OUTPUT"'),
+    'compare before the digest is handed to the later steps',
+  );
+
+  // Every step that checks, signs, attests or tags acts on that step's output and nothing else.
+  for (const name of ['Check Scan Report', 'Sign Image', 'Attest Build Provenance', 'Attest Scan Report',
+    'Verify Signature and Attestation', 'Promote Image to Final Tags']) {
+    const at = names.indexOf(name);
+    assert.ok(at > resolveAt, `${name} comes after the digest comparison`);
+    const block = blocks[at].join('\n');
+    assert.match(block, /\$\{\{ steps\.image\.outputs\.digest \}\}/, `${name} uses the compared digest`);
+    assert.doesNotMatch(block, /needs\.(push|scan)\.outputs/, `${name} reads no digest of its own`);
   }
 });
 
@@ -217,6 +277,28 @@ test('the scanner runs without a package write token', () => {
     assert.doesNotMatch(jobBlock(workflow, other).join('\n'), scanner, `no scanner step in ${other}`);
     assert.doesNotMatch(jobBlock(workflow, other).join('\n'), /^\s+trivy\s/m, `no trivy command in ${other}`);
   }
+});
+
+test('a Trivy step that writes SARIF sets no severity filter it would drop', () => {
+  // trivy-action (v0.36.0 entrypoint.sh) unsets TRIVY_SEVERITY for `format: sarif` unless
+  // `limit-severities-for-sarif` is exactly `true`. The image gates fail on a fixed finding of any
+  // severity on purpose (docs/agents/ci.md); a `severity:` input there only claims a narrower gate.
+  const sarifSteps = [];
+  for (const file of workflows) {
+    const lines = fs.readFileSync(file, 'utf8').split('\n');
+    lines.forEach((line, i) => {
+      if (!/^\s*(- )?uses: aquasecurity\/trivy-action@/.test(line)) return;
+      const block = stepBlock(lines, i);
+      const has = (regex) => block.some((l) => regex.test(l));
+      if (!has(/^\s*format:\s*sarif\s*$/)) return;
+      const where = `${rel(file)}:${i + 1}`;
+      sarifSteps.push(where);
+      if (has(/^\s*limit-severities-for-sarif:\s*true\s*$/)) return;
+      assert.ok(!has(/^\s*severity:/), `${where}: severity does not apply to SARIF output; remove it or set limit-severities-for-sarif: true`);
+    });
+  }
+  // The three image gates and the two report-only filesystem scans.
+  assert.ok(sarifSteps.length >= 5, `expected the Trivy SARIF steps: ${sarifSteps}`);
 });
 
 test('the publish workflow reads and writes no Actions cache', () => {
