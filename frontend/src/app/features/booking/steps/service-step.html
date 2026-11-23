@@ -17,7 +17,7 @@
       [value]="store.serviceSearchQuery()"
       (input)="store.serviceSearchQuery.set($any($event.target).value)"
       placeholder="Search treatments (e.g., fade, trim, shave)..."
-      class="w-full bg-black border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-xs text-zinc-100 placeholder-slate-400 outline-none focus:border-gold-dark transition-all duration-200"
+      class="w-full bg-black border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-xs text-zinc-100 placeholder-slate-400 outline-none focus:border-accent-muted transition-all duration-200"
     />
   </div>
 
@@ -29,7 +29,7 @@
         (click)="store.setServiceCategory(category.id)"
         [attr.aria-pressed]="store.selectedCategory() === category.id"
         [class.bg-zinc-950]="store.selectedCategory() === category.id"
-        [class.text-gold]="store.selectedCategory() === category.id"
+        [class.text-accent]="store.selectedCategory() === category.id"
         class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 text-zinc-400 hover:text-zinc-100"
       >
         {{ category.label }}
@@ -40,11 +40,7 @@
   @if (store.catalogError()) {
     <div role="alert" class="text-center text-xs text-rose-400 py-4">
       <p>{{ store.catalogError() }}</p>
-      <button
-        type="button"
-        class="btn btn-secondary py-2 px-4 text-xs mt-3"
-        (click)="store.retryCatalog()"
-      >
+      <button type="button" class="btn btn-secondary mt-3" (click)="store.retryCatalog()">
         Retry
       </button>
     </div>
@@ -55,18 +51,18 @@
       <button
         type="button"
         [attr.aria-pressed]="store.bookingService() === service.name"
-        class="card w-full text-left p-4 border border-white/5 bg-zinc-900/30 hover:border-gold/30 cursor-pointer transition-all"
+        class="card w-full text-left p-4 cursor-pointer"
         [class.selected-service-item]="store.bookingService() === service.name"
         (click)="store.selectService(service.name)"
       >
         <span class="flex justify-between items-center font-bold">
           <span class="text-zinc-100 text-base flex items-center gap-1.5">
             @if (store.bookingService() === service.name) {
-              <span class="text-gold text-sm">👑</span>
+              <span class="text-accent text-sm">👑</span>
             }
             {{ service.name }}
           </span>
-          <span class="text-gold text-lg">{{ formatUsd(service.price) }}</span>
+          <span class="text-accent text-lg">{{ formatUsd(service.price) }}</span>
         </span>
         <span class="block text-xs font-bold text-zinc-500 uppercase mt-0.5">
           ⏱️ Duration: {{ service.durationMinutes }} mins

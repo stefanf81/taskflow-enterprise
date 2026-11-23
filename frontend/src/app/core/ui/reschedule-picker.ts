@@ -52,7 +52,7 @@ export interface RescheduleSelection {
               class="px-2.5 py-1.5 rounded-lg text-xs border transition-all"
               [class]="
                 date === selectedDate()
-                  ? 'bg-gold/20 border-gold text-gold'
+                  ? 'bg-accent/20 border-accent text-accent'
                   : 'border-white/10 text-zinc-300 hover:border-white/30'
               "
               [attr.aria-pressed]="date === selectedDate()"
@@ -73,9 +73,7 @@ export interface RescheduleSelection {
         } @else if (slotsError()) {
           <div class="flex items-center gap-2" role="alert">
             <p class="text-xs text-rose-400">{{ slotsError() }}</p>
-            <button type="button" class="btn btn-secondary py-1 px-2 text-xs" (click)="retry()">
-              Retry
-            </button>
+            <button type="button" class="btn btn-secondary" (click)="retry()">Retry</button>
           </div>
         } @else {
           <div class="flex flex-wrap gap-1.5">
@@ -85,7 +83,7 @@ export interface RescheduleSelection {
                 class="px-2.5 py-1.5 rounded-lg text-xs border transition-all"
                 [class]="
                   slot === selectedTime()
-                    ? 'bg-gold/20 border-gold text-gold'
+                    ? 'bg-accent/20 border-accent text-accent'
                     : 'border-white/10 text-zinc-300 hover:border-white/30'
                 "
                 [attr.aria-pressed]="slot === selectedTime()"
@@ -103,7 +101,7 @@ export interface RescheduleSelection {
       <div class="flex flex-wrap gap-2">
         <button
           type="button"
-          class="btn btn-submit py-1.5 px-3 text-xs"
+          class="btn btn-submit"
           [disabled]="saving() || !selectedDate() || !selectedTime()"
           (click)="confirm()"
         >
@@ -111,7 +109,7 @@ export interface RescheduleSelection {
         </button>
         <button
           type="button"
-          class="btn btn-secondary py-1.5 px-3 text-xs"
+          class="btn btn-secondary"
           [disabled]="saving()"
           (click)="cancelled.emit()"
         >

@@ -16,7 +16,7 @@
             viewBox="0 0 24 24"
             stroke-width="2.5"
             stroke="currentColor"
-            class="w-7 h-7 text-gold"
+            class="w-7 h-7 text-accent"
           >
             <path
               stroke-linecap="round"
@@ -25,7 +25,7 @@
             />
           </svg>
           <span class="text-xl font-extrabold tracking-tight text-zinc-100 uppercase"
-            >TaskFlow <span class="text-gold font-light lowercase text-base">pro</span></span
+            >TaskFlow <span class="text-accent font-light lowercase text-base">pro</span></span
           >
         </div>
         <div class="flex items-center gap-4">
@@ -46,7 +46,7 @@
           </span>
           <button
             (click)="showAdminLoginModal.set(true)"
-            class="text-xs font-bold text-zinc-400 hover:text-gold tracking-wide uppercase transition-colors"
+            class="text-xs font-bold text-zinc-400 hover:text-accent tracking-wide uppercase transition-colors"
           >
             Sign in
           </button>
@@ -57,14 +57,14 @@
            which Chrome does not report while it is transparent (BENCHMARKS.md §72). -->
       <header class="text-center mb-16 max-w-2xl mx-auto">
         <span
-          class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-gold/10 text-gold border border-gold/20 uppercase tracking-widest mb-4"
+          class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-accent/10 text-accent border border-accent/20 uppercase tracking-widest mb-4"
         >
           Squire Integrated
         </span>
         <h1
           class="text-4xl sm:text-5xl font-black tracking-tight text-white uppercase mb-4 leading-none"
         >
-          Luxury Barber <span class="text-gold">Scheduler</span>
+          Luxury Barber <span class="text-accent">Scheduler</span>
         </h1>
         <p class="text-base text-zinc-400 font-light leading-relaxed mb-6">
           Premium classic cuts, modern fades, hot towel straight-razor shaves, and beard sculpture
@@ -92,7 +92,7 @@
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         <!-- LEFT COLUMN: STATIC MENU, HOURS & TESTIMONIALS (5 COLS) -->
         <div class="lg:col-span-5 space-y-6">
-          <section class="card bg-zinc-950 border border-white/10 rounded-3xl p-8">
+          <section class="card p-8">
             <h2
               class="text-lg font-black text-zinc-100 uppercase tracking-tight mb-6 pb-4 border-b border-white/5"
             >
@@ -102,11 +102,7 @@
             @if (servicesError()) {
               <div role="alert" class="text-center text-xs text-rose-400 mb-6">
                 <p>{{ servicesError() }}</p>
-                <button
-                  type="button"
-                  class="btn btn-secondary py-2 px-4 text-xs mt-3"
-                  (click)="retryServices()"
-                >
+                <button type="button" class="btn btn-secondary mt-3" (click)="retryServices()">
                   Retry
                 </button>
               </div>
@@ -116,7 +112,7 @@
                 <div class="border-b border-white/5 pb-4 last:border-none last:pb-0">
                   <div class="flex justify-between items-center font-bold text-sm mb-1">
                     <span class="text-zinc-100">{{ service.name }}</span>
-                    <span class="text-gold">{{ formatUsd(service.price) }}</span>
+                    <span class="text-accent">{{ formatUsd(service.price) }}</span>
                   </div>
                   <p class="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
                     ⏱️ Duration: {{ service.durationMinutes }} mins
@@ -179,7 +175,7 @@
 
             <!-- Grooming Clays -->
             <div
-              class="mt-6 rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-900 to-gold-light/10 p-5"
+              class="mt-6 rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-900 to-accent-soft/10 p-5"
             >
               <h3 class="text-zinc-100 font-bold text-xs uppercase tracking-wider mb-3">
                 🧴 Artisanal Products
@@ -187,15 +183,15 @@
               <div class="space-y-2 text-xs text-zinc-400 font-light">
                 <p class="flex justify-between">
                   <span>Styling Fiber Clay (100ml)</span>
-                  <span class="text-gold font-bold">$24.00</span>
+                  <span class="text-accent font-bold">$24.00</span>
                 </p>
                 <p class="flex justify-between">
                   <span>Sandalwood Beard Balm (60ml)</span>
-                  <span class="text-gold font-bold">$19.00</span>
+                  <span class="text-accent font-bold">$19.00</span>
                 </p>
                 <p class="flex justify-between">
                   <span>Straight Razor Shave Cream (150ml)</span>
-                  <span class="text-gold font-bold">$22.00</span>
+                  <span class="text-accent font-bold">$22.00</span>
                 </p>
               </div>
             </div>
@@ -210,11 +206,11 @@
               <div class="min-h-12">
                 @if (ratingSummary(); as summary) {
                   <p class="flex items-baseline gap-2">
-                    <span class="text-2xl font-black text-gold leading-none">{{
+                    <span class="text-2xl font-black text-accent leading-none">{{
                       summary.averageRating.toFixed(1)
                     }}</span>
                     <span class="sr-only"> out of 5</span>
-                    <span aria-hidden="true" class="text-gold text-sm leading-none">★</span>
+                    <span aria-hidden="true" class="text-accent text-sm leading-none">★</span>
                     <span class="text-xs text-zinc-400"
                       >from {{ summary.reviewCount }}
                       {{ summary.reviewCount === 1 ? 'review' : 'reviews' }}</span

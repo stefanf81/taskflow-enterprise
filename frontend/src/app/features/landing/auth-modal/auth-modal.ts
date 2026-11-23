@@ -39,7 +39,7 @@ interface AuthFormModel {
         aria-labelledby="authModalTitle"
         cdkTrapFocus
         cdkTrapFocusAutoCapture
-        class="login-card modal-card animate-fadeIn p-8 rounded-3xl border border-white/10 shadow-2xl shadow-black/50"
+        class="login-card modal-card animate-fadeIn p-8 rounded-3xl"
       >
         <button type="button" class="modal-close" aria-label="Close" (click)="closeModal()">
           &times;
@@ -51,7 +51,7 @@ interface AuthFormModel {
             viewBox="0 0 24 24"
             stroke-width="2.5"
             stroke="currentColor"
-            class="w-10 h-10 text-gold mx-auto mb-3"
+            class="w-10 h-10 text-accent mx-auto mb-3"
           >
             <path
               stroke-linecap="round"
@@ -195,11 +195,7 @@ interface AuthFormModel {
             }
           </div>
 
-          <button
-            type="submit"
-            class="btn btn-submit w-full mt-2 py-3 text-xs tracking-wide uppercase font-black"
-            [disabled]="isSubmitting()"
-          >
+          <button type="submit" class="btn btn-submit w-full mt-2" [disabled]="isSubmitting()">
             {{ isSubmitting() ? 'Processing...' : isRegisterMode() ? 'Register' : 'Sign In' }}
           </button>
         </form>
@@ -210,7 +206,7 @@ interface AuthFormModel {
                mouse was released, so the click was lost (BENCHMARKS.md §74). -->
           <button
             type="button"
-            class="text-xs text-gold font-bold hover:text-white"
+            class="text-xs text-accent font-bold hover:text-white"
             (mousedown)="$event.preventDefault()"
             (click)="toggleMode()"
           >

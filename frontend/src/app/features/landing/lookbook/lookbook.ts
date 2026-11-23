@@ -11,7 +11,7 @@ import { Component, output } from '@angular/core';
   selector: 'app-lookbook',
   imports: [],
   template: `
-    <section class="card bg-zinc-950 border border-white/10 rounded-3xl p-8 mb-16">
+    <section class="card p-8 mb-16">
       <h2 class="text-center text-lg font-extrabold text-zinc-100 uppercase tracking-wider mb-2">
         ✂️ Signature Lookbook
       </h2>
@@ -25,11 +25,11 @@ import { Component, output } from '@angular/core';
         <button
           type="button"
           (click)="selectStyle('Classic Haircut', 'hair')"
-          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-gold/10 hover:border-gold/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
+          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
           <span class="text-3xl block mb-3">👦🏻</span>
           <span
-            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-gold transition-colors"
+            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-accent transition-colors"
           >
             Executive Pompadour
           </span>
@@ -46,11 +46,11 @@ import { Component, output } from '@angular/core';
         <button
           type="button"
           (click)="selectStyle('Modern Skin Fade', 'hair')"
-          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-gold/10 hover:border-gold/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
+          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
           <span class="text-3xl block mb-3">👱🏽‍♂️</span>
           <span
-            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-gold transition-colors"
+            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-accent transition-colors"
           >
             Midnight Skin Fade
           </span>
@@ -67,11 +67,11 @@ import { Component, output } from '@angular/core';
         <button
           type="button"
           (click)="selectStyle('Beard Trim & Shave', 'beard')"
-          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-gold/10 hover:border-gold/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
+          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
           <span class="text-3xl block mb-3">🧔🏾</span>
           <span
-            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-gold transition-colors"
+            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-accent transition-colors"
           >
             Bespoke Beard Sculpt
           </span>
@@ -88,11 +88,11 @@ import { Component, output } from '@angular/core';
         <button
           type="button"
           (click)="selectStyle('The Executive Package', 'combo')"
-          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-gold/10 hover:border-gold/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
+          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
           <span class="text-3xl block mb-3">🤵🏼</span>
           <span
-            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-gold transition-colors"
+            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-accent transition-colors"
           >
             Royal Executive
           </span>

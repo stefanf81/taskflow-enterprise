@@ -5,12 +5,7 @@
     are retired and listed below, where they can be restored.
   </p>
 
-  <button
-    type="button"
-    class="btn btn-submit py-2 px-4 text-xs"
-    [disabled]="pending()"
-    (click)="openEditor()"
-  >
+  <button type="button" class="btn btn-submit" [disabled]="pending()" (click)="openEditor()">
     Create service
   </button>
 
@@ -124,14 +119,10 @@
           ></textarea>
         </div>
         <div class="flex gap-3">
-          <button class="btn btn-submit py-2 px-4 text-xs" type="submit">
+          <button class="btn btn-submit" type="submit">
             {{ isSaving() ? 'Saving…' : 'Save service' }}
           </button>
-          <button
-            class="btn btn-secondary py-2 px-4 text-xs"
-            type="button"
-            (click)="editorOpen.set(false)"
-          >
+          <button class="btn btn-secondary" type="button" (click)="editorOpen.set(false)">
             Cancel
           </button>
         </div>
@@ -151,7 +142,7 @@
       </p>
       <button
         type="button"
-        class="btn btn-secondary py-2 px-4 text-xs"
+        class="btn btn-secondary"
         [disabled]="pending()"
         (click)="confirmRetire()"
       >
@@ -159,7 +150,7 @@
       </button>
       <button
         type="button"
-        class="btn btn-secondary py-2 px-4 text-xs"
+        class="btn btn-secondary"
         [disabled]="pending()"
         (click)="retiring.set(null)"
       >
@@ -177,11 +168,7 @@
     <div class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20">
       <span class="text-3xl block mb-2">⚠️</span>
       <h3 class="text-white font-bold text-sm">{{ catalogStore.errorMessage() }}</h3>
-      <button
-        type="button"
-        class="btn btn-secondary py-2 px-4 text-xs mt-3"
-        (click)="catalogStore.loadServices()"
-      >
+      <button type="button" class="btn btn-secondary mt-3" (click)="catalogStore.loadServices()">
         Retry
       </button>
     </div>
@@ -204,7 +191,7 @@
                 {{ service.category }}
               </p>
             </div>
-            <p class="text-sm font-bold text-gold whitespace-nowrap">
+            <p class="text-sm font-bold text-accent whitespace-nowrap">
               {{ formatUsd(service.price) }}
             </p>
           </div>
@@ -217,7 +204,7 @@
           <div class="flex gap-3 mt-3">
             <button
               type="button"
-              class="btn btn-secondary py-2 px-4 text-xs"
+              class="btn btn-secondary"
               [disabled]="pending()"
               (click)="openEditor(service)"
             >
@@ -225,7 +212,7 @@
             </button>
             <button
               type="button"
-              class="btn btn-secondary py-2 px-4 text-xs"
+              class="btn btn-secondary"
               [disabled]="pending()"
               (click)="editorOpen.set(false); retiring.set(service); actionError.set(null)"
             >
@@ -262,11 +249,7 @@
     } @else if (retiredStore.errorMessage()) {
       <div role="alert" class="text-xs text-rose-400">
         <p>{{ retiredStore.errorMessage() }}</p>
-        <button
-          type="button"
-          class="btn btn-secondary py-2 px-4 text-xs mt-3"
-          (click)="retiredStore.loadRetired()"
-        >
+        <button type="button" class="btn btn-secondary mt-3" (click)="retiredStore.loadRetired()">
           Retry
         </button>
       </div>
@@ -292,7 +275,7 @@
             </p>
             <button
               type="button"
-              class="btn btn-secondary py-2 px-4 text-xs mt-3"
+              class="btn btn-secondary mt-3"
               [disabled]="pending()"
               (click)="retiredStore.restore(service)"
             >

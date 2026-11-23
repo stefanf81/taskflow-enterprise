@@ -28,12 +28,7 @@ import { BookingStore } from '../booking/booking.store';
             </p>
           </div>
         </div>
-        <a
-          routerLink="/customer"
-          class="btn btn-secondary py-2.5 px-4 rounded-xl text-xs font-semibold"
-        >
-          &larr; My Appointments
-        </a>
+        <a routerLink="/customer" class="btn btn-secondary"> &larr; My Appointments </a>
       </header>
       <div class="max-w-3xl mx-auto">
         <app-booking-wizard />

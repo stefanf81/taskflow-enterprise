@@ -1,4 +1,4 @@
-<section class="card bg-zinc-950 border border-white/10 rounded-3xl p-8 relative">
+<section class="card p-8 relative">
   <h2 class="text-xl font-black text-zinc-100 tracking-tight uppercase mb-1">
     📅 Booking Assistant
   </h2>
@@ -15,7 +15,7 @@
   >
     <div class="absolute left-0 right-0 h-0.5 bg-white/5 z-0 top-1/2 -translate-y-1/2"></div>
     <div
-      class="absolute left-0 h-0.5 bg-gold-dark z-10 top-1/2 -translate-y-1/2 transition-all duration-300"
+      class="absolute left-0 h-0.5 bg-accent-muted z-10 top-1/2 -translate-y-1/2 transition-all duration-300"
       [class]="progressWidthClass()"
     ></div>
 
@@ -34,7 +34,7 @@
         [attr.tabindex]="store.activeStep() === step.num ? '0' : '-1'"
         (click)="store.setStep(step.num)"
         (keydown)="onStepKeydown($event, i)"
-        class="wizard-step-node relative z-20 w-9 h-9 rounded-full border bg-zinc-950 text-zinc-500 text-xs font-black flex items-center justify-center transition-all duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+        class="wizard-step-node relative z-20 w-9 h-9 rounded-full text-xs font-black flex items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         [class.cursor-pointer]="store.isStepReachable(step.num)"
         [class.cursor-not-allowed]="!store.isStepReachable(step.num)"
         [class.active]="store.activeStep() === step.num"
@@ -50,7 +50,7 @@
   </div>
 
   <!-- Active Step Indicator Badge label -->
-  <div class="text-center font-bold text-xs text-gold uppercase tracking-wider mb-6">
+  <div class="text-center font-bold text-xs text-accent uppercase tracking-wider mb-6">
     {{ store.activeStep() }}. {{ activeStepLabel() }}
   </div>
 
@@ -147,7 +147,7 @@
          was lost (BENCHMARKS.md §74). -->
     <button
       type="button"
-      class="btn btn-secondary text-xs wizard-back-btn"
+      class="btn btn-secondary wizard-back-btn py-2 px-5"
       [disabled]="store.activeStep() === 1"
       (mousedown)="$event.preventDefault()"
       (click)="store.goToPrevStep()"
@@ -158,7 +158,7 @@
     @if (store.activeStep() < 4) {
       <button
         type="button"
-        class="btn btn-submit text-xs wizard-next-btn"
+        class="btn btn-submit wizard-next-btn py-2 px-6"
         [disabled]="!store.isStepValid(store.activeStep())"
         (click)="store.goToNextStep()"
       >

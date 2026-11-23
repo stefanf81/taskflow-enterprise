@@ -8,7 +8,7 @@
         viewBox="0 0 24 24"
         stroke-width="2.5"
         stroke="currentColor"
-        class="w-7 h-7 text-gold"
+        class="w-7 h-7 text-accent"
       >
         <path
           stroke-linecap="round"
@@ -27,7 +27,7 @@
     </div>
     <div class="flex items-center gap-3">
       <button
-        class="btn btn-refresh bg-zinc-950 border border-white/10 text-zinc-400 hover:text-zinc-100 py-2.5 px-4 rounded-xl text-xs font-semibold"
+        class="btn btn-refresh bg-zinc-950 border border-white/10 text-zinc-400 hover:text-zinc-100"
         (click)="loadAppointments()"
         title="Sync list from database"
       >
@@ -48,7 +48,7 @@
         Sync DB
       </button>
       <button
-        class="btn btn-logout bg-red-500/10 text-red-400 hover:bg-red-600 hover:text-white border border-red-500/20 py-2.5 px-4 rounded-xl text-xs font-semibold"
+        class="btn btn-logout bg-red-500/10 text-red-400 hover:bg-red-600 hover:text-white border border-red-500/20"
         (click)="onLogout()"
         title="Log out of owner panel"
       >
@@ -102,17 +102,13 @@
       <span class="text-rose-400 leading-normal font-medium flex-1"
         >⚠️ {{ loadErrorMessage() }}</span
       >
-      <button type="button" class="btn btn-secondary py-2 px-4 text-xs" (click)="retryLoad()">
-        Retry
-      </button>
+      <button type="button" class="btn btn-secondary" (click)="retryLoad()">Retry</button>
     </div>
   } @else {
     <!-- STATS BOARD GRID (SAAS CLEAN TILES) -->
     <section class="grid grid-cols-2 lg:grid-cols-5 gap-5 mb-8 text-zinc-100">
       <!-- Tile 1 -->
-      <div
-        class="card p-5 border border-white/10 bg-zinc-950 rounded-2xl flex justify-between items-center"
-      >
+      <div class="card p-5 flex justify-between items-center">
         <div class="flex flex-col">
           <span class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
             >Total Bookings</span
@@ -127,9 +123,7 @@
       </div>
 
       <!-- Tile 2 -->
-      <div
-        class="card p-5 border border-white/10 bg-zinc-950 rounded-2xl flex justify-between items-center"
-      >
+      <div class="card p-5 flex justify-between items-center">
         <div class="flex flex-col">
           <span class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
             >Pending Approval</span
@@ -146,9 +140,7 @@
       </div>
 
       <!-- Tile 3 -->
-      <div
-        class="card p-5 border border-white/10 bg-zinc-950 rounded-2xl flex justify-between items-center"
-      >
+      <div class="card p-5 flex justify-between items-center">
         <div class="flex flex-col">
           <span class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
             >Approved Slots</span
@@ -165,9 +157,7 @@
       </div>
 
       <!-- Tile 4 -->
-      <div
-        class="card p-5 border border-white/10 bg-zinc-950 rounded-2xl flex justify-between items-center"
-      >
+      <div class="card p-5 flex justify-between items-center">
         <div class="flex flex-col">
           <span class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
             >Overdue Pending</span
@@ -184,19 +174,17 @@
       </div>
 
       <!-- Tile 5 -->
-      <div
-        class="card p-5 border border-white/10 bg-zinc-950 rounded-2xl flex justify-between items-center col-span-2 lg:col-span-1"
-      >
+      <div class="card p-5 flex justify-between items-center col-span-2 lg:col-span-1">
         <div class="flex flex-col">
           <span class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
             >Estimated Revenue</span
           >
-          <span class="text-2xl font-black text-gold mt-1 leading-none">{{
+          <span class="text-2xl font-black text-accent mt-1 leading-none">{{
             approvedRevenue()
           }}</span>
         </div>
         <div
-          class="w-10 h-10 rounded-xl bg-gold/10 text-gold flex items-center justify-center font-extrabold"
+          class="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center font-extrabold"
         >
           $
         </div>
@@ -204,12 +192,12 @@
     </section>
 
     <!-- APPROVAL PROGRESS RATE BAR -->
-    <div class="card bg-zinc-950 border border-white/10 rounded-2xl p-5 mb-10">
+    <div class="card p-5 mb-10">
       <div
         class="flex justify-between items-center text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2"
       >
         <span>Slot Approval Completion Rate</span>
-        <span class="text-gold font-extrabold text-sm">{{ stats().progress }}%</span>
+        <span class="text-accent font-extrabold text-sm">{{ stats().progress }}%</span>
       </div>
       <div
         role="progressbar"
@@ -220,7 +208,7 @@
         class="w-full h-2 bg-white/5 rounded-full overflow-hidden"
       >
         <div
-          class="h-full bg-gradient-to-r from-gold to-gold-dark rounded-full"
+          class="h-full bg-gradient-to-r from-accent to-accent-muted rounded-full"
           [style.width.%]="stats().progress"
         ></div>
       </div>
@@ -231,7 +219,7 @@
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
     <!-- SIDEBAR: DIRECTIONS (4 COLS) -->
     <aside class="lg:col-span-4">
-      <div class="card bg-zinc-950 border border-white/10 rounded-2xl p-6">
+      <div class="card p-6">
         <h2
           class="text-zinc-100 font-black text-sm uppercase tracking-tight mb-4 pb-3 border-b border-white/5"
         >
@@ -267,14 +255,14 @@
 
     <!-- MAIN TABLE LIST (8 COLS) -->
     <main class="lg:col-span-8">
-      <div class="card bg-zinc-950 border border-white/10 rounded-2xl p-6">
+      <div class="card p-6">
         <!-- ADMIN VIEW TOGGLE -->
         <div class="flex gap-4 mb-6 border-b border-white/10 pb-4">
           <button
             type="button"
             (click)="setAdminView('appointments')"
             [attr.aria-pressed]="adminView() === 'appointments'"
-            [class.text-gold]="adminView() === 'appointments'"
+            [class.text-accent]="adminView() === 'appointments'"
             [class.font-black]="adminView() === 'appointments'"
             class="text-sm font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors"
           >
@@ -284,7 +272,7 @@
             type="button"
             (click)="setAdminView('services')"
             [attr.aria-pressed]="adminView() === 'services'"
-            [class.text-gold]="adminView() === 'services'"
+            [class.text-accent]="adminView() === 'services'"
             [class.font-black]="adminView() === 'services'"
             class="text-sm font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors"
           >
@@ -294,7 +282,7 @@
             type="button"
             (click)="setAdminView('schedules')"
             [attr.aria-pressed]="adminView() === 'schedules'"
-            [class.text-gold]="adminView() === 'schedules'"
+            [class.text-accent]="adminView() === 'schedules'"
             [class.font-black]="adminView() === 'schedules'"
             class="text-sm font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors"
           >
@@ -304,7 +292,7 @@
             type="button"
             (click)="setAdminView('notifications')"
             [attr.aria-pressed]="adminView() === 'notifications'"
-            [class.text-gold]="adminView() === 'notifications'"
+            [class.text-accent]="adminView() === 'notifications'"
             [class.font-black]="adminView() === 'notifications'"
             class="text-sm font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors"
           >

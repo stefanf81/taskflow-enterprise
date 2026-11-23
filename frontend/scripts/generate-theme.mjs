@@ -29,17 +29,23 @@ if (contrastFailures.length > 0) {
   process.exit(1);
 }
 
-const colors = [
-  ['--color-gold-light', tokens.colors.gold.light],
-  ['--color-gold', tokens.colors.gold.main],
-  ['--color-gold-dark', tokens.colors.gold.dark],
-  ['--color-obsidian-light', tokens.colors.obsidian.light],
-  ['--color-obsidian', tokens.colors.obsidian.bg],
-  ['--color-obsidian-dark', tokens.colors.obsidian.dark],
-  ['--color-status-pending', tokens.colors.status.pending],
-  ['--color-status-approved', tokens.colors.status.approved],
-  ['--color-status-denied', tokens.colors.status.denied],
-  ['--color-status-info', tokens.colors.status.info],
+/** `gold.main` -> `#c5a059`: a semantic token names a palette colour. */
+function paletteColor(path) {
+  const value = path.split('.').reduce((node, key) => node?.[key], tokens.colors);
+  if (typeof value !== 'string')
+    throw new Error(`semantic token points at unknown colour "${path}"`);
+  return value;
+}
+
+// Only purpose names reach the theme (and so Tailwind's utilities: bg-surface, text-accent, …).
+// The palette under `colors` is the raw material the contrast rules check.
+const variables = [
+  ...Object.entries(tokens.semantic)
+    .filter(([name]) => !name.startsWith('$'))
+    .map(([name, path]) => [`--color-${name}`, paletteColor(path)]),
+  ...Object.entries(tokens.radius).map(([name, value]) => [`--radius-${name}`, value]),
+  ...Object.entries(tokens.shadow).map(([name, value]) => [`--shadow-${name}`, value]),
+  ...Object.entries(tokens.font).map(([name, value]) => [`--font-${name}`, value]),
 ];
 
 // Format with the repo's Prettier config so `prettier --check .` stays green
@@ -51,11 +57,11 @@ const generated = await prettier.format(
     ' * Regenerate with: npm run theme:build',
     ' */',
     '@theme {',
-    ...colors.map(([name, value]) => `  ${name}: ${value};`),
+    ...variables.map(([name, value]) => `  ${name}: ${value};`),
     '}',
     '',
   ].join('\n'),
-  { parser: 'css' },
+  { ...(await prettier.resolveConfig(outputPath)), parser: 'css' },
 );
 
 if (process.argv.includes('--check')) {

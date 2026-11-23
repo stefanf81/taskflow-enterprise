@@ -4,7 +4,7 @@ import { Component, signal } from '@angular/core';
   selector: 'app-faq-section',
   imports: [],
   template: `
-    <section class="card bg-zinc-950 border border-white/10 rounded-3xl p-8 mt-16">
+    <section class="card p-8 mt-16">
       <h2 class="text-center text-lg font-extrabold text-zinc-100 uppercase tracking-tight mb-6">
         💬 Frequently Asked Questions
       </h2>
@@ -16,10 +16,10 @@ import { Component, signal } from '@angular/core';
             (click)="toggleFaq(0)"
             [attr.aria-expanded]="activeFaq() === 0"
             aria-controls="faq-panel-0"
-            class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+            class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <span>⏰ How early should I arrive for my appointment?</span>
-            <span class="text-gold font-extrabold">{{ activeFaq() === 0 ? '−' : '+' }}</span>
+            <span class="text-accent font-extrabold">{{ activeFaq() === 0 ? '−' : '+' }}</span>
           </button>
           @if (activeFaq() === 0) {
             <div id="faq-panel-0" role="region" aria-labelledby="faq-btn-0" class="animate-fadeIn">
@@ -38,10 +38,10 @@ import { Component, signal } from '@angular/core';
             (click)="toggleFaq(1)"
             [attr.aria-expanded]="activeFaq() === 1"
             aria-controls="faq-panel-1"
-            class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+            class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <span>💳 Do you accept credit cards and contactless payments?</span>
-            <span class="text-gold font-extrabold">{{ activeFaq() === 1 ? '−' : '+' }}</span>
+            <span class="text-accent font-extrabold">{{ activeFaq() === 1 ? '−' : '+' }}</span>
           </button>
           @if (activeFaq() === 1) {
             <div id="faq-panel-1" role="region" aria-labelledby="faq-btn-1" class="animate-fadeIn">
@@ -58,10 +58,10 @@ import { Component, signal } from '@angular/core';
             (click)="toggleFaq(2)"
             [attr.aria-expanded]="activeFaq() === 2"
             aria-controls="faq-panel-2"
-            class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+            class="w-full text-left bg-none border-none text-zinc-100 font-bold text-sm cursor-pointer flex justify-between items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <span>🔄 What is your cancellation policy?</span>
-            <span class="text-gold font-extrabold">{{ activeFaq() === 2 ? '−' : '+' }}</span>
+            <span class="text-accent font-extrabold">{{ activeFaq() === 2 ? '−' : '+' }}</span>
           </button>
           @if (activeFaq() === 2) {
             <div id="faq-panel-2" role="region" aria-labelledby="faq-btn-2" class="animate-fadeIn">

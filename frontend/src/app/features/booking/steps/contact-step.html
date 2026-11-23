@@ -70,9 +70,7 @@
     </div>
 
     <!-- Real-Time Booking Summary Card -->
-    <div
-      class="booking-summary-card card animate-fadeIn bg-zinc-900/50 border border-white/10 p-5 mt-6 rounded-2xl"
-    >
+    <div class="booking-summary-card card animate-fadeIn p-5 mt-6">
       <h3
         class="text-zinc-100 font-extrabold text-sm border-b border-white/10 pb-3 mb-4 flex items-center gap-1.5"
       >
@@ -103,7 +101,7 @@
         @if (store.estimatedEndTime()) {
           <p class="flex justify-between">
             <span>⏰ Est. End Time:</span>
-            <strong class="text-gold font-bold">{{
+            <strong class="text-accent font-bold">{{
               formatTime12Hour(store.estimatedEndTime())
             }}</strong>
           </p>
@@ -111,14 +109,14 @@
         <hr class="border-t border-white/10 my-2" />
         <p class="flex justify-between text-sm font-bold text-zinc-100 pt-1">
           <span>Total Est. Price:</span>
-          <span class="text-gold">{{ store.formattedTotal() }}</span>
+          <span class="text-accent">{{ store.formattedTotal() }}</span>
         </p>
       </div>
     </div>
 
     <button
       type="submit"
-      class="btn btn-submit login-btn w-full mt-6 py-3 text-sm font-bold tracking-wide uppercase transition-all duration-200"
+      class="btn btn-submit login-btn w-full mt-6"
       [disabled]="store.isSubmitting()"
     >
       {{ store.isSubmitting() ? 'Securing Slot...' : 'Confirm & Request Booking' }}

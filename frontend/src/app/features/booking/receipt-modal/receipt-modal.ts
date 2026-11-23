@@ -14,7 +14,7 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
   imports: [A11yModule],
   template: `
     <div
-      class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn"
+      class="modal-overlay inset-0 p-4 animate-fadeIn"
       tabindex="-1"
       (click)="onBackdropClick($event)"
       (keydown.escape)="closed.emit()"
@@ -25,7 +25,7 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
         aria-labelledby="receiptModalTitle"
         cdkTrapFocus
         cdkTrapFocusAutoCapture
-        class="login-card modal-card receipt-modal-card animate-fadeIn p-8 rounded-3xl border border-white/10 shadow-2xl shadow-black/50"
+        class="login-card modal-card max-w-[480px] animate-fadeIn p-8 rounded-3xl"
       >
         <button
           type="button"
@@ -72,7 +72,9 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
           <div class="space-y-3 text-xs text-zinc-400 font-light">
             <p class="flex justify-between">
               <span>🔑 Booking Code:</span>
-              <strong class="text-gold font-bold select-all">{{ appointment()?.publicId }}</strong>
+              <strong class="text-accent font-bold select-all">{{
+                appointment()?.publicId
+              }}</strong>
             </p>
             <p class="flex justify-between">
               <span>👤 Customer:</span>
@@ -96,7 +98,7 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
             <hr class="border-t border-dashed border-slate-300 my-2" />
             <p class="flex justify-between text-sm font-bold text-zinc-100 pt-1">
               <span>Estimated Price:</span>
-              <span class="text-gold">\${{ checkoutTotalLabel() }}</span>
+              <span class="text-accent">\${{ checkoutTotalLabel() }}</span>
             </p>
           </div>
         </div>
@@ -112,7 +114,7 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
         <div class="space-y-2.5">
           <button
             type="button"
-            class="btn btn-secondary w-full py-2.5 text-xs font-bold tracking-wide uppercase"
+            class="btn btn-secondary w-full"
             [disabled]="exportingCalendar() || !appointment()"
             (click)="downloadCalendar()"
           >
@@ -121,11 +123,7 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
           @if (calendarError(); as message) {
             <p role="alert" class="text-center text-sm text-rose-400">{{ message }}</p>
           }
-          <button
-            type="button"
-            class="btn btn-submit w-full py-3 font-bold tracking-wide uppercase"
-            (click)="closed.emit()"
-          >
+          <button type="button" class="btn btn-submit w-full" (click)="closed.emit()">
             Got It, Thanks!
           </button>
         </div>

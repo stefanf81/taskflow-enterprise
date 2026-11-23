@@ -16,7 +16,7 @@ import { LandingPage } from './features/landing/landing-page';
       <p class="text-zinc-400 text-sm mb-8">The page you're looking for doesn't exist.</p>
       <a
         routerLink="/"
-        class="text-gold text-sm font-bold uppercase tracking-wider hover:underline"
+        class="text-accent text-sm font-bold uppercase tracking-wider hover:underline"
       >
         Go Home
       </a>

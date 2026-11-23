@@ -20,25 +20,21 @@ This project uses **Tailwind CSS v4** (`^4.3.3`) natively within Angular 22's mo
       }
     }
     ```
-2.  **Global Theme Variables (`src/styles.css`):** Imports Tailwind CSS v4 natively and declares custom brand colors defined by the frontend-local `src/theme/tokens.json`:
+2.  **Theme tokens (`src/theme/tokens.json` → `src/theme/tokens.generated.css`):** `npm run theme:build` turns the JSON's `semantic` colours, `radius`, `shadow` and `font` into a Tailwind `@theme` block that `src/styles.css` imports, and fails when a text colour drops below WCAG AA on the dark surfaces (`scripts/theme-contrast.mjs`). The semantic names are what templates and CSS use:
 
     ```css
-    @import 'tailwindcss';
-
-    /* Platform-local Theme Tokens: src/theme/tokens.json */
     @theme {
-      --color-gold-light: #e5c185;
-      --color-gold: #c5a059;
-      --color-gold-dark: #8e7a5c;
-      --color-obsidian-light: #1e293b;
-      --color-obsidian: #090d16;
-      --color-obsidian-dark: #030712;
-      --color-status-pending: #fbbf24;
-      --color-status-approved: #34d399;
-      --color-status-denied: #f87171;
-      --color-status-info: #3b82f6;
+      --color-page: #000000; /* bg-page */
+      --color-surface: #09090b; /* cards, inputs */
+      --color-fg: #f4f4f5; /* text-fg */
+      --color-accent: #c5a059; /* text-accent, bg-accent/10, border-accent */
+      --color-accent-tint: #1a1610; /* selected cards and slots */
+      --color-danger: #f87171;
+      /* … plus radius, shadow (shadow-ring, shadow-raised, shadow-glow) and font-sans */
     }
     ```
+
+    The shared component classes (`.btn`, `.card`, `.form-control`, `.modal-card`, the wizard's slot pickers) live in `src/app/app.css` inside `@layer components`, so a utility on the same element overrides them.
 
 3.  **Strict Content Security Policy (CSP) Inlining Optimization (`angular.json`):** Our hardened unprivileged production Nginx container implements a strict Content Security Policy (`script-src 'self'` plus the sha384 hashes of the inline scripts the `frontend/Dockerfile` inventory pins). Angular's critical CSS inlining loads the full stylesheet as `media="print"` and switches it on with inline script: an `onload` attribute before Angular 22, and in Angular 22 (Beasties `media-script`) an inline `<script>` appended to `<body>` plus a `data-beasties-media` attribute. The CSP blocks both, which leaves the page unstyled. On the client-rendered shell (`index.csr.html`, body only `<app-root>`) it would not help either: the "critical" CSS is 10 kB of theme variables and preflight, and nothing paints before the JavaScript runs. The prerendered guest landing (`index.html`) does paint before the JavaScript, so inlining could shorten its first paint, but only after the Beasties script is added to the hashed inline-script inventory and the gain is measured. Style inlining therefore stays disabled in `angular.json`, and CI checks both shells for the loader:
     ```json
@@ -57,7 +53,7 @@ The frontend owns its contract files under `src/`:
 
 - **API Types (`src/app/types/api.ts`)**: Re-exports the types generated once into `shared/schemas/src/generated/api-types.ts` from the reviewed root-level `api/openapi.json` baseline. Do not edit manually; use the workspace contract commands.
 - **Pure Time Utilities (`src/app/core/time-utils.ts`)**: Owns pure time formatting and date validation functions.
-- **Design Tokens (`src/theme/tokens.json`)**: Defines the frontend's Gold & Obsidian theme values used by `src/styles.css`.
+- **Design Tokens (`src/theme/tokens.json`)**: The palette and the semantic colours, radii, shadows and font that `npm run theme:build` generates into `src/theme/tokens.generated.css`.
 
 ---
 

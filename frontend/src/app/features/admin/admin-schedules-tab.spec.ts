@@ -42,11 +42,11 @@ describe('AdminSchedulesTab', () => {
     select(2);
     expect(card().classList).toContain('bg-zinc-900');
     expect(card().classList).toContain('border-white/5');
-    expect(card().classList).not.toContain('bg-gold/20');
+    expect(card().classList).not.toContain('bg-accent/20');
 
     select(1);
-    expect(card().classList).toContain('bg-gold/20');
-    expect(card().classList).toContain('border-gold');
+    expect(card().classList).toContain('bg-accent/20');
+    expect(card().classList).toContain('border-accent');
     expect(card().classList).not.toContain('bg-zinc-900');
     // The static classes survive the [class] binding.
     expect(card().classList).toContain('p-4');

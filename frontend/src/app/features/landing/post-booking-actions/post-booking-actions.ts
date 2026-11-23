@@ -45,7 +45,7 @@ interface ReviewFormModel {
   template: `
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
       <!-- Interactive secure self-service cancellation portal -->
-      <section class="card bg-zinc-950 border border-white/10 rounded-3xl p-8">
+      <section class="card p-8">
         <h2 class="text-lg font-black text-zinc-100 tracking-tight mb-2 flex items-center gap-2">
           <span class="text-rose-500">🧹</span> Secure Booking Cancellation
         </h2>
@@ -119,7 +119,7 @@ interface ReviewFormModel {
           <div class="flex justify-end pt-2">
             <button
               type="submit"
-              class="btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-600 hover:text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all w-full sm:w-auto"
+              class="btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-600 hover:text-white w-full sm:w-auto"
               [disabled]="isCancelling()"
             >
               {{ isCancelling() ? 'Cancelling...' : 'Cancel Reservation' }}
@@ -129,11 +129,9 @@ interface ReviewFormModel {
       </section>
 
       <!-- Self-service reschedule: verified like the cancellation, the booking keeps its code. -->
-      <section
-        class="card bg-zinc-950 border border-white/10 rounded-3xl p-8 md:order-last md:col-span-2"
-      >
+      <section class="card p-8 md:order-last md:col-span-2">
         <h2 class="text-lg font-black text-zinc-100 tracking-tight mb-2 flex items-center gap-2">
-          <span class="text-gold">🔁</span> Reschedule a Booking
+          <span class="text-accent">🔁</span> Reschedule a Booking
         </h2>
         <p class="text-xs text-zinc-400 font-light leading-relaxed mb-6">
           Need another time? Provide your Booking ID and Email, then pick a new slot. Your booking
@@ -187,10 +185,7 @@ interface ReviewFormModel {
           </div>
           @if (!rescheduleTarget()) {
             <div class="sm:col-span-2 flex justify-end">
-              <button
-                type="submit"
-                class="btn btn-secondary text-xs font-bold px-5 py-2.5 rounded-xl w-full sm:w-auto"
-              >
+              <button type="submit" class="btn btn-secondary w-full sm:w-auto">
                 Choose a new time
               </button>
             </div>
@@ -208,7 +203,7 @@ interface ReviewFormModel {
       </section>
 
       <!-- Interactive secure self-service review portal -->
-      <section class="card bg-zinc-950 border border-white/10 rounded-3xl p-8">
+      <section class="card p-8">
         <h2 class="text-lg font-black text-zinc-100 tracking-tight mb-2 flex items-center gap-2">
           <span class="text-amber-400">⭐</span> Submit a Review
         </h2>
@@ -319,7 +314,7 @@ interface ReviewFormModel {
           <div class="flex justify-end pt-2">
             <button
               type="submit"
-              class="btn btn-submit text-xs font-bold px-5 py-2.5 rounded-xl transition-all w-full sm:w-auto"
+              class="btn btn-submit w-full sm:w-auto"
               [disabled]="isReviewing()"
             >
               {{ isReviewing() ? 'Submitting...' : 'Submit Review' }}
