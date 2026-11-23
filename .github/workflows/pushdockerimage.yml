@@ -13,18 +13,25 @@ name: TaskFlow Push Docker Images
 #   2. Builds and pushes Docker images to a temporary scan tag on GHCR
 #      (:<tag>-scan) with provenance and SBOM attestations enabled, release
 #      labels (version, revision, created) and an index-level description.
-#   3. Scans the exact pushed digest with Trivy (HIGH,CRITICAL — hard gate,
-#      exit-code: 1).
+#   3. In a job with read-only package access, scans the exact pushed digest
+#      with Trivy (hard gate, exit-code: 1; see the scan step for which
+#      findings fail it) and keeps the report in Trivy's cosign-vuln format.
 #   4. In a separate job that holds the signing token and runs no build or
 #      scan step: signs that digest with cosign (keyless: the certificate
 #      names this workflow and the ref it was dispatched from) and attaches a
-#      signed SLSA build provenance attestation, only if the scan passes (or
-#      skip_scan is set). The signature carries a signed `scan=passed` or
-#      `scan=skipped` annotation.
-#   5. Verifies the signature and the attestation, then promotes the digest to
-#      :<tag> (and to :latest when dispatched from main) with the buildx
+#      signed SLSA build provenance attestation and the scan report as a signed
+#      vulnerability attestation, only if the scan passes (or skip_scan is set,
+#      which publishes no scan attestation). The signature carries a signed
+#      `scan=passed` or `scan=skipped` annotation.
+#   5. Verifies the signature and the attestations, then promotes the digest
+#      to :<tag> (and to :latest when dispatched from main) with the buildx
 #      imagetools command and checks that the tags resolve to the scanned
 #      digest (bit-for-bit identity).
+#
+# Caches: none. A release build restores nothing another workflow wrote (a
+# poisoned Gradle, npm, Angular, BuildKit or Trivy cache would otherwise flow
+# into a signed image or its scan) and saves nothing: `cache-mode: none` below
+# makes the Actions cache service refuse both, and no step asks for a cache.
 #
 # Trigger:
 #   workflow_dispatch only — this workflow is never started automatically.
@@ -50,17 +57,22 @@ on:
         default: ""
 
       skip_scan:
-        description: Skip the Trivy HIGH/CRITICAL gate before pushing
+        description: Skip the Trivy gate (the cluster then refuses the image)
         type: boolean
         default: false
 
 # Least privilege: the resolve/artifact jobs run Gradle and npm (lifecycle
 # scripts, third-party plugins) and need no more than read access. The `push`
-# job gets the package and SARIF write tokens; the signing (OIDC) and
-# attestation tokens go to the `promote` job only, which runs no build, scan
-# or third-party step besides the cosign installer.
+# job gets the package write token, the `scan` job (Trivy) read-only package
+# access and the SARIF upload token; the signing (OIDC) and attestation tokens
+# go to the `promote` job only, which runs no build, scan or third-party step
+# besides the cosign installer.
 permissions:
   contents: read
+
+# No Actions cache reads or writes in any job (see "Caches" above). Enforced by
+# the cache service, so it also covers actions that cache on their own.
+cache-mode: none
 
 # Repository-wide, not per ref: every run from main promotes `latest`,
 # so they are serialized instead of racing on it. Never cancel a publication.
@@ -151,16 +163,16 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # Read-only Gradle cache: CI's `backend` job owns the writes; this manual
-      # workflow only consumes the restored state.
+      # Cold build: no Gradle cache (see "Caches" above).
       - name: Build backend JAR
         uses: ./.github/actions/build-backend-jar
         with:
           java-version: ${{ env.JAVA_VERSION }}
+          gradle-cache: disabled
           artifact-name: backend-jar
           retention-days: 7
 
@@ -175,47 +187,35 @@ jobs:
         working-directory: frontend
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # No setup-node cache: the npm-ci action below restores ~/.npm itself,
-      # and only when its node_modules cache misses (a hit downloads nothing).
+      # Cold build: no npm, node_modules or Angular cache (see "Caches" above).
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           package-manager-cache: false
 
-      # Same inputs as ci.yml's frontend jobs, so a publish run restores CI's
-      # node_modules entry for the same lockfile.
       - name: Install Dependencies
         uses: ./.github/actions/npm-ci
         with:
           package-path: frontend
-          cache-node-modules: "true"
-
-      - name: Cache Angular Build
-        uses: actions/cache@v6
-        with:
-          path: frontend/.angular/cache
-          # Same prefix as ci.yml so a publish run reuses CI's warm cache.
-          key: angular-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            angular-${{ runner.os }}-
+          cache-node-modules: "false"
 
       - name: Build Production Bundle
         run: npx ng build
 
       - name: Upload Frontend Bundle
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: frontend-dist
           path: frontend/dist/frontend/browser
           retention-days: 7
 
   ###########################################################
-  # Build, scan, and push images
+  # Build and push images to the staging tag
   ###########################################################
 
   push:
@@ -234,29 +234,28 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 30
 
-    # GHCR push (login + buildx) and Code Scanning upload happen only here.
-    # No signing token: this job runs the image build and third-party actions.
+    # The GHCR write token, and nothing else: this job runs the image build and
+    # Docker's actions. No signing token (see `promote`) and no scanner: Trivy
+    # runs in `scan`, which can pull but not push.
     permissions:
       contents: read
       packages: write
-      security-events: write
 
-    # One output per component: a matrix leg sets only its own, and only after
-    # its scan gate, so `promote` never sees a digest that failed the scan.
+    # One output per component: a matrix leg sets only its own.
     outputs:
-      backend_digest: ${{ steps.scanned.outputs.backend_digest }}
-      frontend_digest: ${{ steps.scanned.outputs.frontend_digest }}
+      backend_digest: ${{ steps.pushed.outputs.backend_digest }}
+      frontend_digest: ${{ steps.pushed.outputs.frontend_digest }}
 
     strategy:
       # fail-fast is deliberately false: backend and frontend images are
-      # independent. A failure (e.g. a Trivy HIGH/CRITICAL finding) in one
-      # component should not cancel the other component's push.
+      # independent. A failure in one component should not cancel the other
+      # component's push.
       fail-fast: false
       matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -296,14 +295,14 @@ jobs:
 
       - name: Download Backend JAR
         if: matrix.component == 'backend'
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: backend-jar
           path: build/libs
 
       - name: Download Frontend Bundle
         if: matrix.component == 'frontend'
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: frontend-dist
           path: frontend/dist/frontend/browser
@@ -358,15 +357,6 @@ jobs:
           annotations: |
             index:org.opencontainers.image.description=${{ steps.images.outputs.description }}
 
-          cache-from: |
-            type=gha,scope=${{ matrix.component }}-main
-            type=gha,scope=${{ matrix.component }}-pr
-
-          # ignore-error: a transient GHA cache-export blip must not fail a
-          # publication run; the scan below and the `promote` job are the gate.
-          cache-to: |
-            type=gha,mode=max,scope=${{ matrix.component }}-${{ github.ref == 'refs/heads/main' && 'main' || 'pr' }},ignore-error=true
-
           provenance: mode=max
           sbom: true
 
@@ -378,100 +368,8 @@ jobs:
             APK_BUST=${{ github.run_id }}-${{ github.run_attempt }}
             APT_BUST=${{ github.run_id }}-${{ github.run_attempt }}
 
-      ##########################################################
-      # Trivy Java DB cache (backend only; the action's own cache is disabled)
-      #
-      # trivy-action caches the whole `.cache/trivy` tree under
-      # `cache-trivy-<date>`. That archive can carry a stale `java-db/`, and
-      # because the action restores it *after* any restore we do, it would
-      # overwrite a fresh Java DB and force a ~940 MiB re-download. So the
-      # action runs with `cache: false`, only the Java index DB is cached,
-      # one entry per download (keyed by its DownloadedAt), and the
-      # vulnerability DB (stale 6 h after its build, so stale after a
-      # restore) is downloaded by Trivy. See `docker-backend` in ci.yml.
-      ##########################################################
-
-      - name: Restore Trivy Java DB cache
-        if: matrix.component == 'backend' && !inputs.skip_scan
-        id: trivy-java-db-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ github.workspace }}/.cache/trivy/java-db
-          # Never an exact hit: the prefix restores the newest download.
-          key: trivy-java-db-${{ env.TRIVY_VERSION }}-${{ github.run_id }}
-          restore-keys: |
-            trivy-java-db-${{ env.TRIVY_VERSION }}-
-
-      ##########################################################
-      # Hard-gate scan (HIGH/CRITICAL, exit-code: 1)
-      #
-      # Scans the published scan image BEFORE promoting. If the scan
-      # fails with exit-code: 1, `Record Scanned Digest` is skipped, so
-      # this component's `promote` leg gets no digest and fails without
-      # signing or tagging anything. Set `skip_scan: true` on
-      # workflow_dispatch only in exceptional circumstances.
-      ##########################################################
-
-      - name: Install Trivy
-        if: ${{ !inputs.skip_scan }}
-        uses: ./.github/actions/install-trivy
-        with:
-          version: ${{ env.TRIVY_VERSION }}
-
-      - name: Scan Docker Image
-        if: ${{ !inputs.skip_scan }}
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          version: ${{ env.TRIVY_VERSION }}
-          # Installed by the step above (get.trivy.dev, setup-trivy's
-          # download host, no longer resolves).
-          skip-setup-trivy: true
-          image-ref: ${{ steps.images.outputs.image }}@${{ steps.build.outputs.digest }}
-          scan-type: image
-
-          # The Java DB is restored above; the action's own cache would
-          # clobber it — see the cache section note.
-          cache: false
-
-          format: sarif
-          output: trivy-results.sarif
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: 1
-
-      - name: Key Trivy Java DB cache
-        id: trivy-java-db-key
-        if: ${{ !cancelled() && matrix.component == 'backend' && !inputs.skip_scan }}
-        env:
-          META: ${{ github.workspace }}/.cache/trivy/java-db/metadata.json
-        run: |
-          downloaded="$(jq -r '.DownloadedAt // empty' "$META" 2>/dev/null | tr -dc '0-9' || true)"
-          if [[ -n "$downloaded" ]]; then
-            echo "key=trivy-java-db-${TRIVY_VERSION}-${downloaded}" >> "$GITHUB_OUTPUT"
-          fi
-
-      # Only when Trivy downloaded a new Java DB (the key differs from the
-      # restored one).
-      - name: Save Trivy Java DB cache
-        # Best effort: a concurrent job may have saved the same download.
-        continue-on-error: true
-        if: >-
-          !cancelled() &&
-          steps.trivy-java-db-key.outputs.key != '' &&
-          steps.trivy-java-db-key.outputs.key != steps.trivy-java-db-cache.outputs.cache-matched-key
-        uses: actions/cache/save@v6
-        with:
-          path: ${{ github.workspace }}/.cache/trivy/java-db
-          key: ${{ steps.trivy-java-db-key.outputs.key }}
-
-      ##########################################################
-      # Hand the digest to the `promote` job (only runs if all previous
-      # steps succeeded — meaning the scan passed or was explicitly
-      # skipped). Signing and promotion happen there, not here.
-      ##########################################################
-
-      - name: Record Scanned Digest
-        id: scanned
+      - name: Record Pushed Digest
+        id: pushed
         env:
           COMPONENT: ${{ matrix.component }}
           DIGEST: ${{ steps.build.outputs.digest }}
@@ -483,60 +381,52 @@ jobs:
           fi
           echo "${COMPONENT}_digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload SARIF
-        if: ${{ !cancelled() && hashFiles('trivy-results.sarif') != '' }}
-        uses: ./.github/actions/upload-sarif
-        with:
-          path: trivy-results.sarif
-          category: docker-${{ matrix.component }}
-
   ###########################################################
-  # Sign, attest, verify and promote the scanned digest
+  # Scan the pushed digest (read-only package access)
   ###########################################################
 
-  promote:
-    name: Sign and Promote (${{ matrix.component }})
+  scan:
+    name: Scan Docker (${{ matrix.component }})
     needs:
       - resolve
       - push
 
     # `failure` too: the components are independent, so one component's failed
-    # scan must not keep the other from being published. A leg whose own
-    # build or scan did not finish finds no digest below and fails.
-    # `!cancelled()`, not `always()`: a cancelled run must not keep promoting.
+    # build must not keep the other from being scanned. A leg whose build did
+    # not finish finds no digest below and fails.
+    # `!cancelled()`, not `always()`: a cancelled run must not keep scanning.
     if: ${{ !cancelled() && (needs.push.result == 'success' || needs.push.result == 'failure') }}
 
     runs-on: ubuntu-26.04
-    # Above the worst case of the retries below (cosign sign: 3 x 2 min + 1 min
-    # of back-off; cosign verify: 3 x 1 min + 30 s; plus the attestation), so
-    # a hanging Sigstore service ends in the step's own error, not a timeout.
     timeout-minutes: 20
 
-    # The only job that can sign. `id-token` lets it request the OIDC token
-    # Sigstore exchanges for a short-lived signing certificate; `attestations`
-    # stores the provenance attestation on GitHub. It checks out no code and
-    # runs nothing but the cosign installer, cosign, `actions/attest`, `gh`
-    # and `docker` (workflow-policy.test.cjs keeps it that way).
+    # Trivy is a downloaded binary driven by a third-party action that fetches
+    # its databases from a registry, so it runs away from the GHCR write token
+    # (`push`) and the signing token (`promote`): it can pull the image and
+    # write Code Scanning results, nothing else.
     permissions:
-      packages: write
-      id-token: write
-      attestations: write
+      contents: read
+      packages: read
+      security-events: write
+
+    # One output per component: a matrix leg sets only its own, and only after
+    # its scan gate, so `promote` never sees a digest that failed the scan.
+    outputs:
+      backend_digest: ${{ steps.scanned.outputs.backend_digest }}
+      frontend_digest: ${{ steps.scanned.outputs.frontend_digest }}
 
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
 
-    env:
-      # The identity in the signing certificate: this workflow file at the
-      # dispatched ref. Verifiers pin `...@refs/heads/main`.
-      IDENTITY: ${{ github.server_url }}/${{ github.workflow_ref }}
-      OIDC_ISSUER: https://token.actions.githubusercontent.com
-      # Signed into the signature, so a verifier can require `scan=passed`.
-      SCAN: ${{ inputs.skip_scan && 'skipped' || 'passed' }}
-
     steps:
-      # No checkout: this job only acts on the digest the `push` job scanned.
-      - name: Resolve Scanned Digest
+      # For the local install-trivy and upload-sarif actions.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve Pushed Digest
         id: image
         env:
           OWNER: ${{ github.repository_owner }}
@@ -553,6 +443,185 @@ jobs:
             *) echo "::error::unknown component '$COMPONENT'"; exit 1 ;;
           esac
           if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::no pushed digest for ${COMPONENT}: its build did not succeed"
+            exit 1
+          fi
+          owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          {
+            echo "image=ghcr.io/${owner}/taskflow-${COMPONENT}"
+            echo "digest=${DIGEST}"
+          } >> "$GITHUB_OUTPUT"
+
+      # Read-only (`packages: read`); Trivy pulls the image with it. A plain
+      # login rather than docker/login-action keeps one more action out of the
+      # job that runs the scanner. With the CR_PAT fallback (docs/ci/
+      # overview.md) this one can keep GITHUB_TOKEN.
+      - name: Login to GHCR
+        if: ${{ !inputs.skip_scan }}
+        env:
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+
+      ##########################################################
+      # Hard-gate scan (exit-code: 1)
+      #
+      # Scans the pushed digest BEFORE promoting. If the scan fails,
+      # `Record Scanned Digest` is skipped, so this component's `promote`
+      # leg gets no digest and fails without signing or tagging anything.
+      # Set `skip_scan: true` on workflow_dispatch only in exceptional
+      # circumstances: such an image has no scan attestation, and the
+      # cluster's admission policy refuses it.
+      #
+      # Which findings fail it: trivy-action drops the severity filter for
+      # SARIF output unless `limit-severities-for-sarif: true` (the log says
+      # "Building SARIF report with all severities"), so the gate fails on a
+      # fixed vulnerability (`ignore-unfixed`) of any severity, or on a
+      # secret. No `severity:` input, since it would not apply.
+      #
+      # No Trivy cache (`cache: false`): both databases are downloaded here,
+      # into the workspace, and the report step below reuses them.
+      ##########################################################
+
+      - name: Install Trivy
+        if: ${{ !inputs.skip_scan }}
+        uses: ./.github/actions/install-trivy
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+
+      - name: Scan Docker Image
+        if: ${{ !inputs.skip_scan }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          # Installed by the step above (get.trivy.dev, setup-trivy's
+          # download host, no longer resolves).
+          skip-setup-trivy: true
+          image-ref: ${{ steps.image.outputs.image }}@${{ steps.image.outputs.digest }}
+          scan-type: image
+          cache: false
+
+          format: sarif
+          output: trivy-results.sarif
+          ignore-unfixed: true
+          exit-code: 1
+
+      # The report `promote` attests: the same scan with the same filters, from
+      # the databases the gate just downloaded, in Trivy's cosign-vuln format
+      # (https://cosign.sigstore.dev/attestation/vuln/v1). Only after a pass.
+      - name: Write Scan Report
+        if: ${{ !inputs.skip_scan }}
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.image }}@${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          trivy image \
+            --cache-dir "$GITHUB_WORKSPACE/.cache/trivy" \
+            --skip-db-update \
+            --skip-java-db-update \
+            --ignore-unfixed \
+            --pkg-types os,library \
+            --exit-code 1 \
+            --format cosign-vuln \
+            --output "$RUNNER_TEMP/scan-report.json" \
+            "$IMAGE_REF"
+
+      - name: Upload Scan Report
+        if: ${{ !inputs.skip_scan }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-report-${{ matrix.component }}
+          path: ${{ runner.temp }}/scan-report.json
+          if-no-files-found: error
+          retention-days: 7
+
+      ##########################################################
+      # Hand the digest to the `promote` job (only runs if all previous
+      # steps succeeded — meaning the scan passed or was explicitly
+      # skipped). Signing and promotion happen there, not here.
+      ##########################################################
+
+      - name: Record Scanned Digest
+        id: scanned
+        env:
+          COMPONENT: ${{ matrix.component }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+        run: echo "${COMPONENT}_digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload SARIF
+        if: ${{ !cancelled() && hashFiles('trivy-results.sarif') != '' }}
+        uses: ./.github/actions/upload-sarif
+        with:
+          path: trivy-results.sarif
+          category: docker-${{ matrix.component }}
+
+  ###########################################################
+  # Sign, attest, verify and promote the scanned digest
+  ###########################################################
+
+  promote:
+    name: Sign and Promote (${{ matrix.component }})
+    needs:
+      - resolve
+      - scan
+
+    # `failure` too: the components are independent, so one component's failed
+    # scan must not keep the other from being published. A leg whose own
+    # build or scan did not finish finds no digest below and fails.
+    # `!cancelled()`, not `always()`: a cancelled run must not keep promoting.
+    if: ${{ !cancelled() && (needs.scan.result == 'success' || needs.scan.result == 'failure') }}
+
+    runs-on: ubuntu-26.04
+    # Above the worst case of the retries below (cosign sign: 3 x 2 min + 1 min
+    # of back-off; cosign verify: 3 x 1 min + 30 s; plus the two attestations
+    # and their four checks), so a hanging Sigstore service ends in the step's
+    # own error, not a timeout.
+    timeout-minutes: 25
+
+    # The only job that can sign. `id-token` lets it request the OIDC token
+    # Sigstore exchanges for a short-lived signing certificate; `attestations`
+    # stores the attestations on GitHub. It checks out no code and runs
+    # nothing but `actions/download-artifact` (the scan report), the cosign
+    # installer, cosign, `actions/attest`, `gh`, `jq` and `docker`
+    # (workflow-policy.test.cjs keeps it that way).
+    permissions:
+      packages: write
+      id-token: write
+      attestations: write
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
+
+    env:
+      # The identity in the signing certificate: this workflow file at the
+      # dispatched ref. Verifiers pin `...@refs/heads/main`.
+      IDENTITY: ${{ github.server_url }}/${{ github.workflow_ref }}
+      OIDC_ISSUER: https://token.actions.githubusercontent.com
+      # Signed into the signature, so a verifier can require `scan=passed`.
+      SCAN: ${{ inputs.skip_scan && 'skipped' || 'passed' }}
+      # Predicate type of the scan attestation (Trivy's `cosign-vuln` format).
+      SCAN_PREDICATE: https://cosign.sigstore.dev/attestation/vuln/v1
+
+    steps:
+      # No checkout: this job only acts on the digest the `push` job scanned.
+      - name: Resolve Scanned Digest
+        id: image
+        env:
+          OWNER: ${{ github.repository_owner }}
+          COMPONENT: ${{ matrix.component }}
+          # Both, and picked below: an `a && x || y` expression would fall
+          # through to the other component's digest when this one is empty.
+          BACKEND_DIGEST: ${{ needs.scan.outputs.backend_digest }}
+          FRONTEND_DIGEST: ${{ needs.scan.outputs.frontend_digest }}
+        run: |
+          set -euo pipefail
+          case "$COMPONENT" in
+            backend) DIGEST="$BACKEND_DIGEST" ;;
+            frontend) DIGEST="$FRONTEND_DIGEST" ;;
+            *) echo "::error::unknown component '$COMPONENT'"; exit 1 ;;
+          esac
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
             echo "::error::no scanned digest for ${COMPONENT}: its build or scan did not succeed"
             exit 1
           fi
@@ -561,6 +630,34 @@ jobs:
             echo "image=ghcr.io/${owner}/taskflow-${COMPONENT}"
             echo "digest=${DIGEST}"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Download Scan Report
+        if: ${{ !inputs.skip_scan }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: scan-report-${{ matrix.component }}
+          path: ${{ runner.temp }}/scan
+
+      # Before anything is signed: the report must be Trivy's, name exactly
+      # this digest, and list no finding (the gate's verdict, re-read from the
+      # report rather than trusted from the job result).
+      - name: Check Scan Report
+        if: ${{ !inputs.skip_scan }}
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+          REPORT: ${{ runner.temp }}/scan/scan-report.json
+        run: |
+          set -euo pipefail
+          if ! jq -e --arg ref "${IMAGE}@${DIGEST}" '
+              (.scanner.uri | startswith("pkg:github/aquasecurity/trivy@"))
+              and .scanner.result.ArtifactName == $ref
+              and ([.scanner.result.Results[]? | (.Vulnerabilities // [])[], (.Secrets // [])[]] | length == 0)
+            ' "$REPORT" > /dev/null; then
+            echo "::error::the scan report is not a clean Trivy report for ${IMAGE}@${DIGEST}"
+            exit 1
+          fi
+          echo "Scan report checked: $(jq -r '.scanner.uri' "$REPORT"), no findings"
 
       # cosign, `actions/attest` (push-to-registry) and `imagetools` read this
       # login. Not docker/login-action: this job runs no third-party action
@@ -611,20 +708,35 @@ jobs:
       # (`gh attestation verify`, admission controllers). No storage record:
       # those exist for organization-owned repositories only.
       - name: Attest Build Provenance
-        uses: actions/attest@v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ${{ steps.image.outputs.image }}
           subject-digest: ${{ steps.image.outputs.digest }}
           push-to-registry: true
           create-storage-record: false
 
+      # The Trivy report as a signed in-toto attestation, stored on GitHub and
+      # pushed to GHCR like the provenance. The cluster's admission policy
+      # requires it, so an image published with skip_scan (none) is refused.
+      - name: Attest Scan Report
+        if: ${{ !inputs.skip_scan }}
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.image }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          predicate-type: ${{ env.SCAN_PREDICATE }}
+          predicate-path: ${{ runner.temp }}/scan/scan-report.json
+          push-to-registry: true
+          create-storage-record: false
+
       # After both writes to the package. Same identity and annotation as the
       # summary below tells operators to use. `-a` is what makes `cosign
       # verify` check the cosign signature: in bundle mode it accepts any
-      # Sigstore bundle on the digest, and the provenance attestation has the
-      # same identity. The attestation is checked twice: from the GitHub API
-      # (what `gh attestation verify` reads by default) and from the registry
-      # (what admission controllers read).
+      # Sigstore bundle on the digest, and the attestations have the same
+      # identity. Each attestation is checked twice: from the GitHub API (what
+      # `gh attestation verify` reads by default) and from the registry (what
+      # admission controllers read). `gh attestation verify` checks SLSA
+      # provenance unless given another --predicate-type.
       - name: Verify Signature and Attestation
         env:
           IMAGE: ${{ steps.image.outputs.image }}
@@ -666,6 +778,21 @@ jobs:
             --cert-identity "$IDENTITY" \
             --bundle-from-oci
           echo "Attestation verified (GHCR copy) for ${IMAGE}@${DIGEST}"
+
+          if [[ "$SCAN" == "passed" ]]; then
+            retry gh attestation verify "oci://${IMAGE}@${DIGEST}" \
+              --repo "$REPOSITORY" \
+              --cert-identity "$IDENTITY" \
+              --predicate-type "$SCAN_PREDICATE"
+            echo "Scan attestation verified (GitHub API copy) for ${IMAGE}@${DIGEST}"
+
+            retry gh attestation verify "oci://${IMAGE}@${DIGEST}" \
+              --repo "$REPOSITORY" \
+              --cert-identity "$IDENTITY" \
+              --predicate-type "$SCAN_PREDICATE" \
+              --bundle-from-oci
+            echo "Scan attestation verified (GHCR copy) for ${IMAGE}@${DIGEST}"
+          fi
 
       ##########################################################
       # Promote (only runs if all previous steps succeeded — meaning
@@ -732,5 +859,12 @@ jobs:
             echo "gh attestation verify oci://${IMAGE}@${DIGEST} \\"
             echo "  --repo ${REPOSITORY} \\"
             echo "  --cert-identity ${IDENTITY}"
+            if [[ "$SCAN" == "passed" ]]; then
+              echo
+              echo "gh attestation verify oci://${IMAGE}@${DIGEST} \\"
+              echo "  --repo ${REPOSITORY} \\"
+              echo "  --cert-identity ${IDENTITY} \\"
+              echo "  --predicate-type ${SCAN_PREDICATE}"
+            fi
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

@@ -85,7 +85,7 @@ Produces the production JAR artifact consumed by downstream jobs, independently 
 - **Fan-Out From Testing:** `package` runs `./gradlew assemble` (served from the Gradle build cache, ~35-65s) and uploads `backend-jar`. `docker-backend` declares `needs: [changes, package]` and `e2e` declares `needs: [changes, package, frontend]`, so the image build/scan and Playwright start as soon as their artifacts exist (measured start ≈65s) instead of waiting for the backend test suites. On the PR/dispatch path this buys ~100s of wall-clock (run wall 308s → ~210s).
 - **Gating:** `package` mirrors the `backend` job's path filters, so documentation-only diffs skip it. A `package` failure skips `docker-backend` and `e2e`; because a skipped job reports *success* to branch protection, the `e2e-gate` treats a failed `package`/`frontend` as a failure so the required `End-to-End Tests` context cannot pass on a silently skipped run.
 - **Single Source of Truth for the Artifact:** Only `package` uploads `backend-jar`, so the artifact name is unique per run.
-- **Restores the `backend` Job's Gradle State:** setup-gradle keys Gradle User Home by job id and only writes from writable jobs, so the read-only `package` and `dependency-submission` jobs (and the read-only Gradle jobs in `dast.yml`, `pushdockerimage.yml` and `security.yml`) never refreshed their own entries. `package` kept restoring a frozen entry with a Gradle 9.8.0 wrapper (9.8.1 was downloaded on every run), stale dependencies and an empty build cache, so `compileJava` ran (Build JAR 45–49 s vs 18 s for the same `assemble` in `backend`, run `39180950242`); `backend-integration` fell through to the newest Linux entry of any job, the Android build's 1.8 GB Gradle User Home (Set up Gradle 15–22 s), and then downloaded the backend's dependencies (it now keeps its own entry, see §6b). The read-only jobs set `GRADLE_BUILD_ACTION_CACHE_KEY_JOB: backend` on the setup step, so they restore the newest `backend` entry (wrapper, dependencies, build cache); the gradle/actions integration tests use the variable the same way. The CodeQL Java build in `security.yml` restores it too (its own frozen entry had a 9.8.0 wrapper, so 9.8.1 was downloaded every night) but runs `--no-build-cache`: a FROM-CACHE `compileJava` never runs javac, so CodeQL's tracer would see no sources.
+- **Restores the `backend` Job's Gradle State:** setup-gradle keys Gradle User Home by job id and only writes from writable jobs, so the read-only `package` and `dependency-submission` jobs (and the read-only Gradle jobs in `dast.yml` and `security.yml`; `pushdockerimage.yml` builds without a Gradle cache) never refreshed their own entries. `package` kept restoring a frozen entry with a Gradle 9.8.0 wrapper (9.8.1 was downloaded on every run), stale dependencies and an empty build cache, so `compileJava` ran (Build JAR 45–49 s vs 18 s for the same `assemble` in `backend`, run `39180950242`); `backend-integration` fell through to the newest Linux entry of any job, the Android build's 1.8 GB Gradle User Home (Set up Gradle 15–22 s), and then downloaded the backend's dependencies (it now keeps its own entry, see §6b). The read-only jobs set `GRADLE_BUILD_ACTION_CACHE_KEY_JOB: backend` on the setup step, so they restore the newest `backend` entry (wrapper, dependencies, build cache); the gradle/actions integration tests use the variable the same way. The CodeQL Java build in `security.yml` restores it too (its own frozen entry had a 9.8.0 wrapper, so 9.8.1 was downloaded every night) but runs `--no-build-cache`: a FROM-CACHE `compileJava` never runs javac, so CodeQL's tracer would see no sources.
 - **Kept Lean on Purpose:** `package` only builds and uploads the JAR. On `main` pushes the `package` → `docker-backend` chain is the critical path. When the contract check ran inside `package`, it delayed the backend image build by ~25s (run `37222275489`), so it moved to its own job (§6c).
 
 ## 6c. Job: `contract` (OpenAPI Contract)
@@ -237,7 +237,7 @@ Compiles secure, production-grade container images for the backend and frontend 
 - **Hard-Gate Trivy Scan:** The image is scanned with `exit-code: 1` and `severity: HIGH,CRITICAL` — a blocking gate. The SARIF upload passes `wait-for-processing: "false"`, because the Trivy exit code (not Code Scanning processing) is the gate. This is the intentional counterpart to the report-only Trivy filesystem scan in `security.yml`. If a high/critical CVE is found, the build fails but the SARIF is still uploaded (via `if: always()`).
 - **Builder and Layer Cache per Image:**
   - **Frontend:** builds with the runner's default `docker` builder and no layer cache, like the backend. It used Buildx (`prepull-buildkit`, ~10 s) and a `type=gha` layer cache for its brotli/gzip compression stage, but the whole image builds in 6–9 s uncached (§57), every new bundle invalidates the compression stage and `APK_BUST` the runtime stage, so the cache could save at most part of a build that costs less than its own setup.
-  - **Backend:** builds with the runner's default `docker` builder, with no Buildx container and no layer cache, and the image lands directly in the daemon for Trivy. Every commit produces a new JAR, which invalidates the extractor and CDS-training layers, and `APT_BUST` invalidates the apt layer, so the cache almost never hit. Exporting it cost ~40s per build, plus ~7s of BuildKit setup and ~5–9s of OCI tarball load. `pushdockerimage.yml` keeps its own `backend-main` cache.
+  - **Backend:** builds with the runner's default `docker` builder, with no Buildx container and no layer cache, and the image lands directly in the daemon for Trivy. Every commit produces a new JAR, which invalidates the extractor and CDS-training layers, and `APT_BUST` invalidates the apt layer, so the cache almost never hit. Exporting it cost ~40s per build, plus ~7s of BuildKit setup and ~5–9s of OCI tarball load. `pushdockerimage.yml` uses no cache at all (`cache-mode: none`, see §12).
 - **Manual Trigger Bypass (`workflow_dispatch`):** Added the manual trigger check to all job-level `if` checks to ensure that clicking "Run workflow" in GitHub UI actually executes the pipeline on any branch, instead of silently skipping due to lack of file changes.
 
 ## 11. Container & JVM Hardening (SOTA)
@@ -269,7 +269,9 @@ Our Docker build configurations (the backend `Dockerfile` with its shared stages
 
 ## 12. Repository & GHCR Setup
 
-The Docker push workflow (`.github/workflows/pushdockerimage.yml`) pushes images to the GitHub Container Registry (GHCR) using the default `GITHUB_TOKEN`. The workflow default is `contents: read`; the `push` job is granted `packages: write` and `security-events: write`, and only the `promote` job is granted `id-token: write` (the OIDC token for keyless signing) and `attestations: write` (plus `packages: write`), so the jobs that run Gradle and npm hold no write token, and no job that builds or scans an image can sign. The `image_tag` input is passed through `env` and validated against Docker tag syntax (and must not end in `-scan`, the staging suffix) before use.
+The Docker push workflow (`.github/workflows/pushdockerimage.yml`) pushes images to the GitHub Container Registry (GHCR) using the default `GITHUB_TOKEN`. The workflow default is `contents: read`; the `push` job (image build) is granted `packages: write`, the `scan` job (Trivy) only `packages: read` and `security-events: write`, and only the `promote` job is granted `id-token: write` (the OIDC token for keyless signing) and `attestations: write` (plus `packages: write`), so the jobs that run Gradle and npm hold no write token, the scanner can pull but not push, and no job that builds or scans an image can sign.
+
+The workflow reads and writes no Actions cache: `cache-mode: none` at the top makes the cache service refuse both for every job, and no step asks for a cache (the backend JAR builds with `gradle-cache: disabled`, the frontend without the `node_modules` or Angular cache, the image without a `type=gha` layer cache, Trivy with `cache: false`). A release build therefore cannot pick up a cache entry that another workflow or a pull request saved. It costs a cold Gradle and npm build and a fresh Trivy database download per run (~1 GiB for the backend's Java DB). `workflow-policy.test.cjs` fails if any of it comes back. actionlint 1.7.12 does not know the `cache-mode` key yet; `.github/actionlint.yaml` ignores that one error for this file. The `image_tag` input is passed through `env` and validated against Docker tag syntax (and must not end in `-scan`, the staging suffix) before use.
 
 ### Workflow permissions
 
@@ -286,7 +288,7 @@ If you previously pushed `taskflow-backend` / `taskflow-frontend` manually (e.g.
 
 ### Verifying a published image
 
-Every image `pushdockerimage.yml` publishes is signed with cosign (keyless) and carries a signed SLSA build provenance attestation. Both are made for the image **digest** by the `promote` job, after the Trivy gate and before promotion, and that job reads both back before it tags anything, so `:<tag>` and `:latest` never point at an unsigned digest. The run summary prints both commands with the digest filled in.
+Every image `pushdockerimage.yml` publishes is signed with cosign (keyless) and carries a signed SLSA build provenance attestation and, unless it was published with `skip_scan`, the Trivy report as a signed vulnerability attestation (`https://cosign.sigstore.dev/attestation/vuln/v1`, Trivy's `cosign-vuln` format). All are made for the image **digest** by the `promote` job, after the Trivy gate and before promotion, and that job reads them back before it tags anything, so `:<tag>` and `:latest` never point at an unsigned digest. The run summary prints the commands with the digest filled in.
 
 ```bash
 cosign verify ghcr.io/<owner>/taskflow-backend@sha256:<digest> \
@@ -299,20 +301,27 @@ cosign verify ghcr.io/<owner>/taskflow-backend@sha256:<digest> \
 gh attestation verify oci://ghcr.io/<owner>/taskflow-backend@sha256:<digest> \
   --repo <owner>/<repo> \
   --cert-identity "https://github.com/<owner>/<repo>/.github/workflows/pushdockerimage.yml@refs/heads/main"
+
+# the scan report (without --predicate-type, gh checks SLSA provenance)
+gh attestation verify oci://ghcr.io/<owner>/taskflow-backend@sha256:<digest> \
+  --repo <owner>/<repo> \
+  --cert-identity "https://github.com/<owner>/<repo>/.github/workflows/pushdockerimage.yml@refs/heads/main" \
+  --predicate-type https://cosign.sigstore.dev/attestation/vuln/v1
 ```
 
 - **Pin the identity.** Both commands name the workflow file and the ref. The workflow can be dispatched from any branch and the certificate records which one, so a verifier that pins `@refs/heads/main` accepts only images built from `main`. `gh attestation verify --repo` without `--cert-identity` accepts an attestation from any workflow at any ref of the repository.
 - **`latest` comes from `main` only.** A run dispatched from another ref publishes `:<tag>` but does not move `:latest`, and its summary says so: its signature names that ref, and a verifier pinned to `main` rejects it. For the same reason `image_tag: latest` is rejected; a run from `main` moves `latest` on its own.
 - **What the signature says.** It proves the digest was built by this workflow in this repository, and it carries a signed annotation: `scan=passed`, or `scan=skipped` for a `skip_scan` run. `-a scan=passed` makes the verifier reject an unscanned image. Keep `-a` in every `cosign verify` command and admission policy: cosign 3 accepts any Sigstore bundle attached to the digest, and the provenance attestation carries the same identity, so `cosign verify` without `-a` passes on the attestation alone, even if the cosign signature is missing.
 - **What it covers.** The signed digest is the image index, which references the BuildKit provenance and SBOM by digest, so those are covered as well. The attestation from `actions/attest` is the one `gh attestation verify` and admission controllers read. It is stored twice: on GitHub, which `gh attestation verify` reads by default, and in GHCR, which admission controllers read (`gh attestation verify --bundle-from-oci` checks that copy). The workflow verifies both before it promotes.
-- **Who can sign.** Only the `promote` job holds `id-token: write` and `attestations: write`. It checks out no code and runs only the cosign installer, cosign, `actions/attest`, `gh` and `docker`; the image build, Trivy and their actions run in the `push` job, which cannot obtain a signing certificate.
+- **What the scan attestation says.** The `scan` job runs the gate, then writes the report from the same databases in Trivy's `cosign-vuln` format and hands it over as an artifact. Before signing, `promote` checks that the report is Trivy's, names exactly the digest it is about to sign, and lists no vulnerability or secret; only then does it attest it. Which findings fail the gate: `trivy-action` drops the `severity` filter for SARIF output unless `limit-severities-for-sarif: true` is set, so the gate fails on a fixed vulnerability (`ignore-unfixed`) of any severity, or a secret (the log line "Building SARIF report with all severities" shows it); the report uses the same filters.
+- **Who can sign.** Only the `promote` job holds `id-token: write` and `attestations: write`. It checks out no code and runs only `actions/download-artifact` (the scan report), the cosign installer, cosign, `actions/attest`, `gh`, `jq` and `docker`; the image build and its actions run in the `push` job, and Trivy and its action in the `scan` job (read-only package access), neither of which can obtain a signing certificate.
 - **Signing fails closed.** There is no input to publish unsigned. `cosign sign` is retried three times; if the public Sigstore services or the attestations API stay unavailable, the run fails before promotion and no tag is moved. The scanned image stays on `:<tag>-scan`. Once the service is back, use **Re-run failed jobs** on that run: it retries only `promote` with the digest that already passed the scan. Dispatching the workflow again rebuilds the image, so it picks up newer OS packages and is scanned again.
 - **Where it is stored.** Signature and attestation live in the same GHCR package as the image, as extra `sha256-…` entries. A package cleanup must keep them (see the [2026-08-20 audit](audit-2026-08-20.md)).
-- **Enforcement.** Nothing rejects an unsigned image until the cluster checks; that policy belongs with the production manifests, not in this repository.
+- **Enforcement.** The cluster checks with two Kyverno `ImageValidatingPolicy` objects in the production manifests repository (`gitops/apps/kyverno-policies/`): `verify-taskflow-images` (cosign signature with `scan=passed` and SLSA provenance) and `require-taskflow-image-scan` (the scan attestation), both pinned to `pushdockerimage.yml@refs/heads/main`. Both start in Audit; that repository's `docs/KYVERNO_POLICY_ENGINE.md` §8 covers the switch to Deny. A change to the certificate identity (workflow file name, signing job moved to another workflow) or to the scan predicate type has to be made there too.
 
 ### Personal Access Token fallback (`CR_PAT`)
 
-If organization policy blocks workflow write permissions, create a classic PAT with `write:packages` (and optionally `delete:packages`) and store it as a repository secret named `CR_PAT`. Then change both GHCR logins in `pushdockerimage.yml`: the `docker/login-action` step in the `push` job to `password: ${{ secrets.CR_PAT }}`, and the `Login to GHCR` step in the `promote` job to `TOKEN: ${{ secrets.CR_PAT }}`. The `promote` login is the one cosign, the attestation push and the final tags use.
+If organization policy blocks workflow write permissions, create a classic PAT with `write:packages` (and optionally `delete:packages`) and store it as a repository secret named `CR_PAT`. Then change both GHCR write logins in `pushdockerimage.yml`: the `docker/login-action` step in the `push` job to `password: ${{ secrets.CR_PAT }}`, and the `Login to GHCR` step in the `promote` job to `TOKEN: ${{ secrets.CR_PAT }}`. The `promote` login is the one cosign, the attestation push and the final tags use. Leave the `scan` job's login on `GITHUB_TOKEN`: it only pulls, and a PAT there would hand the scanner a write token.
 
 ## 13. Automated Dependency Updates
 
@@ -446,9 +455,10 @@ the same implementation is not copied across workflows (and cannot drift):
   (`package-path`, `shared-schemas`, `ignore-scripts` inputs). Opt-in
   `cache-node-modules` restores an exact-match `node_modules` cache and skips
   the install on a hit (used by the E2E job).
-- `build-backend-jar` — JDK + read-only Gradle cache (the `backend` job's entry),
-  builds the JAR and uploads it; used by `package`, `dast.yml`,
-  `pushdockerimage.yml` and the mobile E2E backend.
+- `build-backend-jar` — JDK + read-only Gradle cache (the `backend` job's entry;
+  `gradle-cache: disabled` builds cold), builds the JAR and uploads it; used by
+  `package`, `dast.yml`, `pushdockerimage.yml` (no cache) and the mobile E2E
+  backend.
 - `start-backend` — generates disposable RSA keys, launches the JAR (`jar-path`
   must match exactly one file), and waits for `/actuator/health/readiness`,
   exposing the PID as an output. `wait: "false"` returns right after launch, so
@@ -458,9 +468,8 @@ the same implementation is not copied across workflows (and cannot drift):
   (used by `start-backend` and by `e2e` after a `wait: "false"` launch).
 - `prepull-buildkit` — pre-pulls the BuildKit image with bounded retries and
   configures `buildx` with `driver-opts: image=<image>` so the pre-pull and the
-  builder cannot diverge. Only for builds that use Buildx features (the
-  `type=gha` cache via `docker/build-push-action`, registry push with
-  attestations): `pushdockerimage.yml` only. It costs ~7–10 s per job, so
+  builder cannot diverge. Only for builds that use Buildx features (registry
+  push with attestations): `pushdockerimage.yml` only. It costs ~7–10 s per job, so
   `e2e` and both `Build Docker` jobs use the default `docker` builder instead.
 - `install-trivy` — installs the Trivy CLI (`TRIVY_VERSION`) from its GitHub
   release, checked against the release's checksums file, and puts it on

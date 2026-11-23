@@ -1,7 +1,7 @@
 name: Build backend JAR
 description: >-
-  Set up the backend JDK and a read-only Gradle cache, build the executable JAR
-  and upload it as an artifact. One copy of the packaging steps that ci.yml
+  Set up the backend JDK and a read-only (or no) Gradle cache, build the
+  executable JAR and upload it as an artifact. One copy of the packaging steps that ci.yml
   (`package`), dast.yml, pushdockerimage.yml and react-native-ci.yml share.
   Expects the repository to be checked out.
 inputs:
@@ -14,6 +14,13 @@ inputs:
       nothing else in the job needs the other assemble outputs).
     required: false
     default: assemble
+  gradle-cache:
+    description: >-
+      `read-only` restores the `backend` job's Gradle cache entry and saves
+      nothing; `disabled` builds cold (image publishing: a release build reads
+      no cache another workflow wrote).
+    required: false
+    default: read-only
   artifact-name:
     description: Name of the uploaded artifact.
     required: true
@@ -24,7 +31,7 @@ runs:
   using: composite
   steps:
     - name: Set up Java
-      uses: actions/setup-java@v6
+      uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
       with:
         distribution: temurin
         java-version: ${{ inputs.java-version }}
@@ -41,12 +48,23 @@ runs:
     # `assemble` in `backend`, run 39180950242). Gradle's own integration tests
     # use this variable the same way
     # (gradle/actions .github/workflows/integ-test-restore-gradle-home.yml).
+    - name: Check Gradle cache mode
+      shell: bash
+      env:
+        GRADLE_CACHE: ${{ inputs.gradle-cache }}
+      run: |
+        case "$GRADLE_CACHE" in
+          read-only | disabled) ;;
+          *) echo "::error::gradle-cache must be read-only or disabled, not '$GRADLE_CACHE'"; exit 1 ;;
+        esac
+
     - name: Set up Gradle
       uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       env:
         GRADLE_BUILD_ACTION_CACHE_KEY_JOB: backend
       with:
         cache-read-only: true
+        cache-disabled: ${{ inputs.gradle-cache == 'disabled' }}
 
     - name: Build JAR
       shell: bash
@@ -56,7 +74,7 @@ runs:
       run: ./gradlew --parallel --build-cache "$GRADLE_TASK" --stacktrace
 
     - name: Upload backend JAR
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: ${{ inputs.artifact-name }}
         path: build/libs/*.jar
