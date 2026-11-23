@@ -56,6 +56,10 @@ env:
   NUCLEI_CONCURRENCY: "10"
   NIKTO_MAX_TIME: "15m"
   FAIL_ON_TLS_ISSUES: ${{ inputs.fail_on_tls_issues != false }}
+  # Comma-separated testssl.sh finding ids (e.g. "cert_revocation") whose HIGH or
+  # CRITICAL severity is accepted. They stay listed in the summary. Add the reason
+  # in a comment here; do not switch the gate off for one known finding.
+  TESTSSL_ACCEPTED_IDS: ""
 
 defaults:
   run:
@@ -146,14 +150,25 @@ jobs:
         run: |
           python3 <<'PY'
           from pathlib import Path
+          import os
           import xml.etree.ElementTree as ET
 
           source = Path("reports/nmap-discovery.xml")
           ports = []
+          # Reasons the result is not a verdict. Nmap exits 0 with an empty port
+          # list when it gives up on the host (--host-timeout), and an
+          # unparseable report used to read as "no open ports" too; both passed
+          # the gate as "no unexpected public ports".
+          problems = []
 
           if source.exists() and source.stat().st_size > 0:
               try:
                   root = ET.parse(source).getroot()
+                  hosts = root.findall("host")
+                  if not hosts:
+                      problems.append("the Nmap report contains no host")
+                  if any(host.attrib.get("timedout") == "true" for host in hosts):
+                      problems.append("Nmap gave up on the host (--host-timeout) before the port scan finished")
                   ports = sorted(
                       {
                           int(port.attrib["portid"])
@@ -163,7 +178,27 @@ jobs:
                       }
                   )
               except (ET.ParseError, OSError) as e:
-                  print(f"::warning::Failed to parse {source}: {e}")
+                  problems.append(f"the Nmap XML report could not be parsed: {e}")
+          else:
+              problems.append("Nmap wrote no XML report")
+
+          # With -Pn an unreachable or wrong address also reports no open port.
+          expected = {
+              int(port.strip())
+              for port in os.environ.get("EXPECTED_PUBLIC_TCP_PORTS", "").split(",")
+              if port.strip()
+          }
+          if not problems and expected and not expected.intersection(ports):
+              problems.append(
+                  "none of the expected public ports is open: the scan did not reach the service (check TARGET_IP)"
+              )
+
+          for problem in problems:
+              print(f"::error::Port discovery gives no verdict: {problem}")
+          Path("reports/nmap-problems.txt").write_text(
+              "".join(f"{problem}\n" for problem in problems),
+              encoding="utf-8",
+          )
 
           Path("reports/open-ports.txt").write_text(
               "\n".join(str(p) for p in ports) + ("\n" if ports else ""),
@@ -281,6 +316,18 @@ jobs:
           if unexp_file.exists():
               unexpected_ports = [p.strip() for p in unexp_file.read_text(encoding="utf-8").split() if p.strip()]
 
+          problems_file = Path("reports/nmap-problems.txt")
+          problems = (
+              [p for p in problems_file.read_text(encoding="utf-8").splitlines() if p]
+              if problems_file.exists()
+              else ["the open ports were not extracted"]
+          )
+
+          if problems:
+              summary_lines.extend(["", "### 🚨 Port Discovery Incomplete", ""])
+              summary_lines.extend(f"- {problem}" for problem in problems)
+              summary_lines.append("")
+
           if unexpected_ports:
               summary_lines.extend([
                   "",
@@ -289,7 +336,7 @@ jobs:
                   f"**Exposed ports not in allowlist:** `{', '.join(unexpected_ports)}`",
                   "",
               ])
-          else:
+          elif not problems:
               summary_lines.extend([
                   "",
                   "### ✅ Port Policy Compliance",
@@ -337,11 +384,23 @@ jobs:
             failed=1
           fi
 
+          # Written by the "Extract open ports" step; empty when the scan gave
+          # a verdict. Missing means that step did not run.
+          if [[ ! -f reports/nmap-problems.txt ]]; then
+            echo "::error::The open ports were not extracted from the Nmap report."
+            failed=1
+          elif [[ -s reports/nmap-problems.txt ]]; then
+            while IFS= read -r problem; do
+              echo "::error::Port discovery gives no verdict: ${problem}"
+            done < reports/nmap-problems.txt
+            failed=1
+          fi
+
           if [[ -s reports/unexpected-public-ports.txt ]]; then
             unexpected_ports="$(paste -sd, reports/unexpected-public-ports.txt)"
             echo "::error::Unexpected public TCP port(s) detected: ${unexpected_ports}."
             failed=1
-          else
+          elif (( failed == 0 )); then
             echo "No unexpected public TCP ports detected."
           fi
 
@@ -588,6 +647,17 @@ jobs:
             if [[ ! -s "reports/nikto-${safe_name}.json" ]]; then
               echo "::error::Nikto failed to produce JSON output for ${url}. Inspect reports/nikto-${safe_name}.log."
               failed_nikto=$((failed_nikto + 1))
+            # Nikto 2.5 writes an array with one object per host and exits 0
+            # when it cannot connect: the only "finding" is then its own
+            # "Unable to connect to <host>:<port>." message.
+            elif ! jq -e 'type == "array" and length > 0 and all(.[]; (.vulnerabilities | type) == "array")' \
+                "reports/nikto-${safe_name}.json" > /dev/null; then
+              echo "::error::Nikto wrote an unexpected JSON report for ${url}."
+              failed_nikto=$((failed_nikto + 1))
+            elif jq -e 'any(.[].vulnerabilities[]; (.msg // "") | startswith("Unable to connect"))' \
+                "reports/nikto-${safe_name}.json" > /dev/null; then
+              echo "::error::Nikto could not connect to ${url}; nothing was audited."
+              failed_nikto=$((failed_nikto + 1))
             fi
           done < reports/web-targets.txt
 
@@ -631,6 +701,14 @@ jobs:
       - name: Generate web & TLS step summary
         if: always()
         run: |
+          # scripts/testssl_gate.py is the one testssl.sh parser: it writes this
+          # section here and decides the verdict in the quality gate below. Its
+          # exit status only matters there.
+          python3 scripts/testssl_gate.py reports \
+            --accept-ids "${TESTSSL_ACCEPTED_IDS}" \
+            --markdown reports/testssl-summary.md \
+            --report-findings-only > /dev/null || true
+
           python3 <<'PY'
           from pathlib import Path
           import json
@@ -702,38 +780,12 @@ jobs:
                   lines.append(f"- **[{sev}]** {name} — `{matched}`")
               lines.append("")
 
-          # testssl.sh findings
-          lines.extend(["### TLS Security (testssl.sh)", ""])
-          testssl_reports = sorted(Path("reports").glob("testssl-*.json"))
-          lines.append(f"- **testssl.sh Reports Generated:** {len(testssl_reports)}")
-
-          tls_crit_high = []
-          protocols = []
-          for report in testssl_reports:
-              try:
-                  data = json.loads(report.read_text(encoding="utf-8"))
-                  for item in data:
-                      sev = item.get("severity", "").upper()
-                      item_id = item.get("id", "")
-                      finding = item.get("finding", "")
-                      if sev in ("CRITICAL", "HIGH"):
-                          tls_crit_high.append((sev, item_id, finding))
-                      if item_id in ("SSLv2", "SSLv3", "TLS1", "TLS1_1", "TLS1_2", "TLS1_3") and "offered" in finding.lower() and "not" not in finding.lower():
-                          protocols.append(item_id)
-              except Exception as e:
-                  lines.append(f"> ⚠️ Error parsing testssl JSON {report.name}: {e}")
-
-          if protocols:
-              lines.append(f"- **Supported TLS Protocols:** `{', '.join(sorted(set(protocols)))}`")
-
-          if tls_crit_high:
-              lines.extend(["", "#### 🚨 High/Critical TLS Findings", ""])
-              for sev, item_id, finding in tls_crit_high[:15]:
-                  lines.append(f"- **[{sev}]** `{item_id}`: {finding}")
-              lines.append("")
+          # testssl.sh findings, written above by scripts/testssl_gate.py
+          tls_summary = Path("reports/testssl-summary.md")
+          if tls_summary.exists():
+              lines.extend(tls_summary.read_text(encoding="utf-8").splitlines())
           else:
-              lines.append("- **TLS Vulnerabilities:** ✅ No High or Critical TLS vulnerabilities detected.")
-              lines.append("")
+              lines.extend(["### TLS Security (testssl.sh)", "", "> 🚨 The testssl.sh reports could not be evaluated.", ""])
 
           # Nikto summary
           lines.extend(["### Web Server Audit (Nikto)", ""])
@@ -744,10 +796,12 @@ jobs:
           for nr in nikto_reports:
               try:
                   nd = json.loads(nr.read_text(encoding="utf-8"))
-                  items = nd.get("vulnerabilities") or nd.get("items") or []
-                  total_nikto_items += len(items)
-              except Exception:
-                  pass
+                  # Nikto 2.5: an array with one object per host. `nd.get` on
+                  # that list raised, and the bare `pass` reported 0 items.
+                  for host in nd if isinstance(nd, list) else [nd]:
+                      total_nikto_items += len(host.get("vulnerabilities") or host.get("items") or [])
+              except Exception as e:
+                  lines.append(f"> ⚠️ Error parsing Nikto JSON {nr.name}: {e}")
           lines.append(f"- **Nikto Discovered Items:** {total_nikto_items}")
 
           summary_text = "\n".join(lines) + "\n"
@@ -781,16 +835,18 @@ jobs:
             echo "::error::Nuclei encountered an operational failure."
             failed=1
           elif [[ -f reports/nuclei-complete ]]; then
-            high_or_critical="$({
+            # No `|| echo 0`: results jq cannot evaluate are not a clean scan.
+            if ! high_or_critical="$(
               jq '
                 map(select(
-                  (.info.severity // "unknown") == "high"
-                  or (.info.severity // "unknown") == "critical"
+                  (.info.severity // "unknown" | ascii_downcase) == "high"
+                  or (.info.severity // "unknown" | ascii_downcase) == "critical"
                 )) | length
-              ' reports/nuclei-results.json 2>/dev/null || echo 0
-            })"
-
-            if (( high_or_critical > 0 )); then
+              ' reports/nuclei-results.json
+            )" || [[ ! "${high_or_critical}" =~ ^[0-9]+$ ]]; then
+              echo "::error::The Nuclei results could not be evaluated."
+              failed=1
+            elif (( high_or_critical > 0 )); then
               echo "::error::Nuclei detected ${high_or_critical} high or critical finding(s)."
               failed=1
             else
@@ -809,34 +865,18 @@ jobs:
             failed=1
           fi
 
-          if [[ "${FAIL_ON_TLS_ISSUES}" == "true" ]]; then
-            # `|| failed=1`: under `set -e` a bare failing heredoc aborted the
-            # step here, before the Nikto verdict below was evaluated.
-            python3 <<'PY' || failed=1
-          from pathlib import Path
-          import json
-          import sys
-
-          crit_high = []
-          for p in Path("reports").glob("testssl-*.json"):
-              try:
-                  data = json.loads(p.read_text(encoding="utf-8"))
-                  for item in data:
-                      sev = item.get("severity", "").upper()
-                      if sev in ("CRITICAL", "HIGH"):
-                          crit_high.append(f"{item.get('id')}: {item.get('finding')}")
-              except Exception as e:
-                  print(f"::warning::Failed to evaluate testssl report {p}: {e}")
-
-          if crit_high:
-              print(f"::error::testssl.sh detected {len(crit_high)} CRITICAL/HIGH TLS finding(s):")
-              for issue in crit_high[:10]:
-                  print(f"::error::  - {issue}")
-              sys.exit(1)
-          else:
-              print("No CRITICAL or HIGH testssl.sh TLS issues detected.")
-          PY
+          # scripts/testssl_gate.py reads both testssl.sh JSON shapes and exits 2
+          # when it cannot give a verdict: a missing or unparseable report, a
+          # FATAL scan problem, an error exit status, or no TLS target at all
+          # (HTTPS unreachable). That fails the gate with fail_on_tls_issues=false
+          # too; the input only decides whether HIGH/CRITICAL findings fail it.
+          tls_args=(--accept-ids "${TESTSSL_ACCEPTED_IDS}")
+          if [[ "${FAIL_ON_TLS_ISSUES}" != "true" ]]; then
+            tls_args+=(--report-findings-only)
           fi
+          # `|| failed=1`: under `set -e` a bare failing command aborted the
+          # step here, before the Nikto verdict below was evaluated.
+          python3 scripts/testssl_gate.py reports "${tls_args[@]}" || failed=1
 
           if [[ -f reports/nikto-failed ]]; then
             echo "::error::Nikto encountered an operational failure or failed to produce JSON output."
