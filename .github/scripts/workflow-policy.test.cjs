@@ -279,6 +279,28 @@ test('the scanner runs without a package write token', () => {
   }
 });
 
+test('a Trivy step that writes SARIF sets no severity filter it would drop', () => {
+  // trivy-action (v0.36.0 entrypoint.sh) unsets TRIVY_SEVERITY for `format: sarif` unless
+  // `limit-severities-for-sarif` is exactly `true`. The image gates fail on a fixed finding of any
+  // severity on purpose (docs/agents/ci.md); a `severity:` input there only claims a narrower gate.
+  const sarifSteps = [];
+  for (const file of workflows) {
+    const lines = fs.readFileSync(file, 'utf8').split('\n');
+    lines.forEach((line, i) => {
+      if (!/^\s*(- )?uses: aquasecurity\/trivy-action@/.test(line)) return;
+      const block = stepBlock(lines, i);
+      const has = (regex) => block.some((l) => regex.test(l));
+      if (!has(/^\s*format:\s*sarif\s*$/)) return;
+      const where = `${rel(file)}:${i + 1}`;
+      sarifSteps.push(where);
+      if (has(/^\s*limit-severities-for-sarif:\s*true\s*$/)) return;
+      assert.ok(!has(/^\s*severity:/), `${where}: severity does not apply to SARIF output; remove it or set limit-severities-for-sarif: true`);
+    });
+  }
+  // The three image gates and the two report-only filesystem scans.
+  assert.ok(sarifSteps.length >= 5, `expected the Trivy SARIF steps: ${sarifSteps}`);
+});
+
 test('the publish workflow reads and writes no Actions cache', () => {
   // A release build must not restore what another workflow (or a pull request) saved: a
   // poisoned cache would flow into a signed image or its scan. `cache-mode: none` makes the
