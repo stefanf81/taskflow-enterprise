@@ -351,7 +351,12 @@ regressions). Major updates are held for 30 days and require manual review.
 Tool versions pinned in workflow `env` blocks are tracked through the
 `customManagers:githubActionsVersions` preset: put a
 `# renovate: datasource=… depName=…` comment directly above a `*_VERSION`
-variable (Trivy, Nuclei, CocoaPods and the k6 image in `k6.yml` do this).
+variable (Trivy, Nuclei and CocoaPods do this). Images are pinned as
+`tag@sha256:<index digest>` and tracked by dedicated regex managers through a
+`# <name>-image:` marker instead: Renovate, ZAP, BuildKit, actionlint, zizmor,
+the k6 image in `k6.yml`, and testssl.sh and Nikto in the external scan. The
+last two only publish rolling tags on GHCR, so their group ("External scanner
+images") is never automerged.
 `GITLEAKS_VERSION` is intentionally not annotated, because its release
 checksum (`GITLEAKS_SHA256`) must change in the same commit. The Node version in
 `mobile/eas.json` is not tracked either; bump it together with `mobile/.nvmrc`.

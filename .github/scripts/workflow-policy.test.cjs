@@ -69,6 +69,29 @@ test('job conditions use !cancelled(), never always()', () => {
   assert.deepEqual(offenders, []);
 });
 
+test('scanner and load-test images are pinned to a tag and index digest', () => {
+  // testssl.sh and Nikto only publish rolling tags, and a Docker Hub tag can be pushed again:
+  // without the digest, what probes the production perimeter changes without a pull request.
+  const pins = [
+    ['nightly-external-server-scan.yml', 'testssl-image', 'TESTSSL_VERSION', 'ghcr.io/testssl/testssl.sh'],
+    ['nightly-external-server-scan.yml', 'nikto-image', 'NIKTO_VERSION', 'ghcr.io/sullo/nikto'],
+    ['k6.yml', 'k6-image', 'K6_VERSION', 'grafana/k6'],
+  ];
+  for (const [file, marker, variable, image] of pins) {
+    const workflow = fs.readFileSync(path.join(workflowDir, file), 'utf8');
+    assert.match(workflow, new RegExp(
+      `# ${marker}: tracked by the dedicated regex manager in \\.github/renovate\\.json\\n`
+      + `\\s+${variable}: "[^@"\\s]+@sha256:[a-f0-9]{64}"`,
+    ), `${file}: pin ${variable} as "<tag>@sha256:<digest>" below the # ${marker}: marker`);
+    // Every use goes through the variable: no second, unpinned reference to the image.
+    const refs = [...workflow.matchAll(new RegExp(`${image.replace(/[.]/g, '\\.')}:(\\S+)`, 'g'))].map((m) => m[1]);
+    assert.notDeepEqual(refs, [], `${file} does not use ${image}`);
+    for (const ref of refs) {
+      assert.ok(ref.startsWith(`\${${variable}}`), `${file}: ${image}:${ref} must use \${${variable}}`);
+    }
+  }
+});
+
 test('the BuildKit image is pinned to a version and index digest', () => {
   const action = fs.readFileSync(path.join(root, 'actions', 'prepull-buildkit', 'action.yml'), 'utf8');
   const marker = '# buildkit-image: tracked by the dedicated regex manager in .github/renovate.json';

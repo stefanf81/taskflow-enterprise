@@ -52,8 +52,9 @@ jobs:
       # would turn the CWV gate on (browser.js enforces unless it is "false").
       CHECK_EARLY_CLICK: ${{ inputs.check_early_click != false }}
       ENFORCE_CWV: ${{ inputs.enforce_cwv == true }}
-      # renovate: datasource=docker depName=grafana/k6 versioning=docker
-      K6_VERSION: "2.4.0-with-browser"
+      # Tag and index digest: a tag on Docker Hub can be pushed again.
+      # k6-image: tracked by the dedicated regex manager in .github/renovate.json
+      K6_VERSION: "2.4.0-with-browser@sha256:61192a56b64554ed96ef4c657cd936af5847a9335457299cf6d2d04122bb493a"
 
     steps:
       - name: Checkout
