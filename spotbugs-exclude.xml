@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <FindBugsFilter>
-    <!-- CSRF protection is handled by Spring Security's CookieCsrfTokenRepository in SecurityConfig;
-         SpotBugs cannot detect the framework-level configuration, so the warning is suppressed here. -->
-    <Match>
-        <Bug pattern="SPRING_CSRF_PROTECTION_DISABLED"/>
-    </Match>
+    <!-- Deliberately empty. SPRING_CSRF_PROTECTION_DISABLED used to be excluded for the whole
+         project; nothing disables CSRF (SecurityConfig narrows the protection matcher instead, which
+         the detector does not flag), so the exclusion only hid a future csrf().disable().
+         A new exclusion must name the class (and method where possible) and say why:
+         <Match><Class name="com.example.taskflow.…"/><Bug pattern="…"/></Match> -->
 </FindBugsFilter>
