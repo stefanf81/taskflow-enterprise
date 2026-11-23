@@ -70,6 +70,9 @@ export class ShopClock {
       : DEFAULT_SHOP_RULES;
   });
 
+  /** The owner's promo strip for the landing page; '' when there is none or while unknown. */
+  readonly announcement = computed(() => this.info()?.announcement ?? '');
+
   /** Whether the rules came from the server (false while loading, after a failure, prerendering). */
   readonly loaded = computed(() => this.info() !== null);
 

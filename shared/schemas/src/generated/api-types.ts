@@ -5,6 +5,15 @@
  * DO NOT EDIT MANUALLY — run `npm run sync:api-types` to regenerate.
  */
 
+export interface AnnouncementRequest {
+  message?: string;
+}
+
+export interface AnnouncementResponse {
+  active: boolean;
+  message: string;
+}
+
 export interface AppointmentCreateRequest {
   barberName: string;
   bookingDate: string;
@@ -265,6 +274,7 @@ export interface ServiceItemResponse {
 }
 
 export interface ShopInfoResponse {
+  announcement: string;
   maxAdvanceDays: number;
   openingHours: OpeningHoursResponse[];
   timeZone: string;

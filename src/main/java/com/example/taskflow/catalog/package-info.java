@@ -1,6 +1,6 @@
 /**
  * Services offered by the shop (name, price, duration) and the retail products it sells over the
- * counter (display only).
+ * counter (display only), and the promo strip of the landing pages.
  */
 @ApplicationModule(allowedDependencies = {"core", "core :: cache"})
 package com.example.taskflow.catalog;

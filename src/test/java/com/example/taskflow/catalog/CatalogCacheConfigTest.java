@@ -22,7 +22,7 @@ class CatalogCacheConfigTest {
         RedisCacheManager.RedisCacheManagerBuilder builder = RedisCacheManager.builder(mock(RedisCacheWriter.class));
         new CatalogCacheConfig().catalogCaches().customize(builder);
 
-        assertEquals(Set.of("services", "products"), builder.getConfiguredCaches());
+        assertEquals(Set.of("services", "products", "announcement"), builder.getConfiguredCaches());
         RedisCacheConfiguration services = builder.getCacheConfigurationFor("services").orElseThrow();
         assertEquals(Duration.ofMinutes(10), services.getTtlFunction().getTimeToLive("key", "value"));
         assertFalse(services.getAllowCacheNullValues());
@@ -31,6 +31,19 @@ class CatalogCacheConfigTest {
                 new ServiceItemResponse(1L, "Cut", new BigDecimal("25.00"), 30, "hair", "desc"));
         ByteBuffer stored = services.getValueSerializationPair().write(catalog);
         assertEquals(catalog, services.getValueSerializationPair().read(stored));
+    }
+
+    @Test
+    void registersTheTypedAnnouncementCache() {
+        RedisCacheManager.RedisCacheManagerBuilder builder = RedisCacheManager.builder(mock(RedisCacheWriter.class));
+        new CatalogCacheConfig().catalogCaches().customize(builder);
+
+        RedisCacheConfiguration announcement = builder.getCacheConfigurationFor("announcement").orElseThrow();
+        assertEquals(Duration.ofMinutes(10), announcement.getTtlFunction().getTimeToLive("key", "value"));
+        for (AnnouncementResponse value : List.of(new AnnouncementResponse(true, "Promo"), new AnnouncementResponse(false, null))) {
+            ByteBuffer stored = announcement.getValueSerializationPair().write(value);
+            assertEquals(value, announcement.getValueSerializationPair().read(stored));
+        }
     }
 
     @Test

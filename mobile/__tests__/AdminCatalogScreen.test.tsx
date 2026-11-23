@@ -178,12 +178,12 @@ describe('AdminCatalogScreen', () => {
     );
   });
 
-  it('switches to the retail products on the Products tab, without the services editor', async () => {
+  it('switches to the storefront (announcement and products) tab, without the services editor', async () => {
     mockServices = [];
     await render(<AdminCatalogScreen />);
     expect(screen.queryByText('Retail products panel')).toBeNull();
 
-    await fireEvent.press(screen.getByText('Products'));
+    await fireEvent.press(screen.getByText('Storefront'));
 
     expect(screen.getByText('Retail products panel')).toBeTruthy();
     expect(screen.queryByText('Create service')).toBeNull();

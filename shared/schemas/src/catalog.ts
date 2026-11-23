@@ -5,7 +5,6 @@ import {
   literal,
   maxLength,
   maximum,
-  minimum,
   minLength,
   multipleOf,
   nullish,
@@ -69,31 +68,6 @@ export type ServiceItemResponse = zInfer<typeof serviceItemResponseSchema>;
 
 /** GET /api/v1/catalog response. */
 export const serviceItemResponseListSchema = array(serviceItemResponseSchema);
-
-/** Admin payload for creating/updating a retail product (limits mirror RetailProductRequest/V44). */
-export const retailProductSchema = object({
-  name: string().check(trim(), minLength(1, "Product name is required"), maxLength(100, "Product name must not exceed 100 characters")),
-  sizeLabel: optional(string().check(trim(), maxLength(30, "Size must not exceed 30 characters"))),
-  price: number("Price must be a valid number").check(positive("Price must be positive"), maximum(99999999.99, "Price must have at most 8 integer digits and 2 decimals"), multipleOf(0.01, "Price must have at most 8 integer digits and 2 decimals")),
-  sortOrder: int("Position must be a whole number").check(minimum(0, "Position must not be negative"), maximum(9999, "Position must not exceed 9999")),
-});
-
-export type RetailProductRequest = zInfer<typeof retailProductSchema>;
-
-/** GET /api/v1/catalog/products response item: a retail product (display only, never booked). */
-export const retailProductResponseSchema = object({
-  id: number(),
-  name: string(),
-  // The backend omits a missing size (NON_NULL Jackson inclusion).
-  sizeLabel: omittedAsEmptyString(),
-  price: number(),
-  sortOrder: number(),
-});
-
-export type RetailProductResponse = zInfer<typeof retailProductResponseSchema>;
-
-/** GET /api/v1/catalog/products response, in the shop's order. */
-export const retailProductResponseListSchema = array(retailProductResponseSchema);
 
 /** GET /api/v1/barbers response item (public directory). */
 export const publicBarberResponseSchema = object({

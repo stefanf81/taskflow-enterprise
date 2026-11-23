@@ -13,10 +13,28 @@ jest.mock('react-native', () => {
   return Object.create(actual, { Animated: { value: Animated } });
 });
 
+let mockAnnouncement = 'Half-price beard trims on Tuesdays';
+jest.mock('../src/core/shop/useShopInfo', () => ({
+  useShopInfo: () => ({ announcement: mockAnnouncement }),
+}));
+
 describe('AnnouncementBar', () => {
   beforeEach(() => {
     mockStart.mockClear();
     mockStop.mockClear();
+    mockAnnouncement = 'Half-price beard trims on Tuesdays';
+  });
+
+  it("shows the owner's text, and nothing (no pulse) when the strip is off", async () => {
+    const { getByText, unmount } = await render(<AnnouncementBar />);
+    expect(getByText('Half-price beard trims on Tuesdays')).toBeTruthy();
+    await unmount();
+    mockStart.mockClear();
+
+    mockAnnouncement = '';
+    const { toJSON } = await render(<AnnouncementBar />);
+    expect(toJSON()).toBeNull();
+    expect(mockStart).not.toHaveBeenCalled();
   });
 
   it('pulses only while the landing tab is shown', async () => {

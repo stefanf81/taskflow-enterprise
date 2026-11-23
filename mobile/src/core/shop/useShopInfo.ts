@@ -10,6 +10,8 @@ export interface ShopInfo {
   rules: ShopRules;
   /** Whether the values came from the server (false while loading or after a failure). */
   loaded: boolean;
+  /** The owner's promo strip for the home screen; '' when there is none or while unknown. */
+  announcement: string;
 }
 
 /**
@@ -38,8 +40,9 @@ export function useShopInfo(): ShopInfo {
             timeZone: data.timeZone,
             rules: { maxAdvanceDays: data.maxAdvanceDays, openingHours: data.openingHours },
             loaded: true,
+            announcement: data.announcement,
           }
-        : { timeZone: null, rules: DEFAULT_SHOP_RULES, loaded: false },
+        : { timeZone: null, rules: DEFAULT_SHOP_RULES, loaded: false, announcement: '' },
     [data],
   );
 }

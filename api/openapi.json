@@ -1,6 +1,30 @@
 {
   "components": {
     "schemas": {
+      "AnnouncementRequest": {
+        "properties": {
+          "message": {
+            "maxLength": 120,
+            "minLength": 0,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AnnouncementResponse": {
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "active"
+        ],
+        "type": "object"
+      },
       "AppointmentCreateRequest": {
         "properties": {
           "barberName": {
@@ -990,6 +1014,9 @@
       },
       "ShopInfoResponse": {
         "properties": {
+          "announcement": {
+            "type": "string"
+          },
           "maxAdvanceDays": {
             "format": "int32",
             "type": "integer"
@@ -2790,6 +2817,47 @@
         ]
       }
     },
+    "/api/v1/catalog/announcement": {
+      "put": {
+        "operationId": "updateAnnouncement",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnouncementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementResponse"
+                }
+              }
+            },
+            "description": "Announcement saved"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Message longer than 120 characters"
+          }
+        },
+        "summary": "Set the landing pages' announcement; a blank message turns it off (Admin Access)",
+        "tags": [
+          "Shop Announcement"
+        ]
+      }
+    },
     "/api/v1/catalog/products": {
       "get": {
         "operationId": "listProducts",
@@ -3471,6 +3539,10 @@
     {
       "description": "Operations for booking and approving appointments",
       "name": "Barber Appointment Management System"
+    },
+    {
+      "description": "The promo strip at the top of the landing pages",
+      "name": "Shop Announcement"
     },
     {
       "description": "Operations for managing barbers, schedules, and time-off",

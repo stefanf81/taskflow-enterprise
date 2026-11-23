@@ -8,6 +8,7 @@ import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
 import { ServiceItem } from '../../types/api';
 import { RetiredServicesStore } from './retired-services.store';
 import { AdminRetailProducts } from './admin-retail-products';
+import { AdminAnnouncement } from './admin-announcement';
 import { packageIcon } from '../../core/ui/icons/package';
 import { timerIcon } from '../../core/ui/icons/timer';
 import { Icon } from '../../core/ui/icon';
@@ -34,7 +35,7 @@ const emptyDraft = (): ServiceDraft => ({
 /** Owner dashboard · service catalog tab: the menu, and the retired services that can be restored. */
 @Component({
   selector: 'app-admin-services-tab',
-  imports: [Icon, Button, Alert, EmptyState, AdminRetailProducts],
+  imports: [Icon, Button, Alert, EmptyState, AdminRetailProducts, AdminAnnouncement],
   templateUrl: './admin-services-tab.html',
 })
 export class AdminServicesTab {

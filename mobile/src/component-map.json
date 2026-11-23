@@ -237,6 +237,22 @@
         "web": "frontend/src/app/core/api/retail-products-api.ts",
         "mobile": "mobile/src/core/catalog/retailProducts.ts"
       }
+    },
+    {
+      "feature": "Landing Announcement (promo strip)",
+      "description": "The owner's promo strip from `announcement` in GET /api/v1/appointments/public/shop (V45, catalog's ShopAnnouncementService); set with PUT /api/v1/catalog/announcement, empty hides it. Web reserves the strip's height in the prerendered page.",
+      "webComponent": "frontend/src/app/features/landing/announcement-bar/announcement-bar.ts",
+      "webAdmin": "frontend/src/app/features/admin/admin-announcement.ts",
+      "mobileComponent": "mobile/src/features/landing/AnnouncementBar.tsx",
+      "mobileAdmin": "mobile/src/features/admin/AnnouncementEditor.tsx",
+      "storeHook": {
+        "web": "frontend/src/app/core/shop-clock.ts",
+        "mobile": "mobile/src/core/shop/useShopInfo.ts"
+      },
+      "api": {
+        "web": "frontend/src/app/core/api/announcement-api.ts",
+        "mobile": "mobile/src/core/catalog/announcement.ts"
+      }
     }
   ],
   "platformContracts": {

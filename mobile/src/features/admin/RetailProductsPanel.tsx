@@ -17,12 +17,13 @@ import {
 } from '../../core/catalog/useRetailProducts';
 import { colors, semantic, withAlpha } from '../../theme/colors';
 import { getApiErrorMessage } from '../../utils/errors';
+import { AnnouncementEditor } from './AnnouncementEditor';
 
 type ProductDraft = { name: string; sizeLabel: string; price: string; sortOrder: string };
 
 /**
- * Owner · catalog · "Products" tab: the retail products both landing pages list (display only,
- * never booked). Add, edit, delete; every save refetches the shared list.
+ * Owner · catalog · "Storefront" tab: the home screen announcement, then the retail products both
+ * landing pages list (display only, never booked). Add, edit, delete; every save refetches the list.
  */
 export const RetailProductsPanel: React.FC = () => {
   const { data: products = [], isLoading, isError, refetch } = useRetailProducts();
@@ -87,6 +88,8 @@ export const RetailProductsPanel: React.FC = () => {
 
   return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <AnnouncementEditor />
+      <Text style={styles.sectionTitle}>Retail products</Text>
       <Text style={styles.hint}>Shown on the home screen and the website. Display only: they are not booked.</Text>
       <ErrorMessage message={errorMessage || ''} />
       {successMessage && (
@@ -148,6 +151,12 @@ export const RetailProductsPanel: React.FC = () => {
 const styles = StyleSheet.create({
   content: {
     paddingBottom: 40,
+  },
+  sectionTitle: {
+    color: colors.text.primary,
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4,
   },
   hint: {
     color: colors.text.secondary,

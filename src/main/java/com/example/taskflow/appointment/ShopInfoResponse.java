@@ -1,5 +1,7 @@
 package com.example.taskflow.appointment;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
 
 /**
@@ -12,5 +14,8 @@ import java.util.List;
  *                       today plus this many days is the last bookable date
  * @param openingHours   one entry per weekday on which at least one barber works, Monday first; a weekday that
  *                       is missing is closed. Derived from the barbers' schedules, so it follows them.
+ * @param announcement   the promo strip the owner set for the landing pages (at most 120 characters), or
+ *                       absent when there is none; owned by the catalog module ({@code ShopAnnouncementService})
  */
-record ShopInfoResponse(String timeZone, int maxAdvanceDays, List<OpeningHoursResponse> openingHours) {}
+record ShopInfoResponse(String timeZone, int maxAdvanceDays, List<OpeningHoursResponse> openingHours,
+                        @Nullable String announcement) {}

@@ -28,6 +28,7 @@ jest.mock('../src/core/shop/useShopInfo', () => ({
     timeZone: null,
     rules: jest.requireActual('@taskflow/domain').DEFAULT_SHOP_RULES,
     loaded: false,
+    announcement: "Special Highlight: Book 'The Executive Package' today",
   }),
 }));
 

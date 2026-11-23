@@ -7,7 +7,12 @@
  *
  * DO NOT EDIT MANUALLY — run `npm run sync:api-types` to regenerate.
  */
-import { array, number, object, optional, string } from "zod/mini";
+import { array, boolean, number, object, optional, string } from "zod/mini";
+
+export const announcementResponseContract = object({
+  active: boolean(),
+  message: optional(string()),
+});
 
 export const appointmentResponseContract = object({
   barberName: string(),
@@ -149,6 +154,7 @@ export const serviceItemResponseContract = object({
 });
 
 export const shopInfoResponseContract = object({
+  announcement: optional(string()),
   maxAdvanceDays: number(),
   openingHours: array(openingHoursResponseContract),
   timeZone: string(),

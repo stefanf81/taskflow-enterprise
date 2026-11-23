@@ -119,8 +119,14 @@ describe('appointmentsApi', () => {
     it('reads the shop zone, booking window and hours from the public endpoint', async () => {
       mockedGet.mockResolvedValueOnce({ data: shopInfo });
       const { signal } = new AbortController();
-      await expect(appointmentsApi.getShopInfo({ signal })).resolves.toEqual(shopInfo);
+      // No promo strip set: the omitted field reads as ''.
+      await expect(appointmentsApi.getShopInfo({ signal })).resolves.toEqual({ ...shopInfo, announcement: '' });
       expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments/public/shop', { signal });
+    });
+
+    it("carries the owner's promo strip", async () => {
+      mockedGet.mockResolvedValueOnce({ data: { ...shopInfo, announcement: 'Half-price Tuesdays' } });
+      await expect(appointmentsApi.getShopInfo()).resolves.toMatchObject({ announcement: 'Half-price Tuesdays' });
     });
 
     it('rejects a response without a zone', async () => {

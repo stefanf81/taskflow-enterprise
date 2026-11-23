@@ -110,6 +110,11 @@ class SecurityAuthorizationIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Ghost Wax\",\"price\":9.0,\"sortOrder\":1}"))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(put("/api/v1/catalog/announcement")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"Free cuts\"}"))
+                .andExpect(status().isUnauthorized());
     }
 
     // ------------------------------------------------------------------
@@ -175,6 +180,10 @@ class SecurityAuthorizationIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON).content(product))
                 .andExpect(status().isForbidden());
         mockMvc.perform(delete("/api/v1/catalog/products/1").header("Authorization", customerToken))
+                .andExpect(status().isForbidden());
+        // The landing pages' promo strip: guests read it from /public/shop, only the owner sets it.
+        mockMvc.perform(put("/api/v1/catalog/announcement").header("Authorization", customerToken)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"Free cuts\"}"))
                 .andExpect(status().isForbidden());
     }
 

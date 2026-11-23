@@ -7,6 +7,7 @@ let mockProducts: Product[];
 const mockSave = jest.fn();
 const mockDelete = jest.fn();
 
+jest.mock('../src/features/admin/AnnouncementEditor', () => ({ AnnouncementEditor: () => null }));
 jest.mock('../src/core/catalog/useRetailProducts', () => ({
   useRetailProducts: () => ({ data: mockProducts, isLoading: false, isError: false, refetch: jest.fn() }),
   useSaveRetailProduct: () => ({ mutate: mockSave, isPending: false }),

@@ -23,7 +23,7 @@ const emptyDraft = (): ServiceDraft => ({ name: '', price: '', durationMinutes: 
 const TABS: ReadonlyArray<{ key: CatalogTab; label: string }> = [
   { key: 'active', label: 'Active' },
   { key: 'retired', label: 'Retired' },
-  { key: 'products', label: 'Products' },
+  { key: 'products', label: 'Storefront' },
 ];
 
 export const AdminCatalogScreen: React.FC = () => {

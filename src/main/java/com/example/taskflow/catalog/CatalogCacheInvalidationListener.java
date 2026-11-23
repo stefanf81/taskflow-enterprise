@@ -44,4 +44,17 @@ class CatalogCacheInvalidationListener {
                     LogSanitizer.safeMessage(e));
         }
     }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    void onAnnouncementChanged(AnnouncementChangedEvent event) {
+        try {
+            Cache cache = caches.getCache(CatalogCacheConfig.ANNOUNCEMENT_CACHE);
+            if (cache != null) {
+                cache.invalidate();
+            }
+        } catch (RuntimeException e) {
+            log.warn("Announcement cache invalidation failed; the entry expires with its TTL: {}",
+                    LogSanitizer.safeMessage(e));
+        }
+    }
 }
