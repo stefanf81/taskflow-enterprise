@@ -29,7 +29,7 @@ Surprises are collected in [gotchas](docs/agents/gotchas.md).
 ```bash
 # Backend (root)
 ./gradlew build                 # compile + test
-./gradlew test                  # unit + H2 integration tests (no Docker)
+./gradlew test                  # unit + PostgreSQL integration tests (Docker or TASKFLOW_TEST_POSTGRES_URL)
 ./gradlew testcontainersTest    # tagged PostgreSQL tests (needs Docker)
 ./gradlew containerConfigTest   # Dockerfile/compose/nginx/workflow guards (part of check)
 ./gradlew check                 # tests, coverage, container guards, SpotBugs, Spotless (not OWASP)

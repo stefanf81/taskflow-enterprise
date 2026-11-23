@@ -71,8 +71,10 @@ class ReviewRatingsIntegrationTest {
                 "c" + m + "@x.test",
                 "555",
                 barber,
-                LocalDate.of(2025, 1, 6),
-                String.format("10:%02d", m),
+                // One day each: same-barber bookings a minute apart overlap, which PostgreSQL's
+                // appointments_no_overlap exclusion constraint (V35) rejects.
+                LocalDate.of(2025, 1, 6).plusDays(m),
+                "10:00",
                 "Classic Haircut");
         a.setStatus(AppointmentStatus.APPROVED);
         return appointmentRepository.save(a);

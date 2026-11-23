@@ -33,15 +33,17 @@ class TaskflowApplicationTest {
     }
 
     @Test
-    void flywayDiscoversPublicIdRepairAndUsesTimeColumnOnH2() {
+    void flywayDiscoversPublicIdRepairAndUsesTimeColumn() {
         assertEquals(
                 1,
                 jdbcTemplate.queryForObject(
-                        "SELECT COUNT(*) FROM \"flyway_schema_history\" WHERE \"version\" = '23'", Integer.class));
-        assertEquals("TIME", jdbcTemplate.queryForObject("""
-                SELECT DATA_TYPE
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_NAME = 'APPOINTMENTS' AND COLUMN_NAME = 'BOOKING_TIME'
-                """, String.class));
+                        "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '23'", Integer.class));
+        // PostgreSQL reports "time without time zone"; H2 (H2DefaultProfileSmokeTest's engine) "TIME".
+        String type = jdbcTemplate.queryForObject("""
+                SELECT data_type
+                FROM information_schema.columns
+                WHERE LOWER(table_name) = 'appointments' AND LOWER(column_name) = 'booking_time'
+                """, String.class);
+        assertTrue(type.toLowerCase(java.util.Locale.ROOT).startsWith("time"), type);
     }
 }

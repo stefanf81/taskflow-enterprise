@@ -8,6 +8,7 @@ import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
 import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.catalog.internal.ServiceItemRepository;
+import com.example.taskflow.testsupport.PostgresTestServer;
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -49,7 +50,7 @@ class AppointmentIdempotencyTestcontainersTest {
     private static final String SERVICE = "Race Cut";
 
     @Container
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.7-alpine")
+    static PostgreSQLContainer postgres = new PostgreSQLContainer(PostgresTestServer.IMAGE)
             .withDatabaseName("taskflow_test")
             .withUsername("postgres")
             .withPassword("postgres-password");

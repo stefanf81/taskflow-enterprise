@@ -3,6 +3,7 @@ package com.example.taskflow.migration;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.example.taskflow.testsupport.PostgresTestServer;
 import db.migration.V37__enable_pg_stat_statements;
 import java.sql.DriverManager;
 import org.flywaydb.core.Flyway;
@@ -17,7 +18,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 class PgStatStatementsPostgresTest {
 
     @Container
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.7-alpine")
+    static PostgreSQLContainer postgres = new PostgreSQLContainer(PostgresTestServer.IMAGE)
             .withDatabaseName("taskflow_test")
             .withUsername("postgres")
             .withPassword("postgres-password")

@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.example.taskflow.appointment.internal.AppointmentRepository;
+import com.example.taskflow.testsupport.PostgresTestServer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.util.HashMap;
@@ -59,7 +60,7 @@ public class AppointmentControllerTestcontainersTest {
 
     // Define the PostgreSQL container matching production.
     @Container
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.7-alpine")
+    static PostgreSQLContainer postgres = new PostgreSQLContainer(PostgresTestServer.IMAGE)
             .withDatabaseName("taskflow_test")
             .withUsername("postgres")
             .withPassword("postgres-password");
