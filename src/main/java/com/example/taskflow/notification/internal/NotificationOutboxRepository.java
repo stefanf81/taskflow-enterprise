@@ -3,6 +3,9 @@ package com.example.taskflow.notification.internal;
 import com.example.taskflow.notification.NotificationOutbox;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -12,10 +15,6 @@ import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.util.List;
 
 @Repository
 public interface NotificationOutboxRepository extends JpaRepository<NotificationOutbox, Long> {
@@ -38,13 +37,12 @@ public interface NotificationOutboxRepository extends JpaRepository<Notification
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints({@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2")})
-    @Query("SELECT n FROM NotificationOutbox n " +
-            "WHERE (n.status = 'PENDING' OR (n.status = 'FAILED' AND n.retryCount < :max)) " +
-            "AND (n.nextAttemptAt IS NULL OR n.nextAttemptAt <= :now) " +
-            "ORDER BY n.id")
-    List<NotificationOutbox> findClaimableForUpdate(@Param("max") int maxRetry,
-                                                    @Param("now") Instant now,
-                                                    Pageable pageable);
+    @Query("SELECT n FROM NotificationOutbox n "
+            + "WHERE (n.status = 'PENDING' OR (n.status = 'FAILED' AND n.retryCount < :max)) "
+            + "AND (n.nextAttemptAt IS NULL OR n.nextAttemptAt <= :now) "
+            + "ORDER BY n.id")
+    List<NotificationOutbox> findClaimableForUpdate(
+            @Param("max") int maxRetry, @Param("now") Instant now, Pageable pageable);
 
     /**
      * Stale-claim reclaim: rows claimed as PROCESSING whose {@code claimedAt} is
@@ -56,9 +54,8 @@ public interface NotificationOutboxRepository extends JpaRepository<Notification
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints({@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2")})
-    @Query("SELECT n FROM NotificationOutbox n " +
-            "WHERE n.status = 'PROCESSING' AND n.claimedAt < :threshold " +
-            "ORDER BY n.id")
+    @Query("SELECT n FROM NotificationOutbox n " + "WHERE n.status = 'PROCESSING' AND n.claimedAt < :threshold "
+            + "ORDER BY n.id")
     List<NotificationOutbox> findStaleProcessing(@Param("threshold") Instant threshold, Pageable pageable);
 
     /**
@@ -69,12 +66,11 @@ public interface NotificationOutboxRepository extends JpaRepository<Notification
      */
     @Transactional
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("UPDATE NotificationOutbox n SET n.status = 'SENT', n.claimedAt = NULL, n.claimedBy = NULL, " +
-            "n.nextAttemptAt = NULL " +
-            "WHERE n.id = :id AND n.status = 'PROCESSING' AND n.claimedBy = :claimedBy AND n.claimedAt = :claimedAt")
-    int markSentIfClaimed(@Param("id") Long id,
-                          @Param("claimedBy") String claimedBy,
-                          @Param("claimedAt") Instant claimedAt);
+    @Query("UPDATE NotificationOutbox n SET n.status = 'SENT', n.claimedAt = NULL, n.claimedBy = NULL, "
+            + "n.nextAttemptAt = NULL "
+            + "WHERE n.id = :id AND n.status = 'PROCESSING' AND n.claimedBy = :claimedBy AND n.claimedAt = :claimedAt")
+    int markSentIfClaimed(
+            @Param("id") Long id, @Param("claimedBy") String claimedBy, @Param("claimedAt") Instant claimedAt);
 
     /**
      * Records a failed delivery (status FAILED, retry counter and backoff written by the caller),
@@ -82,23 +78,23 @@ public interface NotificationOutboxRepository extends JpaRepository<Notification
      */
     @Transactional
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("UPDATE NotificationOutbox n SET n.status = 'FAILED', n.retryCount = :retryCount, " +
-            "n.nextAttemptAt = :nextAttemptAt, n.claimedAt = NULL, n.claimedBy = NULL " +
-            "WHERE n.id = :id AND n.status = 'PROCESSING' AND n.claimedBy = :claimedBy AND n.claimedAt = :claimedAt")
-    int markFailedIfClaimed(@Param("id") Long id,
-                            @Param("claimedBy") String claimedBy,
-                            @Param("claimedAt") Instant claimedAt,
-                            @Param("retryCount") int retryCount,
-                            @Param("nextAttemptAt") Instant nextAttemptAt);
+    @Query("UPDATE NotificationOutbox n SET n.status = 'FAILED', n.retryCount = :retryCount, "
+            + "n.nextAttemptAt = :nextAttemptAt, n.claimedAt = NULL, n.claimedBy = NULL "
+            + "WHERE n.id = :id AND n.status = 'PROCESSING' AND n.claimedBy = :claimedBy AND n.claimedAt = :claimedAt")
+    int markFailedIfClaimed(
+            @Param("id") Long id,
+            @Param("claimedBy") String claimedBy,
+            @Param("claimedAt") Instant claimedAt,
+            @Param("retryCount") int retryCount,
+            @Param("nextAttemptAt") Instant nextAttemptAt);
 
     /** Return an unstarted claim without charging a delivery attempt; never touch a newer claim. */
     @Transactional
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("UPDATE NotificationOutbox n SET n.status = 'PENDING', n.claimedAt = NULL, n.claimedBy = NULL " +
-            "WHERE n.id = :id AND n.status = 'PROCESSING' AND n.claimedBy = :claimedBy AND n.claimedAt = :claimedAt")
-    int releaseIfClaimed(@Param("id") Long id,
-                         @Param("claimedBy") String claimedBy,
-                         @Param("claimedAt") Instant claimedAt);
+    @Query("UPDATE NotificationOutbox n SET n.status = 'PENDING', n.claimedAt = NULL, n.claimedBy = NULL "
+            + "WHERE n.id = :id AND n.status = 'PROCESSING' AND n.claimedBy = :claimedBy AND n.claimedAt = :claimedAt")
+    int releaseIfClaimed(
+            @Param("id") Long id, @Param("claimedBy") String claimedBy, @Param("claimedAt") Instant claimedAt);
 
     /** Retention: deletes delivered rows enqueued before the cutoff. Returns the number deleted. */
     @Transactional

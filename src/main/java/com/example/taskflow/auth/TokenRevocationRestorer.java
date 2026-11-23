@@ -2,14 +2,13 @@ package com.example.taskflow.auth;
 
 import com.example.taskflow.core.LogSanitizer;
 import com.example.taskflow.core.SchedulerProperties;
+import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-
-import java.time.Instant;
 
 /**
  * Loads the durable denylist ({@link PersistentTokenRevocations}) back into {@link TokenRevocationList}:
@@ -27,8 +26,8 @@ class TokenRevocationRestorer {
     private final TokenRevocationList revocations;
     private final boolean schedulersEnabled;
 
-    TokenRevocationRestorer(PersistentTokenRevocations persistent, TokenRevocationList revocations,
-                            SchedulerProperties schedulers) {
+    TokenRevocationRestorer(
+            PersistentTokenRevocations persistent, TokenRevocationList revocations, SchedulerProperties schedulers) {
         this.persistent = persistent;
         this.revocations = revocations;
         this.schedulersEnabled = schedulers.enabled();

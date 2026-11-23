@@ -1,14 +1,31 @@
 package com.example.taskflow.review;
 
-import com.example.taskflow.appointment.internal.Appointment;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.example.taskflow.appointment.AppointmentDetails;
 import com.example.taskflow.appointment.AppointmentService;
-import com.example.taskflow.testsupport.AppointmentDetailsFixtures;
+import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.core.ResourceNotFoundException;
 import com.example.taskflow.review.internal.ReviewRepository;
+import com.example.taskflow.testsupport.AppointmentDetailsFixtures;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
+import java.sql.SQLException;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,24 +35,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
-
-import java.sql.SQLException;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.util.Optional;
-import java.time.ZoneId;
-import java.util.List;
-import java.util.Set;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link ReviewServiceImpl}. The shop clock is fixed at 2031-03-10 14:00 in
@@ -78,7 +77,8 @@ class ReviewServiceImplTest {
 
     @Test
     void savesAReviewForAnApprovedAppointmentThatAlreadyHappened() {
-        when(appointmentService.findDetailsByPublicId(PUBLIC_ID)).thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
+        when(appointmentService.findDetailsByPublicId(PUBLIC_ID))
+                .thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
         when(reviewRepository.existsByAppointmentId(7L)).thenReturn(false);
 
         service.submitReview(PUBLIC_ID, request(5, "  jane@example.com "));
@@ -90,7 +90,8 @@ class ReviewServiceImplTest {
 
     @Test
     void anAppointmentThatStartsExactlyNowCanBeReviewed() {
-        when(appointmentService.findDetailsByPublicId(PUBLIC_ID)).thenReturn(Optional.of(appointment(TODAY, "14:00", "APPROVED")));
+        when(appointmentService.findDetailsByPublicId(PUBLIC_ID))
+                .thenReturn(Optional.of(appointment(TODAY, "14:00", "APPROVED")));
 
         service.submitReview(PUBLIC_ID, request(4, "jane@example.com"));
 
@@ -101,8 +102,8 @@ class ReviewServiceImplTest {
     void unknownPublicIdIs404WithoutEchoingTheId() {
         when(appointmentService.findDetailsByPublicId(PUBLIC_ID)).thenReturn(Optional.empty());
 
-        ResourceNotFoundException ex = assertThrows(ResourceNotFoundException.class,
-                () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
+        ResourceNotFoundException ex = assertThrows(
+                ResourceNotFoundException.class, () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
 
         assertTrue(!ex.getMessage().contains(PUBLIC_ID));
         verify(reviewRepository, never()).save(any());
@@ -110,9 +111,11 @@ class ReviewServiceImplTest {
 
     @Test
     void wrongOwnerEmailIsRejected() {
-        when(appointmentService.findDetailsByPublicId(PUBLIC_ID)).thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
+        when(appointmentService.findDetailsByPublicId(PUBLIC_ID))
+                .thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
                 () -> service.submitReview(PUBLIC_ID, request(5, "someone.else@example.com")));
 
         assertEquals("Verification failed: the provided email does not match this booking.", ex.getMessage());
@@ -121,7 +124,8 @@ class ReviewServiceImplTest {
 
     @Test
     void ownerEmailMatchIsCaseInsensitive() {
-        when(appointmentService.findDetailsByPublicId(PUBLIC_ID)).thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
+        when(appointmentService.findDetailsByPublicId(PUBLIC_ID))
+                .thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
 
         service.submitReview(PUBLIC_ID, request(3, "JANE@EXAMPLE.COM"));
 
@@ -131,9 +135,11 @@ class ReviewServiceImplTest {
     @Test
     void onlyApprovedAppointmentsCanBeReviewed() {
         for (String status : List.of("PENDING", "DENIED")) {
-            when(appointmentService.findDetailsByPublicId(PUBLIC_ID)).thenReturn(Optional.of(appointment(TODAY, "09:00", status)));
+            when(appointmentService.findDetailsByPublicId(PUBLIC_ID))
+                    .thenReturn(Optional.of(appointment(TODAY, "09:00", status)));
 
-            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+            IllegalArgumentException ex = assertThrows(
+                    IllegalArgumentException.class,
                     () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
 
             assertEquals("Only completed appointments can be reviewed.", ex.getMessage(), status);
@@ -144,10 +150,11 @@ class ReviewServiceImplTest {
     @Test
     void approvedAppointmentInTheFutureCannotBeReviewedYet() {
         // later today, in the shop's zone
-        when(appointmentService.findDetailsByPublicId(PUBLIC_ID)).thenReturn(Optional.of(appointment(TODAY, "14:01", "APPROVED")));
+        when(appointmentService.findDetailsByPublicId(PUBLIC_ID))
+                .thenReturn(Optional.of(appointment(TODAY, "14:01", "APPROVED")));
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class, () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
 
         assertEquals("This appointment has not taken place yet and cannot be reviewed.", ex.getMessage());
         verify(reviewRepository, never()).save(any());
@@ -155,10 +162,11 @@ class ReviewServiceImplTest {
 
     @Test
     void futureDayCannotBeReviewedEvenIfItsClockTimeIsEarlier() {
-        when(appointmentService.findDetailsByPublicId(PUBLIC_ID)).thenReturn(Optional.of(appointment(TODAY.plusDays(1), "08:00", "APPROVED")));
+        when(appointmentService.findDetailsByPublicId(PUBLIC_ID))
+                .thenReturn(Optional.of(appointment(TODAY.plusDays(1), "08:00", "APPROVED")));
 
-        assertThrows(IllegalArgumentException.class,
-                () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
+        assertThrows(
+                IllegalArgumentException.class, () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
         verify(reviewRepository, never()).save(any());
     }
 
@@ -166,15 +174,17 @@ class ReviewServiceImplTest {
     void shopZoneNotUtcDecidesWhetherItHasHappened() {
         // 21:00 UTC is already "tomorrow 02:00" in some zones, but the shop is in Los Angeles (14:00 same day).
         // An 18:00 booking today (shop time) is still ahead even though it is 18:00 < 21:00 in UTC.
-        when(appointmentService.findDetailsByPublicId(PUBLIC_ID)).thenReturn(Optional.of(appointment(TODAY, "18:00", "APPROVED")));
+        when(appointmentService.findDetailsByPublicId(PUBLIC_ID))
+                .thenReturn(Optional.of(appointment(TODAY, "18:00", "APPROVED")));
 
-        assertThrows(IllegalArgumentException.class,
-                () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
+        assertThrows(
+                IllegalArgumentException.class, () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
     }
 
     @Test
     void secondsInTheStoredTimeAreUnderstood() {
-        when(appointmentService.findDetailsByPublicId(PUBLIC_ID)).thenReturn(Optional.of(appointment(TODAY, "13:59:30", "APPROVED")));
+        when(appointmentService.findDetailsByPublicId(PUBLIC_ID))
+                .thenReturn(Optional.of(appointment(TODAY, "13:59:30", "APPROVED")));
 
         service.submitReview(PUBLIC_ID, request(5, "jane@example.com"));
 
@@ -183,11 +193,12 @@ class ReviewServiceImplTest {
 
     @Test
     void duplicateIsRejectedByThePreCheck() {
-        when(appointmentService.findDetailsByPublicId(PUBLIC_ID)).thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
+        when(appointmentService.findDetailsByPublicId(PUBLIC_ID))
+                .thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
         when(reviewRepository.existsByAppointmentId(7L)).thenReturn(true);
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class, () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
 
         assertEquals("Review has already been submitted for this appointment.", ex.getMessage());
         verify(reviewRepository, never()).save(any());
@@ -195,17 +206,20 @@ class ReviewServiceImplTest {
 
     @Test
     void duplicateRaceIsDetectedFromTheSqlStateWithoutRequeryingTheAbortedTransaction() {
-        when(appointmentService.findDetailsByPublicId(PUBLIC_ID)).thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
+        when(appointmentService.findDetailsByPublicId(PUBLIC_ID))
+                .thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
         // pre-check passes (the competing insert was not committed yet) ...
         when(reviewRepository.existsByAppointmentId(7L)).thenReturn(false);
         // ... but the unique appointment_id constraint rejects the insert (SQLSTATE 23505)
-        DataIntegrityViolationException violation = new DataIntegrityViolationException("constraint",
-                new RuntimeException("hibernate ConstraintViolationException",
+        DataIntegrityViolationException violation = new DataIntegrityViolationException(
+                "constraint",
+                new RuntimeException(
+                        "hibernate ConstraintViolationException",
                         new SQLException("duplicate key value violates unique constraint", "23505")));
         when(reviewRepository.save(any(Review.class))).thenThrow(violation);
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class, () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
 
         assertEquals("Review has already been submitted for this appointment.", ex.getMessage());
         // On PostgreSQL the transaction is aborted after the failed INSERT; any further statement
@@ -216,24 +230,26 @@ class ReviewServiceImplTest {
 
     @Test
     void duplicateRaceIsDetectedWhenTheSqlStateIsChainedViaNextException() {
-        when(appointmentService.findDetailsByPublicId(PUBLIC_ID)).thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
+        when(appointmentService.findDetailsByPublicId(PUBLIC_ID))
+                .thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
         SQLException wrapper = new SQLException("batch failed", "00000");
         wrapper.setNextException(new SQLException("duplicate", "23505"));
-        when(reviewRepository.save(any(Review.class)))
-                .thenThrow(new DataIntegrityViolationException("x", wrapper));
+        when(reviewRepository.save(any(Review.class))).thenThrow(new DataIntegrityViolationException("x", wrapper));
 
-        assertThrows(IllegalArgumentException.class,
-                () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
+        assertThrows(
+                IllegalArgumentException.class, () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
     }
 
     @Test
     void otherIntegrityViolationsAreRethrown() {
-        when(appointmentService.findDetailsByPublicId(PUBLIC_ID)).thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
-        DataIntegrityViolationException notNull = new DataIntegrityViolationException("null value",
-                new SQLException("null value in column violates not-null constraint", "23502"));
+        when(appointmentService.findDetailsByPublicId(PUBLIC_ID))
+                .thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
+        DataIntegrityViolationException notNull = new DataIntegrityViolationException(
+                "null value", new SQLException("null value in column violates not-null constraint", "23502"));
         when(reviewRepository.save(any(Review.class))).thenThrow(notNull);
 
-        DataIntegrityViolationException thrown = assertThrows(DataIntegrityViolationException.class,
+        DataIntegrityViolationException thrown = assertThrows(
+                DataIntegrityViolationException.class,
                 () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
 
         assertSame(notNull, thrown);
@@ -241,10 +257,12 @@ class ReviewServiceImplTest {
 
     @Test
     void integrityViolationWithoutAnySqlStateIsRethrown() {
-        when(appointmentService.findDetailsByPublicId(PUBLIC_ID)).thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
+        when(appointmentService.findDetailsByPublicId(PUBLIC_ID))
+                .thenReturn(Optional.of(appointment(TODAY, "09:00", "APPROVED")));
         when(reviewRepository.save(any(Review.class))).thenThrow(new DataIntegrityViolationException("opaque"));
 
-        assertThrows(DataIntegrityViolationException.class,
+        assertThrows(
+                DataIntegrityViolationException.class,
                 () -> service.submitReview(PUBLIC_ID, request(5, "jane@example.com")));
     }
 
@@ -266,13 +284,13 @@ class ReviewServiceImplTest {
 
     @Test
     void barberRatingsAreTheCountedAggregateInNameOrder() {
-        when(reviewRepository.findCountedRatingsPerBarber()).thenReturn(List.of(
-                new BarberRatingResponse("Sara", 5.0, 1L),
-                new BarberRatingResponse("Alex", 3.5, 2L)));
+        when(reviewRepository.findCountedRatingsPerBarber())
+                .thenReturn(
+                        List.of(new BarberRatingResponse("Sara", 5.0, 1L), new BarberRatingResponse("Alex", 3.5, 2L)));
 
-        assertEquals(List.of(
-                new BarberRatingResponse("Alex", 3.5, 2L),
-                new BarberRatingResponse("Sara", 5.0, 1L)), service.getBarberRatings());
+        assertEquals(
+                List.of(new BarberRatingResponse("Alex", 3.5, 2L), new BarberRatingResponse("Sara", 5.0, 1L)),
+                service.getBarberRatings());
     }
 
     @Test
@@ -292,9 +310,17 @@ class ReviewServiceImplTest {
         assertTrue(validator.validate(request(5, "a@b.co")).isEmpty());
         assertEquals(1, violationsFor(validator, request(0, "a@b.co")).size());
         assertEquals(1, violationsFor(validator, request(6, "a@b.co")).size());
-        assertEquals(1, violationsFor(validator, new ReviewRequest(null, "x", "a@b.co")).size());
-        assertEquals(1, violationsFor(validator, new ReviewRequest(3, "x".repeat(1001), "a@b.co")).size());
-        assertEquals(1, violationsFor(validator, new ReviewRequest(3, "x", "not-an-email")).size());
+        assertEquals(
+                1,
+                violationsFor(validator, new ReviewRequest(null, "x", "a@b.co")).size());
+        assertEquals(
+                1,
+                violationsFor(validator, new ReviewRequest(3, "x".repeat(1001), "a@b.co"))
+                        .size());
+        assertEquals(
+                1,
+                violationsFor(validator, new ReviewRequest(3, "x", "not-an-email"))
+                        .size());
     }
 
     private static Set<ConstraintViolation<ReviewRequest>> violationsFor(Validator validator, ReviewRequest request) {

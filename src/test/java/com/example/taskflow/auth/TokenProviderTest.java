@@ -1,5 +1,13 @@
 package com.example.taskflow.auth;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,15 +19,6 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
-
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class TokenProviderTest {
@@ -61,7 +60,8 @@ class TokenProviderTest {
 
     @Test
     void generateToken_shouldUseCustomIssuerAndAudience() {
-        TokenProvider customProvider = new TokenProvider(encoder, new JwtProperties("custom-issuer", "custom-audience", 7200L));
+        TokenProvider customProvider =
+                new TokenProvider(encoder, new JwtProperties("custom-issuer", "custom-audience", 7200L));
 
         GrantedAuthority authority = () -> "ROLE_CUSTOMER";
         when(authentication.getAuthorities()).thenAnswer(invocation -> List.of(authority));
@@ -138,12 +138,15 @@ class TokenProviderTest {
     @Test
     void issuedAtAndExpiryComeFromTheTokenClock() {
         Instant now = Instant.parse("2026-10-12T08:00:00Z");
-        TokenProvider fixed = new TokenProvider(encoder, new JwtProperties("test-issuer", "test-audience", 3600L),
-                Clock.fixed(now, ZoneOffset.UTC));
+        TokenProvider fixed = new TokenProvider(
+                encoder, new JwtProperties("test-issuer", "test-audience", 3600L), Clock.fixed(now, ZoneOffset.UTC));
         when(authentication.getAuthorities()).thenAnswer(invocation -> List.of());
         when(authentication.getName()).thenReturn("user@test.com");
-        when(encoder.encode(any(JwtEncoderParameters.class))).thenReturn(Jwt.withTokenValue("t")
-                .header("alg", "RS256").claim("scope", "").build());
+        when(encoder.encode(any(JwtEncoderParameters.class)))
+                .thenReturn(Jwt.withTokenValue("t")
+                        .header("alg", "RS256")
+                        .claim("scope", "")
+                        .build());
 
         fixed.generateToken(authentication);
 
@@ -156,12 +159,18 @@ class TokenProviderTest {
     /** The account's token version goes into the token, so raising it revokes this token too (#218). */
     @Test
     void theAccountsTokenVersionIsCopiedIntoTheToken() {
-        TokenProvider versioned = new TokenProvider(encoder, new JwtProperties("test-issuer", "test-audience", 3600L),
-                TokenProvider.TOKEN_CLOCK, username -> "user@test.com".equals(username) ? 7 : 0);
+        TokenProvider versioned = new TokenProvider(
+                encoder,
+                new JwtProperties("test-issuer", "test-audience", 3600L),
+                TokenProvider.TOKEN_CLOCK,
+                username -> "user@test.com".equals(username) ? 7 : 0);
         when(authentication.getAuthorities()).thenAnswer(invocation -> List.of());
         when(authentication.getName()).thenReturn("user@test.com");
-        when(encoder.encode(any(JwtEncoderParameters.class))).thenReturn(Jwt.withTokenValue("t")
-                .header("alg", "RS256").claim("scope", "").build());
+        when(encoder.encode(any(JwtEncoderParameters.class)))
+                .thenReturn(Jwt.withTokenValue("t")
+                        .header("alg", "RS256")
+                        .claim("scope", "")
+                        .build());
 
         versioned.generateToken(authentication);
 

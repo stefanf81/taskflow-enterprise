@@ -1,11 +1,11 @@
 package com.example.taskflow.migration;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Boots the whole application on a fresh H2 database migrated with exactly the Flyway layout of
@@ -13,14 +13,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * context only starts if Hibernate's {@code ddl-auto=validate} accepts the migrated schema, so this
  * covers "schema validates without V2/V11", and the database must come up with no demo data.
  */
-@SpringBootTest(properties = {
-        "app.rate-limit.enabled=false",
-        "app.schedulers.enabled=false",
-        "spring.datasource.url=jdbc:h2:mem:prodlayout;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
-        "spring.flyway.locations=classpath:db/migration,classpath:db/seed,classpath:db/prod-cleanup",
-        "spring.flyway.ignore-migration-patterns=*:future",
-        "spring.jpa.hibernate.ddl-auto=validate"
-})
+@SpringBootTest(
+        properties = {
+            "app.rate-limit.enabled=false",
+            "app.schedulers.enabled=false",
+            "spring.datasource.url=jdbc:h2:mem:prodlayout;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+            "spring.flyway.locations=classpath:db/migration,classpath:db/seed,classpath:db/prod-cleanup",
+            "spring.flyway.ignore-migration-patterns=*:future",
+            "spring.jpa.hibernate.ddl-auto=validate"
+        })
 class ProductionLayoutContextTest {
 
     @Autowired

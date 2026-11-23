@@ -1,7 +1,6 @@
 package com.example.taskflow.appointment;
-import com.example.taskflow.appointment.internal.Appointment;
-import com.example.taskflow.appointment.stream.AppointmentEventStreamService;
 
+import com.example.taskflow.appointment.stream.AppointmentEventStreamService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -14,20 +13,19 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-import org.springframework.http.CacheControl;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-
 import java.time.Clock;
 import java.time.Instant;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/api/v1/appointments")
@@ -43,10 +41,14 @@ class AppointmentController {
     private final BookingProperties bookingProperties;
     private final Clock clock;
 
-    public AppointmentController(AppointmentQueryService queryService, AppointmentBookingService bookingService,
-                                 AppointmentLifecycleService lifecycleService,
-                                 AppointmentEventStreamService eventStreamService, BarberService barberService,
-                                 BookingProperties bookingProperties, Clock clock) {
+    public AppointmentController(
+            AppointmentQueryService queryService,
+            AppointmentBookingService bookingService,
+            AppointmentLifecycleService lifecycleService,
+            AppointmentEventStreamService eventStreamService,
+            BarberService barberService,
+            BookingProperties bookingProperties,
+            Clock clock) {
         this.queryService = queryService;
         this.bookingService = bookingService;
         this.lifecycleService = lifecycleService;
@@ -57,28 +59,35 @@ class AppointmentController {
     }
 
     @GetMapping
-    @Operation(summary = "View a list of scheduled appointments", description = "Can be filtered by status and customer name, with pagination.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Successfully retrieved paginated appointments"),
-            @ApiResponse(responseCode = "400", description = "Invalid filter (for example an unknown status) or pagination parameters")
-    })
+    @Operation(
+            summary = "View a list of scheduled appointments",
+            description = "Can be filtered by status and customer name, with pagination.")
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "200", description = "Successfully retrieved paginated appointments"),
+                @ApiResponse(
+                        responseCode = "400",
+                        description = "Invalid filter (for example an unknown status) or pagination parameters")
+            })
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AppointmentDashboardResponse> getAllAppointments(
-            @Parameter(description = "Filter by status (PENDING, APPROVED, DENIED, CANCELLED, or OVERDUE for past PENDING bookings)")
-            @RequestParam(required = false) String status,
-            @Parameter(description = "Search by customer name, e-mail or phone (contains, case-insensitive) or by exact public id")
-            @RequestParam(required = false) String search,
-            @Parameter(description = "Page number (0-indexed)")
-            @RequestParam(defaultValue = "0") @Min(0) int page,
-            @Parameter(description = "Page size")
-            @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size) {
+            @Parameter(
+                            description =
+                                    "Filter by status (PENDING, APPROVED, DENIED, CANCELLED, or OVERDUE for past PENDING bookings)")
+                    @RequestParam(required = false)
+                    String status,
+            @Parameter(
+                            description =
+                                    "Search by customer name, e-mail or phone (contains, case-insensitive) or by exact public id")
+                    @RequestParam(required = false)
+                    String search,
+            @Parameter(description = "Page number (0-indexed)") @RequestParam(defaultValue = "0") @Min(0) int page,
+            @Parameter(description = "Page size") @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size) {
 
         AppointmentDashboardResponse response = queryService.getAllAppointments(status, search, page, size);
         // Customer names, e-mails and phones: no-store keeps them out of the browser and
         // device HTTP caches, where they would outlive the session.
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .body(response);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(response);
     }
 
     @GetMapping(value = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -91,31 +100,33 @@ class AppointmentController {
         // token expires (non-JWT principals, e.g. in tests, simply have no expiry).
         // Also hand over the token id so the stream is closed when the token is revoked (logout).
         Instant tokenExpiresAt = authentication instanceof JwtAuthenticationToken jwt
-                ? jwt.getToken().getExpiresAt() : null;
+                ? jwt.getToken().getExpiresAt()
+                : null;
         String tokenId = authentication instanceof JwtAuthenticationToken jwt
-                ? jwt.getToken().getId() : null;
+                ? jwt.getToken().getId()
+                : null;
         return eventStreamService.subscribe(authentication.getName(), tokenExpiresAt, tokenId);
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get an appointment by its ID")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Successfully retrieved appointment"),
-            @ApiResponse(responseCode = "404", description = "Appointment was not found")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "200", description = "Successfully retrieved appointment"),
+                @ApiResponse(responseCode = "404", description = "Appointment was not found")
+            })
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AppointmentResponse> getAppointmentById(
-            @Parameter(description = "The database ID of the appointment")
-            @PathVariable Long id) {
+            @Parameter(description = "The database ID of the appointment") @PathVariable Long id) {
 
         AppointmentResponse appointment = queryService.getAppointmentById(id);
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .body(appointment);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(appointment);
     }
 
     @GetMapping("/public/shop")
-    @Operation(summary = "Get the shop's time zone, booking window and opening hours, which decide what is bookable (Guest Access)")
+    @Operation(
+            summary =
+                    "Get the shop's time zone, booking window and opening hours, which decide what is bookable (Guest Access)")
     @ApiResponse(responseCode = "200", description = "Shop time zone, booking window and opening hours returned")
     public ResponseEntity<ShopInfoResponse> getShopInfo() {
         // The zone and window change only with a deployment, but the hours change whenever an admin
@@ -123,30 +134,32 @@ class AppointmentController {
         // with the ETag (304) like the catalog; the server-side openingHours cache serves the body.
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noCache().cachePublic())
-                .body(new ShopInfoResponse(clock.getZone().getId(), bookingProperties.maxAdvanceDays(),
-                        barberService.getOpeningHours()));
+                .body(new ShopInfoResponse(
+                        clock.getZone().getId(), bookingProperties.maxAdvanceDays(), barberService.getOpeningHours()));
     }
 
     @GetMapping("/public/busy-slots")
     @Operation(summary = "Get a list of busy time slots for a specific barber on a specific date (Guest Access)")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "List of busy time slots returned"),
-            @ApiResponse(responseCode = "400", description = "Unknown barber or invalid date"),
-            @ApiResponse(responseCode = "503", description = "Availability temporarily cannot be computed (database busy); retry shortly")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "200", description = "List of busy time slots returned"),
+                @ApiResponse(responseCode = "400", description = "Unknown barber or invalid date"),
+                @ApiResponse(
+                        responseCode = "503",
+                        description = "Availability temporarily cannot be computed (database busy); retry shortly")
+            })
     public ResponseEntity<java.util.List<String>> getBusySlots(
             @Parameter(description = "Barber name")
-            @NotBlank(message = "Barber name is required")
-            @Size(max = 100, message = "Barber name must not exceed 100 characters")
-            @RequestParam String barberName,
+                    @NotBlank(message = "Barber name is required") @Size(max = 100, message = "Barber name must not exceed 100 characters") @RequestParam
+                    String barberName,
             @Parameter(description = "Booking date (YYYY-MM-DD)")
-            @NotBlank(message = "Booking date is required")
-            @Pattern(regexp = "^\\d{4}-\\d{2}-\\d{2}$", message = "Date must be in YYYY-MM-DD format")
-            @RequestParam String bookingDate,
-            @Parameter(description = "Optional service name: slots where that service would overlap a later "
-                    + "booking or run past closing time are also reported as busy")
-            @Size(max = 100, message = "Service type must not exceed 100 characters")
-            @RequestParam(required = false) String serviceType) {
+                    @NotBlank(message = "Booking date is required") @Pattern(regexp = "^\\d{4}-\\d{2}-\\d{2}$", message = "Date must be in YYYY-MM-DD format") @RequestParam
+                    String bookingDate,
+            @Parameter(
+                            description = "Optional service name: slots where that service would overlap a later "
+                                    + "booking or run past closing time are also reported as busy")
+                    @Size(max = 100, message = "Service type must not exceed 100 characters") @RequestParam(required = false)
+                    String serviceType) {
 
         java.util.List<String> busySlots = bookingService.getBusySlots(barberName, bookingDate, serviceType);
         // Revalidated on every request: a max-age let the browser or the app's HTTP cache answer
@@ -159,14 +172,16 @@ class AppointmentController {
 
     @PutMapping("/public/cancel/{publicId}")
     @Operation(summary = "Cancel an appointment securely as a guest by verifying the booking email (Guest Access)")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Appointment cancelled (or already cancelled)"),
-            @ApiResponse(responseCode = "400", description = "Invalid or mismatched email, declined booking, or booking already started"),
-            @ApiResponse(responseCode = "404", description = "Appointment with given public ID not found")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "204", description = "Appointment cancelled (or already cancelled)"),
+                @ApiResponse(
+                        responseCode = "400",
+                        description = "Invalid or mismatched email, declined booking, or booking already started"),
+                @ApiResponse(responseCode = "404", description = "Appointment with given public ID not found")
+            })
     public ResponseEntity<Void> publicCancelAppointment(
-            @Parameter(description = "The public UUID of the appointment")
-            @PathVariable String publicId,
+            @Parameter(description = "The public UUID of the appointment") @PathVariable String publicId,
             @Valid @RequestBody CancelRequest request) {
         lifecycleService.publicCancelAppointment(publicId, request.email());
         return ResponseEntity.noContent().build();
@@ -174,16 +189,21 @@ class AppointmentController {
 
     @PostMapping
     @Operation(summary = "Create/Book a new appointment (Guest Access)")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Successfully booked appointment"),
-            @ApiResponse(responseCode = "200", description = "Idempotent replay — the Idempotency-Key already created this booking"),
-            @ApiResponse(responseCode = "400", description = "Invalid request payload, off-grid or past time, too far ahead, too many upcoming bookings, or slot unavailable"),
-            @ApiResponse(responseCode = "409", description = "Idempotency-Key already used for a different request")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "201", description = "Successfully booked appointment"),
+                @ApiResponse(
+                        responseCode = "200",
+                        description = "Idempotent replay — the Idempotency-Key already created this booking"),
+                @ApiResponse(
+                        responseCode = "400",
+                        description =
+                                "Invalid request payload, off-grid or past time, too far ahead, too many upcoming bookings, or slot unavailable"),
+                @ApiResponse(responseCode = "409", description = "Idempotency-Key already used for a different request")
+            })
     public ResponseEntity<AppointmentResponse> createAppointment(
             @RequestHeader(value = "Idempotency-Key", required = false)
-            @Size(max = 100, message = "Idempotency-Key must not exceed 100 characters")
-            String idempotencyKey,
+                    @Size(max = 100, message = "Idempotency-Key must not exceed 100 characters") String idempotencyKey,
             @Valid @RequestBody AppointmentCreateRequest request) {
 
         AppointmentCreationResult result = bookingService.createAppointment(request, idempotencyKey);
@@ -193,34 +213,37 @@ class AppointmentController {
 
     @PutMapping("/{id}")
     @Operation(summary = "Approve or Deny an appointment status (Owner Admin Access)")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Successfully updated appointment status"),
-            @ApiResponse(responseCode = "400", description = "Invalid request payload provided"),
-            @ApiResponse(responseCode = "404", description = "Appointment was not found"),
-            @ApiResponse(responseCode = "409", description = "Transition not allowed, booking cannot be approved (no barber, past, slot taken), or concurrent modification")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "200", description = "Successfully updated appointment status"),
+                @ApiResponse(responseCode = "400", description = "Invalid request payload provided"),
+                @ApiResponse(responseCode = "404", description = "Appointment was not found"),
+                @ApiResponse(
+                        responseCode = "409",
+                        description =
+                                "Transition not allowed, booking cannot be approved (no barber, past, slot taken), or concurrent modification")
+            })
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AppointmentResponse> updateAppointmentStatus(
-            @Parameter(description = "The database ID of the appointment to update")
-            @PathVariable Long id,
+            @Parameter(description = "The database ID of the appointment to update") @PathVariable Long id,
             @Valid @RequestBody AppointmentUpdateRequest request) {
-        
+
         AppointmentResponse updatedAppointment = lifecycleService.updateAppointmentStatus(id, request);
         return ResponseEntity.ok(updatedAppointment);
     }
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Cancel an appointment (soft cancel: the booking is kept with status CANCELLED)")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Appointment cancelled (or already cancelled)"),
-            @ApiResponse(responseCode = "400", description = "A declined appointment cannot be cancelled"),
-            @ApiResponse(responseCode = "404", description = "Appointment was not found")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "204", description = "Appointment cancelled (or already cancelled)"),
+                @ApiResponse(responseCode = "400", description = "A declined appointment cannot be cancelled"),
+                @ApiResponse(responseCode = "404", description = "Appointment was not found")
+            })
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteAppointment(
-            @Parameter(description = "The database ID of the appointment to delete")
-            @PathVariable Long id) {
-        
+            @Parameter(description = "The database ID of the appointment to delete") @PathVariable Long id) {
+
         lifecycleService.deleteAppointment(id);
         return ResponseEntity.noContent().build();
     }

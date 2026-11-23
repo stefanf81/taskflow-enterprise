@@ -1,12 +1,8 @@
 package com.example.taskflow.core;
 
-import org.hibernate.cfg.AvailableSettings;
-import org.hibernate.jpa.SpecHints;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,10 +16,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import org.hibernate.cfg.AvailableSettings;
+import org.hibernate.jpa.SpecHints;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Spring Boot ignores a property it does not know, so a renamed key keeps "working" silently. Under
@@ -49,6 +48,7 @@ class PropertyKeysMetadataTest {
 
     /** Canonical key -> metadata entry, plus the canonical names of Map-typed properties. */
     private static final Map<String, JsonNode> PROPERTIES = new HashMap<>();
+
     private static final List<String> MAP_PROPERTIES = new ArrayList<>();
     /** Hibernate/JPA setting name -> deprecated? */
     private static final Map<String, Boolean> HIBERNATE_SETTINGS = new HashMap<>();
@@ -85,15 +85,21 @@ class PropertyKeysMetadataTest {
 
     @Test
     void flagsTheKeysThatWereSilentlyIgnored() {
-        for (String ignored : List.of("management.metrics.distribution.sla.http.server.requests",
-                "server.error.include-message", "management.endpoint.prometheus.enabled",
-                "spring.h2.console.enabled", "spring.jpa.properties.hibernate.query.plan_parameter_metadata_max_size",
+        for (String ignored : List.of(
+                "management.metrics.distribution.sla.http.server.requests",
+                "server.error.include-message",
+                "management.endpoint.prometheus.enabled",
+                "spring.h2.console.enabled",
+                "spring.jpa.properties.hibernate.query.plan_parameter_metadata_max_size",
                 "server.forward-headers-strategy")) {
             assertNotNull(check(ignored), ignored);
         }
-        for (String bound : List.of("management.metrics.distribution.slo.http.server.requests",
-                "spring.web.error.include-message", "management.endpoint.prometheus.access",
-                "spring.datasource.driverClassName", "spring.jpa.properties.hibernate.jdbc.batch_size",
+        for (String bound : List.of(
+                "management.metrics.distribution.slo.http.server.requests",
+                "spring.web.error.include-message",
+                "management.endpoint.prometheus.access",
+                "spring.datasource.driverClassName",
+                "spring.jpa.properties.hibernate.jdbc.batch_size",
                 "server.request.header.forwarded.strategy")) {
             assertNull(check(bound), bound);
         }
@@ -102,16 +108,29 @@ class PropertyKeysMetadataTest {
     /** The application's own keys: bound by a properties record, or declared as additional metadata. */
     @Test
     void appKeysAreCheckedAgainstTheGeneratedMetadata() {
-        for (String misspelt : List.of("app.jwt.lifetime", "app.rate-limit.max-request-per-minute",
-                "app.sse.max-connection-per-admin", "app.shop.timezone", "app.unknown.key")) {
+        for (String misspelt : List.of(
+                "app.jwt.lifetime",
+                "app.rate-limit.max-request-per-minute",
+                "app.sse.max-connection-per-admin",
+                "app.shop.timezone",
+                "app.unknown.key")) {
             assertNotNull(check(misspelt), misspelt);
         }
-        for (String known : List.of("app.jwt.lifetime-seconds", "app.rsa.require-persistent-keys",
-                "app.rate-limit.login-max-failures", "app.rate-limit.auth-max-requests-per-minute",
-                "app.sse.heartbeat-interval-ms", "app.notification.retention-cron", "app.instance.id",
-                "app.cache.single-flight.max-wait-ms", "app.booking.max-advance-days", "app.schedulers.enabled",
-                "app.state.store", "app.security.require-strong-admin-password",
-                "app.logging.async.max-flush-time-ms", "app.rateLimit.maxRequestsPerMinute")) {
+        for (String known : List.of(
+                "app.jwt.lifetime-seconds",
+                "app.rsa.require-persistent-keys",
+                "app.rate-limit.login-max-failures",
+                "app.rate-limit.auth-max-requests-per-minute",
+                "app.sse.heartbeat-interval-ms",
+                "app.notification.retention-cron",
+                "app.instance.id",
+                "app.cache.single-flight.max-wait-ms",
+                "app.booking.max-advance-days",
+                "app.schedulers.enabled",
+                "app.state.store",
+                "app.security.require-strong-admin-password",
+                "app.logging.async.max-flush-time-ms",
+                "app.rateLimit.maxRequestsPerMinute")) {
             assertNull(check(known), known);
         }
     }
@@ -154,12 +173,14 @@ class PropertyKeysMetadataTest {
 
     private static void loadMetadata(String resource) throws IOException {
         JsonMapper mapper = JsonMapper.shared();
-        for (URL url : Collections.list(PropertyKeysMetadataTest.class.getClassLoader().getResources(resource))) {
+        for (URL url :
+                Collections.list(PropertyKeysMetadataTest.class.getClassLoader().getResources(resource))) {
             try (InputStream in = url.openStream()) {
                 for (JsonNode property : mapper.readTree(in).path("properties")) {
                     String name = property.path("name").asString();
                     // additional-* metadata only adds fields (e.g. a deprecation) to an existing entry
-                    PROPERTIES.merge(name, property, (a, b) -> a.path("deprecation").isMissingNode() ? b : a);
+                    PROPERTIES.merge(
+                            name, property, (a, b) -> a.path("deprecation").isMissingNode() ? b : a);
                     if (property.path("type").asString("").startsWith("java.util.Map<")) {
                         MAP_PROPERTIES.add(name);
                     }
@@ -172,8 +193,8 @@ class PropertyKeysMetadataTest {
         for (Field field : settings.getFields()) {
             if (field.getType() == String.class && Modifier.isStatic(field.getModifiers())) {
                 try {
-                    HIBERNATE_SETTINGS.merge((String) field.get(null), field.isAnnotationPresent(Deprecated.class),
-                            (a, b) -> a && b);
+                    HIBERNATE_SETTINGS.merge(
+                            (String) field.get(null), field.isAnnotationPresent(Deprecated.class), (a, b) -> a && b);
                 } catch (IllegalAccessException e) {
                     throw new IllegalStateException(e);
                 }

@@ -1,5 +1,10 @@
 package com.example.taskflow.auth;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,12 +15,6 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.util.StopWatch;
-
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * STATE-OF-THE-ART ASYMMETRIC RSA-2048 JWT BENCHMARK
@@ -36,7 +35,7 @@ public class JwtSecurityBenchmarkTest {
     @Autowired
     private JwtDecoder jwtDecoder;
 
-    private static final int ITERATIONS = 1000;       // Total ops to execute
+    private static final int ITERATIONS = 1000; // Total ops to execute
     private static final double MAX_PARSE_LATENCY_MS = 1.0; // SLA: token validation must be < 1.0ms
 
     @Test
@@ -99,8 +98,11 @@ public class JwtSecurityBenchmarkTest {
         System.out.println("=========================================================================");
 
         // Assert that parsing remains fast (strict SLA protection)
-        assertTrue(avgParseLatencyMs < MAX_PARSE_LATENCY_MS,
-                String.format("Cryptographic regression! Average token verification of %.4fms exceeded the %.2fms SLA.", avgParseLatencyMs, MAX_PARSE_LATENCY_MS));
+        assertTrue(
+                avgParseLatencyMs < MAX_PARSE_LATENCY_MS,
+                String.format(
+                        "Cryptographic regression! Average token verification of %.4fms exceeded the %.2fms SLA.",
+                        avgParseLatencyMs, MAX_PARSE_LATENCY_MS));
 
         assertTrue(validCount == ITERATIONS, "Verification failed! Not all tokens were validated correctly.");
     }

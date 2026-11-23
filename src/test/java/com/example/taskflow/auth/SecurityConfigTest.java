@@ -1,38 +1,38 @@
 package com.example.taskflow.auth;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
-
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.util.Base64;
-
-import com.example.taskflow.auth.internal.UserRepository;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-
-import java.util.Optional;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.example.taskflow.auth.internal.UserRepository;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.util.Base64;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
 class SecurityConfigTest {
 
     private final AccountTokenCheck accounts = mock(AccountTokenCheck.class);
 
     private SecurityConfig createConfig(String admin, String pass, String privKey, String pubKey) {
-        return new SecurityConfig(admin, pass, new RsaKeyProperties(privKey, pubKey, false),
-                new JwtProperties("taskflow", "taskflow-api", 3600), new CookieProperties(false));
+        return new SecurityConfig(
+                admin,
+                pass,
+                new RsaKeyProperties(privKey, pubKey, false),
+                new JwtProperties("taskflow", "taskflow-api", 3600),
+                new CookieProperties(false));
     }
 
     @Test
@@ -46,7 +46,8 @@ class SecurityConfigTest {
 
         SecurityConfig config = createConfig("admin", "pass", privBase64, pubBase64);
 
-        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
+        assertNotNull(config.jwtDecoder(
+                new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
         assertNotNull(config.jwkSource());
         assertNotNull(config.jwtEncoder(config.jwkSource()));
     }
@@ -54,33 +55,48 @@ class SecurityConfigTest {
     @Test
     void testLoadRsaKeyInvalid() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "invalid-base64", "invalid-base64");
-        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class))); // Should fallback to ephemeral keys
+        assertNotNull(config.jwtDecoder(
+                new TokenRevocationList(),
+                mock(AccountTokenCheck.class),
+                mock(RefreshSessionService.class))); // Should fallback to ephemeral keys
     }
 
     @Test
     void testLoadRsaKeyBlank() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "", "   ");
-        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
+        assertNotNull(config.jwtDecoder(
+                new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
     }
 
     @Test
     void testLoadRsaKeyPartiallyBlank() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "valid-fake-base", "");
-        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
+        assertNotNull(config.jwtDecoder(
+                new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
     }
 
     @Test
     void productionRequiresPersistentKeys() {
-        assertThrows(IllegalStateException.class, () -> new SecurityConfig(
-                "admin", "pass", new RsaKeyProperties(null, null, true),
-                new JwtProperties("taskflow", "taskflow-api", 3600), new CookieProperties(false)));
+        assertThrows(
+                IllegalStateException.class,
+                () -> new SecurityConfig(
+                        "admin",
+                        "pass",
+                        new RsaKeyProperties(null, null, true),
+                        new JwtProperties("taskflow", "taskflow-api", 3600),
+                        new CookieProperties(false)));
     }
 
     @Test
     void productionRejectsInvalidPersistentKeys() {
-        assertThrows(IllegalStateException.class, () -> new SecurityConfig(
-                "admin", "pass", new RsaKeyProperties("invalid-base64", "invalid-base64", true),
-                new JwtProperties("taskflow", "taskflow-api", 3600), new CookieProperties(false)));
+        assertThrows(
+                IllegalStateException.class,
+                () -> new SecurityConfig(
+                        "admin",
+                        "pass",
+                        new RsaKeyProperties("invalid-base64", "invalid-base64", true),
+                        new JwtProperties("taskflow", "taskflow-api", 3600),
+                        new CookieProperties(false)));
     }
 
     @Test
@@ -91,7 +107,10 @@ class SecurityConfigTest {
         rsaKeyField.setAccessible(true);
         rsaKeyField.set(config, null);
 
-        assertThrows(IllegalStateException.class, () -> config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
+        assertThrows(
+                IllegalStateException.class,
+                () -> config.jwtDecoder(
+                        new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
     }
 
     @Test
@@ -130,8 +149,8 @@ class SecurityConfigTest {
         // A cookie a native HTTP stack picked up (or an analytics cookie) authenticates nothing.
         MockHttpServletRequest withOther = new MockHttpServletRequest("POST", "/api/v1/appointments/5");
         withOther.addHeader("Authorization", "Bearer native-token");
-        withOther.setCookies(new jakarta.servlet.http.Cookie("XSRF-TOKEN", "x"),
-                new jakarta.servlet.http.Cookie("theme", "dark"));
+        withOther.setCookies(
+                new jakarta.servlet.http.Cookie("XSRF-TOKEN", "x"), new jakarta.servlet.http.Cookie("theme", "dark"));
         assertTrue(config.bearerOnlyRequestMatcher().matches(withOther));
     }
 
@@ -238,6 +257,7 @@ class SecurityConfigTest {
         }
         assertTrue(new org.springframework.boot.context.properties.bind.Binder(
                         new org.springframework.boot.context.properties.source.MapConfigurationPropertySource())
-                .bindOrCreate("app.cookie", CookieProperties.class).secure());
+                .bindOrCreate("app.cookie", CookieProperties.class)
+                .secure());
     }
 }

@@ -1,10 +1,9 @@
 package com.example.taskflow.migration;
 
-import com.example.taskflow.testsupport.PostgresTestServer;
-import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Tag;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.example.taskflow.testsupport.PostgresTestServer;
 import java.io.File;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -15,9 +14,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.LinkedHashMap;
 import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 
 /**
  * DATA-8: runs {@code scripts/prepare-booking-time-migration.sh} (needs {@code bash} and {@code psql})
@@ -76,7 +75,7 @@ class BookingTimePreparationScriptPostgresTest {
     private Map<String, String> statuses(Connection c) throws SQLException {
         Map<String, String> result = new LinkedHashMap<>();
         try (Statement st = c.createStatement();
-             ResultSet rs = st.executeQuery("SELECT customer_name, status FROM appointments ORDER BY id")) {
+                ResultSet rs = st.executeQuery("SELECT customer_name, status FROM appointments ORDER BY id")) {
             while (rs.next()) {
                 result.put(rs.getString(1), rs.getString(2));
             }
@@ -87,7 +86,8 @@ class BookingTimePreparationScriptPostgresTest {
     private Map<String, String> times(Connection c) throws SQLException {
         Map<String, String> result = new LinkedHashMap<>();
         try (Statement st = c.createStatement();
-             ResultSet rs = st.executeQuery("SELECT customer_name, booking_time::text FROM appointments ORDER BY id")) {
+                ResultSet rs =
+                        st.executeQuery("SELECT customer_name, booking_time::text FROM appointments ORDER BY id")) {
             while (rs.next()) {
                 result.put(rs.getString(1), rs.getString(2));
             }
@@ -98,7 +98,7 @@ class BookingTimePreparationScriptPostgresTest {
     private static final String BASH_BINARY = resolveBash();
 
     private static String resolveBash() {
-        for (String candidate : new String[]{"/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"}) {
+        for (String candidate : new String[] {"/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"}) {
             if (new File(candidate).canExecute()) {
                 return candidate;
             }
@@ -123,16 +123,22 @@ class BookingTimePreparationScriptPostgresTest {
 
     private void withLegacyDatabase(ThrowingConsumer<String> body) throws Exception {
         String database = "bt_" + System.nanoTime();
-        try (Connection admin = connect(adminUri.getPath().substring(1)); Statement st = admin.createStatement()) {
+        try (Connection admin = connect(adminUri.getPath().substring(1));
+                Statement st = admin.createStatement()) {
             st.execute("CREATE DATABASE " + database);
         }
         try {
             // exactly the schema production has before V21: V1..V20 (no seed data)
-            Flyway.configure().dataSource(jdbcUrl(database), user, password)
-                    .locations("classpath:db/migration").target("20").load().migrate();
+            Flyway.configure()
+                    .dataSource(jdbcUrl(database), user, password)
+                    .locations("classpath:db/migration")
+                    .target("20")
+                    .load()
+                    .migrate();
             body.accept(database);
         } finally {
-            try (Connection admin = connect(adminUri.getPath().substring(1)); Statement st = admin.createStatement()) {
+            try (Connection admin = connect(adminUri.getPath().substring(1));
+                    Statement st = admin.createStatement()) {
                 st.execute("DROP DATABASE IF EXISTS " + database + " WITH (FORCE)");
             }
         }
@@ -189,8 +195,11 @@ class BookingTimePreparationScriptPostgresTest {
             }
 
             // the real thing: V21 creates its unique index, V22 converts to TIME, V25/V26 run ...
-            Flyway.configure().dataSource(jdbcUrl(database), user, password)
-                    .locations("classpath:db/migration").load().migrate();
+            Flyway.configure()
+                    .dataSource(jdbcUrl(database), user, password)
+                    .locations("classpath:db/migration")
+                    .load()
+                    .migrate();
 
             try (Connection c = connect(database)) {
                 // V35 then repairs overlapping intervals: the off-grid APPROVED a1 (09:30-10:30, no
@@ -205,10 +214,13 @@ class BookingTimePreparationScriptPostgresTest {
     }
 
     private static void legacyRowAfterV22(Connection c) throws SQLException {
-        exec(c, "INSERT INTO appointments (customer_name, customer_email, customer_phone, barber_name, "
-                + "booking_date, booking_time, booking_end_time, service_type, status, public_id, created_at, updated_at) VALUES "
-                + "('dup', 'dup@x.test', '1', 'Alex the Barber', DATE '" + MONDAY + "', TIME '09:00', TIME '10:00', 'Cut', "
-                + "'PENDING', 'f0f0f0f0-0000-0000-0000-000000000001', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
+        exec(
+                c,
+                "INSERT INTO appointments (customer_name, customer_email, customer_phone, barber_name, "
+                        + "booking_date, booking_time, booking_end_time, service_type, status, public_id, created_at, updated_at) VALUES "
+                        + "('dup', 'dup@x.test', '1', 'Alex the Barber', DATE '" + MONDAY
+                        + "', TIME '09:00', TIME '10:00', 'Cut', "
+                        + "'PENDING', 'f0f0f0f0-0000-0000-0000-000000000001', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
     }
 
     @Test

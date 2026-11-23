@@ -1,24 +1,22 @@
 package com.example.taskflow.core.cache;
 
-import com.example.taskflow.core.redis.RedisBackoff;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.example.taskflow.core.redis.RedisBackoff;
+import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import org.springframework.cache.Cache;
 import org.springframework.cache.concurrent.ConcurrentMapCache;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 import org.springframework.data.redis.RedisConnectionFailureException;
-
-import java.util.concurrent.Callable;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** While the store fails, reads skip it for the back-off interval and loaders run directly. */
 class RedisBackoffCacheManagerTest {
@@ -26,8 +24,7 @@ class RedisBackoffCacheManagerTest {
     private final AtomicLong now = new AtomicLong(1_000);
     private final RedisBackoff backoff = new RedisBackoff("test", 5_000, now::get);
     private final FlakyCache store = new FlakyCache("things");
-    private final Cache cache = new RedisBackoffCacheManager(new SingleCacheManager(store), backoff)
-            .getCache("things");
+    private final Cache cache = new RedisBackoffCacheManager(new SingleCacheManager(store), backoff).getCache("things");
     private final AtomicInteger loads = new AtomicInteger();
     private final Callable<String> loader = () -> "value-" + loads.incrementAndGet();
 
@@ -100,7 +97,7 @@ class RedisBackoffCacheManagerTest {
         cache.put("k", "stale");
         cache.put("other", "stale too");
         store.down.set(true);
-        cache.get("k");                       // trips the back-off
+        cache.get("k"); // trips the back-off
         int callsAfterFailure = store.calls.get();
 
         assertFalse(cache.evictIfPresent("k"));

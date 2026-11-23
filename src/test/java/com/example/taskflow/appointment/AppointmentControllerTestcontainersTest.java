@@ -1,29 +1,28 @@
 package com.example.taskflow.appointment;
-import com.example.taskflow.appointment.internal.AppointmentRepository;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.MediaType;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-
-import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.example.taskflow.appointment.internal.AppointmentRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * STATE-OF-THE-ART (SOTA) INTEGRATION TEST EXAMPLE USING TESTCONTAINERS (BARBER BOOKING DOMAIN)
@@ -96,7 +95,10 @@ public class AppointmentControllerTestcontainersTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("access_token").getValue();
+                .andReturn()
+                .getResponse()
+                .getCookie("access_token")
+                .getValue();
 
         authHeader = "Bearer " + cookie;
     }
@@ -132,12 +134,17 @@ public class AppointmentControllerTestcontainersTest {
         sentinelRequest.put("bookingTime", "13:00");
         sentinelRequest.put("serviceType", "Beard Trim & Shave");
 
-        String assignedBarber = objectMapper.readTree(mockMvc.perform(post("/api/v1/appointments")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(sentinelRequest)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.barberName", not("No Preference (First Available)")))
-                .andReturn().getResponse().getContentAsString()).get("barberName").asText();
+        String assignedBarber = objectMapper
+                .readTree(mockMvc.perform(post("/api/v1/appointments")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(sentinelRequest)))
+                        .andExpect(status().isCreated())
+                        .andExpect(jsonPath("$.barberName", not("No Preference (First Available)")))
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString())
+                .get("barberName")
+                .asText();
 
         Map<String, Object> specificRequest = new HashMap<>(sentinelRequest);
         specificRequest.put("customerEmail", "other@example.com");

@@ -1,30 +1,16 @@
 package com.example.taskflow.appointment;
-import com.example.taskflow.appointment.internal.Appointment;
-import com.example.taskflow.appointment.internal.AppointmentRepository;
-import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
-
-import com.example.taskflow.catalog.ServiceItem;
-import com.example.taskflow.core.ConflictException;
-import com.example.taskflow.core.ResourceNotFoundException;
-import org.junit.jupiter.api.Test;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.SliceImpl;
-import org.springframework.data.jpa.domain.Specification;
-
-import java.math.BigDecimal;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.ZoneOffset;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+
+import com.example.taskflow.appointment.internal.Appointment;
+import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
+import com.example.taskflow.core.ConflictException;
+import com.example.taskflow.core.ResourceNotFoundException;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
 
 /** {@link AppointmentLifecycleService}: admin status transitions (BKG-3) and the soft cancel by admin, guest and customer (BKG-5). */
 class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
@@ -33,15 +19,19 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
     void testUpdateStatus_PendingToApproved_Success() {
         Appointment pending = appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00");
         when(appointmentRepository.findById(1L)).thenReturn(Optional.of(pending));
-        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW)).thenReturn(List.of(pending));
+        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW))
+                .thenReturn(List.of(pending));
 
-        AppointmentResponse response = lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED"));
+        AppointmentResponse response =
+                lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED"));
 
         assertEquals("APPROVED", response.status());
         verify(appointmentRepository).save(pending);
         assertEquals(1, eventsOfType(AppointmentStatusChangedEvent.class).size());
         assertEquals(1, eventsOfType(AvailabilityChangedEvent.class).size());
-        assertEquals(AppointmentAdminEvent.Type.UPDATED, eventsOfType(AppointmentAdminEvent.class).get(0).type());
+        assertEquals(
+                AppointmentAdminEvent.Type.UPDATED,
+                eventsOfType(AppointmentAdminEvent.class).get(0).type());
     }
 
     @Test
@@ -51,9 +41,17 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
         when(appointmentRepository.findById(1L)).thenReturn(Optional.of(approved));
         when(appointmentRepository.findById(2L)).thenReturn(Optional.of(pending));
 
-        assertEquals("DENIED", lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("DENIED")).status());
+        assertEquals(
+                "DENIED",
+                lifecycleService
+                        .updateAppointmentStatus(1L, new AppointmentUpdateRequest("DENIED"))
+                        .status());
         // denying an overdue pending booking must stay possible (no availability check on deny)
-        assertEquals("DENIED", lifecycleService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("DENIED")).status());
+        assertEquals(
+                "DENIED",
+                lifecycleService
+                        .updateAppointmentStatus(2L, new AppointmentUpdateRequest("DENIED"))
+                        .status());
     }
 
     /** BKG-3: same-status requests are a no-op: no write, no event, hence no e-mail. */
@@ -62,7 +60,8 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
         Appointment approved = appointment(1, AppointmentStatus.APPROVED, TOMORROW, "10:00");
         when(appointmentRepository.findById(1L)).thenReturn(Optional.of(approved));
 
-        AppointmentResponse response = lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED"));
+        AppointmentResponse response =
+                lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED"));
 
         assertEquals("APPROVED", response.status());
         verify(appointmentRepository, never()).save(any(Appointment.class));
@@ -74,9 +73,11 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
         Appointment cancelled = appointment(1, AppointmentStatus.CANCELLED, TOMORROW, "10:00");
         when(appointmentRepository.findById(1L)).thenReturn(Optional.of(cancelled));
 
-        assertThrows(InvalidStatusTransitionException.class,
+        assertThrows(
+                InvalidStatusTransitionException.class,
                 () -> lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")));
-        assertThrows(InvalidStatusTransitionException.class,
+        assertThrows(
+                InvalidStatusTransitionException.class,
                 () -> lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("DENIED")));
         verify(appointmentRepository, never()).save(any(Appointment.class));
         assertTrue(events.isEmpty());
@@ -87,7 +88,8 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
         for (AppointmentStatus from : List.of(AppointmentStatus.APPROVED, AppointmentStatus.DENIED)) {
             when(appointmentRepository.findById(1L)).thenReturn(Optional.of(appointment(1, from, TOMORROW, "10:00")));
             for (String target : List.of("PENDING", "CANCELLED")) {
-                assertThrows(InvalidStatusTransitionException.class,
+                assertThrows(
+                        InvalidStatusTransitionException.class,
                         () -> lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest(target)),
                         from + " -> " + target);
             }
@@ -102,8 +104,13 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
         when(appointmentRepository.findById(1L)).thenReturn(Optional.of(denied));
 
         // slot still free: re-approval works
-        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW)).thenReturn(List.of());
-        assertEquals("APPROVED", lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")).status());
+        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW))
+                .thenReturn(List.of());
+        assertEquals(
+                "APPROVED",
+                lifecycleService
+                        .updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED"))
+                        .status());
     }
 
     /** V35: an overlap only the PostgreSQL exclusion constraint saw (23P01) at approval is the same 409. */
@@ -111,12 +118,16 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
     void testUpdateStatus_ApproveHittingTheExclusionConstraintIsAConflict() {
         Appointment denied = appointment(1, AppointmentStatus.DENIED, TOMORROW, "10:00");
         when(appointmentRepository.findById(1L)).thenReturn(Optional.of(denied));
-        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW)).thenReturn(List.of());
-        org.mockito.Mockito.doThrow(new org.springframework.dao.DataIntegrityViolationException("overlap",
+        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW))
+                .thenReturn(List.of());
+        org.mockito.Mockito.doThrow(new org.springframework.dao.DataIntegrityViolationException(
+                        "overlap",
                         new java.sql.SQLException("conflicting key value violates exclusion constraint", "23P01")))
-                .when(appointmentRepository).flush();
+                .when(appointmentRepository)
+                .flush();
 
-        ConflictException ex = assertThrows(ConflictException.class,
+        ConflictException ex = assertThrows(
+                ConflictException.class,
                 () -> lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")));
         assertTrue(ex.getMessage().contains("already booked"));
         assertTrue(eventsOfType(AppointmentStatusChangedEvent.class).isEmpty());
@@ -127,12 +138,15 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
         Appointment pending = appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00");
         when(appointmentRepository.findById(1L)).thenReturn(Optional.of(pending));
         org.springframework.dao.DataIntegrityViolationException notNull =
-                new org.springframework.dao.DataIntegrityViolationException("not null",
-                        new java.sql.SQLException("null value", "23502"));
+                new org.springframework.dao.DataIntegrityViolationException(
+                        "not null", new java.sql.SQLException("null value", "23502"));
         org.mockito.Mockito.doThrow(notNull).when(appointmentRepository).flush();
 
-        assertSame(notNull, assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
-                () -> lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED"))));
+        assertSame(
+                notNull,
+                assertThrows(
+                        org.springframework.dao.DataIntegrityViolationException.class,
+                        () -> lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED"))));
     }
 
     /** BKG-3: the slot of a DENIED booking was re-booked meanwhile -> 409, status untouched. */
@@ -141,9 +155,11 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
         Appointment denied = appointment(1, AppointmentStatus.DENIED, TOMORROW, "10:00");
         Appointment rebooked = appointment(2, AppointmentStatus.PENDING, TOMORROW, "10:00");
         when(appointmentRepository.findById(1L)).thenReturn(Optional.of(denied));
-        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW)).thenReturn(List.of(rebooked));
+        when(appointmentRepository.findActiveForBarberOnDate("Alex the Barber", TOMORROW))
+                .thenReturn(List.of(rebooked));
 
-        ConflictException ex = assertThrows(ConflictException.class,
+        ConflictException ex = assertThrows(
+                ConflictException.class,
                 () -> lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")));
         assertTrue(ex.getMessage().contains("already booked"));
         assertEquals(AppointmentStatus.DENIED, denied.getStatusEnum());
@@ -158,7 +174,8 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
         sentinel.setBarber(null);
         when(appointmentRepository.findById(1L)).thenReturn(Optional.of(sentinel));
 
-        ConflictException ex = assertThrows(ConflictException.class,
+        ConflictException ex = assertThrows(
+                ConflictException.class,
                 () -> lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")));
         assertTrue(ex.getMessage().contains("no assigned barber"));
 
@@ -166,10 +183,15 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
         Appointment noFk = appointment(2, AppointmentStatus.PENDING, TOMORROW, "11:00");
         noFk.setBarber(null);
         when(appointmentRepository.findById(2L)).thenReturn(Optional.of(noFk));
-        assertThrows(ConflictException.class,
+        assertThrows(
+                ConflictException.class,
                 () -> lifecycleService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("APPROVED")));
         // ...but such a row can still be denied
-        assertEquals("DENIED", lifecycleService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("DENIED")).status());
+        assertEquals(
+                "DENIED",
+                lifecycleService
+                        .updateAppointmentStatus(2L, new AppointmentUpdateRequest("DENIED"))
+                        .status());
     }
 
     @Test
@@ -179,10 +201,12 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
         when(appointmentRepository.findById(1L)).thenReturn(Optional.of(past));
         when(appointmentRepository.findById(2L)).thenReturn(Optional.of(earlierToday));
 
-        ConflictException ex = assertThrows(ConflictException.class,
+        ConflictException ex = assertThrows(
+                ConflictException.class,
                 () -> lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")));
         assertTrue(ex.getMessage().contains("past"));
-        assertThrows(ConflictException.class,
+        assertThrows(
+                ConflictException.class,
                 () -> lifecycleService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("APPROVED")));
     }
 
@@ -190,9 +214,11 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
     void testUpdateStatus_ApproveRefusesWhenBarberNowOnLeave() {
         Appointment pending = appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00");
         when(appointmentRepository.findById(1L)).thenReturn(Optional.of(pending));
-        when(barberTimeOffRepository.findBarberIdsOnTimeOff(List.of(7L), TOMORROW)).thenReturn(List.of(7L));
+        when(barberTimeOffRepository.findBarberIdsOnTimeOff(List.of(7L), TOMORROW))
+                .thenReturn(List.of(7L));
 
-        ConflictException ex = assertThrows(ConflictException.class,
+        ConflictException ex = assertThrows(
+                ConflictException.class,
                 () -> lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")));
         assertTrue(ex.getMessage().contains("time off"));
     }
@@ -200,14 +226,18 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
     @Test
     void testUpdateStatus_NotFoundAndUnknownTarget() {
         when(appointmentRepository.findById(1L)).thenReturn(Optional.empty());
-        assertThrows(ResourceNotFoundException.class,
+        assertThrows(
+                ResourceNotFoundException.class,
                 () -> lifecycleService.updateAppointmentStatus(1L, new AppointmentUpdateRequest("APPROVED")));
 
-        when(appointmentRepository.findById(2L)).thenReturn(Optional.of(appointment(2, AppointmentStatus.PENDING, TOMORROW, "10:00")));
-        assertThrows(IllegalArgumentException.class,
+        when(appointmentRepository.findById(2L))
+                .thenReturn(Optional.of(appointment(2, AppointmentStatus.PENDING, TOMORROW, "10:00")));
+        assertThrows(
+                IllegalArgumentException.class,
                 () -> lifecycleService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("OTHER")));
         // PENDING / CANCELLED are not valid targets of this endpoint
-        assertThrows(InvalidStatusTransitionException.class,
+        assertThrows(
+                InvalidStatusTransitionException.class,
                 () -> lifecycleService.updateAppointmentStatus(2L, new AppointmentUpdateRequest("CANCELLED")));
     }
 
@@ -221,11 +251,13 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
         assertEquals(AppointmentStatus.CANCELLED, pending.getStatusEnum());
         verify(appointmentRepository).save(pending);
         verify(appointmentRepository, never()).delete(any(Appointment.class));
-        AppointmentCancelledEvent event = eventsOfType(AppointmentCancelledEvent.class).get(0);
+        AppointmentCancelledEvent event =
+                eventsOfType(AppointmentCancelledEvent.class).get(0);
         assertEquals("public-1", event.appointment().publicId());
         assertEquals(AppointmentStatus.CANCELLED, event.appointment().status());
         assertEquals(AppointmentCancelledEvent.CancelledBy.GUEST, event.cancelledBy());
-        assertTrue(eventsOfType(AppointmentStatusChangedEvent.class).isEmpty(),
+        assertTrue(
+                eventsOfType(AppointmentStatusChangedEvent.class).isEmpty(),
                 "cancel must not publish the status-change event with the stale status");
         assertEquals(1, eventsOfType(AvailabilityChangedEvent.class).size());
         assertEquals(1, eventsOfType(AppointmentAdminEvent.class).size());
@@ -252,13 +284,21 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
         when(appointmentRepository.findByPublicId("public-3")).thenReturn(ok);
         when(appointmentRepository.findByPublicId("nope")).thenReturn(null);
 
-        assertTrue(assertThrows(IllegalArgumentException.class,
-                () -> lifecycleService.publicCancelAppointment("public-1", "john@test.com")).getMessage().contains("declined"));
-        assertTrue(assertThrows(IllegalArgumentException.class,
-                () -> lifecycleService.publicCancelAppointment("public-2", "john@test.com")).getMessage().contains("already started"));
-        assertThrows(IllegalArgumentException.class,
+        assertTrue(assertThrows(
+                        IllegalArgumentException.class,
+                        () -> lifecycleService.publicCancelAppointment("public-1", "john@test.com"))
+                .getMessage()
+                .contains("declined"));
+        assertTrue(assertThrows(
+                        IllegalArgumentException.class,
+                        () -> lifecycleService.publicCancelAppointment("public-2", "john@test.com"))
+                .getMessage()
+                .contains("already started"));
+        assertThrows(
+                IllegalArgumentException.class,
                 () -> lifecycleService.publicCancelAppointment("public-3", "wrong@test.com"));
-        assertThrows(ResourceNotFoundException.class,
+        assertThrows(
+                ResourceNotFoundException.class,
                 () -> lifecycleService.publicCancelAppointment("nope", "john@test.com"));
         assertEquals(AppointmentStatus.APPROVED, ok.getStatusEnum());
         verify(appointmentRepository, never()).save(any(Appointment.class));
@@ -271,14 +311,17 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
         when(appointmentRepository.findByPublicId("public-1")).thenReturn(mine);
         when(appointmentRepository.findByPublicId("public-2")).thenReturn(past);
 
-        assertThrows(ResourceNotFoundException.class,
+        assertThrows(
+                ResourceNotFoundException.class,
                 () -> lifecycleService.cancelMyAppointment("public-1", "someone-else@test.com"));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(
+                IllegalArgumentException.class,
                 () -> lifecycleService.cancelMyAppointment("public-2", "john@test.com"));
 
         lifecycleService.cancelMyAppointment("public-1", "John@Test.com");
         assertEquals(AppointmentStatus.CANCELLED, mine.getStatusEnum());
-        assertEquals(AppointmentCancelledEvent.CancelledBy.CUSTOMER,
+        assertEquals(
+                AppointmentCancelledEvent.CancelledBy.CUSTOMER,
                 eventsOfType(AppointmentCancelledEvent.class).get(0).cancelledBy());
     }
 
@@ -293,7 +336,8 @@ class AppointmentLifecycleServiceTest extends AppointmentServiceTestSupport {
 
         lifecycleService.deleteAppointment(1L);
         assertEquals(AppointmentStatus.CANCELLED, past.getStatusEnum());
-        assertEquals(AppointmentCancelledEvent.CancelledBy.ADMIN,
+        assertEquals(
+                AppointmentCancelledEvent.CancelledBy.ADMIN,
                 eventsOfType(AppointmentCancelledEvent.class).get(0).cancelledBy());
         verify(appointmentRepository, never()).delete(any(Appointment.class));
         verify(appointmentRepository, never()).deleteById(any());

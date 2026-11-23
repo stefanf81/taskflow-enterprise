@@ -1,14 +1,13 @@
 package com.example.taskflow.appointment;
 
 import com.example.taskflow.core.cache.CacheConfig;
+import java.time.Duration;
 import org.springframework.boot.cache.autoconfigure.RedisCacheManagerBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.SerializationException;
-
-import java.time.Duration;
 
 /** The appointment module's Redis caches: typed values (see {@link CacheConfig}), applied when the cache type is redis. */
 @Configuration
@@ -41,8 +40,7 @@ class AppointmentCacheConfig {
 
     @Bean
     RedisCacheManagerBuilderCustomizer appointmentCaches() {
-        return builder -> builder
-                .withCacheConfiguration(BARBERS_CACHE, barbersCache())
+        return builder -> builder.withCacheConfiguration(BARBERS_CACHE, barbersCache())
                 .withCacheConfiguration(PUBLIC_BARBERS_CACHE, publicBarbersCache())
                 .withCacheConfiguration(OPENING_HOURS_CACHE, openingHoursCache())
                 .withCacheConfiguration(AppointmentStatsService.BUSY_SLOTS_CACHE, busySlotsCache())
@@ -56,7 +54,8 @@ class AppointmentCacheConfig {
      */
     static final class StatsValueSerializer implements RedisSerializer<Object> {
 
-        private final RedisSerializer<AppointmentStats> stats = CacheConfig.typedValueSerializer(AppointmentStats.class);
+        private final RedisSerializer<AppointmentStats> stats =
+                CacheConfig.typedValueSerializer(AppointmentStats.class);
         private final RedisSerializer<Long> count = CacheConfig.typedValueSerializer(Long.class);
 
         @Override

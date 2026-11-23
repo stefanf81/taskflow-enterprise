@@ -21,5 +21,4 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 record RateLimitProperties(
         @DefaultValue("false") boolean enabled,
         @DefaultValue("100") int maxRequestsPerMinute,
-        @DefaultValue("20") int authMaxRequestsPerMinute) {
-}
+        @DefaultValue("20") int authMaxRequestsPerMinute) {}

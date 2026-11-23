@@ -1,16 +1,16 @@
 package com.example.taskflow.core.web;
 
-import jakarta.servlet.Filter;
-import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockFilterChain;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+
+import jakarta.servlet.Filter;
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockFilterChain;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 
 /**
  * The ETag filter hashes successful, storable GET bodies but must leave event streams and actuator
@@ -26,8 +26,9 @@ class ShallowEtagFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain(new jakarta.servlet.http.HttpServlet() {
             @Override
-            protected void doGet(jakarta.servlet.http.HttpServletRequest req,
-                                 jakarta.servlet.http.HttpServletResponse res) throws java.io.IOException {
+            protected void doGet(
+                    jakarta.servlet.http.HttpServletRequest req, jakarta.servlet.http.HttpServletResponse res)
+                    throws java.io.IOException {
                 res.getWriter().write("[]");
             }
         });
@@ -107,8 +108,9 @@ class ShallowEtagFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain(new jakarta.servlet.http.HttpServlet() {
             @Override
-            protected void doGet(jakarta.servlet.http.HttpServletRequest req,
-                                 jakarta.servlet.http.HttpServletResponse res) throws java.io.IOException {
+            protected void doGet(
+                    jakarta.servlet.http.HttpServletRequest req, jakarta.servlet.http.HttpServletResponse res)
+                    throws java.io.IOException {
                 res.getWriter().write("[]");
             }
         });
@@ -147,7 +149,8 @@ class ShallowEtagFilterTest {
     @Test
     void successfulCacheableGetStillGetsAnEtagAndA304() throws Exception {
         MockHttpServletResponse first = new MockHttpServletResponse();
-        filter.doFilter(new MockHttpServletRequest("GET", "/api/v1/catalog"), first, servlet(200, "max-age=300, public"));
+        filter.doFilter(
+                new MockHttpServletRequest("GET", "/api/v1/catalog"), first, servlet(200, "max-age=300, public"));
         String etag = first.getHeader("ETag");
         assertNotNull(etag);
 
@@ -171,8 +174,9 @@ class ShallowEtagFilterTest {
     private static MockFilterChain servlet(int status, String cacheControl) {
         return new MockFilterChain(new jakarta.servlet.http.HttpServlet() {
             @Override
-            protected void service(jakarta.servlet.http.HttpServletRequest req,
-                                   jakarta.servlet.http.HttpServletResponse res) throws java.io.IOException {
+            protected void service(
+                    jakarta.servlet.http.HttpServletRequest req, jakarta.servlet.http.HttpServletResponse res)
+                    throws java.io.IOException {
                 res.setStatus(status);
                 if (cacheControl != null) {
                     res.setHeader("Cache-Control", cacheControl);

@@ -15,13 +15,15 @@ import org.springframework.web.bind.annotation.*;
 class BarberScheduleController {
     private final BarberScheduleService service;
 
-    BarberScheduleController(BarberScheduleService service) { this.service = service; }
+    BarberScheduleController(BarberScheduleService service) {
+        this.service = service;
+    }
 
     @GetMapping
     @Operation(summary = "Get a barber's weekly schedule")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Weekly schedule returned"),
-            @ApiResponse(responseCode = "404", description = "Barber not found")
+        @ApiResponse(responseCode = "200", description = "Weekly schedule returned"),
+        @ApiResponse(responseCode = "404", description = "Barber not found")
     })
     public ResponseEntity<BarberScheduleResponse> get(@PathVariable Long barberId) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.get(barberId));
@@ -30,24 +32,28 @@ class BarberScheduleController {
     @PostMapping("/preview")
     @Operation(summary = "Preview booking conflicts for a weekly schedule change")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Conflict preview returned"),
-            @ApiResponse(responseCode = "400", description = "Invalid schedule"),
-            @ApiResponse(responseCode = "404", description = "Barber not found"),
-            @ApiResponse(responseCode = "409", description = "Schedule revision changed")
+        @ApiResponse(responseCode = "200", description = "Conflict preview returned"),
+        @ApiResponse(responseCode = "400", description = "Invalid schedule"),
+        @ApiResponse(responseCode = "404", description = "Barber not found"),
+        @ApiResponse(responseCode = "409", description = "Schedule revision changed")
     })
-    public SchedulePreviewResponse preview(@PathVariable Long barberId, @Valid @RequestBody ScheduleChangeRequest request) {
+    public SchedulePreviewResponse preview(
+            @PathVariable Long barberId, @Valid @RequestBody ScheduleChangeRequest request) {
         return service.preview(barberId, request);
     }
 
     @PutMapping
     @Operation(summary = "Update a barber's weekly schedule")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Weekly schedule updated"),
-            @ApiResponse(responseCode = "400", description = "Invalid schedule"),
-            @ApiResponse(responseCode = "404", description = "Barber not found"),
-            @ApiResponse(responseCode = "409", description = "Schedule revision changed or conflicting bookings not confirmed")
+        @ApiResponse(responseCode = "200", description = "Weekly schedule updated"),
+        @ApiResponse(responseCode = "400", description = "Invalid schedule"),
+        @ApiResponse(responseCode = "404", description = "Barber not found"),
+        @ApiResponse(
+                responseCode = "409",
+                description = "Schedule revision changed or conflicting bookings not confirmed")
     })
-    public BarberScheduleResponse update(@PathVariable Long barberId, @Valid @RequestBody ScheduleChangeRequest request) {
+    public BarberScheduleResponse update(
+            @PathVariable Long barberId, @Valid @RequestBody ScheduleChangeRequest request) {
         return service.update(barberId, request);
     }
 }

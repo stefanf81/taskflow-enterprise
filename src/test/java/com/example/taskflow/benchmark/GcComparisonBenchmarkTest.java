@@ -1,33 +1,31 @@
 package com.example.taskflow.benchmark;
 
-import com.example.taskflow.appointment.internal.Appointment;
-import com.example.taskflow.appointment.internal.AppointmentRepository;
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.example.taskflow.appointment.AppointmentResponse;
 import com.example.taskflow.appointment.Barber;
+import com.example.taskflow.appointment.internal.Appointment;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
 import com.example.taskflow.auth.TestSecurityConfig;
 import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.catalog.internal.ServiceItemRepository;
-import com.example.taskflow.catalog.ServiceItemResponse;
 import com.example.taskflow.review.internal.ReviewRepository;
-import tools.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
-
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * GC COMPARISON BENCHMARK: G1GC vs ZGC ON ALLOCATION-HEAVY PATHS
@@ -44,11 +42,12 @@ import static org.junit.jupiter.api.Assertions.*;
  *   JAVA_TOOL_OPTIONS="-XX:+UseZGC" ./gradlew benchmarkTest --tests *GcComparison*
  */
 @Tag("benchmark")
-@SpringBootTest(properties = {
-        "app.rate-limit.enabled=false",
-        "app.stats.cache.ttl=0",
-        "spring.datasource.hikari.maximum-pool-size=10",
-})
+@SpringBootTest(
+        properties = {
+            "app.rate-limit.enabled=false",
+            "app.stats.cache.ttl=0",
+            "spring.datasource.hikari.maximum-pool-size=10",
+        })
 @Import(TestSecurityConfig.class)
 class GcComparisonBenchmarkTest {
 
@@ -109,11 +108,7 @@ class GcComparisonBenchmarkTest {
         // Seed barbers
         barbers = new ArrayList<>(BARBER_COUNT);
         for (int i = 0; i < BARBER_COUNT; i++) {
-            barbers.add(new Barber(
-                    "Barber " + i,
-                    "barber" + i + "@example.com",
-                    "555-" + String.format("%04d", i)
-            ));
+            barbers.add(new Barber("Barber " + i, "barber" + i + "@example.com", "555-" + String.format("%04d", i)));
         }
         barberRepository.saveAll(barbers);
 
@@ -126,8 +121,7 @@ class GcComparisonBenchmarkTest {
                     BigDecimal.valueOf(15.00 + (i % 85)),
                     15 + (i % 60),
                     categories[i % categories.length],
-                    "Description for service " + i + " — a full-service offering"
-            ));
+                    "Description for service " + i + " — a full-service offering"));
         }
         serviceItemRepository.saveAll(services);
 
@@ -146,8 +140,7 @@ class GcComparisonBenchmarkTest {
                     barber.getName(),
                     baseDate.plusDays(i / (BARBER_COUNT * 2)),
                     times[i % times.length],
-                    service.getName()
-            );
+                    service.getName());
             a.setBarber(barber);
             a.setService(service);
             a.setStatus(statuses[i % statuses.length]);
@@ -162,22 +155,29 @@ class GcComparisonBenchmarkTest {
 
     @Test
     void identifyGarbageCollector() {
-        System.out.println("\n" + "=" .repeat(80));
+        System.out.println("\n" + "=".repeat(80));
         System.out.println("  ACTIVE GARBAGE COLLECTOR IDENTIFICATION");
-        System.out.println("=" .repeat(80));
+        System.out.println("=".repeat(80));
 
         // Print JVM GC info via runtime MXBean
         for (var pool : ManagementFactory.getMemoryPoolMXBeans()) {
             String name = pool.getName();
             // Only print GC-related pools
-            if (name.contains("Heap") || name.contains("Young") || name.contains("Old") || name.contains("Eden") || name.contains("Survivor") || name.contains("Tenured") || name.contains("ZHeap")) {
+            if (name.contains("Heap")
+                    || name.contains("Young")
+                    || name.contains("Old")
+                    || name.contains("Eden")
+                    || name.contains("Survivor")
+                    || name.contains("Tenured")
+                    || name.contains("ZHeap")) {
                 System.out.printf("  Memory pool: %s (%s)%n", name, pool.getType());
             }
         }
 
         String activeGcName = "unknown";
         for (var bean : gcBeans) {
-            System.out.printf("  GC: %s (collections: %d, time: %d ms)%n",
+            System.out.printf(
+                    "  GC: %s (collections: %d, time: %d ms)%n",
                     bean.getName(), bean.getCollectionCount(), bean.getCollectionTime());
             if (bean.getCollectionCount() > 0) {
                 activeGcName = bean.getName();
@@ -210,10 +210,10 @@ class GcComparisonBenchmarkTest {
 
     @Test
     void benchmarkAppointmentListWithMapping() {
-        System.out.println("\n" + "=" .repeat(80));
+        System.out.println("\n" + "=".repeat(80));
         System.out.println("  APPOINTMENT LIST: ENTITY LOAD + DTO MAPPING");
         System.out.println("  Data volume: " + APPOINTMENT_COUNT + " rows");
-        System.out.println("=" .repeat(80));
+        System.out.println("=".repeat(80));
 
         // --- Warm up ---
         GCStats warmupGc = new GCStats(gcBeans);
@@ -233,8 +233,7 @@ class GcComparisonBenchmarkTest {
         double avgMs = (totalNs / (double) MEASUREMENT_ITERATIONS) / 1_000_000.0;
         double throughput = 1000.0 / avgMs;
 
-        reportResults("Entity load + DTO map", APPOINTMENT_COUNT, avgMs, throughput,
-                warmupGc, measurementGc);
+        reportResults("Entity load + DTO map", APPOINTMENT_COUNT, avgMs, throughput, warmupGc, measurementGc);
     }
 
     // -----------------------------------------------------------------------
@@ -245,10 +244,10 @@ class GcComparisonBenchmarkTest {
 
     @Test
     void benchmarkJsonSerialization() throws Exception {
-        System.out.println("\n" + "=" .repeat(80));
+        System.out.println("\n" + "=".repeat(80));
         System.out.println("  JSON SERIALIZATION: APPOINTMENT RESPONSE LIST");
         System.out.println("  Data volume: " + APPOINTMENT_COUNT + " items");
-        System.out.println("=" .repeat(80));
+        System.out.println("=".repeat(80));
 
         // Pre-load the data once (not measured)
         List<AppointmentResponse> responses = loadAndMapAppointments();
@@ -277,8 +276,7 @@ class GcComparisonBenchmarkTest {
         double avgMs = (totalNs / (double) MEASUREMENT_ITERATIONS) / 1_000_000.0;
         double throughput = 1000.0 / avgMs;
 
-        reportResults("JSON serialization (Jackson)", APPOINTMENT_COUNT, avgMs, throughput,
-                warmupGc, measurementGc);
+        reportResults("JSON serialization (Jackson)", APPOINTMENT_COUNT, avgMs, throughput, warmupGc, measurementGc);
     }
 
     // -----------------------------------------------------------------------
@@ -289,10 +287,10 @@ class GcComparisonBenchmarkTest {
 
     @Test
     void benchmarkCombinedApiEndpoint() throws Exception {
-        System.out.println("\n" + "=" .repeat(80));
+        System.out.println("\n" + "=".repeat(80));
         System.out.println("  COMBINED API ENDPOINT: DB READ → DTO MAP → JSON");
         System.out.println("  Data volume: " + APPOINTMENT_COUNT + " rows");
-        System.out.println("=" .repeat(80));
+        System.out.println("=".repeat(80));
 
         // --- Warm up ---
         GCStats warmupGc = new GCStats(gcBeans);
@@ -318,8 +316,7 @@ class GcComparisonBenchmarkTest {
         double avgMs = (totalNs / (double) MEASUREMENT_ITERATIONS) / 1_000_000.0;
         double throughput = 1000.0 / avgMs;
 
-        reportResults("Combined (DB→DTO→JSON)", APPOINTMENT_COUNT, avgMs, throughput,
-                warmupGc, measurementGc);
+        reportResults("Combined (DB→DTO→JSON)", APPOINTMENT_COUNT, avgMs, throughput, warmupGc, measurementGc);
     }
 
     // -----------------------------------------------------------------------
@@ -333,10 +330,10 @@ class GcComparisonBenchmarkTest {
     void benchmarkAllocationStress() {
         int allocationCount = 500_000;
 
-        System.out.println("\n" + "=" .repeat(80));
+        System.out.println("\n" + "=".repeat(80));
         System.out.println("  SYNTHETIC ALLOCATION STRESS: DTO CONSTRUCTION");
         System.out.println("  Objects created: " + allocationCount + " AppointmentResponse records");
-        System.out.println("=" .repeat(80));
+        System.out.println("=".repeat(80));
 
         // --- Warm up ---
         GCStats warmupGc = new GCStats(gcBeans);
@@ -400,8 +397,7 @@ class GcComparisonBenchmarkTest {
                     "Service " + (i % 50),
                     "PENDING",
                     java.time.LocalDateTime.now(),
-                    java.time.LocalDateTime.now()
-            ));
+                    java.time.LocalDateTime.now()));
         }
         return records;
     }
@@ -414,8 +410,8 @@ class GcComparisonBenchmarkTest {
     }
 
     /** Prints benchmark results table. */
-    private void reportResults(String label, int rowCount, double avgMs, double throughput,
-                               GCStats warmup, GCStats measurement) {
+    private void reportResults(
+            String label, int rowCount, double avgMs, double throughput, GCStats warmup, GCStats measurement) {
         System.out.println();
         System.out.printf("  %-40s %12s %12s%n", "Metric", "Value", "");
         System.out.println("  " + "-".repeat(65));
@@ -475,16 +471,17 @@ class GcComparisonBenchmarkTest {
                 long count = currentBeans.get(i).getCollectionCount() - baseline.collectionCounts[i];
                 long time = currentBeans.get(i).getCollectionTime() - baseline.collectionTimes[i];
                 if (count > 0) {
-                    System.out.printf("    %-30s %5d collections  %6d ms total%n",
+                    System.out.printf(
+                            "    %-30s %5d collections  %6d ms total%n",
                             currentBeans.get(i).getName(), count, time);
                     totalGcCount += count;
                     totalGcTime += time;
                 }
             }
             if (totalGcCount > 0) {
-                System.out.printf("    %-30s %5d collections  %6d ms total%n",
-                        "TOTAL", totalGcCount, totalGcTime);
-                System.out.printf("    %-30s %5s  %6.2f ms avg pause%n",
+                System.out.printf("    %-30s %5d collections  %6d ms total%n", "TOTAL", totalGcCount, totalGcTime);
+                System.out.printf(
+                        "    %-30s %5s  %6.2f ms avg pause%n",
                         "Average pause", "", (double) totalGcTime / totalGcCount);
             } else {
                 System.out.println("    No GC collections during this phase.");
@@ -497,7 +494,8 @@ class GcComparisonBenchmarkTest {
                 if (name.contains("ZGC")) {
                     try {
                         var server = ManagementFactory.getPlatformMBeanServer();
-                        var on = javax.management.ObjectName.getInstance("java.lang:type=GarbageCollector,name=" + name);
+                        var on =
+                                javax.management.ObjectName.getInstance("java.lang:type=GarbageCollector,name=" + name);
                         Object val = server.getAttribute(on, "Generational");
                         if ("true".equals(val.toString())) {
                             return "ZGC (Generational)";

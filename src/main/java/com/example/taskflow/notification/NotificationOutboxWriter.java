@@ -1,19 +1,18 @@
 package com.example.taskflow.notification;
-import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 
-import com.example.taskflow.appointment.AppointmentDetails;
 import com.example.taskflow.appointment.AppointmentCancelledEvent;
+import com.example.taskflow.appointment.AppointmentDetails;
 import com.example.taskflow.appointment.AppointmentRescheduledEvent;
 import com.example.taskflow.appointment.AppointmentStatusChangedEvent;
 import com.example.taskflow.core.LogSanitizer;
+import com.example.taskflow.notification.internal.NotificationOutboxRepository;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
-
-import java.time.Clock;
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 
 /**
  * C3: Enqueues a PENDING notification row whenever an appointment status changes.
@@ -96,12 +95,8 @@ public class NotificationOutboxWriter {
             String message = String.format(
                     "Subject: Appointment RESCHEDULED - Dear %s, your %s appointment with %s has been moved to %s at %s and is pending confirmation.",
                     name, service, barber, date, time);
-            outboxRepository.save(new NotificationOutbox(
-                    safe(updated.customerEmail()),
-                    "EMAIL",
-                    message,
-                    now(),
-                    "PENDING"));
+            outboxRepository.save(
+                    new NotificationOutbox(safe(updated.customerEmail()), "EMAIL", message, now(), "PENDING"));
         } catch (Exception e) {
             logger.error("Failed to enqueue reschedule notification: {}", LogSanitizer.safeMessage(e));
             throw new RuntimeException("Failed to enqueue notification", e);
@@ -125,7 +120,8 @@ public class NotificationOutboxWriter {
         String name = safe(appointment.customerName());
         String barber = safe(appointment.barberName());
         String service = safe(appointment.serviceType());
-        String date = appointment.bookingDate() != null ? appointment.bookingDate().toString() : "";
+        String date =
+                appointment.bookingDate() != null ? appointment.bookingDate().toString() : "";
         String time = safe(appointment.bookingTime());
         String status = safe(appointment.status().name());
 
@@ -133,40 +129,44 @@ public class NotificationOutboxWriter {
         String content;
         if ("APPROVED".equalsIgnoreCase(status)) {
             subject = "Appointment APPROVED";
-            content = String.format("Dear %s, your %s appointment with %s on %s at %s has been APPROVED.",
+            content = String.format(
+                    "Dear %s, your %s appointment with %s on %s at %s has been APPROVED.",
                     name, service, barber, date, time);
         } else if ("DENIED".equalsIgnoreCase(status)) {
             subject = "Appointment DECLINED";
-            content = String.format("Dear %s, unfortunately we could not accommodate your %s appointment with %s on %s at %s. Please try booking another slot.",
+            content = String.format(
+                    "Dear %s, unfortunately we could not accommodate your %s appointment with %s on %s at %s. Please try booking another slot.",
                     name, service, barber, date, time);
         } else if ("CANCELLED".equalsIgnoreCase(status)) {
             // Defensive: cancellations normally arrive as AppointmentCancelledEvent.
             return buildCancellationMessage(appointment, null);
         } else {
             subject = "Appointment Update";
-            content = String.format("Dear %s, your appointment status has been updated to: %s.",
-                    name, status);
+            content = String.format("Dear %s, your appointment status has been updated to: %s.", name, status);
         }
         return "Subject: " + subject + " - " + content;
     }
 
-    private String buildCancellationMessage(AppointmentDetails appointment,
-                                            AppointmentCancelledEvent.CancelledBy cancelledBy) {
+    private String buildCancellationMessage(
+            AppointmentDetails appointment, AppointmentCancelledEvent.CancelledBy cancelledBy) {
         String name = safe(appointment.customerName());
         String barber = safe(appointment.barberName());
         String service = safe(appointment.serviceType());
-        String date = appointment.bookingDate() != null ? appointment.bookingDate().toString() : "";
+        String date =
+                appointment.bookingDate() != null ? appointment.bookingDate().toString() : "";
         String time = safe(appointment.bookingTime());
         if (time.length() > 5) {
             time = time.substring(0, 5);
         }
 
-        String content = String.format("Dear %s, your %s appointment with %s on %s at %s has been cancelled.",
+        String content = String.format(
+                "Dear %s, your %s appointment with %s on %s at %s has been cancelled.",
                 name, service, barber, date, time);
         if (cancelledBy == AppointmentCancelledEvent.CancelledBy.BARBER_UNAVAILABLE) {
             content += String.format(" %s is unavailable on that day. Please book another time.", barber);
         } else if (cancelledBy == AppointmentCancelledEvent.CancelledBy.ADMIN) {
-            content += " The cancellation was made by the shop. Please book another time if you still need an appointment.";
+            content +=
+                    " The cancellation was made by the shop. Please book another time if you still need an appointment.";
         }
         return "Subject: Appointment CANCELLED - " + content;
     }

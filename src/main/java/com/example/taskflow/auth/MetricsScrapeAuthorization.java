@@ -1,5 +1,10 @@
 package com.example.taskflow.auth;
 
+import jakarta.servlet.http.HttpServletRequest;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.function.Supplier;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
@@ -7,12 +12,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
-
-import jakarta.servlet.http.HttpServletRequest;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.function.Supplier;
 
 /**
  * Who may read {@code /actuator/prometheus}: anyone while no {@code app.metrics.scrape-token} is
@@ -41,9 +40,10 @@ final class MetricsScrapeAuthorization implements AuthorizationManager<RequestAu
     }
 
     @Override
-    public AuthorizationDecision authorize(Supplier<? extends Authentication> authentication,
-                                           RequestAuthorizationContext context) {
-        return new AuthorizationDecision(expected == null || MessageDigest.isEqual(expected, sha256(presented(context.getRequest()))));
+    public AuthorizationDecision authorize(
+            Supplier<? extends Authentication> authentication, RequestAuthorizationContext context) {
+        return new AuthorizationDecision(
+                expected == null || MessageDigest.isEqual(expected, sha256(presented(context.getRequest()))));
     }
 
     private static String presented(HttpServletRequest request) {

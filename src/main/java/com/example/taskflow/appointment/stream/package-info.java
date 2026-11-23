@@ -5,7 +5,9 @@
  * {@code TokenRevokedEvent} and {@code AccountTokensRevokedEvent} only; the parent only publishes its event and subscribes controllers
  * through {@code AppointmentEventStreamService}.
  */
-@ApplicationModule(displayName = "Admin event stream", allowedDependencies = {"core", "auth"})
+@ApplicationModule(
+        displayName = "Admin event stream",
+        allowedDependencies = {"core", "auth"})
 package com.example.taskflow.appointment.stream;
 
 import org.springframework.modulith.ApplicationModule;

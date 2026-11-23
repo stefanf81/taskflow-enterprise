@@ -1,11 +1,18 @@
 package com.example.taskflow.appointment;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
 import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.catalog.internal.ServiceItemRepository;
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,14 +22,6 @@ import org.springframework.cache.CacheManager;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-
-import java.math.BigDecimal;
-import java.time.Clock;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * User-visible availability-cache correctness: every availability mutation must
@@ -79,7 +78,8 @@ class AppointmentCacheInvalidationIntegrationTest {
     private static final String BARBER = "Alex the Barber";
     private static final String SERVICE = "Classic Haircut";
     /** A Thursday inside the booking window (bookings must be in the future and within 90 days). */
-    private static final LocalDate DATE = LocalDate.now().plusDays(7)
+    private static final LocalDate DATE = LocalDate.now()
+            .plusDays(7)
             .with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.THURSDAY));
 
     private Cache busySlotsCache;
@@ -128,15 +128,14 @@ class AppointmentCacheInvalidationIntegrationTest {
     }
 
     private void assertAvailabilityEvicted() {
-        assertNull(busySlotsCache.get(BARBER + "-" + DATE),
-                "concrete busy-slots entry must be evicted");
-        assertNull(busySlotsCache.get(AppointmentBookingService.NO_PREFERENCE_BARBER + "-" + DATE),
+        assertNull(busySlotsCache.get(BARBER + "-" + DATE), "concrete busy-slots entry must be evicted");
+        assertNull(
+                busySlotsCache.get(AppointmentBookingService.NO_PREFERENCE_BARBER + "-" + DATE),
                 "First Available aggregate must be evicted");
     }
 
     private AppointmentCreateRequest bookingRequest(String time) {
-        return new AppointmentCreateRequest(
-                "John Doe", "john@test.com", "555-0000", BARBER, DATE, time, SERVICE);
+        return new AppointmentCreateRequest("John Doe", "john@test.com", "555-0000", BARBER, DATE, time, SERVICE);
     }
 
     @Test
@@ -146,11 +145,11 @@ class AppointmentCacheInvalidationIntegrationTest {
         statsService.getStatsCached();
         assertNotNull(cacheManager.getCache(AppointmentStatsService.STATS_CACHE).get(LocalDate.now(clock)));
 
-        lifecycleService.updateAppointmentStatus(created.appointment().id(),
-                new AppointmentUpdateRequest("APPROVED"));
+        lifecycleService.updateAppointmentStatus(created.appointment().id(), new AppointmentUpdateRequest("APPROVED"));
 
         assertAvailabilityEvicted();
-        assertNull(cacheManager.getCache(AppointmentStatsService.STATS_CACHE).get(LocalDate.now(clock)),
+        assertNull(
+                cacheManager.getCache(AppointmentStatsService.STATS_CACHE).get(LocalDate.now(clock)),
                 "appointmentStats entry must be evicted after a mutation");
     }
 
@@ -160,9 +159,10 @@ class AppointmentCacheInvalidationIntegrationTest {
 
         bookingService.createAppointment(bookingRequest("10:00"), null);
 
-        List<String> aggregate = busySlotsService.getBusySlots(
-                AppointmentBookingService.NO_PREFERENCE_BARBER, DATE.toString());
-        assertTrue(aggregate.contains("10:00"),
+        List<String> aggregate =
+                busySlotsService.getBusySlots(AppointmentBookingService.NO_PREFERENCE_BARBER, DATE.toString());
+        assertTrue(
+                aggregate.contains("10:00"),
                 "the only barber is now booked, so 10:00 must be busy for First Available");
         assertTrue(busySlotsService.getBusySlots(BARBER, DATE.toString()).contains("10:00"));
     }
@@ -203,8 +203,7 @@ class AppointmentCacheInvalidationIntegrationTest {
         var created = bookingService.createAppointment(bookingRequest("10:00"), null);
         primeAvailability();
 
-        lifecycleService.updateAppointmentStatus(created.appointment().id(),
-                new AppointmentUpdateRequest("DENIED"));
+        lifecycleService.updateAppointmentStatus(created.appointment().id(), new AppointmentUpdateRequest("DENIED"));
 
         assertAvailabilityEvicted();
     }
@@ -263,10 +262,12 @@ class AppointmentCacheInvalidationIntegrationTest {
         // back: the AFTER_COMMIT listener must not run, so the primed entries
         // survive. This is the property the previous in-transaction eviction
         // could not provide.
-        assertThrows(IllegalStateException.class, () -> transactionTemplate.executeWithoutResult(status -> {
-            eventPublisher.publishEvent(AvailabilityChangedEvent.single(BARBER, DATE));
-            throw new IllegalStateException("forced rollback");
-        }));
+        assertThrows(
+                IllegalStateException.class,
+                () -> transactionTemplate.executeWithoutResult(status -> {
+                    eventPublisher.publishEvent(AvailabilityChangedEvent.single(BARBER, DATE));
+                    throw new IllegalStateException("forced rollback");
+                }));
 
         assertNotNull(busySlotsCache.get(BARBER + "-" + DATE));
         assertNotNull(busySlotsCache.get(AppointmentBookingService.NO_PREFERENCE_BARBER + "-" + DATE));

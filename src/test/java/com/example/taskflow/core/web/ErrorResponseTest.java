@@ -1,12 +1,12 @@
 package com.example.taskflow.core.web;
 
-import org.junit.jupiter.api.Test;
-import java.time.Instant;
-import java.util.Collections;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+
+import java.time.Instant;
+import java.util.Collections;
+import org.junit.jupiter.api.Test;
 
 class ErrorResponseTest {
 
@@ -27,7 +27,13 @@ class ErrorResponseTest {
     @Test
     void testErrorResponseWithValidationErrors() {
         ErrorResponse.ValidationError validationError = new ErrorResponse.ValidationError("field", "message");
-        ErrorResponse response = new ErrorResponse(Instant.parse("2026-10-12T08:00:00Z"), 400, "Bad Request", "Validation failed", "/api/test", Collections.singletonList(validationError));
+        ErrorResponse response = new ErrorResponse(
+                Instant.parse("2026-10-12T08:00:00Z"),
+                400,
+                "Bad Request",
+                "Validation failed",
+                "/api/test",
+                Collections.singletonList(validationError));
 
         assertEquals(400, response.status());
         assertEquals(1, response.validationErrors().size());

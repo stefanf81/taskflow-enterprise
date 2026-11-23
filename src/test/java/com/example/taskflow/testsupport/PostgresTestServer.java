@@ -1,8 +1,7 @@
 package com.example.taskflow.testsupport;
 
-import org.testcontainers.postgresql.PostgreSQLContainer;
-
 import java.net.URI;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * The PostgreSQL server for the {@code @Tag("testcontainers")} tests that create their own schemas or
@@ -16,8 +15,7 @@ public final class PostgresTestServer {
 
     private static PostgreSQLContainer container;
 
-    private PostgresTestServer() {
-    }
+    private PostgresTestServer() {}
 
     /** JDBC URL of the server's default database, e.g. {@code jdbc:postgresql://host:port/postgres}. */
     public static String jdbcUrl() {

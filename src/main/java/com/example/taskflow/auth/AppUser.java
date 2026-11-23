@@ -51,9 +51,23 @@ public class AppUser implements Timestamped {
         this.role = role;
     }
 
-    public String getEmail() { return email; }
-    public String getPasswordHash() { return passwordHash; }
-    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
-    public String getRole() { return role; }
-    public int getTokenVersion() { return tokenVersion; }
+    public String getEmail() {
+        return email;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public int getTokenVersion() {
+        return tokenVersion;
+    }
 }

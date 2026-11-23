@@ -1,24 +1,23 @@
 package com.example.taskflow.core.logging;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.LoggingEvent;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.StandardEnvironment;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 class ConsoleLogEncoderTest {
 
     private static LoggingEvent event(LoggerContext context) {
-        LoggingEvent event = new LoggingEvent(ConsoleLogEncoderTest.class.getName(), context.getLogger("test"),
-                Level.INFO, "hello", null, null);
+        LoggingEvent event = new LoggingEvent(
+                ConsoleLogEncoderTest.class.getName(), context.getLogger("test"), Level.INFO, "hello", null, null);
         // A bare LoggerContext has no MDC adapter; the structured formatter reads the MDC.
         event.setMDCPropertyMap(java.util.Map.of());
         return event;
@@ -58,7 +57,8 @@ class ConsoleLogEncoderTest {
     @Test
     void logbackConfigurationKeepsThePatternUnlessTheFormatPropertyIsSet() throws Exception {
         String xml = Files.readString(Path.of("src/main/resources/logback-spring.xml"));
-        assertTrue(xml.contains("source=\"logging.structured.format.console\"") && xml.contains("defaultValue=\"\""),
+        assertTrue(
+                xml.contains("source=\"logging.structured.format.console\"") && xml.contains("defaultValue=\"\""),
                 "the structured format must default to empty (plain pattern)");
         assertTrue(xml.contains("class=\"com.example.taskflow.core.logging.ConsoleLogEncoder\""));
         assertFalse(xml.contains("<springProfile"), "the console format must not depend on the profile");

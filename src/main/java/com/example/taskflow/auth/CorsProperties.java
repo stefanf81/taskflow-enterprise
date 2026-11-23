@@ -13,5 +13,6 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * </ul>
  */
 @ConfigurationProperties(prefix = "app.cors")
-record CorsProperties(@DefaultValue("http://localhost:4200,http://127.0.0.1:4200") String allowedOrigins) {
-}
+record CorsProperties(
+        @DefaultValue("http://localhost:4200,http://127.0.0.1:4200")
+        String allowedOrigins) {}

@@ -1,15 +1,14 @@
 package db.migration;
 
-import org.flywaydb.core.api.migration.Context;
-import org.junit.jupiter.api.Test;
+import static org.mockito.Mockito.*;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
 import java.sql.Savepoint;
 import java.sql.Statement;
-
-import static org.mockito.Mockito.*;
+import org.flywaydb.core.api.migration.Context;
+import org.junit.jupiter.api.Test;
 
 class V37EnablePgStatStatementsTest {
 

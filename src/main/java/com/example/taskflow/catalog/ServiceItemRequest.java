@@ -15,24 +15,12 @@ import java.math.BigDecimal;
  * database error.
  */
 public record ServiceItemRequest(
-    @NotBlank(message = "Service name is required")
-    @Size(max = 100, message = "Service name must not exceed 100 characters")
-    String name,
+        @NotBlank(message = "Service name is required") @Size(max = 100, message = "Service name must not exceed 100 characters") String name,
 
-    @NotNull(message = "Price is required")
-    @Positive(message = "Price must be positive")
-    @Digits(integer = 8, fraction = 2, message = "Price must have at most 8 integer digits and 2 decimals")
-    BigDecimal price,
+        @NotNull(message = "Price is required") @Positive(message = "Price must be positive") @Digits(integer = 8, fraction = 2, message = "Price must have at most 8 integer digits and 2 decimals") BigDecimal price,
 
-    @NotNull(message = "Duration is required")
-    @Positive(message = "Duration must be positive")
-    @Max(value = 1440, message = "Duration must not exceed 1440 minutes")
-    Integer durationMinutes,
+        @NotNull(message = "Duration is required") @Positive(message = "Duration must be positive") @Max(value = 1440, message = "Duration must not exceed 1440 minutes") Integer durationMinutes,
 
-    @NotBlank(message = "Category is required")
-    @Size(max = 50, message = "Category must not exceed 50 characters")
-    String category,
+        @NotBlank(message = "Category is required") @Size(max = 50, message = "Category must not exceed 50 characters") String category,
 
-    @Size(max = 500, message = "Description must not exceed 500 characters")
-    String description
-) {}
+        @Size(max = 500, message = "Description must not exceed 500 characters") String description) {}

@@ -1,18 +1,17 @@
 package com.example.taskflow.review;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.cache.RedisCacheConfiguration;
-import org.springframework.data.redis.cache.RedisCacheManager;
-import org.springframework.data.redis.cache.RedisCacheWriter;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.Mockito.mock;
 
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.mockito.Mockito.mock;
+import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.cache.RedisCacheConfiguration;
+import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.cache.RedisCacheWriter;
 
 class ReviewCacheConfigTest {
 
@@ -22,7 +21,8 @@ class ReviewCacheConfigTest {
         new ReviewCacheConfig().reviewCaches().customize(builder);
 
         assertEquals(Set.of("barberRatings"), builder.getConfiguredCaches());
-        RedisCacheConfiguration ratings = builder.getCacheConfigurationFor("barberRatings").orElseThrow();
+        RedisCacheConfiguration ratings =
+                builder.getCacheConfigurationFor("barberRatings").orElseThrow();
         assertEquals(Duration.ofMinutes(10), ratings.getTtlFunction().getTimeToLive("key", "value"));
         assertFalse(ratings.getAllowCacheNullValues());
 

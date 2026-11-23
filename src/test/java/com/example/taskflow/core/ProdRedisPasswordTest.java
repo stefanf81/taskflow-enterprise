@@ -1,18 +1,17 @@
 package com.example.taskflow.core;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.core.env.MapPropertySource;
-import org.springframework.core.env.StandardEnvironment;
-import org.springframework.data.redis.connection.RedisPassword;
-import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Map;
 import java.util.Properties;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.env.StandardEnvironment;
+import org.springframework.data.redis.connection.RedisPassword;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 
 /**
  * The prod profile sends {@code REDIS_PASSWORD} to Redis and has no default for it
@@ -25,8 +24,8 @@ class ProdRedisPasswordTest {
 
     private static String propertyValue() throws IOException {
         Properties prod = new Properties();
-        try (InputStream in = ProdRedisPasswordTest.class.getClassLoader()
-                .getResourceAsStream("application-prod.properties")) {
+        try (InputStream in =
+                ProdRedisPasswordTest.class.getClassLoader().getResourceAsStream("application-prod.properties")) {
             prod.load(in);
         }
         return prod.getProperty("spring.data.redis.password");
@@ -55,8 +54,8 @@ class ProdRedisPasswordTest {
 
     @Test
     void aPasswordIsPassedThroughAndAnEmptyOneMeansNoAuthentication() throws IOException {
-        String configured = environmentWith(Map.of("REDIS_PASSWORD", "s3cret"))
-                .resolveRequiredPlaceholders(propertyValue());
+        String configured =
+                environmentWith(Map.of("REDIS_PASSWORD", "s3cret")).resolveRequiredPlaceholders(propertyValue());
         assertThat(configured).isEqualTo("s3cret");
         RedisStandaloneConfiguration withPassword = new RedisStandaloneConfiguration();
         withPassword.setPassword(configured);

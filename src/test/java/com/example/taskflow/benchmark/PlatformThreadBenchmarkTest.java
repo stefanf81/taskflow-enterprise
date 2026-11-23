@@ -24,15 +24,14 @@ import org.springframework.context.annotation.Import;
  */
 @Tag("benchmark")
 @SpringBootTest(
-    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = {
-        "spring.threads.virtual.enabled=false",
-        "app.rate-limit.enabled=false",
-        "app.stats.cache.ttl=0",
-        "spring.datasource.hikari.maximum-pool-size=10",
-        "spring.datasource.hikari.minimum-idle=10"
-    }
-)
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {
+            "spring.threads.virtual.enabled=false",
+            "app.rate-limit.enabled=false",
+            "app.stats.cache.ttl=0",
+            "spring.datasource.hikari.maximum-pool-size=10",
+            "spring.datasource.hikari.minimum-idle=10"
+        })
 @Import(TestSecurityConfig.class)
 class PlatformThreadBenchmarkTest extends BaseVirtualThreadBenchmark {
 

@@ -15,18 +15,17 @@ import org.jspecify.annotations.Nullable;
  * @param email the barber's email
  * @param phone the barber's phone number
  */
-public record BarberResponse(Long id, String name, @Nullable String email, @Nullable String phone) {
+public record BarberResponse(
+        Long id,
+        String name,
+        @Nullable String email,
+        @Nullable String phone) {
 
     /**
      * Factory method: create a {@code BarberResponse} from a fully loaded {@link Barber} entity.
      * Used by the current entity-based code path.
      */
     public static BarberResponse fromEntity(Barber barber) {
-        return new BarberResponse(
-                barber.getId(),
-                barber.getName(),
-                barber.getEmail(),
-                barber.getPhone()
-        );
+        return new BarberResponse(barber.getId(), barber.getName(), barber.getEmail(), barber.getPhone());
     }
 }

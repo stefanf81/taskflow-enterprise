@@ -1,5 +1,7 @@
 package com.example.taskflow.notification;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Properties;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -10,9 +12,6 @@ import org.springframework.core.env.Profiles;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Properties;
-
 @Configuration(proxyBeanMethods = false)
 class NotificationGatewayConfig {
 
@@ -20,8 +19,9 @@ class NotificationGatewayConfig {
     @ConditionalOnProperty(name = "app.notification.gateway", havingValue = "simulated", matchIfMissing = true)
     NotificationGateway simulatedNotificationGateway(NotificationProperties properties, Environment environment) {
         if (environment.acceptsProfiles(Profiles.of("prod"))) {
-            LoggerFactory.getLogger(NotificationGatewayConfig.class).warn(
-                    "Notification gateway is SIMULATED: no email will be delivered. Production must configure app.notification.gateway=smtp.");
+            LoggerFactory.getLogger(NotificationGatewayConfig.class)
+                    .warn(
+                            "Notification gateway is SIMULATED: no email will be delivered. Production must configure app.notification.gateway=smtp.");
         }
         return new SimulatedNotificationGateway(properties.simulateFailures());
     }
@@ -41,10 +41,13 @@ class NotificationGatewayConfig {
             sender.setUsername(properties.username());
             sender.setPassword(properties.password());
             Properties mail = new Properties();
-            mail.setProperty("mail.smtp.auth", Boolean.toString(
-                    properties.username() != null && !properties.username().isBlank()));
+            mail.setProperty(
+                    "mail.smtp.auth",
+                    Boolean.toString(properties.username() != null
+                            && !properties.username().isBlank()));
             mail.setProperty("mail.smtp.starttls.enable", Boolean.toString(properties.startTls() && !properties.ssl()));
-            mail.setProperty("mail.smtp.starttls.required", Boolean.toString(properties.startTls() && !properties.ssl()));
+            mail.setProperty(
+                    "mail.smtp.starttls.required", Boolean.toString(properties.startTls() && !properties.ssl()));
             mail.setProperty("mail.smtp.ssl.enable", Boolean.toString(properties.ssl()));
             mail.setProperty("mail.smtp.ssl.checkserveridentity", "true");
             mail.setProperty("mail.smtp.connectiontimeout", Integer.toString(properties.connectTimeoutMs()));

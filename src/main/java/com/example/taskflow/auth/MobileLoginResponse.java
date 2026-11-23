@@ -13,5 +13,4 @@ record MobileLoginResponse(
         long expiresIn,
         String username,
         String role,
-        @Nullable String refreshToken
-) {}
+        @Nullable String refreshToken) {}

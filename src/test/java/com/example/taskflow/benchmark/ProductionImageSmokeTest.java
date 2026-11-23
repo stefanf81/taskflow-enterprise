@@ -1,15 +1,14 @@
 package com.example.taskflow.benchmark;
 
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 
 /** Execute the workflow's actual shutdown assertion against deterministic docker-log streams. */
 @Tag("container-config")
@@ -18,7 +17,7 @@ class ProductionImageSmokeTest {
     private static final String BASH_BINARY = resolveBash();
 
     private static String resolveBash() {
-        for (String candidate : new String[]{"/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"}) {
+        for (String candidate : new String[] {"/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"}) {
             if (new File(candidate).canExecute()) {
                 return candidate;
             }
@@ -54,9 +53,10 @@ class ProductionImageSmokeTest {
         String workflow = Files.readString(Path.of(".github/workflows/ci.yml"));
         String check = workflow.lines()
                 .map(String::strip)
-                .filter(line -> line.startsWith("docker logs smoke-backend")
-                        && line.contains("Graceful shutdown complete"))
-                .findFirst().orElseThrow();
+                .filter(line ->
+                        line.startsWith("docker logs smoke-backend") && line.contains("Graceful shutdown complete"))
+                .findFirst()
+                .orElseThrow();
         // The following workflow line prints diagnostics on failure; test the pipeline's
         // real exit status instead of substituting or weakening that failure handler.
         if (check.endsWith("\\")) {

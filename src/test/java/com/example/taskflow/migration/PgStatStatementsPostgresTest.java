@@ -1,17 +1,16 @@
 package com.example.taskflow.migration;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import db.migration.V37__enable_pg_stat_statements;
+import java.sql.DriverManager;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
-
-import java.sql.DriverManager;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("testcontainers")
 @Testcontainers
@@ -36,8 +35,8 @@ class PgStatStatementsPostgresTest {
         assertEquals(0, flyway.migrate().migrationsExecuted);
 
         try (var connection = DriverManager.getConnection(
-                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
-             var statement = connection.createStatement()) {
+                        postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+                var statement = connection.createStatement()) {
             // Simulate a pre-existing DBA installation: applying V37's body again must be harmless.
             connection.setAutoCommit(false);
             var context = org.mockito.Mockito.mock(org.flywaydb.core.api.migration.Context.class);

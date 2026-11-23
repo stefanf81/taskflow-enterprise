@@ -17,5 +17,4 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties(prefix = "app.rate-limit")
 record LoginThrottleProperties(
         @DefaultValue("10") int loginMaxFailures,
-        @DefaultValue("300") long loginFailureWindowSeconds) {
-}
+        @DefaultValue("300") long loginFailureWindowSeconds) {}

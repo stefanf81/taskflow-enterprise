@@ -1,21 +1,11 @@
 package com.example.taskflow.appointment;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.review.ReviewRequest;
 import com.example.taskflow.review.ReviewService;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.cache.CacheManager;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.aopalliance.intercept.MethodInterceptor;
-import org.springframework.aop.framework.Advised;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
-
 import java.time.LocalDate;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -23,18 +13,38 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-
-import static org.junit.jupiter.api.Assertions.*;
+import org.aopalliance.intercept.MethodInterceptor;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.springframework.aop.framework.Advised;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cache.CacheManager;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** Real service transactions, both lock orderings. Also inherited by the PostgreSQL test. */
 @SpringBootTest(properties = {"app.rate-limit.enabled=false", "app.schedulers.enabled=false"})
 class ReviewStatusConcurrencyIntegrationTest {
-    @Autowired private AppointmentRepository appointments;
-    @Autowired private AppointmentLifecycleService lifecycle;
-    @Autowired private ReviewService reviews;
-    @Autowired private PlatformTransactionManager transactions;
-    @Autowired private JdbcTemplate jdbc;
-    @Autowired private CacheManager caches;
+    @Autowired
+    private AppointmentRepository appointments;
+
+    @Autowired
+    private AppointmentLifecycleService lifecycle;
+
+    @Autowired
+    private ReviewService reviews;
+
+    @Autowired
+    private PlatformTransactionManager transactions;
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    @Autowired
+    private CacheManager caches;
 
     private Appointment approved;
 
@@ -43,8 +53,14 @@ class ReviewStatusConcurrencyIntegrationTest {
         jdbc.update("DELETE FROM reviews");
         appointments.deleteAll();
         caches.getCache("barberRatings").clear();
-        Appointment booking = new Appointment("Customer", "race@example.com", "555", "Alex the Barber",
-                LocalDate.of(2025, 1, 6), "10:00", "Classic Haircut");
+        Appointment booking = new Appointment(
+                "Customer",
+                "race@example.com",
+                "555",
+                "Alex the Barber",
+                LocalDate.of(2025, 1, 6),
+                "10:00",
+                "Classic Haircut");
         booking.setStatus(AppointmentStatus.APPROVED);
         approved = appointments.saveAndFlush(booking);
     }
@@ -74,7 +90,9 @@ class ReviewStatusConcurrencyIntegrationTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = AppointmentStatus.class, names = {"CANCELLED", "DENIED"})
+    @EnumSource(
+            value = AppointmentStatus.class,
+            names = {"CANCELLED", "DENIED"})
     void statusFirstRejectsTheReviewAfterCommit(AppointmentStatus status) throws Exception {
         CountDownLatch statusWritten = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -98,8 +116,8 @@ class ReviewStatusConcurrencyIntegrationTest {
             assertBlocked(reviewer);
             release.countDown();
             writer.get(10, TimeUnit.SECONDS);
-            ExecutionException failure = assertThrows(ExecutionException.class,
-                    () -> reviewer.get(10, TimeUnit.SECONDS));
+            ExecutionException failure =
+                    assertThrows(ExecutionException.class, () -> reviewer.get(10, TimeUnit.SECONDS));
             assertInstanceOf(IllegalArgumentException.class, failure.getCause());
             assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM reviews", Integer.class));
             assertFinalStatus(status);
@@ -112,7 +130,9 @@ class ReviewStatusConcurrencyIntegrationTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = AppointmentStatus.class, names = {"CANCELLED", "DENIED"})
+    @EnumSource(
+            value = AppointmentStatus.class,
+            names = {"CANCELLED", "DENIED"})
     void reviewFirstMakesTheStatusWriterUncountItAfterCommit(AppointmentStatus status) throws Exception {
         CountDownLatch reviewWritten = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -149,7 +169,8 @@ class ReviewStatusConcurrencyIntegrationTest {
     }
 
     private void assertFinalStatus(AppointmentStatus status) {
-        assertEquals(status, appointments.findById(approved.getId()).orElseThrow().getStatusEnum());
+        assertEquals(
+                status, appointments.findById(approved.getId()).orElseThrow().getStatusEnum());
         assertTrue(reviews.getBarberRatings().isEmpty(), "cancelled/denied bookings must not count");
     }
 }

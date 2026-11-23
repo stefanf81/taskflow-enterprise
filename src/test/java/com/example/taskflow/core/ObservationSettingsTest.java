@@ -1,18 +1,17 @@
 package com.example.taskflow.core;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationHandler;
 import io.micrometer.observation.ObservationRegistry;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.micrometer.observation.autoconfigure.ObservationAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Properties;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The observations switched off in {@code application.properties} for throughput (Spring Security's
@@ -40,10 +39,14 @@ class ObservationSettingsTest {
                 .run(context -> {
                     ObservationRegistry registry = context.getBean(ObservationRegistry.class);
 
-                    assertThat(Observation.createNotStarted("lettuce", registry).isNoop()).isTrue();
-                    assertThat(Observation.createNotStarted("spring.security.filterchains", registry).isNoop())
+                    assertThat(Observation.createNotStarted("lettuce", registry).isNoop())
                             .isTrue();
-                    assertThat(Observation.createNotStarted("http.server.requests", registry).isNoop()).isFalse();
+                    assertThat(Observation.createNotStarted("spring.security.filterchains", registry)
+                                    .isNoop())
+                            .isTrue();
+                    assertThat(Observation.createNotStarted("http.server.requests", registry)
+                                    .isNoop())
+                            .isFalse();
                 });
     }
 

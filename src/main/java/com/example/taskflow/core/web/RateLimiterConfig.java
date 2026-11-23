@@ -6,11 +6,15 @@ import com.example.taskflow.core.LogSanitizer;
 import com.example.taskflow.core.redis.RedisBackoff;
 import com.example.taskflow.core.redis.RedisConnectionRecovery;
 import com.fasterxml.jackson.annotation.JsonInclude;
-
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,12 +22,12 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
-import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.cors.CorsConfiguration;
@@ -33,12 +37,6 @@ import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.cors.DefaultCorsProcessor;
 import org.springframework.web.filter.OncePerRequestFilter;
 import tools.jackson.databind.json.JsonMapper;
-
-import java.io.IOException;
-import java.time.Clock;
-import java.time.Instant;
-import java.util.Collections;
-import java.util.List;
 
 @Configuration
 @ConditionalOnProperty(name = "app.rate-limit.enabled", havingValue = "true", matchIfMissing = false)
@@ -66,8 +64,7 @@ class RateLimiterConfig {
             (Class) List.class);
 
     /** A request's count in its window and the seconds until that window ends (at least 1). */
-    record Count(long count, long retryAfterSeconds) {
-    }
+    record Count(long count, long retryAfterSeconds) {}
 
     private static final long WINDOW_MILLIS = 60_000;
     private static final String RATE_LIMIT_MESSAGE = "Too many requests. Please try again later.";
@@ -92,36 +89,48 @@ class RateLimiterConfig {
     private final FixedWindowCounter localFallback = new FixedWindowCounter(WINDOW_MILLIS, 50_000);
     /** Skips Redis after it failed, so an outage costs one timeout per interval, not one per request. */
     private final RedisBackoff redisBackoff;
+
     private final @Nullable CorsConfigurationSource corsConfigurationSource;
     private final CorsProcessor corsProcessor = new DefaultCorsProcessor();
     private final Clock clock;
 
     @Autowired
-    public RateLimiterConfig(RateLimitProperties properties,
-                             ObjectProvider<RedisConnectionRecovery> connectionRecovery,
-                             ObjectProvider<CorsConfigurationSource> corsConfigurationSource,
-                             ObjectProvider<Clock> clock) {
-        this(properties.maxRequestsPerMinute(), properties.authMaxRequestsPerMinute(),
+    public RateLimiterConfig(
+            RateLimitProperties properties,
+            ObjectProvider<RedisConnectionRecovery> connectionRecovery,
+            ObjectProvider<CorsConfigurationSource> corsConfigurationSource,
+            ObjectProvider<Clock> clock) {
+        this(
+                properties.maxRequestsPerMinute(),
+                properties.authMaxRequestsPerMinute(),
                 new RedisBackoff("Rate limiter", connectionRecovery.getIfAvailable()),
                 corsConfigurationSource.getIfAvailable(),
                 clock.getIfAvailable(Clock::systemUTC));
     }
 
     RateLimiterConfig(int maxRequestsPerMinute, int authMaxRequestsPerMinute) {
-        this(maxRequestsPerMinute, authMaxRequestsPerMinute, new RedisBackoff("Rate limiter"), null,
-                Clock.systemUTC());
+        this(maxRequestsPerMinute, authMaxRequestsPerMinute, new RedisBackoff("Rate limiter"), null, Clock.systemUTC());
     }
 
-    RateLimiterConfig(int maxRequestsPerMinute, int authMaxRequestsPerMinute,
-                      @Nullable CorsConfigurationSource corsConfigurationSource, Clock clock) {
-        this(maxRequestsPerMinute, authMaxRequestsPerMinute, new RedisBackoff("Rate limiter"),
-                corsConfigurationSource, clock);
+    RateLimiterConfig(
+            int maxRequestsPerMinute,
+            int authMaxRequestsPerMinute,
+            @Nullable CorsConfigurationSource corsConfigurationSource,
+            Clock clock) {
+        this(
+                maxRequestsPerMinute,
+                authMaxRequestsPerMinute,
+                new RedisBackoff("Rate limiter"),
+                corsConfigurationSource,
+                clock);
     }
 
-    private RateLimiterConfig(int maxRequestsPerMinute, int authMaxRequestsPerMinute,
-                              RedisBackoff redisBackoff,
-                              @Nullable CorsConfigurationSource corsConfigurationSource,
-                              Clock clock) {
+    private RateLimiterConfig(
+            int maxRequestsPerMinute,
+            int authMaxRequestsPerMinute,
+            RedisBackoff redisBackoff,
+            @Nullable CorsConfigurationSource corsConfigurationSource,
+            Clock clock) {
         this.maxRequestsPerMinute = maxRequestsPerMinute;
         this.authMaxRequestsPerMinute = authMaxRequestsPerMinute;
         this.redisBackoff = redisBackoff;
@@ -152,9 +161,9 @@ class RateLimiterConfig {
             }
 
             @Override
-            protected void doFilterInternal(HttpServletRequest request,
-                    HttpServletResponse response,
-                    FilterChain filterChain) throws ServletException, IOException {
+            protected void doFilterInternal(
+                    HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+                    throws ServletException, IOException {
 
                 String clientIp = getClientIp(request);
                 String path = requestPath(request);
@@ -172,16 +181,18 @@ class RateLimiterConfig {
                     if (currentCount == maxRequests + 1L) {
                         String safePath = LogSanitizer.stripNewlines(path);
                         String safeIp = LogSanitizer.stripNewlines(clientIp);
-                        log.warn("Rate limit exceeded for IP {} on path {}; further requests in this window "
-                                + "are rejected without logging", safeIp, safePath);
+                        log.warn(
+                                "Rate limit exceeded for IP {} on path {}; further requests in this window "
+                                        + "are rejected without logging",
+                                safeIp,
+                                safePath);
                     }
                     // Short-circuiting ahead of Spring Security skips CorsFilter: apply CORS here
                     // so cross-origin clients see the 429 Problem Details body and Retry-After
                     // instead of an opaque browser network error.
                     if (corsConfigurationSource != null && CorsUtils.isCorsRequest(request)) {
                         CorsConfiguration corsConfig = corsConfigurationSource.getCorsConfiguration(request);
-                        if (!corsProcessor.processRequest(corsConfig, request, response)
-                                || response.isCommitted()) {
+                        if (!corsProcessor.processRequest(corsConfig, request, response) || response.isCommitted()) {
                             return;
                         }
                     }
@@ -231,9 +242,7 @@ class RateLimiterConfig {
         if (redisBackoff.allowRequest()) {
             try {
                 List<Long> result = redisTemplate.execute(
-                        RATE_LIMIT_SCRIPT,
-                        Collections.singletonList(redisKey),
-                        String.valueOf(WINDOW_MILLIS));
+                        RATE_LIMIT_SCRIPT, Collections.singletonList(redisKey), String.valueOf(WINDOW_MILLIS));
                 redisBackoff.recordSuccess();
                 if (result != null && result.size() == 2 && result.get(0) != null && result.get(1) != null) {
                     return new Count(result.get(0), retryAfterSeconds(result.get(1)));

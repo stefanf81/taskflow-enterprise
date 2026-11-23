@@ -1,21 +1,20 @@
 package com.example.taskflow.core.telemetry;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.List;
+import java.util.Properties;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.micrometer.metrics.autoconfigure.CompositeMeterRegistryAutoConfiguration;
 import org.springframework.boot.micrometer.metrics.autoconfigure.MetricsAutoConfiguration;
 import org.springframework.boot.micrometer.metrics.autoconfigure.export.prometheus.PrometheusMetricsExportAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.List;
-import java.util.Properties;
-import java.util.regex.Pattern;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The prod profile publishes {@code taskflow.client.performance} with buckets at the Core Web Vitals
@@ -36,21 +35,26 @@ class ClientTelemetrySloBucketsTest {
                 .toArray(String[]::new);
 
         new ApplicationContextRunner()
-                .withConfiguration(AutoConfigurations.of(MetricsAutoConfiguration.class,
-                        CompositeMeterRegistryAutoConfiguration.class, PrometheusMetricsExportAutoConfiguration.class))
+                .withConfiguration(AutoConfigurations.of(
+                        MetricsAutoConfiguration.class,
+                        CompositeMeterRegistryAutoConfiguration.class,
+                        PrometheusMetricsExportAutoConfiguration.class))
                 .withPropertyValues(distribution)
                 .run(context -> {
                     PrometheusMeterRegistry registry = context.getBean(PrometheusMeterRegistry.class);
                     // Registered exactly as ClientTelemetryController does.
-                    DistributionSummary lcp = registry.summary("taskflow.client.performance",
-                            "platform", "WEB", "route", "LANDING", "name", "LCP");
+                    DistributionSummary lcp = registry.summary(
+                            "taskflow.client.performance", "platform", "WEB", "route", "LANDING", "name", "LCP");
                     lcp.record(2100);
                     lcp.record(3600);
 
-                    String buckets = registry.scrape().lines()
+                    String buckets = registry.scrape()
+                            .lines()
                             .filter(line -> line.startsWith("taskflow_client_performance_bucket"))
                             .reduce("", (a, b) -> a + b + "\n");
-                    List<Double> bounds = Pattern.compile("le=\"([0-9.]+)\"").matcher(buckets).results()
+                    List<Double> bounds = Pattern.compile("le=\"([0-9.]+)\"")
+                            .matcher(buckets)
+                            .results()
                             .map(match -> Double.valueOf(match.group(1)))
                             .toList();
                     assertThat(bounds).containsExactly(0.1, 0.25, 200.0, 500.0, 800.0, 1800.0, 2500.0, 3000.0, 4000.0);

@@ -1,17 +1,26 @@
 package com.example.taskflow.benchmark;
 
-import com.example.taskflow.appointment.internal.Appointment;
-import com.example.taskflow.appointment.internal.AppointmentRepository;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.example.taskflow.appointment.AppointmentCreateRequest;
 import com.example.taskflow.appointment.Barber;
-import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.BarberSchedule;
+import com.example.taskflow.appointment.internal.Appointment;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
+import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
+import com.example.taskflow.auth.TestSecurityConfig;
 import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.example.taskflow.review.internal.ReviewRepository;
 import com.zaxxer.hikari.HikariDataSource;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.*;
+import java.util.concurrent.*;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -20,18 +29,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.*;
-
-import com.example.taskflow.auth.TestSecurityConfig;
-
-import javax.sql.DataSource;
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.stream.IntStream;
-
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * HIKARICP POOL SIZE SWEEP UNDER VIRTUAL THREADS.
@@ -49,13 +46,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @Tag("benchmark")
 @SpringBootTest(
-    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = {
-        "spring.threads.virtual.enabled=true",
-        "app.rate-limit.enabled=false",
-        "app.stats.cache.ttl=0"
-    }
-)
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {"spring.threads.virtual.enabled=true", "app.rate-limit.enabled=false", "app.stats.cache.ttl=0"})
 @Import(TestSecurityConfig.class)
 class HikariPoolSweepBenchmarkTest {
 
@@ -79,9 +71,9 @@ class HikariPoolSweepBenchmarkTest {
 
     // Workload mix (same as VirtualThreadBenchmarkTest)
     private static final double W_APPOINTMENTS = 0.30;
-    private static final double W_BARBERS       = 0.20;
-    private static final double W_CATALOG       = 0.20;
-    private static final double W_CREATE        = 0.30;
+    private static final double W_BARBERS = 0.20;
+    private static final double W_CATALOG = 0.20;
+    private static final double W_CREATE = 0.30;
 
     // -----------------------------------------------------------------------
     //  INJECTIONS
@@ -91,14 +83,19 @@ class HikariPoolSweepBenchmarkTest {
 
     @Autowired
     private BarberRepository barberRepository;
+
     @Autowired
     private ServiceItemRepository serviceItemRepository;
+
     @Autowired
     private AppointmentRepository appointmentRepository;
+
     @Autowired
     private ReviewRepository reviewRepository;
+
     @Autowired
     private BarberTimeOffRepository barberTimeOffRepository;
+
     @Autowired
     private BarberScheduleRepository barberScheduleRepository;
 
@@ -141,8 +138,7 @@ class HikariPoolSweepBenchmarkTest {
         // Barbers
         List<Barber> barbers = new ArrayList<>(BARBER_COUNT);
         for (int i = 0; i < BARBER_COUNT; i++) {
-            barbers.add(new Barber("Barber " + i, "barber" + i + "@example.com",
-                    "555-" + String.format("%04d", i)));
+            barbers.add(new Barber("Barber " + i, "barber" + i + "@example.com", "555-" + String.format("%04d", i)));
         }
         barberRepository.saveAll(barbers);
         barberNames = barbers.stream().map(Barber::getName).toList();
@@ -163,9 +159,12 @@ class HikariPoolSweepBenchmarkTest {
         String[] cats = {"hair", "beard", "combo", "facial", "other"};
         List<ServiceItem> services = new ArrayList<>(SERVICE_COUNT);
         for (int i = 0; i < SERVICE_COUNT; i++) {
-            services.add(new ServiceItem("Service " + i,
-                    BigDecimal.valueOf(20.00 + (i * 5)), 15 + (i * 5),
-                    cats[i % cats.length], "Service " + i));
+            services.add(new ServiceItem(
+                    "Service " + i,
+                    BigDecimal.valueOf(20.00 + (i * 5)),
+                    15 + (i * 5),
+                    cats[i % cats.length],
+                    "Service " + i));
         }
         serviceItemRepository.saveAll(services);
         serviceNames = services.stream().map(ServiceItem::getName).toList();
@@ -179,9 +178,14 @@ class HikariPoolSweepBenchmarkTest {
         for (int i = 0; i < APPOINTMENT_COUNT; i++) {
             Barber b = barbers.get(i % BARBER_COUNT);
             ServiceItem sv = services.get(i % SERVICE_COUNT);
-            Appointment a = new Appointment("Customer " + i, "c" + i + "@t.com",
-                    "+1-555-" + i, b.getName(), baseDate.plusDays(i / (BARBER_COUNT * 2)),
-                    tSlots[i % tSlots.length], sv.getName());
+            Appointment a = new Appointment(
+                    "Customer " + i,
+                    "c" + i + "@t.com",
+                    "+1-555-" + i,
+                    b.getName(),
+                    baseDate.plusDays(i / (BARBER_COUNT * 2)),
+                    tSlots[i % tSlots.length],
+                    sv.getName());
             a.setBarber(b);
             a.setService(sv);
             a.setStatus(statuses[i % statuses.length]);
@@ -220,16 +224,17 @@ class HikariPoolSweepBenchmarkTest {
 
     @Test
     void sweepHikariPoolSizes() throws Exception {
-        System.out.println("\n" + "=" .repeat(95));
+        System.out.println("\n" + "=".repeat(95));
         System.out.println("  \u2699 HIKARICP POOL SIZE SWEEP (VIRTUAL THREADS ENABLED)");
         System.out.println("  Sweeping sizes: " + Arrays.toString(POOL_SIZES));
         System.out.println("  Concurrency: " + CONCURRENCY
                 + " | Workload: 30% GET apps / 20% barbers / 20% catalog / 30% POST create");
-        System.out.println("=" .repeat(95));
+        System.out.println("=".repeat(95));
 
         // Table header
         System.out.println();
-        System.out.printf("  %-8s %12s %12s %10s %10s %10s %8s%n",
+        System.out.printf(
+                "  %-8s %12s %12s %10s %10s %10s %8s%n",
                 "Pool", "Throughput", "Avg Lat", "p50", "p95", "p99", "Errors");
         System.out.println("  " + "-".repeat(75));
 
@@ -260,18 +265,20 @@ class HikariPoolSweepBenchmarkTest {
             double sec = elapsedNs / 1_000_000_000.0;
             int throughput = (int) Math.round(MEASUREMENT_REQUESTS / sec);
 
-            long[] sorted = latencies.stream().mapToLong(Long::longValue).sorted().toArray();
+            long[] sorted =
+                    latencies.stream().mapToLong(Long::longValue).sorted().toArray();
             int avg = (int) Math.round(Arrays.stream(sorted).average().orElse(0));
-            int p50  = percentile(sorted, 50);
-            int p95  = percentile(sorted, 95);
-            int p99  = percentile(sorted, 99);
+            int p50 = percentile(sorted, 50);
+            int p95 = percentile(sorted, 95);
+            int p99 = percentile(sorted, 99);
             int errors = MEASUREMENT_REQUESTS - sorted.length;
 
             // Print this row
-            System.out.printf("  %-8s %12d %12d %10d %10d %10d %8d%n",
+            System.out.printf(
+                    "  %-8s %12d %12d %10d %10d %10d %8d%n",
                     "size=" + poolSize, throughput, avg, p50, p95, p99, errors);
 
-            results[idx] = new int[]{throughput, avg, p50, p95, p99, errors};
+            results[idx] = new int[] {throughput, avg, p50, p95, p99, errors};
         }
 
         // Summary
@@ -287,9 +294,9 @@ class HikariPoolSweepBenchmarkTest {
                 bestIdx = i;
             }
         }
-        System.out.printf("     pool-size=%d  throughput=%d req/s  avg=%d ms  p99=%d ms%n",
-                POOL_SIZES[bestIdx], results[bestIdx][0],
-                results[bestIdx][1], results[bestIdx][4]);
+        System.out.printf(
+                "     pool-size=%d  throughput=%d req/s  avg=%d ms  p99=%d ms%n",
+                POOL_SIZES[bestIdx], results[bestIdx][0], results[bestIdx][1], results[bestIdx][4]);
 
         // Also print the baseline comparison line
         System.out.println();
@@ -315,7 +322,8 @@ class HikariPoolSweepBenchmarkTest {
                     long t0 = System.nanoTime();
                     try {
                         executeRandomRequest();
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                    }
                     long t1 = System.nanoTime();
                     endGate.countDown();
                     return (t1 - t0) / 1_000_000L;
@@ -329,7 +337,10 @@ class HikariPoolSweepBenchmarkTest {
             List<Long> latencies = new ArrayList<>(count);
             for (Future<Long> f : futures) {
                 if (f.isDone()) {
-                    try { latencies.add(f.get()); } catch (Exception ignored) {}
+                    try {
+                        latencies.add(f.get());
+                    } catch (Exception ignored) {
+                    }
                 }
             }
             return latencies;
@@ -360,21 +371,20 @@ class HikariPoolSweepBenchmarkTest {
         headers.setBearerAuth(accessToken);
         ResponseEntity<String> r = http.exchange(
                 baseUrl + "/api/v1/appointments?page=0&size=10&status=PENDING",
-                HttpMethod.GET, new HttpEntity<>(headers), String.class);
-        if (!r.getStatusCode().is2xxSuccessful())
-            System.err.println("  GET apps failed: " + r.getStatusCode());
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                String.class);
+        if (!r.getStatusCode().is2xxSuccessful()) System.err.println("  GET apps failed: " + r.getStatusCode());
     }
 
     private void getBarbers() {
         ResponseEntity<String> r = http.getForEntity(baseUrl + "/api/v1/barbers", String.class);
-        if (!r.getStatusCode().is2xxSuccessful())
-            System.err.println("  GET barbers failed: " + r.getStatusCode());
+        if (!r.getStatusCode().is2xxSuccessful()) System.err.println("  GET barbers failed: " + r.getStatusCode());
     }
 
     private void getCatalog() {
         ResponseEntity<String> r = http.getForEntity(baseUrl + "/api/v1/catalog", String.class);
-        if (!r.getStatusCode().is2xxSuccessful())
-            System.err.println("  GET catalog failed: " + r.getStatusCode());
+        if (!r.getStatusCode().is2xxSuccessful()) System.err.println("  GET catalog failed: " + r.getStatusCode());
     }
 
     private void createAppointment() {
@@ -386,19 +396,18 @@ class HikariPoolSweepBenchmarkTest {
         String cid = UUID.randomUUID().toString().substring(0, 8);
 
         AppointmentCreateRequest body = new AppointmentCreateRequest(
-                "BM-" + cid, "bm-" + cid + "@t.com", "+1-555-" + cid,
-                barberName, date, time, serviceName);
+                "BM-" + cid, "bm-" + cid + "@t.com", "+1-555-" + cid, barberName, date, time, serviceName);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         try {
-            ResponseEntity<String> r = http.exchange(baseUrl + "/api/v1/appointments",
-                    HttpMethod.POST, new HttpEntity<>(body, headers), String.class);
-            if (!r.getStatusCode().is2xxSuccessful()
-                    && !r.getStatusCode().equals(HttpStatus.BAD_REQUEST)) {
+            ResponseEntity<String> r = http.exchange(
+                    baseUrl + "/api/v1/appointments", HttpMethod.POST, new HttpEntity<>(body, headers), String.class);
+            if (!r.getStatusCode().is2xxSuccessful() && !r.getStatusCode().equals(HttpStatus.BAD_REQUEST)) {
                 System.err.println("  POST failed: " + r.getStatusCode());
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 
     // -----------------------------------------------------------------------

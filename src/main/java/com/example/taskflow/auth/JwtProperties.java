@@ -16,5 +16,4 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 record JwtProperties(
         @DefaultValue("taskflow") String issuer,
         @DefaultValue("taskflow-api") String audience,
-        @DefaultValue("3600") long lifetimeSeconds) {
-}
+        @DefaultValue("3600") long lifetimeSeconds) {}

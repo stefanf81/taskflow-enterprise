@@ -1,23 +1,22 @@
 package com.example.taskflow.appointment;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.example.taskflow.catalog.CatalogService;
 import com.example.taskflow.catalog.ServiceItemRequest;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.modulith.test.ApplicationModuleTest;
-import org.springframework.test.context.TestPropertySource;
-import org.springframework.modulith.test.PublishedEvents;
-import org.springframework.transaction.IllegalTransactionStateException;
-
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.modulith.test.ApplicationModuleTest;
+import org.springframework.modulith.test.PublishedEvents;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.transaction.IllegalTransactionStateException;
 
 /**
  * Boots the appointment module with the modules it is allowed to depend on (catalog, core) and
@@ -30,12 +29,16 @@ class AppointmentModuleTest {
 
     @Autowired
     private AppointmentService appointments;
+
     @Autowired
     private AppointmentBookingService booking;
+
     @Autowired
     private AppointmentLifecycleService lifecycle;
+
     @Autowired
     private BarberService barbers;
+
     @Autowired
     private CatalogService catalog;
 
@@ -62,8 +65,10 @@ class AppointmentModuleTest {
 
     private AppointmentResponse book(String email, LocalDate day, String time) {
         return booking.createAppointment(
-                new AppointmentCreateRequest("Module Test", email, "555-0100", barberName, day, time, serviceName),
-                UUID.randomUUID().toString()).appointment();
+                        new AppointmentCreateRequest(
+                                "Module Test", email, "555-0100", barberName, day, time, serviceName),
+                        UUID.randomUUID().toString())
+                .appointment();
     }
 
     @Test
@@ -74,7 +79,9 @@ class AppointmentModuleTest {
 
         AppointmentDetails details = events.ofType(AppointmentStatusChangedEvent.class)
                 .matching(e -> booked.id().equals(e.getAppointment().id()))
-                .iterator().next().getAppointment();
+                .iterator()
+                .next()
+                .getAppointment();
         assertEquals(AppointmentStatus.APPROVED, details.status());
         assertEquals("module-approve@example.com", details.customerEmail());
         assertEquals(serviceName, details.serviceType());
@@ -85,8 +92,8 @@ class AppointmentModuleTest {
     void claimingAReminderOutsideATransactionIsRefused() {
         // The reminder flag must commit with the notification module's outbox row; on its own it
         // would commit first and a failed outbox write would lose the e-mail.
-        assertThrows(IllegalTransactionStateException.class,
-                () -> appointments.claimReminder(1L, aWorkingDayInTwoWeeks()));
+        assertThrows(
+                IllegalTransactionStateException.class, () -> appointments.claimReminder(1L, aWorkingDayInTwoWeeks()));
     }
 
     @Test
@@ -97,7 +104,8 @@ class AppointmentModuleTest {
 
         AppointmentCancelledEvent event = events.ofType(AppointmentCancelledEvent.class)
                 .matching(e -> booked.id().equals(e.appointment().id()))
-                .iterator().next();
+                .iterator()
+                .next();
         assertEquals(AppointmentCancelledEvent.CancelledBy.GUEST, event.cancelledBy());
         assertEquals(AppointmentStatus.CANCELLED, event.appointment().status());
         assertTrue(appointments.findDetailsByPublicId(booked.publicId()).isPresent());

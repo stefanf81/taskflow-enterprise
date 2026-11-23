@@ -1,10 +1,9 @@
 package com.example.taskflow.notification;
-import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 
+import com.example.taskflow.notification.internal.NotificationOutboxRepository;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 /**
  * Service layer for notification outbox queries.
@@ -22,8 +21,7 @@ class NotificationService {
 
     @Transactional(readOnly = true)
     public List<NotificationOutboxResponse> getRecentNotifications() {
-        return repository.findTop100ByOrderBySentAtDescIdDesc()
-                .stream()
+        return repository.findTop100ByOrderBySentAtDescIdDesc().stream()
                 .map(NotificationOutboxResponse::fromEntity)
                 .toList();
     }
