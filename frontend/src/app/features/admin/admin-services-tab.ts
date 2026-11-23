@@ -7,6 +7,12 @@ import { formatUsd } from '../../core/format';
 import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
 import { ServiceItem } from '../../types/api';
 import { RetiredServicesStore } from './retired-services.store';
+import { packageIcon } from '../../core/ui/icons/package';
+import { timerIcon } from '../../core/ui/icons/timer';
+import { Icon } from '../../core/ui/icon';
+import { Button } from '../../core/ui/button';
+import { Alert } from '../../core/ui/alert';
+import { EmptyState } from '../../core/ui/empty-state';
 
 interface ServiceDraft {
   name: string;
@@ -27,10 +33,14 @@ const emptyDraft = (): ServiceDraft => ({
 /** Owner dashboard · service catalog tab: the menu, and the retired services that can be restored. */
 @Component({
   selector: 'app-admin-services-tab',
-  imports: [],
+  imports: [Icon, Button, Alert, EmptyState],
   templateUrl: './admin-services-tab.html',
 })
 export class AdminServicesTab {
+  protected readonly icons = {
+    package: packageIcon,
+    timer: timerIcon,
+  };
   private readonly catalogApi = inject(CatalogApi);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly catalogStore = inject(ServiceCatalogStore);

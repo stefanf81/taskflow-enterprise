@@ -2,6 +2,17 @@ import { Component, inject, signal } from '@angular/core';
 import { finalize } from 'rxjs';
 import { AppointmentsApi } from '../../core/api/appointments-api';
 import { FlashMessages } from '../../core/ui/flash-messages';
+import { Button } from '../../core/ui/button';
+import { EmptyState } from '../../core/ui/empty-state';
+import { Icon } from '../../core/ui/icon';
+import { calendarIcon } from '../../core/ui/icons/calendar';
+import { mailIcon } from '../../core/ui/icons/mail';
+import { phoneIcon } from '../../core/ui/icons/phone';
+import { scissorsIcon } from '../../core/ui/icons/scissors';
+import { searchIcon } from '../../core/ui/icons/search';
+import { xIcon } from '../../core/ui/icons/x';
+import { SegmentedControl, SegmentOption } from '../../core/ui/segmented-control';
+import { StatusBadge } from '../../core/ui/status-badge';
 import { AppointmentStore } from './appointment.store';
 import { ShopClock } from '../../core/shop-clock';
 import { formatTime12Hour, formatLocalDate, isOverdue } from '../../core/time-utils';
@@ -9,7 +20,7 @@ import { formatTime12Hour, formatLocalDate, isOverdue } from '../../core/time-ut
 /** Owner dashboard · appointments tab (list, filter, search, approve/deny/cancel). */
 @Component({
   selector: 'app-admin-appointments-tab',
-  imports: [],
+  imports: [Button, EmptyState, Icon, SegmentedControl, StatusBadge],
   templateUrl: './admin-appointments-tab.html',
 })
 export class AdminAppointmentsTab {
@@ -26,6 +37,22 @@ export class AdminAppointmentsTab {
   protected readonly isLoading = this.store.isLoading;
   protected readonly loadErrorMessage = this.store.loadErrorMessage;
   protected readonly pendingIds = signal<ReadonlySet<number>>(new Set());
+  protected readonly filters: readonly SegmentOption<string>[] = [
+    { value: 'all', label: 'All' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'approved', label: 'Approved' },
+    { value: 'overdue', label: 'Overdue' },
+    { value: 'denied', label: 'Denied' },
+    { value: 'cancelled', label: 'Cancelled' },
+  ];
+  protected readonly icons = {
+    calendar: calendarIcon,
+    mail: mailIcon,
+    phone: phoneIcon,
+    scissors: scissorsIcon,
+    search: searchIcon,
+    x: xIcon,
+  };
 
   setFilter(filter: string): void {
     this.store.setFilter(filter);

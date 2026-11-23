@@ -8,10 +8,12 @@
     method="post"
     [formRoot]="store.bookingForm"
     (submit)="$event.preventDefault(); submitted.emit()"
-    class="appointment-form"
+    class="appointment-form space-y-4"
   >
-    <div class="form-group">
-      <label for="customerName">Your Full Name <span class="required">*</span></label>
+    <div class="form-group flex flex-col gap-1.5">
+      <label for="customerName" class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
+        >Your Full Name <span class="required">*</span></label
+      >
       <input
         type="text"
         id="customerName"
@@ -29,9 +31,11 @@
       }
     </div>
 
-    <div class="form-row">
-      <div class="form-group">
-        <label for="customerEmail">Email Address <span class="required">*</span></label>
+    <div class="form-row grid gap-4 sm:grid-cols-2">
+      <div class="form-group flex flex-col gap-1.5">
+        <label for="customerEmail" class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
+          >Email Address <span class="required">*</span></label
+        >
         <input
           type="email"
           id="customerEmail"
@@ -49,8 +53,10 @@
         }
       </div>
 
-      <div class="form-group">
-        <label for="customerPhone">Phone Number <span class="required">*</span></label>
+      <div class="form-group flex flex-col gap-1.5">
+        <label for="customerPhone" class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
+          >Phone Number <span class="required">*</span></label
+        >
         <input
           type="tel"
           id="customerPhone"
@@ -74,25 +80,25 @@
       <h3
         class="text-zinc-100 font-extrabold text-sm border-b border-white/10 pb-3 mb-4 flex items-center gap-1.5"
       >
-        <span>📋 Reservation Summary</span>
+        <span><app-icon [icon]="icons.clipboardList" /> Reservation Summary</span>
       </h3>
       <div class="space-y-3 text-xs text-zinc-400 font-light">
         <p class="flex justify-between">
-          <span>✂️ Treatment:</span>
+          <span><app-icon [icon]="icons.scissors" /> Treatment:</span>
           <strong class="text-zinc-100 font-semibold">{{ store.bookingService() }}</strong>
         </p>
         <p class="flex justify-between">
-          <span>⏱️ Duration:</span>
+          <span><app-icon [icon]="icons.timer" /> Duration:</span>
           <strong class="text-zinc-100 font-semibold"
             >{{ store.selectedServiceObj()?.durationMinutes }} mins</strong
           >
         </p>
         <p class="flex justify-between">
-          <span>💈 Stylist:</span>
+          <span><app-icon [icon]="icons.userRound" /> Stylist:</span>
           <strong class="text-zinc-100 font-semibold">{{ store.bookingBarber() }}</strong>
         </p>
         <p class="flex justify-between">
-          <span>📅 Scheduled:</span>
+          <span><app-icon [icon]="icons.calendar" /> Scheduled:</span>
           <strong class="text-zinc-100 font-semibold">
             {{ formatLocalDate(store.bookingDate()) }} at
             {{ formatTime12Hour(store.bookingTime()) }}
@@ -100,7 +106,7 @@
         </p>
         @if (store.estimatedEndTime()) {
           <p class="flex justify-between">
-            <span>⏰ Est. End Time:</span>
+            <span><app-icon [icon]="icons.alarmClock" /> Est. End Time:</span>
             <strong class="text-accent font-bold">{{
               formatTime12Hour(store.estimatedEndTime())
             }}</strong>
@@ -114,11 +120,7 @@
       </div>
     </div>
 
-    <button
-      type="submit"
-      class="btn btn-submit login-btn w-full mt-6"
-      [disabled]="store.isSubmitting()"
-    >
+    <button type="submit" appButton class="login-btn w-full mt-6" [disabled]="store.isSubmitting()">
       {{ store.isSubmitting() ? 'Securing Slot...' : 'Confirm & Request Booking' }}
     </button>
   </form>

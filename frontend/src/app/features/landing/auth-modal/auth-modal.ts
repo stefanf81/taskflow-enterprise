@@ -7,6 +7,10 @@ import { AuthApi } from '../../../core/api/auth-api';
 import { AuthState } from '../../../core/auth/auth.state';
 import { NETWORK_ERROR_MESSAGE, extractApiError } from '../../../core/api/extract-api-error';
 import { RequestValidationError } from '../../../core/api/request-validation';
+import { Button } from '../../../core/ui/button';
+import { Alert } from '../../../core/ui/alert';
+import { lockIcon } from '../../../core/ui/icons/lock';
+import { Icon } from '../../../core/ui/icon';
 
 /** Model shape for the Signal Forms login / register wizard. */
 interface AuthFormModel {
@@ -30,7 +34,7 @@ interface AuthFormModel {
  */
 @Component({
   selector: 'app-auth-modal',
-  imports: [FormField, A11yModule],
+  imports: [FormField, A11yModule, Button, Alert, Icon],
   template: `
     <div class="modal-overlay" tabindex="-1" (keydown.escape)="closeModal()">
       <div
@@ -45,20 +49,7 @@ interface AuthFormModel {
           &times;
         </button>
         <div class="login-header text-center mb-6">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke-width="2.5"
-            stroke="currentColor"
-            class="w-10 h-10 text-accent mx-auto mb-3"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
-            />
-          </svg>
+          <app-icon [icon]="icons.lock" class="block size-10 text-accent mx-auto mb-3" />
           <h2 id="authModalTitle" class="text-xl font-black text-zinc-100 tracking-tight uppercase">
             {{ isRegisterMode() ? 'Create Account' : 'Sign In' }}
           </h2>
@@ -72,29 +63,15 @@ interface AuthFormModel {
         </div>
 
         @if (sessionNotice() && !errorMessage()) {
-          <div
-            role="status"
-            class="alert mb-4 py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-amber-500/20 bg-amber-500/10"
-          >
-            <span class="text-amber-400 leading-normal font-medium">{{ sessionNotice() }}</span>
-          </div>
+          <app-alert tone="warning" class="mb-4">{{ sessionNotice() }}</app-alert>
         }
 
-        @if (errorMessage()) {
-          <div
-            role="alert"
-            class="alert alert-error mb-4 py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-red-500/20"
-          >
-            <span class="text-rose-400 leading-normal font-medium">{{ errorMessage() }}</span>
-          </div>
+        @if (errorMessage(); as message) {
+          <app-alert tone="error" class="mb-4">{{ message }}</app-alert>
         }
 
-        @if (successMessage()) {
-          <div
-            class="alert alert-success mb-4 py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-emerald-500/10"
-          >
-            <span class="text-emerald-400 leading-normal font-medium">{{ successMessage() }}</span>
-          </div>
+        @if (successMessage(); as message) {
+          <app-alert tone="success" class="mb-4">{{ message }}</app-alert>
         }
 
         <form method="post" (submit)="$event.preventDefault(); onLogin()" class="space-y-4">
@@ -195,7 +172,7 @@ interface AuthFormModel {
             }
           </div>
 
-          <button type="submit" class="btn btn-submit w-full mt-2" [disabled]="isSubmitting()">
+          <button type="submit" appButton class="w-full mt-2" [disabled]="isSubmitting()">
             {{ isSubmitting() ? 'Processing...' : isRegisterMode() ? 'Register' : 'Sign In' }}
           </button>
         </form>
@@ -220,6 +197,9 @@ interface AuthFormModel {
   `,
 })
 export class AuthModalComponent {
+  protected readonly icons = {
+    lock: lockIcon,
+  };
   private readonly authApi = inject(AuthApi);
   private readonly authState = inject(AuthState);
   private readonly destroyRef = inject(DestroyRef);

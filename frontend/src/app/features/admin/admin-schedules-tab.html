@@ -1,14 +1,11 @@
 <div class="space-y-6 animate-fadeIn">
   <h3 class="text-white font-bold text-lg">Barber Schedules & Time-Off</h3>
 
-  @if (loadError()) {
-    <div
-      role="alert"
-      class="alert alert-error py-3 px-4 rounded-xl text-xs flex items-center gap-3 border border-red-500/20"
-    >
-      <span class="text-rose-400 leading-normal font-medium flex-1">{{ loadError() }}</span>
-      <button type="button" class="btn btn-secondary" (click)="retryLoad()">Retry</button>
-    </div>
+  @if (loadError(); as message) {
+    <app-alert tone="error">
+      {{ message }}
+      <button type="button" appButton="secondary" alertAction (click)="retryLoad()">Retry</button>
+    </app-alert>
   }
 
   <div class="flex flex-col md:flex-row gap-6">
@@ -74,7 +71,8 @@
         />
         <button
           type="button"
-          class="btn btn-secondary w-full"
+          appButton="secondary"
+          class="w-full"
           [disabled]="isSaving()"
           (click)="createBarber()"
         >
@@ -87,40 +85,15 @@
     <div class="w-full md:w-2/3 space-y-6">
       <!-- One banner for every action of this tab (add barber, weekly hours, time off). -->
       @if (timeOffActionError()) {
-        <div
-          role="alert"
-          class="alert alert-error py-2.5 px-4 rounded-xl text-xs border border-red-500/20 flex items-center gap-2"
-        >
-          <span class="text-rose-400 leading-normal font-medium">{{ timeOffActionError() }}</span>
-          <button
-            type="button"
-            class="text-base font-bold opacity-60 hover:opacity-100 ml-auto"
-            (click)="timeOffActionError.set(null)"
-            aria-label="Dismiss error"
-          >
-            &times;
-          </button>
-        </div>
+        <app-alert tone="error" dismissible (dismissed)="timeOffActionError.set(null)">
+          {{ timeOffActionError() }}
+        </app-alert>
       }
 
       @if (timeOffActionSuccess()) {
-        <div
-          role="status"
-          aria-live="polite"
-          class="alert alert-success py-2.5 px-4 rounded-xl text-xs border border-emerald-500/10 flex items-center gap-2"
-        >
-          <span class="text-emerald-400 leading-normal font-medium">{{
-            timeOffActionSuccess()
-          }}</span>
-          <button
-            type="button"
-            class="text-base font-bold opacity-60 hover:opacity-100 ml-auto"
-            (click)="timeOffActionSuccess.set(null)"
-            aria-label="Dismiss"
-          >
-            &times;
-          </button>
-        </div>
+        <app-alert tone="success" dismissible (dismissed)="timeOffActionSuccess.set(null)">
+          {{ timeOffActionSuccess() }}
+        </app-alert>
       }
 
       @if (selectedBarberId()) {
@@ -174,7 +147,7 @@
             class="form-control w-full"
           />
         </div>
-        <button class="btn btn-submit w-full" [disabled]="isSaving()" (click)="addTimeOff()">
+        <button appButton class="w-full" [disabled]="isSaving()" (click)="addTimeOff()">
           {{ isSaving() ? 'Saving…' : 'Save Time-Off' }}
         </button>
       </div>
@@ -185,11 +158,7 @@
           Scheduled Time-Off
         </h4>
         @if (timeOffs().length === 0) {
-          <div
-            class="text-center py-8 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20"
-          >
-            <p class="text-xs text-zinc-500 font-light italic">No time-off scheduled.</p>
-          </div>
+          <app-empty-state [icon]="icons.calendar" title="No time-off scheduled." />
         } @else {
           <div class="space-y-3">
             @for (to of timeOffs(); track to.id) {
@@ -198,7 +167,8 @@
               >
                 <div>
                   <p class="text-sm font-bold text-rose-400">
-                    ⛔ {{ formatLocalDate(to.startDate) }} &rarr;
+                    <app-icon [icon]="icons.ban" class="mr-1" />{{ formatLocalDate(to.startDate) }}
+                    &rarr;
                     {{ formatLocalDate(to.endDate) }}
                   </p>
                   <p class="text-xs text-zinc-400 mt-1 font-light">

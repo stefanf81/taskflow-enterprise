@@ -15,6 +15,16 @@ import { LookbookComponent } from './lookbook/lookbook';
 import { PostBookingActionsComponent } from './post-booking-actions/post-booking-actions';
 import { BookingWizard } from '../booking/booking-wizard';
 import { LookbookSelectionBus } from '../booking/lookbook-selection';
+import { circleCheckIcon } from '../../core/ui/icons/circle-check';
+import { clockIcon } from '../../core/ui/icons/clock';
+import { hourglassIcon } from '../../core/ui/icons/hourglass';
+import { lockIcon } from '../../core/ui/icons/lock';
+import { scissorsIcon } from '../../core/ui/icons/scissors';
+import { sprayCanIcon } from '../../core/ui/icons/spray-can';
+import { starIcon } from '../../core/ui/icons/star';
+import { timerIcon } from '../../core/ui/icons/timer';
+import { Icon } from '../../core/ui/icon';
+import { Button } from '../../core/ui/button';
 
 /**
  * Guest landing page (route `/`).
@@ -33,10 +43,22 @@ import { LookbookSelectionBus } from '../booking/lookbook-selection';
     LookbookComponent,
     PostBookingActionsComponent,
     BookingWizard,
+    Icon,
+    Button,
   ],
   templateUrl: './landing-page.html',
 })
 export class LandingPage {
+  protected readonly icons = {
+    circleCheck: circleCheckIcon,
+    clock: clockIcon,
+    hourglass: hourglassIcon,
+    lock: lockIcon,
+    scissors: scissorsIcon,
+    sprayCan: sprayCanIcon,
+    star: starIcon,
+    timer: timerIcon,
+  };
   private readonly authState = inject(AuthState);
   private readonly lookbookSelection = inject(LookbookSelectionBus);
   private readonly flash = inject(FlashMessages);

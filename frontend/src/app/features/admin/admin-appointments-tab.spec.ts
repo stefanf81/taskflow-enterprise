@@ -244,7 +244,7 @@ describe('AdminAppointmentsTab', () => {
       await reloadWith(withStatus('CANCELLED'));
 
       const el = fixture.nativeElement as HTMLElement;
-      expect(el.querySelector('.rounded-full')?.textContent).toContain('Cancelled');
+      expect(el.querySelector('app-status-badge')?.textContent).toContain('Cancelled');
       const labels = buttonLabels();
       expect(labels).not.toContain('Approve');
       expect(labels).not.toContain('Deny');

@@ -5,6 +5,18 @@ import { asyncScheduler, throttleTime } from 'rxjs';
 import { Router } from '@angular/router';
 import { injectSignOut } from '../../core/auth/sign-out';
 import { FlashMessages } from '../../core/ui/flash-messages';
+import { Alert } from '../../core/ui/alert';
+import { Button } from '../../core/ui/button';
+import { Icon } from '../../core/ui/icon';
+import { checkIcon } from '../../core/ui/icons/check';
+import { circleCheckIcon } from '../../core/ui/icons/circle-check';
+import { clipboardListIcon } from '../../core/ui/icons/clipboard-list';
+import { dollarSignIcon } from '../../core/ui/icons/dollar-sign';
+import { hourglassIcon } from '../../core/ui/icons/hourglass';
+import { refreshCwIcon } from '../../core/ui/icons/refresh-cw';
+import { scissorsIcon } from '../../core/ui/icons/scissors';
+import { triangleExclamationPointIcon } from '../../core/ui/icons/triangle-exclamation-point';
+import { PageHeader } from '../../core/ui/page-header';
 import { AppointmentStore } from './appointment.store';
 import { AdminEventsService } from './admin-events.service';
 import { AdminAppointmentsTab } from './admin-appointments-tab';
@@ -24,7 +36,16 @@ export const REFRESH_THROTTLE_MS = 300;
 
 @Component({
   selector: 'app-admin-dashboard',
-  imports: [AdminAppointmentsTab, AdminServicesTab, AdminSchedulesTab, AdminNotificationsTab],
+  imports: [
+    AdminAppointmentsTab,
+    AdminServicesTab,
+    AdminSchedulesTab,
+    AdminNotificationsTab,
+    Alert,
+    Button,
+    Icon,
+    PageHeader,
+  ],
   templateUrl: './admin-dashboard.html',
 })
 export class AdminDashboard {
@@ -34,6 +55,16 @@ export class AdminDashboard {
   private readonly adminEvents = inject(AdminEventsService);
   private readonly flash = inject(FlashMessages);
   private readonly signOut = injectSignOut();
+  protected readonly icons = {
+    check: checkIcon,
+    circleCheck: circleCheckIcon,
+    clipboardList: clipboardListIcon,
+    dollarSign: dollarSignIcon,
+    hourglass: hourglassIcon,
+    refreshCw: refreshCwIcon,
+    scissors: scissorsIcon,
+    triangleExclamationPoint: triangleExclamationPointIcon,
+  };
 
   readonly stats = this.store.stats;
   protected readonly approvedRevenue = computed(() => formatUsd(this.stats().approvedRevenue));

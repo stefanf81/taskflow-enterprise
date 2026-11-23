@@ -126,6 +126,88 @@
     box-shadow: none;
   }
 
+  /* Destructive actions: cancel, deny, sign out. */
+  .btn-danger {
+    background-color: color-mix(in oklab, var(--color-danger) 10%, transparent);
+    color: var(--color-danger);
+    border: 1px solid color-mix(in oklab, var(--color-danger) 20%, transparent);
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background-color: var(--color-danger-strong);
+    color: #ffffff;
+  }
+
+  .btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* <app-icon>: 1em square by default (scales with the text next to it); a size utility on the
+     element overrides it. */
+  .app-icon {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+    vertical-align: -0.125em;
+  }
+
+  .app-icon > svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Status colours for badges and alerts: one rule set per component, tinted by --tone. */
+  .tone-success {
+    --tone: var(--color-success);
+  }
+  .tone-warning {
+    --tone: var(--color-warning);
+  }
+  .tone-danger {
+    --tone: var(--color-danger);
+  }
+  .tone-neutral {
+    --tone: var(--color-fg-muted);
+  }
+
+  /* <app-status-badge> */
+  .status-badge {
+    display: inline-block;
+    padding: 0.125rem 0.625rem;
+    border-radius: 9999px;
+    border: 1px solid color-mix(in oklab, var(--tone) 20%, transparent);
+    background-color: color-mix(in oklab, var(--tone) 10%, transparent);
+    color: var(--tone);
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .status-badge.alarm {
+    border-color: var(--color-danger-strong);
+    background-color: var(--color-danger-strong);
+    color: #ffffff;
+  }
+
+  /* <app-alert> */
+  .alert {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid color-mix(in oklab, var(--tone) 20%, transparent);
+    background-color: color-mix(in oklab, var(--tone) 5%, transparent);
+    color: var(--tone);
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+
   /* Square icon button (delete, …) */
   .action-btn {
     width: 2.25rem;

@@ -11,7 +11,7 @@
   } @else if (store.rosterError()) {
     <div role="alert" class="text-center text-xs text-rose-400 py-2">
       <p>{{ store.rosterError() }} You can still choose "No Preference".</p>
-      <button type="button" class="btn btn-secondary mt-3" (click)="store.retryRoster()">
+      <button type="button" appButton="secondary" class="mt-3" (click)="store.retryRoster()">
         Retry
       </button>
     </div>
@@ -35,7 +35,7 @@
     <span
       class="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-lg font-black text-accent"
     >
-      🚀
+      <app-icon [icon]="icons.shuffle" />
     </span>
     <span class="block">
       <span class="block text-zinc-100 font-extrabold text-sm">No Preference</span>

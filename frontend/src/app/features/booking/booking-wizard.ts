@@ -15,6 +15,11 @@ import { DateTimeStep } from './steps/date-time-step';
 import { ServiceStep } from './steps/service-step';
 import { StylistStep } from './steps/stylist-step';
 import { BookingStore, WIZARD_STEPS } from './booking.store';
+import { calendarIcon } from '../../core/ui/icons/calendar';
+import { checkIcon } from '../../core/ui/icons/check';
+import { Icon } from '../../core/ui/icon';
+import { Button } from '../../core/ui/button';
+import { Alert } from '../../core/ui/alert';
 
 /** Progress bar width per step (Tailwind classes, written out so the class scanner finds them). */
 const STEP_PROGRESS_WIDTHS = ['w-0', 'w-1/3', 'w-2/3', 'w-full'] as const;
@@ -29,10 +34,23 @@ const STEP_PROGRESS_WIDTHS = ['w-0', 'w-1/3', 'w-2/3', 'w-full'] as const;
  */
 @Component({
   selector: 'app-booking-wizard',
-  imports: [ReceiptModalComponent, ServiceStep, StylistStep, DateTimeStep, ContactStep],
+  imports: [
+    ReceiptModalComponent,
+    ServiceStep,
+    StylistStep,
+    DateTimeStep,
+    ContactStep,
+    Icon,
+    Button,
+    Alert,
+  ],
   templateUrl: './booking-wizard.html',
 })
 export class BookingWizard {
+  protected readonly icons = {
+    calendar: calendarIcon,
+    check: checkIcon,
+  };
   protected readonly store = inject(BookingStore);
   protected readonly flash = inject(FlashMessages);
   private readonly injector = inject(Injector);

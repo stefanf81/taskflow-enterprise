@@ -388,7 +388,7 @@ export class BookingStore {
     this.bookingModel.update((m) => ({ ...m, serviceType: serviceName }));
     this.selectedCategory.set(category);
     this.activeStep.set(2);
-    this.flash.showSuccess(`✨ Lookbook Style selected: ${serviceName}! Choose your stylist next.`);
+    this.flash.showSuccess(`Lookbook Style selected: ${serviceName}! Choose your stylist next.`);
   }
 
   isStepValid(step: number): boolean {

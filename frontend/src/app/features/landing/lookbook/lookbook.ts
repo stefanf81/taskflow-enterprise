@@ -1,4 +1,9 @@
 import { Component, output } from '@angular/core';
+import { crownIcon } from '../../../core/ui/icons/crown';
+import { scissorsIcon } from '../../../core/ui/icons/scissors';
+import { sparklesIcon } from '../../../core/ui/icons/sparkles';
+import { windIcon } from '../../../core/ui/icons/wind';
+import { Icon } from '../../../core/ui/icon';
 
 /**
  * Standalone Lookbook Showcase component.
@@ -9,11 +14,11 @@ import { Component, output } from '@angular/core';
  */
 @Component({
   selector: 'app-lookbook',
-  imports: [],
+  imports: [Icon],
   template: `
     <section class="card p-8 mb-16">
       <h2 class="text-center text-lg font-extrabold text-zinc-100 uppercase tracking-wider mb-2">
-        ✂️ Signature Lookbook
+        <app-icon [icon]="icons.scissors" /> Signature Lookbook
       </h2>
       <p class="text-center text-xs text-zinc-500 font-light max-w-md mx-auto mb-8">
         Browse our trending style collections. Click any look below to automatically load the
@@ -27,7 +32,7 @@ import { Component, output } from '@angular/core';
           (click)="selectStyle('Classic Haircut', 'hair')"
           class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
-          <span class="text-3xl block mb-3">👦🏻</span>
+          <span class="text-3xl block mb-3"><app-icon [icon]="icons.scissors" /></span>
           <span
             class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-accent transition-colors"
           >
@@ -48,7 +53,7 @@ import { Component, output } from '@angular/core';
           (click)="selectStyle('Modern Skin Fade', 'hair')"
           class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
-          <span class="text-3xl block mb-3">👱🏽‍♂️</span>
+          <span class="text-3xl block mb-3"><app-icon [icon]="icons.wind" /></span>
           <span
             class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-accent transition-colors"
           >
@@ -69,7 +74,7 @@ import { Component, output } from '@angular/core';
           (click)="selectStyle('Beard Trim & Shave', 'beard')"
           class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
-          <span class="text-3xl block mb-3">🧔🏾</span>
+          <span class="text-3xl block mb-3"><app-icon [icon]="icons.sparkles" /></span>
           <span
             class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-accent transition-colors"
           >
@@ -90,7 +95,7 @@ import { Component, output } from '@angular/core';
           (click)="selectStyle('The Executive Package', 'combo')"
           class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
-          <span class="text-3xl block mb-3">🤵🏼</span>
+          <span class="text-3xl block mb-3"><app-icon [icon]="icons.crown" /></span>
           <span
             class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-accent transition-colors"
           >
@@ -109,6 +114,12 @@ import { Component, output } from '@angular/core';
   `,
 })
 export class LookbookComponent {
+  protected readonly icons = {
+    crown: crownIcon,
+    scissors: scissorsIcon,
+    sparkles: sparklesIcon,
+    wind: windIcon,
+  };
   /** Emitted when a user clicks a lookbook style card. */
   readonly styleSelected = output<{ serviceName: string; category: string }>();
 

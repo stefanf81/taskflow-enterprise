@@ -1,111 +1,60 @@
 <div class="w-full px-4 sm:px-8 lg:px-16 pt-12">
-  <header class="flex justify-between items-center mb-10 pb-6 border-b border-white/10">
-    <div class="flex items-center gap-3">
-      <span class="text-3xl">👤</span>
-      <div>
-        <h1 class="text-xl font-extrabold text-white uppercase leading-none">My Appointments</h1>
-        <p class="text-xs text-zinc-500 mt-1.5 font-light">
-          Manage your upcoming barbershop reservations
-        </p>
-      </div>
-    </div>
-    <div class="flex items-center gap-3">
-      <a routerLink="/customer/book" class="btn btn-submit">Book an appointment</a>
-      <button
-        class="btn btn-logout bg-red-500/10 text-red-400 hover:bg-red-600 hover:text-white border border-red-500/20"
-        (click)="onLogout()"
-      >
-        Log Out
-      </button>
-    </div>
-  </header>
+  <app-page-header
+    [icon]="icons.circleUser"
+    title="My Appointments"
+    subtitle="Manage your upcoming barbershop reservations"
+  >
+    <a routerLink="/customer/book" appButton>Book an appointment</a>
+    <button type="button" appButton="danger" class="btn-logout" (click)="onLogout()">
+      Log Out
+    </button>
+  </app-page-header>
 
-  @if (errorMessage()) {
-    <div
-      role="alert"
-      class="alert alert-error mb-6 py-3 px-4 rounded-xl text-xs border border-red-500/20 flex items-center gap-2"
-    >
-      <span class="text-rose-400 leading-normal font-medium">{{ errorMessage() }}</span>
-      <button
-        type="button"
-        class="text-base font-bold opacity-60 hover:opacity-100 ml-auto"
-        (click)="errorMessage.set(null)"
-        aria-label="Dismiss error"
-      >
-        &times;
-      </button>
-    </div>
+  @if (errorMessage(); as message) {
+    <app-alert tone="error" class="mb-6" dismissible (dismissed)="errorMessage.set(null)">
+      {{ message }}
+    </app-alert>
   }
 
-  @if (successMessage()) {
-    <div
-      role="status"
-      aria-live="polite"
-      class="alert alert-success mb-6 py-3 px-4 rounded-xl text-xs border border-emerald-500/10 flex items-center gap-2"
-    >
-      <span class="text-emerald-400 leading-normal font-medium">{{ successMessage() }}</span>
-      <button
-        type="button"
-        class="text-base font-bold opacity-60 hover:opacity-100 ml-auto"
-        (click)="successMessage.set(null)"
-        aria-label="Dismiss"
-      >
-        &times;
-      </button>
-    </div>
+  @if (successMessage(); as message) {
+    <app-alert tone="success" class="mb-6" dismissible (dismissed)="successMessage.set(null)">
+      {{ message }}
+    </app-alert>
   }
 
-  @if (cancelErrorMessage()) {
-    <div
-      role="alert"
-      class="alert alert-error mb-6 py-3 px-4 rounded-xl text-xs border border-red-500/20 flex items-center gap-2"
+  @if (cancelErrorMessage(); as message) {
+    <app-alert
+      tone="error"
+      class="mb-6"
+      dismissible
+      (dismissed)="customerStore.cancelErrorMessage.set(null)"
     >
-      <span class="text-rose-400 leading-normal font-medium">{{ cancelErrorMessage() }}</span>
-      <button
-        type="button"
-        class="text-base font-bold opacity-60 hover:opacity-100 ml-auto"
-        (click)="customerStore.cancelErrorMessage.set(null)"
-        aria-label="Dismiss error"
-      >
-        &times;
-      </button>
-    </div>
+      {{ message }}
+    </app-alert>
   }
 
   <div class="card p-6">
-    @if (loadErrorMessage()) {
-      <div
-        class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20"
-      >
-        <span class="text-3xl block mb-2">⚠️</span>
-        <h3 class="text-white font-bold text-sm">{{ loadErrorMessage() }}</h3>
-        <button type="button" class="btn btn-secondary mt-4" (click)="loadAppointments()">
-          Retry
-        </button>
-      </div>
+    @if (loadErrorMessage(); as message) {
+      <app-empty-state kind="error" [title]="message">
+        <button type="button" appButton="secondary" (click)="loadAppointments()">Retry</button>
+      </app-empty-state>
     } @else if (isLoading() && customerStore.appointments().length === 0) {
       <!-- A refresh keeps the current rows on screen; the placeholder is for the first load. -->
-      <div
-        class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20"
-      >
-        <span class="text-3xl block mb-2 animate-pulse">⏳</span>
-        <h3 class="text-white font-bold text-sm">Loading your appointments…</h3>
-      </div>
+      <app-empty-state kind="loading" title="Loading your appointments…" />
     } @else if (customerStore.appointments().length === 0) {
-      <div
-        class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20"
+      <app-empty-state
+        [icon]="icons.calendar"
+        title="No scheduled appointments found"
+        description="You haven't booked any haircuts yet!"
       >
-        <span class="text-3xl block mb-2">📅</span>
-        <h3 class="text-white font-bold text-sm">No scheduled appointments found</h3>
-        <p class="text-xs text-zinc-500 font-light mt-1">You haven't booked any haircuts yet!</p>
         @if (currentPage() > 0) {
-          <button type="button" class="btn btn-secondary mt-4" (click)="customerStore.setPage(0)">
+          <button type="button" appButton="secondary" (click)="customerStore.setPage(0)">
             Back to first page
           </button>
         } @else {
-          <a routerLink="/customer/book" class="btn btn-submit mt-4"> Book an appointment </a>
+          <a routerLink="/customer/book" appButton>Book an appointment</a>
         }
-      </div>
+      </app-empty-state>
     } @else {
       <div class="space-y-4">
         @for (appt of customerStore.appointments(); track appt.id) {
@@ -115,18 +64,16 @@
             <div class="flex-1">
               <div class="flex items-center gap-3 mb-2">
                 <h3 class="text-zinc-100 font-extrabold text-base">{{ appt.serviceType }}</h3>
-                <span
-                  class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider"
-                  [class]="statusBadgeClass(appt.status)"
-                >
-                  {{ statusLabel(appt.status) }}
-                </span>
+                <app-status-badge [status]="appt.status" />
               </div>
               <p class="text-xs text-zinc-400 font-light">
                 With <strong class="text-zinc-100">{{ appt.barberName }}</strong>
               </p>
-              <p class="text-xs font-bold text-accent uppercase tracking-wider mt-2">
-                📅 {{ formatLocalDate(appt.bookingDate) }} at
+              <p
+                class="text-xs font-bold text-accent uppercase tracking-wider mt-2 flex items-center gap-1.5"
+              >
+                <app-icon [icon]="icons.calendar" class="size-3.5" />
+                {{ formatLocalDate(appt.bookingDate) }} at
                 {{ formatTime12Hour(appt.bookingTime) }}
               </p>
               <p class="text-xs text-zinc-400 mt-1">
@@ -139,16 +86,21 @@
                 <div class="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    class="btn btn-secondary"
+                    appButton="secondary"
                     [attr.aria-label]="'Add ' + appt.serviceType + ' to my calendar'"
                     [disabled]="customerStore.exportingId() === appt.publicId"
                     (click)="customerStore.exportCalendar(appt.publicId)"
                   >
-                    {{ customerStore.exportingId() === appt.publicId ? 'Exporting…' : '📅 .ics' }}
+                    @if (customerStore.exportingId() === appt.publicId) {
+                      Exporting…
+                    } @else {
+                      <app-icon [icon]="icons.download" />
+                      .ics
+                    }
                   </button>
                   <button
                     type="button"
-                    class="btn btn-secondary"
+                    appButton="secondary"
                     [disabled]="customerStore.reschedulingId() !== null"
                     [attr.aria-expanded]="reschedulingPublicId() === appt.publicId"
                     (click)="openReschedule(appt.publicId)"
@@ -156,7 +108,8 @@
                     Reschedule
                   </button>
                   <button
-                    class="btn bg-rose-500/10 text-rose-400 hover:bg-rose-600 hover:text-white border border-rose-500/20"
+                    type="button"
+                    appButton="danger"
                     [disabled]="
                       customerStore.isCancelling() ||
                       customerStore.reschedulingId() === appt.publicId
@@ -185,7 +138,9 @@
       @if (totalPages() > 1) {
         <div class="flex justify-between items-center border-t border-white/5 pt-5 mt-6">
           <button
-            class="btn btn-secondary btn-page"
+            type="button"
+            appButton="secondary"
+            class="btn-page"
             [disabled]="currentPage() === 0"
             (click)="prevPage()"
           >
@@ -196,7 +151,9 @@
             <strong class="text-zinc-100">{{ totalPages() }}</strong></span
           >
           <button
-            class="btn btn-secondary btn-page"
+            type="button"
+            appButton="secondary"
+            class="btn-page"
             [disabled]="currentPage() >= totalPages() - 1"
             (click)="nextPage()"
           >

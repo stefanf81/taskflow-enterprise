@@ -66,9 +66,14 @@ describe('AdminNotificationsTab', () => {
     expect(text()).toContain('EMAIL');
     expect(text()).toContain('a***@example.com');
     expect(text()).toContain('Your appointment is confirmed');
-    expect(text()).toContain('SENT');
     expect(text()).toContain('Reminder');
-    expect(text()).toContain('PENDING');
+    // Each status gets its own badge colour (a failed or pending message is no longer green).
+    const badges = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('app-status-badge'),
+    );
+    expect(badges.map((b) => b.textContent?.trim())).toEqual(['Sent', 'Pending']);
+    expect(badges[0]!.classList).toContain('tone-success');
+    expect(badges[1]!.classList).toContain('tone-warning');
     expect(text()).not.toContain('No notifications sent yet');
   });
 

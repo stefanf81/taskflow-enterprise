@@ -240,6 +240,31 @@
       "webVitals": "frontend/src/app/core/telemetry/web-vitals.ts",
       "mobileComponent": "mobile/src/core/telemetry/appTelemetry.ts",
       "mobileClient": "mobile/src/core/telemetry/clientTelemetry.ts"
+    },
+    {
+      "feature": "Shared UI building blocks",
+      "description": "Buttons, banners, empty states, status badges and icons both clients build screens from. Web icons are Lucide (core/ui/icons/), mobile uses Ionicons.",
+      "button": {
+        "web": "frontend/src/app/core/ui/button.ts",
+        "mobile": "mobile/src/components/common/Button.tsx"
+      },
+      "alert": {
+        "web": "frontend/src/app/core/ui/alert.ts",
+        "mobile": "mobile/src/components/common/ErrorMessage.tsx"
+      },
+      "emptyState": {
+        "web": "frontend/src/app/core/ui/empty-state.ts",
+        "mobile": "mobile/src/components/common/EmptyState.tsx"
+      },
+      "statusBadge": {
+        "web": "frontend/src/app/core/ui/status-badge.ts",
+        "mobile": "mobile/src/components/common/Badge.tsx"
+      },
+      "webOnly": [
+        "frontend/src/app/core/ui/segmented-control.ts",
+        "frontend/src/app/core/ui/page-header.ts",
+        "frontend/src/app/core/ui/icon.ts"
+      ]
     }
   ],
   "platformContracts": {

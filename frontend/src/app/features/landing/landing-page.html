@@ -10,20 +10,7 @@
       <!-- Sticky Navigation Header -->
       <nav class="flex justify-between items-center mb-16 py-4 border-b border-white/10">
         <div class="flex items-center gap-2.5">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke-width="2.5"
-            stroke="currentColor"
-            class="w-7 h-7 text-accent"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
+          <app-icon [icon]="icons.circleCheck" class="size-7 text-accent" />
           <span class="text-xl font-extrabold tracking-tight text-zinc-100 uppercase"
             >TaskFlow <span class="text-accent font-light lowercase text-base">pro</span></span
           >
@@ -96,13 +83,13 @@
             <h2
               class="text-lg font-black text-zinc-100 uppercase tracking-tight mb-6 pb-4 border-b border-white/5"
             >
-              ✂️ Grooming Menu
+              <app-icon [icon]="icons.scissors" /> Grooming Menu
             </h2>
 
             @if (servicesError()) {
               <div role="alert" class="text-center text-xs text-rose-400 mb-6">
                 <p>{{ servicesError() }}</p>
-                <button type="button" class="btn btn-secondary mt-3" (click)="retryServices()">
+                <button type="button" appButton="secondary" class="mt-3" (click)="retryServices()">
                   Retry
                 </button>
               </div>
@@ -115,7 +102,7 @@
                     <span class="text-accent">{{ formatUsd(service.price) }}</span>
                   </div>
                   <p class="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
-                    ⏱️ Duration: {{ service.durationMinutes }} mins
+                    <app-icon [icon]="icons.timer" /> Duration: {{ service.durationMinutes }} mins
                   </p>
                   <p class="text-xs text-zinc-400 font-light leading-relaxed">
                     {{ service.description }}
@@ -155,7 +142,7 @@
             <!-- Operating Hours Panel -->
             <div class="mt-8 rounded-2xl border border-white/10 bg-zinc-900/50 p-5">
               <h3 class="text-zinc-100 font-bold text-xs uppercase tracking-wider mb-3">
-                ⏰ Operating Hours
+                <app-icon [icon]="icons.clock" /> Operating Hours
               </h3>
               <div class="space-y-2 text-xs text-zinc-400 font-light">
                 @for (row of openingHours(); track row.days) {
@@ -178,7 +165,7 @@
               class="mt-6 rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-900 to-accent-soft/10 p-5"
             >
               <h3 class="text-zinc-100 font-bold text-xs uppercase tracking-wider mb-3">
-                🧴 Artisanal Products
+                <app-icon [icon]="icons.sprayCan" /> Artisanal Products
               </h3>
               <div class="space-y-2 text-xs text-zinc-400 font-light">
                 <p class="flex justify-between">
@@ -201,7 +188,7 @@
                  prerendered page shows the same empty box as the browser while it loads. -->
             <div class="mt-6 rounded-xl border border-white/5 bg-zinc-900/5 p-5">
               <h3 class="text-zinc-100 font-bold text-xs uppercase tracking-wider mb-3">
-                ⭐️ Client Ratings
+                <app-icon [icon]="icons.star" /> Client Ratings
               </h3>
               <div class="min-h-12">
                 @if (ratingSummary(); as summary) {
@@ -276,7 +263,7 @@
         <div
           class="text-center text-zinc-500 font-light py-12 border border-dashed border-white/10 rounded-3xl mt-16"
         >
-          ⌛ Loading additional details...
+          <app-icon [icon]="icons.hourglass" /> Loading additional details...
         </div>
       }
 
@@ -290,8 +277,8 @@
       <!-- Guest Footer -->
       <footer class="mt-20 pt-10 border-t border-white/10 text-center">
         <p class="text-xs text-zinc-500 font-light leading-normal">
-          🔒 TaskFlow platform is 100% secured utilizing industry standard SSL/TLS and stateless
-          RSA-2048 OAuth2 encryption protocols.
+          <app-icon [icon]="icons.lock" /> TaskFlow platform is 100% secured utilizing industry
+          standard SSL/TLS and stateless RSA-2048 OAuth2 encryption protocols.
         </p>
       </footer>
 

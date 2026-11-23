@@ -61,16 +61,15 @@
       </p>
     </div>
   } @else if (store.slotsError()) {
-    <div
-      role="alert"
-      class="alert alert-error animate-fadeIn py-4 px-5 rounded-xl text-xs border border-red-500/20 text-center"
-    >
-      <p class="text-rose-400 font-medium leading-normal">{{ store.slotsError() }}</p>
-      <p class="text-zinc-500 font-light mt-1">We can't show available times until this loads.</p>
-      <button type="button" class="btn btn-secondary mt-3" (click)="store.retrySlots()">
+    <app-alert tone="error">
+      {{ store.slotsError() }}
+      <span class="block text-zinc-500 font-light mt-1"
+        >We can't show available times until this loads.</span
+      >
+      <button type="button" appButton="secondary" alertAction (click)="store.retrySlots()">
         Retry
       </button>
-    </div>
+    </app-alert>
   } @else if (store.bookingDate()) {
     <div class="form-group mt-6">
       <span
@@ -94,9 +93,9 @@
             (click)="store.selectTimeSlot(slot)"
           >
             @if (store.isSlotPast(slot)) {
-              ⏱️ Passed
+              <app-icon [icon]="icons.timer" /> Passed
             } @else if (store.busySlots().includes(slot)) {
-              🚫 Taken
+              <app-icon [icon]="icons.ban" /> Taken
             } @else {
               {{ formatTime12Hour(slot) }}
             }
@@ -108,7 +107,8 @@
     <div
       class="mt-6 py-10 px-4 text-center text-sm text-zinc-300 bg-zinc-900/40 border border-dashed border-white/10 rounded-lg"
     >
-      📅 Select an upcoming date above to view available time slots
+      <app-icon [icon]="icons.calendar" /> Select an upcoming date above to view available time
+      slots
     </div>
   }
 </div>

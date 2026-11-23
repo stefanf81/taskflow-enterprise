@@ -21,6 +21,7 @@ import { AppointmentsApi } from '../api/appointments-api';
 import { extractApiError } from '../api/extract-api-error';
 import { refreshResource, safeResourceValue } from '../resource-utils';
 import { ShopClock } from '../shop-clock';
+import { Button } from './button';
 
 /** The slot a booking should move to. */
 export interface RescheduleSelection {
@@ -37,6 +38,7 @@ export interface RescheduleSelection {
  */
 @Component({
   selector: 'app-reschedule-picker',
+  imports: [Button],
   template: `
     <div
       class="p-3 rounded-xl border border-white/10 bg-zinc-900/60 space-y-3 mt-1"
@@ -73,7 +75,7 @@ export interface RescheduleSelection {
         } @else if (slotsError()) {
           <div class="flex items-center gap-2" role="alert">
             <p class="text-xs text-rose-400">{{ slotsError() }}</p>
-            <button type="button" class="btn btn-secondary" (click)="retry()">Retry</button>
+            <button type="button" appButton="secondary" (click)="retry()">Retry</button>
           </div>
         } @else {
           <div class="flex flex-wrap gap-1.5">
@@ -101,7 +103,7 @@ export interface RescheduleSelection {
       <div class="flex flex-wrap gap-2">
         <button
           type="button"
-          class="btn btn-submit"
+          appButton
           [disabled]="saving() || !selectedDate() || !selectedTime()"
           (click)="confirm()"
         >
@@ -109,7 +111,7 @@ export interface RescheduleSelection {
         </button>
         <button
           type="button"
-          class="btn btn-secondary"
+          appButton="secondary"
           [disabled]="saving()"
           (click)="cancelled.emit()"
         >

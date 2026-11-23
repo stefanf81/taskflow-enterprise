@@ -9,6 +9,11 @@ import { FlashMessages } from '../../../core/ui/flash-messages';
 import { ReschedulePicker, RescheduleSelection } from '../../../core/ui/reschedule-picker';
 import { ReviewStore } from '../../../core/reviews/review.store';
 import { formatLocalDate, formatTime12Hour } from '../../../core/time-utils';
+import { calendarXIcon } from '../../../core/ui/icons/calendar-x';
+import { repeatIcon } from '../../../core/ui/icons/repeat';
+import { starIcon } from '../../../core/ui/icons/star';
+import { Icon } from '../../../core/ui/icon';
+import { Button } from '../../../core/ui/button';
 
 /** Model shape for the "Cancel my booking" Signal Form. */
 interface CancelFormModel {
@@ -41,13 +46,14 @@ interface ReviewFormModel {
  */
 @Component({
   selector: 'app-post-booking-actions',
-  imports: [FormField, ReschedulePicker],
+  imports: [FormField, ReschedulePicker, Icon, Button],
   template: `
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
       <!-- Interactive secure self-service cancellation portal -->
       <section class="card p-8">
         <h2 class="text-lg font-black text-zinc-100 tracking-tight mb-2 flex items-center gap-2">
-          <span class="text-rose-500">🧹</span> Secure Booking Cancellation
+          <span class="text-rose-500"><app-icon [icon]="icons.calendarX" /></span> Secure Booking
+          Cancellation
         </h2>
         <p class="text-xs text-zinc-400 font-light leading-relaxed mb-6">
           Need to cancel your reservation? Provide your Booking ID and Email below to delete your
@@ -119,7 +125,8 @@ interface ReviewFormModel {
           <div class="flex justify-end pt-2">
             <button
               type="submit"
-              class="btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-600 hover:text-white w-full sm:w-auto"
+              appButton="danger"
+              class="w-full sm:w-auto"
               [disabled]="isCancelling()"
             >
               {{ isCancelling() ? 'Cancelling...' : 'Cancel Reservation' }}
@@ -131,7 +138,7 @@ interface ReviewFormModel {
       <!-- Self-service reschedule: verified like the cancellation, the booking keeps its code. -->
       <section class="card p-8 md:order-last md:col-span-2">
         <h2 class="text-lg font-black text-zinc-100 tracking-tight mb-2 flex items-center gap-2">
-          <span class="text-accent">🔁</span> Reschedule a Booking
+          <span class="text-accent"><app-icon [icon]="icons.repeat" /></span> Reschedule a Booking
         </h2>
         <p class="text-xs text-zinc-400 font-light leading-relaxed mb-6">
           Need another time? Provide your Booking ID and Email, then pick a new slot. Your booking
@@ -185,7 +192,7 @@ interface ReviewFormModel {
           </div>
           @if (!rescheduleTarget()) {
             <div class="sm:col-span-2 flex justify-end">
-              <button type="submit" class="btn btn-secondary w-full sm:w-auto">
+              <button type="submit" appButton="secondary" class="w-full sm:w-auto">
                 Choose a new time
               </button>
             </div>
@@ -205,7 +212,7 @@ interface ReviewFormModel {
       <!-- Interactive secure self-service review portal -->
       <section class="card p-8">
         <h2 class="text-lg font-black text-zinc-100 tracking-tight mb-2 flex items-center gap-2">
-          <span class="text-amber-400">⭐</span> Submit a Review
+          <span class="text-amber-400"><app-icon [icon]="icons.star" /></span> Submit a Review
         </h2>
         <p class="text-xs text-zinc-400 font-light leading-relaxed mb-6">
           Did you enjoy your haircut? Provide your Booking ID to leave a public rating and review
@@ -312,11 +319,7 @@ interface ReviewFormModel {
             </div>
           </div>
           <div class="flex justify-end pt-2">
-            <button
-              type="submit"
-              class="btn btn-submit w-full sm:w-auto"
-              [disabled]="isReviewing()"
-            >
+            <button type="submit" appButton class="w-full sm:w-auto" [disabled]="isReviewing()">
               {{ isReviewing() ? 'Submitting...' : 'Submit Review' }}
             </button>
           </div>
@@ -326,6 +329,11 @@ interface ReviewFormModel {
   `,
 })
 export class PostBookingActionsComponent {
+  protected readonly icons = {
+    calendarX: calendarXIcon,
+    repeat: repeatIcon,
+    star: starIcon,
+  };
   private readonly appointmentsApi = inject(AppointmentsApi);
   private readonly reviewsApi = inject(ReviewsApi);
   private readonly flash = inject(FlashMessages);
@@ -399,7 +407,7 @@ export class PostBookingActionsComponent {
         next: () => {
           this.isCancelling.set(false);
           this.flash.showSuccess(
-            '🗑️ Reservation successfully cancelled. Your time slot has been released.',
+            'Reservation successfully cancelled. Your time slot has been released.',
           );
           this.cancelForm().reset({ publicId: '', email: '' });
         },
@@ -443,7 +451,7 @@ export class PostBookingActionsComponent {
           // Also closes the picker (see rescheduleTarget).
           this.rescheduleForm().reset({ publicId: '', email: '' });
           this.flash.showSuccess(
-            `🔁 Booking moved to ${formatLocalDate(moved.bookingDate)} at ${formatTime12Hour(moved.bookingTime)}. The shop will confirm it again.`,
+            `Booking moved to ${formatLocalDate(moved.bookingDate)} at ${formatTime12Hour(moved.bookingTime)}. The shop will confirm it again.`,
           );
         },
         error: (err) => {

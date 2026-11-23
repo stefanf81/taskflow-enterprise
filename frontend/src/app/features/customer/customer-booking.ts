@@ -2,6 +2,9 @@ import { Component, effect, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { BookingWizard } from '../booking/booking-wizard';
 import { BookingStore } from '../booking/booking.store';
+import { Button } from '../../core/ui/button';
+import { scissorsIcon } from '../../core/ui/icons/scissors';
+import { PageHeader } from '../../core/ui/page-header';
 
 /**
  * Signed-in customers' entry to the booking flow (route: `/customer/book`).
@@ -13,23 +16,16 @@ import { BookingStore } from '../booking/booking.store';
  */
 @Component({
   selector: 'app-customer-booking',
-  imports: [BookingWizard, RouterLink],
+  imports: [BookingWizard, RouterLink, Button, PageHeader],
   template: `
     <div class="w-full px-4 sm:px-8 lg:px-16 pt-12 pb-24">
-      <header class="flex justify-between items-center mb-10 pb-6 border-b border-white/10">
-        <div class="flex items-center gap-3">
-          <span class="text-3xl">✂️</span>
-          <div>
-            <h1 class="text-xl font-extrabold text-white uppercase leading-none">
-              Book an Appointment
-            </h1>
-            <p class="text-xs text-zinc-500 mt-1.5 font-light">
-              Pick a treatment, stylist and time. Your details are pre-filled.
-            </p>
-          </div>
-        </div>
-        <a routerLink="/customer" class="btn btn-secondary"> &larr; My Appointments </a>
-      </header>
+      <app-page-header
+        [icon]="scissorsIcon"
+        title="Book an Appointment"
+        subtitle="Pick a treatment, stylist and time. Your details are pre-filled."
+      >
+        <a routerLink="/customer" appButton="secondary">&larr; My Appointments</a>
+      </app-page-header>
       <div class="max-w-3xl mx-auto">
         <app-booking-wizard />
       </div>
@@ -38,6 +34,7 @@ import { BookingStore } from '../booking/booking.store';
 })
 export class CustomerBooking {
   private readonly store = inject(BookingStore);
+  protected readonly scissorsIcon = scissorsIcon;
 
   constructor() {
     // Re-runs when the session principal or the customer's booking history arrives, so
