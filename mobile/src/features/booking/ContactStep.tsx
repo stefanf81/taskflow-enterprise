@@ -74,6 +74,7 @@ export const ContactStep: React.FC<ContactStepProps> = ({
     <Input
       label="Full Name *"
       placeholder="e.g. John Doe"
+      autoComplete="name"
       value={contact.name}
       onChangeText={(value) => onChangeContact('name', value)}
       testID="customer-name-input"
@@ -82,6 +83,7 @@ export const ContactStep: React.FC<ContactStepProps> = ({
     <Input
       label="Email Address *"
       placeholder="john.doe@example.com"
+      autoComplete="email"
       value={contact.email}
       onChangeText={(value) => onChangeContact('email', value)}
       keyboardType="email-address"
@@ -95,6 +97,7 @@ export const ContactStep: React.FC<ContactStepProps> = ({
       value={contact.phone}
       onChangeText={(value) => onChangeContact('phone', value)}
       keyboardType="phone-pad"
+      autoComplete="tel"
       testID="customer-phone-input"
     />
 

@@ -3,7 +3,7 @@ import { Component, inject } from '@angular/core';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
-import { ReviewStore, summarizeShopRatings } from './review.store';
+import { ReviewStore } from './review.store';
 import { BarberRating } from '../../types/api';
 
 @Component({ template: '' })
@@ -123,30 +123,3 @@ describe('ReviewStore', () => {
   });
 });
 
-describe('summarizeShopRatings', () => {
-  it('is null when nobody has a review', () => {
-    expect(summarizeShopRatings([])).toBeNull();
-    expect(
-      summarizeShopRatings([{ barberName: 'New Barber', averageRating: 0, reviewCount: 0 }]),
-    ).toBeNull();
-  });
-
-  it('weights each barber by review count and ignores barbers without reviews', () => {
-    const summary = summarizeShopRatings([
-      { barberName: 'A', averageRating: 4, reviewCount: 1 },
-      { barberName: 'B', averageRating: 5, reviewCount: 3 },
-      { barberName: 'C', averageRating: 0, reviewCount: 0 },
-    ]);
-    expect(summary?.averageRating).toBe(4.75);
-    expect(summary?.reviewCount).toBe(4);
-    expect(summary?.topBarber.barberName).toBe('B');
-  });
-
-  it('breaks a tie on the average by the larger number of reviews', () => {
-    const summary = summarizeShopRatings([
-      { barberName: 'Few', averageRating: 5, reviewCount: 2 },
-      { barberName: 'Many', averageRating: 5, reviewCount: 9 },
-    ]);
-    expect(summary?.topBarber.barberName).toBe('Many');
-  });
-});

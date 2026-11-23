@@ -7,12 +7,12 @@ import { useShopInfo } from '../../core/shop/useShopInfo';
 import { colors } from '../../theme/colors';
 
 interface HomeHeaderProps {
-  /** Shown to guests only; opens the sign-in screen. */
-  onOwnerPortal?: () => void;
+  /** Shown to guests only; opens the sign-in screen (customers and the owner alike). */
+  onSignIn?: () => void;
 }
 
-/** Brand row: logo, live "Shop Open" / "Closed" badge and, for guests, the owner sign-in link. */
-export const HomeHeader: React.FC<HomeHeaderProps> = ({ onOwnerPortal }) => {
+/** Brand row: logo, live "Shop Open" / "Closed" badge and, for guests, the sign-in link. */
+export const HomeHeader: React.FC<HomeHeaderProps> = ({ onSignIn }) => {
   const { timeZone, rules, loaded } = useShopInfo();
   const now = useNow(60_000, timeZone);
   const openNow = loaded ? isOpenAt(now, rules) : null;
@@ -34,9 +34,9 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({ onOwnerPortal }) => {
             </Text>
           </View>
         )}
-        {onOwnerPortal && (
-          <TouchableOpacity onPress={onOwnerPortal}>
-            <Text style={styles.ownerLink}>Owner Portal</Text>
+        {onSignIn && (
+          <TouchableOpacity onPress={onSignIn} accessibilityRole="button">
+            <Text style={styles.ownerLink}>Sign in</Text>
           </TouchableOpacity>
         )}
       </View>

@@ -6,37 +6,7 @@ import { PUBLIC_REQUEST } from '../http/public-request.token';
 import { safeResourceValue } from '../resource-utils';
 import { isServerRender } from '../platform';
 import { barberRatingResponseListSchema } from '@taskflow/schemas';
-
-/** Shop-wide rating built from the per-barber averages. */
-export interface ShopRatingSummary {
-  /** Mean of every review, i.e. the barbers' averages weighted by their review counts. */
-  averageRating: number;
-  reviewCount: number;
-  /** Highest average; on a tie the barber with more reviews. */
-  topBarber: BarberRating;
-}
-
-export function summarizeShopRatings(ratings: readonly BarberRating[]): ShopRatingSummary | null {
-  const reviewed = ratings.filter((r) => r.reviewCount > 0);
-  const [first, ...rest] = reviewed;
-  if (!first) return null;
-  let reviewCount = 0;
-  let ratingSum = 0;
-  let topBarber = first;
-  for (const r of reviewed) {
-    reviewCount += r.reviewCount;
-    ratingSum += r.averageRating * r.reviewCount;
-  }
-  for (const r of rest) {
-    if (
-      r.averageRating > topBarber.averageRating ||
-      (r.averageRating === topBarber.averageRating && r.reviewCount > topBarber.reviewCount)
-    ) {
-      topBarber = r;
-    }
-  }
-  return { averageRating: ratingSum / reviewCount, reviewCount, topBarber };
-}
+import { summarizeShopRatings } from '@taskflow/domain';
 
 @Injectable({ providedIn: 'root' })
 export class ReviewStore {

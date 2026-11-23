@@ -2,6 +2,7 @@ export * from './time';
 export * from './shop';
 export * from './appointment';
 export * from './reschedule';
+export * from './ratings';
 
 // Built on first use, not when the module loads: every importer's cold start paid for it, also
 // screens that format no price (BENCHMARKS.md §79).

@@ -84,12 +84,14 @@ export const LoginScreen: React.FC = () => {
             render={({ field: { onBlur, onChange, value } }) => (
               <Input
                 label="Username or Email"
-                placeholder="admin or customer@example.com"
+                placeholder="you@example.com"
                 value={value}
                 onBlur={onBlur}
                 onChangeText={onChange}
                 error={errors.username?.message}
                 autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="username"
                 icon={
                   <Ionicons
                     name="person-outline"
@@ -114,6 +116,7 @@ export const LoginScreen: React.FC = () => {
                 onChangeText={onChange}
                 error={errors.password?.message}
                 secureTextEntry
+                autoComplete="current-password"
                 icon={
                   <Ionicons
                     name="key-outline"
