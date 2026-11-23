@@ -52,7 +52,7 @@ npm run sync:api-types          # regenerate both clients' API types (and :check
 
 # Full stack
 ./start-docker.sh | ./stop-docker.sh
-./verify.sh [--quick]           # full verification; --quick skips PostgreSQL and E2E
+./verify.sh [--quick]           # full verification; --quick skips the Docker stack, parity tests and E2E
 ```
 
 Default dev/test credentials are `admin` / `admin-password`; `.env` (from `.env.example`) is required by compose.
