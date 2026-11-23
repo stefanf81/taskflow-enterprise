@@ -26,21 +26,42 @@ public class BarberTimeOff {
     @Column(length = 255)
     private String reason;
 
-    public BarberTimeOff() {
-    }
+    public BarberTimeOff() {}
 
     // Getters and Setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+    public Long getId() {
+        return id;
+    }
 
-    public void setBarber(Barber barber) { this.barber = barber; }
+    public void setId(Long id) {
+        this.id = id;
+    }
 
-    public LocalDate getStartDate() { return startDate; }
-    public void setStartDate(LocalDate startDate) { this.startDate = startDate; }
+    public void setBarber(Barber barber) {
+        this.barber = barber;
+    }
 
-    public LocalDate getEndDate() { return endDate; }
-    public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
+    public LocalDate getStartDate() {
+        return startDate;
+    }
 
-    public String getReason() { return reason; }
-    public void setReason(String reason) { this.reason = reason; }
+    public void setStartDate(LocalDate startDate) {
+        this.startDate = startDate;
+    }
+
+    public LocalDate getEndDate() {
+        return endDate;
+    }
+
+    public void setEndDate(LocalDate endDate) {
+        this.endDate = endDate;
+    }
+
+    public String getReason() {
+        return reason;
+    }
+
+    public void setReason(String reason) {
+        this.reason = reason;
+    }
 }

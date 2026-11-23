@@ -1,15 +1,14 @@
 package com.example.taskflow.catalog;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.math.BigDecimal;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.modulith.test.ApplicationModuleTest;
 import org.springframework.test.context.TestPropertySource;
-
-import java.math.BigDecimal;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Boots the catalog module on its own (plus the shared {@code core} module). */
 @ApplicationModuleTest
@@ -36,8 +35,8 @@ class CatalogModuleTest {
     @Test
     void findsAServiceByItsName() {
         String name = "Module Lookup Cut " + UUID.randomUUID();
-        ServiceItemResponse created = catalogService.createService(
-                new ServiceItemRequest(name, new BigDecimal("12.00"), 45, "hair", null));
+        ServiceItemResponse created =
+                catalogService.createService(new ServiceItemRequest(name, new BigDecimal("12.00"), 45, "hair", null));
         try {
             ServiceItem found = catalogService.findServiceByName(name).orElseThrow();
 

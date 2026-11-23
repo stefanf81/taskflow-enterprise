@@ -6,5 +6,4 @@ import org.springframework.context.annotation.Configuration;
 /** Registers {@link SseProperties}. */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(SseProperties.class)
-class SseConfig {
-}
+class SseConfig {}

@@ -8,6 +8,10 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import org.apache.catalina.Globals;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,11 +24,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.Environment;
 import org.springframework.web.filter.OncePerRequestFilter;
-
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 
 /**
  * Guards the trusted-proxy setting behind the rate limiter
@@ -76,8 +75,10 @@ class TrustedProxyConfig {
         try {
             return Pattern.compile(regex);
         } catch (PatternSyntaxException e) {
-            throw new IllegalStateException(PROXIES_PROPERTY + " (APP_TRUSTED_PROXY_REGEX) is not a valid "
-                    + "regular expression: " + e.getDescription(), e);
+            throw new IllegalStateException(
+                    PROXIES_PROPERTY + " (APP_TRUSTED_PROXY_REGEX) is not a valid " + "regular expression: "
+                            + e.getDescription(),
+                    e);
         }
     }
 
@@ -108,8 +109,8 @@ class TrustedProxyConfig {
         }
 
         @Override
-        protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
-                                        FilterChain chain) throws ServletException, IOException {
+        protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+                throws ServletException, IOException {
             String peer = request.getRemoteAddr();
             boolean handledByValve = Boolean.TRUE.equals(request.getAttribute(Globals.REQUEST_FORWARDED_ATTRIBUTE));
             if (!handledByValve
@@ -119,10 +120,14 @@ class TrustedProxyConfig {
                 counter.increment();
                 if (warned.compareAndSet(false, true)) {
                     String safePeer = LogSanitizer.stripNewlines(peer);
-                    log.warn("A request from {} carried X-Forwarded-For, but {} does not match that peer, so its "
+                    log.warn(
+                            "A request from {} carried X-Forwarded-For, but {} does not match that peer, so its "
                                     + "client address was ignored. If {} is the reverse proxy, APP_TRUSTED_PROXY_REGEX is "
                                     + "wrong and every client shares one rate-limit bucket (logged once; counted in {}).",
-                            safePeer, PROXIES_PROPERTY, safePeer, UNTRUSTED_COUNTER);
+                            safePeer,
+                            PROXIES_PROPERTY,
+                            safePeer,
+                            UNTRUSTED_COUNTER);
                 }
             }
             chain.doFilter(request, response);

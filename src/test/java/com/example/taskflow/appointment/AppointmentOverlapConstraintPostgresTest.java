@@ -1,5 +1,16 @@
 package com.example.taskflow.appointment;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.reset;
+
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
@@ -7,19 +18,6 @@ import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.example.taskflow.core.ConflictException;
 import com.example.taskflow.testsupport.PostgresTestServer;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
-
-import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -39,17 +37,18 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.reset;
+import javax.sql.DataSource;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 /**
  * V35 on a real PostgreSQL server: the {@code appointments_no_overlap} exclusion constraint closes the
@@ -66,7 +65,7 @@ class AppointmentOverlapConstraintPostgresTest {
 
     private static final String BARBER = "Overlap Barber";
     private static final String LONG = "Overlap Long Treatment"; // 90 minutes
-    private static final String CUT = "Overlap Cut";             // 30 minutes
+    private static final String CUT = "Overlap Cut"; // 30 minutes
 
     @DynamicPropertySource
     static void postgres(DynamicPropertyRegistry registry) throws SQLException {
@@ -75,7 +74,7 @@ class AppointmentOverlapConstraintPostgresTest {
         String password = PostgresTestServer.password();
         String schema = "ov_" + System.nanoTime();
         try (Connection c = DriverManager.getConnection(base, user, password);
-             Statement st = c.createStatement()) {
+                Statement st = c.createStatement()) {
             st.execute("CREATE SCHEMA " + schema);
         }
         String url = base + (base.contains("?") ? "&" : "?") + "currentSchema=" + schema;
@@ -86,18 +85,38 @@ class AppointmentOverlapConstraintPostgresTest {
         registry.add("spring.jpa.database-platform", () -> "org.hibernate.dialect.PostgreSQLDialect");
     }
 
-    @Autowired private AppointmentBookingService bookingService;
-    @Autowired private AppointmentLifecycleService lifecycleService;
-    @Autowired private AppointmentRepository appointmentRepository;
-    @Autowired private BarberRepository barberRepository;
-    @Autowired private BarberScheduleRepository barberScheduleRepository;
-    @Autowired private ServiceItemRepository serviceItemRepository;
-    @Autowired private com.example.taskflow.review.internal.ReviewRepository reviewRepository;
-    @Autowired private CacheManager cacheManager;
-    @Autowired private DataSource dataSource;
-    @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired
+    private AppointmentBookingService bookingService;
 
-    @MockitoSpyBean private BusySlotsService busySlotsService;
+    @Autowired
+    private AppointmentLifecycleService lifecycleService;
+
+    @Autowired
+    private AppointmentRepository appointmentRepository;
+
+    @Autowired
+    private BarberRepository barberRepository;
+
+    @Autowired
+    private BarberScheduleRepository barberScheduleRepository;
+
+    @Autowired
+    private ServiceItemRepository serviceItemRepository;
+
+    @Autowired
+    private com.example.taskflow.review.internal.ReviewRepository reviewRepository;
+
+    @Autowired
+    private CacheManager cacheManager;
+
+    @Autowired
+    private DataSource dataSource;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @MockitoSpyBean
+    private BusySlotsService busySlotsService;
 
     private LocalDate date;
 
@@ -140,14 +159,18 @@ class AppointmentOverlapConstraintPostgresTest {
 
     @Test
     void migrationCreatesTheExclusionConstraintAndStoresEndTimes() {
-        String definition = jdbcTemplate.queryForObject("SELECT pg_get_constraintdef(oid) FROM pg_constraint "
-                + "WHERE conname = 'appointments_no_overlap' AND conrelid = 'appointments'::regclass", String.class);
+        String definition = jdbcTemplate.queryForObject(
+                "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                        + "WHERE conname = 'appointments_no_overlap' AND conrelid = 'appointments'::regclass",
+                String.class);
         assertTrue(definition.startsWith("EXCLUDE USING gist (barber_name WITH =, tsrange("), definition);
         assertTrue(definition.contains("WHERE"), definition);
 
-        AppointmentResponse created = bookingService.createAppointment(
-                request("stored@example.com", date, "10:00", LONG), null).appointment();
-        assertEquals(LocalTime.of(11, 30),
+        AppointmentResponse created = bookingService
+                .createAppointment(request("stored@example.com", date, "10:00", LONG), null)
+                .appointment();
+        assertEquals(
+                LocalTime.of(11, 30),
                 appointmentRepository.findById(created.id()).orElseThrow().getBookingEndTime());
     }
 
@@ -195,9 +218,11 @@ class AppointmentOverlapConstraintPostgresTest {
             ps.setString(3, start);
             ps.setString(4, end);
             ps.setString(5, UUID.randomUUID().toString());
-            ps.setString(6, com.example.taskflow.appointment.internal.CreationRequestFingerprint.of(
-                    new com.example.taskflow.appointment.internal.Appointment("Raw", "raw@example.com", "1",
-                            BARBER, date, start, "Raw")));
+            ps.setString(
+                    6,
+                    com.example.taskflow.appointment.internal.CreationRequestFingerprint.of(
+                            new com.example.taskflow.appointment.internal.Appointment(
+                                    "Raw", "raw@example.com", "1", BARBER, date, start, "Raw")));
             ps.executeUpdate();
         }
     }
@@ -243,7 +268,9 @@ class AppointmentOverlapConstraintPostgresTest {
 
             assertEquals(1, created, "round " + round + ": exactly one booking may win");
             assertEquals(1, rejected, "round " + round + ": the other is a 400");
-            assertEquals(1, appointmentRepository.findActiveForBarberOnDate(BARBER, day).size());
+            assertEquals(
+                    1,
+                    appointmentRepository.findActiveForBarberOnDate(BARBER, day).size());
         }
     }
 
@@ -251,29 +278,38 @@ class AppointmentOverlapConstraintPostgresTest {
     @Test
     void anOverlapThatSlipsPastTheCheckIsRejectedByTheConstraintAsASlotCollision() {
         bookingService.createAppointment(request("first@example.com", date, "10:00", LONG), null);
-        doReturn(Optional.empty()).when(busySlotsService)
+        doReturn(Optional.empty())
+                .when(busySlotsService)
                 .findConflict(any(), eq(date), eq(LocalTime.of(11, 0)), anyInt(), any());
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
                 () -> bookingService.createAppointment(request("second@example.com", date, "11:00", CUT), null));
         assertTrue(ex.getMessage().contains("just booked"), ex.getMessage());
-        assertEquals(1, appointmentRepository.findActiveForBarberOnDate(BARBER, date).size());
+        assertEquals(
+                1, appointmentRepository.findActiveForBarberOnDate(BARBER, date).size());
     }
 
     @Test
     void reApprovingADeniedBookingIntoAnOverlapIsAConflict() {
-        long denied = bookingService.createAppointment(
-                request("denied@example.com", date, "10:00", LONG), null).appointment().id();
+        long denied = bookingService
+                .createAppointment(request("denied@example.com", date, "10:00", LONG), null)
+                .appointment()
+                .id();
         lifecycleService.updateAppointmentStatus(denied, new AppointmentUpdateRequest("DENIED"));
         // the slot is free again, so 11:00 can be booked
         bookingService.createAppointment(request("taken@example.com", date, "11:00", CUT), null);
 
         // the re-check would refuse it too; bypass it to prove the database refuses the overlap on its own
-        doReturn(Optional.empty()).when(busySlotsService)
+        doReturn(Optional.empty())
+                .when(busySlotsService)
                 .findConflict(any(), eq(date), eq(LocalTime.of(10, 0)), anyInt(), eq(denied));
-        ConflictException ex = assertThrows(ConflictException.class,
+        ConflictException ex = assertThrows(
+                ConflictException.class,
                 () -> lifecycleService.updateAppointmentStatus(denied, new AppointmentUpdateRequest("APPROVED")));
         assertTrue(ex.getMessage().contains("already booked"), ex.getMessage());
-        assertEquals(AppointmentStatus.DENIED, appointmentRepository.findById(denied).orElseThrow().getStatusEnum());
+        assertEquals(
+                AppointmentStatus.DENIED,
+                appointmentRepository.findById(denied).orElseThrow().getStatusEnum());
     }
 }

@@ -3,11 +3,10 @@ package com.example.taskflow.core.web;
 import jakarta.servlet.Filter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.InputStream;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.filter.ShallowEtagHeaderFilter;
-
-import java.io.InputStream;
 
 /**
  * ETags for GET responses ({@link ShallowEtagHeaderFilter}), so a revalidated {@code Cache-Control}
@@ -31,8 +30,11 @@ class EtagFilterConfig {
              * so a repeated failing GET could be answered 304 and keep a cached error alive.
              */
             @Override
-            protected boolean isEligibleForEtag(HttpServletRequest request, HttpServletResponse response,
-                                                int responseStatusCode, InputStream inputStream) {
+            protected boolean isEligibleForEtag(
+                    HttpServletRequest request,
+                    HttpServletResponse response,
+                    int responseStatusCode,
+                    InputStream inputStream) {
                 return "GET".equals(request.getMethod())
                         && super.isEligibleForEtag(request, response, responseStatusCode, inputStream);
             }

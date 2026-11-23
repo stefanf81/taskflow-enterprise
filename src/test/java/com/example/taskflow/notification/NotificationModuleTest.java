@@ -1,19 +1,18 @@
 package com.example.taskflow.notification;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.example.taskflow.appointment.AppointmentCancelledEvent;
 import com.example.taskflow.appointment.AppointmentCancelledEvent.CancelledBy;
 import com.example.taskflow.appointment.AppointmentDetails;
 import com.example.taskflow.appointment.AppointmentStatus;
 import com.example.taskflow.notification.internal.NotificationOutboxRepository;
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.modulith.test.ApplicationModuleTest;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.modulith.test.Scenario;
-
-import java.time.LocalDate;
-
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * The notification module reacts to appointment events alone: it receives an
@@ -29,8 +28,15 @@ class NotificationModuleTest {
     @Test
     void aCancellationEventEnqueuesAPendingEmail(Scenario scenario) {
         AppointmentDetails booking = new AppointmentDetails(
-                9_000_001L, "module-pub-1", "Module Test", "notify-module@example.com", "Alex the Barber",
-                "Classic Haircut", LocalDate.now().plusDays(3), "10:00", AppointmentStatus.CANCELLED);
+                9_000_001L,
+                "module-pub-1",
+                "Module Test",
+                "notify-module@example.com",
+                "Alex the Barber",
+                "Classic Haircut",
+                LocalDate.now().plusDays(3),
+                "10:00",
+                AppointmentStatus.CANCELLED);
 
         scenario.publish(new AppointmentCancelledEvent(booking, CancelledBy.ADMIN))
                 .andWaitForStateChange(() -> outbox.findTop100ByOrderBySentAtDescIdDesc().stream()

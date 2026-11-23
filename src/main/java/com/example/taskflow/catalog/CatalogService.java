@@ -1,14 +1,17 @@
 package com.example.taskflow.catalog;
-import com.example.taskflow.catalog.internal.ServiceItemRepository;
 
 import java.util.List;
 import java.util.Optional;
 
 public interface CatalogService {
     List<ServiceItemResponse> getAllServices();
+
     ServiceItemResponse getServiceById(Long id);
+
     ServiceItemResponse createService(ServiceItemRequest request);
+
     ServiceItemResponse updateService(Long id, ServiceItemRequest request);
+
     void deleteService(Long id);
 
     /** Services that were retired instead of deleted because appointments still reference them. */

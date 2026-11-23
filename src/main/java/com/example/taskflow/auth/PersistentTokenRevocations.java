@@ -2,13 +2,12 @@ package com.example.taskflow.auth;
 
 import com.example.taskflow.auth.internal.RevokedTokenRepository;
 import com.example.taskflow.core.LogSanitizer;
+import java.time.Instant;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
-
-import java.time.Instant;
-import java.util.List;
 
 /**
  * The durable copy of the logout denylist in PostgreSQL ({@code revoked_tokens}, V39,
@@ -47,7 +46,8 @@ class PersistentTokenRevocations {
         try {
             repository.save(new RevokedToken(jti, expiresAt));
         } catch (RuntimeException e) {
-            logger.warn("Token revocation could not be stored durably (still enforced in Redis/memory): {}",
+            logger.warn(
+                    "Token revocation could not be stored durably (still enforced in Redis/memory): {}",
                     LogSanitizer.safeMessage(e));
         }
     }

@@ -1,9 +1,18 @@
 package com.example.taskflow.notification;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 import com.example.taskflow.testsupport.MutableTestClock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,28 +22,19 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 /**
  * Database-backed tests of the outbox pipeline (H2): reminders reach the relay (DATA-1), claim
  * ownership, retry cap, backoff and locking (DATA-3) and retention (DATA-12). The shop clock is a
  * {@link MutableTestClock} so time can be moved instead of slept; the live {@code @Scheduled} jobs
  * are switched off and the job methods are called directly.
  */
-@SpringBootTest(properties = {
-        "app.rate-limit.enabled=false",
-        "app.schedulers.enabled=false",
-        "app.notification.simulate-failures=true",
-        "app.instance.id=relay-A"
-})
+@SpringBootTest(
+        properties = {
+            "app.rate-limit.enabled=false",
+            "app.schedulers.enabled=false",
+            "app.notification.simulate-failures=true",
+            "app.instance.id=relay-A"
+        })
 @Import(NotificationOutboxIntegrationTest.TestClockConfig.class)
 class NotificationOutboxIntegrationTest {
 
@@ -49,14 +49,29 @@ class NotificationOutboxIntegrationTest {
         }
     }
 
-    @Autowired private MutableTestClock clock;
-    @Autowired private NotificationOutboxRepository outbox;
-    @Autowired private AppointmentRepository appointments;
-    @Autowired private AppointmentReminderScheduler reminders;
-    @Autowired private NotificationRelayScheduler relay;
-    @Autowired private NotificationSender sender;
-    @Autowired private NotificationRetentionScheduler retention;
-    @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired
+    private MutableTestClock clock;
+
+    @Autowired
+    private NotificationOutboxRepository outbox;
+
+    @Autowired
+    private AppointmentRepository appointments;
+
+    @Autowired
+    private AppointmentReminderScheduler reminders;
+
+    @Autowired
+    private NotificationRelayScheduler relay;
+
+    @Autowired
+    private NotificationSender sender;
+
+    @Autowired
+    private NotificationRetentionScheduler retention;
+
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     @BeforeEach
     void reset() {
@@ -87,8 +102,14 @@ class NotificationOutboxIntegrationTest {
 
     @Test
     void reminderRowIsPickedUpByTheRelayClaimQueryAndEndsSent() {
-        Appointment appointment = new Appointment("Rem Inder", "rem.inder@x.test", "555-1", "Alex the Barber",
-                LocalDate.of(2031, 3, 11), "10:00", "Classic Haircut");
+        Appointment appointment = new Appointment(
+                "Rem Inder",
+                "rem.inder@x.test",
+                "555-1",
+                "Alex the Barber",
+                LocalDate.of(2031, 3, 11),
+                "10:00",
+                "Classic Haircut");
         appointment.setStatus("APPROVED");
         appointment = appointments.save(appointment);
 
@@ -119,13 +140,25 @@ class NotificationOutboxIntegrationTest {
     @Test
     void appointmentsThatAreNotApprovedForTomorrowGetNoReminder() {
         for (String status : new String[] {"PENDING", "DENIED"}) {
-            Appointment a = new Appointment("N " + status, "n." + status.toLowerCase() + "@x.test", "555-2",
-                    "Alex the Barber", LocalDate.of(2031, 3, 11), "11:00", "Classic Haircut");
+            Appointment a = new Appointment(
+                    "N " + status,
+                    "n." + status.toLowerCase() + "@x.test",
+                    "555-2",
+                    "Alex the Barber",
+                    LocalDate.of(2031, 3, 11),
+                    "11:00",
+                    "Classic Haircut");
             a.setStatus(status);
             appointments.save(a);
         }
-        Appointment later = new Appointment("Later", "later@x.test", "555-3", "Alex the Barber",
-                LocalDate.of(2031, 3, 12), "12:00", "Classic Haircut");
+        Appointment later = new Appointment(
+                "Later",
+                "later@x.test",
+                "555-3",
+                "Alex the Barber",
+                LocalDate.of(2031, 3, 12),
+                "12:00",
+                "Classic Haircut");
         later.setStatus("APPROVED");
         appointments.save(later);
 
@@ -245,7 +278,11 @@ class NotificationOutboxIntegrationTest {
 
         relay.relay();
 
-        assertEquals(backlog, outbox.findAll().stream().filter(row -> "SENT".equals(row.getStatus())).count());
+        assertEquals(
+                backlog,
+                outbox.findAll().stream()
+                        .filter(row -> "SENT".equals(row.getStatus()))
+                        .count());
     }
 
     @Test

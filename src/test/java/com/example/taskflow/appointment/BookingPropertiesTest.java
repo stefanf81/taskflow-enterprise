@@ -1,11 +1,11 @@
 package com.example.taskflow.appointment;
 
-import org.junit.jupiter.api.Test;
-import java.time.LocalTime;
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import java.time.LocalTime;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
 class BookingPropertiesTest {
 

@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -16,8 +17,6 @@ import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.cfg.EnumFeature;
 import tools.jackson.databind.json.JsonMapper;
-
-import java.io.IOException;
 
 /**
  * Anonymous, untrusted measurements, not an audit trail or billing signal. The existing API
@@ -45,14 +44,18 @@ class ClientTelemetryController {
         this.meters = meters;
     }
 
-    @Operation(summary = "Record one anonymous, allowlisted client measurement", requestBody =
-            @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true,
-                    content = @Content(schema = @Schema(implementation = ClientTelemetryEvent.class))))
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Measurement recorded"),
-            @ApiResponse(responseCode = "400", description = "Malformed or disallowed telemetry payload"),
-            @ApiResponse(responseCode = "413", description = "Telemetry payload exceeds 1024 bytes")
-    })
+    @Operation(
+            summary = "Record one anonymous, allowlisted client measurement",
+            requestBody =
+                    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                            required = true,
+                            content = @Content(schema = @Schema(implementation = ClientTelemetryEvent.class))))
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "204", description = "Measurement recorded"),
+                @ApiResponse(responseCode = "400", description = "Malformed or disallowed telemetry payload"),
+                @ApiResponse(responseCode = "413", description = "Telemetry payload exceeds 1024 bytes")
+            })
     @PostMapping(path = "/api/v1/telemetry", consumes = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<Void> record(HttpServletRequest request) {
         try {
@@ -64,8 +67,14 @@ class ClientTelemetryController {
             if (event == null) {
                 return empty(400);
             }
-            String[] tags = { "platform", event.platform().name(), "route", event.route().name(),
-                    "name", event.name().name() };
+            String[] tags = {
+                "platform",
+                event.platform().name(),
+                "route",
+                event.route().name(),
+                "name",
+                event.name().name()
+            };
             if (ClientTelemetryEvent.isError(event.name())) {
                 meters.counter("taskflow.client.errors", tags).increment();
             } else {
@@ -81,6 +90,8 @@ class ClientTelemetryController {
     }
 
     private static ResponseEntity<Void> empty(int status) {
-        return ResponseEntity.status(status).cacheControl(CacheControl.noStore()).build();
+        return ResponseEntity.status(status)
+                .cacheControl(CacheControl.noStore())
+                .build();
     }
 }

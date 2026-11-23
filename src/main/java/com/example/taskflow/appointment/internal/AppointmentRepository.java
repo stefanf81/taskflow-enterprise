@@ -1,6 +1,8 @@
 package com.example.taskflow.appointment.internal;
 
 import com.example.taskflow.appointment.AppointmentStatus;
+import java.time.LocalDate;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -10,12 +12,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDate;
-import java.util.List;
-
 @Repository
-public interface AppointmentRepository
-        extends JpaRepository<Appointment, Long>, JpaSpecificationExecutor<Appointment> {
+public interface AppointmentRepository extends JpaRepository<Appointment, Long>, JpaSpecificationExecutor<Appointment> {
 
     /**
      * One page of every appointment without the {@code COUNT(*)} that {@code findAll(Pageable)} runs
@@ -49,8 +47,7 @@ public interface AppointmentRepository
      * for the same index-only scan as {@link #countByStatus}.
      */
     @Query("SELECT COUNT(*) FROM Appointment a WHERE a.status = :status AND a.bookingDate < :date")
-    long countByStatusAndBookingDateBefore(@Param("status") AppointmentStatus status,
-                                           @Param("date") LocalDate date);
+    long countByStatusAndBookingDateBefore(@Param("status") AppointmentStatus status, @Param("date") LocalDate date);
 
     Appointment findByPublicId(String publicId);
 
@@ -66,7 +63,8 @@ public interface AppointmentRepository
      * {@code IgnoreCase} query generates {@code upper(col) = upper(?)}, which no plain
      * B-tree index can serve).
      */
-    @Query(value = "SELECT a FROM Appointment a WHERE lower(a.customerEmail) = lower(:email)",
+    @Query(
+            value = "SELECT a FROM Appointment a WHERE lower(a.customerEmail) = lower(:email)",
             countQuery = "SELECT COUNT(a) FROM Appointment a WHERE lower(a.customerEmail) = lower(:email)")
     Page<Appointment> findByCustomerEmailIgnoreCase(@Param("email") String email, Pageable pageable);
 
@@ -82,13 +80,15 @@ public interface AppointmentRepository
           AND a.status IN (com.example.taskflow.appointment.AppointmentStatus.PENDING,
                            com.example.taskflow.appointment.AppointmentStatus.APPROVED)
     """)
-    long countUpcoming(@Param("email") String email, @Param("today") LocalDate today,
-                       @Param("fromTime") String fromTime);
+    long countUpcoming(
+            @Param("email") String email, @Param("today") LocalDate today, @Param("fromTime") String fromTime);
 
-    @Query("SELECT a.id FROM Appointment a WHERE a.bookingDate = :date AND a.reminderSent = :reminderSent AND a.status = :status")
-    List<Long> findReminderIds(@Param("date") LocalDate date,
-                               @Param("reminderSent") boolean reminderSent,
-                               @Param("status") AppointmentStatus status);
+    @Query(
+            "SELECT a.id FROM Appointment a WHERE a.bookingDate = :date AND a.reminderSent = :reminderSent AND a.status = :status")
+    List<Long> findReminderIds(
+            @Param("date") LocalDate date,
+            @Param("reminderSent") boolean reminderSent,
+            @Param("status") AppointmentStatus status);
 
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT a FROM Appointment a WHERE a.id = :id")
@@ -107,8 +107,8 @@ public interface AppointmentRepository
                            com.example.taskflow.appointment.AppointmentStatus.APPROVED)
         ORDER BY a.bookingTime
     """)
-    List<Appointment> findActiveForBarberOnDate(@Param("barberName") String barberName,
-                                                @Param("bookingDate") LocalDate bookingDate);
+    List<Appointment> findActiveForBarberOnDate(
+            @Param("barberName") String barberName, @Param("bookingDate") LocalDate bookingDate);
 
     /** PENDING/APPROVED appointments of every barber on one date (used by "No Preference"). */
     @Query("""
@@ -130,9 +130,10 @@ public interface AppointmentRepository
                            com.example.taskflow.appointment.AppointmentStatus.APPROVED)
         ORDER BY a.bookingDate, a.bookingTime
     """)
-    List<Appointment> findActiveForBarberInRange(@Param("barberName") String barberName,
-                                                 @Param("startDate") LocalDate startDate,
-                                                 @Param("endDate") LocalDate endDate);
+    List<Appointment> findActiveForBarberInRange(
+            @Param("barberName") String barberName,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
 
     /**
      * Dashboard counters. Every SUM is wrapped in COALESCE: SUM over an empty table is
@@ -142,14 +143,14 @@ public interface AppointmentRepository
      * Revenue uses the price snapshotted at booking time and only falls back to the live
      * service price for legacy rows that have none.
      */
-    @Query("SELECT new com.example.taskflow.appointment.AppointmentStats(" +
-            "COALESCE(SUM(CASE WHEN a.status <> com.example.taskflow.appointment.AppointmentStatus.CANCELLED THEN 1 ELSE 0 END), 0L), " +
-            "COALESCE(SUM(CASE WHEN a.status = com.example.taskflow.appointment.AppointmentStatus.PENDING THEN 1 ELSE 0 END), 0L), " +
-            "COALESCE(SUM(CASE WHEN a.status = com.example.taskflow.appointment.AppointmentStatus.APPROVED THEN 1 ELSE 0 END), 0L), " +
-            "COALESCE(SUM(CASE WHEN a.status = com.example.taskflow.appointment.AppointmentStatus.DENIED THEN 1 ELSE 0 END), 0L), " +
-            "COALESCE(SUM(CASE WHEN a.status = com.example.taskflow.appointment.AppointmentStatus.PENDING AND a.bookingDate < :now THEN 1 ELSE 0 END), 0L), " +
-            "0, " +
-            "COALESCE(SUM(CASE WHEN a.status = com.example.taskflow.appointment.AppointmentStatus.APPROVED THEN CAST(COALESCE(a.priceAtBooking, s.price) AS double) ELSE 0.0 END), 0.0)) " +
-            "FROM Appointment a LEFT JOIN a.service s")
+    @Query("SELECT new com.example.taskflow.appointment.AppointmentStats("
+            + "COALESCE(SUM(CASE WHEN a.status <> com.example.taskflow.appointment.AppointmentStatus.CANCELLED THEN 1 ELSE 0 END), 0L), "
+            + "COALESCE(SUM(CASE WHEN a.status = com.example.taskflow.appointment.AppointmentStatus.PENDING THEN 1 ELSE 0 END), 0L), "
+            + "COALESCE(SUM(CASE WHEN a.status = com.example.taskflow.appointment.AppointmentStatus.APPROVED THEN 1 ELSE 0 END), 0L), "
+            + "COALESCE(SUM(CASE WHEN a.status = com.example.taskflow.appointment.AppointmentStatus.DENIED THEN 1 ELSE 0 END), 0L), "
+            + "COALESCE(SUM(CASE WHEN a.status = com.example.taskflow.appointment.AppointmentStatus.PENDING AND a.bookingDate < :now THEN 1 ELSE 0 END), 0L), "
+            + "0, "
+            + "COALESCE(SUM(CASE WHEN a.status = com.example.taskflow.appointment.AppointmentStatus.APPROVED THEN CAST(COALESCE(a.priceAtBooking, s.price) AS double) ELSE 0.0 END), 0.0)) "
+            + "FROM Appointment a LEFT JOIN a.service s")
     com.example.taskflow.appointment.AppointmentStats getAppointmentStats(@Param("now") LocalDate now);
 }

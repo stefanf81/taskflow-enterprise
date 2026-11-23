@@ -1,10 +1,5 @@
 package com.example.taskflow.auth;
 
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.stereotype.Component;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -13,6 +8,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Component;
 
 /**
  * Denylist of revoked JWT ids ({@code jti}).
@@ -78,25 +77,26 @@ class TokenRevocationList {
     static final long NOT_REVOKED_TTL_MILLIS = 30_000;
     /** Caps the "not revoked" cache; beyond it, answers are simply not cached. */
     static final int MAX_NOT_REVOKED_ENTRIES = 100_000;
+
     private static final long NO_GENERATION = Long.MIN_VALUE;
 
     /** A cached "not revoked": valid for {@code generation} until {@code untilMillis}. */
-    private record NotRevoked(long generation, long untilMillis) {
-    }
+    private record NotRevoked(long generation, long untilMillis) {}
 
     private final ConcurrentHashMap<String, NotRevoked> notRevoked = new ConcurrentHashMap<>();
     /** The last generation read successfully, and when that read started; NO_GENERATION if none. */
     private volatile long generation = NO_GENERATION;
+
     private volatile long generationReadAt;
     /** When the last read was started, successful or not: at most one per GENERATION_READ_MILLIS. */
     private volatile long generationAttemptAt;
+
     private final AtomicBoolean readingGeneration = new AtomicBoolean();
     /**
      * Runs the generation reads off the request path. The Spring constructor uses a virtual thread;
      * the others never read it (no "not revoked" cache), unless a test sets one.
      */
-    private volatile Executor generationReader = task -> {
-    };
+    private volatile Executor generationReader = task -> {};
 
     private final ConcurrentHashMap<String, Instant> revoked = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Instant> pendingSync = new ConcurrentHashMap<>();
@@ -108,11 +108,13 @@ class TokenRevocationList {
     private final Clock clock;
 
     @Autowired
-    public TokenRevocationList(ApplicationEventPublisher events,
-                               ObjectProvider<RedisTokenRevocationStore> shared,
-                               ObjectProvider<PersistentTokenRevocations> persistent) {
+    public TokenRevocationList(
+            ApplicationEventPublisher events,
+            ObjectProvider<RedisTokenRevocationStore> shared,
+            ObjectProvider<PersistentTokenRevocations> persistent) {
         this(events, shared.getIfAvailable(), persistent.getIfAvailable(), TokenProvider.TOKEN_CLOCK);
-        this.generationReader = task -> Thread.ofVirtual().name("revocation-generation").start(task);
+        this.generationReader =
+                task -> Thread.ofVirtual().name("revocation-generation").start(task);
     }
 
     TokenRevocationList(ApplicationEventPublisher events, RedisTokenRevocationStore shared) {
@@ -123,8 +125,11 @@ class TokenRevocationList {
         this(events, shared, null, clock);
     }
 
-    TokenRevocationList(ApplicationEventPublisher events, RedisTokenRevocationStore shared,
-                        PersistentTokenRevocations persistent, Clock clock) {
+    TokenRevocationList(
+            ApplicationEventPublisher events,
+            RedisTokenRevocationStore shared,
+            PersistentTokenRevocations persistent,
+            Clock clock) {
         this.events = events;
         this.shared = shared;
         this.persistent = persistent;
@@ -281,7 +286,9 @@ class TokenRevocationList {
 
     private void cacheNotRevoked(String jti, long knownGeneration, long nowMillis) {
         if (notRevoked.size() >= MAX_NOT_REVOKED_ENTRIES) {
-            notRevoked.values().removeIf(entry -> entry.untilMillis() <= nowMillis || entry.generation() != knownGeneration);
+            notRevoked
+                    .values()
+                    .removeIf(entry -> entry.untilMillis() <= nowMillis || entry.generation() != knownGeneration);
             if (notRevoked.size() >= MAX_NOT_REVOKED_ENTRIES) {
                 return;
             }

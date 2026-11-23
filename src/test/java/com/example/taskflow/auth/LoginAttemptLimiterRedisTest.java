@@ -1,19 +1,5 @@
 package com.example.taskflow.auth;
 
-import com.example.taskflow.core.redis.RedisBackoff;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.mockito.ArgumentMatchers;
-import org.springframework.data.redis.RedisConnectionFailureException;
-import org.springframework.data.redis.core.RedisCallback;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.data.redis.core.script.RedisScript;
-
-import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
-
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -27,6 +13,19 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import com.example.taskflow.core.redis.RedisBackoff;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 
 /** {@link LoginAttemptLimiter} in {@code app.state.store=redis} mode, with the Redis client mocked. */
 class LoginAttemptLimiterRedisTest {
@@ -42,8 +41,8 @@ class LoginAttemptLimiterRedisTest {
         redis = mock(StringRedisTemplate.class);
         values = mock(ValueOperations.class);
         when(redis.opsForValue()).thenReturn(values);
-        limiter = new LoginAttemptLimiter(3, 300,
-                new RedisLoginFailureCounter(redis, new RedisBackoff("test", 5_000, clock::get)));
+        limiter = new LoginAttemptLimiter(
+                3, 300, new RedisLoginFailureCounter(redis, new RedisBackoff("test", 5_000, clock::get)));
     }
 
     @Test
@@ -91,7 +90,9 @@ class LoginAttemptLimiterRedisTest {
         assertEquals(captured.get(0), captured.get(1), "case and surrounding whitespace do not split the window");
         assertFalse(captured.get(0).equals(captured.get(2)), "another account has its own window");
 
-        assertEquals(79, RedisLoginFailureCounter.key("u".repeat(100_000) + "|1.2.3.4").length());
+        assertEquals(
+                79,
+                RedisLoginFailureCounter.key("u".repeat(100_000) + "|1.2.3.4").length());
     }
 
     @Test
@@ -122,7 +123,8 @@ class LoginAttemptLimiterRedisTest {
 
     @Test
     void failuresCountedLocallyKeepTheFallbackWarmWhenRedisFailsMidWindow() {
-        when(redis.execute(ArgumentMatchers.<RedisScript<Long>>any(), anyList(), anyString())).thenReturn(1L, 2L, 3L);
+        when(redis.execute(ArgumentMatchers.<RedisScript<Long>>any(), anyList(), anyString()))
+                .thenReturn(1L, 2L, 3L);
         limiter.recordFailure("a@x.com");
         limiter.recordFailure("a@x.com");
         limiter.recordFailure("a@x.com");
@@ -134,7 +136,8 @@ class LoginAttemptLimiterRedisTest {
 
     @Test
     void aStaleLocalCountNeverLocksOutWhileRedisIsHealthy() {
-        when(redis.execute(ArgumentMatchers.<RedisScript<Long>>any(), anyList(), anyString())).thenReturn(1L, 2L, 3L);
+        when(redis.execute(ArgumentMatchers.<RedisScript<Long>>any(), anyList(), anyString()))
+                .thenReturn(1L, 2L, 3L);
         for (int i = 0; i < 3; i++) {
             limiter.recordFailure("a@x.com");
         }
@@ -166,8 +169,8 @@ class LoginAttemptLimiterRedisTest {
 
     @Test
     void zeroStillDisablesTheThrottleWithoutTouchingRedis() {
-        LoginAttemptLimiter disabled = new LoginAttemptLimiter(0, 300,
-                new RedisLoginFailureCounter(redis, new RedisBackoff("test", 5_000, clock::get)));
+        LoginAttemptLimiter disabled = new LoginAttemptLimiter(
+                0, 300, new RedisLoginFailureCounter(redis, new RedisBackoff("test", 5_000, clock::get)));
         disabled.recordFailure("a@x.com");
         disabled.checkAllowed("a@x.com");
         disabled.recordSuccess("a@x.com");

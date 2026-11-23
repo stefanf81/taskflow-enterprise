@@ -1,17 +1,16 @@
 package com.example.taskflow.appointment;
+
 import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
-
 import com.example.taskflow.core.LogSanitizer;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
+import java.time.Clock;
+import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
-
-import java.time.Clock;
-import java.time.Instant;
 
 /**
  * What follows a write to an appointment, shared by {@link AppointmentBookingService} and

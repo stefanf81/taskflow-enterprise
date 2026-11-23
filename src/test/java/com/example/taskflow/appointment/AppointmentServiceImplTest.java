@@ -1,30 +1,13 @@
 package com.example.taskflow.appointment;
-import com.example.taskflow.appointment.internal.Appointment;
-import com.example.taskflow.appointment.internal.AppointmentRepository;
-import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
-
-import com.example.taskflow.catalog.ServiceItem;
-import com.example.taskflow.core.ConflictException;
-import com.example.taskflow.core.ResourceNotFoundException;
-import org.junit.jupiter.api.Test;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.SliceImpl;
-import org.springframework.data.jpa.domain.Specification;
-
-import java.math.BigDecimal;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.ZoneOffset;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+
+import com.example.taskflow.appointment.internal.Appointment;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
 
 /** {@link AppointmentServiceImpl}: the cross-module API used by {@code notification} and {@code review}. */
 class AppointmentServiceImplTest extends AppointmentServiceTestSupport {
@@ -67,7 +50,8 @@ class AppointmentServiceImplTest extends AppointmentServiceTestSupport {
 
     @Test
     void testFindAppointmentIdsNeedingRemindersAsksForApprovedOnly() {
-        when(appointmentRepository.findReminderIds(TOMORROW, false, AppointmentStatus.APPROVED)).thenReturn(List.of(5L));
+        when(appointmentRepository.findReminderIds(TOMORROW, false, AppointmentStatus.APPROVED))
+                .thenReturn(List.of(5L));
 
         assertEquals(List.of(5L), appointmentService.findAppointmentIdsNeedingReminders(TOMORROW));
     }
@@ -78,7 +62,8 @@ class AppointmentServiceImplTest extends AppointmentServiceTestSupport {
         when(appointmentRepository.findByPublicIdForUpdate("public-1")).thenReturn(Optional.of(appt));
         when(appointmentRepository.findByPublicIdForUpdate("nope")).thenReturn(Optional.empty());
 
-        AppointmentDetails details = appointmentService.findDetailsByPublicId("public-1").orElseThrow();
+        AppointmentDetails details =
+                appointmentService.findDetailsByPublicId("public-1").orElseThrow();
 
         assertEquals(1L, details.id());
         assertEquals("public-1", details.publicId());

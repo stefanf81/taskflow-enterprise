@@ -1,44 +1,4 @@
 package com.example.taskflow.appointment;
-import com.example.taskflow.appointment.internal.Appointment;
-
-import com.example.taskflow.appointment.internal.AppointmentRepository;
-import com.example.taskflow.appointment.internal.BarberRepository;
-import com.example.taskflow.appointment.internal.BarberScheduleRepository;
-import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
-import com.example.taskflow.auth.internal.UserRepository;
-import com.example.taskflow.catalog.ServiceItem;
-import com.example.taskflow.catalog.internal.ServiceItemRepository;
-import com.example.taskflow.notification.NotificationOutbox;
-import com.example.taskflow.notification.internal.NotificationOutboxRepository;
-import com.example.taskflow.review.internal.ReviewRepository;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
-import org.springframework.dao.QueryTimeoutException;
-import org.springframework.http.MediaType;
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.ResultActions;
-
-import java.math.BigDecimal;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.ZoneOffset;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
@@ -60,6 +20,45 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.example.taskflow.appointment.internal.Appointment;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
+import com.example.taskflow.appointment.internal.BarberRepository;
+import com.example.taskflow.appointment.internal.BarberScheduleRepository;
+import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
+import com.example.taskflow.auth.internal.UserRepository;
+import com.example.taskflow.catalog.ServiceItem;
+import com.example.taskflow.catalog.internal.ServiceItemRepository;
+import com.example.taskflow.notification.NotificationOutbox;
+import com.example.taskflow.notification.internal.NotificationOutboxRepository;
+import com.example.taskflow.review.internal.ReviewRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
 /**
  * End-to-end regression tests (MockMvc + the real H2 schema, Flyway V1-V28) for the booking
  * rules: grid/duration/overlap (BKG-1), date window and per-e-mail limit (BKG-2), admin status
@@ -76,6 +75,7 @@ class BookingRulesIntegrationTest {
 
     /** Monday 2030-05-13, 08:00 shop time. */
     static final Instant NOW = Instant.parse("2030-05-13T08:00:00Z");
+
     private static final LocalDate TODAY = LocalDate.of(2030, 5, 13);
     private static final LocalDate TUE = TODAY.plusDays(1);
     private static final LocalDate WED = TODAY.plusDays(2);
@@ -94,19 +94,41 @@ class BookingRulesIntegrationTest {
         }
     }
 
-    @Autowired private MockMvc mockMvc;
-    @Autowired private AppointmentRepository appointmentRepository;
-    @Autowired private BarberRepository barberRepository;
-    @Autowired private BarberScheduleRepository barberScheduleRepository;
-    @Autowired private BarberTimeOffRepository barberTimeOffRepository;
-    @Autowired private ServiceItemRepository serviceItemRepository;
-    @Autowired private ReviewRepository reviewRepository;
-    @Autowired private NotificationOutboxRepository outboxRepository;
-    @Autowired private UserRepository userRepository;
-    @Autowired private CacheManager cacheManager;
-    @Autowired private BookingProperties bookingProperties;
+    @Autowired
+    private MockMvc mockMvc;
 
-    @MockitoSpyBean private AppointmentRepository spiedAppointmentRepository;
+    @Autowired
+    private AppointmentRepository appointmentRepository;
+
+    @Autowired
+    private BarberRepository barberRepository;
+
+    @Autowired
+    private BarberScheduleRepository barberScheduleRepository;
+
+    @Autowired
+    private BarberTimeOffRepository barberTimeOffRepository;
+
+    @Autowired
+    private ServiceItemRepository serviceItemRepository;
+
+    @Autowired
+    private ReviewRepository reviewRepository;
+
+    @Autowired
+    private NotificationOutboxRepository outboxRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private CacheManager cacheManager;
+
+    @Autowired
+    private BookingProperties bookingProperties;
+
+    @MockitoSpyBean
+    private AppointmentRepository spiedAppointmentRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private String adminToken;
@@ -120,7 +142,8 @@ class BookingRulesIntegrationTest {
         barberTimeOffRepository.deleteAll();
         // keep the bootstrapped admin account (these tests log in with it)
         userRepository.deleteAll(userRepository.findAll().stream()
-                .filter(user -> !"admin".equalsIgnoreCase(user.getEmail())).toList());
+                .filter(user -> !"admin".equalsIgnoreCase(user.getEmail()))
+                .toList());
         for (String name : List.of("busySlots", "appointmentStats", "barbers", "publicBarbers", "services")) {
             Cache cache = cacheManager.getCache(name);
             if (cache != null) {
@@ -132,20 +155,28 @@ class BookingRulesIntegrationTest {
         ensureService(LONG, "60.00", 120);
 
         Map<String, String> login = Map.of("username", "admin", "password", "admin-password");
-        adminToken = "Bearer " + mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(login)))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("access_token").getValue();
+        adminToken = "Bearer "
+                + mockMvc.perform(post("/api/v1/auth/login")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(login)))
+                        .andExpect(status().isOk())
+                        .andReturn()
+                        .getResponse()
+                        .getCookie("access_token")
+                        .getValue();
     }
 
     // ── fixtures ──────────────────────────────────────────────────────────────
 
     private Barber ensureBarber(String name) {
-        Barber barber = barberRepository.findByName(name)
-                .orElseGet(() -> barberRepository.save(new Barber(name, name.replace(' ', '.') + "@taskflow.com", "555-0100")));
+        Barber barber = barberRepository
+                .findByName(name)
+                .orElseGet(() ->
+                        barberRepository.save(new Barber(name, name.replace(' ', '.') + "@taskflow.com", "555-0100")));
         for (int day = 1; day <= 6; day++) {
-            if (barberScheduleRepository.findByBarberIdAndDayOfWeek(barber.getId(), day).isEmpty()) {
+            if (barberScheduleRepository
+                    .findByBarberIdAndDayOfWeek(barber.getId(), day)
+                    .isEmpty()) {
                 BarberSchedule schedule = new BarberSchedule();
                 schedule.setBarber(barber);
                 schedule.setDayOfWeek(day);
@@ -192,7 +223,9 @@ class BookingRulesIntegrationTest {
     private JsonNode book(String email, String barber, LocalDate date, String time, String service) throws Exception {
         String body = postBooking(request(email, barber, date, time, service))
                 .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         return objectMapper.readTree(body);
     }
 
@@ -211,14 +244,19 @@ class BookingRulesIntegrationTest {
 
     private List<String> busySlots(String barber, LocalDate date) throws Exception {
         String body = mockMvc.perform(get("/api/v1/appointments/public/busy-slots")
-                        .param("barberName", barber).param("bookingDate", date.toString()))
+                        .param("barberName", barber)
+                        .param("bookingDate", date.toString()))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         return objectMapper.readerForListOf(String.class).readValue(body);
     }
 
     private List<NotificationOutbox> outboxFor(String email) {
-        return outboxRepository.findAll().stream().filter(o -> email.equalsIgnoreCase(o.getRecipient())).toList();
+        return outboxRepository.findAll().stream()
+                .filter(o -> email.equalsIgnoreCase(o.getRecipient()))
+                .toList();
     }
 
     private AppointmentStatus statusOf(long id) {
@@ -270,9 +308,13 @@ class BookingRulesIntegrationTest {
     void noPreferenceNeverAssignsABarberWhoIsAlreadyBooked() throws Exception {
         book("named@example.com", TUE, "10:00");
 
-        ResultActions result = postBooking(request("any@example.com", AppointmentBookingService.NO_PREFERENCE_BARBER, TUE, "10:00", CUT));
+        ResultActions result = postBooking(
+                request("any@example.com", AppointmentBookingService.NO_PREFERENCE_BARBER, TUE, "10:00", CUT));
         String assigned = result.andReturn().getResponse().getStatus() == 201
-                ? objectMapper.readTree(result.andReturn().getResponse().getContentAsString()).get("barberName").asText()
+                ? objectMapper
+                        .readTree(result.andReturn().getResponse().getContentAsString())
+                        .get("barberName")
+                        .asText()
                 : null;
         if (assigned != null) {
             assertTrue(!BARBER.equals(assigned), "the busy barber must not be assigned, got " + assigned);
@@ -342,8 +384,14 @@ class BookingRulesIntegrationTest {
 
     @Test
     void sentinelBarberRowsCannotBeApproved() throws Exception {
-        Appointment legacy = new Appointment("Legacy", "legacy@example.com", "555", AppointmentBookingService.NO_PREFERENCE_BARBER,
-                TUE, "10:00", CUT);
+        Appointment legacy = new Appointment(
+                "Legacy",
+                "legacy@example.com",
+                "555",
+                AppointmentBookingService.NO_PREFERENCE_BARBER,
+                TUE,
+                "10:00",
+                CUT);
         legacy.setStatus(AppointmentStatus.DENIED);
         legacy = appointmentRepository.save(legacy);
 
@@ -388,8 +436,8 @@ class BookingRulesIntegrationTest {
 
     @Test
     void optimisticLockingRejectsAStaleWrite() {
-        Appointment saved = appointmentRepository.save(new Appointment(
-                "Lock", "lock@example.com", "555", BARBER, TUE, "10:00", CUT));
+        Appointment saved = appointmentRepository.save(
+                new Appointment("Lock", "lock@example.com", "555", BARBER, TUE, "10:00", CUT));
         // two readers load the same version...
         Appointment staleCopy = appointmentRepository.findById(saved.getId()).orElseThrow();
         Appointment winner = appointmentRepository.findById(saved.getId()).orElseThrow();
@@ -398,7 +446,8 @@ class BookingRulesIntegrationTest {
 
         // ...the second writer's update is refused instead of silently interleaving
         staleCopy.setStatus(AppointmentStatus.APPROVED);
-        org.junit.jupiter.api.Assertions.assertThrows(org.springframework.dao.OptimisticLockingFailureException.class,
+        org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.dao.OptimisticLockingFailureException.class,
                 () -> appointmentRepository.saveAndFlush(staleCopy));
     }
 
@@ -407,10 +456,12 @@ class BookingRulesIntegrationTest {
     @Test
     void databaseFailureOnBusySlotsIsA503AndIsNotCached() throws Exception {
         doThrow(new QueryTimeoutException("simulated timeout"))
-                .when(spiedAppointmentRepository).findActiveForBarberOnDate(anyString(), eq(TUE));
+                .when(spiedAppointmentRepository)
+                .findActiveForBarberOnDate(anyString(), eq(TUE));
 
         mockMvc.perform(get("/api/v1/appointments/public/busy-slots")
-                        .param("barberName", BARBER).param("bookingDate", TUE.toString()))
+                        .param("barberName", BARBER)
+                        .param("bookingDate", TUE.toString()))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(header().exists("Retry-After"));
 
@@ -427,13 +478,15 @@ class BookingRulesIntegrationTest {
     @Test
     void unknownBarberAndMalformedDateAreBadRequestsAndNeverCached() throws Exception {
         mockMvc.perform(get("/api/v1/appointments/public/busy-slots")
-                        .param("barberName", "Nobody Here").param("bookingDate", TUE.toString()))
+                        .param("barberName", "Nobody Here")
+                        .param("bookingDate", TUE.toString()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("Unknown barber")));
         assertNull(cacheManager.getCache("busySlots").get("Nobody Here-" + TUE));
 
         mockMvc.perform(get("/api/v1/appointments/public/busy-slots")
-                        .param("barberName", BARBER).param("bookingDate", "2030-13-45"))
+                        .param("barberName", BARBER)
+                        .param("bookingDate", "2030-13-45"))
                 .andExpect(status().isBadRequest());
     }
 
@@ -476,31 +529,52 @@ class BookingRulesIntegrationTest {
         guestCancel(guest.get("publicId").asText(), "guest@example.com").andExpect(status().isNoContent());
         // admin
         JsonNode byAdmin = book("admin.cancelled@example.com", TUE, "11:00");
-        mockMvc.perform(delete("/api/v1/appointments/" + byAdmin.get("id").asLong()).header("Authorization", adminToken))
+        mockMvc.perform(delete("/api/v1/appointments/" + byAdmin.get("id").asLong())
+                        .header("Authorization", adminToken))
                 .andExpect(status().isNoContent());
         // signed-in customer
-        Map<String, Object> registration = Map.of("fullName", "Cust Omer", "email", "cust@example.com",
-                "password", "customer-pass-123", "phone", "555-0222");
-        mockMvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(registration))).andExpect(status().isCreated());
-        String customerToken = "Bearer " + mockMvc.perform(post("/api/v1/auth/login")
+        Map<String, Object> registration = Map.of(
+                "fullName",
+                "Cust Omer",
+                "email",
+                "cust@example.com",
+                "password",
+                "customer-pass-123",
+                "phone",
+                "555-0222");
+        mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("username", "cust@example.com", "password", "customer-pass-123"))))
-                .andExpect(status().isOk()).andReturn().getResponse().getCookie("access_token").getValue();
+                        .content(objectMapper.writeValueAsString(registration)))
+                .andExpect(status().isCreated());
+        String customerToken = "Bearer "
+                + mockMvc.perform(post("/api/v1/auth/login")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(
+                                        Map.of("username", "cust@example.com", "password", "customer-pass-123"))))
+                        .andExpect(status().isOk())
+                        .andReturn()
+                        .getResponse()
+                        .getCookie("access_token")
+                        .getValue();
         JsonNode mine = book("cust@example.com", TUE, "13:00");
-        mockMvc.perform(delete("/api/v1/customer/appointments/" + mine.get("publicId").asText())
+        mockMvc.perform(delete("/api/v1/customer/appointments/"
+                                + mine.get("publicId").asText())
                         .header("Authorization", customerToken))
                 .andExpect(status().isNoContent());
 
-        Map<String, String> expectedTimes = Map.of("guest@example.com", "10:00",
-                "admin.cancelled@example.com", "11:00", "cust@example.com", "13:00");
+        Map<String, String> expectedTimes = Map.of(
+                "guest@example.com", "10:00", "admin.cancelled@example.com", "11:00", "cust@example.com", "13:00");
         expectedTimes.forEach((email, time) -> {
             List<NotificationOutbox> mails = outboxFor(email);
             assertEquals(1, mails.size(), email);
             String message = mails.get(0).getMessage();
-            assertTrue(message.contains("your " + CUT + " appointment with " + BARBER + " on " + TUE + " at " + time
-                    + " has been cancelled"), message);
-            assertTrue(!message.contains("status has been updated"), "must not use the generic status wording: " + message);
+            assertTrue(
+                    message.contains("your " + CUT + " appointment with " + BARBER + " on " + TUE + " at " + time
+                            + " has been cancelled"),
+                    message);
+            assertTrue(
+                    !message.contains("status has been updated"),
+                    "must not use the generic status wording: " + message);
         });
 
         // the customer sees the cancelled booking in their history
@@ -513,7 +587,8 @@ class BookingRulesIntegrationTest {
     void deniedAndPastBookingsCannotBeCancelledByGuestsButAdminsMayCancelPastOnes() throws Exception {
         long deniedId = book("denied@example.com", TUE, "10:00").get("id").asLong();
         adminSetStatus(deniedId, "DENIED").andExpect(status().isOk());
-        String deniedPublicId = appointmentRepository.findById(deniedId).orElseThrow().getPublicId();
+        String deniedPublicId =
+                appointmentRepository.findById(deniedId).orElseThrow().getPublicId();
         guestCancel(deniedPublicId, "denied@example.com").andExpect(status().isBadRequest());
 
         Appointment past = new Appointment("Past", "past@example.com", "555", BARBER, TODAY.minusDays(1), "10:00", CUT);
@@ -534,13 +609,18 @@ class BookingRulesIntegrationTest {
         Map<String, Object> request = request("replay@example.com", BARBER, TUE, "10:00", CUT);
         JsonNode created = objectMapper.readTree(mockMvc.perform(post("/api/v1/appointments")
                         .header("Idempotency-Key", "late-replay")
-                        .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
         guestCancel(created.get("publicId").asText(), "replay@example.com").andExpect(status().isNoContent());
 
         mockMvc.perform(post("/api/v1/appointments")
                         .header("Idempotency-Key", "late-replay")
-                        .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(request)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id", is(created.get("id").asInt())))
                 .andExpect(jsonPath("$.status", is("CANCELLED")));
@@ -595,8 +675,11 @@ class BookingRulesIntegrationTest {
         assertEquals(AppointmentStatus.PENDING, statusOf(thu.get("id").asLong()));
         List<NotificationOutbox> mails = outboxFor("tue@example.com");
         assertEquals(1, mails.size());
-        assertTrue(mails.get(0).getMessage().contains("has been cancelled"), mails.get(0).getMessage());
-        assertTrue(mails.get(0).getMessage().contains("unavailable"), mails.get(0).getMessage());
+        assertTrue(
+                mails.get(0).getMessage().contains("has been cancelled"),
+                mails.get(0).getMessage());
+        assertTrue(
+                mails.get(0).getMessage().contains("unavailable"), mails.get(0).getMessage());
         // wed was APPROVED earlier (1 mail) and is now cancelled (second mail)
         assertEquals(2, outboxFor("wed@example.com").size());
         assertEquals(0, outboxFor("thu@example.com").size());
@@ -612,11 +695,17 @@ class BookingRulesIntegrationTest {
                 .andExpect(status().isCreated());
         Barber fresh = barberRepository.findByName("Fresh Hire").orElseThrow();
         for (int day = 1; day <= 6; day++) {
-            BarberSchedule schedule = barberScheduleRepository.findByBarberIdAndDayOfWeek(fresh.getId(), day).orElseThrow();
+            BarberSchedule schedule = barberScheduleRepository
+                    .findByBarberIdAndDayOfWeek(fresh.getId(), day)
+                    .orElseThrow();
             assertEquals(LocalTime.of(9, 0), schedule.getStartTime());
             assertEquals(LocalTime.of(17, 0), schedule.getEndTime());
         }
-        assertTrue(barberScheduleRepository.findByBarberIdAndDayOfWeek(fresh.getId(), 7).isEmpty(), "Sunday is off");
+        assertTrue(
+                barberScheduleRepository
+                        .findByBarberIdAndDayOfWeek(fresh.getId(), 7)
+                        .isEmpty(),
+                "Sunday is off");
 
         book("hire@example.com", "Fresh Hire", TUE, "10:00", CUT);
         assertEquals(List.of("10:00"), busySlots("Fresh Hire", TUE));
@@ -637,16 +726,18 @@ class BookingRulesIntegrationTest {
 
     @Test
     void adminSearchMatchesNameEmailPhoneAndPublicIdAndAlsoAppliesToOverdue() throws Exception {
-        Appointment olga = new Appointment("Olga Overdue", "olga.o@example.com", "555-7777", BARBER, TODAY.minusDays(3), "10:00", CUT);
+        Appointment olga = new Appointment(
+                "Olga Overdue", "olga.o@example.com", "555-7777", BARBER, TODAY.minusDays(3), "10:00", CUT);
         olga = appointmentRepository.save(olga);
-        Appointment other = new Appointment("Peter Past", "peter@example.com", "555-8888", BARBER, TODAY.minusDays(3), "11:00", CUT);
+        Appointment other = new Appointment(
+                "Peter Past", "peter@example.com", "555-8888", BARBER, TODAY.minusDays(3), "11:00", CUT);
         appointmentRepository.save(other);
         JsonNode future = book("future.fiona@example.com", TUE, "10:00");
 
-        assertSearch("olga", 1, olga.getId());                   // name, case-insensitive
-        assertSearch("OLGA.O@EXAMPLE", 1, olga.getId());         // e-mail contains, case-insensitive
-        assertSearch("555-7777", 1, olga.getId());               // phone
-        assertSearch(olga.getPublicId(), 1, olga.getId());       // exact public id
+        assertSearch("olga", 1, olga.getId()); // name, case-insensitive
+        assertSearch("OLGA.O@EXAMPLE", 1, olga.getId()); // e-mail contains, case-insensitive
+        assertSearch("555-7777", 1, olga.getId()); // phone
+        assertSearch(olga.getPublicId(), 1, olga.getId()); // exact public id
         assertSearch(olga.getPublicId().substring(0, 8), 0, null); // a partial public id does not match
         assertSearch("fiona", 1, future.get("id").asLong());
         assertSearch("zzz-no-match", 0, null);
@@ -655,12 +746,16 @@ class BookingRulesIntegrationTest {
         mockMvc.perform(get("/api/v1/appointments").param("status", "OVERDUE").header("Authorization", adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.content", hasSize(2)));
-        mockMvc.perform(get("/api/v1/appointments").param("status", "OVERDUE").param("search", "peter")
+        mockMvc.perform(get("/api/v1/appointments")
+                        .param("status", "OVERDUE")
+                        .param("search", "peter")
                         .header("Authorization", adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.content", hasSize(1)))
                 .andExpect(jsonPath("$.page.content[0].customerName", is("Peter Past")));
-        mockMvc.perform(get("/api/v1/appointments").param("status", "OVERDUE").param("search", "fiona")
+        mockMvc.perform(get("/api/v1/appointments")
+                        .param("status", "OVERDUE")
+                        .param("search", "fiona")
                         .header("Authorization", adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.content", hasSize(0)));
@@ -669,8 +764,8 @@ class BookingRulesIntegrationTest {
     }
 
     private void assertSearch(String term, int expected, Long expectedId) throws Exception {
-        ResultActions result = mockMvc.perform(get("/api/v1/appointments").param("search", term)
-                        .header("Authorization", adminToken))
+        ResultActions result = mockMvc.perform(
+                        get("/api/v1/appointments").param("search", term).header("Authorization", adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.content", hasSize(expected)));
         if (expectedId != null) {
@@ -682,7 +777,11 @@ class BookingRulesIntegrationTest {
     void revenueUsesThePriceSnapshotNotTheCurrentPrice() throws Exception {
         long id = book("price@example.com", TUE, "10:00").get("id").asLong();
         adminSetStatus(id, "APPROVED").andExpect(status().isOk());
-        assertEquals(0, new BigDecimal("25.00").compareTo(appointmentRepository.findById(id).orElseThrow().getPriceAtBooking()));
+        assertEquals(
+                0,
+                new BigDecimal("25.00")
+                        .compareTo(
+                                appointmentRepository.findById(id).orElseThrow().getPriceAtBooking()));
 
         // the shop doubles the price afterwards
         ServiceItem cut = serviceItemRepository.findByName(CUT).orElseThrow();
@@ -707,8 +806,12 @@ class BookingRulesIntegrationTest {
     @Test
     void emailLookupsAreCaseInsensitive() {
         appointmentRepository.save(new Appointment("Mixed", "MiXeD@Case.com", "555", BARBER, TUE, "10:00", CUT));
-        assertEquals(1, appointmentRepository.findByCustomerEmailIgnoreCase("mixed@case.COM",
-                org.springframework.data.domain.PageRequest.of(0, 10)).getTotalElements());
+        assertEquals(
+                1,
+                appointmentRepository
+                        .findByCustomerEmailIgnoreCase(
+                                "mixed@case.COM", org.springframework.data.domain.PageRequest.of(0, 10))
+                        .getTotalElements());
         assertEquals(1, appointmentRepository.countUpcoming("MIXED@CASE.COM", TODAY, "00:00"));
 
         userRepository.save(new com.example.taskflow.auth.AppUser("user@case.com", "hash", "U", null, "ROLE_CUSTOMER"));
@@ -721,12 +824,14 @@ class BookingRulesIntegrationTest {
         Appointment approved = new Appointment("A", "a@example.com", "555", BARBER, TUE, "10:00", CUT);
         approved.setStatus(AppointmentStatus.APPROVED);
         approved = appointmentRepository.save(approved);
-        for (AppointmentStatus other : List.of(AppointmentStatus.PENDING, AppointmentStatus.DENIED, AppointmentStatus.CANCELLED)) {
+        for (AppointmentStatus other :
+                List.of(AppointmentStatus.PENDING, AppointmentStatus.DENIED, AppointmentStatus.CANCELLED)) {
             Appointment appointment = new Appointment("B", other + "@example.com", "555", BARBER, TUE, "11:00", CUT);
             appointment.setStatus(other);
             appointmentRepository.save(appointment);
         }
-        assertEquals(List.of(approved.getId()),
+        assertEquals(
+                List.of(approved.getId()),
                 appointmentRepository.findReminderIds(TUE, false, AppointmentStatus.APPROVED));
     }
 
@@ -734,12 +839,16 @@ class BookingRulesIntegrationTest {
 
     private List<String> busySlots(LocalDate date, String serviceType) throws Exception {
         var builder = get("/api/v1/appointments/public/busy-slots")
-                .param("barberName", BARBER).param("bookingDate", date.toString());
+                .param("barberName", BARBER)
+                .param("bookingDate", date.toString());
         if (serviceType != null) {
             builder = builder.param("serviceType", serviceType);
         }
-        String body = mockMvc.perform(builder).andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+        String body = mockMvc.perform(builder)
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         return List.of(objectMapper.readValue(body, String[].class));
     }
 
@@ -764,14 +873,16 @@ class BookingRulesIntegrationTest {
     @Test
     void busySlotsWithAnUnknownServiceIsA400() throws Exception {
         mockMvc.perform(get("/api/v1/appointments/public/busy-slots")
-                        .param("barberName", BARBER).param("bookingDate", TUE.toString())
+                        .param("barberName", BARBER)
+                        .param("bookingDate", TUE.toString())
                         .param("serviceType", "No Such Service"))
                 .andExpect(status().isBadRequest());
     }
 
     // ── per-email cap (code-review finding 8) ────────────────────────────────
 
-    @Autowired private AppointmentBookingService bookingService;
+    @Autowired
+    private AppointmentBookingService bookingService;
 
     private void seedActive(String email, LocalDate date, String time) {
         appointmentRepository.save(new Appointment("Cap Customer", email, "555", BARBER, date, time, CUT));
@@ -780,11 +891,13 @@ class BookingRulesIntegrationTest {
     /** created_at/updated_at come from the injected Clock (EntityTimestampListener), not the wall clock. */
     @Test
     void auditTimestampsComeFromTheInjectedClock() {
-        AppointmentCreationResult created = bookingService.createAppointment(new AppointmentCreateRequest(
-                "Audit Customer", "audit@example.com", "555", BARBER, TUE, "11:00", CUT), null);
+        AppointmentCreationResult created = bookingService.createAppointment(
+                new AppointmentCreateRequest("Audit Customer", "audit@example.com", "555", BARBER, TUE, "11:00", CUT),
+                null);
 
         java.time.LocalDateTime expected = java.time.LocalDateTime.ofInstant(NOW, java.time.ZoneId.systemDefault());
-        Appointment row = appointmentRepository.findById(created.appointment().id()).orElseThrow();
+        Appointment row =
+                appointmentRepository.findById(created.appointment().id()).orElseThrow();
         assertEquals(expected, row.getCreatedAt());
         assertEquals(expected, row.getUpdatedAt());
         assertEquals(expected, created.appointment().createdAt());
@@ -793,7 +906,7 @@ class BookingRulesIntegrationTest {
     @Test
     void aBookingThatAlreadyTookPlaceTodayNoLongerCountsAgainstTheCap() throws Exception {
         String email = "cap-today@example.com";
-        seedActive(email, TODAY, "07:00");   // earlier today (now is 08:00): already happened
+        seedActive(email, TODAY, "07:00"); // earlier today (now is 08:00): already happened
         seedActive(email, WED, "09:00");
         seedActive(email, WED, "10:00");
         seedActive(email, THU, "09:00");
@@ -822,8 +935,9 @@ class BookingRulesIntegrationTest {
                 results.add(pool.submit(() -> {
                     start.await();
                     try {
-                        bookingService.createAppointment(new AppointmentCreateRequest(
-                                "Cap Customer", email, "555", BARBER, TUE, slot, CUT), null);
+                        bookingService.createAppointment(
+                                new AppointmentCreateRequest("Cap Customer", email, "555", BARBER, TUE, slot, CUT),
+                                null);
                         return true;
                     } catch (IllegalArgumentException rejected) {
                         return false;
@@ -844,4 +958,3 @@ class BookingRulesIntegrationTest {
         assertEquals(5, appointmentRepository.countUpcoming(email, TODAY, "08:00"));
     }
 }
-

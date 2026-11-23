@@ -1,5 +1,12 @@
 package com.example.taskflow.architecture;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_ACCESS_STANDARD_STREAMS;
+import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.AccessTarget;
 import com.tngtech.archunit.core.domain.JavaAccess;
@@ -9,8 +16,6 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
-import org.junit.jupiter.api.Test;
-
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -22,19 +27,15 @@ import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
-
-import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
-import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
-import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_ACCESS_STANDARD_STREAMS;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
 
 /**
  * Coding-standard rules that Spring Modulith's {@link ModularityTest} does not cover. Module
  * boundaries themselves (cycles, internal access, allowed dependencies) live there.
  */
-@AnalyzeClasses(packages = {"com.example.taskflow", "db.migration"}, importOptions = ImportOption.DoNotIncludeTests.class)
+@AnalyzeClasses(
+        packages = {"com.example.taskflow", "db.migration"},
+        importOptions = ImportOption.DoNotIncludeTests.class)
 public class ArchitectureTest {
 
     // Module cycles, illegal cross-module access and the allowed dependency graph (package-info
@@ -49,8 +50,15 @@ public class ArchitectureTest {
     static final ArchRule no_standard_streams_allowed = NO_CLASSES_SHOULD_ACCESS_STANDARD_STREAMS;
 
     /** The java.time types whose no-arg {@code now()} reads the JVM's wall clock and default zone. */
-    private static final List<Class<?>> WALL_CLOCK_TYPES = List.of(LocalDate.class, LocalDateTime.class,
-            LocalTime.class, Instant.class, ZonedDateTime.class, OffsetDateTime.class, Year.class, YearMonth.class);
+    private static final List<Class<?>> WALL_CLOCK_TYPES = List.of(
+            LocalDate.class,
+            LocalDateTime.class,
+            LocalTime.class,
+            Instant.class,
+            ZonedDateTime.class,
+            OffsetDateTime.class,
+            Year.class,
+            YearMonth.class);
 
     /**
      * Calls that may keep the no-arg {@code now()}, as {@code "<fully qualified class>#<method>"} with
@@ -60,7 +68,8 @@ public class ArchitectureTest {
     private static final Map<String, String> NO_ARG_NOW_ALLOWLIST = Map.of();
 
     private static final DescribedPredicate<JavaAccess<?>> NO_ARG_NOW = DescribedPredicate.describe(
-            "a no-arg now() of " + WALL_CLOCK_TYPES.stream().map(Class::getSimpleName).toList(),
+            "a no-arg now() of "
+                    + WALL_CLOCK_TYPES.stream().map(Class::getSimpleName).toList(),
             ArchitectureTest::isNoArgNow);
 
     // 3. AGENTS.md: inject the Clock, never call no-arg now(). "Past", "today" and "tomorrow" are
@@ -68,7 +77,8 @@ public class ArchitectureTest {
     //    Method references (Instant::now) count as well as calls.
     @ArchTest
     static final ArchRule no_wall_clock_now = noClasses()
-            .should().accessTargetWhere(NO_ARG_NOW)
+            .should()
+            .accessTargetWhere(NO_ARG_NOW)
             .because("AGENTS.md: inject the Clock and use now(clock); see NO_ARG_NOW_ALLOWLIST for exceptions");
 
     private static boolean isNoArgNow(JavaAccess<?> access) {
@@ -78,7 +88,8 @@ public class ArchitectureTest {
                 || WALL_CLOCK_TYPES.stream().noneMatch(type -> target.getOwner().isEquivalentTo(type))) {
             return false;
         }
-        String origin = access.getOriginOwner().getName() + "#" + access.getOrigin().getName();
+        String origin =
+                access.getOriginOwner().getName() + "#" + access.getOrigin().getName();
         return !NO_ARG_NOW_ALLOWLIST.containsKey(origin);
     }
 

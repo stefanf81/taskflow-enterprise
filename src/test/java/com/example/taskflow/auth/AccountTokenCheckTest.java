@@ -1,17 +1,5 @@
 package com.example.taskflow.auth;
 
-import com.example.taskflow.auth.internal.UserRepository;
-import com.example.taskflow.testsupport.MutableTestClock;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.security.oauth2.jwt.Jwt;
-
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -21,6 +9,17 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import com.example.taskflow.auth.internal.UserRepository;
+import com.example.taskflow.testsupport.MutableTestClock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.security.oauth2.jwt.Jwt;
 
 /** https://github.com/stefanf81/taskflow-enterprise/issues/218: tokens follow their account. */
 class AccountTokenCheckTest {
@@ -43,14 +42,25 @@ class AccountTokenCheckTest {
 
     private static UserRepository.TokenState state(int version, String role) {
         return new UserRepository.TokenState() {
-            @Override public int getTokenVersion() { return version; }
-            @Override public String getRole() { return role; }
+            @Override
+            public int getTokenVersion() {
+                return version;
+            }
+
+            @Override
+            public String getRole() {
+                return role;
+            }
         };
     }
 
     private static Jwt token(String subject, String scope, Integer version) {
-        Jwt.Builder builder = Jwt.withTokenValue("t").header("alg", "RS256")
-                .subject(subject).claim("scope", scope).issuedAt(NOW).expiresAt(NOW.plusSeconds(3600));
+        Jwt.Builder builder = Jwt.withTokenValue("t")
+                .header("alg", "RS256")
+                .subject(subject)
+                .claim("scope", scope)
+                .issuedAt(NOW)
+                .expiresAt(NOW.plusSeconds(3600));
         if (version != null) {
             builder.claim(AccountTokenCheck.VERSION_CLAIM, version);
         }
@@ -61,7 +71,8 @@ class AccountTokenCheckTest {
     void aTokenOfTheCurrentVersionAndRoleIsAccepted() {
         account("jane@x.test", 2, "ROLE_CUSTOMER");
 
-        assertFalse(check.validate(token("jane@x.test", "ROLE_CUSTOMER FACTOR_PASSWORD", 2)).hasErrors());
+        assertFalse(check.validate(token("jane@x.test", "ROLE_CUSTOMER FACTOR_PASSWORD", 2))
+                .hasErrors());
     }
 
     @Test
@@ -85,7 +96,8 @@ class AccountTokenCheckTest {
     void aDemotedAccountsAdminTokenIsRejected() {
         account("former@x.test", 0, "ROLE_CUSTOMER");
 
-        assertTrue(check.validate(token("former@x.test", "ROLE_ADMIN FACTOR_PASSWORD", 0)).hasErrors());
+        assertTrue(check.validate(token("former@x.test", "ROLE_ADMIN FACTOR_PASSWORD", 0))
+                .hasErrors());
     }
 
     @Test
@@ -143,14 +155,18 @@ class AccountTokenCheckTest {
         check.validate(token("jane@x.test", "ROLE_CUSTOMER", 4));
         clock.advance(AccountTokenCheck.CACHE_TTL.plusSeconds(1));
         when(users.findTokenState("jane@x.test")).thenThrow(new DataAccessResourceFailureException("down"));
-        assertTrue(check.validate(token("jane@x.test", "ROLE_CUSTOMER", 3)).hasErrors(),
+        assertTrue(
+                check.validate(token("jane@x.test", "ROLE_CUSTOMER", 3)).hasErrors(),
                 "the stale state still rejects a revoked version");
         assertFalse(check.validate(token("jane@x.test", "ROLE_CUSTOMER", 4)).hasErrors());
     }
 
     @Test
     void aTokenWithoutSubjectIsRejected() {
-        Jwt anonymous = Jwt.withTokenValue("t").header("alg", "RS256").claim("scope", "ROLE_ADMIN").build();
+        Jwt anonymous = Jwt.withTokenValue("t")
+                .header("alg", "RS256")
+                .claim("scope", "ROLE_ADMIN")
+                .build();
 
         assertTrue(check.validate(anonymous).hasErrors());
     }

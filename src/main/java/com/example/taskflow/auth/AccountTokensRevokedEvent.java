@@ -7,5 +7,4 @@ package com.example.taskflow.auth;
  *
  * @param username the account's login name (its e-mail, or the configured admin name)
  */
-public record AccountTokensRevokedEvent(String username) {
-}
+public record AccountTokensRevokedEvent(String username) {}

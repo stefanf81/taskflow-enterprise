@@ -1,10 +1,10 @@
 package com.example.taskflow.auth;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.validation.annotation.Validated;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 
 /**
  * Refresh sessions, bound from {@code app.auth.refresh.*}.
@@ -20,6 +20,7 @@ import jakarta.validation.constraints.Min;
  */
 @Validated
 @ConfigurationProperties("app.auth.refresh")
-record RefreshProperties(@DefaultValue("2592000") @Min(1) long customerLifetimeSeconds,
-                         @DefaultValue("28800") @Min(1) long adminLifetimeSeconds,
-                         @DefaultValue("30") @Min(0) @Max(300) long reuseGraceSeconds) {}
+record RefreshProperties(
+        @DefaultValue("2592000") @Min(1) long customerLifetimeSeconds,
+        @DefaultValue("28800") @Min(1) long adminLifetimeSeconds,
+        @DefaultValue("30") @Min(0) @Max(300) long reuseGraceSeconds) {}

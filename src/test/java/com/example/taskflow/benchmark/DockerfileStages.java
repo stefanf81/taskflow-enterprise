@@ -1,5 +1,8 @@
 package com.example.taskflow.benchmark;
 
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -8,9 +11,6 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Reads a Dockerfile's build stages for the container-config guards. Only uncommented
@@ -24,8 +24,7 @@ final class DockerfileStages {
     private static final Pattern STAGE_HEADER =
             Pattern.compile("FROM\\s+(?:--\\S+\\s+)*(\\S+)\\s+AS\\s+(\\S+)", Pattern.CASE_INSENSITIVE);
 
-    private DockerfileStages() {
-    }
+    private DockerfileStages() {}
 
     /** The stage's own instructions (its FROM line excluded), up to the next FROM. */
     static List<String> instructions(String dockerfile, String stage) {
@@ -41,7 +40,9 @@ final class DockerfileStages {
             if (current == null && line.startsWith("FROM ")) {
                 break;
             }
-            current = current == null ? new StringBuilder(line) : current.append(' ').append(line);
+            current = current == null
+                    ? new StringBuilder(line)
+                    : current.append(' ').append(line);
             if (!line.endsWith("\\")) {
                 instructions.add(current.toString());
                 current = null;
@@ -110,7 +111,8 @@ final class DockerfileStages {
     }
 
     private static List<String> uncommentedLines(String dockerfile) {
-        return dockerfile.lines()
+        return dockerfile
+                .lines()
                 .map(String::strip)
                 .filter(line -> !line.isEmpty() && !line.startsWith("#"))
                 .toList();

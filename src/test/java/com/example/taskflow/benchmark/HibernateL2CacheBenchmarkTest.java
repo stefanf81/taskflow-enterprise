@@ -1,19 +1,24 @@
 package com.example.taskflow.benchmark;
 
-import com.example.taskflow.appointment.internal.AppointmentRepository;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
 import com.example.taskflow.appointment.Barber;
-import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.BarberResponse;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
+import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
 import com.example.taskflow.auth.TestSecurityConfig;
 import com.example.taskflow.catalog.ServiceItem;
-import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.example.taskflow.catalog.ServiceItemResponse;
+import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.example.taskflow.review.internal.ReviewRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.TypedQuery;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -22,12 +27,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Import;
-
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * HIBERNATE 2ND-LEVEL CACHE vs SPRING @Cacheable vs NO CACHE BENCHMARK
@@ -77,14 +76,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * @see com.example.taskflow.core.cache.CacheConfig
  */
 @Tag("benchmark")
-@SpringBootTest(properties = {
-        "app.rate-limit.enabled=false",
-        "spring.datasource.hikari.maximum-pool-size=10",
-        "spring.cache.type=simple",
-        "spring.jpa.properties.hibernate.cache.use_second_level_cache=true",
-        "spring.jpa.properties.hibernate.cache.use_query_cache=true",
-        "spring.jpa.properties.hibernate.cache.region.factory_class=jcache"
-})
+@SpringBootTest(
+        properties = {
+            "app.rate-limit.enabled=false",
+            "spring.datasource.hikari.maximum-pool-size=10",
+            "spring.cache.type=simple",
+            "spring.jpa.properties.hibernate.cache.use_second_level_cache=true",
+            "spring.jpa.properties.hibernate.cache.use_query_cache=true",
+            "spring.jpa.properties.hibernate.cache.region.factory_class=jcache"
+        })
 @Import(TestSecurityConfig.class)
 class HibernateL2CacheBenchmarkTest {
 
@@ -144,11 +144,7 @@ class HibernateL2CacheBenchmarkTest {
         // Seed barbers
         List<Barber> barbers = new ArrayList<>(BARBER_COUNT);
         for (int i = 0; i < BARBER_COUNT; i++) {
-            barbers.add(new Barber(
-                    "Barber " + i,
-                    "barber" + i + "@example.com",
-                    "555-0" + i
-            ));
+            barbers.add(new Barber("Barber " + i, "barber" + i + "@example.com", "555-0" + i));
         }
         barberRepository.saveAll(barbers);
 
@@ -161,8 +157,7 @@ class HibernateL2CacheBenchmarkTest {
                     BigDecimal.valueOf(10.00 + (i % 90)),
                     15 + (i % 60),
                     categories[i % categories.length],
-                    "Description for service " + i
-            ));
+                    "Description for service " + i));
         }
         serviceItemRepository.saveAll(services);
     }
@@ -300,8 +295,8 @@ class HibernateL2CacheBenchmarkTest {
         warmQueryCache(BARBER_PROJECTION_JPQL, BarberResponse.class);
 
         warmup(WARMUP_ITERATIONS, () -> runCachedQuery(BARBER_PROJECTION_JPQL, BarberResponse.class));
-        BenchmarkResult result = measure(MEASUREMENT_ITERATIONS,
-                () -> runCachedQuery(BARBER_PROJECTION_JPQL, BarberResponse.class));
+        BenchmarkResult result =
+                measure(MEASUREMENT_ITERATIONS, () -> runCachedQuery(BARBER_PROJECTION_JPQL, BarberResponse.class));
 
         printResult("Barbers: Hibernate L2 + Query Cache", BARBER_COUNT, result);
     }
@@ -319,8 +314,8 @@ class HibernateL2CacheBenchmarkTest {
         warmQueryCache(SERVICE_PROJECTION_JPQL, ServiceItemResponse.class);
 
         warmup(WARMUP_ITERATIONS, () -> runCachedQuery(SERVICE_PROJECTION_JPQL, ServiceItemResponse.class));
-        BenchmarkResult result = measure(MEASUREMENT_ITERATIONS,
-                () -> runCachedQuery(SERVICE_PROJECTION_JPQL, ServiceItemResponse.class));
+        BenchmarkResult result = measure(
+                MEASUREMENT_ITERATIONS, () -> runCachedQuery(SERVICE_PROJECTION_JPQL, ServiceItemResponse.class));
 
         printResult("Services: Hibernate L2 + Query Cache", SERVICE_COUNT, result);
     }
@@ -400,8 +395,7 @@ class HibernateL2CacheBenchmarkTest {
     private <T> List<T> runCachedQuery(String jpql, Class<T> resultClass) {
         EntityManager em = emf.createEntityManager();
         try {
-            TypedQuery<T> query = em.createQuery(jpql, resultClass)
-                    .setHint("org.hibernate.cacheable", true);
+            TypedQuery<T> query = em.createQuery(jpql, resultClass).setHint("org.hibernate.cacheable", true);
             return query.getResultList();
         } finally {
             em.close();
@@ -447,7 +441,8 @@ class HibernateL2CacheBenchmarkTest {
         System.out.println();
         System.out.println("  ═══ RESULT ═══");
         System.out.println("  " + label);
-        System.out.printf("  avg= %8.3f µs  throughput= %10.1f ops/sec  rows= %d  iter= %d%n",
+        System.out.printf(
+                "  avg= %8.3f µs  throughput= %10.1f ops/sec  rows= %d  iter= %d%n",
                 r.avgUs, r.opsPerSec, rowCount, r.iterations);
         System.out.println();
     }

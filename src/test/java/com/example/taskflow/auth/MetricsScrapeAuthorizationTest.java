@@ -1,10 +1,10 @@
 package com.example.taskflow.auth;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class MetricsScrapeAuthorizationTest {
 
@@ -13,7 +13,8 @@ class MetricsScrapeAuthorizationTest {
         if (authorization != null) {
             request.addHeader("Authorization", authorization);
         }
-        return manager.authorize(() -> null, new RequestAuthorizationContext(request)).isGranted();
+        return manager.authorize(() -> null, new RequestAuthorizationContext(request))
+                .isGranted();
     }
 
     @Test

@@ -6,13 +6,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/catalog")
@@ -37,7 +36,8 @@ class CatalogController {
     }
 
     @GetMapping("/retired")
-    @Operation(summary = "Get the retired services (Admin Access)",
+    @Operation(
+            summary = "Get the retired services (Admin Access)",
             description = "Services that still have appointments were retired instead of deleted. They are not "
                     + "bookable and are not in the public list until restored.")
     @ApiResponse(responseCode = "200", description = "List of retired services returned")
@@ -51,11 +51,13 @@ class CatalogController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get a specific service by ID")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Service found and returned"),
-            @ApiResponse(responseCode = "404", description = "Service not found")
-    })
-    public ResponseEntity<ServiceItemResponse> getServiceById(@Parameter(description = "Service database ID") @PathVariable Long id) {
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "200", description = "Service found and returned"),
+                @ApiResponse(responseCode = "404", description = "Service not found")
+            })
+    public ResponseEntity<ServiceItemResponse> getServiceById(
+            @Parameter(description = "Service database ID") @PathVariable Long id) {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noCache().cachePublic())
                 .body(catalogService.getServiceById(id));
@@ -63,10 +65,11 @@ class CatalogController {
 
     @PostMapping
     @Operation(summary = "Create a new service (Admin Access)")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Service created successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid service data")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "201", description = "Service created successfully"),
+                @ApiResponse(responseCode = "400", description = "Invalid service data")
+            })
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ServiceItemResponse> createService(@Valid @RequestBody ServiceItemRequest request) {
         return new ResponseEntity<>(catalogService.createService(request), HttpStatus.CREATED);
@@ -74,33 +77,39 @@ class CatalogController {
 
     @PutMapping("/{id}")
     @Operation(summary = "Update a service (Admin Access)")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Service updated successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid service data"),
-            @ApiResponse(responseCode = "404", description = "Service not found")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "200", description = "Service updated successfully"),
+                @ApiResponse(responseCode = "400", description = "Invalid service data"),
+                @ApiResponse(responseCode = "404", description = "Service not found")
+            })
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ServiceItemResponse> updateService(@Parameter(description = "Service database ID") @PathVariable Long id, @Valid @RequestBody ServiceItemRequest request) {
+    public ResponseEntity<ServiceItemResponse> updateService(
+            @Parameter(description = "Service database ID") @PathVariable Long id,
+            @Valid @RequestBody ServiceItemRequest request) {
         return ResponseEntity.ok(catalogService.updateService(id, request));
     }
 
     @PostMapping("/{id}/restore")
     @Operation(summary = "Restore a retired service (Admin Access)")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Service is active again"),
-            @ApiResponse(responseCode = "404", description = "Service not found")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "200", description = "Service is active again"),
+                @ApiResponse(responseCode = "404", description = "Service not found")
+            })
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ServiceItemResponse> restoreService(@Parameter(description = "Service database ID") @PathVariable Long id) {
+    public ResponseEntity<ServiceItemResponse> restoreService(
+            @Parameter(description = "Service database ID") @PathVariable Long id) {
         return ResponseEntity.ok(catalogService.restoreService(id));
     }
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete a service (Admin Access)")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Service deleted successfully"),
-            @ApiResponse(responseCode = "404", description = "Service not found")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "204", description = "Service deleted successfully"),
+                @ApiResponse(responseCode = "404", description = "Service not found")
+            })
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteService(@Parameter(description = "Service database ID") @PathVariable Long id) {
         catalogService.deleteService(id);

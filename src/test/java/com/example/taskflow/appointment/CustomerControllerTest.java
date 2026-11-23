@@ -1,5 +1,10 @@
 package com.example.taskflow.appointment;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+import java.util.Collections;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -10,13 +15,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-
-import java.time.LocalDate;
-import java.util.Collections;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CustomerControllerTest {
@@ -41,11 +39,9 @@ class CustomerControllerTest {
     void getMyAppointments_shouldReturnPage() {
         when(authentication.getName()).thenReturn("user@test.com");
         Page<AppointmentResponse> page = new PageImpl<>(Collections.emptyList());
-        when(queryService.getMyAppointments(eq("user@test.com"), eq(0), eq(10)))
-                .thenReturn(page);
+        when(queryService.getMyAppointments(eq("user@test.com"), eq(0), eq(10))).thenReturn(page);
 
-        ResponseEntity<Page<AppointmentResponse>> result =
-                customerController.getMyAppointments(authentication, 0, 10);
+        ResponseEntity<Page<AppointmentResponse>> result = customerController.getMyAppointments(authentication, 0, 10);
 
         assertEquals(HttpStatus.OK, result.getStatusCode());
         assertTrue(result.getBody().isEmpty());
