@@ -45,6 +45,24 @@ plugins {
 	alias(libs.plugins.versions)
 	alias(libs.plugins.spotbugs)
 	alias(libs.plugins.dependency.analysis)
+	alias(libs.plugins.spotless)
+}
+
+// Java formatting: palantir-java-format (4-space indent, 120 columns, imports
+// sorted and unused ones removed). `spotlessCheck` runs in CI (ci.yml,
+// backend-integration) and as part of `check`; `./gradlew spotlessApply` fixes it.
+// The one-time reformat commit is listed in .git-blame-ignore-revs.
+spotless {
+	java {
+		target 'src/*/java/**/*.java'
+		// Released Flyway Java migrations stay byte-for-byte as shipped (AGENTS.md:
+		// never edit a released migration).
+		targetExclude 'src/main/java/db/migration/**'
+		palantirJavaFormat(libs.versions.palantir.java.format.get())
+		// Keeps type-use annotations such as JSpecify's @Nullable next to the type:
+		// OpenApiResponseNullabilityConfig derives the `required` lists from them.
+		formatAnnotations()
+	}
 }
 
 dependencyAnalysis {

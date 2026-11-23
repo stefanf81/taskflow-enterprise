@@ -32,7 +32,8 @@ Surprises are collected in [gotchas](docs/agents/gotchas.md).
 ./gradlew test                  # unit + H2 integration tests (no Docker)
 ./gradlew testcontainersTest    # tagged PostgreSQL tests (needs Docker)
 ./gradlew containerConfigTest   # Dockerfile/compose/nginx/workflow guards (part of check)
-./gradlew check                 # tests, coverage, container guards, SpotBugs (not OWASP)
+./gradlew check                 # tests, coverage, container guards, SpotBugs, Spotless (not OWASP)
+./gradlew spotlessApply         # format Java; CI runs spotlessCheck
 ./gradlew dependencyCheckAnalyze  # explicit OWASP scan (fails on CVSS >= 7)
 ./gradlew bootRun               # run locally on H2
 
@@ -62,6 +63,7 @@ Backend
 - Flyway only, `ddl-auto=validate` everywhere. Never edit a released migration; there is deliberately no V16. A migration that changes the status or barber of reviewed appointments must also update `reviews.counted`/`barber_name` (V38).
 - Authorization is deny-by-default: a new endpoint needs an explicit `SecurityConfig` rule, a `HEAD` twin for every `GET`, `@PreAuthorize` if admin-only, and a case in `SecurityAuthorizationIntegrationTest`.
 - Module boundaries are checked by `ModularityTest`: declare a new cross-module dependency in the module's `package-info.java` (`allowedDependencies`), pass other modules `AppointmentDetails`-style snapshots instead of entities, and keep controllers/`*Impl` classes package-private (ADR-022).
+- Run `./gradlew spotlessApply` before committing Java (palantir-java-format; released Java migrations are excluded).
 - Inject the `Clock`; never call no-arg `now()` (`ArchitectureTest` enforces it). Raw SQL inserts into `appointments` must supply `booking_end_time`.
 - Never persist the "No Preference" sentinel; resolve it to a real barber inside the booking transaction.
 - A response DTO field that can be null must be JSpecify `@Nullable` (Jackson omits nulls; the OpenAPI `required` lists and the client contracts are derived from it).
