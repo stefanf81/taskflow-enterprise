@@ -99,6 +99,101 @@ class SecurityConfigTest {
                         new CookieProperties(false)));
     }
 
+    // ---- configured key pair: the two halves must belong together and be long enough ----
+
+    private static KeyPair rsa(int bits) throws Exception {
+        KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
+        kpg.initialize(bits);
+        return kpg.generateKeyPair();
+    }
+
+    private static String b64(java.security.Key key) {
+        return Base64.getEncoder().encodeToString(key.getEncoded());
+    }
+
+    private static Throwable root(Throwable t) {
+        while (t.getCause() != null) {
+            t = t.getCause();
+        }
+        return t;
+    }
+
+    @Test
+    void productionRejectsAPublicKeyOfAnotherPair() throws Exception {
+        // Each half is a valid key, so both parse: before the pair check this started and every
+        // token it issued failed its own decoder.
+        KeyPair signing = rsa(2048);
+        KeyPair other = rsa(2048);
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> new SecurityConfig(
+                "admin", "pass", new RsaKeyProperties(b64(signing.getPrivate()), b64(other.getPublic()), true),
+                new JwtProperties("taskflow", "taskflow-api", 3600), new CookieProperties(false)));
+
+        String message = root(failure).getMessage();
+        assertTrue(message.contains("APP_RSA_PUBLIC_KEY is not the public key of APP_RSA_PRIVATE_KEY"), message);
+        // No key material in the message that ends up in the startup log.
+        assertFalse(message.contains(b64(other.getPublic()).substring(0, 24)), message);
+    }
+
+    @Test
+    void productionRejectsAKeyBelow2048Bits() throws Exception {
+        KeyPair weak = rsa(1024);
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> new SecurityConfig(
+                "admin", "pass", new RsaKeyProperties(b64(weak.getPrivate()), b64(weak.getPublic()), true),
+                new JwtProperties("taskflow", "taskflow-api", 3600), new CookieProperties(false)));
+
+        assertTrue(root(failure).getMessage().contains("1024-bit"), root(failure).getMessage());
+    }
+
+    @Test
+    void aMismatchedPairOutsideProductionFallsBackToAnEphemeralPairThatWorks() throws Exception {
+        // Same rule as an unreadable key: without require-persistent-keys the start continues with
+        // a generated pair (WARN), and that pair signs tokens its own decoder accepts.
+        SecurityConfig config = createConfig("admin", "pass", b64(rsa(2048).getPrivate()), b64(rsa(2048).getPublic()));
+
+        var jwk = (com.nimbusds.jose.jwk.RSAKey) config.jwkSource()
+                .get(new com.nimbusds.jose.jwk.JWKSelector(new com.nimbusds.jose.jwk.JWKMatcher.Builder().build()), null)
+                .get(0);
+        SecurityConfig.requireUsableKeyPair(jwk.toRSAPrivateKey(), jwk.toRSAPublicKey());
+    }
+
+    @Test
+    void aMatchingPairPassesAndSignsATokenItsDecoderAccepts() throws Exception {
+        KeyPair pair = rsa(2048);
+        SecurityConfig.requireUsableKeyPair((java.security.interfaces.RSAPrivateKey) pair.getPrivate(),
+                (java.security.interfaces.RSAPublicKey) pair.getPublic());
+
+        SecurityConfig config = new SecurityConfig("admin", "pass",
+                new RsaKeyProperties(b64(pair.getPrivate()), b64(pair.getPublic()), true),
+                new JwtProperties("taskflow", "taskflow-api", 3600), new CookieProperties(false));
+        TokenProvider tokens = new TokenProvider(config.jwtEncoder(config.jwkSource()),
+                new JwtProperties("taskflow", "taskflow-api", 3600));
+        String token = tokens.generateToken(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                "admin", "n/a", java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN"))));
+
+        AccountTokenCheck anyAccount = mock(AccountTokenCheck.class);
+        RefreshSessionService anySession = mock(RefreshSessionService.class);
+        when(anyAccount.validate(any())).thenReturn(
+                org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.success());
+        when(anySession.validate(any())).thenReturn(
+                org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.success());
+        assertEquals("admin", config.jwtDecoder(new TokenRevocationList(), anyAccount, anySession).decode(token).getSubject());
+    }
+
+    @Test
+    void aPrivateKeyThatDoesNotMatchItsOwnModulusFailsTheSignatureProbe() throws Exception {
+        // Same modulus, wrong private exponent: the modulus comparison passes, the probe does not.
+        KeyPair pair = rsa(2048);
+        java.security.interfaces.RSAPrivateKey real = (java.security.interfaces.RSAPrivateKey) pair.getPrivate();
+        java.security.interfaces.RSAPrivateKey broken = (java.security.interfaces.RSAPrivateKey)
+                java.security.KeyFactory.getInstance("RSA").generatePrivate(new java.security.spec.RSAPrivateKeySpec(
+                        real.getModulus(), real.getPrivateExponent().add(java.math.BigInteger.TWO)));
+
+        assertThrows(java.security.GeneralSecurityException.class, () -> SecurityConfig.requireUsableKeyPair(
+                broken, (java.security.interfaces.RSAPublicKey) pair.getPublic()));
+    }
+
     @Test
     void testJwtDecoderException() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", null, null);

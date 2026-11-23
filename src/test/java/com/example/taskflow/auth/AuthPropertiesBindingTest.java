@@ -62,6 +62,26 @@ class AuthPropertiesBindingTest {
                 });
     }
 
+    /**
+     * A token lifetime of 0 or below issues tokens that are already expired, and a mistyped large one
+     * (milliseconds for seconds) keeps a stolen token valid for weeks: both stop the start.
+     */
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"0", "-1", "59", "86401", "3600000"})
+    void aTokenLifetimeOutsideOneMinuteToOneDayFailsTheStart(String seconds) {
+        runner.withPropertyValues("app.jwt.lifetime-seconds=" + seconds)
+                .run(context -> assertThat(context).hasFailed().getFailure().rootCause()
+                        .hasMessageContaining("lifetimeSeconds"));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"60", "900", "86400"})
+    void aTokenLifetimeInsideTheRangeBinds(String seconds) {
+        runner.withPropertyValues("app.jwt.lifetime-seconds=" + seconds)
+                .run(context -> assertThat(context.getBean(JwtProperties.class).lifetimeSeconds())
+                        .isEqualTo(Long.parseLong(seconds)));
+    }
+
     /** Prod: app.cors.allowed-origins=${APP_CORS_ALLOWED_ORIGINS:} with the variable unset must still abort. */
     @Test
     void anEmptyCorsListStillFailsTheStart() {

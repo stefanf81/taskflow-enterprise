@@ -1,2 +1,12 @@
-# Remediate false positive or unupgradable transitive dependency CVE-2026-54515 in jackson-databind
-CVE-2026-54515
+# Trivy suppressions (read by security.yml's `trivyignores` and, from the working directory, by
+# every `trivy` run in this checkout). Deliberately empty.
+#
+# Rules for a new entry:
+#   - one line per CVE with a comment above it: why it does not apply here and what removes it;
+#   - always with an expiry, so a forgotten entry starts failing instead of hiding the CVE:
+#       CVE-2099-0001 exp:2099-01-31
+#   - never for a finding that has a fixed release: raise the dependency instead
+#     (build.gradle constraints / gradle/libs.versions.toml, as for Tomcat).
+#
+# CVE-2026-54515 (jackson-databind, GHSA-5jmj-h7xm-6q6v) was listed here without an expiry until
+# 2026-11. It is fixed in 2.22.1 and 3.1.4; the build resolves 2.23.0 and 3.3.0.

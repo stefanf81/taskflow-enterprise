@@ -1,16 +1,6 @@
 package com.example.taskflow.auth;
-
 import com.example.taskflow.auth.internal.UserRepository;
-import com.nimbusds.jose.jwk.JWKSet;
-import com.nimbusds.jose.jwk.RSAKey;
-import com.nimbusds.jose.jwk.source.JWKSource;
-import com.nimbusds.jose.proc.SecurityContext;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.interfaces.RSAPrivateKey;
-import java.security.interfaces.RSAPublicKey;
-import java.util.List;
-import java.util.UUID;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +20,14 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.security.web.util.matcher.AndRequestMatcher;
+import org.springframework.security.web.util.matcher.NegatedRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
@@ -39,18 +37,21 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jose.jwk.source.JWKSource;
+import com.nimbusds.jose.proc.SecurityContext;
+
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
-import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
-import org.springframework.security.web.csrf.CsrfFilter;
-import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
-import org.springframework.security.web.util.matcher.AndRequestMatcher;
-import org.springframework.security.web.util.matcher.NegatedRequestMatcher;
-import org.springframework.security.web.util.matcher.OrRequestMatcher;
-import org.springframework.security.web.util.matcher.RequestMatcher;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.util.List;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
+import java.util.UUID;
 
 @Configuration
 @EnableWebSecurity
@@ -86,8 +87,8 @@ class SecurityConfig {
         this.jwtIssuer = jwt.issuer();
         this.jwtAudience = jwt.audience();
         this.cookieSecure = cookie.secure();
-        this.keyPair =
-                loadOrGenerateRsaKeyPair(rsaKeys.privateKey(), rsaKeys.publicKey(), rsaKeys.requirePersistentKeys());
+        this.keyPair = loadOrGenerateRsaKeyPair(rsaKeys.privateKey(), rsaKeys.publicKey(),
+                rsaKeys.requirePersistentKeys());
         this.rsaKey = new RSAKey.Builder((RSAPublicKey) keyPair.getPublic())
                 .privateKey((RSAPrivateKey) keyPair.getPrivate())
                 .keyID(UUID.randomUUID().toString())
@@ -95,13 +96,13 @@ class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(
-            HttpSecurity http, JwtDecoder jwtDecoder, MetricsProperties metrics, Environment environment)
-            throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder,
+                                                   MetricsProperties metrics, Environment environment) throws Exception {
         MetricsScrapeAuthorization prometheusAccess = new MetricsScrapeAuthorization(metrics.scrapeToken());
         if (!prometheusAccess.protectsTheEndpoint() && environment.acceptsProfiles(Profiles.of("prod"))) {
             logger.warn("/actuator/prometheus is unauthenticated: app.metrics.scrape-token (APP_METRICS_SCRAPE_TOKEN) "
-                    + "is not set, so only the network keeps the metrics internal");
+                    + "is not set, so only the network keeps the metrics internal. Set the token and "
+                    + "APP_REQUIRE_METRICS_SCRAPE_TOKEN=true to make a missing token fail the start");
         }
 
         JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
@@ -114,209 +115,145 @@ class SecurityConfig {
         // Resource Server automatically adds a CSRF exemption for every request whose
         // token its resolver can read. Our resolver also reads ambient cookies, so that
         // default would silently exempt every signed-in browser, not just native clients.
-        RequestMatcher csrfProtection = new AndRequestMatcher(
-                CsrfFilter.DEFAULT_CSRF_MATCHER,
+        RequestMatcher csrfProtection = new AndRequestMatcher(CsrfFilter.DEFAULT_CSRF_MATCHER,
                 new NegatedRequestMatcher(new OrRequestMatcher(
-                        PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/login"),
-                        PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/mobile/login"),
-                        PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/register"),
-                        PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/appointments"),
-                        PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*"),
-                        PathPatternRequestMatcher.pathPattern(
-                                HttpMethod.PUT, "/api/v1/appointments/public/reschedule/*"),
-                        PathPatternRequestMatcher.pathPattern(
-                                HttpMethod.POST, "/api/v1/appointments/public/reschedule/*/availability"),
-                        PathPatternRequestMatcher.pathPattern(
-                                HttpMethod.POST, "/api/v1/appointments/public/calendar/*"),
-                        PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/reviews/public/*"),
-                        PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/telemetry"),
-                        nativeSessionRequestMatcher(),
-                        bearerOnlyRequestMatcher())));
+                    PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/login"),
+                    PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/mobile/login"),
+                    PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/register"),
+                    PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/appointments"),
+                     PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*"),
+                     PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, "/api/v1/appointments/public/reschedule/*"),
+                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/appointments/public/reschedule/*/availability"),
+                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/appointments/public/calendar/*"),
+                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/reviews/public/*"),
+                     PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/telemetry"),
+                     nativeSessionRequestMatcher(),
+                     bearerOnlyRequestMatcher()
+                )));
 
-        http.csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository())
-                        .csrfTokenRequestHandler(new CookieCsrfTokenRequestHandler())
-                        // Apply our complete matcher after all configurers' init hooks, including
-                        // Resource Server's registerDefaultCsrfOverride. DSL ordering alone cannot
-                        // override the automatic exemption; this runs on the final CsrfFilter.
-                        .withObjectPostProcessor(new ObjectPostProcessor<CsrfFilter>() {
-                            @Override
-                            public <O extends CsrfFilter> O postProcess(O filter) {
-                                filter.setRequireCsrfProtectionMatcher(csrfProtection);
-                                // sendError dispatches to the deny-by-default /error route before
-                                // authentication and turns the 403 into a misleading 401 on Tomcat.
-                                filter.setAccessDeniedHandler((request, response, denied) ->
-                                        response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN));
-                                return filter;
-                            }
-                        }))
-                .cors(cors -> {}) // CorsConfigurationSource is provided by CorsConfig @Bean auto-detection
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        // Rules are listed per HTTP method, and Spring MVC serves HEAD from
-                        // every @GetMapping handler. Each GET rule therefore has a HEAD twin,
-                        // so HEAD can neither slip past an admin rule nor be refused on a
-                        // public one. Anything not listed is denied (see the last rule).
-                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.HEAD, "/api/v1/auth/csrf")
-                        .permitAll()
-                        // Swagger UI / OpenAPI docs are ADMIN-gated (fail-safe: even if
-                        // springdoc is left enabled, the docs are never public). Prod
-                        // additionally disables springdoc outright via
-                        // application-prod.properties.
-                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
-                        .hasRole("ADMIN")
-                        // No /h2-console rule: Spring Boot 4 serves the console only with the
-                        // spring-boot-h2console module, which is not a dependency.
-                        .requestMatchers(
-                                HttpMethod.POST,
-                                "/api/v1/auth/login",
-                                "/api/v1/auth/mobile/login",
-                                "/api/v1/auth/register")
-                        .permitAll()
-                        // Logout must work for everyone: with an expired session it is the
-                        // request that clears the cookie, so it cannot require authentication.
-                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh", "/api/v1/auth/mobile/refresh")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/me")
-                        .authenticated()
-                        .requestMatchers(HttpMethod.HEAD, "/api/v1/auth/me")
-                        .authenticated()
-                        // Liveness/readiness probes must stay reachable unauthenticated
-                        // for Kubernetes/docker healthchecks. The Prometheus scrape is open
-                        // while app.metrics.scrape-token is unset (then only the production
-                        // NetworkPolicy, which limits this port to the monitoring namespace,
-                        // keeps it internal) and bearer-token only once it is set.
-                        // All other Actuator endpoints remain administrator-only.
-                        .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness")
-                        .permitAll()
-                        // Open unless app.metrics.scrape-token is set, then bearer-token only (see
-                        // MetricsScrapeAuthorization). HEAD is not listed: it falls to the ADMIN rule below.
-                        .requestMatchers(HttpMethod.GET, "/actuator/prometheus")
-                        .access(prometheusAccess)
-                        .requestMatchers("/actuator/**")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/appointments/public/busy-slots")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/public/busy-slots")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/appointments/public/shop")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/public/shop")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/public/reschedule/*")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/appointments/public/reschedule/*/availability")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/appointments/public/calendar/*")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/appointments")
-                        .permitAll()
-                        // Before the public catalog rules: first match wins, and /retired lists services
-                        // that are not public.
-                        .requestMatchers(HttpMethod.GET, "/api/v1/catalog/retired")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.HEAD, "/api/v1/catalog/retired")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/catalog", "/api/v1/catalog/*")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.HEAD, "/api/v1/catalog", "/api/v1/catalog/*")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/reviews/public/barber-ratings")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.HEAD, "/api/v1/reviews/public/barber-ratings")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/reviews/public/*")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/telemetry")
-                        .permitAll()
-                        // Public booking only needs a barber identifier and display name.
-                        // Contact data and time-off details are restricted to administrators.
-                        .requestMatchers(HttpMethod.GET, "/api/v1/barbers")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.HEAD, "/api/v1/barbers")
-                        .permitAll()
-                        // Strict Admin restrictions to prevent privilege escalation / BOLA / PII leakage.
-                        // GET and HEAD are both covered: HEAD reaches the same handler and would
-                        // otherwise leak existence/size (Content-Length) of admin-only data.
-                        .requestMatchers(
-                                HttpMethod.GET,
-                                "/api/v1/barbers/admin",
-                                "/api/v1/barbers/*/time-off",
-                                "/api/v1/barbers/*/schedule")
-                        .hasRole("ADMIN")
-                        .requestMatchers(
-                                HttpMethod.HEAD,
-                                "/api/v1/barbers/admin",
-                                "/api/v1/barbers/*/time-off",
-                                "/api/v1/barbers/*/schedule")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/appointments/events")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/events")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/appointments")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/appointments/{id}")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/{id}")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/{id}")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/appointments/{id}")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/v1/barbers/**")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/barbers/**")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/barbers/**")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/v1/catalog/**")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/catalog/**")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/catalog/**")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/notifications")
-                        .hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.HEAD, "/api/v1/notifications")
-                        .hasRole("ADMIN")
-                        .requestMatchers(
-                                HttpMethod.GET,
-                                "/api/v1/customer/appointments",
-                                "/api/v1/customer/appointments/*/calendar",
-                                "/api/v1/customer/appointments/*/availability")
+        http
+            .csrf(csrf -> csrf
+                .csrfTokenRepository(csrfTokenRepository())
+                .csrfTokenRequestHandler(new CookieCsrfTokenRequestHandler())
+                // Apply our complete matcher after all configurers' init hooks, including
+                // Resource Server's registerDefaultCsrfOverride. DSL ordering alone cannot
+                // override the automatic exemption; this runs on the final CsrfFilter.
+                .withObjectPostProcessor(new ObjectPostProcessor<CsrfFilter>() {
+                    @Override
+                    public <O extends CsrfFilter> O postProcess(O filter) {
+                        filter.setRequireCsrfProtectionMatcher(csrfProtection);
+                        // sendError dispatches to the deny-by-default /error route before
+                        // authentication and turns the 403 into a misleading 401 on Tomcat.
+                        filter.setAccessDeniedHandler((request, response, denied) ->
+                                response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN));
+                        return filter;
+                    }
+                })
+            )
+            .cors(cors -> {})  // CorsConfigurationSource is provided by CorsConfig @Bean auto-detection
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                // Rules are listed per HTTP method, and Spring MVC serves HEAD from
+                // every @GetMapping handler. Each GET rule therefore has a HEAD twin,
+                // so HEAD can neither slip past an admin rule nor be refused on a
+                // public one. Anything not listed is denied (see the last rule).
+                .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/auth/csrf").permitAll()
+                // Swagger UI / OpenAPI docs are ADMIN-gated (fail-safe: even if
+                // springdoc is left enabled, the docs are never public). Prod
+                // additionally disables springdoc outright via
+                // application-prod.properties.
+                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").hasRole("ADMIN")
+                // No /h2-console rule: Spring Boot 4 serves the console only with the
+                // spring-boot-h2console module, which is not a dependency.
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/mobile/login", "/api/v1/auth/register").permitAll()
+                // Logout must work for everyone: with an expired session it is the
+                // request that clears the cookie, so it cannot require authentication.
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh", "/api/v1/auth/mobile/refresh").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/auth/me").authenticated()
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/auth/me").authenticated()
+                // Liveness/readiness probes must stay reachable unauthenticated
+                // for Kubernetes/docker healthchecks. The Prometheus scrape is open
+                // while app.metrics.scrape-token is unset (then only the production
+                // NetworkPolicy, which limits this port to the monitoring namespace,
+                // keeps it internal) and bearer-token only once it is set.
+                // All other Actuator endpoints remain administrator-only.
+                .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness").permitAll()
+                // Open unless app.metrics.scrape-token is set, then bearer-token only (see
+                // MetricsScrapeAuthorization). HEAD is not listed: it falls to the ADMIN rule below.
+                .requestMatchers(HttpMethod.GET, "/actuator/prometheus").access(prometheusAccess)
+                .requestMatchers("/actuator/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/appointments/public/busy-slots").permitAll()
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/public/busy-slots").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/appointments/public/shop").permitAll()
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/public/shop").permitAll()
+                .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/public/cancel/*").permitAll()
+                .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/public/reschedule/*").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/appointments/public/reschedule/*/availability").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/appointments/public/calendar/*").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/appointments").permitAll()
+                // Before the public catalog rules: first match wins, and /retired lists services
+                // that are not public.
+                .requestMatchers(HttpMethod.GET, "/api/v1/catalog/retired").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/catalog/retired").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/catalog", "/api/v1/catalog/*").permitAll()
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/catalog", "/api/v1/catalog/*").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/reviews/public/barber-ratings").permitAll()
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/reviews/public/barber-ratings").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/reviews/public/*").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/telemetry").permitAll()
+                // Public booking only needs a barber identifier and display name.
+                // Contact data and time-off details are restricted to administrators.
+                .requestMatchers(HttpMethod.GET, "/api/v1/barbers").permitAll()
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/barbers").permitAll()
+                // Strict Admin restrictions to prevent privilege escalation / BOLA / PII leakage.
+                // GET and HEAD are both covered: HEAD reaches the same handler and would
+                // otherwise leak existence/size (Content-Length) of admin-only data.
+                .requestMatchers(HttpMethod.GET, "/api/v1/barbers/admin", "/api/v1/barbers/*/time-off", "/api/v1/barbers/*/schedule").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/barbers/admin", "/api/v1/barbers/*/time-off", "/api/v1/barbers/*/schedule").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/appointments/events").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/events").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/appointments").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/appointments/{id}").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/appointments/{id}").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/appointments/{id}").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/appointments/{id}").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/barbers/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/barbers/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/barbers/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/catalog/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/catalog/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/catalog/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/notifications").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/notifications").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/customer/appointments",
+                        "/api/v1/customer/appointments/*/calendar",
+                        "/api/v1/customer/appointments/*/availability").hasAnyRole("CUSTOMER", "ADMIN")
+                .requestMatchers(HttpMethod.HEAD, "/api/v1/customer/appointments",
+                        "/api/v1/customer/appointments/*/calendar",
+                        "/api/v1/customer/appointments/*/availability").hasAnyRole("CUSTOMER", "ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/customer/appointments/*/reschedule")
                         .hasAnyRole("CUSTOMER", "ADMIN")
-                        .requestMatchers(
-                                HttpMethod.HEAD,
-                                "/api/v1/customer/appointments",
-                                "/api/v1/customer/appointments/*/calendar",
-                                "/api/v1/customer/appointments/*/availability")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/customer/appointments/*")
                         .hasAnyRole("CUSTOMER", "ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/customer/appointments/*/reschedule")
-                        .hasAnyRole("CUSTOMER", "ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/customer/appointments/*")
-                        .hasAnyRole("CUSTOMER", "ADMIN")
-                        // Deny by default. A new endpoint, or a method that no rule above
-                        // names, is refused until someone writes an explicit rule for it —
-                        // it must not silently become "any logged-in user".
-                        .anyRequest()
-                        .denyAll())
-                // Registered ahead of CSRF/bearer processing so an invalid access_token
-                // cookie is dropped (and expired) before it can turn every request,
-                // including login and public pages, into a 401.
-                .addFilterBefore(new StaleAccessTokenCookieFilter(jwtDecoder, cookieSecure), CsrfFilter.class)
-                .oauth2ResourceServer(oauth2 -> oauth2.bearerTokenResolver(cookieBearerTokenResolver(jwtDecoder))
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
-                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin())
-                        .addHeaderWriter(new org.springframework.security.web.header.writers.StaticHeadersWriter(
-                                "Cross-Origin-Resource-Policy", "same-origin")));
+                // Deny by default. A new endpoint, or a method that no rule above
+                // names, is refused until someone writes an explicit rule for it —
+                // it must not silently become "any logged-in user".
+                .anyRequest().denyAll()
+            )
+            // Registered ahead of CSRF/bearer processing so an invalid access_token
+            // cookie is dropped (and expired) before it can turn every request,
+            // including login and public pages, into a 401.
+            .addFilterBefore(new StaleAccessTokenCookieFilter(jwtDecoder, cookieSecure), CsrfFilter.class)
+            .oauth2ResourceServer(oauth2 -> oauth2
+                .bearerTokenResolver(cookieBearerTokenResolver(jwtDecoder))
+                .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
+            .headers(headers -> headers
+                .frameOptions(frame -> frame.sameOrigin())
+                .addHeaderWriter(new org.springframework.security.web.header.writers.StaticHeadersWriter("Cross-Origin-Resource-Policy", "same-origin"))
+            );
 
         return http.build();
     }
@@ -370,7 +307,7 @@ class SecurityConfig {
                         jwtDecoder.decode(token);
                     }
                 } catch (org.springframework.security.oauth2.jwt.JwtException
-                        | org.springframework.security.oauth2.core.OAuth2AuthenticationException e) {
+                         | org.springframework.security.oauth2.core.OAuth2AuthenticationException e) {
                     return null;
                 }
             }
@@ -427,8 +364,7 @@ class SecurityConfig {
         }
         for (jakarta.servlet.http.Cookie cookie : cookies) {
             if (CREDENTIAL_COOKIES.contains(cookie.getName())
-                    && cookie.getValue() != null
-                    && !cookie.getValue().isBlank()) {
+                    && cookie.getValue() != null && !cookie.getValue().isBlank()) {
                 return true;
             }
         }
@@ -437,20 +373,26 @@ class SecurityConfig {
 
     @Bean
     public AuthenticationManager authenticationManager(
-            UserDetailsService userDetailsService, PasswordEncoder passwordEncoder) {
+            UserDetailsService userDetailsService,
+            PasswordEncoder passwordEncoder) {
         DaoAuthenticationProvider authenticationProvider = new DaoAuthenticationProvider(userDetailsService);
         authenticationProvider.setPasswordEncoder(passwordEncoder);
         return new ProviderManager(authenticationProvider);
     }
 
     @Bean
-    public org.springframework.boot.CommandLineRunner initAdminUser(
-            UserRepository userRepository, PasswordEncoder passwordEncoder, AccountTokenCheck accounts) {
+    public org.springframework.boot.CommandLineRunner initAdminUser(UserRepository userRepository, PasswordEncoder passwordEncoder,
+                                                                    AccountTokenCheck accounts) {
         return args -> {
             java.util.Optional<AppUser> existing = userRepository.findByEmailIgnoreCase(adminUsername);
             if (existing.isEmpty()) {
                 AppUser admin = new AppUser(
-                        adminUsername, passwordEncoder.encode(adminPassword), "Shop Owner", "", "ROLE_ADMIN");
+                    adminUsername,
+                    passwordEncoder.encode(adminPassword),
+                    "Shop Owner",
+                    "",
+                    "ROLE_ADMIN"
+                );
                 userRepository.save(admin);
                 logger.info("Default admin user created successfully.");
             } else if ("ROLE_ADMIN".equals(existing.get().getRole())
@@ -492,16 +434,15 @@ class SecurityConfig {
     }
 
     @Bean
-    public JwtDecoder jwtDecoder(
-            TokenRevocationList revocationList, AccountTokenCheck accounts, RefreshSessionService refreshSessions) {
+    public JwtDecoder jwtDecoder(TokenRevocationList revocationList, AccountTokenCheck accounts,
+                                 RefreshSessionService refreshSessions) {
         try {
-            NimbusJwtDecoder decoder =
-                    NimbusJwtDecoder.withPublicKey(this.rsaKey.toRSAPublicKey()).build();
+            NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(this.rsaKey.toRSAPublicKey()).build();
             // A3: validate issuer + audience (expiry is enforced by the default
             // validators). Rejects tokens issued by another authority or intended
             // for a different resource, closing token-substitution gaps.
-            org.springframework.security.oauth2.core.OAuth2TokenValidator<org.springframework.security.oauth2.jwt.Jwt>
-                    audienceValidator = new org.springframework.security.oauth2.jwt.JwtClaimValidator<List<String>>(
+            org.springframework.security.oauth2.core.OAuth2TokenValidator<org.springframework.security.oauth2.jwt.Jwt> audienceValidator =
+                    new org.springframework.security.oauth2.jwt.JwtClaimValidator<List<String>>(
                             "aud", aud -> aud != null && aud.contains(jwtAudience));
             // Tokens revoked at logout are rejected for the rest of their lifetime.
             OAuth2TokenValidator<Jwt> notRevoked = jwt -> revocationList.isRevoked(jwt.getId())
@@ -527,27 +468,67 @@ class SecurityConfig {
         }
     }
 
+    /** Smallest modulus accepted for a configured signing key; Nimbus refuses to sign RS256 below it. */
+    static final int MIN_RSA_KEY_BITS = 2048;
+
+    /**
+     * Refuses a configured pair this instance could not use. Each half parses on its own, so two
+     * halves of different pairs (one of the two secrets rotated or pasted from another environment)
+     * used to start: every login then returned a token the decoder rejected, and
+     * {@link StaleAccessTokenCookieFilter} expired the cookie on the next request. A key below
+     * {@link #MIN_RSA_KEY_BITS} started too and failed at the first login, when Nimbus refused to
+     * sign with it. The messages name the variable, never key material.
+     *
+     * <p>The modulus comparison names the usual mistake; signing and verifying a fixed probe also
+     * rejects a private key whose own parameters are inconsistent (about a millisecond, once).
+     */
+    static void requireUsableKeyPair(RSAPrivateKey privateKey, RSAPublicKey publicKey)
+            throws java.security.GeneralSecurityException {
+        int bits = publicKey.getModulus().bitLength();
+        if (bits < MIN_RSA_KEY_BITS) {
+            throw new java.security.InvalidKeyException("APP_RSA_PUBLIC_KEY is a " + bits + "-bit RSA key; at least "
+                    + MIN_RSA_KEY_BITS + " bits are required");
+        }
+        if (!publicKey.getModulus().equals(privateKey.getModulus())) {
+            throw new java.security.InvalidKeyException(
+                    "APP_RSA_PUBLIC_KEY is not the public key of APP_RSA_PRIVATE_KEY (the moduli differ)");
+        }
+        byte[] probe = "taskflow-jwt-key-pair-check".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        java.security.Signature signer = java.security.Signature.getInstance("SHA256withRSA");
+        signer.initSign(privateKey);
+        signer.update(probe);
+        byte[] signature = signer.sign();
+        java.security.Signature verifier = java.security.Signature.getInstance("SHA256withRSA");
+        verifier.initVerify(publicKey);
+        verifier.update(probe);
+        if (!verifier.verify(signature)) {
+            throw new java.security.InvalidKeyException(
+                    "APP_RSA_PUBLIC_KEY does not verify a signature made with APP_RSA_PRIVATE_KEY");
+        }
+    }
+
     /**
      * Load a persistent RSA keypair from APP_RSA_PRIVATE_KEY / APP_RSA_PUBLIC_KEY
      * environment variables (base64-encoded DER). Falls back to a freshly generated
      * ephemeral key when the env vars are absent (logged at WARN — JWT tokens become
-     * invalid on restart in this case).
+     * invalid on restart in this case). A pair that does not belong together or is too
+     * short ({@link #requireUsableKeyPair}) counts as one that could not be loaded.
      */
     private static KeyPair loadOrGenerateRsaKeyPair(
             String privateKeyB64, String publicKeyB64, boolean requirePersistentKeys) {
-        if (privateKeyB64 != null && !privateKeyB64.isBlank() && publicKeyB64 != null && !publicKeyB64.isBlank()) {
+        if (privateKeyB64 != null && !privateKeyB64.isBlank() && 
+            publicKeyB64 != null && !publicKeyB64.isBlank()) {
             try {
                 byte[] privateBytes = java.util.Base64.getDecoder().decode(privateKeyB64);
                 byte[] publicBytes = java.util.Base64.getDecoder().decode(publicKeyB64);
-
-                java.security.spec.PKCS8EncodedKeySpec privateSpec =
-                        new java.security.spec.PKCS8EncodedKeySpec(privateBytes);
-                java.security.spec.X509EncodedKeySpec publicSpec =
-                        new java.security.spec.X509EncodedKeySpec(publicBytes);
-
+                
+                java.security.spec.PKCS8EncodedKeySpec privateSpec = new java.security.spec.PKCS8EncodedKeySpec(privateBytes);
+                java.security.spec.X509EncodedKeySpec publicSpec = new java.security.spec.X509EncodedKeySpec(publicBytes);
+                
                 java.security.KeyFactory keyFactory = java.security.KeyFactory.getInstance("RSA");
                 RSAPrivateKey privateKey = (RSAPrivateKey) keyFactory.generatePrivate(privateSpec);
                 RSAPublicKey publicKey = (RSAPublicKey) keyFactory.generatePublic(publicSpec);
+                requireUsableKeyPair(privateKey, publicKey);
 
                 logger.info("Loaded persistent RSA key pair from environment variables");
                 return new KeyPair(publicKey, privateKey);
@@ -562,10 +543,10 @@ class SecurityConfig {
         if (requirePersistentKeys) {
             throw new IllegalStateException("Persistent RSA keys are required in this environment");
         }
-
+        
         try {
             KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
-            keyPairGenerator.initialize(2048);
+            keyPairGenerator.initialize(MIN_RSA_KEY_BITS);
             KeyPair kp = keyPairGenerator.generateKeyPair();
             logger.warn("*** EPHEMERAL RSA KEY IN USE *** All JWT tokens invalidated on restart. "
                     + "Set APP_RSA_PRIVATE_KEY and APP_RSA_PUBLIC_KEY env vars for persistent signing.");
