@@ -86,7 +86,10 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          args=(--redact --verbose --no-banner --exit-code=2
+          # --ignore-gitleaks-allow: an inline `gitleaks:allow` comment would let
+          # the commit that adds a secret also switch off its detection. The
+          # repository uses none; a false positive goes into .gitleaksignore.
+          args=(--redact --verbose --no-banner --exit-code=2 --ignore-gitleaks-allow
             --report-format=sarif --report-path=results.sarif)
 
           # PRs scan only the commits they add. Every other event scans the
@@ -105,6 +108,25 @@ jobs:
               fi
             done
             args+=("--log-opts=--no-merges ${BASE_SHA}..${HEAD_SHA}")
+
+            # A pull request must not bring its own suppressions: gitleaks reads
+            # .gitleaks.toml and .gitleaksignore from the working tree, so a
+            # commit that adds a secret could add the allowlist entry or the
+            # fingerprint that hides it. Scan with the base commit's copies. The
+            # commits themselves are read from .git, not from the working tree.
+            # To accept a false positive, merge its fingerprint to main first,
+            # then update the PR branch from main: a re-run of this check keeps
+            # the event's old base commit.
+            for file in .gitleaks.toml .gitleaksignore; do
+              if ! git diff --quiet "${BASE_SHA}" "${HEAD_SHA}" -- "${file}"; then
+                echo "::warning file=${file}::This pull request changes ${file}. The scan uses the version on the base branch; the change takes effect after it is merged."
+              fi
+              # Remove first: the pull request may have made it a symlink.
+              rm -f -- "${file}"
+              if git cat-file -e "${BASE_SHA}:${file}" 2>/dev/null; then
+                git show "${BASE_SHA}:${file}" > "${file}"
+              fi
+            done
           fi
 
           status=0
@@ -118,7 +140,7 @@ jobs:
               {
                 echo "### 🛑 Gitleaks: leaks found"
                 echo
-                echo "Rotate every real secret. For a false positive, append its fingerprint to \`.gitleaksignore\`."
+                echo "Rotate every real secret. For a false positive, append its fingerprint to \`.gitleaksignore\` on \`main\` first (a pull request is scanned with its base commit's ignore file), then update this branch from \`main\` (a plain re-run keeps the old base commit)."
                 echo
                 echo "| Rule | File | Line | Fingerprint |"
                 echo "| --- | --- | --- | --- |"
