@@ -13,6 +13,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *       unauthenticated, which then relies on the network (NetworkPolicy) to keep it internal.
  *       Environment variable {@code APP_METRICS_SCRAPE_TOKEN}.</li>
  * </ul>
+ * {@code app.metrics.require-scrape-token} is not bound here: it only decides whether
+ * {@link MetricsScrapeTokenGuard} exists.
  */
 @ConfigurationProperties(prefix = "app.metrics")
 record MetricsProperties(@DefaultValue("") String scrapeToken) {

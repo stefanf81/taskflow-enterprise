@@ -110,7 +110,7 @@ class PropertyKeysMetadataTest {
                 "app.rate-limit.login-max-failures", "app.rate-limit.auth-max-requests-per-minute",
                 "app.sse.heartbeat-interval-ms", "app.notification.retention-cron", "app.instance.id",
                 "app.cache.single-flight.max-wait-ms", "app.booking.max-advance-days", "app.schedulers.enabled",
-                "app.state.store", "app.security.require-strong-admin-password",
+                "app.state.store", "app.security.require-strong-admin-password", "app.metrics.require-scrape-token",
                 "app.logging.async.max-flush-time-ms", "app.rateLimit.maxRequestsPerMinute")) {
             assertNull(check(known), known);
         }
