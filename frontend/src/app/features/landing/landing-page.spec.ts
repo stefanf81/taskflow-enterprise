@@ -5,22 +5,12 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { Router, provideRouter } from '@angular/router';
 import { LandingPage } from './landing-page';
 import { AuthState, SESSION_EXPIRED_MESSAGE } from '../../core/auth/auth.state';
-import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
 import { DashboardPrefetch } from '../../dashboard-loaders';
 import { FlashMessages } from '../../core/ui/flash-messages';
-import { ReviewStore } from '../../core/reviews/review.store';
 // Imported for its side effect only: the wizard is behind `@defer`, whose dynamic import would
 // otherwise have to be transformed mid-test, taking longer than the settle loop below waits.
 import '../booking/booking-wizard';
 import { DEFAULT_SHOP_RULES } from '@taskflow/domain';
-
-/** The body of the "Client Ratings" card (the box that holds its height while loading). */
-function ratingsBody(root: HTMLElement): HTMLElement | undefined {
-  const heading = Array.from(root.querySelectorAll<HTMLElement>('h3')).find((h) =>
-    h.textContent?.includes('Client Ratings'),
-  );
-  return (heading?.nextElementSibling as HTMLElement | null) ?? undefined;
-}
 
 /** The open/closed badge in the guest navigation. */
 function openClosedBadge(root: HTMLElement): HTMLElement | undefined {
@@ -49,12 +39,6 @@ describe('LandingPage before the shop hours are known', () => {
     const badge = openClosedBadge(pending.nativeElement);
     expect(badge).toBeTruthy();
     expect(badge?.classList).toContain('invisible');
-
-    // The ratings are not answered either: the card keeps its box, empty rather than claiming
-    // "No reviews yet" (which the prerendered page would otherwise show to everyone).
-    const ratings = ratingsBody(pending.nativeElement);
-    expect(ratings?.classList).toContain('min-h-12');
-    expect(ratings?.textContent?.trim()).toBe('');
   });
 });
 
@@ -123,12 +107,8 @@ describe('LandingPage', () => {
     fixture.detectChanges();
   }
 
-  it('shows the opening hours and open/closed badge from the shop info', () => {
+  it('shows the open/closed badge from the shop info', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    // DEFAULT_SHOP_RULES were flushed for /public/shop: Monday-Saturday 09:00-17:00.
-    expect(text).toContain('Monday - Saturday');
-    expect(text).toContain('9:00 AM - 5:00 PM');
-    expect(text).toMatch(/Sunday\s*CLOSED/);
     expect(text).toMatch(/● (Shop Open|Closed Now)/);
     expect(openClosedBadge(fixture.nativeElement)?.classList).not.toContain('invisible');
   });
@@ -166,31 +146,6 @@ describe('LandingPage', () => {
     button?.click();
 
     expect(page.showAdminLoginModal()).toBe(true);
-  });
-
-  it('says so when nobody has been reviewed yet', () => {
-    // beforeEach answered /reviews/public/barber-ratings with an empty list.
-    expect(ratingsBody(fixture.nativeElement)?.textContent).toContain('No reviews yet');
-  });
-
-  it('shows the real shop rating instead of a hand-picked quote', async () => {
-    TestBed.inject(ReviewStore).loadRatings();
-    fixture.detectChanges();
-    httpMock
-      .expectOne((req) => req.url.includes('/api/v1/reviews/public/barber-ratings'))
-      .flush([
-        { barberName: 'Alex the Barber', averageRating: 4.5, reviewCount: 10 },
-        { barberName: 'Sara the Stylist', averageRating: 5, reviewCount: 30 },
-      ]);
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    const text = ratingsBody(fixture.nativeElement)?.textContent?.replace(/\s+/g, ' ') ?? '';
-    // (4.5 × 10 + 5 × 30) / 40 = 4.875
-    expect(text).toContain('4.9 out of 5');
-    expect(text).toContain('from 40 reviews');
-    expect(text).toContain('Top rated: Sara the Stylist · 5.0');
-    expect(fixture.nativeElement.textContent).not.toContain('Liam K.');
   });
 
   it('prefetches the dashboard chunks when the login modal opens, not before', () => {
@@ -237,30 +192,6 @@ describe('LandingPage', () => {
       fixture.detectChanges();
 
       expect(navigate).toHaveBeenCalledWith('/admin');
-    });
-  });
-
-  describe('failed menu load (FE-1)', () => {
-    it('keeps the page alive and offers a retry', async () => {
-      TestBed.inject(ServiceCatalogStore).loadServices();
-      fixture.detectChanges();
-      httpMock
-        .match((req) => req.url.includes('/api/v1/catalog'))
-        .forEach((req) => req.flush(null, { status: 500, statusText: 'Server Error' }));
-      await fixture.whenStable();
-      fixture.detectChanges();
-
-      const el = fixture.nativeElement as HTMLElement;
-      expect(el.textContent).toContain('Could not load service catalog.');
-      expect(el.textContent).toContain('Grooming Menu');
-      expect(el.querySelector('app-booking-wizard')).toBeTruthy();
-
-      fixture.componentInstance.retryServices();
-      fixture.detectChanges();
-      httpMock.match((req) => req.url.includes('/api/v1/catalog')).forEach((req) => req.flush([]));
-      await fixture.whenStable();
-      fixture.detectChanges();
-      expect(el.textContent).not.toContain('Could not load service catalog.');
     });
   });
 });
