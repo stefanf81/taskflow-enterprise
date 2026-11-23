@@ -51,6 +51,11 @@ jest.mock('../src/core/catalog/useCatalog', () => ({
   }),
 }));
 
+jest.mock('../src/features/admin/RetailProductsPanel', () => {
+  const { Text } = jest.requireActual('react-native');
+  return { RetailProductsPanel: () => <Text>Retail products panel</Text> };
+});
+
 describe('AdminCatalogScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -171,5 +176,17 @@ describe('AdminCatalogScreen', () => {
       },
       expect.anything(),
     );
+  });
+
+  it('switches to the retail products on the Products tab, without the services editor', async () => {
+    mockServices = [];
+    await render(<AdminCatalogScreen />);
+    expect(screen.queryByText('Retail products panel')).toBeNull();
+
+    await fireEvent.press(screen.getByText('Products'));
+
+    expect(screen.getByText('Retail products panel')).toBeTruthy();
+    expect(screen.queryByText('Create service')).toBeNull();
+    expect(screen.queryByText('No Services Found')).toBeNull();
   });
 });

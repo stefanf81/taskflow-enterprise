@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, semantic, withAlpha } from '../../theme/colors';
-import { formatRating, openingHoursRows, summarizeShopRatings } from '@taskflow/domain';
+import { formatRating, formatUsd, openingHoursRows, summarizeShopRatings } from '@taskflow/domain';
+import { useRetailProducts } from '../../core/catalog/useRetailProducts';
 import { useBarberRatings } from './useReviews';
 import { useShopInfo } from '../../core/shop/useShopInfo';
 
@@ -32,23 +33,41 @@ export const OperatingHours: React.FC = () => {
   );
 };
 
-export const ArtisanalProducts: React.FC = () => (
-  <View style={styles.productsCard}>
-    <Text style={styles.cardLabel}>Artisanal Products</Text>
-    <View style={styles.row}>
-      <Text style={styles.productName}>Styling Fiber Clay (100ml)</Text>
-      <Text style={styles.productPrice}>$24.00</Text>
+/** The shop's retail products (`/api/v1/catalog/products`, the same list as the web page). */
+export const ArtisanalProducts: React.FC = () => {
+  const { data: products = [], isLoading, isError, refetch } = useRetailProducts();
+
+  let body: React.ReactNode;
+  if (isError) {
+    body = (
+      <Text style={styles.productNote} onPress={() => refetch()} accessibilityRole="button">
+        Could not load the products. Tap to retry.
+      </Text>
+    );
+  } else if (isLoading) {
+    body = <Text style={styles.productNote}>Loading products…</Text>;
+  } else if (products.length === 0) {
+    body = <Text style={styles.productNote}>Ask in the shop about today's products.</Text>;
+  } else {
+    body = products.map((product) => (
+      <View key={product.id} style={styles.row}>
+        <Text style={styles.productName}>
+          {product.name}
+          {product.sizeLabel ? ` (${product.sizeLabel})` : ''}
+        </Text>
+        <Text style={styles.productPrice}>{formatUsd(product.price)}</Text>
+      </View>
+    ));
+  }
+
+  return (
+    <View style={styles.productsCard} testID="artisanal-products">
+      <Text style={styles.cardLabel}>Artisanal Products</Text>
+      {/* Holds the three seeded rows' height while loading, so the cards below do not jump. */}
+      <View style={styles.productsBody}>{body}</View>
     </View>
-    <View style={styles.row}>
-      <Text style={styles.productName}>Sandalwood Beard Balm (60ml)</Text>
-      <Text style={styles.productPrice}>$19.00</Text>
-    </View>
-    <View style={styles.row}>
-      <Text style={styles.productName}>Straight Razor Shave Cream (150ml)</Text>
-      <Text style={styles.productPrice}>$22.00</Text>
-    </View>
-  </View>
-);
+  );
+};
 
 /**
  * The shop's real rating across every barber's reviews (`/reviews/public/barber-ratings`), in place
@@ -145,6 +164,13 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   productName: {
+    color: semantic['fg-muted'],
+    fontSize: 12,
+  },
+  productsBody: {
+    minHeight: 54,
+  },
+  productNote: {
     color: semantic['fg-muted'],
     fontSize: 12,
   },

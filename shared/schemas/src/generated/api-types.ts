@@ -208,6 +208,21 @@ export interface RescheduleRequest {
   bookingTime: string;
 }
 
+export interface RetailProductRequest {
+  name: string;
+  price: number;
+  sizeLabel?: string;
+  sortOrder: number;
+}
+
+export interface RetailProductResponse {
+  id: number;
+  name: string;
+  price: number;
+  sizeLabel: string;
+  sortOrder: number;
+}
+
 export interface ReviewRequest {
   comment?: string;
   customerEmail: string;

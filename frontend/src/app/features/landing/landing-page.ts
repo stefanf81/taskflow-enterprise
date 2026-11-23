@@ -13,6 +13,7 @@ import { AuthModalComponent } from './auth-modal/auth-modal';
 import { FaqSectionComponent } from './faq-section/faq-section';
 import { LookbookComponent } from './lookbook/lookbook';
 import { PostBookingActionsComponent } from './post-booking-actions/post-booking-actions';
+import { RetailProducts } from './retail-products/retail-products';
 import { BookingWizard } from '../booking/booking-wizard';
 import { LookbookSelectionBus } from '../booking/lookbook-selection';
 import { circleCheckIcon } from '../../core/ui/icons/circle-check';
@@ -43,6 +44,7 @@ import { Button } from '../../core/ui/button';
     LookbookComponent,
     PostBookingActionsComponent,
     BookingWizard,
+    RetailProducts,
     Icon,
     Button,
   ],

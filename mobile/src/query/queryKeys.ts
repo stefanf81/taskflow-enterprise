@@ -27,6 +27,10 @@ export const queryKeys = {
     // admin-only retired list must not share a cache entry prefix with it.
     retired: ['retiredServices'] as const,
   },
+  /** Retail products (display only); a root of its own, like the menu. */
+  retailProducts: {
+    all: ['retailProducts'] as const,
+  },
   busySlots: {
     all: ['busySlots'] as const,
     forDay: (barberName: string, bookingDate: string, serviceType: string) =>
@@ -106,11 +110,12 @@ export function updateCachedBooking(
 /**
  * Roots of the queries that read public endpoints (api/publicEndpoints.ts: sent without a token,
  * so the answer is the same for every user): the shop's hours and booking window, the service
- * menu, the barbers and their ratings. Everything else is, or may be, the signed-in user's.
+ * menu and retail products, the barbers and their ratings. Everything else is, or may be, the signed-in user's.
  */
 const PUBLIC_QUERY_ROOTS: ReadonlySet<unknown> = new Set([
   'shopInfo',
   queryKeys.catalog.all[0],
+  queryKeys.retailProducts.all[0],
   'publicBarbers',
   'barberRatings',
 ]);

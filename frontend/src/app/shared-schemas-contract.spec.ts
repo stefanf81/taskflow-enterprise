@@ -32,6 +32,7 @@ const VALIDATOR_FOR_CONTRACT: Record<keyof typeof contracts, keyof typeof valida
   pagedModelAppointmentResponseContract: 'pagedAppointmentResponseSchema',
   publicBarberResponseContract: 'publicBarberResponseSchema',
   registerResponseContract: 'registerResponseSchema',
+  retailProductResponseContract: 'retailProductResponseSchema',
   scheduleDayContract: 'scheduleDaySchema',
   schedulePreviewResponseContract: 'schedulePreviewResponseSchema',
   serviceItemResponseContract: 'serviceItemResponseSchema',

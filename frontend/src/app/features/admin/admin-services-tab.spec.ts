@@ -21,8 +21,8 @@ describe('AdminServicesTab', () => {
   }
 
   /**
-   * Answers the two requests the tab makes on mount. Both are flushed before waiting: whenStable()
-   * does not settle while either one is pending.
+   * Answers the three requests the tab makes on mount (menu, retired services, retail products).
+   * All are flushed before waiting: whenStable() does not settle while one is pending.
    */
   async function respond(
     body: object,
@@ -31,6 +31,7 @@ describe('AdminServicesTab', () => {
   ): Promise<void> {
     flush('/api/v1/catalog', body, status);
     flush('/api/v1/catalog/retired', retired.body, retired.status);
+    flush('/api/v1/catalog/products', []);
     await fixture.whenStable();
     fixture.detectChanges();
   }

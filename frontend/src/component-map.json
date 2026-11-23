@@ -265,6 +265,22 @@
         "frontend/src/app/core/ui/page-header.ts",
         "frontend/src/app/core/ui/icon.ts"
       ]
+    },
+    {
+      "feature": "Retail Products (display only)",
+      "description": "The shop's over-the-counter products from GET /api/v1/catalog/products (V44); never booked. Web loads the landing rows in a deferred block (outside main.js); both admins add, edit and delete.",
+      "webComponent": "frontend/src/app/features/landing/retail-products/retail-products.ts",
+      "webAdmin": "frontend/src/app/features/admin/admin-retail-products.ts",
+      "mobileComponent": "mobile/src/features/landing/ShopInfo.tsx",
+      "mobileAdmin": "mobile/src/features/admin/RetailProductsPanel.tsx",
+      "storeHook": {
+        "web": "frontend/src/app/core/catalog/retail-product.store.ts",
+        "mobile": "mobile/src/core/catalog/useRetailProducts.ts"
+      },
+      "api": {
+        "web": "frontend/src/app/core/api/retail-products-api.ts",
+        "mobile": "mobile/src/core/catalog/retailProducts.ts"
+      }
     }
   ],
   "platformContracts": {

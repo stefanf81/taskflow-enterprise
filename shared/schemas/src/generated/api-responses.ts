@@ -126,6 +126,14 @@ export const registerResponseContract = object({
   message: string(),
 });
 
+export const retailProductResponseContract = object({
+  id: number(),
+  name: string(),
+  price: number(),
+  sizeLabel: optional(string()),
+  sortOrder: number(),
+});
+
 export const schedulePreviewResponseContract = object({
   conflictCount: number(),
   conflictsRevision: string(),

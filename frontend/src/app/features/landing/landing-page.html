@@ -167,20 +167,13 @@
               <h3 class="text-zinc-100 font-bold text-xs uppercase tracking-wider mb-3">
                 <app-icon [icon]="icons.sprayCan" /> Artisanal Products
               </h3>
-              <div class="space-y-2 text-xs text-zinc-400 font-light">
-                <p class="flex justify-between">
-                  <span>Styling Fiber Clay (100ml)</span>
-                  <span class="text-accent font-bold">$24.00</span>
-                </p>
-                <p class="flex justify-between">
-                  <span>Sandalwood Beard Balm (60ml)</span>
-                  <span class="text-accent font-bold">$19.00</span>
-                </p>
-                <p class="flex justify-between">
-                  <span>Straight Razor Shave Cream (150ml)</span>
-                  <span class="text-accent font-bold">$22.00</span>
-                </p>
-              </div>
+              <!-- From /api/v1/catalog/products, loaded when the card scrolls into view (it is
+                   below the fold): the placeholder holds the three seeded rows' height (h-16). -->
+              @defer (on viewport; prefetch on idle) {
+                <app-retail-products />
+              } @placeholder {
+                <div class="h-16"></div>
+              }
             </div>
 
             <!-- Client ratings from the real reviews (/reviews/public/barber-ratings). They load
