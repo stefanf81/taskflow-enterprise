@@ -99,6 +99,7 @@ Mobile
 
 Dependencies
 - `frontend`, `mobile`, `shared/schemas` and `shared/domain` are npm workspaces with one root `package-lock.json` (always `npm ci`, not `npm install`). `overrides`, `allowScripts` and the vendored patch tarballs (`file:mobile/vendor/…`) only work in the root `package.json`. Hoisting must not change which version a tool sees: `npm run check:dependency-tree` (in `lint:all` and after every CI install) fails on any dependency resolved outside its declared range; the root pins `jsdom` for the frontend's vitest. Never hand-edit or merge lockfiles: `npm ci` does not check ranges. New versions need to age 3 days like Renovate's hold; see CONTRIBUTING.
+- Backend versions come from the Spring Boot BOM (`platform()`, not Spring's dependency-management plugin, so `tomcat.version`-style properties do nothing). To get a fix ahead of the BOM, add a catalog version and a `constraints { }` entry in `build.gradle` (a floor, no new edge) and list the module in `checkBomOverrides`, which fails (with `check` and `containerConfigTest`) once the BOM manages that version or later; the Boot upgrade then removes the pin.
 
 Contracts
 - After any backend DTO or endpoint change: start the backend, `npm run api:spec:update`, `npm run sync:api-types`, commit the baseline and the generated files (`shared/schemas/src/generated/`; the clients' `types/api.ts` only re-export them), update the matching hand-written response schema in `shared/schemas` (a parity spec fails otherwise), then run `npm run sync:api-types:check`.
