@@ -1,9 +1,9 @@
 package com.example.taskflow.auth;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 class MetricsScrapeTokenGuardTest {
 
@@ -18,7 +18,9 @@ class MetricsScrapeTokenGuardTest {
     void rejectsMissingBlankPlaceholderAndShortTokens() {
         assertThrows(IllegalStateException.class, () -> MetricsScrapeTokenGuard.validate(null));
         assertThrows(IllegalStateException.class, () -> MetricsScrapeTokenGuard.validate("   "));
-        assertThrows(IllegalStateException.class, () -> MetricsScrapeTokenGuard.validate("<CHANGE_ME_METRICS_SCRAPE_TOKEN>"));
+        assertThrows(
+                IllegalStateException.class,
+                () -> MetricsScrapeTokenGuard.validate("<CHANGE_ME_METRICS_SCRAPE_TOKEN>"));
         assertThrows(IllegalStateException.class, () -> MetricsScrapeTokenGuard.validate("short-token"));
     }
 
@@ -29,11 +31,10 @@ class MetricsScrapeTokenGuardTest {
 
     @Test
     void whenRequiredTheContextRefusesToStartWithoutAToken() {
-        runner.withPropertyValues("app.metrics.require-scrape-token=true")
-                .run(ctx -> {
-                    assertNotNull(ctx.getStartupFailure());
-                    assertTrue(rootMessage(ctx.getStartupFailure()).contains("APP_METRICS_SCRAPE_TOKEN"));
-                });
+        runner.withPropertyValues("app.metrics.require-scrape-token=true").run(ctx -> {
+            assertNotNull(ctx.getStartupFailure());
+            assertTrue(rootMessage(ctx.getStartupFailure()).contains("APP_METRICS_SCRAPE_TOKEN"));
+        });
     }
 
     /** Prod: app.metrics.scrape-token bound from an empty APP_METRICS_SCRAPE_TOKEN must still abort. */
@@ -48,7 +49,8 @@ class MetricsScrapeTokenGuardTest {
         runner.withPropertyValues("app.metrics.require-scrape-token=true", "app.metrics.scrape-token=" + TOKEN)
                 .run(ctx -> {
                     assertNull(ctx.getStartupFailure());
-                    assertEquals(1, ctx.getBeansOfType(MetricsScrapeTokenGuard.class).size());
+                    assertEquals(
+                            1, ctx.getBeansOfType(MetricsScrapeTokenGuard.class).size());
                 });
     }
 
@@ -57,7 +59,8 @@ class MetricsScrapeTokenGuardTest {
         runner.run(ctx -> {
             assertNull(ctx.getStartupFailure());
             assertTrue(ctx.getBeansOfType(MetricsScrapeTokenGuard.class).isEmpty());
-            assertFalse(new MetricsScrapeAuthorization(ctx.getBean(MetricsProperties.class).scrapeToken())
+            assertFalse(new MetricsScrapeAuthorization(
+                            ctx.getBean(MetricsProperties.class).scrapeToken())
                     .protectsTheEndpoint());
         });
     }

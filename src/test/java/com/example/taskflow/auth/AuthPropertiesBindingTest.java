@@ -70,7 +70,10 @@ class AuthPropertiesBindingTest {
     @org.junit.jupiter.params.provider.ValueSource(strings = {"0", "-1", "59", "86401", "3600000"})
     void aTokenLifetimeOutsideOneMinuteToOneDayFailsTheStart(String seconds) {
         runner.withPropertyValues("app.jwt.lifetime-seconds=" + seconds)
-                .run(context -> assertThat(context).hasFailed().getFailure().rootCause()
+                .run(context -> assertThat(context)
+                        .hasFailed()
+                        .getFailure()
+                        .rootCause()
                         .hasMessageContaining("lifetimeSeconds"));
     }
 

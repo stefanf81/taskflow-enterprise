@@ -32,9 +32,8 @@ class MetricsScrapeTokenGuard {
                             + "without it GET /actuator/prometheus is unauthenticated.");
         }
         if (token.contains("CHANGE_ME") || token.strip().length() < MIN_TOKEN_LENGTH) {
-            throw new IllegalStateException(
-                    "APP_METRICS_SCRAPE_TOKEN is a placeholder or shorter than " + MIN_TOKEN_LENGTH
-                            + " characters; generate one with `openssl rand -hex 24`.");
+            throw new IllegalStateException("APP_METRICS_SCRAPE_TOKEN is a placeholder or shorter than "
+                    + MIN_TOKEN_LENGTH + " characters; generate one with `openssl rand -hex 24`.");
         }
     }
 }

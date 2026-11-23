@@ -1,10 +1,10 @@
 package com.example.taskflow.auth;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.validation.annotation.Validated;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 
 /**
  * The access tokens, bound from {@code app.jwt.*}.
@@ -25,6 +25,7 @@ import jakarta.validation.constraints.Min;
 record JwtProperties(
         @DefaultValue("taskflow") String issuer,
         @DefaultValue("taskflow-api") String audience,
+
         @DefaultValue("3600") @Min(MIN_LIFETIME_SECONDS) @Max(MAX_LIFETIME_SECONDS) long lifetimeSeconds) {
 
     static final long MIN_LIFETIME_SECONDS = 60;
