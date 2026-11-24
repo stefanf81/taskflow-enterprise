@@ -127,6 +127,15 @@ if (testJavaVersion.present) {
 	}
 	tasks.withType(Test).configureEach {
 		javaLauncher = testLauncher
+		// JDK 28 makes ReflectionFactory.newConstructorForSerialization(Class,
+		// Constructor) throw unless this property is set. Spring's repackaged
+		// Objenesis relies on it to instantiate CGLIB proxies, so without it every
+		// class-proxied bean without a no-arg constructor (BusySlotsService, ...)
+		// fails and no context starts. The JDK calls the property temporary; it
+		// stays out of the image and production (ADR-020 decision 7).
+		if (testJavaVersion.get().toInteger() >= 28) {
+			systemProperty 'jdk.reflect.allowNonSerializableConstruction', 'true'
+		}
 	}
 }
 
