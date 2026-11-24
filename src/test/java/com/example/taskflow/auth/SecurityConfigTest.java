@@ -194,8 +194,7 @@ class SecurityConfigTest {
     void aMismatchedPairOutsideProductionFallsBackToAnEphemeralPairThatWorks() throws Exception {
         // Same rule as an unreadable key: without require-persistent-keys the start continues with
         // a generated pair (WARN), and that pair signs tokens its own decoder accepts.
-        SecurityConfig config = createConfig(
-                "admin", "pass", b64(rsa().getPrivate()), b64(rsa().getPublic()));
+        SecurityConfig config = createConfig("admin", "pass", b64(rsa().getPrivate()), b64(rsa().getPublic()));
 
         var jwk = (com.nimbusds.jose.jwk.RSAKey) config.jwkSource()
                 .get(
