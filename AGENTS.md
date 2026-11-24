@@ -29,10 +29,11 @@ Surprises are collected in [gotchas](docs/agents/gotchas.md).
 ```bash
 # Backend (root)
 ./gradlew build                 # compile + test
-./gradlew test                  # unit + H2 integration tests (no Docker)
+./gradlew test                  # unit + PostgreSQL integration tests (Docker or TASKFLOW_TEST_POSTGRES_URL)
 ./gradlew testcontainersTest    # tagged PostgreSQL tests (needs Docker)
 ./gradlew containerConfigTest   # Dockerfile/compose/nginx/workflow guards (part of check)
-./gradlew check                 # tests, coverage, container guards, SpotBugs (not OWASP)
+./gradlew check                 # tests, coverage, container guards, SpotBugs, Spotless (not OWASP)
+./gradlew spotlessApply         # format Java; CI runs spotlessCheck
 ./gradlew dependencyCheckAnalyze  # explicit OWASP scan (fails on CVSS >= 7)
 ./gradlew bootRun               # run locally on H2
 
@@ -51,7 +52,7 @@ npm run sync:api-types          # regenerate both clients' API types (and :check
 
 # Full stack
 ./start-docker.sh | ./stop-docker.sh
-./verify.sh [--quick]           # full verification; --quick skips PostgreSQL and E2E
+./verify.sh [--quick]           # full verification; --quick skips the Docker stack, parity tests and E2E
 ```
 
 Default dev/test credentials are `admin` / `admin-password`; `.env` (from `.env.example`) is required by compose.
@@ -62,6 +63,7 @@ Backend
 - Flyway only, `ddl-auto=validate` everywhere. Never edit a released migration; there is deliberately no V16. A migration that changes the status or barber of reviewed appointments must also update `reviews.counted`/`barber_name` (V38).
 - Authorization is deny-by-default: a new endpoint needs an explicit `SecurityConfig` rule, a `HEAD` twin for every `GET`, `@PreAuthorize` if admin-only, and a case in `SecurityAuthorizationIntegrationTest`.
 - Module boundaries are checked by `ModularityTest`: declare a new cross-module dependency in the module's `package-info.java` (`allowedDependencies`), pass other modules `AppointmentDetails`-style snapshots instead of entities, and keep controllers/`*Impl` classes package-private (ADR-022).
+- Run `./gradlew spotlessApply` before committing Java (palantir-java-format; released Java migrations are excluded).
 - Inject the `Clock`; never call no-arg `now()` (`ArchitectureTest` enforces it). Raw SQL inserts into `appointments` must supply `booking_end_time`.
 - Never persist the "No Preference" sentinel; resolve it to a real barber inside the booking transaction.
 - A response DTO field that can be null must be JSpecify `@Nullable` (Jackson omits nulls; the OpenAPI `required` lists and the client contracts are derived from it).
@@ -75,36 +77,38 @@ Containers
 - Default-profile startup must stay offline: the AOT cache training boots the app under `--network=none`.
 
 CI
-- Pin every third-party action to a full commit SHA with a `# vX.Y.Z` comment; GitHub-owned `actions/*` stay on tags.
+- Pin every action, GitHub-owned `actions/*` and `github/*` included, to a full commit SHA with a `# vX.Y.Z` comment; zizmor in CI fails on a tag ref.
 - A job that must run after a skipped `needs` starts with `!cancelled()`, never `always()`.
 - DAST: ZAP exits 0 for a scan the app never saw. Keep `dast.yml`'s rate-limit overrides, `ZAP_AUTH_HEADER_SITE: localhost` (a host name, not a URL) and the `zap-report` gate (BENCHMARKS §69).
 
 Frontend
 - Never read `httpResource().value` directly in a computed or template (it throws in error state); use `safeResourceValue` and gate on `error()`/`hasValue()`.
-- Layout is feature-first: one feature's stores and child components live in `src/app/features/<name>/`; app-wide code and stores shared by several features live in `src/app/core/` (which must not import `features/`). Update `component-map.json` when a file moves (`npm run check:component-map`).
+- Feature-first: a feature's stores and child components live in `src/app/features/<name>/`, code several features share in `src/app/core/` (which must not import `features/`). Update `component-map.json` when a file moves (`npm run check:component-map`).
 - Guest endpoints are marked with the `PUBLIC_REQUEST` token, not matched by URL.
 - The `access_token` cookie is HttpOnly and never read by JavaScript; the role lives only in the in-memory `AuthState`.
 - The landing page must not import `BookingStore` (it pulls Signal Forms into `main.js`); use `LookbookSelectionBus`.
 - Late landing content (shop info, catalog) holds its space from first paint, and no page or above-the-fold text fades in on load: Chrome skips transparent paints for FCP/LCP (`e2e/landing-stability.spec.ts`).
 - A prerendered `@defer` block that only reacts to clicks hydrates `on interaction` (with `prefetch on idle`), not `on idle`: idle hydration loses clicks made before the page has loaded (`e2e/early-interaction.spec.ts`).
 - No `@angular/common` pipes, `NgClass` or `CommonModule` (ESLint enforces it): they ship ~22 kB to every guest page; use `core/format.ts` and `[class]` bindings.
-- Edit `src/theme/tokens.json`, not `tokens.generated.css`. Schemas use `zod/mini`; keep the check order, since it decides `issues[0]`.
+- Build screens from the `core/ui` blocks (`appButton`, `app-alert`, `app-empty-state`, `app-icon`, …); a missing `Button` import fails silently. Icons, not emoji: import each from `core/ui/icons/<name>` (no barrel).
+- Colours live in `shared/theme/tokens.json` (web + mobile); never edit `tokens.generated.css` or hard-code one. Schemas use `zod/mini`; keep the check order, since it decides `issues[0]`.
 - Prettier: 100 columns, single quotes, run from `frontend/`.
 
 Mobile
-- Layout mirrors web: a feature's screens/hooks/API calls live in `src/features/<name>/`, what several features share in `src/core/<domain>/`. Public calls go through `src/api/publicEndpoints.ts`; follow the Rules of React (the compiler bails out silently, `reactCompiler.test.ts` catches it).
+- Layout mirrors web (`src/features/<name>/`, shared code in `src/core/<domain>/`). Public calls go through `src/api/publicEndpoints.ts`; follow the Rules of React (the compiler bails out silently; `reactCompiler.test.ts`).
 - Subscribe to the auth store with per-field selectors, never the whole store. No bulk Prettier runs (mobile has no `.prettierrc`).
 - Never call zod's `toJSONSchema` or `z.core.compile`: Metro stubs them out of the bundle (`metro/zodLocales.js`).
 - Credentials change only through `storage.startSession`/`rotateSession`/`clearSession` (session epoch, ADR-023), never the single setters.
 
 Dependencies
-- `frontend`, `mobile`, `shared/schemas` and `shared/domain` are npm workspaces with one root `package-lock.json` (always `npm ci`, not `npm install`). `overrides`, `allowScripts` and the vendored patch tarballs (`file:mobile/vendor/…`) only work in the root `package.json`. Hoisting must not change which version a tool sees: `npm run check:dependency-tree` (in `lint:all` and after every CI install) fails on any dependency resolved outside its declared range; the root pins `jsdom` for the frontend's vitest. Never hand-edit or merge lockfiles: `npm ci` does not check ranges. New versions need to age 3 days like Renovate's hold; see CONTRIBUTING.
+- npm workspaces (`frontend`, `mobile`, `shared/*`) share one root `package-lock.json`: always `npm ci`; never hand-edit or merge it. `overrides`, `allowScripts` and the `file:mobile/vendor/…` tarballs work only in the root `package.json`. `npm run check:dependency-tree` fails on a dependency resolved outside its range. New versions age 3 days (CONTRIBUTING).
+- Backend versions come from the Spring Boot BOM via `platform()` (`*.version` properties do nothing). A fix ahead of the BOM is a `constraints { }` floor plus `checkBomOverrides` ([backend](docs/agents/backend.md)).
 
 Contracts
-- After any backend DTO or endpoint change: start the backend, `npm run api:spec:update`, `npm run sync:api-types`, commit the baseline and the generated files (`shared/schemas/src/generated/`; the clients' `types/api.ts` only re-export them), update the matching hand-written response schema in `shared/schemas` (a parity spec fails otherwise), then run `npm run sync:api-types:check`.
+- After a backend DTO or endpoint change: with the backend running, `npm run api:spec:update` and `npm run sync:api-types`; commit the baseline and `shared/schemas/src/generated/`; update the hand-written schema in `shared/schemas` (a parity spec fails otherwise); then `npm run sync:api-types:check`.
 - A new public endpoint also goes into `OpenApiSecurityConfig.PUBLIC_OPERATIONS` (`OpenApiSecurityDocumentationTest` checks it against the filter chain).
-- Rules both clients apply (opening days, booking window, who may cancel, time helpers) live once in `shared/domain`; the shop's values come from `/public/shop` (`ShopClock` / `useShopInfo`). Never hard-code them in a client.
-- Porting a feature between web and mobile: look it up in `frontend/src/component-map.json` / `mobile/src/component-map.json` and follow `.opencode/skills/sync-to-mobile.md`. Finish with `npm run lint:all` and `npm run test:all`.
+- Rules both clients apply (opening days, booking window, who may cancel, time helpers) live once in `shared/domain`; the shop's values come from `/public/shop` (`ShopClock` / `useShopInfo`), never hard-coded.
+- Porting a feature between web and mobile: use both `component-map.json` files and `.opencode/skills/sync-to-mobile.md`; finish with `npm run lint:all` and `npm run test:all`.
 
 ## Writing to this file
 

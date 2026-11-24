@@ -11,7 +11,7 @@ import {
   ModalProps,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 
 interface CustomModalProps extends ModalProps {
   title?: string;
@@ -55,7 +55,7 @@ export const Modal: React.FC<CustomModalProps> = ({ title, onClose, visible, chi
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: withAlpha(semantic.page, 0.75),
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,

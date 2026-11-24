@@ -1,19 +1,18 @@
 package com.example.taskflow.appointment;
+
 import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
-
 import com.example.taskflow.core.ConflictException;
 import com.example.taskflow.core.ResourceNotFoundException;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Optional;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Status lifecycle of an existing booking: admin approve/deny, the soft cancel by an admin
@@ -32,11 +31,12 @@ class AppointmentLifecycleService {
     private final BarberRepository barberRepository;
     private final Clock clock;
 
-    AppointmentLifecycleService(AppointmentRepository appointmentRepository,
-                                AppointmentChangePublisher changes,
-                                BusySlotsService busySlotsService,
-                                BarberRepository barberRepository,
-                                Clock clock) {
+    AppointmentLifecycleService(
+            AppointmentRepository appointmentRepository,
+            AppointmentChangePublisher changes,
+            BusySlotsService busySlotsService,
+            BarberRepository barberRepository,
+            Clock clock) {
         this.appointmentRepository = appointmentRepository;
         this.changes = changes;
         this.busySlotsService = busySlotsService;
@@ -46,7 +46,8 @@ class AppointmentLifecycleService {
 
     @Transactional
     public AppointmentResponse updateAppointmentStatus(Long id, AppointmentUpdateRequest request) {
-        Appointment item = appointmentRepository.findById(id)
+        Appointment item = appointmentRepository
+                .findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found with id: " + id));
 
         AppointmentStatus current = item.getStatusEnum();
@@ -80,9 +81,8 @@ class AppointmentLifecycleService {
         changes.availabilityChanged(savedItem);
 
         changes.tagSpan(
-            "appointment.id", String.valueOf(savedItem.getId()),
-            "appointment.status", savedItem.getStatus()
-        );
+                "appointment.id", String.valueOf(savedItem.getId()),
+                "appointment.status", savedItem.getStatus());
 
         // The notification outbox entry is written by the notification module's listener.
         changes.statusChanged(this, savedItem);
@@ -125,17 +125,18 @@ class AppointmentLifecycleService {
     private void requireCanApprove(Appointment item) {
         Barber barber = item.getBarber();
         if (barber == null || AppointmentBookingService.NO_PREFERENCE_BARBER.equals(item.getBarberName())) {
-            throw new ConflictException("This appointment has no assigned barber and cannot be approved. "
-                    + "Deny or cancel it instead.");
+            throw new ConflictException(
+                    "This appointment has no assigned barber and cannot be approved. " + "Deny or cancel it instead.");
         }
-        barber = barberRepository.findByIdForBooking(barber.getId())
+        barber = barberRepository
+                .findByIdForBooking(barber.getId())
                 .orElseThrow(() -> new ConflictException("The assigned barber is no longer available."));
         LocalTime start = LocalTime.parse(item.getBookingTime());
         if (!LocalDateTime.of(item.getBookingDate(), start).isAfter(LocalDateTime.now(clock))) {
             throw new ConflictException("A past appointment cannot be approved.");
         }
-        busySlotsService.findConflict(barber, item.getBookingDate(), start,
-                        BusySlotsService.durationOf(item), item.getId())
+        busySlotsService
+                .findConflict(barber, item.getBookingDate(), start, BusySlotsService.durationOf(item), item.getId())
                 .ifPresent(message -> {
                     throw new ConflictException(message);
                 });
@@ -144,7 +145,8 @@ class AppointmentLifecycleService {
     /** Admin DELETE: soft-cancels (the row is kept as CANCELLED). Past bookings may be cancelled by an admin. */
     @Transactional
     public void deleteAppointment(Long id) {
-        Appointment item = appointmentRepository.findById(id)
+        Appointment item = appointmentRepository
+                .findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found with id: " + id));
         cancelAppointment(item, AppointmentCancelledEvent.CancelledBy.ADMIN, false);
     }
@@ -156,9 +158,11 @@ class AppointmentLifecycleService {
         if (item == null) {
             throw new ResourceNotFoundException("Appointment booking not found.");
         }
-        if (email == null || item.getCustomerEmail() == null
+        if (email == null
+                || item.getCustomerEmail() == null
                 || !item.getCustomerEmail().trim().equalsIgnoreCase(email.trim())) {
-            throw new IllegalArgumentException("Verification failed: The provided email address does not match this booking ID.");
+            throw new IllegalArgumentException(
+                    "Verification failed: The provided email address does not match this booking ID.");
         }
         cancelAppointment(item, AppointmentCancelledEvent.CancelledBy.GUEST, true);
     }
@@ -168,7 +172,8 @@ class AppointmentLifecycleService {
     public void cancelMyAppointment(String publicId, String email) {
         Appointment appointment = Optional.ofNullable(appointmentRepository.findByPublicId(publicId))
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found or unauthorized."));
-        if (email == null || appointment.getCustomerEmail() == null
+        if (email == null
+                || appointment.getCustomerEmail() == null
                 || !appointment.getCustomerEmail().trim().equalsIgnoreCase(email.trim())) {
             throw new ResourceNotFoundException("Appointment not found or unauthorized.");
         }
@@ -186,8 +191,8 @@ class AppointmentLifecycleService {
      *   <li>{@code enforceNotPast}: customers and guests cannot cancel a booking that has started.</li>
      * </ul>
      */
-    private void cancelAppointment(Appointment item, AppointmentCancelledEvent.CancelledBy cancelledBy,
-                                   boolean enforceNotPast) {
+    private void cancelAppointment(
+            Appointment item, AppointmentCancelledEvent.CancelledBy cancelledBy, boolean enforceNotPast) {
         AppointmentStatus current = item.getStatusEnum();
         if (current == AppointmentStatus.CANCELLED) {
             return;
@@ -208,10 +213,9 @@ class AppointmentLifecycleService {
         changes.adminEvent(AppointmentAdminEvent.Type.UPDATED, saved.getId());
 
         changes.tagSpan(
-            "appointment.id", String.valueOf(saved.getId()),
-            "appointment.action", "cancel",
-            "appointment.cancelledBy", cancelledBy.name()
-        );
+                "appointment.id", String.valueOf(saved.getId()),
+                "appointment.action", "cancel",
+                "appointment.cancelledBy", cancelledBy.name());
     }
 
     private static LocalDateTime startOf(Appointment item) {

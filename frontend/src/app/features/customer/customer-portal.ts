@@ -4,9 +4,17 @@ import { injectSignOut } from '../../core/auth/sign-out';
 import { CustomerStore } from '../../core/customer/customer.store';
 import { FlashMessages } from '../../core/ui/flash-messages';
 import { ReschedulePicker, RescheduleSelection } from '../../core/ui/reschedule-picker';
+import { Alert } from '../../core/ui/alert';
+import { Button } from '../../core/ui/button';
+import { EmptyState } from '../../core/ui/empty-state';
+import { Icon } from '../../core/ui/icon';
+import { calendarIcon } from '../../core/ui/icons/calendar';
+import { circleUserIcon } from '../../core/ui/icons/circle-user';
+import { downloadIcon } from '../../core/ui/icons/download';
+import { PageHeader } from '../../core/ui/page-header';
+import { StatusBadge } from '../../core/ui/status-badge';
 import { isCustomerCancellable } from '@taskflow/domain';
 import { ShopClock } from '../../core/shop-clock';
-import { statusLabel } from './appointment-status';
 import { formatTime12Hour, formatLocalDate } from '../../core/time-utils';
 
 /**
@@ -15,23 +23,20 @@ import { formatTime12Hour, formatLocalDate } from '../../core/time-utils';
  * code splitting). Its list lives in CustomerStore; action messages use the app-wide banner
  * (FlashMessages).
  */
-/** Colours of each status badge; the badge's static classes add the shape. */
-const STATUS_BADGE_CLASSES: Readonly<Record<string, string>> = {
-  APPROVED: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  PENDING: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-  DENIED: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-  CANCELLED: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20',
-};
-
 @Component({
   selector: 'app-customer-portal',
-  imports: [RouterLink, ReschedulePicker],
+  imports: [RouterLink, ReschedulePicker, Alert, Button, EmptyState, Icon, PageHeader, StatusBadge],
   templateUrl: './customer-portal.html',
 })
 export class CustomerPortal {
   private readonly flash = inject(FlashMessages);
   private readonly signOut = injectSignOut();
   readonly customerStore = inject(CustomerStore);
+  protected readonly icons = {
+    calendar: calendarIcon,
+    circleUser: circleUserIcon,
+    download: downloadIcon,
+  };
   private readonly shopClock = inject(ShopClock);
   private readonly router = inject(Router);
 
@@ -75,15 +80,6 @@ export class CustomerPortal {
 
   protected prevPage(): void {
     this.customerStore.prevPage();
-  }
-
-  /** Colours of a status badge (added to its static classes). */
-  protected statusBadgeClass(status: string): string {
-    return STATUS_BADGE_CLASSES[status] ?? '';
-  }
-
-  protected statusLabel(status: string): string {
-    return statusLabel(status);
   }
 
   /**

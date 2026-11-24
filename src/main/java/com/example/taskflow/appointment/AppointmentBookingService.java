@@ -1,13 +1,21 @@
 package com.example.taskflow.appointment;
+
 import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.CreationRequestFingerprint;
 import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
-
 import com.example.taskflow.catalog.CatalogService;
 import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.core.LogSanitizer;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.List;
+import java.util.concurrent.locks.Lock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -17,15 +25,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
-
-import java.time.Clock;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.util.List;
-import java.util.concurrent.locks.Lock;
 
 /**
  * Guest booking: creates appointments and answers the busy-slot lookups of the booking form.
@@ -69,14 +68,15 @@ class AppointmentBookingService {
     /** Lock stripes for the per-email booking cap, with a bounded wait. */
     private final EmailLockStripes emailLocks = new EmailLockStripes(64, EmailLockStripes.DEFAULT_MAX_WAIT);
 
-    AppointmentBookingService(AppointmentRepository appointmentRepository,
-                              AppointmentChangePublisher changes,
-                              BusySlotsService busySlotsService,
-                              BarberRepository barberRepository,
-                              CatalogService catalogService,
-                              Clock clock,
-                              BookingProperties bookingProperties,
-                              PlatformTransactionManager transactionManager) {
+    AppointmentBookingService(
+            AppointmentRepository appointmentRepository,
+            AppointmentChangePublisher changes,
+            BusySlotsService busySlotsService,
+            BarberRepository barberRepository,
+            CatalogService catalogService,
+            Clock clock,
+            BookingProperties bookingProperties,
+            PlatformTransactionManager transactionManager) {
         this.appointmentRepository = appointmentRepository;
         this.changes = changes;
         this.busySlotsService = busySlotsService;
@@ -151,7 +151,8 @@ class AppointmentBookingService {
                 // The partial unique index idx_appointment_slot_active (same start) or, on
                 // PostgreSQL, the appointments_no_overlap exclusion constraint (overlapping
                 // interval with a different start) caught it.
-                logger.warn("Slot collision for {} at {} on {} — request raced with another booking.",
+                logger.warn(
+                        "Slot collision for {} at {} on {} — request raced with another booking.",
                         LogSanitizer.stripNewlines(request.barberName()),
                         LogSanitizer.stripNewlines(request.bookingTime()),
                         request.bookingDate());
@@ -159,8 +160,10 @@ class AppointmentBookingService {
                         "This time slot was just booked by someone else. Please select a different time.");
             }
             // Unknown constraint violation (FK, NOT NULL, CHECK, etc.)
-            logger.error("Unexpected data integrity violation during appointment creation (root: {})",
-                    LogSanitizer.safeMessage(ex), ex);
+            logger.error(
+                    "Unexpected data integrity violation during appointment creation (root: {})",
+                    LogSanitizer.safeMessage(ex),
+                    ex);
             throw new IllegalArgumentException(
                     "Unable to process the booking due to a data conflict. Please try again.");
         } finally {
@@ -185,7 +188,8 @@ class AppointmentBookingService {
             if (!SqlStates.isDeadlock(ex)) {
                 throw ex;
             }
-            logger.info("Booking attempt for {} at {} on {} was a deadlock victim; retrying once.",
+            logger.info(
+                    "Booking attempt for {} at {} on {} was a deadlock victim; retrying once.",
                     LogSanitizer.stripNewlines(request.barberName()),
                     LogSanitizer.stripNewlines(request.bookingTime()),
                     request.bookingDate());
@@ -216,7 +220,8 @@ class AppointmentBookingService {
 
             // BKG-2: not in the past (shop time zone), not too far ahead.
             if (!LocalDateTime.of(bookingDate, bookingTime).isAfter(now)) {
-                throw new IllegalArgumentException("The appointment must be in the future. Please choose a later date or time.");
+                throw new IllegalArgumentException(
+                        "The appointment must be in the future. Please choose a later date or time.");
             }
             if (bookingDate.isAfter(today.plusDays(bookingProperties.maxAdvanceDays()))) {
                 throw new IllegalArgumentException("Appointments can be booked at most "
@@ -224,18 +229,19 @@ class AppointmentBookingService {
             }
 
             // A1: resolve the catalog service first - its duration drives every availability rule.
-            ServiceItem service = catalogService.findServiceByName(request.serviceType())
+            ServiceItem service = catalogService
+                    .findServiceByName(request.serviceType())
                     .orElseThrow(() -> new IllegalArgumentException(
                             "Unknown service: '" + LogSanitizer.stripNewlines(request.serviceType())
                                     + "'. Please select a service from the catalog."));
             int durationMinutes = service.getDurationMinutes() != null && service.getDurationMinutes() > 0
-                    ? service.getDurationMinutes() : BusySlotsService.DEFAULT_DURATION_MINUTES;
+                    ? service.getDurationMinutes()
+                    : BusySlotsService.DEFAULT_DURATION_MINUTES;
 
             // Roster/time-off writes take the barber's exclusive lock. Take our shared lock
             // before ANY schedule inputs are loaded (including No Preference resolution).
-            List<Barber> lockedBarbers = NO_PREFERENCE_BARBER.equals(request.barberName())
-                    ? barberRepository.findAllForBooking()
-                    : null;
+            List<Barber> lockedBarbers =
+                    NO_PREFERENCE_BARBER.equals(request.barberName()) ? barberRepository.findAllForBooking() : null;
 
             // H2: "No Preference (First Available)" is an input-only sentinel. Resolve
             // it to a concrete, available barber BEFORE persisting so the partial
@@ -257,14 +263,17 @@ class AppointmentBookingService {
             // check is not repeated (three more queries); a second read could not close the race
             // the constraints above guard anyway.
             if (!resolved.availabilityChecked()) {
-                busySlotsService.findConflict(resolvedBarber, bookingDate, bookingTime, durationMinutes, null)
+                busySlotsService
+                        .findConflict(resolvedBarber, bookingDate, bookingTime, durationMinutes, null)
                         .ifPresent(message -> {
                             throw new IllegalArgumentException(message);
                         });
             }
 
             // BKG-2: bound the number of upcoming bookings one e-mail address can hold.
-            long upcoming = appointmentRepository.countUpcoming(request.customerEmail().trim(), today,
+            long upcoming = appointmentRepository.countUpcoming(
+                    request.customerEmail().trim(),
+                    today,
                     now.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm")));
             if (upcoming >= bookingProperties.maxActivePerEmail()) {
                 throw new IllegalArgumentException("This email address already has "
@@ -286,8 +295,8 @@ class AppointmentBookingService {
             // Freeze the price: later catalog price edits must not rewrite revenue history.
             item.setPriceAtBooking(service.getPrice());
             // Store exactly the interval the rules above validated; the exclusion constraint keys on it.
-            item.setBookingSlot(bookingDate, request.bookingTime().trim(),
-                    Appointment.endTimeOf(bookingTime, durationMinutes));
+            item.setBookingSlot(
+                    bookingDate, request.bookingTime().trim(), Appointment.endTimeOf(bookingTime, durationMinutes));
             item.setStatus(AppointmentStatus.PENDING);
 
             Appointment savedItem = appointmentRepository.save(item);
@@ -295,11 +304,10 @@ class AppointmentBookingService {
             changes.adminEvent(AppointmentAdminEvent.Type.CREATED, savedItem.getId());
 
             changes.tagSpan(
-                // The customer's name is deliberately not a span attribute: traces are
-                // exported to a separate backend with different access and retention.
-                "appointment.id", String.valueOf(savedItem.getId()),
-                "appointment.status", savedItem.getStatus()
-            );
+                    // The customer's name is deliberately not a span attribute: traces are
+                    // exported to a separate backend with different access and retention.
+                    "appointment.id", String.valueOf(savedItem.getId()),
+                    "appointment.status", savedItem.getStatus());
 
             return AppointmentCreationResult.created(AppointmentResponse.fromEntity(savedItem));
         });
@@ -331,7 +339,8 @@ class AppointmentBookingService {
     private AppointmentCreationResult replayOrConflict(
             Appointment existing, AppointmentCreateRequest request, String idempotencyKey) {
         if (!isSameReplayRequest(existing, request)) {
-            logger.warn("Idempotency-Key replay rejected: payload mismatch (key hash {}).",
+            logger.warn(
+                    "Idempotency-Key replay rejected: payload mismatch (key hash {}).",
                     Integer.toHexString(idempotencyKey.hashCode()));
             throw new IdempotencyConflictException(
                     "The Idempotency-Key was already used for a different request. Please retry with a new key.");
@@ -358,8 +367,8 @@ class AppointmentBookingService {
         if (fingerprint == null) {
             fingerprint = CreationRequestFingerprint.of(existing);
         }
-        String barber = NO_PREFERENCE_BARBER.equals(request.barberName())
-                ? existing.getBarberName() : request.barberName();
+        String barber =
+                NO_PREFERENCE_BARBER.equals(request.barberName()) ? existing.getBarberName() : request.barberName();
         return fingerprint.equals(CreationRequestFingerprint.of(request, barber));
     }
 
@@ -369,8 +378,7 @@ class AppointmentBookingService {
      * @param availabilityChecked whether the booking rules already accepted this barber for the
      *                            requested slot (the "No Preference" resolution evaluates them)
      */
-    private record ResolvedBarber(Barber barber, boolean availabilityChecked) {
-    }
+    private record ResolvedBarber(Barber barber, boolean availabilityChecked) {}
 
     /**
      * Resolves the requested barber name to a catalog entity. The
@@ -378,16 +386,18 @@ class AppointmentBookingService {
      * can take the booking (schedule, time off, service length, overlap); unknown
      * concrete names are rejected with a 400.
      */
-    private ResolvedBarber resolveBarber(AppointmentCreateRequest request, int durationMinutes,
-                                         List<Barber> lockedBarbers) {
+    private ResolvedBarber resolveBarber(
+            AppointmentCreateRequest request, int durationMinutes, List<Barber> lockedBarbers) {
         if (NO_PREFERENCE_BARBER.equals(request.barberName())) {
-            return busySlotsService.findFirstAvailableBarber(
+            return busySlotsService
+                    .findFirstAvailableBarber(
                             lockedBarbers, request.bookingDate(), request.bookingTime(), durationMinutes)
                     .map(barber -> new ResolvedBarber(barber, true))
                     .orElseThrow(() -> new IllegalArgumentException(
                             "No barber is available for the selected time. Please choose another time or barber."));
         }
-        return barberRepository.findByNameForBooking(request.barberName())
+        return barberRepository
+                .findByNameForBooking(request.barberName())
                 .map(barber -> new ResolvedBarber(barber, false))
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Unknown barber: '" + LogSanitizer.stripNewlines(request.barberName())
@@ -427,9 +437,8 @@ class AppointmentBookingService {
         Integer minutes = catalogService.getAllServices().stream()
                 .filter(service -> service.name().equals(serviceName))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Unknown service: '" + LogSanitizer.stripNewlines(serviceName)
-                                + "'. Please select a service from the catalog."))
+                .orElseThrow(() -> new IllegalArgumentException("Unknown service: '"
+                        + LogSanitizer.stripNewlines(serviceName) + "'. Please select a service from the catalog."))
                 .durationMinutes();
         return minutes != null && minutes > 0 ? minutes : BusySlotsService.DEFAULT_DURATION_MINUTES;
     }
@@ -452,7 +461,8 @@ class AppointmentBookingService {
         if (!date.isBefore(today) && !date.isAfter(today.plusDays(bookingProperties.maxAdvanceDays()))) {
             return null;
         }
-        if (!NO_PREFERENCE_BARBER.equals(barberName) && barberRepository.findByName(barberName).isEmpty()) {
+        if (!NO_PREFERENCE_BARBER.equals(barberName)
+                && barberRepository.findByName(barberName).isEmpty()) {
             throw BusySlotsService.unknownBarber(barberName);
         }
         return BusySlotsService.ALL_SLOTS;

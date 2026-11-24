@@ -2,21 +2,20 @@ package com.example.taskflow.appointment;
 
 import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.core.ConflictException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /** RFC 5545 export with UTC instants, stable UID, CRLF and UTF-8-octet-aware line folding. */
 @Service
 class AppointmentCalendarService {
-    private static final DateTimeFormatter UTC = DateTimeFormatter.ofPattern("uuuuMMdd'T'HHmmss'Z'")
-            .withZone(ZoneOffset.UTC);
+    private static final DateTimeFormatter UTC =
+            DateTimeFormatter.ofPattern("uuuuMMdd'T'HHmmss'Z'").withZone(ZoneOffset.UTC);
     private final AppointmentOwnership ownership;
     private final Clock clock;
 
@@ -40,11 +39,19 @@ class AppointmentCalendarService {
         line(ics, "BEGIN:VEVENT");
         line(ics, "UID:" + text(item.getPublicId()) + "@taskflow");
         line(ics, "DTSTAMP:" + UTC.format(clock.instant()));
-        line(ics, "DTSTART:" + UTC.format(LocalDateTime.of(item.getBookingDate(),
-                LocalTime.parse(item.getBookingTime())).atZone(clock.getZone()).toInstant()));
+        line(
+                ics,
+                "DTSTART:"
+                        + UTC.format(LocalDateTime.of(item.getBookingDate(), LocalTime.parse(item.getBookingTime()))
+                                .atZone(clock.getZone())
+                                .toInstant()));
         // The stored end is authoritative even after a catalog duration edit.
-        line(ics, "DTEND:" + UTC.format(LocalDateTime.of(item.getBookingDate(), item.getBookingEndTime())
-                .atZone(clock.getZone()).toInstant()));
+        line(
+                ics,
+                "DTEND:"
+                        + UTC.format(LocalDateTime.of(item.getBookingDate(), item.getBookingEndTime())
+                                .atZone(clock.getZone())
+                                .toInstant()));
         line(ics, "SEQUENCE:" + (item.getVersion() == null ? 0 : item.getVersion()));
         line(ics, "SUMMARY:TaskFlow appointment");
         line(ics, "DESCRIPTION:" + text(item.getServiceType() + " with " + item.getBarberName()));
@@ -57,14 +64,18 @@ class AppointmentCalendarService {
     }
 
     private static String text(String value) {
-        return value.replace("\\", "\\\\").replace("\r\n", "\n").replace('\r', '\n')
-                .replace("\n", "\\n").replace(";", "\\;").replace(",", "\\,")
+        return value.replace("\\", "\\\\")
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .replace("\n", "\\n")
+                .replace(";", "\\;")
+                .replace(",", "\\,")
                 .replaceAll("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]", "");
     }
 
     private static void line(StringBuilder target, String value) {
         int octets = 0;
-        for (int offset = 0; offset < value.length();) {
+        for (int offset = 0; offset < value.length(); ) {
             int point = value.codePointAt(offset);
             String character = new String(Character.toChars(point));
             int length = character.getBytes(StandardCharsets.UTF_8).length;

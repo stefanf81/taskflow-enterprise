@@ -5,5 +5,4 @@ package com.example.taskflow.review;
  * review, or a reviewed appointment leaving or re-entering APPROVED). The cached ratings are evicted
  * once that transaction has committed.
  */
-record BarberRatingsChangedEvent() {
-}
+record BarberRatingsChangedEvent() {}

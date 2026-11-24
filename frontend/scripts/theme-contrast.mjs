@@ -1,5 +1,5 @@
 /**
- * WCAG 2.x AA colour-contrast rules for src/theme/tokens.json.
+ * WCAG 2.x AA colour-contrast rules for shared/theme/tokens.json (used by web and mobile).
  *
  * `generate-theme.mjs` runs these on every `theme:build` / `theme:check` (and so on
  * `npm run lint`), so a token edit that drops a text/background pair below AA fails CI
@@ -10,7 +10,10 @@
 /** Obsidian tokens used as backgrounds behind text (`border`/`muted`/`light` are not). */
 export const TEXT_SURFACES = ['bg', 'card', 'surface', 'inputBg', 'dark'];
 
-/** Tokens rendered as normal-size text on the dark surfaces (WCAG 1.4.3: 4.5:1). */
+/**
+ * Tokens rendered as normal-size text on the dark surfaces (WCAG 1.4.3: 4.5:1). `text.disabled`
+ * is not here: it only labels disabled controls, which WCAG 1.4.3 exempts.
+ */
 export const TEXT_TOKENS = [
   'text.primary',
   'text.secondary',
@@ -31,7 +34,10 @@ export const CONTRAST_RULES = [
   ...TEXT_TOKENS.flatMap((fg) =>
     TEXT_SURFACES.map((surface) => ({ fg, bg: `obsidian.${surface}`, min: 4.5 })),
   ),
-  // Dark labels on gold fills (primary buttons, selected slots, completed steps).
+  // Dark labels on gold fills (primary buttons, selected slots, completed steps): `onAccent` is
+  // what the UI renders, `dark` what it rendered before the semantic tokens.
+  { fg: 'text.onAccent', bg: 'gold.main', min: 4.5 },
+  { fg: 'text.onAccent', bg: 'gold.bright', min: 4.5 },
   { fg: 'text.dark', bg: 'gold.main', min: 4.5 },
   { fg: 'text.dark', bg: 'gold.bright', min: 4.5 },
   { fg: 'text.dark', bg: 'gold.light', min: 4.5 },

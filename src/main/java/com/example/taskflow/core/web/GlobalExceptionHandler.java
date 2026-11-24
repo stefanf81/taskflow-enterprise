@@ -3,27 +3,26 @@ package com.example.taskflow.core.web;
 import com.example.taskflow.core.DomainException;
 import com.example.taskflow.core.LogSanitizer;
 import jakarta.servlet.http.HttpServletRequest;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.dao.TransientDataAccessException;
-import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.http.HttpHeaders;
-import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-
-import java.time.Clock;
-import java.time.Instant;
-import java.util.List;
 
 @ControllerAdvice
 class GlobalExceptionHandler {
@@ -47,17 +46,11 @@ class GlobalExceptionHandler {
      * them: that status, its reason phrase, the exception's message and the request path.
      */
     @ExceptionHandler(DomainException.class)
-    public ResponseEntity<ErrorResponse> handleDomainException(
-            DomainException ex, HttpServletRequest request) {
+    public ResponseEntity<ErrorResponse> handleDomainException(DomainException ex, HttpServletRequest request) {
 
         HttpStatus status = ex.getStatus();
         ErrorResponse errorResponse = new ErrorResponse(
-                now(),
-                status.value(),
-                status.getReasonPhrase(),
-                ex.getMessage(),
-                request.getRequestURI()
-        );
+                now(), status.value(), status.getReasonPhrase(), ex.getMessage(), request.getRequestURI());
         return new ResponseEntity<>(errorResponse, status);
     }
 
@@ -75,32 +68,28 @@ class GlobalExceptionHandler {
                 HttpStatus.CONFLICT.value(),
                 HttpStatus.CONFLICT.getReasonPhrase(),
                 "The record was changed by someone else. Please reload and try again.",
-                request.getRequestURI()
-        );
+                request.getRequestURI());
         return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgumentException(
             IllegalArgumentException ex, HttpServletRequest request) {
-        
+
         ErrorResponse errorResponse = new ErrorResponse(
                 now(),
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 ex.getMessage(),
-                request.getRequestURI()
-        );
+                request.getRequestURI());
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationException(
             MethodArgumentNotValidException ex, HttpServletRequest request) {
-        
-        List<ErrorResponse.ValidationError> validationErrors = ex.getBindingResult()
-                .getFieldErrors()
-                .stream()
+
+        List<ErrorResponse.ValidationError> validationErrors = ex.getBindingResult().getFieldErrors().stream()
                 .map(error -> new ErrorResponse.ValidationError(error.getField(), error.getDefaultMessage()))
                 .toList();
 
@@ -110,20 +99,17 @@ class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 "Validation failed",
                 request.getRequestURI(),
-                validationErrors
-        );
+                validationErrors);
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(jakarta.validation.ConstraintViolationException.class)
     public ResponseEntity<ErrorResponse> handleConstraintViolationException(
             jakarta.validation.ConstraintViolationException ex, HttpServletRequest request) {
-        
-        List<ErrorResponse.ValidationError> validationErrors = ex.getConstraintViolations()
-                .stream()
+
+        List<ErrorResponse.ValidationError> validationErrors = ex.getConstraintViolations().stream()
                 .map(violation -> new ErrorResponse.ValidationError(
-                        violation.getPropertyPath().toString(), 
-                        violation.getMessage()))
+                        violation.getPropertyPath().toString(), violation.getMessage()))
                 .toList();
 
         ErrorResponse errorResponse = new ErrorResponse(
@@ -132,8 +118,7 @@ class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 "Validation failed",
                 request.getRequestURI(),
-                validationErrors
-        );
+                validationErrors);
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
@@ -145,7 +130,8 @@ class GlobalExceptionHandler {
         // parser's detailed message (which can embed the offending user-supplied scalar value)
         // or internal class names in the client response.
         Throwable cause = ex.getMostSpecificCause();
-        logger.warn("Malformed JSON request on {} ({})",
+        logger.warn(
+                "Malformed JSON request on {} ({})",
                 LogSanitizer.stripNewlines(request.getRequestURI()),
                 cause != null ? cause.getClass().getSimpleName() : ex.getClass().getSimpleName());
 
@@ -154,8 +140,7 @@ class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 "Malformed JSON request payload. Please check your request body and content type.",
-                request.getRequestURI()
-        );
+                request.getRequestURI());
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
@@ -163,54 +148,53 @@ class GlobalExceptionHandler {
         org.springframework.web.servlet.resource.NoResourceFoundException.class,
         org.springframework.web.servlet.NoHandlerFoundException.class
     })
-    public ResponseEntity<ErrorResponse> handleNotFoundExceptions(
-            Exception ex, HttpServletRequest request) {
-        
+    public ResponseEntity<ErrorResponse> handleNotFoundExceptions(Exception ex, HttpServletRequest request) {
+
         ErrorResponse errorResponse = new ErrorResponse(
                 now(),
                 HttpStatus.NOT_FOUND.value(),
                 HttpStatus.NOT_FOUND.getReasonPhrase(),
                 "Resource not found.",
-                request.getRequestURI()
-        );
+                request.getRequestURI());
         return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMethodNotSupportedException(
             org.springframework.web.HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
-        
+
         ErrorResponse errorResponse = new ErrorResponse(
                 now(),
                 HttpStatus.METHOD_NOT_ALLOWED.value(),
                 HttpStatus.METHOD_NOT_ALLOWED.getReasonPhrase(),
                 "Method not allowed.",
-                request.getRequestURI()
-        );
+                request.getRequestURI());
         // Keep the Allow header Spring computes for this exception.
-        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).headers(ex.getHeaders()).body(errorResponse);
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .headers(ex.getHeaders())
+                .body(errorResponse);
     }
 
     @ExceptionHandler(org.springframework.web.HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMediaTypeNotSupportedException(
             org.springframework.web.HttpMediaTypeNotSupportedException ex, HttpServletRequest request) {
-        
+
         ErrorResponse errorResponse = new ErrorResponse(
                 now(),
                 HttpStatus.UNSUPPORTED_MEDIA_TYPE.value(),
                 HttpStatus.UNSUPPORTED_MEDIA_TYPE.getReasonPhrase(),
                 "Unsupported media type.",
-                request.getRequestURI()
-        );
-        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).headers(ex.getHeaders()).body(errorResponse);
+                request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                .headers(ex.getHeaders())
+                .body(errorResponse);
     }
 
     @ExceptionHandler({
         org.springframework.web.bind.MissingServletRequestParameterException.class,
         org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class
     })
-    public ResponseEntity<ErrorResponse> handleBadRequestExceptions(
-            Exception ex, HttpServletRequest request) {
+    public ResponseEntity<ErrorResponse> handleBadRequestExceptions(Exception ex, HttpServletRequest request) {
 
         // Only the parameter name (chosen by us) is echoed. The framework's own
         // message for a type mismatch names Java classes ("Failed to convert value
@@ -219,7 +203,8 @@ class GlobalExceptionHandler {
         String detail;
         if (ex instanceof org.springframework.web.bind.MissingServletRequestParameterException missing) {
             detail = "Required parameter '" + missing.getParameterName() + "' is missing.";
-        } else if (ex instanceof org.springframework.web.method.annotation.MethodArgumentTypeMismatchException mismatch) {
+        } else if (ex
+                instanceof org.springframework.web.method.annotation.MethodArgumentTypeMismatchException mismatch) {
             detail = "Invalid value for parameter '" + mismatch.getName() + "'.";
         } else {
             detail = "Invalid request.";
@@ -229,8 +214,7 @@ class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 "Bad Request: " + detail,
-                request.getRequestURI()
-        );
+                request.getRequestURI());
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
@@ -248,15 +232,16 @@ class GlobalExceptionHandler {
         if (status == null || !status.is4xxClientError()) {
             status = HttpStatus.BAD_REQUEST;
         }
-        logger.debug("Unparseable request parameters ({}) on {}", status.value(),
+        logger.debug(
+                "Unparseable request parameters ({}) on {}",
+                status.value(),
                 LogSanitizer.stripNewlines(request.getRequestURI()));
         ErrorResponse errorResponse = new ErrorResponse(
                 now(),
                 status.value(),
                 status.getReasonPhrase(),
                 "Bad Request: The request parameters could not be parsed.",
-                request.getRequestURI()
-        );
+                request.getRequestURI());
         return new ResponseEntity<>(errorResponse, status);
     }
 
@@ -285,8 +270,7 @@ class GlobalExceptionHandler {
                 HttpStatus.CONFLICT.value(),
                 HttpStatus.CONFLICT.getReasonPhrase(),
                 "The request conflicts with existing data.",
-                request.getRequestURI()
-        );
+                request.getRequestURI());
         return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
     }
 
@@ -300,8 +284,7 @@ class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 "Bad Request: The request contains a character that cannot be stored.",
-                request.getRequestURI()
-        );
+                request.getRequestURI());
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
@@ -334,55 +317,65 @@ class GlobalExceptionHandler {
             return unstorableText(request);
         }
         // Provider messages/causes may include account names or query parameters.
-        logger.warn("Authentication service unavailable on {} ({})",
-                LogSanitizer.stripNewlines(request.getRequestURI()), ex.getClass().getSimpleName());
+        logger.warn(
+                "Authentication service unavailable on {} ({})",
+                LogSanitizer.stripNewlines(request.getRequestURI()),
+                ex.getClass().getSimpleName());
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .header("Retry-After", "1")
-                .body(new ErrorResponse(now(), 503, "Service Unavailable",
-                        "The service is temporarily busy. Please try again shortly.", request.getRequestURI()));
+                .body(new ErrorResponse(
+                        now(),
+                        503,
+                        "Service Unavailable",
+                        "The service is temporarily busy. Please try again shortly.",
+                        request.getRequestURI()));
     }
 
     @ExceptionHandler(AuthenticationServiceException.class)
     public ResponseEntity<ErrorResponse> handleAuthenticationServiceException(
             AuthenticationServiceException ex, HttpServletRequest request) {
-        logger.error("Authentication service failed on {} ({})",
-                LogSanitizer.stripNewlines(request.getRequestURI()), ex.getClass().getSimpleName());
+        logger.error(
+                "Authentication service failed on {} ({})",
+                LogSanitizer.stripNewlines(request.getRequestURI()),
+                ex.getClass().getSimpleName());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse(now(), 500, "Internal Server Error",
-                        "Authentication is unavailable. Please try again later.", request.getRequestURI()));
+                .body(new ErrorResponse(
+                        now(),
+                        500,
+                        "Internal Server Error",
+                        "Authentication is unavailable. Please try again later.",
+                        request.getRequestURI()));
     }
 
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ErrorResponse> handleAuthenticationException(
             AuthenticationException ex, HttpServletRequest request) {
-        
+
         String safeMessage = LogSanitizer.stripNewlines(ex.getMessage());
         logger.warn("Authentication failed: {}", safeMessage);
-        
+
         ErrorResponse errorResponse = new ErrorResponse(
                 now(),
                 HttpStatus.UNAUTHORIZED.value(),
                 HttpStatus.UNAUTHORIZED.getReasonPhrase(),
                 "Authentication failed: Invalid credentials.",
-                request.getRequestURI()
-        );
+                request.getRequestURI());
         return new ResponseEntity<>(errorResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDeniedException(
             AccessDeniedException ex, HttpServletRequest request) {
-        
+
         String safeMessage = LogSanitizer.stripNewlines(ex.getMessage());
         logger.warn("Access denied: {}", safeMessage);
-        
+
         ErrorResponse errorResponse = new ErrorResponse(
                 now(),
                 HttpStatus.FORBIDDEN.value(),
                 HttpStatus.FORBIDDEN.getReasonPhrase(),
                 "Access denied: You do not have permission to access this resource.",
-                request.getRequestURI()
-        );
+                request.getRequestURI());
         return new ResponseEntity<>(errorResponse, HttpStatus.FORBIDDEN);
     }
 
@@ -417,18 +410,19 @@ class GlobalExceptionHandler {
         TransientDataAccessException.class,
         CannotCreateTransactionException.class
     })
-    public ResponseEntity<ErrorResponse> handleDataAccessResourceFailure(
-            Exception ex, HttpServletRequest request) {
-        logger.warn("{} resource unavailable on {}: {}", unavailableResource(ex),
-                LogSanitizer.stripNewlines(request.getRequestURI()), LogSanitizer.safeMessage(ex));
+    public ResponseEntity<ErrorResponse> handleDataAccessResourceFailure(Exception ex, HttpServletRequest request) {
+        logger.warn(
+                "{} resource unavailable on {}: {}",
+                unavailableResource(ex),
+                LogSanitizer.stripNewlines(request.getRequestURI()),
+                LogSanitizer.safeMessage(ex));
 
         ErrorResponse errorResponse = new ErrorResponse(
                 now(),
                 HttpStatus.SERVICE_UNAVAILABLE.value(),
                 HttpStatus.SERVICE_UNAVAILABLE.getReasonPhrase(),
                 "The service is temporarily busy. Please try again shortly.",
-                request.getRequestURI()
-        );
+                request.getRequestURI());
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .header("Retry-After", "1")
                 .body(errorResponse);
@@ -439,20 +433,17 @@ class GlobalExceptionHandler {
             org.springframework.web.server.ResponseStatusException ex, HttpServletRequest request) {
 
         int status = ex.getStatusCode().value();
-        String message = ex.getReason() == null ? "Request could not be processed." : LogSanitizer.stripNewlines(ex.getReason());
-        ErrorResponse errorResponse = new ErrorResponse(
-                now(),
-                status,
-                ex.getStatusCode().toString(),
-                message,
-                request.getRequestURI()
-        );
-        return ResponseEntity.status(ex.getStatusCode()).headers(ex.getHeaders()).body(errorResponse);
+        String message =
+                ex.getReason() == null ? "Request could not be processed." : LogSanitizer.stripNewlines(ex.getReason());
+        ErrorResponse errorResponse =
+                new ErrorResponse(now(), status, ex.getStatusCode().toString(), message, request.getRequestURI());
+        return ResponseEntity.status(ex.getStatusCode())
+                .headers(ex.getHeaders())
+                .body(errorResponse);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGlobalException(
-            Exception ex, HttpServletRequest request) {
+    public ResponseEntity<ErrorResponse> handleGlobalException(Exception ex, HttpServletRequest request) {
 
         // Spring MVC's own exceptions (missing header, unacceptable Accept, async
         // timeout, upload too large, ...) implement ErrorResponse and know their
@@ -467,16 +458,18 @@ class GlobalExceptionHandler {
                 return ResponseEntity.status(framework.getStatusCode()).build();
             }
             if (status != null && status.is4xxClientError()) {
-                logger.debug("Request rejected ({}) on {}: {}", status.value(),
-                        LogSanitizer.stripNewlines(request.getRequestURI()), LogSanitizer.safeMessage(ex));
+                logger.debug(
+                        "Request rejected ({}) on {}: {}",
+                        status.value(),
+                        LogSanitizer.stripNewlines(request.getRequestURI()),
+                        LogSanitizer.safeMessage(ex));
                 HttpHeaders headers = framework.getHeaders();
                 ErrorResponse errorResponse = new ErrorResponse(
                         now(),
                         status.value(),
                         status.getReasonPhrase(),
                         "The request could not be processed.",
-                        request.getRequestURI()
-                );
+                        request.getRequestURI());
                 return ResponseEntity.status(status).headers(headers).body(errorResponse);
             }
         }
@@ -485,7 +478,8 @@ class GlobalExceptionHandler {
         // failing row column values with customer PII: log only the exception type and SQLState.
         String sqlState = findSqlState(ex);
         if (sqlState != null || ex instanceof org.springframework.dao.DataAccessException) {
-            logger.error("Unhandled data-access exception ({}, SQLState {}) on {}",
+            logger.error(
+                    "Unhandled data-access exception ({}, SQLState {}) on {}",
                     ex.getClass().getSimpleName(),
                     sqlState != null ? sqlState : "none",
                     LogSanitizer.stripNewlines(request.getRequestURI()));
@@ -499,8 +493,7 @@ class GlobalExceptionHandler {
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(),
                 "An unexpected error occurred. Please try again later.",
-                request.getRequestURI()
-        );
+                request.getRequestURI());
         return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 }

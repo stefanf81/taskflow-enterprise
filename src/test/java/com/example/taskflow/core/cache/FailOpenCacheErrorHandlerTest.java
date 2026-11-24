@@ -1,5 +1,12 @@
 package com.example.taskflow.core.cache;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
@@ -13,14 +20,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.RedisConnectionFailureException;
-
-import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** A failing cache store must turn into a cache miss, not a failed request. */
 class FailOpenCacheErrorHandlerTest {
@@ -79,8 +78,7 @@ class FailOpenCacheErrorHandlerTest {
         }
 
         @CacheEvict(value = "things")
-        public void evict(String key) {
-        }
+        public void evict(String key) {}
     }
 
     /** A cache whose store is unreachable, like Redis while it is down or hung. */

@@ -19,8 +19,7 @@ public final class ClientAddresses {
 
     private static final int NETWORK_BYTES = 8; // /64
 
-    private ClientAddresses() {
-    }
+    private ClientAddresses() {}
 
     /** The rate-limit client of {@code address}; {@code ""} for none. */
     public static String rateLimitKey(String address) {

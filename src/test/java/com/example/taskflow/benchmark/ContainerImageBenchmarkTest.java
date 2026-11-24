@@ -1,14 +1,13 @@
 package com.example.taskflow.benchmark;
 
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.regex.Pattern;
-
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 
 /**
  * Guards the CDS training and production-image decisions measured in BENCHMARKS.md §56.
@@ -68,15 +67,16 @@ class ContainerImageBenchmarkTest {
 
         boolean purged = prodRun.contains("apt-get purge -y --auto-remove curl wget gnupg");
         boolean setuidStripped = prodRun.contains("-perm /6000 -exec chmod a-s");
-        boolean purgeBeforeUpgrade = purged
-                && prodRun.indexOf("apt-get purge") < prodRun.indexOf("apt-get -y upgrade");
+        boolean purgeBeforeUpgrade = purged && prodRun.indexOf("apt-get purge") < prodRun.indexOf("apt-get -y upgrade");
         // The Java 25 base ships no wget (§62): the local image must install it, not just
         // avoid purging it, or every compose health check fails.
         boolean localKeepsWget = !localRun.contains("apt-get purge")
-                && Pattern.compile("apt-get install[^&]*\\bwget\\b").matcher(localRun).find()
-                && DockerfileStages.inheritedInstructions(d, "local", "HEALTHCHECK").contains("CMD wget");
-        boolean pebbleRemoved = prodRun.contains("rm -f /usr/bin/pebble")
-                && prodRun.contains("rm -rf /var/lib/pebble");
+                && Pattern.compile("apt-get install[^&]*\\bwget\\b")
+                        .matcher(localRun)
+                        .find()
+                && DockerfileStages.inheritedInstructions(d, "local", "HEALTHCHECK")
+                        .contains("CMD wget");
+        boolean pebbleRemoved = prodRun.contains("rm -f /usr/bin/pebble") && prodRun.contains("rm -rf /var/lib/pebble");
 
         System.out.println("  prod target purges curl/wget/gnupg: " + purged);
         System.out.println("  Purge runs before the package refresh: " + purgeBeforeUpgrade);
@@ -91,10 +91,14 @@ class ContainerImageBenchmarkTest {
         assertTrue(purged, "the prod target must purge curl/wget/gnupg — the JVM uses none of them (§56)");
         assertTrue(purgeBeforeUpgrade, "purge before apt-get upgrade so removed packages are not refreshed");
         assertTrue(setuidStripped, "the prod target must strip setuid/setgid bits (§56)");
-        assertTrue(localKeepsWget, "the local target's HEALTHCHECK needs wget, installed in an "
-                + "inherited stage because the Java 25 base has none (P1-6 §47, §62)");
-        assertTrue(pebbleRemoved, "the prod target must remove the unmanaged pebble Go binary — "
-                + "apt cannot patch its Go stdlib (CVE-2026-97031/78667/78669) and the Trivy gate is HIGH/CRITICAL");
+        assertTrue(
+                localKeepsWget,
+                "the local target's HEALTHCHECK needs wget, installed in an "
+                        + "inherited stage because the Java 25 base has none (P1-6 §47, §62)");
+        assertTrue(
+                pebbleRemoved,
+                "the prod target must remove the unmanaged pebble Go binary — "
+                        + "apt cannot patch its Go stdlib (CVE-2026-97031/78667/78669) and the Trivy gate is HIGH/CRITICAL");
     }
 
     @Test
@@ -105,15 +109,19 @@ class ContainerImageBenchmarkTest {
         // succeeds without applying the updates from the repositories it could not reach.
         for (String target : List.of("prod", "local")) {
             String run = DockerfileStages.inheritedInstructions(d, target, "RUN");
-            long refreshes = Pattern.compile("apt-get update\\b").matcher(run).results().count();
-            long strict = Pattern.compile("apt-get update --error-on=any\\b").matcher(run).results().count();
+            long refreshes =
+                    Pattern.compile("apt-get update\\b").matcher(run).results().count();
+            long strict = Pattern.compile("apt-get update --error-on=any\\b")
+                    .matcher(run)
+                    .results()
+                    .count();
 
-            System.out.println("  " + target + ": " + strict + " of " + refreshes
-                    + " apt-get update calls use --error-on=any");
+            System.out.println(
+                    "  " + target + ": " + strict + " of " + refreshes + " apt-get update calls use --error-on=any");
 
             assertTrue(refreshes > 0, "the " + target + " target must refresh the package index (tini install)");
-            assertEquals(refreshes, strict,
-                    "every apt-get update in the " + target + " target must use --error-on=any");
+            assertEquals(
+                    refreshes, strict, "every apt-get update in the " + target + " target must use --error-on=any");
         }
     }
 
@@ -129,11 +137,10 @@ class ContainerImageBenchmarkTest {
 
         boolean trainedWithG1 = DockerfileStages.instructions(d, "cds-training", "RUN")
                 .contains("java -XX:+UseG1GC -XX:AOTCacheOutput=/tmp/application.aot");
-        boolean launched = runtimeCmd.contains("\"-XX:AOTCache=application.aot\"")
-                && !runtimeCmd.contains("AOTMode");
-        boolean bothValidate = List.of("prod", "local").stream().allMatch(target -> DockerfileStages
-                .instructions(d, target, "RUN")
-                .contains("-XX:+UseG1GC -XX:AOTMode=on -XX:AOTCache=application.aot"));
+        boolean launched = runtimeCmd.contains("\"-XX:AOTCache=application.aot\"") && !runtimeCmd.contains("AOTMode");
+        boolean bothValidate = List.of("prod", "local").stream()
+                .allMatch(target -> DockerfileStages.instructions(d, target, "RUN")
+                        .contains("-XX:+UseG1GC -XX:AOTMode=on -XX:AOTCache=application.aot"));
         boolean noCdsLeftovers = hasNoLegacyArchiveInstructions(d);
         boolean documented = md.contains("## ⚡ 62.");
 
@@ -157,16 +164,19 @@ class ContainerImageBenchmarkTest {
     void legacy_archive_guard_ignores_comments_but_checks_instructions() throws Exception {
         String d = Files.readString(Path.of("Dockerfile"));
         String historicalComment = "# Previously: application.jsa -Xshare:on -XX:ArchiveClassesAtExit\n";
-        assertTrue(hasNoLegacyArchiveInstructions(historicalComment + d),
+        assertTrue(
+                hasNoLegacyArchiveInstructions(historicalComment + d),
                 "historical comments must not trip the archive instruction guard");
-        assertFalse(hasNoLegacyArchiveInstructions(d.replace(
-                "\"-XX:AOTCache=application.aot\"", "\"-Xshare:auto\"")),
+        assertFalse(
+                hasNoLegacyArchiveInstructions(d.replace("\"-XX:AOTCache=application.aot\"", "\"-Xshare:auto\"")),
                 "legacy flags in the runtime CMD must still fail");
-        assertFalse(hasNoLegacyArchiveInstructions(d.replace(
-                "AOTCacheOutput=/tmp/application.aot", "ArchiveClassesAtExit=/tmp/application.aot")),
+        assertFalse(
+                hasNoLegacyArchiveInstructions(
+                        d.replace("AOTCacheOutput=/tmp/application.aot", "ArchiveClassesAtExit=/tmp/application.aot")),
                 "legacy flags in the training RUN must still fail");
-        assertFalse(hasNoLegacyArchiveInstructions(d.replace(
-                "/tmp/application.aot ./application.aot", "/tmp/application.jsa ./application.jsa")),
+        assertFalse(
+                hasNoLegacyArchiveInstructions(
+                        d.replace("/tmp/application.aot ./application.aot", "/tmp/application.jsa ./application.jsa")),
                 "copying the former archive must still fail");
     }
 

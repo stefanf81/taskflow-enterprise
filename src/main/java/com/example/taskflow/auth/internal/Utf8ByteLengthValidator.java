@@ -2,15 +2,13 @@ package com.example.taskflow.auth.internal;
 
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
-
 import java.nio.charset.StandardCharsets;
 
 public class Utf8ByteLengthValidator implements ConstraintValidator<Utf8ByteLength, CharSequence> {
 
     private int max;
 
-    public Utf8ByteLengthValidator() {
-    }
+    public Utf8ByteLengthValidator() {}
 
     @Override
     public void initialize(Utf8ByteLength annotation) {

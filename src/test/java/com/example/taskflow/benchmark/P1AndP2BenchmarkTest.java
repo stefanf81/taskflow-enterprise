@@ -1,6 +1,11 @@
 package com.example.taskflow.benchmark;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.example.taskflow.appointment.Barber;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
@@ -8,24 +13,17 @@ import com.example.taskflow.auth.TestSecurityConfig;
 import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.example.taskflow.review.internal.ReviewRepository;
-import com.example.taskflow.appointment.internal.AppointmentRepository;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
-
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 @Tag("benchmark")
 @SpringBootTest(properties = {"app.rate-limit.enabled=false", "spring.cache.type=simple"})
@@ -33,13 +31,26 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(TestSecurityConfig.class)
 class P1AndP2BenchmarkTest {
 
-    @Autowired private MockMvc mockMvc;
-    @Autowired private BarberRepository barberRepository;
-    @Autowired private BarberScheduleRepository scheduleRepository;
-    @Autowired private BarberTimeOffRepository timeOffRepository;
-    @Autowired private ServiceItemRepository serviceItemRepository;
-    @Autowired private AppointmentRepository appointmentRepository;
-    @Autowired private ReviewRepository reviewRepository;
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private BarberRepository barberRepository;
+
+    @Autowired
+    private BarberScheduleRepository scheduleRepository;
+
+    @Autowired
+    private BarberTimeOffRepository timeOffRepository;
+
+    @Autowired
+    private ServiceItemRepository serviceItemRepository;
+
+    @Autowired
+    private AppointmentRepository appointmentRepository;
+
+    @Autowired
+    private ReviewRepository reviewRepository;
 
     @Test
     void p1_3_cacheControl_headers() throws Exception {
@@ -52,11 +63,20 @@ class P1AndP2BenchmarkTest {
         serviceItemRepository.save(new ServiceItem("Svc", BigDecimal.TEN, 30, "hair", "d"));
 
         long t0 = System.nanoTime();
-        MvcResult catalog = mockMvc.perform(get("/api/v1/catalog")).andExpect(status().isOk()).andReturn();
-        MvcResult barbers = mockMvc.perform(get("/api/v1/barbers")).andExpect(status().isOk()).andReturn();
-        MvcResult ratings = mockMvc.perform(get("/api/v1/reviews/public/barber-ratings")).andExpect(status().isOk()).andReturn();
+        MvcResult catalog = mockMvc.perform(get("/api/v1/catalog"))
+                .andExpect(status().isOk())
+                .andReturn();
+        MvcResult barbers = mockMvc.perform(get("/api/v1/barbers"))
+                .andExpect(status().isOk())
+                .andReturn();
+        MvcResult ratings = mockMvc.perform(get("/api/v1/reviews/public/barber-ratings"))
+                .andExpect(status().isOk())
+                .andReturn();
         MvcResult busy = mockMvc.perform(get("/api/v1/appointments/public/busy-slots")
-                .param("barberName", "Bench Bar").param("bookingDate", "2026-06-15")).andExpect(status().isOk()).andReturn();
+                        .param("barberName", "Bench Bar")
+                        .param("bookingDate", "2026-06-15"))
+                .andExpect(status().isOk())
+                .andReturn();
         long elapsedUs = (System.nanoTime() - t0) / 1000;
 
         String catalogCC = catalog.getResponse().getHeader("Cache-Control");
@@ -68,13 +88,18 @@ class P1AndP2BenchmarkTest {
         System.out.println("  Barbers Cache-Control: " + barbersCC);
         System.out.println("  Ratings Cache-Control: " + ratingsCC);
         System.out.println("  BusySlots Cache-Control: " + busyCC);
-        System.out.printf("  4 GETs elapsed: %d µs (%.2f ms) avg %.1f µs/req%n", elapsedUs, elapsedUs/1000.0, elapsedUs/4.0);
+        System.out.printf(
+                "  4 GETs elapsed: %d µs (%.2f ms) avg %.1f µs/req%n", elapsedUs, elapsedUs / 1000.0, elapsedUs / 4.0);
 
         // Admins edit the catalog and the roster from both clients: public, but revalidated (§44 update).
-        assertNotNull(catalogCC); assertEquals("no-cache, public", catalogCC, "catalog public, revalidated (ETag 304)");
-        assertNotNull(barbersCC); assertEquals("no-cache, public", barbersCC, "barbers public, revalidated (ETag 304)");
-        assertNotNull(ratingsCC); assertEquals("no-cache, public", ratingsCC, "ratings revalidated (ETag 304)");
-        assertNotNull(busyCC); assertEquals("no-cache, private", busyCC, "busySlots revalidated (ETag 304)");
+        assertNotNull(catalogCC);
+        assertEquals("no-cache, public", catalogCC, "catalog public, revalidated (ETag 304)");
+        assertNotNull(barbersCC);
+        assertEquals("no-cache, public", barbersCC, "barbers public, revalidated (ETag 304)");
+        assertNotNull(ratingsCC);
+        assertEquals("no-cache, public", ratingsCC, "ratings revalidated (ETag 304)");
+        assertNotNull(busyCC);
+        assertEquals("no-cache, private", busyCC, "busySlots revalidated (ETag 304)");
 
         // The authenticated tiers (no-store) are asserted in HttpCacheHeadersIntegrationTest.
         System.out.println("  ✓ P1-3 Cache-Control headers verified");
@@ -137,11 +162,13 @@ class P1AndP2BenchmarkTest {
         System.out.printf("  Parse latency: %d µs%n", us);
 
         assertTrue(hasStale && hasGc && hasRetryDelay, "queryClient must have staleTime/gcTime/retryDelay");
-        assertTrue(hasTimeout && not15000 && hasPoolTimeout,
+        assertTrue(
+                hasTimeout && not15000 && hasPoolTimeout,
                 "mobile timeout must be 10000 and Hikari must fail first at 4000ms");
 
         System.out.println("  Expected: staleTime 0→60s cuts refetch on every mount → ~50% fewer catalog/barbers GETs");
-        System.out.println("  gcTime 5m keeps cache across nav, 4s pool acquisition + 5s query timeout fit mobile's 10s deadline");
+        System.out.println(
+                "  gcTime 5m keeps cache across nav, 4s pool acquisition + 5s query timeout fit mobile's 10s deadline");
         System.out.println("  ✓ P1-4 mobile tuning verified");
         System.out.println("=".repeat(80));
     }
@@ -163,8 +190,8 @@ class P1AndP2BenchmarkTest {
         boolean hasRamp = ls.contains("ramping-vus") && ls.contains("target: 50") && ls.contains("target: 200");
         boolean hasThresh = ls.contains("http_req_failed") && ls.contains("p(95)<500");
         boolean cwvTight = bs.contains("p(95)<800") && bs.contains("p(95)<1800") && bs.contains("p(95)<2500");
-        boolean productionSafeProbe = ps.contains("constant-arrival-rate") && ps.contains("rate: 1")
-                && !ps.contains("/actuator/health");
+        boolean productionSafeProbe =
+                ps.contains("constant-arrival-rate") && ps.contains("rate: 1") && !ps.contains("/actuator/health");
         boolean notLenient = !bs.contains("p(95)<2500") || bs.contains("p(95)<800"); // ensure tight
         long us = (System.nanoTime() - t0) / 1000;
 
@@ -174,9 +201,11 @@ class P1AndP2BenchmarkTest {
         System.out.printf("  Parse latency: %d µs%n", us);
 
         assertTrue(hasRamp && hasThresh, "load.js must have ramping-vus and p95<500");
-        assertTrue(ls.contains("scenarios: OPEN_MODEL ? openArrival : closedRamp"),
+        assertTrue(
+                ls.contains("scenarios: OPEN_MODEL ? openArrival : closedRamp"),
                 "the open arrival model replaces the closed ramp instead of running on top of it");
-        assertTrue(ls.contains("LOCAL_HOSTS") && ls.contains("ALLOW_REMOTE_LOAD"),
+        assertTrue(
+                ls.contains("LOCAL_HOSTS") && ls.contains("ALLOW_REMOTE_LOAD"),
                 "load.js must refuse a non-local BASE_URL unless explicitly allowed");
         assertTrue(cwvTight, "browser.js must be tightened to CWV good thresholds");
         assertTrue(productionSafeProbe, "probe.js must stay below the per-IP rate limit and use public endpoints");

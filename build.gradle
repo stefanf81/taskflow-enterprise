@@ -45,6 +45,24 @@ plugins {
 	alias(libs.plugins.versions)
 	alias(libs.plugins.spotbugs)
 	alias(libs.plugins.dependency.analysis)
+	alias(libs.plugins.spotless)
+}
+
+// Java formatting: palantir-java-format (4-space indent, 120 columns, imports
+// sorted and unused ones removed). `spotlessCheck` runs in CI (ci.yml,
+// backend-integration) and as part of `check`; `./gradlew spotlessApply` fixes it.
+// The one-time reformat commit is listed in .git-blame-ignore-revs.
+spotless {
+	java {
+		target 'src/*/java/**/*.java'
+		// Released Flyway Java migrations stay byte-for-byte as shipped (AGENTS.md:
+		// never edit a released migration).
+		targetExclude 'src/main/java/db/migration/**'
+		palantirJavaFormat(libs.versions.palantir.java.format.get())
+		// Keeps type-use annotations such as JSpecify's @Nullable next to the type:
+		// OpenApiResponseNullabilityConfig derives the `required` lists from them.
+		formatAnnotations()
+	}
 }
 
 dependencyAnalysis {
@@ -98,6 +116,20 @@ java {
 	}
 }
 
+// Runs every Test task on a newer JDK than the compile toolchain: the weekly
+// jdk-next workflow passes -PtestJavaVersion=27 (and 28 for the early-access
+// build). Compilation stays on the Java 25 toolchain, so the tests exercise the
+// class files that ship.
+def testJavaVersion = providers.gradleProperty('testJavaVersion')
+if (testJavaVersion.present) {
+	def testLauncher = javaToolchains.launcherFor {
+		languageVersion = JavaLanguageVersion.of(testJavaVersion.get())
+	}
+	tasks.withType(Test).configureEach {
+		javaLauncher = testLauncher
+	}
+}
+
 // Disable the plain jar artifact. Only the Spring Boot executable jar (build by
 // the `bootJar` task) is produced in build/libs/, so the Dockerfiles' wildcard
 // `COPY build/libs/*.jar` always matches exactly one file instead of failing
@@ -131,6 +163,19 @@ dependencies {
 	constraints {
 		implementation(libs.commons.lang3)
 		implementation(libs.logback.classic)
+		// Tomcat 11.0.29 ahead of the Boot 4.2.0 BOM (11.0.27): CVE-2026-116830 (HTTP/2),
+		// CVE-2026-118028 (RewriteValve), CVE-2026-121649 (ExpiresFilter), CVE-2026-116600 and six
+		// lower ones. None is reachable here (no HTTP/2, valve, filter or WebSocket endpoint), but the
+		// image scan gates on every fixed HIGH. Constraints, not declarations: they raise the three
+		// modules spring-boot-starter-tomcat already brings without adding an edge (a declared
+		// tomcat-embed-core re-added tomcat-annotations-api, BENCHMARKS.md §61), and a constraint is a
+		// floor, so a later BOM release wins on its own. checkBomOverrides fails once the BOM manages
+		// this release or a later one: then delete these three lines and the catalog entry.
+		// 11.0.29 is in the listed range of CVE-2026-133325 (cluster TLS-PSK, fixed in the unreleased
+		// 11.0.30): the tomcat-embed jars carry no cluster classes; take 11.0.30 when it is released.
+		implementation(libs.tomcat.embed.core)
+		implementation(libs.tomcat.embed.el)
+		implementation(libs.tomcat.embed.websocket)
 	}
 	// Spring Boot
 	implementation libs.spring.boot.starter.data.jpa
@@ -149,11 +194,11 @@ dependencies {
 	// Log4j API used by Spring Boot's log4j-to-slf4j bridge.
 	implementation libs.log4j2.api
 	implementation libs.log4j2.to.slf4j
-	// Netty (incl. netty-codec-dns, GHSA-mfg7-5gfp-c4w3), Tomcat embed (CVE-2026-68525,
-	// CVE-2026-65905, CVE-2026-65182), Hibernate, PgJDBC, SLF4J and Byte Buddy are no longer
-	// pinned here: the Spring Boot 4.2.0 BOM manages exactly the versions these overrides
-	// pinned (Netty 4.2.20.Final, Tomcat 11.0.27, Hibernate 7.4.15.Final, PgJDBC 42.7.14,
-	// SLF4J 2.0.20, Byte Buddy 1.18.17). Re-add a pin only if a fix lands before the BOM.
+	// Netty (incl. netty-codec-dns, GHSA-mfg7-5gfp-c4w3), Hibernate, PgJDBC, SLF4J and Byte Buddy
+	// are no longer pinned here: the Spring Boot 4.2.0 BOM manages exactly the versions these
+	// overrides pinned (Netty 4.2.20.Final, Hibernate 7.4.15.Final, PgJDBC 42.7.14, SLF4J 2.0.20,
+	// Byte Buddy 1.18.17). Re-add a pin only if a fix lands before the BOM, as for Tomcat in the
+	// constraints block above (the BOM is at 11.0.27), and list it in checkBomOverrides below.
 	// Jackson — explicit pins so dependency tooling sees the correct versions
 	// (BOM property overrides are not resolved consistently by all tooling).
 	//   - jackson-databind 2.x / jackson-core 2.x: fixes 8 CVEs (HIGH: async parser bypass,
@@ -244,7 +289,17 @@ spotbugs {
 	reportLevel = com.github.spotbugs.snom.Confidence.valueOf('HIGH')
 	excludeFilter = file("spotbugs-exclude.xml")
 }
+// The PostgreSQL tests (test and testcontainersTest) take their image from the
+// compose `db` service (PostgresTestServer.IMAGE). Only that image is an input,
+// so an image update reruns both suites instead of restoring them from the build
+// cache, while other docker-compose.yml edits leave their cache alone.
+def composePostgresImage = providers.fileContents(layout.projectDirectory.file("docker-compose.yml")).asText.map { text ->
+	def image = text =~ /(?m)^\s+image: (postgres:\S+)$/
+	image.find() ? image.group(1) : "none"
+}
+
 tasks.named("test") {
+	inputs.property("postgresImage", composePostgresImage)
 	useJUnitPlatform {
 		// container-config guards run in containerConfigTest below, so their
 		// file inputs never invalidate this (Spring-context) suite's cache.
@@ -266,10 +321,13 @@ tasks.named("test") {
 	// Spring context tests that seed and inspect the same tables. Tests call the job methods
 	// directly; production leaves app.schedulers.enabled at its default (true).
 	systemProperty "app.schedulers.enabled", "false"
-	// A per-context H2 database: the shared `tododb` URL let rows written by
-	// one Spring context leak into another context in the same fork, so a
-	// change in fork assignment made AppointmentControllerIntegrationTest fail.
-	systemProperty "spring.datasource.url", 'jdbc:h2:mem:${random.uuid};MODE=PostgreSQL;DB_CLOSE_DELAY=-1'
+	// Spring-context tests run on PostgreSQL, the production engine: one server per fork
+	// (a Testcontainers container, or TASKFLOW_TEST_POSTGRES_URL), and one database per
+	// Spring context cloned from a Flyway-migrated template, so no context sees another's
+	// rows (a shared database once let fork assignment fail AppointmentControllerIntegrationTest).
+	// See testsupport/PostgresTestDatabases. H2 remains only for the offline AOT-cache training,
+	// bootRun and the tests that pin it (H2DefaultProfileSmokeTest, ProductionLayoutContextTest).
+	systemProperty "taskflow.test.postgres", "true"
 	// Without includes the JaCoCo agent instruments every class the fork
 	// loads, i.e. all of Spring, Hibernate, Tomcat, H2..., while the report
 	// covers only this project's classes. One cold Spring context, 2 paired
@@ -281,6 +339,49 @@ tasks.named("test") {
 	finalizedBy(tasks.jacocoTestReport)
 }
 
+// Versions pinned ahead of the Spring Boot BOM (the constraints block above) are only needed until
+// the BOM catches up, and nothing else says when that is: a constraint is a floor, so a forgotten one
+// never holds a version back, it just stays as a misleading pin that Renovate keeps bumping. This
+// check resolves the BOM alone and fails once it manages a pinned module at or above the pin, so the
+// Boot upgrade that makes a pin redundant also removes it. It only reads POMs (no jars), runs with
+// `check` and before the container-config guards, and is configuration-cache safe.
+def bomProbeDeps = configurations.dependencyScope("bootBomProbe")
+def bomProbe = configurations.resolvable("bootBomProbeClasspath") { extendsFrom(bomProbeDeps.get()) }
+def bomOverrides = [
+	(libs.tomcat.embed.core.get().module.toString()): libs.versions.tomcat.get(),
+	(libs.logback.classic.get().module.toString()): libs.versions.logback.get(),
+]
+dependencies {
+	add("bootBomProbe", platform(libs.spring.boot.dependencies))
+	bomOverrides.keySet().each { add("bootBomProbe", it) }
+}
+tasks.register("checkBomOverrides") {
+	group = "verification"
+	description = "Fails when the Spring Boot BOM manages a pinned module at or above the catalog pin."
+	def managedRoot = bomProbe.flatMap { it.incoming.resolutionResult.rootComponent }
+	def bootVersion = libs.versions.spring.boot.get()
+	inputs.property("bomOverrides", bomOverrides)
+	doLast {
+		def managed = managedRoot.get().dependencies
+				.findAll { it instanceof org.gradle.api.artifacts.result.ResolvedDependencyResult }
+				.collectEntries { [(it.selected.moduleVersion.module.toString()): it.selected.moduleVersion.version] }
+		def stale = bomOverrides.findAll { module, pinned ->
+			def a = managed[module].tokenize(".-").collect { it.isInteger() ? it as int : -1 }
+			def b = pinned.tokenize(".-").collect { it.isInteger() ? it as int : -1 }
+			def diff = [a, b].transpose().collect { x, y -> x <=> y }.find { it != 0 }
+			(diff ?: (a.size() <=> b.size())) >= 0
+		}
+		if (stale) {
+			throw new GradleException("Spring Boot ${bootVersion} now manages " +
+					stale.collect { module, pinned -> "${module} ${managed[module]} (pinned ${pinned})" }.join(", ") +
+					": remove the pin from the constraints block in build.gradle and gradle/libs.versions.toml.")
+		}
+		logger.lifecycle("BOM overrides still ahead of Spring Boot ${bootVersion}: " +
+				bomOverrides.collect { module, pinned -> "${module} ${pinned} > ${managed[module]}" }.join(", "))
+	}
+}
+tasks.named("check") { dependsOn("checkBomOverrides") }
+
 // File-reading guards on the container configuration (tagged container-config):
 // the Dockerfile's targets, compose, nginx and the image workflows. Kept out of
 // `test` so a Dockerfile-, compose-, nginx-, workflow- or BENCHMARKS.md-only
@@ -290,6 +391,7 @@ tasks.named("test") {
 // FROM-CACHE. Dockerfile.x64 is listed because its absence is asserted.
 tasks.register("containerConfigTest", Test) {
 	group = "verification"
+	dependsOn("checkBomOverrides")
 	description = "Runs the container-config guards (Dockerfile, compose, nginx, image workflows)."
 	useJUnitPlatform {
 		includeTags 'container-config'
@@ -329,12 +431,7 @@ tasks.register("testcontainersTest", Test) {
 	testClassesDirs = sourceSets.test.output.classesDirs
 	classpath = sourceSets.test.runtimeClasspath
 	maxParallelForks = 1
-	// The PostgreSQL containers take their image from the compose `db` service
-	// (PostgresTestServer.IMAGE), so an image update must rerun the suite
-	// instead of restoring its result from the build cache.
-	inputs.file("docker-compose.yml")
-			.withPropertyName("composeFile")
-			.withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.property("postgresImage", composePostgresImage)
 	// jacocoTestReport/-Verification read `test` only, so the agent here only
 	// slowed every Spring context start (see the `test` task).
 	jacoco {

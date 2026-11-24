@@ -1,21 +1,16 @@
 package com.example.taskflow.appointment;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
+
 import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
-
 import com.example.taskflow.catalog.CatalogService;
 import com.example.taskflow.catalog.ServiceItem;
 import io.micrometer.tracing.Tracer;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEvent;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.transaction.PlatformTransactionManager;
-
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -26,9 +21,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.lenient;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEvent;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.PlatformTransactionManager;
 
 /**
  * Shared fixture of the appointment service unit tests ({@link AppointmentBookingServiceTest},
@@ -41,6 +40,7 @@ abstract class AppointmentServiceTestSupport {
 
     /** Monday 2026-10-12, 08:00 shop time (UTC). */
     static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-12T08:00:00Z"), ZoneOffset.UTC);
+
     static final LocalDate TODAY = LocalDate.of(2026, 10, 12);
     static final LocalDate TOMORROW = TODAY.plusDays(1);
 
@@ -84,9 +84,11 @@ abstract class AppointmentServiceTestSupport {
 
     @BeforeEach
     void setUpServices() {
-        busySlotsService = new BusySlotsService(barberRepository, barberScheduleRepository, barberTimeOffRepository, appointmentRepository);
+        busySlotsService = new BusySlotsService(
+                barberRepository, barberScheduleRepository, barberTimeOffRepository, appointmentRepository);
         bookingService = bookingService(CLOCK);
-        lifecycleService = new AppointmentLifecycleService(appointmentRepository, changes(CLOCK), busySlotsService, barberRepository, CLOCK);
+        lifecycleService = new AppointmentLifecycleService(
+                appointmentRepository, changes(CLOCK), busySlotsService, barberRepository, CLOCK);
         queryService = new AppointmentQueryService(appointmentRepository, statsService, CLOCK);
         appointmentService = new AppointmentServiceImpl(appointmentRepository);
 
@@ -104,8 +106,12 @@ abstract class AppointmentServiceTestSupport {
         lenient().when(barberRepository.findByIdForBooking(7L)).thenReturn(Optional.of(alex));
         lenient().when(barberRepository.findAllForBooking()).thenReturn(List.of(alex));
         lenient().when(barberRepository.findAllByOrderByIdAsc()).thenReturn(List.of(alex));
-        lenient().when(barberScheduleRepository.findForBarbersOnDay(any(), any())).thenReturn(List.of(schedule));
-        lenient().when(barberTimeOffRepository.findBarberIdsOnTimeOff(any(), any())).thenReturn(Collections.emptyList());
+        lenient()
+                .when(barberScheduleRepository.findForBarbersOnDay(any(), any()))
+                .thenReturn(List.of(schedule));
+        lenient()
+                .when(barberTimeOffRepository.findBarberIdsOnTimeOff(any(), any()))
+                .thenReturn(Collections.emptyList());
         lenient().when(catalogService.findServiceByName("Haircut")).thenReturn(Optional.of(haircut));
         lenient().when(appointmentRepository.save(any(Appointment.class))).thenAnswer(inv -> {
             Appointment saved = inv.getArgument(0);
@@ -114,14 +120,27 @@ abstract class AppointmentServiceTestSupport {
             }
             return saved;
         });
-        lenient().doAnswer(inv -> events.add(inv.getArgument(0))).when(eventPublisher).publishEvent(any(Object.class));
-        lenient().doAnswer(inv -> events.add(inv.getArgument(0))).when(eventPublisher).publishEvent(any(ApplicationEvent.class));
+        lenient()
+                .doAnswer(inv -> events.add(inv.getArgument(0)))
+                .when(eventPublisher)
+                .publishEvent(any(Object.class));
+        lenient()
+                .doAnswer(inv -> events.add(inv.getArgument(0)))
+                .when(eventPublisher)
+                .publishEvent(any(ApplicationEvent.class));
     }
 
     /** A booking service whose "now" (and shop time zone) is {@code clock}. */
     AppointmentBookingService bookingService(Clock clock) {
-        return new AppointmentBookingService(appointmentRepository, changes(clock), busySlotsService, barberRepository,
-                catalogService, clock, BookingProperties.defaults(), transactionManager);
+        return new AppointmentBookingService(
+                appointmentRepository,
+                changes(clock),
+                busySlotsService,
+                barberRepository,
+                catalogService,
+                clock,
+                BookingProperties.defaults(),
+                transactionManager);
     }
 
     private AppointmentChangePublisher changes(Clock clock) {
@@ -135,8 +154,8 @@ abstract class AppointmentServiceTestSupport {
     }
 
     Appointment appointment(long id, AppointmentStatus status, LocalDate date, String time) {
-        Appointment appointment = new Appointment("John Doe", "john@test.com", "123",
-                "Alex the Barber", date, time, "Haircut");
+        Appointment appointment =
+                new Appointment("John Doe", "john@test.com", "123", "Alex the Barber", date, time, "Haircut");
         appointment.setId(id);
         appointment.setPublicId("public-" + id);
         appointment.setBarber(alex);

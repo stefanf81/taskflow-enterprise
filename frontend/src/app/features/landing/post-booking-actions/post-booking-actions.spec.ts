@@ -179,7 +179,7 @@ describe('PostBookingActionsComponent', () => {
     req.flush(null);
 
     expect(flash.successMessage()).toBe(
-      '🗑️ Reservation successfully cancelled. Your time slot has been released.',
+      'Reservation successfully cancelled. Your time slot has been released.',
     );
     expect(component.cancelModel().publicId).toBe('');
   });

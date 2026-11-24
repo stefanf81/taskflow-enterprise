@@ -1,19 +1,5 @@
 package com.example.taskflow.core.cache;
 
-import com.example.taskflow.core.redis.RedisBackoff;
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentMatchers;
-import org.springframework.data.redis.RedisConnectionFailureException;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.data.redis.core.script.RedisScript;
-
-import java.time.Duration;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
-
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -27,6 +13,18 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import com.example.taskflow.core.redis.RedisBackoff;
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentMatchers;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 
 /** {@link RedisCacheLoadLock} with the Redis client mocked (the real-Redis cases are elsewhere). */
 class RedisCacheLoadLockTest {
@@ -47,7 +45,8 @@ class RedisCacheLoadLockTest {
 
     @Test
     void acquireIsSetNxWithTheLeaseAndReturnsAToken() {
-        when(values.setIfAbsent(eq("lock:services:all"), anyString(), eq(Duration.ofSeconds(10)))).thenReturn(true);
+        when(values.setIfAbsent(eq("lock:services:all"), anyString(), eq(Duration.ofSeconds(10))))
+                .thenReturn(true);
 
         assertNotNull(lock.tryAcquire("services", "all"));
     }
@@ -63,8 +62,8 @@ class RedisCacheLoadLockTest {
     void releaseIsACompareAndDeleteWithTheHoldersToken() {
         lock.release("services", "all", "my-token");
 
-        verify(redis).execute(ArgumentMatchers.<RedisScript<Long>>any(), eq(List.of("lock:services:all")),
-                eq("my-token"));
+        verify(redis)
+                .execute(ArgumentMatchers.<RedisScript<Long>>any(), eq(List.of("lock:services:all")), eq("my-token"));
     }
 
     @Test

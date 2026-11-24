@@ -1,11 +1,10 @@
 package com.example.taskflow.core.redis;
+
 import com.example.taskflow.core.LogSanitizer;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Failure bookkeeping for best-effort Redis use with an in-memory fallback.
@@ -95,8 +94,11 @@ public final class RedisBackoff {
         }
         if (!degraded) {
             degraded = true;
-            log.warn("{}: Redis unavailable, using the per-JVM fallback and retrying every {} ms: {}",
-                    component, backoffMillis, LogSanitizer.safeMessage(e));
+            log.warn(
+                    "{}: Redis unavailable, using the per-JVM fallback and retrying every {} ms: {}",
+                    component,
+                    backoffMillis,
+                    LogSanitizer.safeMessage(e));
         } else if (log.isDebugEnabled()) {
             log.debug("{}: Redis still unavailable: {}", component, LogSanitizer.safeMessage(e));
         }

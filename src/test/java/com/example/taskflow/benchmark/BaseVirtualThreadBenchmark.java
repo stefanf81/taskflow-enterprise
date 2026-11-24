@@ -1,30 +1,29 @@
 package com.example.taskflow.benchmark;
 
-import com.example.taskflow.appointment.internal.Appointment;
-import com.example.taskflow.appointment.internal.AppointmentRepository;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.example.taskflow.appointment.AppointmentCreateRequest;
 import com.example.taskflow.appointment.Barber;
-import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.BarberSchedule;
+import com.example.taskflow.appointment.internal.Appointment;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
+import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
 import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.example.taskflow.review.internal.ReviewRepository;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.*;
+import java.util.concurrent.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.*;
-
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.util.*;
-import java.util.concurrent.*;
-
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * ABSTRACT BASE for Platform Thread vs Virtual Thread benchmark on I/O-bound
@@ -84,9 +83,9 @@ abstract class BaseVirtualThreadBenchmark {
     //                                    busy-slot validation, entity save, cache
     //                                    eviction)
     private static final double W_APPOINTMENTS = 0.30;
-    private static final double W_BARBERS       = 0.20;
-    private static final double W_CATALOG       = 0.20;
-    private static final double W_CREATE        = 0.30;
+    private static final double W_BARBERS = 0.20;
+    private static final double W_CATALOG = 0.20;
+    private static final double W_CREATE = 0.30;
 
     // =========================================================================
     //  INJECTED DEPENDENCIES
@@ -130,10 +129,11 @@ abstract class BaseVirtualThreadBenchmark {
 
     /** Cached seed data keys for random selection during measurement */
     private List<String> barberNames;
+
     private List<String> serviceNames;
     private List<String> times;
 
-    private String modeName;    // "Platform Threads" or "Virtual Threads"
+    private String modeName; // "Platform Threads" or "Virtual Threads"
 
     // =========================================================================
     //  SETUP — seed DB, login once
@@ -150,9 +150,9 @@ abstract class BaseVirtualThreadBenchmark {
         http = new BenchmarkHttp();
 
         // Print header
-        System.out.println("\n" + "=" .repeat(90));
+        System.out.println("\n" + "=".repeat(90));
         System.out.println("  \u2699 THREADING MODEL BENCHMARK: " + modeName);
-        System.out.println("=" .repeat(90));
+        System.out.println("=".repeat(90));
 
         // Clean in FK dependency order
         reviewRepository.deleteAll();
@@ -165,11 +165,7 @@ abstract class BaseVirtualThreadBenchmark {
         // --- Seed barbers ---
         List<Barber> barbers = new ArrayList<>(BARBER_COUNT);
         for (int i = 0; i < BARBER_COUNT; i++) {
-            barbers.add(new Barber(
-                    "Barber " + i,
-                    "barber" + i + "@example.com",
-                    "555-" + String.format("%04d", i)
-            ));
+            barbers.add(new Barber("Barber " + i, "barber" + i + "@example.com", "555-" + String.format("%04d", i)));
         }
         barberRepository.saveAll(barbers);
         barberNames = barbers.stream().map(Barber::getName).toList();
@@ -197,8 +193,7 @@ abstract class BaseVirtualThreadBenchmark {
                     BigDecimal.valueOf(20.00 + (i * 5)),
                     15 + (i * 5),
                     categories[i % categories.length],
-                    "Benchmark service " + i
-            ));
+                    "Benchmark service " + i));
         }
         serviceItemRepository.saveAll(services);
         serviceNames = services.stream().map(ServiceItem::getName).toList();
@@ -219,8 +214,7 @@ abstract class BaseVirtualThreadBenchmark {
                     barber.getName(),
                     baseDate.plusDays(i / (BARBER_COUNT * 2)),
                     timeSlots[i % timeSlots.length],
-                    service.getName()
-            );
+                    service.getName());
             a.setBarber(barber);
             a.setService(service);
             a.setStatus(statuses[i % statuses.length]);
@@ -228,17 +222,16 @@ abstract class BaseVirtualThreadBenchmark {
         }
         appointmentRepository.saveAll(appointments);
 
-        System.out.println("  Seed data: " + BARBER_COUNT + " barbers, "
-                + SERVICE_COUNT + " services, " + APPOINTMENT_COUNT + " appointments");
+        System.out.println("  Seed data: " + BARBER_COUNT + " barbers, " + SERVICE_COUNT + " services, "
+                + APPOINTMENT_COUNT + " appointments");
 
         // --- Login as admin to get JWT ---
         loginAndGetToken();
 
         System.out.println("  Auth token acquired, benchmark ready.");
-        System.out.println("  Workload: 30% GET appointments / 20% GET barbers / "
-                + "20% GET catalog / 30% POST create");
-        System.out.println("  Concurrency: " + CONCURRENCY
-                + " | Total measurement requests: " + MEASUREMENT_REQUESTS);
+        System.out.println(
+                "  Workload: 30% GET appointments / 20% GET barbers / " + "20% GET catalog / 30% POST create");
+        System.out.println("  Concurrency: " + CONCURRENCY + " | Total measurement requests: " + MEASUREMENT_REQUESTS);
         System.out.println();
     }
 
@@ -262,11 +255,9 @@ abstract class BaseVirtualThreadBenchmark {
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<Map<String, String>> request = new HttpEntity<>(loginBody, headers);
 
-        ResponseEntity<String> response = http.postForEntity(
-                baseUrl + "/api/v1/auth/login", request, String.class);
+        ResponseEntity<String> response = http.postForEntity(baseUrl + "/api/v1/auth/login", request, String.class);
 
-        assertTrue(response.getStatusCode().is2xxSuccessful(),
-                "Login failed: " + response.getStatusCode());
+        assertTrue(response.getStatusCode().is2xxSuccessful(), "Login failed: " + response.getStatusCode());
 
         // Parse access_token from Set-Cookie header
         List<String> setCookies = response.getHeaders().get("Set-Cookie");
@@ -288,8 +279,7 @@ abstract class BaseVirtualThreadBenchmark {
             accessToken = response.getBody();
         }
 
-        assertTrue(accessToken != null && !accessToken.isBlank(),
-                "Failed to extract access_token from login response");
+        assertTrue(accessToken != null && !accessToken.isBlank(), "Failed to extract access_token from login response");
     }
 
     // =========================================================================
@@ -324,9 +314,9 @@ abstract class BaseVirtualThreadBenchmark {
         long p99 = percentile(sorted, 99);
 
         // --- Report ---
-        System.out.println("=" .repeat(90));
+        System.out.println("=".repeat(90));
         System.out.println("  \uD83D\uDCCA RESULTS: " + modeName);
-        System.out.println("=" .repeat(90));
+        System.out.println("=".repeat(90));
         System.out.printf("  %-40s %10s%n", "Metric", "Value");
         System.out.println("  " + "-".repeat(55));
         System.out.printf("  %-40s %10.2f req/sec%n", "Throughput", throughput);
@@ -341,13 +331,13 @@ abstract class BaseVirtualThreadBenchmark {
         System.out.printf("  %-40s %10d ms%n", "p95 latency", p95);
         System.out.printf("  %-40s %10d ms%n", "p99 latency", p99);
         System.out.printf("  %-40s %10d ms%n", "Maximum latency", max);
-        System.out.println("=" .repeat(90));
+        System.out.println("=".repeat(90));
         System.out.println();
 
         // --- Assert ---
-        assertTrue(avg < MAX_AVG_LATENCY_MS,
-                String.format("Average latency %.2f ms exceeds %.2f ms SLA",
-                        avg, MAX_AVG_LATENCY_MS));
+        assertTrue(
+                avg < MAX_AVG_LATENCY_MS,
+                String.format("Average latency %.2f ms exceeds %.2f ms SLA", avg, MAX_AVG_LATENCY_MS));
 
         // Print summary line for easy comparison
         System.out.println(">>> SUMMARY [" + modeName + "]"
@@ -392,8 +382,7 @@ abstract class BaseVirtualThreadBenchmark {
             boolean completed = finishLatch.await(BENCHMARK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
             if (!completed) {
-                System.err.println("  WARNING: Benchmark timed out after "
-                        + BENCHMARK_TIMEOUT_SECONDS + " seconds");
+                System.err.println("  WARNING: Benchmark timed out after " + BENCHMARK_TIMEOUT_SECONDS + " seconds");
             }
 
             List<Long> latencies = new ArrayList<>(count);
@@ -438,8 +427,7 @@ abstract class BaseVirtualThreadBenchmark {
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         ResponseEntity<String> response = http.exchange(
-                baseUrl + "/api/v1/appointments?page=0&size=10&status=PENDING",
-                HttpMethod.GET, entity, String.class);
+                baseUrl + "/api/v1/appointments?page=0&size=10&status=PENDING", HttpMethod.GET, entity, String.class);
 
         if (!response.getStatusCode().is2xxSuccessful()) {
             System.err.println("  GET appointments failed: " + response.getStatusCode());
@@ -448,8 +436,7 @@ abstract class BaseVirtualThreadBenchmark {
 
     /** GET /api/v1/barbers (public) */
     private void getBarbers() {
-        ResponseEntity<String> response = http.getForEntity(
-                baseUrl + "/api/v1/barbers", String.class);
+        ResponseEntity<String> response = http.getForEntity(baseUrl + "/api/v1/barbers", String.class);
 
         if (!response.getStatusCode().is2xxSuccessful()) {
             System.err.println("  GET barbers failed: " + response.getStatusCode());
@@ -458,8 +445,7 @@ abstract class BaseVirtualThreadBenchmark {
 
     /** GET /api/v1/catalog (public) */
     private void getCatalog() {
-        ResponseEntity<String> response = http.getForEntity(
-                baseUrl + "/api/v1/catalog", String.class);
+        ResponseEntity<String> response = http.getForEntity(baseUrl + "/api/v1/catalog", String.class);
 
         if (!response.getStatusCode().is2xxSuccessful()) {
             System.err.println("  GET catalog failed: " + response.getStatusCode());
@@ -482,17 +468,15 @@ abstract class BaseVirtualThreadBenchmark {
                 barberName,
                 date,
                 time,
-                serviceName
-        );
+                serviceName);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<AppointmentCreateRequest> entity = new HttpEntity<>(body, headers);
 
         try {
-            ResponseEntity<String> response = http.exchange(
-                    baseUrl + "/api/v1/appointments",
-                    HttpMethod.POST, entity, String.class);
+            ResponseEntity<String> response =
+                    http.exchange(baseUrl + "/api/v1/appointments", HttpMethod.POST, entity, String.class);
 
             if (!response.getStatusCode().is2xxSuccessful()) {
                 // Expect some 400s for duplicate time slots — that's okay,

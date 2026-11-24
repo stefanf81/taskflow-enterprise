@@ -1,38 +1,38 @@
 package com.example.taskflow.auth;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
-
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.util.Base64;
-
-import com.example.taskflow.auth.internal.UserRepository;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-
-import java.util.Optional;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.example.taskflow.auth.internal.UserRepository;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.util.Base64;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
 class SecurityConfigTest {
 
     private final AccountTokenCheck accounts = mock(AccountTokenCheck.class);
 
     private SecurityConfig createConfig(String admin, String pass, String privKey, String pubKey) {
-        return new SecurityConfig(admin, pass, new RsaKeyProperties(privKey, pubKey, false),
-                new JwtProperties("taskflow", "taskflow-api", 3600), new CookieProperties(false));
+        return new SecurityConfig(
+                admin,
+                pass,
+                new RsaKeyProperties(privKey, pubKey, false),
+                new JwtProperties("taskflow", "taskflow-api", 3600),
+                new CookieProperties(false));
     }
 
     @Test
@@ -46,7 +46,8 @@ class SecurityConfigTest {
 
         SecurityConfig config = createConfig("admin", "pass", privBase64, pubBase64);
 
-        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
+        assertNotNull(config.jwtDecoder(
+                new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
         assertNotNull(config.jwkSource());
         assertNotNull(config.jwtEncoder(config.jwkSource()));
     }
@@ -54,33 +55,204 @@ class SecurityConfigTest {
     @Test
     void testLoadRsaKeyInvalid() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "invalid-base64", "invalid-base64");
-        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class))); // Should fallback to ephemeral keys
+        assertNotNull(config.jwtDecoder(
+                new TokenRevocationList(),
+                mock(AccountTokenCheck.class),
+                mock(RefreshSessionService.class))); // Should fallback to ephemeral keys
     }
 
     @Test
     void testLoadRsaKeyBlank() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "", "   ");
-        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
+        assertNotNull(config.jwtDecoder(
+                new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
     }
 
     @Test
     void testLoadRsaKeyPartiallyBlank() throws Exception {
         SecurityConfig config = createConfig("admin", "pass", "valid-fake-base", "");
-        assertNotNull(config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
+        assertNotNull(config.jwtDecoder(
+                new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
     }
 
     @Test
     void productionRequiresPersistentKeys() {
-        assertThrows(IllegalStateException.class, () -> new SecurityConfig(
-                "admin", "pass", new RsaKeyProperties(null, null, true),
-                new JwtProperties("taskflow", "taskflow-api", 3600), new CookieProperties(false)));
+        assertThrows(
+                IllegalStateException.class,
+                () -> new SecurityConfig(
+                        "admin",
+                        "pass",
+                        new RsaKeyProperties(null, null, true),
+                        new JwtProperties("taskflow", "taskflow-api", 3600),
+                        new CookieProperties(false)));
     }
 
     @Test
     void productionRejectsInvalidPersistentKeys() {
-        assertThrows(IllegalStateException.class, () -> new SecurityConfig(
-                "admin", "pass", new RsaKeyProperties("invalid-base64", "invalid-base64", true),
-                new JwtProperties("taskflow", "taskflow-api", 3600), new CookieProperties(false)));
+        assertThrows(
+                IllegalStateException.class,
+                () -> new SecurityConfig(
+                        "admin",
+                        "pass",
+                        new RsaKeyProperties("invalid-base64", "invalid-base64", true),
+                        new JwtProperties("taskflow", "taskflow-api", 3600),
+                        new CookieProperties(false)));
+    }
+
+    // ---- configured key pair: the two halves must belong together and be long enough ----
+
+    private static KeyPair rsa() throws Exception {
+        KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
+        kpg.initialize(2048);
+        return kpg.generateKeyPair();
+    }
+
+    /**
+     * A deliberately undersized (1024-bit) pair, to prove the production check rejects it. It is
+     * assembled from two primes instead of {@code KeyPairGenerator.initialize(1024)} so no code path
+     * in this repository asks the JDK for a weak key (CodeQL {@code java/insufficient-key-size}).
+     */
+    private static KeyPair weakRsa1024() throws Exception {
+        var random = new java.security.SecureRandom();
+        var e = java.security.spec.RSAKeyGenParameterSpec.F4;
+        java.math.BigInteger p;
+        java.math.BigInteger q;
+        java.math.BigInteger n;
+        java.math.BigInteger phi;
+        do {
+            p = java.math.BigInteger.probablePrime(512, random);
+            q = java.math.BigInteger.probablePrime(512, random);
+            n = p.multiply(q);
+            phi = p.subtract(java.math.BigInteger.ONE).multiply(q.subtract(java.math.BigInteger.ONE));
+        } while (p.equals(q) || n.bitLength() != 1024 || !phi.gcd(e).equals(java.math.BigInteger.ONE));
+        var d = e.modInverse(phi);
+        var factory = java.security.KeyFactory.getInstance("RSA");
+        return new KeyPair(
+                factory.generatePublic(new java.security.spec.RSAPublicKeySpec(n, e)),
+                factory.generatePrivate(new java.security.spec.RSAPrivateCrtKeySpec(
+                        n,
+                        e,
+                        d,
+                        p,
+                        q,
+                        d.mod(p.subtract(java.math.BigInteger.ONE)),
+                        d.mod(q.subtract(java.math.BigInteger.ONE)),
+                        q.modInverse(p))));
+    }
+
+    private static String b64(java.security.Key key) {
+        return Base64.getEncoder().encodeToString(key.getEncoded());
+    }
+
+    private static Throwable root(Throwable t) {
+        while (t.getCause() != null) {
+            t = t.getCause();
+        }
+        return t;
+    }
+
+    @Test
+    void productionRejectsAPublicKeyOfAnotherPair() throws Exception {
+        // Each half is a valid key, so both parse: before the pair check this started and every
+        // token it issued failed its own decoder.
+        KeyPair signing = rsa();
+        KeyPair other = rsa();
+
+        IllegalStateException failure = assertThrows(
+                IllegalStateException.class,
+                () -> new SecurityConfig(
+                        "admin",
+                        "pass",
+                        new RsaKeyProperties(b64(signing.getPrivate()), b64(other.getPublic()), true),
+                        new JwtProperties("taskflow", "taskflow-api", 3600),
+                        new CookieProperties(false)));
+
+        String message = root(failure).getMessage();
+        assertTrue(message.contains("APP_RSA_PUBLIC_KEY is not the public key of APP_RSA_PRIVATE_KEY"), message);
+        // No key material in the message that ends up in the startup log.
+        assertFalse(message.contains(b64(other.getPublic()).substring(0, 24)), message);
+    }
+
+    @Test
+    void productionRejectsAKeyBelow2048Bits() throws Exception {
+        KeyPair weak = weakRsa1024();
+
+        IllegalStateException failure = assertThrows(
+                IllegalStateException.class,
+                () -> new SecurityConfig(
+                        "admin",
+                        "pass",
+                        new RsaKeyProperties(b64(weak.getPrivate()), b64(weak.getPublic()), true),
+                        new JwtProperties("taskflow", "taskflow-api", 3600),
+                        new CookieProperties(false)));
+
+        assertTrue(
+                root(failure).getMessage().contains("1024-bit"), root(failure).getMessage());
+    }
+
+    @Test
+    void aMismatchedPairOutsideProductionFallsBackToAnEphemeralPairThatWorks() throws Exception {
+        // Same rule as an unreadable key: without require-persistent-keys the start continues with
+        // a generated pair (WARN), and that pair signs tokens its own decoder accepts.
+        SecurityConfig config = createConfig("admin", "pass", b64(rsa().getPrivate()), b64(rsa().getPublic()));
+
+        var jwk = (com.nimbusds.jose.jwk.RSAKey) config.jwkSource()
+                .get(
+                        new com.nimbusds.jose.jwk.JWKSelector(new com.nimbusds.jose.jwk.JWKMatcher.Builder().build()),
+                        null)
+                .get(0);
+        SecurityConfig.requireUsableKeyPair(jwk.toRSAPrivateKey(), jwk.toRSAPublicKey());
+    }
+
+    @Test
+    void aMatchingPairPassesAndSignsATokenItsDecoderAccepts() throws Exception {
+        KeyPair pair = rsa();
+        SecurityConfig.requireUsableKeyPair(
+                (java.security.interfaces.RSAPrivateKey) pair.getPrivate(),
+                (java.security.interfaces.RSAPublicKey) pair.getPublic());
+
+        SecurityConfig config = new SecurityConfig(
+                "admin",
+                "pass",
+                new RsaKeyProperties(b64(pair.getPrivate()), b64(pair.getPublic()), true),
+                new JwtProperties("taskflow", "taskflow-api", 3600),
+                new CookieProperties(false));
+        TokenProvider tokens = new TokenProvider(
+                config.jwtEncoder(config.jwkSource()), new JwtProperties("taskflow", "taskflow-api", 3600));
+        String token = tokens.generateToken(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        "admin",
+                        "n/a",
+                        java.util.List.of(
+                                new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN"))));
+
+        AccountTokenCheck anyAccount = mock(AccountTokenCheck.class);
+        RefreshSessionService anySession = mock(RefreshSessionService.class);
+        when(anyAccount.validate(any()))
+                .thenReturn(org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.success());
+        when(anySession.validate(any()))
+                .thenReturn(org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.success());
+        assertEquals(
+                "admin",
+                config.jwtDecoder(new TokenRevocationList(), anyAccount, anySession)
+                        .decode(token)
+                        .getSubject());
+    }
+
+    @Test
+    void aPrivateKeyThatDoesNotMatchItsOwnModulusFailsTheSignatureProbe() throws Exception {
+        // Same modulus, wrong private exponent: the modulus comparison passes, the probe does not.
+        KeyPair pair = rsa();
+        java.security.interfaces.RSAPrivateKey real = (java.security.interfaces.RSAPrivateKey) pair.getPrivate();
+        java.security.interfaces.RSAPrivateKey broken =
+                (java.security.interfaces.RSAPrivateKey) java.security.KeyFactory.getInstance("RSA")
+                        .generatePrivate(new java.security.spec.RSAPrivateKeySpec(
+                                real.getModulus(), real.getPrivateExponent().add(java.math.BigInteger.TWO)));
+
+        assertThrows(
+                java.security.GeneralSecurityException.class,
+                () -> SecurityConfig.requireUsableKeyPair(
+                        broken, (java.security.interfaces.RSAPublicKey) pair.getPublic()));
     }
 
     @Test
@@ -91,7 +263,10 @@ class SecurityConfigTest {
         rsaKeyField.setAccessible(true);
         rsaKeyField.set(config, null);
 
-        assertThrows(IllegalStateException.class, () -> config.jwtDecoder(new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
+        assertThrows(
+                IllegalStateException.class,
+                () -> config.jwtDecoder(
+                        new TokenRevocationList(), mock(AccountTokenCheck.class), mock(RefreshSessionService.class)));
     }
 
     @Test
@@ -130,8 +305,8 @@ class SecurityConfigTest {
         // A cookie a native HTTP stack picked up (or an analytics cookie) authenticates nothing.
         MockHttpServletRequest withOther = new MockHttpServletRequest("POST", "/api/v1/appointments/5");
         withOther.addHeader("Authorization", "Bearer native-token");
-        withOther.setCookies(new jakarta.servlet.http.Cookie("XSRF-TOKEN", "x"),
-                new jakarta.servlet.http.Cookie("theme", "dark"));
+        withOther.setCookies(
+                new jakarta.servlet.http.Cookie("XSRF-TOKEN", "x"), new jakarta.servlet.http.Cookie("theme", "dark"));
         assertTrue(config.bearerOnlyRequestMatcher().matches(withOther));
     }
 
@@ -238,6 +413,7 @@ class SecurityConfigTest {
         }
         assertTrue(new org.springframework.boot.context.properties.bind.Binder(
                         new org.springframework.boot.context.properties.source.MapConfigurationPropertySource())
-                .bindOrCreate("app.cookie", CookieProperties.class).secure());
+                .bindOrCreate("app.cookie", CookieProperties.class)
+                .secure());
     }
 }

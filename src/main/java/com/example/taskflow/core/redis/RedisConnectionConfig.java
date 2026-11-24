@@ -3,15 +3,14 @@ package com.example.taskflow.core.redis;
 import io.lettuce.core.ClientOptions;
 import io.lettuce.core.SocketOptions;
 import io.lettuce.core.resource.ExtendedKeepAliveSupport;
+import java.time.Clock;
+import java.time.Duration;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.data.redis.autoconfigure.LettuceClientOptionsBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
-
-import java.time.Clock;
-import java.time.Duration;
 
 /**
  * Dead-connection detection for the Lettuce connections (all profiles; nothing here connects).
@@ -58,12 +57,16 @@ class RedisConnectionConfig {
 
     /** Resets the factory's shared connection; resolved lazily, so startup never touches Redis. */
     @Bean
-    RedisConnectionRecovery redisConnectionRecovery(ObjectProvider<RedisConnectionFactory> connectionFactory,
-                                                    Clock clock) {
-        return new RedisConnectionRecovery(() -> {
-            if (connectionFactory.getIfAvailable() instanceof LettuceConnectionFactory lettuce) {
-                lettuce.resetConnection();
-            }
-        }, RedisConnectionRecovery.DEFAULT_THRESHOLD, RedisBackoff.DEFAULT_BACKOFF_MILLIS, clock::millis);
+    RedisConnectionRecovery redisConnectionRecovery(
+            ObjectProvider<RedisConnectionFactory> connectionFactory, Clock clock) {
+        return new RedisConnectionRecovery(
+                () -> {
+                    if (connectionFactory.getIfAvailable() instanceof LettuceConnectionFactory lettuce) {
+                        lettuce.resetConnection();
+                    }
+                },
+                RedisConnectionRecovery.DEFAULT_THRESHOLD,
+                RedisBackoff.DEFAULT_BACKOFF_MILLIS,
+                clock::millis);
     }
 }

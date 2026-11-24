@@ -28,7 +28,7 @@ import { ReschedulePicker, type RescheduleSelection } from '../../core/appointme
 import { shareCalendarFile } from '../../core/calendar/shareCalendarFile';
 import { useAuthStore } from '../../core/auth/useAuthStore';
 import { useShallow } from 'zustand/react/shallow';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 import { isCustomerCancellable, type ShopRules } from '@taskflow/domain';
 import type { AppointmentItem } from '../../types/api';
 import { useShopInfo } from '../../core/shop/useShopInfo';
@@ -395,9 +395,9 @@ const styles = StyleSheet.create({
   successBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(52, 211, 153, 0.12)',
+    backgroundColor: withAlpha(semantic.success, 0.12),
     borderWidth: 1,
-    borderColor: 'rgba(52, 211, 153, 0.3)',
+    borderColor: withAlpha(semantic.success, 0.3),
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,

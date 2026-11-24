@@ -1,15 +1,15 @@
 package com.example.taskflow.appointment.stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /** {@code app.sse.*} keeps its keys and defaults. */
 class SsePropertiesBindingTest {
 
-    private final ApplicationContextRunner runner = new ApplicationContextRunner()
-            .withUserConfiguration(SseConfig.class);
+    private final ApplicationContextRunner runner =
+            new ApplicationContextRunner().withUserConfiguration(SseConfig.class);
 
     @Test
     void defaultsAreTheFormerValueDefaults() {

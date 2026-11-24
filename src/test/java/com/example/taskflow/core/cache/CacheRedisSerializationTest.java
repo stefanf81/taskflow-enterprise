@@ -1,23 +1,22 @@
 package com.example.taskflow.core.cache;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+
 import com.example.taskflow.appointment.BarberResponse;
 import com.example.taskflow.appointment.PublicBarberResponse;
 import com.example.taskflow.catalog.ServiceItemResponse;
-import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.cache.RedisCacheConfiguration;
-import org.springframework.data.redis.serializer.RedisSerializer;
-
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.cache.RedisCacheConfiguration;
+import org.springframework.data.redis.serializer.RedisSerializer;
 
 /**
  * Round-trips the cached DTOs through the typed serializers every feature cache uses
@@ -41,8 +40,8 @@ class CacheRedisSerializationTest {
     @Test
     void typedListCacheRoundTripsWithoutTypeIds() {
         RedisCacheConfiguration services = CacheConfig.listCache(Duration.ofMinutes(10), ServiceItemResponse.class);
-        List<ServiceItemResponse> original = List.of(
-                new ServiceItemResponse(1L, "Cut", new BigDecimal("25.00"), 30, "hair", "desc"));
+        List<ServiceItemResponse> original =
+                List.of(new ServiceItemResponse(1L, "Cut", new BigDecimal("25.00"), 30, "hair", "desc"));
 
         byte[] bytes = write(services, original);
         String json = new String(bytes, StandardCharsets.UTF_8);
@@ -70,10 +69,12 @@ class CacheRedisSerializationTest {
         RedisCacheConfiguration barbers = CacheConfig.listCache(Duration.ofMinutes(10), BarberResponse.class);
         RedisCacheConfiguration slots = CacheConfig.listCache(Duration.ofMinutes(2), String.class);
 
-        assertNull(read(services, former.serialize(List.of(
-                new ServiceItemResponse(1L, "Cut", BigDecimal.TEN, 30, "hair", "d")))));
-        assertNull(read(barbers, former.serialize(new ArrayList<>(List.of(
-                new BarberResponse(1L, "A", "a@example.com", "555"))))));
+        assertNull(read(
+                services,
+                former.serialize(List.of(new ServiceItemResponse(1L, "Cut", BigDecimal.TEN, 30, "hair", "d")))));
+        assertNull(read(
+                barbers,
+                former.serialize(new ArrayList<>(List.of(new BarberResponse(1L, "A", "a@example.com", "555"))))));
         assertNull(read(slots, former.serialize(List.of("09:00", "10:00"))));
         assertNull(read(slots, former.serialize(List.of())));
         assertNull(read(slots, "not json".getBytes(StandardCharsets.UTF_8)));
@@ -92,8 +93,7 @@ class CacheRedisSerializationTest {
         RedisSerializer<Object> s = CacheConfig.cacheValueSerializer();
         List<BarberResponse> original = List.of(
                 new BarberResponse(1L, "Barber A", "a@example.com", "555-1"),
-                new BarberResponse(2L, "Barber B", "b@example.com", "555-2")
-        );
+                new BarberResponse(2L, "Barber B", "b@example.com", "555-2"));
         byte[] bytes = s.serialize(original);
         assertNotNull(bytes);
         Object deserialized = s.deserialize(bytes);
@@ -121,9 +121,8 @@ class CacheRedisSerializationTest {
     @Test
     void serviceItemResponseList_roundTrip() {
         RedisSerializer<Object> s = CacheConfig.cacheValueSerializer();
-        List<ServiceItemResponse> original = List.of(
-                new ServiceItemResponse(1L, "Cut", BigDecimal.valueOf(25.00), 30, "hair", "desc")
-        );
+        List<ServiceItemResponse> original =
+                List.of(new ServiceItemResponse(1L, "Cut", BigDecimal.valueOf(25.00), 30, "hair", "desc"));
         byte[] bytes = s.serialize(original);
         assertNotNull(bytes);
         Object deserialized = s.deserialize(bytes);

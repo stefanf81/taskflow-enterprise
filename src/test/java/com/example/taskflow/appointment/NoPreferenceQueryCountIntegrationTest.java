@@ -1,25 +1,24 @@
 package com.example.taskflow.appointment;
-import com.example.taskflow.appointment.internal.Appointment;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.PersistenceContext;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.LocalTime;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * TODO 2.5: "No Preference" resolution runs inside the booking transaction and used to issue
@@ -34,13 +33,26 @@ class NoPreferenceQueryCountIntegrationTest {
     /** A Monday far from any seed booking. */
     private static final LocalDate MONDAY = LocalDate.of(2031, 3, 10);
 
-    @Autowired private BusySlotsService busySlotsService;
-    @Autowired private org.springframework.cache.CacheManager cacheManager;
-    @Autowired private BarberRepository barberRepository;
-    @Autowired private BarberScheduleRepository barberScheduleRepository;
-    @Autowired private AppointmentRepository appointmentRepository;
-    @Autowired private EntityManagerFactory entityManagerFactory;
-    @PersistenceContext private EntityManager entityManager;
+    @Autowired
+    private BusySlotsService busySlotsService;
+
+    @Autowired
+    private org.springframework.cache.CacheManager cacheManager;
+
+    @Autowired
+    private BarberRepository barberRepository;
+
+    @Autowired
+    private BarberScheduleRepository barberScheduleRepository;
+
+    @Autowired
+    private AppointmentRepository appointmentRepository;
+
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     private int barberSequence;
 
@@ -52,15 +64,15 @@ class NoPreferenceQueryCountIntegrationTest {
         addWorkingBookedBarbers(2);
         int few = (int) barberRepository.count();
 
-        long fewResolve = statementsDuring(() ->
-                assertTrue(busySlotsService.findFirstAvailableBarber(MONDAY, "10:00", 30).isEmpty()));
+        long fewResolve = statementsDuring(() -> assertTrue(
+                busySlotsService.findFirstAvailableBarber(MONDAY, "10:00", 30).isEmpty()));
         long fewLongSlots = statementsDuring(this::computeLongSlots);
 
         addWorkingBookedBarbers(10);
         assertEquals(few + 10, barberRepository.count());
 
-        long manyResolve = statementsDuring(() ->
-                assertTrue(busySlotsService.findFirstAvailableBarber(MONDAY, "10:00", 30).isEmpty()));
+        long manyResolve = statementsDuring(() -> assertTrue(
+                busySlotsService.findFirstAvailableBarber(MONDAY, "10:00", 30).isEmpty()));
         long manyLongSlots = statementsDuring(this::computeLongSlots);
 
         assertEquals(fewResolve, manyResolve, "statement count must not grow with the number of barbers");
@@ -73,8 +85,12 @@ class NoPreferenceQueryCountIntegrationTest {
         Barber firstFree = barberRepository.findAllByOrderByIdAsc().get(0);
         appointmentRepository.deleteAll(appointmentRepository.findActiveForBarberOnDate(firstFree.getName(), MONDAY));
         entityManager.flush();
-        assertEquals(firstFree.getId(),
-                busySlotsService.findFirstAvailableBarber(MONDAY, "10:00", 30).orElseThrow().getId());
+        assertEquals(
+                firstFree.getId(),
+                busySlotsService
+                        .findFirstAvailableBarber(MONDAY, "10:00", 30)
+                        .orElseThrow()
+                        .getId());
     }
 
     /**
@@ -90,7 +106,8 @@ class NoPreferenceQueryCountIntegrationTest {
     private long statementsDuring(Runnable action) {
         entityManager.flush();
         entityManager.clear();
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        Statistics statistics =
+                entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
         boolean wasEnabled = statistics.isStatisticsEnabled();
         statistics.setStatisticsEnabled(true);
         statistics.clear();
@@ -104,8 +121,8 @@ class NoPreferenceQueryCountIntegrationTest {
 
     private void addWorkingBookedBarbers(int count) {
         for (int i = 0; i < count; i++) {
-            Barber barber = barberRepository.save(new Barber("Query Count Barber " + (++barberSequence),
-                    "qc" + barberSequence + "@taskflow.test", "555-0199"));
+            Barber barber = barberRepository.save(new Barber(
+                    "Query Count Barber " + (++barberSequence), "qc" + barberSequence + "@taskflow.test", "555-0199"));
             BarberSchedule schedule = new BarberSchedule();
             schedule.setBarber(barber);
             schedule.setDayOfWeek(MONDAY.getDayOfWeek().getValue());
@@ -117,8 +134,14 @@ class NoPreferenceQueryCountIntegrationTest {
     }
 
     private void bookAtTen(Barber barber) {
-        Appointment appointment = new Appointment("Busy", "busy-" + barber.getId() + "@taskflow.test", "555",
-                barber.getName(), MONDAY, "10:00", "Classic Haircut");
+        Appointment appointment = new Appointment(
+                "Busy",
+                "busy-" + barber.getId() + "@taskflow.test",
+                "555",
+                barber.getName(),
+                MONDAY,
+                "10:00",
+                "Classic Haircut");
         appointment.setBarber(barber);
         appointmentRepository.save(appointment);
     }

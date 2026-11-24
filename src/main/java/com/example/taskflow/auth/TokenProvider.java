@@ -1,5 +1,9 @@
 package com.example.taskflow.auth;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.util.function.ToIntFunction;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -7,11 +11,6 @@ import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Component;
-
-import java.time.Clock;
-import java.time.Instant;
-import java.util.function.ToIntFunction;
-import java.util.stream.Collectors;
 
 @Component
 class TokenProvider {
@@ -61,8 +60,8 @@ class TokenProvider {
         return generateToken(authentication, null, tokenVersion.applyAsInt(authentication.getName()));
     }
 
-    String generateToken(Authentication authentication, @org.jspecify.annotations.Nullable String sessionId,
-                         int version) {
+    String generateToken(
+            Authentication authentication, @org.jspecify.annotations.Nullable String sessionId, int version) {
         Instant now = Instant.now(clock);
 
         String scope = authentication.getAuthorities().stream()
@@ -80,7 +79,9 @@ class TokenProvider {
                 .claim("scope", scope)
                 // Raising the account's version revokes this token with all others of the account.
                 .claim(AccountTokenCheck.VERSION_CLAIM, version)
-                .claims(values -> { if (sessionId != null) values.put(RefreshSessionService.SESSION_CLAIM, sessionId); })
+                .claims(values -> {
+                    if (sessionId != null) values.put(RefreshSessionService.SESSION_CLAIM, sessionId);
+                })
                 .build();
 
         return this.encoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();

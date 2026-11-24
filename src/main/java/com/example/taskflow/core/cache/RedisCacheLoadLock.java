@@ -1,14 +1,13 @@
 package com.example.taskflow.core.cache;
+
 import com.example.taskflow.core.SharedStateStore;
 import com.example.taskflow.core.redis.RedisBackoff;
-
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
-
 import java.time.Duration;
 import java.util.Collections;
 import java.util.UUID;
 import java.util.function.Supplier;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 
 /**
  * Cross-replica lease for {@link SingleFlightCacheManager}: {@code SET lock:<cache>:<key> <token> NX PX
@@ -30,8 +29,8 @@ final class RedisCacheLoadLock implements SingleFlightCacheManager.DistributedLo
 
     static {
         // KEYS[1]=lock:<cache>:<key>  ARGV[1]=token of the releasing holder
-        String lua = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end; "
-                + "return 0";
+        String lua =
+                "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end; " + "return 0";
         RELEASE_SCRIPT = new DefaultRedisScript<>();
         RELEASE_SCRIPT.setScriptText(lua);
         RELEASE_SCRIPT.setResultType(Long.class);

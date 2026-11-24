@@ -46,10 +46,10 @@ export const AddBarberCard: React.FC<AddBarberCardProps> = ({ onCreated, onMessa
   return (
     <Card style={styles.card}>
       <Text style={styles.title}>Add Barber</Text>
-      <Input label="Name *" placeholder="Jordan" value={name} onChangeText={setName} />
+      <Input label="Name *" placeholder="Jordan" autoComplete="off" value={name} onChangeText={setName} />
       <Input
         label="Email"
-        placeholder="jordan@example.com"
+        placeholder="jordan@example.com" autoComplete="off"
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
@@ -57,7 +57,7 @@ export const AddBarberCard: React.FC<AddBarberCardProps> = ({ onCreated, onMessa
       />
       <Input
         label="Phone"
-        placeholder="555-0100"
+        placeholder="555-0100" autoComplete="off"
         value={phone}
         onChangeText={setPhone}
         keyboardType="phone-pad"

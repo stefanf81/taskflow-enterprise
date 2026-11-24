@@ -42,18 +42,18 @@ describe('AdminSchedulesTab', () => {
     select(2);
     expect(card().classList).toContain('bg-zinc-900');
     expect(card().classList).toContain('border-white/5');
-    expect(card().classList).not.toContain('bg-gold/20');
+    expect(card().classList).not.toContain('bg-accent/20');
 
     select(1);
-    expect(card().classList).toContain('bg-gold/20');
-    expect(card().classList).toContain('border-gold');
+    expect(card().classList).toContain('bg-accent/20');
+    expect(card().classList).toContain('border-accent');
     expect(card().classList).not.toContain('bg-zinc-900');
     // The static classes survive the [class] binding.
     expect(card().classList).toContain('p-4');
   });
 
-  it('requires both dates before submitting time off', () => {
-    component.addTimeOff();
+  it('requires both dates before submitting time off', async () => {
+    await component.addTimeOff();
     expect(component.timeOffActionError()).toBe('Start and end dates are required.');
     httpMock.expectNone((r) => r.url.includes('/time-off') && r.method === 'POST');
   });

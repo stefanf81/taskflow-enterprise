@@ -27,6 +27,22 @@ export const useAppointments = (
   });
 };
 
+/** Every booking of a day or week, for the owner's calendar. */
+export const useAppointmentsInRange = (
+  from: string,
+  to: string,
+  { subscribed = true }: { subscribed?: boolean } = {},
+) => {
+  return useQuery({
+    queryKey: queryKeys.calendarAppointments.range(from, to),
+    queryFn: ({ signal }) => appointmentsApi.getAppointmentsInRange(from, to, { signal }),
+    staleTime: 10000,
+    // No placeholderData: another day's bookings must never be shown as this day's.
+    refetchOnWindowFocus: true,
+    subscribed,
+  });
+};
+
 /**
  * `enabled: false` keeps the query idle while its caller does not show the slots yet (the booking
  * wizard before its date/time step), so a selection change there does not fire a request.

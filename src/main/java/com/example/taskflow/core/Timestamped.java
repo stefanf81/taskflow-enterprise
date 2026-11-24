@@ -13,6 +13,5 @@ public interface Timestamped {
     void markCreated(LocalDateTime now);
 
     /** Before every {@code UPDATE}; an entity without an update timestamp ignores it. */
-    default void markUpdated(LocalDateTime now) {
-    }
+    default void markUpdated(LocalDateTime now) {}
 }

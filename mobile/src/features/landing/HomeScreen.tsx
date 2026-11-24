@@ -9,14 +9,14 @@ import { Card } from '../../components/common/Card';
 import { useAuthStore } from '../../core/auth/useAuthStore';
 import { useShallow } from 'zustand/react/shallow';
 import { RootStackParamList, GuestTabParamList } from '../../types/navigation';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 import { AnnouncementBar } from './AnnouncementBar';
 import { HomeHeader } from './HomeHeader';
 import { HeroSection } from './HeroSection';
 import { HomeSection } from './HomeSection';
 import { LookbookGallery } from './LookbookGallery';
 import { GroomingMenu } from './GroomingMenu';
-import { ArtisanalProducts, ClientTestimonial, OperatingHours } from './ShopInfo';
+import { ArtisanalProducts, ClientRatings, OperatingHours } from './ShopInfo';
 import { MasterStylists } from './MasterStylists';
 import { FaqSection } from './FaqSection';
 
@@ -45,7 +45,7 @@ export const HomeScreen: React.FC = () => {
       <ScrollView testID="home-scroll-view" contentContainerStyle={styles.scrollContent}>
         <AnnouncementBar active={isFocused} />
 
-        <HomeHeader onOwnerPortal={isAuthenticated ? undefined : signIn} />
+        <HomeHeader onSignIn={isAuthenticated ? undefined : signIn} />
 
         <HeroSection
           isAuthenticated={isAuthenticated}
@@ -65,12 +65,12 @@ export const HomeScreen: React.FC = () => {
           />
         </HomeSection>
 
-        {/* Web's left column: grooming menu, hours, products, testimonial */}
+        {/* Web's left column: grooming menu, hours, products, client ratings */}
         <Card style={styles.menuCard}>
           <GroomingMenu />
           <OperatingHours />
           <ArtisanalProducts />
-          <ClientTestimonial />
+          <ClientRatings />
         </Card>
 
         <MasterStylists onSelectBarber={(name) => book({ preselectedBarber: name })} />
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     marginTop: 32,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: withAlpha(semantic['fg-strong'], 0.1),
     alignItems: 'center',
   },
   footerText: {

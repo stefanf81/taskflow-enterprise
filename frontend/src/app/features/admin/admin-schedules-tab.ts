@@ -4,6 +4,12 @@ import { AdminWeeklySchedule } from './admin-weekly-schedule';
 import { AppointmentStore } from './appointment.store';
 import { BarberStore } from './barber.store';
 import { formatLocalDate } from '../../core/time-utils';
+import { banIcon } from '../../core/ui/icons/ban';
+import { calendarIcon } from '../../core/ui/icons/calendar';
+import { Icon } from '../../core/ui/icon';
+import { Button } from '../../core/ui/button';
+import { Alert } from '../../core/ui/alert';
+import { EmptyState } from '../../core/ui/empty-state';
 
 interface TimeOffFormModel {
   startDate: string;
@@ -14,10 +20,14 @@ interface TimeOffFormModel {
 /** Owner dashboard · barbers, their weekly hours and time off (Signal Forms). */
 @Component({
   selector: 'app-admin-schedules-tab',
-  imports: [FormField, AdminWeeklySchedule],
+  imports: [FormField, AdminWeeklySchedule, Icon, Button, Alert, EmptyState],
   templateUrl: './admin-schedules-tab.html',
 })
 export class AdminSchedulesTab {
+  protected readonly icons = {
+    ban: banIcon,
+    calendar: calendarIcon,
+  };
   private readonly barberStore = inject(BarberStore);
   private readonly appointmentStore = inject(AppointmentStore);
 

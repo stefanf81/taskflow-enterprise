@@ -1,4 +1,9 @@
 import { Component, output } from '@angular/core';
+import { crownIcon } from '../../../core/ui/icons/crown';
+import { scissorsIcon } from '../../../core/ui/icons/scissors';
+import { sparklesIcon } from '../../../core/ui/icons/sparkles';
+import { windIcon } from '../../../core/ui/icons/wind';
+import { Icon } from '../../../core/ui/icon';
 
 /**
  * Standalone Lookbook Showcase component.
@@ -9,32 +14,36 @@ import { Component, output } from '@angular/core';
  */
 @Component({
   selector: 'app-lookbook',
-  imports: [],
+  imports: [Icon],
   template: `
-    <section class="card bg-zinc-950 border border-white/10 rounded-3xl p-8 mb-16">
+    <section class="card p-8 mb-16">
       <h2 class="text-center text-lg font-extrabold text-zinc-100 uppercase tracking-wider mb-2">
-        ✂️ Signature Lookbook
+        <app-icon [icon]="icons.scissors" /> Signature Lookbook
       </h2>
       <p class="text-center text-xs text-zinc-500 font-light max-w-md mx-auto mb-8">
         Browse our trending style collections. Click any look below to automatically load the
         treatment package directly into your guided assistant wizard!
       </p>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <!-- A snap-scrolling strip on a phone (four stacked cards pushed the booking wizard ~900 px
+           further down), a grid from sm. -->
+      <div
+        class="-mx-8 px-8 pb-2 flex gap-4 overflow-x-auto snap-x snap-mandatory sm:mx-0 sm:px-0 sm:pb-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:gap-6 sm:overflow-visible"
+      >
         <!-- Style 1 -->
         <button
           type="button"
           (click)="selectStyle('Classic Haircut', 'hair')"
-          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-gold/10 hover:border-gold/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
+          class="group shrink-0 w-[78%] snap-center sm:w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
-          <span class="text-3xl block mb-3">👦🏻</span>
+          <span class="text-3xl block mb-3"><app-icon [icon]="icons.scissors" /></span>
           <span
-            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-gold transition-colors"
+            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-accent transition-colors"
           >
             Executive Pompadour
           </span>
           <span
-            class="inline-block bg-white/10 text-zinc-400 text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
+            class="inline-block bg-white/10 text-zinc-400 text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
             >Classic Crop</span
           >
           <span class="block text-xs text-zinc-500 font-light leading-relaxed">
@@ -46,16 +55,16 @@ import { Component, output } from '@angular/core';
         <button
           type="button"
           (click)="selectStyle('Modern Skin Fade', 'hair')"
-          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-gold/10 hover:border-gold/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
+          class="group shrink-0 w-[78%] snap-center sm:w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
-          <span class="text-3xl block mb-3">👱🏽‍♂️</span>
+          <span class="text-3xl block mb-3"><app-icon [icon]="icons.wind" /></span>
           <span
-            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-gold transition-colors"
+            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-accent transition-colors"
           >
             Midnight Skin Fade
           </span>
           <span
-            class="inline-block bg-white/10 text-zinc-400 text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
+            class="inline-block bg-white/10 text-zinc-400 text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
             >Textured Crop</span
           >
           <span class="block text-xs text-zinc-500 font-light leading-relaxed">
@@ -67,16 +76,16 @@ import { Component, output } from '@angular/core';
         <button
           type="button"
           (click)="selectStyle('Beard Trim & Shave', 'beard')"
-          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-gold/10 hover:border-gold/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
+          class="group shrink-0 w-[78%] snap-center sm:w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
-          <span class="text-3xl block mb-3">🧔🏾</span>
+          <span class="text-3xl block mb-3"><app-icon [icon]="icons.sparkles" /></span>
           <span
-            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-gold transition-colors"
+            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-accent transition-colors"
           >
             Bespoke Beard Sculpt
           </span>
           <span
-            class="inline-block bg-white/10 text-zinc-400 text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
+            class="inline-block bg-white/10 text-zinc-400 text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
             >Beard Design</span
           >
           <span class="block text-xs text-zinc-500 font-light leading-relaxed">
@@ -88,16 +97,16 @@ import { Component, output } from '@angular/core';
         <button
           type="button"
           (click)="selectStyle('The Executive Package', 'combo')"
-          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-gold/10 hover:border-gold/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
+          class="group shrink-0 w-[78%] snap-center sm:w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
-          <span class="text-3xl block mb-3">🤵🏼</span>
+          <span class="text-3xl block mb-3"><app-icon [icon]="icons.crown" /></span>
           <span
-            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-gold transition-colors"
+            class="block font-extrabold text-sm text-zinc-100 mb-1 group-hover:text-accent transition-colors"
           >
             Royal Executive
           </span>
           <span
-            class="inline-block bg-white/10 text-zinc-400 text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
+            class="inline-block bg-white/10 text-zinc-400 text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-3"
             >Combo Elite</span
           >
           <span class="block text-xs text-zinc-500 font-light leading-relaxed">
@@ -109,6 +118,12 @@ import { Component, output } from '@angular/core';
   `,
 })
 export class LookbookComponent {
+  protected readonly icons = {
+    crown: crownIcon,
+    scissors: scissorsIcon,
+    sparkles: sparklesIcon,
+    wind: windIcon,
+  };
   /** Emitted when a user clicks a lookbook style card. */
   readonly styleSelected = output<{ serviceName: string; category: string }>();
 

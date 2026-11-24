@@ -1,16 +1,11 @@
 package com.example.taskflow.appointment;
+
 import com.example.taskflow.appointment.internal.Appointment;
-import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
-import com.example.taskflow.appointment.internal.BarberScheduleRepository;
-import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
-
+import com.example.taskflow.appointment.internal.BarberRepository;
+import com.example.taskflow.appointment.internal.BarberScheduleRepository;
+import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
 import com.example.taskflow.core.LogSanitizer;
-import org.jspecify.annotations.Nullable;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
@@ -21,6 +16,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Barber availability rules and busy-slot calculation.
@@ -46,8 +45,7 @@ public class BusySlotsService {
      * Synchronized with shared frontend/mobile tokens (DEFAULT_TIME_SLOTS). A booking must
      * start on one of these.
      */
-    public static final List<String> ALL_SLOTS =
-            List.of("09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00");
+    public static final List<String> ALL_SLOTS = List.of("09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00");
 
     /**
      * Length assumed for a service without a positive duration, and for legacy appointments that
@@ -61,18 +59,18 @@ public class BusySlotsService {
      * @param schedule the barber's working window on that weekday, or {@code null} when not scheduled
      * @param active   the barber's PENDING/APPROVED appointments on that date
      */
-    record BarberDay(Barber barber, boolean onTimeOff, BarberSchedule schedule, List<Appointment> active) {
-    }
+    record BarberDay(Barber barber, boolean onTimeOff, BarberSchedule schedule, List<Appointment> active) {}
 
     private final BarberRepository barberRepository;
     private final BarberScheduleRepository barberScheduleRepository;
     private final BarberTimeOffRepository barberTimeOffRepository;
     private final AppointmentRepository appointmentRepository;
 
-    public BusySlotsService(BarberRepository barberRepository,
-                            BarberScheduleRepository barberScheduleRepository,
-                            BarberTimeOffRepository barberTimeOffRepository,
-                            AppointmentRepository appointmentRepository) {
+    public BusySlotsService(
+            BarberRepository barberRepository,
+            BarberScheduleRepository barberScheduleRepository,
+            BarberTimeOffRepository barberTimeOffRepository,
+            AppointmentRepository appointmentRepository) {
         this.barberRepository = barberRepository;
         this.barberScheduleRepository = barberScheduleRepository;
         this.barberTimeOffRepository = barberTimeOffRepository;
@@ -99,8 +97,7 @@ public class BusySlotsService {
             return computeNoPreferenceBusySlots(date);
         }
 
-        Barber barber = barberRepository.findByName(barberName)
-                .orElseThrow(() -> unknownBarber(barberName));
+        Barber barber = barberRepository.findByName(barberName).orElseThrow(() -> unknownBarber(barberName));
         BarberDay day = loadBarberDay(barber, date);
 
         // Time off or not scheduled that weekday: every slot is busy (a legitimate, cacheable
@@ -117,10 +114,9 @@ public class BusySlotsService {
      *                             re-approved), or {@code null}
      * @return the reason the booking cannot be placed, or empty when it can
      */
-    public Optional<String> findConflict(Barber barber, LocalDate date, LocalTime start,
-                                         int durationMinutes, Long excludeAppointmentId) {
-        return evaluate(loadBarberDay(barber, date), start, durationMinutes,
-                excludeAppointmentId);
+    public Optional<String> findConflict(
+            Barber barber, LocalDate date, LocalTime start, int durationMinutes, Long excludeAppointmentId) {
+        return evaluate(loadBarberDay(barber, date), start, durationMinutes, excludeAppointmentId);
     }
 
     /**
@@ -129,11 +125,11 @@ public class BusySlotsService {
      * interval). Not the create-time answer, which counts the booking as busy and takes the length
      * from the current catalog. Uncached: the answer belongs to one booking.
      */
-    public List<String> busySlotsForMove(Barber barber, LocalDate date, int durationMinutes,
-                                         Long appointmentId) {
+    public List<String> busySlotsForMove(Barber barber, LocalDate date, int durationMinutes, Long appointmentId) {
         BarberDay day = loadBarberDay(barber, date);
         return ALL_SLOTS.stream()
-                .filter(slot -> evaluate(day, LocalTime.parse(slot), durationMinutes, appointmentId).isPresent())
+                .filter(slot -> evaluate(day, LocalTime.parse(slot), durationMinutes, appointmentId)
+                        .isPresent())
                 .toList();
     }
 
@@ -142,8 +138,7 @@ public class BusySlotsService {
      * service length vs. closing time, then overlap with the barber's active appointments (each with
      * its own stored end time). Checked in that order, so the reason reported is the first that applies.
      */
-    static Optional<String> evaluate(BarberDay day, LocalTime start, int durationMinutes,
-                                     Long excludeAppointmentId) {
+    static Optional<String> evaluate(BarberDay day, LocalTime start, int durationMinutes, Long excludeAppointmentId) {
         if (day.onTimeOff()) {
             return Optional.of("The selected barber is unavailable on this date (time off). "
                     + "Please choose another date or barber.");
@@ -154,8 +149,8 @@ public class BusySlotsService {
             return Optional.of("The selected barber is not scheduled to work on the requested date.");
         }
         if (start.isBefore(schedule.getStartTime()) || !start.isBefore(schedule.getEndTime())) {
-            return Optional.of("Booking time must be within the barber's working hours ("
-                    + schedule.getStartTime() + "–" + schedule.getEndTime() + ").");
+            return Optional.of("Booking time must be within the barber's working hours (" + schedule.getStartTime()
+                    + "–" + schedule.getEndTime() + ").");
         }
         // Compare in minutes of the day (widened to long so extreme durations cannot overflow int).
         int startMinute = minuteOf(start);
@@ -204,8 +199,8 @@ public class BusySlotsService {
      * {@link BarberRepository#findAllForBooking()}) so booking transactions do not query
      * {@code barbers} a second time.
      */
-    Optional<Barber> findFirstAvailableBarber(List<Barber> candidates, LocalDate date, String bookingTime,
-                                              int durationMinutes) {
+    Optional<Barber> findFirstAvailableBarber(
+            List<Barber> candidates, LocalDate date, String bookingTime, int durationMinutes) {
         LocalTime requested = parseSlot(bookingTime);
         if (candidates == null || candidates.isEmpty() || date == null || requested == null) {
             return Optional.empty();
@@ -225,8 +220,8 @@ public class BusySlotsService {
         }
     }
 
-    private Optional<Barber> findFirstAvailableBarber(List<Barber> candidates, LocalDate date, LocalTime requested,
-                                                      int durationMinutes) {
+    private Optional<Barber> findFirstAvailableBarber(
+            List<Barber> candidates, LocalDate date, LocalTime requested, int durationMinutes) {
         return loadBarberDays(candidates, date).stream()
                 .filter(day -> evaluate(day, requested, durationMinutes, null).isEmpty())
                 .map(BarberDay::barber)
@@ -266,9 +261,7 @@ public class BusySlotsService {
         }
 
         // Busy = all slots minus those where at least one barber is available
-        return ALL_SLOTS.stream()
-                .filter(slot -> !availableSlots.contains(slot))
-                .toList();
+        return ALL_SLOTS.stream().filter(slot -> !availableSlots.contains(slot)).toList();
     }
 
     /**
@@ -284,17 +277,17 @@ public class BusySlotsService {
      * removes the entry of every duration the catalog offers. Errors propagate and are never
      * cached, like the cached path.
      */
-    @Cacheable(value = "busySlots",
-            key = "#barberName + '-' + #bookingDate + '-' + #durationMinutes", sync = true)
+    @Cacheable(value = "busySlots", key = "#barberName + '-' + #bookingDate + '-' + #durationMinutes", sync = true)
     public List<String> getBusySlots(String barberName, String bookingDate, int durationMinutes) {
         LocalDate date = parseDate(bookingDate);
         List<BarberDay> days = AppointmentBookingService.NO_PREFERENCE_BARBER.equals(barberName)
                 ? loadBarberDays(barberRepository.findAllByOrderByIdAsc(), date)
-                : List.of(loadBarberDay(barberRepository.findByName(barberName)
-                        .orElseThrow(() -> unknownBarber(barberName)), date));
+                : List.of(loadBarberDay(
+                        barberRepository.findByName(barberName).orElseThrow(() -> unknownBarber(barberName)), date));
         return ALL_SLOTS.stream()
-                .filter(slot -> days.stream().allMatch(day ->
-                        evaluate(day, LocalTime.parse(slot), durationMinutes, null).isPresent()))
+                .filter(slot -> days.stream()
+                        .allMatch(day -> evaluate(day, LocalTime.parse(slot), durationMinutes, null)
+                                .isPresent()))
                 .toList();
     }
 
@@ -323,8 +316,11 @@ public class BusySlotsService {
         Set<Long> onTimeOff = new HashSet<>(barberTimeOffRepository.findBarberIdsOnTimeOff(ids, date));
 
         List<Long> working = ids.stream().filter(id -> !onTimeOff.contains(id)).toList();
-        Map<Long, BarberSchedule> schedules = working.isEmpty() ? Map.of()
-                : barberScheduleRepository.findForBarbersOnDay(working, date.getDayOfWeek().getValue()).stream()
+        Map<Long, BarberSchedule> schedules = working.isEmpty()
+                ? Map.of()
+                : barberScheduleRepository
+                        .findForBarbersOnDay(working, date.getDayOfWeek().getValue())
+                        .stream()
                         .collect(Collectors.toMap(s -> s.getBarber().getId(), Function.identity()));
 
         Map<String, List<Appointment>> activeByBarber;
@@ -339,7 +335,9 @@ public class BusySlotsService {
         }
 
         return barbers.stream()
-                .map(barber -> new BarberDay(barber, onTimeOff.contains(barber.getId()),
+                .map(barber -> new BarberDay(
+                        barber,
+                        onTimeOff.contains(barber.getId()),
                         schedules.get(barber.getId()),
                         activeByBarber.getOrDefault(barber.getName(), List.of())))
                 .toList();

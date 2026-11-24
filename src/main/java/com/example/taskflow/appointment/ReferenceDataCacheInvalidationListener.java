@@ -41,8 +41,10 @@ class ReferenceDataCacheInvalidationListener {
                     cache.invalidate();
                 }
             } catch (RuntimeException e) {
-                log.warn("{} cache invalidation failed; entries expire with their TTL: {}",
-                        name, LogSanitizer.safeMessage(e));
+                log.warn(
+                        "{} cache invalidation failed; entries expire with their TTL: {}",
+                        name,
+                        LogSanitizer.safeMessage(e));
             }
         }
     }

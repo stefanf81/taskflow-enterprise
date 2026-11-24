@@ -60,7 +60,7 @@ runs:
     - name: Restore node_modules
       id: nm-cache
       if: inputs.cache-node-modules == 'true'
-      uses: actions/cache/restore@v6
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           node_modules
@@ -75,7 +75,7 @@ runs:
     - name: Restore npm download cache
       id: npm-cache
       if: inputs.cache-node-modules == 'true' && steps.nm-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/restore@v6
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.npm
         key: npm-cache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
@@ -88,7 +88,8 @@ runs:
       if: steps.nm-cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: ${{ github.workspace }}
-      run: |
+      # Installs the exact version frontend/package.json declares (packageManager).
+      run: | # zizmor: ignore[adhoc-packages]
         set -euo pipefail
         declared="$(node -p "require('./frontend/package.json').packageManager")"
         want="${declared#npm@}"
@@ -160,7 +161,7 @@ runs:
 
     - name: Save node_modules
       if: inputs.cache-node-modules == 'true' && steps.nm-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v6
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           node_modules
@@ -170,7 +171,7 @@ runs:
 
     - name: Save npm download cache
       if: inputs.cache-node-modules == 'true' && steps.nm-cache.outputs.cache-hit != 'true' && steps.npm-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v6
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.npm
         key: ${{ steps.npm-cache.outputs.cache-primary-key }}

@@ -102,4 +102,23 @@ describe('ReviewStore', () => {
 
     expect(store.ratings().length).toBe(1);
   });
+
+  it('reports hasLoaded and a shop summary once the ratings have answered', async () => {
+    // beforeEach answered with an empty list: loaded, but nobody reviewed yet.
+    expect(store.hasLoaded()).toBe(true);
+    expect(store.shopSummary()).toBeNull();
+
+    store.loadRatings();
+    fixture.detectChanges();
+    httpMock
+      .expectOne((r) => r.url.includes('/api/v1/reviews/public/barber-ratings'))
+      .flush(mockRatings);
+    await fixture.whenStable();
+
+    expect(store.shopSummary()).toEqual({
+      averageRating: (4.8 * 12 + 4.9 * 15) / 27,
+      reviewCount: 27,
+      topBarber: mockRatings[1],
+    });
+  });
 });

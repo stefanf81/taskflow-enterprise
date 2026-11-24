@@ -1,22 +1,24 @@
 package com.example.taskflow.core.cache;
 
+import com.example.taskflow.core.SharedStateStore;
+import com.example.taskflow.core.redis.RedisBackoff;
+import com.example.taskflow.core.redis.RedisConnectionRecovery;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
-import com.example.taskflow.core.SharedStateStore;
-import com.example.taskflow.core.redis.RedisBackoff;
-import com.example.taskflow.core.redis.RedisConnectionRecovery;
+import java.time.Duration;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.config.BeanPostProcessor;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
+import org.springframework.boot.cache.autoconfigure.RedisCacheManagerBuilderCustomizer;
+import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
-import org.springframework.boot.cache.autoconfigure.RedisCacheManagerBuilderCustomizer;
-import org.springframework.beans.factory.support.StaticListableBeanFactory;
-import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.cache.BatchStrategies;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
@@ -31,9 +33,6 @@ import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import tools.jackson.databind.JavaType;
 import tools.jackson.databind.json.JsonMapper;
-
-import java.time.Duration;
-import java.util.List;
 
 /**
  * Redis-backed cache configuration.
@@ -65,8 +64,9 @@ public class CacheConfig {
 
     /** A cache whose values are always a {@code List<elementType>}. */
     public static RedisCacheConfiguration listCache(Duration ttl, Class<?> elementType) {
-        return cache(ttl, typedValueSerializer(
-                CACHE_MAPPER.getTypeFactory().constructCollectionType(List.class, elementType)));
+        return cache(
+                ttl,
+                typedValueSerializer(CACHE_MAPPER.getTypeFactory().constructCollectionType(List.class, elementType)));
     }
 
     /** TTL, String keys, no null values and the given value serializer. */
@@ -74,7 +74,8 @@ public class CacheConfig {
         return RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(ttl)
                 .disableCachingNullValues()
-                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
+                .serializeKeysWith(
+                        RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(valueSerializer));
     }
 
@@ -131,29 +132,28 @@ public class CacheConfig {
      * value.  All are JDK standard-library types or our own domain record with
      * no known deserialization gadgets, keeping this configuration secure.
      */
-    private static final PolymorphicTypeValidator CACHE_TYPE_VALIDATOR =
-            BasicPolymorphicTypeValidator.builder()
-                    .allowIfSubType("com.example.taskflow.appointment.AppointmentStats")
-                    .allowIfSubType("com.example.taskflow.appointment.BarberResponse")
-                    .allowIfSubType("com.example.taskflow.appointment.PublicBarberResponse")
-                    .allowIfSubType("com.example.taskflow.catalog.ServiceItemResponse")
-                    .allowIfSubType("java.util.ArrayList")
-                    // List types from JDK 21+ List.of() and other collection
-                    // factories. ImmutableCollections inner classes are
-                    // package-private so Class.isAssignableFrom may fail;
-                    // enumerating them explicitly guarantees matching.
-                    .allowIfSubType("java.util.ImmutableCollections$ListN")
-                    .allowIfSubType("java.util.ImmutableCollections$List12")
-                    .allowIfSubType("java.util.Collections$EmptyList")
-                    .allowIfSubType("java.util.Collections$SingletonList")
-                    .allowIfSubType("java.util.Arrays$ArrayList")
-                    // Value types that appear as elements of cached collections
-                    .allowIfSubType("java.lang.String")
-                    .allowIfSubType("java.lang.Long")
-                    .allowIfSubType("java.lang.Double")
-                    .allowIfSubType("java.lang.Integer")
-                    .allowIfSubType("java.math.BigDecimal")
-                    .build();
+    private static final PolymorphicTypeValidator CACHE_TYPE_VALIDATOR = BasicPolymorphicTypeValidator.builder()
+            .allowIfSubType("com.example.taskflow.appointment.AppointmentStats")
+            .allowIfSubType("com.example.taskflow.appointment.BarberResponse")
+            .allowIfSubType("com.example.taskflow.appointment.PublicBarberResponse")
+            .allowIfSubType("com.example.taskflow.catalog.ServiceItemResponse")
+            .allowIfSubType("java.util.ArrayList")
+            // List types from JDK 21+ List.of() and other collection
+            // factories. ImmutableCollections inner classes are
+            // package-private so Class.isAssignableFrom may fail;
+            // enumerating them explicitly guarantees matching.
+            .allowIfSubType("java.util.ImmutableCollections$ListN")
+            .allowIfSubType("java.util.ImmutableCollections$List12")
+            .allowIfSubType("java.util.Collections$EmptyList")
+            .allowIfSubType("java.util.Collections$SingletonList")
+            .allowIfSubType("java.util.Arrays$ArrayList")
+            // Value types that appear as elements of cached collections
+            .allowIfSubType("java.lang.String")
+            .allowIfSubType("java.lang.Long")
+            .allowIfSubType("java.lang.Double")
+            .allowIfSubType("java.lang.Integer")
+            .allowIfSubType("java.math.BigDecimal")
+            .build();
 
     private static ObjectMapper redisObjectMapper() {
         ObjectMapper mapper = new ObjectMapper();
@@ -163,10 +163,7 @@ public class CacheConfig {
         // always written; the explicit allow-list (PolymorphicTypeValidator)
         // still gates what types can be reconstructed.
         mapper.activateDefaultTyping(
-                CACHE_TYPE_VALIDATOR,
-                ObjectMapper.DefaultTyping.EVERYTHING,
-                JsonTypeInfo.As.PROPERTY
-        );
+                CACHE_TYPE_VALIDATOR, ObjectMapper.DefaultTyping.EVERYTHING, JsonTypeInfo.As.PROPERTY);
         return mapper;
     }
 
@@ -203,7 +200,8 @@ public class CacheConfig {
      */
     @Bean
     public static BeanPostProcessor singleFlightCacheManagerPostProcessor(
-            Environment environment, ObjectProvider<StringRedisTemplate> redisTemplate,
+            Environment environment,
+            ObjectProvider<StringRedisTemplate> redisTemplate,
             ObjectProvider<RedisConnectionRecovery> connectionRecovery) {
         boolean sharedLease = SharedStateStore.isRedis(environment);
         SingleFlightProperties singleFlight = SingleFlightProperties.bind(environment);
@@ -216,9 +214,8 @@ public class CacheConfig {
                     return bean;
                 }
                 RedisBackoff backoff = new RedisBackoff("Redis cache", connectionRecovery.getIfAvailable());
-                SingleFlightCacheManager.DistributedLoadLock lock = sharedLease
-                        ? new RedisCacheLoadLock(redisTemplate::getObject, lease, backoff)
-                        : null;
+                SingleFlightCacheManager.DistributedLoadLock lock =
+                        sharedLease ? new RedisCacheLoadLock(redisTemplate::getObject, lease, backoff) : null;
                 return wrap(redis, lock, maxWait, backoff);
             }
         };
@@ -226,17 +223,19 @@ public class CacheConfig {
 
     static BeanPostProcessor singleFlightCacheManagerPostProcessor(
             Environment environment, ObjectProvider<StringRedisTemplate> redisTemplate) {
-        return singleFlightCacheManagerPostProcessor(environment, redisTemplate, new StaticListableBeanFactory()
-                .getBeanProvider(RedisConnectionRecovery.class));
+        return singleFlightCacheManagerPostProcessor(
+                environment,
+                redisTemplate,
+                new StaticListableBeanFactory().getBeanProvider(RedisConnectionRecovery.class));
     }
 
-    static BeanPostProcessor singleFlightPostProcessor(SingleFlightCacheManager.DistributedLoadLock lock,
-                                                       Duration maxWait) {
+    static BeanPostProcessor singleFlightPostProcessor(
+            SingleFlightCacheManager.DistributedLoadLock lock, Duration maxWait) {
         return singleFlightPostProcessor(lock, maxWait, new RedisBackoff("Redis cache"));
     }
 
-    static BeanPostProcessor singleFlightPostProcessor(SingleFlightCacheManager.DistributedLoadLock lock,
-                                                       Duration maxWait, RedisBackoff backoff) {
+    static BeanPostProcessor singleFlightPostProcessor(
+            SingleFlightCacheManager.DistributedLoadLock lock, Duration maxWait, RedisBackoff backoff) {
         return new BeanPostProcessor() {
             @Override
             public Object postProcessAfterInitialization(Object bean, String beanName) {
@@ -245,8 +244,11 @@ public class CacheConfig {
         };
     }
 
-    private static CacheManager wrap(RedisCacheManager redis, SingleFlightCacheManager.DistributedLoadLock lock,
-                                     Duration maxWait, RedisBackoff backoff) {
+    private static CacheManager wrap(
+            RedisCacheManager redis,
+            SingleFlightCacheManager.DistributedLoadLock lock,
+            Duration maxWait,
+            RedisBackoff backoff) {
         return new SingleFlightCacheManager(new RedisBackoffCacheManager(redis, backoff), lock, maxWait);
     }
 

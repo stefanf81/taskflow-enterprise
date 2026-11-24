@@ -31,8 +31,8 @@ final class BenchmarkHttp {
     }
 
     <T> ResponseEntity<T> exchange(String url, HttpMethod method, HttpEntity<?> request, Class<T> responseType) {
-        RestClient.RequestBodySpec spec = client.method(method).uri(url)
-                .headers(headers -> headers.addAll(request.getHeaders()));
+        RestClient.RequestBodySpec spec =
+                client.method(method).uri(url).headers(headers -> headers.addAll(request.getHeaders()));
         Object body = request.getBody();
         if (body != null) {
             spec.body(body);

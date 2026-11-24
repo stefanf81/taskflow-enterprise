@@ -3030,3 +3030,36 @@ Script time is Chrome's `ScriptDuration`, main-thread tasks `TaskDuration`, both
 * **Caching trade-off:** the framework code was a separate ~200 kB chunk that stayed cached across deploys that only changed application code. It is now part of `main.js`, so any change to `main.js` re-downloads it.
 * **Verified:** the Playwright suite, `landing-stability` and `early-interaction` included, passed against the production frontend image in CI (`main` dispatch at `0f80fe2`, run 44855485326).
 * **Not measured:** FCP/LCP on slow 4G. Re-measure the §60/§63 slow-4G numbers before treating the change as neutral.
+
+## 🔍 84. Type-Aware ESLint, Narrowly (2026-11-21)
+
+**Question:** typescript-eslint now recommends type-aware linting (`projectService` + `recommendedTypeChecked`), but `npm run lint` caches ESLint results per file (`--cache-strategy content`), which is only sound while no rule depends on other files' types.
+
+| Frontend ESLint, this container | Time |
+| :--- | ---: |
+| Main config, no cache | 2.7 s |
+| Main config, warm content cache | 0.6 s |
+| Main config + `recommendedTypeChecked` on `src/`, no cache | 7.7 s |
+| Type-aware pass with only the two promise rules (`eslint.typed.config.mjs`) | 5.6 s |
+
+* **Findings of the full preset:** 92 in 19 files; 79 in spec files, mostly `no-unsafe-*` on test doubles. In production code 11 were `any`-typed `catchError` errors (typing, not bugs) and 3 were unhandled `router.navigateByUrl()` Promises (already reported through `provideBrowserGlobalErrorListeners()` → `TelemetryErrorHandler`). 4 more unhandled Promises were in specs, where a test called `addTimeOff()` without awaiting the result.
+* **Adopted:** `no-floating-promises` and `no-misused-promises` only, in a separate uncached pass, so the cached main pass keeps its guarantee. The navigations are marked `void`; the specs now await the save after flushing its request and assert its `true`/`false` result. Cost: ~5 s per `npm run lint`.
+* **Not adopted:** the rest of `recommendedTypeChecked` (mostly spec noise; `no-unsafe-*` would need typed test doubles first).
+
+## 🐘 85. Spring-Context Tests on PostgreSQL Instead of H2 (2026-11-23)
+
+**Question:** `./gradlew test` ran its Spring contexts on H2 in PostgreSQL mode, one in-memory database per context, while production runs PostgreSQL 18. What does running them on the production engine cost, and what does it find?
+
+**Setup:** one PostgreSQL server per Gradle test fork (`PostgresTestServer`: the compose/CI image by digest, data directory on tmpfs, `fsync`, `synchronous_commit` and `full_page_writes` off, `max_connections=200`; or `TASKFLOW_TEST_POSTGRES_URL`). Flyway migrates one template database per set of locations; its name carries a hash of the migration files, an advisory lock serialises forks sharing an external server, and it is built under a temporary name and renamed when complete. Each Spring context then gets `CREATE DATABASE … TEMPLATE …` through a test-only `EnvironmentPostProcessor`, lazily on the first read of a datasource property, so slice tests create no database. The application's own Flyway only validates the cloned history. Pool per context: Hikari's default maximum of 10 (concurrency tests need several connections per thread), `minimum-idle=1`, `idle-timeout=10s`, so a cached context holds one connection: at most 32 cached contexts plus one active pool stay far below 200.
+
+| `./gradlew test --rerun`, 4 vCPU container, 2 forks, warm Gradle | H2 (before) | PostgreSQL (after) |
+| :--- | ---: | ---: |
+| Wall time, sample 1 | 114 s | 117 s |
+| Wall time, sample 2 | 100 s | 110 s |
+| Sum of test-class times (first run of each) | 203.9 s | 212.3 s |
+| Test classes / tests | 125 / 838 | 126 / 839 |
+
+* **Cost:** about +6% wall time (medians 107 s → 114 s); the summed class time grows 4%. Container start and the one template migration per fork are paid once; a context's `CREATE DATABASE … TEMPLATE` replaces migrating ~40 versions into H2, which is why the per-context cost barely moves. Same host and Gradle state for both; the first, cold H2 run (121 s) is excluded like the first PostgreSQL run.
+* **Found on the first full run:** 3 failures, 2 of them real test-data bugs H2 had hidden. `ReviewRatingsIntegrationTest` booked one barber a minute apart with 60-minute services, which V35's `appointments_no_overlap` exclusion constraint (PostgreSQL only) rejects; its bookings now fall on separate days. `TaskflowApplicationTest` queried H2's upper-case `INFORMATION_SCHEMA`; it now reads `information_schema` case-insensitively and accepts PostgreSQL's `time without time zone`.
+* **H2 kept for:** `bootRun` and the Dockerfile's offline AOT-cache training (default profile, `--network=none`), guarded by the new `H2DefaultProfileSmokeTest` (all migrations applied, Hibernate validation, seed data on H2), plus `FlywayMigrationTest`/`DataMigrationsH2Test`, which exercise the Java migrations' H2 branches directly. `ProductionLayoutContextTest` moved to PostgreSQL: the production migration layout now validates on the production engine.
+* **Requirement:** `./gradlew test` (and so `check`, `verify.sh --quick` and CI's `backend` job) now needs Docker, or `TASKFLOW_TEST_POSTGRES_URL` naming a server where the user may create databases. GitHub's Ubuntu runners have Docker.

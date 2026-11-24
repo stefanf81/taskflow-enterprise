@@ -1,3 +1,4 @@
+import { Component } from '@angular/core';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
@@ -9,6 +10,17 @@ import { FlashMessages } from '../../core/ui/flash-messages';
 import { AuthState } from '../../core/auth/auth.state';
 import { AdminEventsService } from './admin-events.service';
 import { AppointmentDashboardResponse } from '../../types/api';
+
+@Component({ template: 'section' })
+class SectionStub {}
+
+const SECTION_PATHS = [
+  'appointments',
+  'calendar',
+  'services',
+  'schedules',
+  'notifications',
+] as const;
 
 describe('AdminDashboard shell', () => {
   let fixture: ComponentFixture<AdminDashboard>;
@@ -34,7 +46,13 @@ describe('AdminDashboard shell', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AdminDashboard],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter(
+          SECTION_PATHS.map((path) => ({ path: `admin/${path}`, component: SectionStub })),
+        ),
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(AdminDashboard);
@@ -59,16 +77,35 @@ describe('AdminDashboard shell', () => {
     );
   });
 
-  it('switches between workspace tabs', () => {
-    expect(component.adminView()).toBe('appointments');
-    component.setAdminView('schedules');
-    expect(component.adminView()).toBe('schedules');
-    component.setAdminView('notifications');
-    expect(component.adminView()).toBe('notifications');
+  it('links every section to its own URL and marks the current one', async () => {
+    const el = fixture.nativeElement as HTMLElement;
+    const links = () =>
+      Array.from(el.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Owner sections"] a'));
+
+    expect(links().map((a) => [a.textContent?.trim(), a.getAttribute('href')])).toEqual([
+      ['Appointments', '/admin/appointments'],
+      ['Calendar', '/admin/calendar'],
+      ['Service Catalog', '/admin/services'],
+      ['Schedules & Time-Off', '/admin/schedules'],
+      ['Notification Outbox', '/admin/notifications'],
+    ]);
+
+    await TestBed.inject(Router).navigateByUrl('/admin/schedules');
+    fixture.detectChanges();
+
+    const current = links().filter((a) => a.getAttribute('aria-current') === 'page');
+    expect(current.map((a) => a.textContent?.trim())).toEqual(['Schedules & Time-Off']);
+    expect(current[0]!.classList).toContain('text-accent');
+    // The routed section renders inside the card.
+    expect(el.querySelector('main router-outlet + *')?.textContent).toBe('section');
   });
 
-  it('exposes dashboard stats from the store', () => {
-    expect(component.stats().total).toBe(6);
+  it('has no Sync DB button and no permanent guidelines card', () => {
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).not.toContain('Sync DB');
+    expect(text).not.toContain('Owner Guidelines');
+    // The booking numbers belong to the appointments section, not to the shell.
+    expect(text).not.toContain('Total Bookings');
   });
 
   it('logs out and returns to the landing page once the server confirms', async () => {
@@ -101,32 +138,6 @@ describe('AdminDashboard shell', () => {
     expect(navigate).not.toHaveBeenCalled();
     expect(TestBed.inject(AuthState).isLoggedIn()).toBe(true);
     expect(TestBed.inject(FlashMessages).errorMessage()).toContain('Could not sign out');
-  });
-
-  it('shows a retry instead of a board of zeros when the dashboard fails to load', async () => {
-    const store = TestBed.inject(AppointmentStore);
-    store.refresh();
-    fixture.detectChanges();
-    httpMock
-      .match((r) => r.url.includes('/api/v1/appointments') && r.method === 'GET')
-      .forEach((r) => r.flush(null, { status: 500, statusText: 'Server Error' }));
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.textContent).toContain('Could not load appointments. Please retry.');
-    expect(el.textContent).not.toContain('Total Bookings');
-    // The shell kept rendering (a raw resource.value() read would have thrown).
-    expect(el.querySelector('h1')?.textContent).toContain('TaskFlow Owner Panel');
-
-    component.retryLoad();
-    fixture.detectChanges();
-    httpMock
-      .match((r) => r.url.includes('/api/v1/appointments') && r.method === 'GET')
-      .forEach((r) => r.flush(mockDashboard));
-    await fixture.whenStable();
-    fixture.detectChanges();
-    expect(el.textContent).toContain('Total Bookings');
   });
 
   it('refetches the list on an SSE tick at once and coalesces a burst into one trailing refresh', () => {

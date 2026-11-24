@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 
 interface TimeSlotPickerProps {
   slots: readonly string[];
@@ -80,8 +80,8 @@ const styles = StyleSheet.create({
     borderColor: colors.gold.main,
   },
   busySlot: {
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-    borderColor: 'rgba(239, 68, 68, 0.2)',
+    backgroundColor: withAlpha(semantic.danger, 0.08),
+    borderColor: withAlpha(semantic.danger, 0.2),
     opacity: 0.6,
   },
   pastSlot: {

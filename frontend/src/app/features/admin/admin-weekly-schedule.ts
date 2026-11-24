@@ -2,6 +2,7 @@ import { Component, computed, inject, linkedSignal, signal } from '@angular/core
 import { BarberScheduleResponse, ScheduleDay, SchedulePreviewResponse } from '../../types/api';
 import { AppointmentStore } from './appointment.store';
 import { BarberStore } from './barber.store';
+import { Button } from '../../core/ui/button';
 
 /** One weekday row of the editor; a closed day is sent as "no shift". */
 interface DayDraft {
@@ -32,16 +33,15 @@ function toDraft(schedule: BarberScheduleResponse | null): DayDraft[] {
  */
 @Component({
   selector: 'app-admin-weekly-schedule',
+  imports: [Button],
   template: `
-    <div class="card p-5 border border-white/5 bg-zinc-900/30 rounded-2xl">
+    <div class="card p-5">
       <h4 class="text-zinc-100 font-extrabold mb-4 border-b border-white/5 pb-2">Weekly Hours</h4>
 
       @if (loadError()) {
         <div class="flex items-center gap-3" role="alert">
           <p class="text-xs text-rose-400 flex-1">{{ loadError() }}</p>
-          <button type="button" class="btn btn-secondary py-1.5 px-3 text-xs" (click)="reload()">
-            Retry
-          </button>
+          <button type="button" appButton="secondary" (click)="reload()">Retry</button>
         </div>
       } @else if (!schedule()) {
         <p class="text-xs text-zinc-500" role="status">Loading the weekly hours…</p>
@@ -65,7 +65,7 @@ function toDraft(schedule: BarberScheduleResponse | null): DayDraft[] {
                   [value]="day.opens"
                   [disabled]="isSaving()"
                   (change)="updateDay(day.dayOfWeek, { opens: $any($event.target).value })"
-                  class="form-control p-1.5 rounded-lg text-xs bg-zinc-950 border border-white/10 text-white"
+                  class="form-control"
                 />
                 <span class="text-zinc-500 text-xs">to</span>
                 <input
@@ -74,7 +74,7 @@ function toDraft(schedule: BarberScheduleResponse | null): DayDraft[] {
                   [value]="day.closes"
                   [disabled]="isSaving()"
                   (change)="updateDay(day.dayOfWeek, { closes: $any($event.target).value })"
-                  class="form-control p-1.5 rounded-lg text-xs bg-zinc-950 border border-white/10 text-white"
+                  class="form-control"
                 />
               } @else {
                 <span class="text-xs text-zinc-500 italic">Not working</span>
@@ -112,7 +112,8 @@ function toDraft(schedule: BarberScheduleResponse | null): DayDraft[] {
             }
             <button
               type="button"
-              class="btn btn-submit w-full py-2.5"
+              appButton
+              class="w-full"
               [disabled]="isSaving() || (result.conflictCount > 0 && !confirmCancellation())"
               (click)="save()"
             >
@@ -130,7 +131,7 @@ function toDraft(schedule: BarberScheduleResponse | null): DayDraft[] {
         <div class="flex flex-wrap gap-2 mt-4">
           <button
             type="button"
-            class="btn btn-secondary py-2 px-4 text-xs"
+            appButton="secondary"
             [disabled]="
               isSaving() || unchanged() || invalidDay() !== null || currentPreview() !== null
             "
@@ -140,7 +141,7 @@ function toDraft(schedule: BarberScheduleResponse | null): DayDraft[] {
           </button>
           <button
             type="button"
-            class="btn btn-secondary py-2 px-4 text-xs"
+            appButton="secondary"
             [disabled]="isSaving() || unchanged()"
             (click)="reset()"
           >

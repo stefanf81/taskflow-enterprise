@@ -1,20 +1,19 @@
 package com.example.taskflow.auth;
 
-import com.example.taskflow.core.redis.RedisBackoff;
 import com.example.taskflow.core.SharedStateStore;
-import org.springframework.data.redis.connection.SetCondition;
-import org.springframework.data.redis.core.RedisCallback;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
-import org.springframework.data.redis.core.script.RedisScript;
-import org.springframework.data.redis.core.types.Expiration;
-
+import com.example.taskflow.core.redis.RedisBackoff;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.data.redis.connection.SetCondition;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.data.redis.core.types.Expiration;
 
 /**
  * Redis side of {@link TokenRevocationList} ({@code app.state.store=redis}).
@@ -61,8 +60,7 @@ final class RedisTokenRevocationStore {
     static final long UNAVAILABLE = Long.MIN_VALUE;
 
     /** A revocation announced by another replica. */
-    record RemoteRevocation(String jti, Instant expiresAt) {
-    }
+    record RemoteRevocation(String jti, Instant expiresAt) {}
 
     private final StringRedisTemplate redis;
     private final RedisBackoff backoff;
@@ -86,7 +84,8 @@ final class RedisTokenRevocationStore {
         if (!backoff.allowRequest()) {
             return false;
         }
-        long ttlMillis = Math.max(MIN_TTL_MILLIS, Duration.between(now, expiresAt).toMillis());
+        long ttlMillis =
+                Math.max(MIN_TTL_MILLIS, Duration.between(now, expiresAt).toMillis());
         try {
             redis.execute(WRITE_SCRIPT, List.of(key(jti), GENERATION_KEY), String.valueOf(ttlMillis));
             backoff.recordSuccess();
@@ -115,13 +114,21 @@ final class RedisTokenRevocationStore {
             if (!backoff.allowRequest()) {
                 return false;
             }
-            List<Map.Entry<String, Instant>> batch = entries.subList(from, Math.min(from + WRITE_BATCH, entries.size()));
+            List<Map.Entry<String, Instant>> batch =
+                    entries.subList(from, Math.min(from + WRITE_BATCH, entries.size()));
             try {
                 redis.executePipelined((RedisCallback<Object>) connection -> {
                     for (Map.Entry<String, Instant> entry : batch) {
-                        long ttlMillis = Math.max(MIN_TTL_MILLIS, Duration.between(now, entry.getValue()).toMillis());
-                        connection.stringCommands().set(key(entry.getKey()).getBytes(StandardCharsets.UTF_8), PRESENT,
-                                SetCondition.upsert(), Expiration.milliseconds(ttlMillis));
+                        long ttlMillis = Math.max(
+                                MIN_TTL_MILLIS,
+                                Duration.between(now, entry.getValue()).toMillis());
+                        connection
+                                .stringCommands()
+                                .set(
+                                        key(entry.getKey()).getBytes(StandardCharsets.UTF_8),
+                                        PRESENT,
+                                        SetCondition.upsert(),
+                                        Expiration.milliseconds(ttlMillis));
                     }
                     // After the batch's SETs on the same connection: a replica that sees the new
                     // generation also sees every entry of the batch.
@@ -149,7 +156,8 @@ final class RedisTokenRevocationStore {
             // A plain PTTL. RedisTemplate.getExpire(key, unit) retries with TTL after any error,
             // which would double the timeout paid during an outage.
             byte[] rawKey = key(jti).getBytes(StandardCharsets.UTF_8);
-            Long ttl = redis.execute((RedisCallback<Long>) connection -> connection.keyCommands().pTtl(rawKey));
+            Long ttl = redis.execute(
+                    (RedisCallback<Long>) connection -> connection.keyCommands().pTtl(rawKey));
             backoff.recordSuccess();
             if (ttl == null || ttl == -2) {
                 return NOT_REVOKED;

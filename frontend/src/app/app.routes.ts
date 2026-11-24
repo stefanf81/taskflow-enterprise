@@ -16,7 +16,7 @@ import { LandingPage } from './features/landing/landing-page';
       <p class="text-zinc-400 text-sm mb-8">The page you're looking for doesn't exist.</p>
       <a
         routerLink="/"
-        class="text-gold text-sm font-bold uppercase tracking-wider hover:underline"
+        class="text-accent text-sm font-bold uppercase tracking-wider hover:underline"
       >
         Go Home
       </a>
@@ -32,7 +32,7 @@ class NotFoundComponent {
     effect(() => {
       const role = this.auth.role();
       if (role === 'ROLE_ADMIN' || role === 'ROLE_CUSTOMER') {
-        this.router.navigateByUrl(this.auth.dashboardPathFor(role), { replaceUrl: true });
+        void this.router.navigateByUrl(this.auth.dashboardPathFor(role), { replaceUrl: true });
       }
       // Guests stay on the 404 page
     });
@@ -54,6 +54,10 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: loadAdminDashboard,
     title: 'Owner Dashboard — TaskFlow',
+    // One URL per section, each its own chunk: a reload or Back keeps the owner where they were.
+    // The guard on the parent covers the children; an unknown /admin/… falls through to the 404.
+    // The section list is its own lazy file, so the child-route config stays out of main.js.
+    loadChildren: () => import('./features/admin/admin.routes').then((m) => m.ADMIN_ROUTES),
   },
   {
     path: 'customer',

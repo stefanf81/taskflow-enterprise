@@ -1,8 +1,9 @@
 package com.example.taskflow.auth;
 
+import com.example.taskflow.core.SharedStateStore;
 import com.example.taskflow.core.redis.RedisBackoff;
 import com.example.taskflow.core.redis.RedisConnectionRecovery;
-import com.example.taskflow.core.SharedStateStore;
+import java.nio.charset.StandardCharsets;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -11,8 +12,6 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
-
-import java.nio.charset.StandardCharsets;
 
 /**
  * Redis-backed security state, active only with {@code app.state.store=redis} (set by the prod
@@ -30,17 +29,17 @@ import java.nio.charset.StandardCharsets;
 class SharedSecurityStateConfig {
 
     @Bean
-    RedisTokenRevocationStore redisTokenRevocationStore(StringRedisTemplate redisTemplate,
-                                                        ObjectProvider<RedisConnectionRecovery> connectionRecovery) {
-        return new RedisTokenRevocationStore(redisTemplate,
-                new RedisBackoff("Token revocation list", connectionRecovery.getIfAvailable()));
+    RedisTokenRevocationStore redisTokenRevocationStore(
+            StringRedisTemplate redisTemplate, ObjectProvider<RedisConnectionRecovery> connectionRecovery) {
+        return new RedisTokenRevocationStore(
+                redisTemplate, new RedisBackoff("Token revocation list", connectionRecovery.getIfAvailable()));
     }
 
     @Bean
-    RedisLoginFailureCounter redisLoginFailureCounter(StringRedisTemplate redisTemplate,
-                                                      ObjectProvider<RedisConnectionRecovery> connectionRecovery) {
-        return new RedisLoginFailureCounter(redisTemplate,
-                new RedisBackoff("Login attempt limiter", connectionRecovery.getIfAvailable()));
+    RedisLoginFailureCounter redisLoginFailureCounter(
+            StringRedisTemplate redisTemplate, ObjectProvider<RedisConnectionRecovery> connectionRecovery) {
+        return new RedisLoginFailureCounter(
+                redisTemplate, new RedisBackoff("Login attempt limiter", connectionRecovery.getIfAvailable()));
     }
 
     /**
@@ -48,20 +47,21 @@ class SharedSecurityStateConfig {
      * the refresh phase blocks on (and may fail with) an unreachable Redis.
      */
     @Bean
-    RedisMessageListenerContainer tokenRevocationListenerContainer(RedisConnectionFactory connectionFactory,
-                                                                   TokenRevocationList revocationList) {
+    RedisMessageListenerContainer tokenRevocationListenerContainer(
+            RedisConnectionFactory connectionFactory, TokenRevocationList revocationList) {
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();
         container.setConnectionFactory(connectionFactory);
         container.setAutoStartup(false);
         container.addMessageListener(
-                (message, pattern) -> revocationList.onRemoteRevocation(
-                        new String(message.getBody(), StandardCharsets.UTF_8)),
+                (message, pattern) ->
+                        revocationList.onRemoteRevocation(new String(message.getBody(), StandardCharsets.UTF_8)),
                 new ChannelTopic(RedisTokenRevocationStore.CHANNEL));
         return container;
     }
 
     @Bean
-    RevocationChannelSubscriber revocationChannelSubscriber(RedisMessageListenerContainer tokenRevocationListenerContainer) {
+    RevocationChannelSubscriber revocationChannelSubscriber(
+            RedisMessageListenerContainer tokenRevocationListenerContainer) {
         return new RevocationChannelSubscriber(tokenRevocationListenerContainer);
     }
 }

@@ -12,16 +12,18 @@ import { EmptyState } from '../../components/common/EmptyState';
 import { ErrorState } from '../../components/common/ErrorState';
 import { useCatalog, useRestoreService, useRetiredServices, useCreateService, useUpdateService, useRetireService } from '../../core/catalog/useCatalog';
 import { ServiceItem } from '../../types/api';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 import { getApiErrorMessage } from '../../utils/errors';
+import { RetailProductsPanel } from './RetailProductsPanel';
 
-type CatalogTab = 'active' | 'retired';
+type CatalogTab = 'active' | 'retired' | 'products';
 type ServiceDraft = { name: string; price: string; durationMinutes: string; category: string; description: string };
 const emptyDraft = (): ServiceDraft => ({ name: '', price: '', durationMinutes: '', category: '', description: '' });
 
 const TABS: ReadonlyArray<{ key: CatalogTab; label: string }> = [
   { key: 'active', label: 'Active' },
   { key: 'retired', label: 'Retired' },
+  { key: 'products', label: 'Storefront' },
 ];
 
 export const AdminCatalogScreen: React.FC = () => {
@@ -108,7 +110,9 @@ export const AdminCatalogScreen: React.FC = () => {
           <Text style={styles.title}>Menu & Pricing</Text>
         </View>
 
-        <Button title="Create service" onPress={() => openEditor()} disabled={pending} style={styles.createButton} />
+        {tab !== 'products' && (
+          <Button title="Create service" onPress={() => openEditor()} disabled={pending} style={styles.createButton} />
+        )}
 
         <View style={styles.tabs} accessibilityRole="tablist">
           {TABS.map(({ key, label }) => {
@@ -127,6 +131,10 @@ export const AdminCatalogScreen: React.FC = () => {
           })}
         </View>
 
+        {tab === 'products' ? (
+          <RetailProductsPanel />
+        ) : (
+        <>
         <ErrorMessage message={errorMessage || ''} />
         {successMessage && (
           <View style={styles.successBanner}>
@@ -196,6 +204,8 @@ export const AdminCatalogScreen: React.FC = () => {
             )}
           />
         )}
+        </>
+        )}
       </View>
       <Modal visible={editorOpen} animationType="slide" onRequestClose={() => { if (!pending) setEditorOpen(false); }}>
         <SafeAreaView style={styles.safeArea}>
@@ -264,9 +274,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: withAlpha(semantic['fg-strong'], 0.05),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: withAlpha(semantic['fg-strong'], 0.05),
   },
   tabSelected: {
     backgroundColor: colors.obsidian.card,
@@ -282,9 +292,9 @@ const styles = StyleSheet.create({
     color: colors.gold.main,
   },
   successBanner: {
-    backgroundColor: 'rgba(52, 211, 153, 0.12)',
+    backgroundColor: withAlpha(semantic.success, 0.12),
     borderWidth: 1,
-    borderColor: 'rgba(52, 211, 153, 0.3)',
+    borderColor: withAlpha(semantic.success, 0.3),
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,

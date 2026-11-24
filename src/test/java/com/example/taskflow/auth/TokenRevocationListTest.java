@@ -1,12 +1,11 @@
 package com.example.taskflow.auth;
 
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
 
 class TokenRevocationListTest {
 
@@ -94,8 +93,7 @@ class TokenRevocationListTest {
         TokenRevocationList list = new TokenRevocationList(null, null, Clock.fixed(now, ZoneOffset.UTC));
 
         int applied = list.restore(java.util.List.of(
-                new RevokedToken("live", now.plusSeconds(300)),
-                new RevokedToken("dead", now.minusSeconds(1))));
+                new RevokedToken("live", now.plusSeconds(300)), new RevokedToken("dead", now.minusSeconds(1))));
 
         assertEquals(1, applied);
         assertTrue(list.isRevoked("live"));

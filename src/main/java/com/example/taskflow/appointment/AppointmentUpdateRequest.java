@@ -5,8 +5,5 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record AppointmentUpdateRequest(
-    @NotBlank(message = "Status is required")
-    @Size(max = 50)
-    @Pattern(regexp = "^(APPROVED|DENIED)$", message = "Status must be APPROVED or DENIED")
-    String status
-) {}
+        @NotBlank(message = "Status is required") @Size(max = 50) @Pattern(regexp = "^(APPROVED|DENIED)$", message = "Status must be APPROVED or DENIED")
+        String status) {}

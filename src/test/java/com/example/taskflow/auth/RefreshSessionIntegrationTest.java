@@ -1,34 +1,5 @@
 package com.example.taskflow.auth;
 
-import com.example.taskflow.auth.internal.UserRepository;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.servlet.http.Cookie;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.web.servlet.MockMvc;
-
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
-import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.oauth2.jwt.Jwt;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -40,15 +11,49 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.example.taskflow.auth.internal.UserRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.Cookie;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.test.web.servlet.MockMvc;
+
 /** Grace 0 over HTTP: an immediate replay counts as reuse. The grace window is tested on the service. */
 @SpringBootTest(properties = {"app.rate-limit.enabled=false", "app.auth.refresh.reuse-grace-seconds=0"})
 @AutoConfigureMockMvc
 class RefreshSessionIntegrationTest {
 
-    @Autowired private MockMvc mockMvc;
-    @Autowired private UserRepository userRepository;
-    @Autowired private PasswordEncoder passwordEncoder;
-    @Autowired private JdbcTemplate jdbc;
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -80,8 +85,11 @@ class RefreshSessionIntegrationTest {
             "customer@taskflow.com", null, List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER")));
 
     private static Jwt tokenOf(RefreshSessionService.Issued session) {
-        return Jwt.withTokenValue("t").header("alg", "RS256").subject(session.username())
-                .claim(RefreshSessionService.SESSION_CLAIM, session.id()).build();
+        return Jwt.withTokenValue("t")
+                .header("alg", "RS256")
+                .subject(session.username())
+                .claim(RefreshSessionService.SESSION_CLAIM, session.id())
+                .build();
     }
 
     @Test
@@ -90,10 +98,12 @@ class RefreshSessionIntegrationTest {
         RefreshSessionService service = new RefreshSessionService(jdbc, new RefreshProperties(3600, 3600, 30), clock);
         RefreshSessionService.Issued login = service.create(CUSTOMER);
 
-        RefreshSessionService.Issued first = service.rotate(login.refreshToken()).orElseThrow();
+        RefreshSessionService.Issued first =
+                service.rotate(login.refreshToken()).orElseThrow();
         clock.advance(Duration.ofSeconds(20));
         // A second tab (or a retry after a lost response) presents the just-used credential.
-        RefreshSessionService.Issued concurrent = service.rotate(login.refreshToken()).orElseThrow();
+        RefreshSessionService.Issued concurrent =
+                service.rotate(login.refreshToken()).orElseThrow();
 
         assertNotEquals(first.refreshToken(), concurrent.refreshToken());
         assertEquals(login.expiresAt(), concurrent.expiresAt(), "the family deadline never moves");
@@ -143,7 +153,8 @@ class RefreshSessionIntegrationTest {
         JdbcTemplate failing = mock(JdbcTemplate.class, invocation -> {
             throw new DataAccessResourceFailureException("database down");
         });
-        RefreshSessionService unreachable = new RefreshSessionService(failing, new RefreshProperties(3600, 3600, 30), clock);
+        RefreshSessionService unreachable =
+                new RefreshSessionService(failing, new RefreshProperties(3600, 3600, 30), clock);
 
         // No cached state: accept rather than sign everybody out during an outage (ADR-018).
         assertFalse(unreachable.validate(tokenOf(login)).hasErrors());
@@ -161,8 +172,8 @@ class RefreshSessionIntegrationTest {
         jdbc.update("DELETE FROM refresh_credentials");
         jdbc.update("DELETE FROM refresh_sessions");
         userRepository.deleteAll();
-        userRepository.save(new AppUser("customer@taskflow.com", passwordEncoder.encode("Pass1234"),
-                "Customer", "555-0101", "ROLE_CUSTOMER"));
+        userRepository.save(new AppUser(
+                "customer@taskflow.com", passwordEncoder.encode("Pass1234"), "Customer", "555-0101", "ROLE_CUSTOMER"));
     }
 
     @Test
@@ -172,7 +183,9 @@ class RefreshSessionIntegrationTest {
                         .content(objectMapper.writeValueAsString(
                                 Map.of("username", "customer@taskflow.com", "password", "Pass1234"))))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         JsonNode initial = objectMapper.readTree(loginJson);
         String firstAccess = initial.get("accessToken").asText();
         String firstRefresh = initial.get("refreshToken").asText();
@@ -184,7 +197,9 @@ class RefreshSessionIntegrationTest {
                         .content(objectMapper.writeValueAsString(Map.of("refreshToken", firstRefresh))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value("customer@taskflow.com"))
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         JsonNode rotated = objectMapper.readTree(rotatedJson);
         String secondAccess = rotated.get("accessToken").asText();
         String secondRefresh = rotated.get("refreshToken").asText();
@@ -217,7 +232,8 @@ class RefreshSessionIntegrationTest {
                         .content(objectMapper.writeValueAsString(
                                 Map.of("username", "customer@taskflow.com", "password", "Pass1234"))))
                 .andExpect(status().isOk())
-                .andReturn().getResponse();
+                .andReturn()
+                .getResponse();
         Cookie refreshCookie = loginRes.getCookie("refresh_token");
         assertNotNull(refreshCookie);
         // The SPA cannot read the credential; the hint tells it (and nginx) that it can renew.
@@ -227,14 +243,17 @@ class RefreshSessionIntegrationTest {
         assertEquals("1", hint.getValue());
 
         // Without CSRF token, browser refresh is forbidden (403).
-        mockMvc.perform(post("/api/v1/auth/refresh").cookie(refreshCookie))
-                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/auth/refresh").cookie(refreshCookie)).andExpect(status().isForbidden());
 
         // Obtain the real double-submit XSRF-TOKEN cookie + header (never .with(csrf()), which
         // replaces the shared CsrfFilter's CookieCsrfTokenRepository in the cached Spring context).
-        var csrfRes = mockMvc.perform(get("/api/v1/auth/csrf")).andExpect(status().isOk()).andReturn().getResponse();
+        var csrfRes = mockMvc.perform(get("/api/v1/auth/csrf"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse();
         Cookie xsrfCookie = csrfRes.getCookie("XSRF-TOKEN");
-        String xsrfHeader = objectMapper.readTree(csrfRes.getContentAsString()).get("token").asText();
+        String xsrfHeader =
+                objectMapper.readTree(csrfRes.getContentAsString()).get("token").asText();
 
         // With CSRF token, browser refresh rotates both cookies.
         var refreshRes = mockMvc.perform(post("/api/v1/auth/refresh")
@@ -242,7 +261,8 @@ class RefreshSessionIntegrationTest {
                         .header("X-XSRF-TOKEN", xsrfHeader))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value("customer@taskflow.com"))
-                .andReturn().getResponse();
+                .andReturn()
+                .getResponse();
         Cookie newAccess = refreshRes.getCookie("access_token");
         Cookie newRefresh = refreshRes.getCookie("refresh_token");
         assertNotNull(newAccess);
@@ -256,7 +276,8 @@ class RefreshSessionIntegrationTest {
                         .cookie(refreshCookie, xsrfCookie)
                         .header("X-XSRF-TOKEN", xsrfHeader))
                 .andExpect(status().isUnauthorized())
-                .andReturn().getResponse();
+                .andReturn()
+                .getResponse();
         assertTrue(rejected.getHeaders("Set-Cookie").stream()
                 .anyMatch(value -> value.startsWith("taskflow_session=;") && value.contains("Max-Age=0")));
         assertTrue(rejected.getHeaders("Set-Cookie").stream()

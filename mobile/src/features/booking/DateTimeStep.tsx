@@ -7,8 +7,9 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from '../../components/common/Button';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 import { DEFAULT_TIME_SLOTS, UpcomingDay } from '../../utils/time-utils';
 import { getApiErrorMessage } from '../../utils/errors';
 import { TimeSlotPicker } from './TimeSlotPicker';
@@ -105,7 +106,8 @@ export const DateTimeStep: React.FC<DateTimeStepProps> = ({
       </>
     ) : (
       <View style={styles.noDatePrompt}>
-        <Text style={styles.noDateText}>📅 Select an upcoming date above to view available time slots</Text>
+        <Ionicons name="calendar-outline" size={22} color={colors.text.muted} style={styles.noDateIcon} />
+        <Text style={styles.noDateText}>Select an upcoming date above to view available time slots</Text>
       </View>
     )}
 
@@ -169,10 +171,13 @@ const styles = StyleSheet.create({
   noDatePrompt: {
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: withAlpha(semantic['fg-strong'], 0.1),
     borderRadius: 8,
     padding: 24,
     alignItems: 'center',
+  },
+  noDateIcon: {
+    marginBottom: 8,
   },
   noDateText: {
     color: colors.text.muted,

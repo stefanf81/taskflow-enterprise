@@ -1,7 +1,17 @@
 package com.example.taskflow.auth;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.example.taskflow.auth.internal.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.Cookie;
+import java.util.HashMap;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,17 +20,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
-
-import jakarta.servlet.http.Cookie;
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.hamcrest.Matchers.containsString;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * HTTP-boundary authorization matrix against the real {@code SecurityFilterChain}
@@ -55,10 +54,18 @@ class SecurityAuthorizationIntegrationTest {
     void setUp() throws Exception {
         userRepository.deleteAll();
 
-        userRepository.save(new AppUser("admin@taskflow.com", passwordEncoder.encode("admin-password"),
-                "Shop Owner", "555-0001", "ROLE_ADMIN"));
-        userRepository.save(new AppUser("customer@taskflow.com", passwordEncoder.encode("customer-password"),
-                "Jane Customer", "555-0002", "ROLE_CUSTOMER"));
+        userRepository.save(new AppUser(
+                "admin@taskflow.com",
+                passwordEncoder.encode("admin-password"),
+                "Shop Owner",
+                "555-0001",
+                "ROLE_ADMIN"));
+        userRepository.save(new AppUser(
+                "customer@taskflow.com",
+                passwordEncoder.encode("customer-password"),
+                "Jane Customer",
+                "555-0002",
+                "ROLE_CUSTOMER"));
 
         adminToken = "Bearer " + login("admin@taskflow.com", "admin-password");
         customerToken = "Bearer " + login("customer@taskflow.com", "customer-password");
@@ -72,7 +79,10 @@ class SecurityAuthorizationIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("access_token").getValue();
+                .andReturn()
+                .getResponse()
+                .getCookie("access_token")
+                .getValue();
     }
 
     // ------------------------------------------------------------------
@@ -104,6 +114,16 @@ class SecurityAuthorizationIntegrationTest {
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Ghost\",\"email\":\"ghost@taskflow.com\",\"phone\":\"555-0009\"}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/catalog/products")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Ghost Wax\",\"price\":9.0,\"sortOrder\":1}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(put("/api/v1/catalog/announcement")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"Free cuts\"}"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -152,7 +172,8 @@ class SecurityAuthorizationIntegrationTest {
         mockMvc.perform(post("/api/v1/catalog")
                         .header("Authorization", customerToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Ghost Cut\",\"price\":10.0,\"durationMinutes\":15,\"category\":\"hair\"}"))
+                        .content(
+                                "{\"name\":\"Ghost Cut\",\"price\":10.0,\"durationMinutes\":15,\"category\":\"hair\"}"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(delete("/api/v1/catalog/1").header("Authorization", customerToken))
                 .andExpect(status().isForbidden());
@@ -160,6 +181,26 @@ class SecurityAuthorizationIntegrationTest {
         mockMvc.perform(get("/api/v1/catalog/retired").header("Authorization", customerToken))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/catalog/1/restore").header("Authorization", customerToken))
+                .andExpect(status().isForbidden());
+        // Retail products: public to read, admin-only to write (the catalog's /** write rules).
+        String product = "{\"name\":\"Ghost Wax\",\"price\":9.0,\"sortOrder\":1}";
+        mockMvc.perform(post("/api/v1/catalog/products")
+                        .header("Authorization", customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(product))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/catalog/products/1")
+                        .header("Authorization", customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(product))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/v1/catalog/products/1").header("Authorization", customerToken))
+                .andExpect(status().isForbidden());
+        // The landing pages' promo strip: guests read it from /public/shop, only the owner sets it.
+        mockMvc.perform(put("/api/v1/catalog/announcement")
+                        .header("Authorization", customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"Free cuts\"}"))
                 .andExpect(status().isForbidden());
     }
 
@@ -276,6 +317,8 @@ class SecurityAuthorizationIntegrationTest {
                 .andExpect(status().isNotFound());
         mockMvc.perform(head("/api/v1/catalog/999999")).andExpect(status().isNotFound());
         mockMvc.perform(head("/api/v1/catalog")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/catalog/products")).andExpect(status().isOk());
+        mockMvc.perform(head("/api/v1/catalog/products")).andExpect(status().isOk());
         mockMvc.perform(head("/api/v1/barbers")).andExpect(status().isOk());
         mockMvc.perform(head("/api/v1/auth/csrf")).andExpect(status().isOk());
         mockMvc.perform(head("/api/v1/appointments/public/busy-slots")
@@ -319,9 +362,11 @@ class SecurityAuthorizationIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"jane@example.com\"}"))
                 .andExpect(status().isNotFound());
-        mockMvc.perform(put("/api/v1/appointments/public/reschedule/" + unknown)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"jane@example.com\",\"bookingDate\":\"2030-05-16\",\"bookingTime\":\"10:00\"}"))
+        mockMvc.perform(
+                        put("/api/v1/appointments/public/reschedule/" + unknown)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"email\":\"jane@example.com\",\"bookingDate\":\"2030-05-16\",\"bookingTime\":\"10:00\"}"))
                 .andExpect(status().isNotFound());
         mockMvc.perform(post("/api/v1/appointments/public/reschedule/" + unknown + "/availability")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -399,14 +444,14 @@ class SecurityAuthorizationIntegrationTest {
         Map<String, String> creds = new HashMap<>();
         creds.put("username", "customer@taskflow.com");
         creds.put("password", "customer-password");
-        mockMvc.perform(post("/api/v1/auth/login").cookie(stale)
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .cookie(stale)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(creds)))
                 .andExpect(status().isOk());
 
         // Logout works too (it is the request that clears the cookie).
-        mockMvc.perform(post("/api/v1/auth/logout").cookie(stale).with(csrf()))
-                .andExpect(status().isNoContent());
+        mockMvc.perform(post("/api/v1/auth/logout").cookie(stale).with(csrf())).andExpect(status().isNoContent());
     }
 
     @Test
@@ -434,28 +479,32 @@ class SecurityAuthorizationIntegrationTest {
     @Test
     void cachedPublicReads_doNotMintXsrfCookiesForGuestOrNativeClients() throws Exception {
         mockMvc.perform(get("/api/v1/catalog"))
-                .andExpect(status().isOk()).andExpect(header().doesNotExist("Set-Cookie"));
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist("Set-Cookie"));
         mockMvc.perform(get("/api/v1/catalog").header("Authorization", customerToken))
-                .andExpect(status().isOk()).andExpect(header().doesNotExist("Set-Cookie"));
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist("Set-Cookie"));
     }
 
     @Test
     void cookieLogout_requiresTheActualDoubleSubmitHeader() throws Exception {
         Cookie access = new Cookie("access_token", customerToken.substring("Bearer ".length()));
         var csrfResponse = mockMvc.perform(get("/api/v1/auth/csrf").cookie(access))
-                .andExpect(status().isOk()).andReturn().getResponse();
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse();
         Cookie xsrf = csrfResponse.getCookie("XSRF-TOKEN");
-        String token = objectMapper.readTree(csrfResponse.getContentAsString()).get("token").asText();
+        String token = objectMapper
+                .readTree(csrfResponse.getContentAsString())
+                .get("token")
+                .asText();
 
-        mockMvc.perform(post("/api/v1/auth/logout").cookie(access, xsrf))
-                .andExpect(status().isForbidden());
-        mockMvc.perform(post("/api/v1/auth/logout").cookie(access, xsrf)
-                        .header("X-XSRF-TOKEN", "wrong-token"))
+        mockMvc.perform(post("/api/v1/auth/logout").cookie(access, xsrf)).andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/auth/logout").cookie(access, xsrf).header("X-XSRF-TOKEN", "wrong-token"))
                 .andExpect(status().isForbidden());
         // A failed CSRF check must not revoke the session.
         mockMvc.perform(get("/api/v1/auth/me").cookie(access)).andExpect(status().isOk());
-        mockMvc.perform(post("/api/v1/auth/logout").cookie(access, xsrf)
-                        .header("X-XSRF-TOKEN", token))
+        mockMvc.perform(post("/api/v1/auth/logout").cookie(access, xsrf).header("X-XSRF-TOKEN", token))
                 .andExpect(status().isNoContent());
     }
 
@@ -463,15 +512,18 @@ class SecurityAuthorizationIntegrationTest {
     void cookieAdminMutation_remainsCsrfProtectedEvenWithABearerHeader() throws Exception {
         Cookie access = new Cookie("access_token", adminToken.substring("Bearer ".length()));
         for (String authorization : new String[] {"", adminToken}) {
-            mockMvc.perform(post("/api/v1/catalog").cookie(access)
+            mockMvc.perform(post("/api/v1/catalog")
+                            .cookie(access)
                             .header("Authorization", authorization)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(status().isForbidden());
         }
         // Header-only native clients still reach validation without a CSRF token.
-        mockMvc.perform(post("/api/v1/catalog").header("Authorization", adminToken)
-                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+        mockMvc.perform(post("/api/v1/catalog")
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
                 .andExpect(status().isBadRequest());
     }
 
@@ -510,10 +562,14 @@ class SecurityAuthorizationIntegrationTest {
         String body = objectMapper.writeValueAsString(bad);
 
         for (int i = 0; i < 10; i++) {
-            mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(body))
+            mockMvc.perform(post("/api/v1/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
                     .andExpect(status().isUnauthorized());
         }
-        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(header().exists("Retry-After"));
 

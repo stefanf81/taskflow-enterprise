@@ -1,6 +1,12 @@
 package com.example.taskflow.core.web;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
 import jakarta.servlet.FilterChain;
+import java.util.Arrays;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
@@ -11,13 +17,6 @@ import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.filter.OncePerRequestFilter;
-
-import java.util.Arrays;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
 
 class RateLimiterConfigTest {
 
@@ -43,8 +42,8 @@ class RateLimiterConfigTest {
     }
 
     private void mockExecuteForKey(String expectedKey, Long returnValue) {
-        when(redisTemplate.execute(ArgumentMatchers.<RedisScript<List<Long>>>any(), eq(List.of(expectedKey)),
-                eq("60000")))
+        when(redisTemplate.execute(
+                        ArgumentMatchers.<RedisScript<List<Long>>>any(), eq(List.of(expectedKey)), eq("60000")))
                 .thenReturn(List.of(returnValue, 60_000L));
     }
 
@@ -87,8 +86,11 @@ class RateLimiterConfigTest {
         assertEquals(429, json.get("status").asInt());
         assertEquals("Too Many Requests", json.get("error").asString());
         assertEquals("Too Many Requests", json.get("title").asString());
-        assertEquals("Too many requests. Please try again later.", json.get("message").asString());
-        assertEquals("Too many requests. Please try again later.", json.get("detail").asString());
+        assertEquals(
+                "Too many requests. Please try again later.",
+                json.get("message").asString());
+        assertEquals(
+                "Too many requests. Please try again later.", json.get("detail").asString());
         assertEquals("/api/v1/auth/login", json.get("path").asString());
         assertEquals("/api/v1/auth/login", json.get("instance").asString());
         assertEquals("about:blank", json.get("type").asString());
@@ -122,8 +124,12 @@ class RateLimiterConfigTest {
         source.registerCorsConfiguration("/**", cors);
 
         OncePerRequestFilter corsAwareFilter = new RateLimiterConfig(
-                100, 20, source, java.time.Clock.fixed(java.time.Instant.parse("2026-10-12T08:00:00Z"),
-                java.time.ZoneOffset.UTC)).createRateLimitFilter(redisTemplate);
+                        100,
+                        20,
+                        source,
+                        java.time.Clock.fixed(
+                                java.time.Instant.parse("2026-10-12T08:00:00Z"), java.time.ZoneOffset.UTC))
+                .createRateLimitFilter(redisTemplate);
         mockExecute(21L);
 
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login");
@@ -238,7 +244,11 @@ class RateLimiterConfigTest {
 
         filter.doFilter(request, response, filterChain);
 
-        verify(redisTemplate, times(1)).execute(ArgumentMatchers.<RedisScript<List<Long>>>any(), eq(List.of("rate_limit:127.0.0.1:api")), eq("60000"));
+        verify(redisTemplate, times(1))
+                .execute(
+                        ArgumentMatchers.<RedisScript<List<Long>>>any(),
+                        eq(List.of("rate_limit:127.0.0.1:api")),
+                        eq("60000"));
         verify(filterChain, times(1)).doFilter(request, response);
         assertEquals(200, response.getStatus());
     }
@@ -322,8 +332,13 @@ class RateLimiterConfigTest {
 
     @Test
     void stateChangingAuthRequestsKeepTheAuthBucket() throws Exception {
-        for (String path : List.of("/api/v1/auth/login", "/api/v1/auth/mobile/login", "/api/v1/auth/register",
-                "/api/v1/auth/refresh", "/api/v1/auth/mobile/refresh", "/api/v1/auth/logout")) {
+        for (String path : List.of(
+                "/api/v1/auth/login",
+                "/api/v1/auth/mobile/login",
+                "/api/v1/auth/register",
+                "/api/v1/auth/refresh",
+                "/api/v1/auth/mobile/refresh",
+                "/api/v1/auth/logout")) {
             MockHttpServletRequest request = new MockHttpServletRequest("POST", path);
             request.setRemoteAddr("10.0.0.11");
             mockExecuteForKey("rate_limit:10.0.0.11:auth", 21L);
@@ -355,7 +370,8 @@ class RateLimiterConfigTest {
         assertEquals(21, blockedAt, "the 21st auth request in the window is refused even with Redis down");
         // After the first failure Redis is skipped for a backoff period rather than
         // being retried (and timing out) on every request.
-        verify(redisTemplate, times(1)).execute(ArgumentMatchers.<RedisScript<List<Long>>>any(), anyList(), anyString());
+        verify(redisTemplate, times(1))
+                .execute(ArgumentMatchers.<RedisScript<List<Long>>>any(), anyList(), anyString());
     }
 
     @Test

@@ -1,30 +1,27 @@
 package com.example.taskflow.benchmark;
 
-import com.example.taskflow.appointment.internal.AppointmentRepository;
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.example.taskflow.appointment.Barber;
-import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.BarberResponse;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
+import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
 import com.example.taskflow.auth.TestSecurityConfig;
 import com.example.taskflow.catalog.ServiceItem;
-import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.example.taskflow.catalog.ServiceItemResponse;
+import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.example.taskflow.review.internal.ReviewRepository;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.util.StopWatch;
-
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * HIGH-PERFORMANCE DTO PROJECTION vs ENTITY LOADING BENCHMARK
@@ -46,11 +43,12 @@ import static org.junit.jupiter.api.Assertions.*;
  * </ul>
  */
 @Tag("benchmark")
-@SpringBootTest(properties = {
-        "app.rate-limit.enabled=false",
-        "app.stats.cache.ttl=0",
-        "spring.datasource.hikari.maximum-pool-size=10",
-})
+@SpringBootTest(
+        properties = {
+            "app.rate-limit.enabled=false",
+            "app.stats.cache.ttl=0",
+            "spring.datasource.hikari.maximum-pool-size=10",
+        })
 @Import(TestSecurityConfig.class)
 class DtoProjectionBenchmarkTest {
 
@@ -91,11 +89,7 @@ class DtoProjectionBenchmarkTest {
         // --- Seed barbers ---
         List<Barber> barbers = new ArrayList<>(BARBER_COUNT);
         for (int i = 0; i < BARBER_COUNT; i++) {
-            barbers.add(new Barber(
-                    "Barber " + i,
-                    "barber" + i + "@example.com",
-                    "555-0" + i
-            ));
+            barbers.add(new Barber("Barber " + i, "barber" + i + "@example.com", "555-0" + i));
         }
         barberRepository.saveAll(barbers);
 
@@ -108,8 +102,7 @@ class DtoProjectionBenchmarkTest {
                     BigDecimal.valueOf(10.00 + (i % 90)),
                     15 + (i % 60),
                     categories[i % categories.length],
-                    "Description for service " + i
-            ));
+                    "Description for service " + i));
         }
         serviceItemRepository.saveAll(services);
     }
@@ -120,10 +113,10 @@ class DtoProjectionBenchmarkTest {
 
     @Test
     void benchmarkBarberReads() {
-        System.out.println("\n" + "=" .repeat(80));
+        System.out.println("\n" + "=".repeat(80));
         System.out.println("  BARBER LISTING: ENTITY LOADING vs DTO PROJECTION");
         System.out.println("  Data volume: " + BARBER_COUNT + " rows");
-        System.out.println("=" .repeat(80));
+        System.out.println("=".repeat(80));
 
         // --- Warm up ---
         for (int i = 0; i < WARMUP_ITERATIONS; i++) {
@@ -147,24 +140,28 @@ class DtoProjectionBenchmarkTest {
 
         // --- Report ---
         double speedup = ((entityAvgMs - dtoAvgMs) / entityAvgMs) * 100.0;
-        double entityThroughput = 1000.0 / entityAvgMs;  // ops/sec
+        double entityThroughput = 1000.0 / entityAvgMs; // ops/sec
         double dtoThroughput = 1000.0 / dtoAvgMs;
 
         System.out.println();
         System.out.printf("  %-45s %12s %12s %10s%n", "Approach", "Avg (ms)", "Ops/sec", "vs Entity");
         System.out.println("  " + "-".repeat(79));
-        System.out.printf("  %-45s %12.3f %12.1f %10s%n",
-                "Entity loading + manual mapping", entityAvgMs, entityThroughput, "—");
-        System.out.printf("  %-45s %12.3f %12.1f %10s%n",
-                "DTO projection (JPQL constructor)", dtoAvgMs, dtoThroughput,
+        System.out.printf(
+                "  %-45s %12.3f %12.1f %10s%n", "Entity loading + manual mapping", entityAvgMs, entityThroughput, "—");
+        System.out.printf(
+                "  %-45s %12.3f %12.1f %10s%n",
+                "DTO projection (JPQL constructor)",
+                dtoAvgMs,
+                dtoThroughput,
                 speedup > 0 ? "+" + String.format("%.1f%%", speedup) : String.format("%.1f%%", speedup));
 
         // --- Validate correctness ---
         List<BarberResponse> entityResults = loadBarbersViaEntities();
         List<BarberResponse> dtoResults = loadBarbersViaDtos();
-        assertEquals(entityResults.size(), dtoResults.size(),
-                "Both approaches must return the same number of barbers");
-        assertEquals(entityResults.get(0).name(), dtoResults.get(0).name(),
+        assertEquals(entityResults.size(), dtoResults.size(), "Both approaches must return the same number of barbers");
+        assertEquals(
+                entityResults.get(0).name(),
+                dtoResults.get(0).name(),
                 "Both approaches must return the same data (checked first entry)");
 
         // --- Summary line for easy parsing ---
@@ -181,10 +178,10 @@ class DtoProjectionBenchmarkTest {
 
     @Test
     void benchmarkServiceReads() {
-        System.out.println("\n" + "=" .repeat(80));
+        System.out.println("\n" + "=".repeat(80));
         System.out.println("  SERVICE CATALOG: ENTITY LOADING vs DTO PROJECTION");
         System.out.println("  Data volume: " + SERVICE_COUNT + " rows");
-        System.out.println("=" .repeat(80));
+        System.out.println("=".repeat(80));
 
         // --- Warm up ---
         for (int i = 0; i < WARMUP_ITERATIONS; i++) {
@@ -214,18 +211,23 @@ class DtoProjectionBenchmarkTest {
         System.out.println();
         System.out.printf("  %-45s %12s %12s %10s%n", "Approach", "Avg (ms)", "Ops/sec", "vs Entity");
         System.out.println("  " + "-".repeat(79));
-        System.out.printf("  %-45s %12.3f %12.1f %10s%n",
-                "Entity loading + manual mapping", entityAvgMs, entityThroughput, "—");
-        System.out.printf("  %-45s %12.3f %12.1f %10s%n",
-                "DTO projection (JPQL constructor)", dtoAvgMs, dtoThroughput,
+        System.out.printf(
+                "  %-45s %12.3f %12.1f %10s%n", "Entity loading + manual mapping", entityAvgMs, entityThroughput, "—");
+        System.out.printf(
+                "  %-45s %12.3f %12.1f %10s%n",
+                "DTO projection (JPQL constructor)",
+                dtoAvgMs,
+                dtoThroughput,
                 speedup > 0 ? "+" + String.format("%.1f%%", speedup) : String.format("%.1f%%", speedup));
 
         // --- Validate correctness ---
         List<ServiceItemResponse> entityResults = loadServicesViaEntities();
         List<ServiceItemResponse> dtoResults = loadServicesViaDtos();
-        assertEquals(entityResults.size(), dtoResults.size(),
-                "Both approaches must return the same number of services");
-        assertEquals(entityResults.get(0).name(), dtoResults.get(0).name(),
+        assertEquals(
+                entityResults.size(), dtoResults.size(), "Both approaches must return the same number of services");
+        assertEquals(
+                entityResults.get(0).name(),
+                dtoResults.get(0).name(),
                 "Both approaches must return the same data (checked first entry)");
 
         // --- Summary line for easy parsing ---
@@ -294,22 +296,22 @@ class DtoProjectionBenchmarkTest {
         System.out.println();
         System.out.printf("  %-20s %-20s %-20s %-20s%n", "Domain", "Entity (ms)", "DTO (ms)", "Speedup");
         System.out.println("  " + "-".repeat(76));
-        System.out.printf("  %-20s %-20.3f %-20.3f %-+20.1f%%%n",
-                "Barbers", barberEntityMs, barberDtoMs, barberSpeedup);
-        System.out.printf("  %-20s %-20.3f %-20.3f %-+20.1f%%%n",
-                "Services", svcEntityMs, svcDtoMs, svcSpeedup);
+        System.out.printf(
+                "  %-20s %-20.3f %-20.3f %-+20.1f%%%n", "Barbers", barberEntityMs, barberDtoMs, barberSpeedup);
+        System.out.printf("  %-20s %-20.3f %-20.3f %-+20.1f%%%n", "Services", svcEntityMs, svcDtoMs, svcSpeedup);
         System.out.println("  " + "-".repeat(76));
-        System.out.printf("  %-20s %-20s %-20s %-20s%n",
-                "", "",
-                "Avg improvement:",
-                String.format("%.1f%%", (barberSpeedup + svcSpeedup) / 2.0));
+        System.out.printf(
+                "  %-20s %-20s %-20s %-20s%n",
+                "", "", "Avg improvement:", String.format("%.1f%%", (barberSpeedup + svcSpeedup) / 2.0));
         System.out.println();
 
         // Assert: DTO projection should be at least as fast as entity loading
         // (it's strictly faster in practice, but we assert non-regression)
-        assertTrue(barberDtoMs <= barberEntityMs * 1.05,
+        assertTrue(
+                barberDtoMs <= barberEntityMs * 1.05,
                 "Barber DTO projection should not be more than 5% slower than entity loading");
-        assertTrue(svcDtoMs <= svcEntityMs * 1.05,
+        assertTrue(
+                svcDtoMs <= svcEntityMs * 1.05,
                 "Service DTO projection should not be more than 5% slower than entity loading");
     }
 

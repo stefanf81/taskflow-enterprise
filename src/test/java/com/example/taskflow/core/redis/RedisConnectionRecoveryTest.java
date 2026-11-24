@@ -1,21 +1,20 @@
 package com.example.taskflow.core.redis;
 
-import io.lettuce.core.RedisCommandTimeoutException;
-import org.junit.jupiter.api.Test;
-import org.springframework.dao.QueryTimeoutException;
-import org.springframework.data.redis.RedisConnectionFailureException;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.lettuce.core.RedisCommandTimeoutException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.data.redis.RedisConnectionFailureException;
 
 class RedisConnectionRecoveryTest {
 
@@ -86,9 +85,13 @@ class RedisConnectionRecoveryTest {
 
     @Test
     void aFailingResetIsSwallowed() {
-        RedisConnectionRecovery failing = new RedisConnectionRecovery(() -> {
-            throw new IllegalStateException("factory stopped");
-        }, 1, 5_000, now::get);
+        RedisConnectionRecovery failing = new RedisConnectionRecovery(
+                () -> {
+                    throw new IllegalStateException("factory stopped");
+                },
+                1,
+                5_000,
+                now::get);
 
         failing.recordFailure(TIMEOUT);
 
@@ -100,15 +103,19 @@ class RedisConnectionRecoveryTest {
         CountDownLatch inReset = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         AtomicInteger concurrentResets = new AtomicInteger();
-        RedisConnectionRecovery slow = new RedisConnectionRecovery(() -> {
-            concurrentResets.incrementAndGet();
-            inReset.countDown();
-            try {
-                release.await(5, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }, 3, 5_000, now::get);
+        RedisConnectionRecovery slow = new RedisConnectionRecovery(
+                () -> {
+                    concurrentResets.incrementAndGet();
+                    inReset.countDown();
+                    try {
+                        release.await(5, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                },
+                3,
+                5_000,
+                now::get);
 
         try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
             for (int i = 0; i < 200; i++) {
@@ -146,7 +153,7 @@ class RedisConnectionRecoveryTest {
 
     @Test
     void rejectsInvalidSettings() {
-        assertThrows(IllegalArgumentException.class, () -> new RedisConnectionRecovery(() -> { }, 0, 1, now::get));
-        assertThrows(IllegalArgumentException.class, () -> new RedisConnectionRecovery(() -> { }, 1, -1, now::get));
+        assertThrows(IllegalArgumentException.class, () -> new RedisConnectionRecovery(() -> {}, 0, 1, now::get));
+        assertThrows(IllegalArgumentException.class, () -> new RedisConnectionRecovery(() -> {}, 1, -1, now::get));
     }
 }

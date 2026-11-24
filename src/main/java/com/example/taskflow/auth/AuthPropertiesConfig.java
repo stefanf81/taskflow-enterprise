@@ -10,12 +10,12 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties({
-        JwtProperties.class,
-        RsaKeyProperties.class,
-        CookieProperties.class,
-        CorsProperties.class,
-        LoginThrottleProperties.class,
-        MetricsProperties.class,
-        RefreshProperties.class})
-class AuthPropertiesConfig {
-}
+    JwtProperties.class,
+    RsaKeyProperties.class,
+    CookieProperties.class,
+    CorsProperties.class,
+    LoginThrottleProperties.class,
+    MetricsProperties.class,
+    RefreshProperties.class
+})
+class AuthPropertiesConfig {}

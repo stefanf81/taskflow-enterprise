@@ -219,10 +219,10 @@ describe('Hooks', () => {
       mockGetShopInfoFn.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
 
       const { result } = await renderHook(() => useShopInfo(), { wrapper: createWrapper() });
-      expect(result.current).toEqual({ timeZone: null, rules: DEFAULT_SHOP_RULES, loaded: false });
+      expect(result.current).toEqual({ timeZone: null, rules: DEFAULT_SHOP_RULES, loaded: false, announcement: '' });
 
       await act(async () => {
-        answer({ timeZone: 'Europe/Berlin', maxAdvanceDays: 30, openingHours });
+        answer({ timeZone: 'Europe/Berlin', maxAdvanceDays: 30, openingHours, announcement: 'Half-price Tuesdays' });
         await new Promise((r) => setTimeout(r, 50));
       });
 
@@ -230,6 +230,7 @@ describe('Hooks', () => {
         timeZone: 'Europe/Berlin',
         rules: { maxAdvanceDays: 30, openingHours },
         loaded: true,
+        announcement: 'Half-price Tuesdays',
       });
     });
 
@@ -239,7 +240,7 @@ describe('Hooks', () => {
       const { result } = await renderHook(() => useShopInfo(), { wrapper: createWrapper() });
       await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
 
-      expect(result.current).toEqual({ timeZone: null, rules: DEFAULT_SHOP_RULES, loaded: false });
+      expect(result.current).toEqual({ timeZone: null, rules: DEFAULT_SHOP_RULES, loaded: false, announcement: '' });
     });
   });
 

@@ -1,16 +1,15 @@
 package com.example.taskflow.notification;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
 import com.example.taskflow.notification.internal.NotificationOutboxRepository;
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.data.domain.Pageable;
-import org.springframework.mail.MailSendException;
-
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -20,15 +19,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.LongStream;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.domain.Pageable;
+import org.springframework.mail.MailSendException;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationRelaySchedulerTest {
@@ -78,8 +77,10 @@ class NotificationRelaySchedulerTest {
         // batch means the backlog is drained: no second claim.
         verify(outboxRepository, times(1)).findClaimableForUpdate(eq(10), eq(NOW), any(Pageable.class));
         // Both go out in one gateway call (one SMTP session).
-        verify(sender).process(List.of(new NotificationSender.Claim(1L, "test-instance", NOW),
-                new NotificationSender.Claim(2L, "test-instance", NOW)));
+        verify(sender)
+                .process(List.of(
+                        new NotificationSender.Claim(1L, "test-instance", NOW),
+                        new NotificationSender.Claim(2L, "test-instance", NOW)));
         assertEquals("PROCESSING", pending.getStatus());
         assertEquals("test-instance", pending.getClaimedBy());
     }
@@ -88,7 +89,8 @@ class NotificationRelaySchedulerTest {
     @Test
     void relayDrainsABacklogInConsecutiveBatches() {
         when(outboxRepository.findClaimableForUpdate(anyInt(), any(Instant.class), any(Pageable.class)))
-                .thenReturn(pendingRows(0, NotificationRelayScheduler.CLAIM_BATCH_SIZE),
+                .thenReturn(
+                        pendingRows(0, NotificationRelayScheduler.CLAIM_BATCH_SIZE),
                         pendingRows(100, NotificationRelayScheduler.CLAIM_BATCH_SIZE),
                         pendingRows(200, 20));
         when(outboxRepository.save(any(NotificationOutbox.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -106,8 +108,14 @@ class NotificationRelaySchedulerTest {
 
     @Test
     void relayStopsClaimingOnceTheDrainBudgetIsUsedUp() {
-        NotificationRelayScheduler noBudget = new NotificationRelayScheduler(outboxRepository, sender, selfProvider,
-                "test-instance", Clock.fixed(NOW, ZoneOffset.UTC), true, Duration.ZERO);
+        NotificationRelayScheduler noBudget = new NotificationRelayScheduler(
+                outboxRepository,
+                sender,
+                selfProvider,
+                "test-instance",
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                true,
+                Duration.ZERO);
         when(outboxRepository.findStaleProcessing(any(Instant.class), any(Pageable.class)))
                 .thenReturn(List.of());
 
@@ -121,16 +129,24 @@ class NotificationRelaySchedulerTest {
     @Test
     void relayStopsStartingSendsMidBatchAndReturnsUnstartedClaimsWithoutAnAttempt() {
         AtomicLong nanos = new AtomicLong();
-        relay = new NotificationRelayScheduler(outboxRepository, sender, selfProvider, "test-instance",
-                Clock.fixed(NOW, ZoneOffset.UTC), true,
-                Duration.ofSeconds(20), nanos::get);
+        relay = new NotificationRelayScheduler(
+                outboxRepository,
+                sender,
+                selfProvider,
+                "test-instance",
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                true,
+                Duration.ofSeconds(20),
+                nanos::get);
         when(outboxRepository.findClaimableForUpdate(anyInt(), any(), any()))
                 .thenReturn(pendingRows(0, NotificationRelayScheduler.CLAIM_BATCH_SIZE));
         when(outboxRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         doAnswer(invocation -> {
-            nanos.addAndGet(Duration.ofSeconds(11).toNanos());
-            return null;
-        }).when(sender).process(anyList());
+                    nanos.addAndGet(Duration.ofSeconds(11).toNanos());
+                    return null;
+                })
+                .when(sender)
+                .process(anyList());
         when(outboxRepository.findStaleProcessing(any(), any())).thenReturn(List.of());
 
         relay.relay();
@@ -147,9 +163,15 @@ class NotificationRelaySchedulerTest {
     @Test
     void budgetExhaustedWhileClaimingDoesNotStartASend() {
         AtomicLong nanos = new AtomicLong();
-        relay = new NotificationRelayScheduler(outboxRepository, sender, selfProvider, "test-instance",
-                Clock.fixed(NOW, ZoneOffset.UTC), true,
-                Duration.ofSeconds(20), nanos::get);
+        relay = new NotificationRelayScheduler(
+                outboxRepository,
+                sender,
+                selfProvider,
+                "test-instance",
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                true,
+                Duration.ofSeconds(20),
+                nanos::get);
         when(outboxRepository.findClaimableForUpdate(anyInt(), any(), any())).thenAnswer(invocation -> {
             nanos.set(Duration.ofSeconds(21).toNanos());
             return pendingRows(1, 1);
@@ -171,8 +193,15 @@ class NotificationRelaySchedulerTest {
     @Test
     void aTransportOutageReturnsTheRunsClaimsAndPausesDeliveryUntilItRecovers() {
         AtomicLong nanos = new AtomicLong();
-        relay = new NotificationRelayScheduler(outboxRepository, sender, selfProvider, "test-instance",
-                Clock.fixed(NOW, ZoneOffset.UTC), true, Duration.ofSeconds(20), nanos::get);
+        relay = new NotificationRelayScheduler(
+                outboxRepository,
+                sender,
+                selfProvider,
+                "test-instance",
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                true,
+                Duration.ofSeconds(20),
+                nanos::get);
         when(outboxRepository.findClaimableForUpdate(anyInt(), any(), any()))
                 .thenAnswer(invocation -> pendingRows(0, NotificationRelayScheduler.CLAIM_BATCH_SIZE));
         when(outboxRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -221,11 +250,14 @@ class NotificationRelaySchedulerTest {
     }
 
     private static List<NotificationOutbox> pendingRows(long firstId, int count) {
-        return LongStream.range(firstId, firstId + count).mapToObj(id -> {
-            NotificationOutbox row = new NotificationOutbox("r" + id + "@x.com", "EMAIL", "m", SENT_AT, "PENDING");
-            row.setId(id);
-            return row;
-        }).toList();
+        return LongStream.range(firstId, firstId + count)
+                .mapToObj(id -> {
+                    NotificationOutbox row =
+                            new NotificationOutbox("r" + id + "@x.com", "EMAIL", "m", SENT_AT, "PENDING");
+                    row.setId(id);
+                    return row;
+                })
+                .toList();
     }
 
     @Test
@@ -242,8 +274,8 @@ class NotificationRelaySchedulerTest {
 
     @Test
     void scheduledRelayDoesNothingWhenSchedulersAreDisabled() {
-        NotificationRelayScheduler disabled = new NotificationRelayScheduler(
-                outboxRepository, sender, selfProvider, "off", Clock.systemUTC(), false);
+        NotificationRelayScheduler disabled =
+                new NotificationRelayScheduler(outboxRepository, sender, selfProvider, "off", Clock.systemUTC(), false);
 
         disabled.scheduledRelay();
 

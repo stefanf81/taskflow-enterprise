@@ -5,7 +5,6 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { Router, provideRouter } from '@angular/router';
 import { LandingPage } from './landing-page';
 import { AuthState, SESSION_EXPIRED_MESSAGE } from '../../core/auth/auth.state';
-import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
 import { DashboardPrefetch } from '../../dashboard-loaders';
 import { FlashMessages } from '../../core/ui/flash-messages';
 // Imported for its side effect only: the wizard is behind `@defer`, whose dynamic import would
@@ -108,12 +107,8 @@ describe('LandingPage', () => {
     fixture.detectChanges();
   }
 
-  it('shows the opening hours and open/closed badge from the shop info', () => {
+  it('shows the open/closed badge from the shop info', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    // DEFAULT_SHOP_RULES were flushed for /public/shop: Monday-Saturday 09:00-17:00.
-    expect(text).toContain('Monday - Saturday');
-    expect(text).toContain('9:00 AM - 5:00 PM');
-    expect(text).toMatch(/Sunday\s*CLOSED/);
     expect(text).toMatch(/● (Shop Open|Closed Now)/);
     expect(openClosedBadge(fixture.nativeElement)?.classList).not.toContain('invisible');
   });
@@ -140,14 +135,15 @@ describe('LandingPage', () => {
     expect(flash.successMessage()).toBe('Welcome back, Owner!');
   });
 
-  it('opens the owner portal login modal only when triggered', () => {
+  it('opens the login modal only when the nav\'s "Sign in" is clicked', () => {
     const page = fixture.componentInstance;
-    const button = (fixture.nativeElement as HTMLElement).querySelector(
-      'button',
-    ) as HTMLButtonElement;
+    const button = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('nav button'),
+    ).find((b) => b.textContent?.trim() === 'Sign in');
+    expect(button).toBeTruthy();
     expect(page.showAdminLoginModal()).toBe(false);
 
-    button.click();
+    button?.click();
 
     expect(page.showAdminLoginModal()).toBe(true);
   });
@@ -196,30 +192,6 @@ describe('LandingPage', () => {
       fixture.detectChanges();
 
       expect(navigate).toHaveBeenCalledWith('/admin');
-    });
-  });
-
-  describe('failed menu load (FE-1)', () => {
-    it('keeps the page alive and offers a retry', async () => {
-      TestBed.inject(ServiceCatalogStore).loadServices();
-      fixture.detectChanges();
-      httpMock
-        .match((req) => req.url.includes('/api/v1/catalog'))
-        .forEach((req) => req.flush(null, { status: 500, statusText: 'Server Error' }));
-      await fixture.whenStable();
-      fixture.detectChanges();
-
-      const el = fixture.nativeElement as HTMLElement;
-      expect(el.textContent).toContain('Could not load service catalog.');
-      expect(el.textContent).toContain('Grooming Menu');
-      expect(el.querySelector('app-booking-wizard')).toBeTruthy();
-
-      fixture.componentInstance.retryServices();
-      fixture.detectChanges();
-      httpMock.match((req) => req.url.includes('/api/v1/catalog')).forEach((req) => req.flush([]));
-      await fixture.whenStable();
-      fixture.detectChanges();
-      expect(el.textContent).not.toContain('Could not load service catalog.');
     });
   });
 });

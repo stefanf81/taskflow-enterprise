@@ -37,8 +37,8 @@ class ReviewRatingInputsListener {
     private final ApplicationEventPublisher eventPublisher;
     private final CacheManager cacheManager;
 
-    ReviewRatingInputsListener(ReviewRepository reviewRepository, ApplicationEventPublisher eventPublisher,
-                               CacheManager cacheManager) {
+    ReviewRatingInputsListener(
+            ReviewRepository reviewRepository, ApplicationEventPublisher eventPublisher, CacheManager cacheManager) {
         this.reviewRepository = reviewRepository;
         this.eventPublisher = eventPublisher;
         this.cacheManager = cacheManager;
@@ -78,7 +78,8 @@ class ReviewRatingInputsListener {
                 cache.evictIfPresent(ReviewCacheConfig.ALL_RATINGS_KEY);
             }
         } catch (RuntimeException e) {
-            logger.warn("Barber ratings cache eviction failed, the entry expires with its TTL: {}",
+            logger.warn(
+                    "Barber ratings cache eviction failed, the entry expires with its TTL: {}",
                     LogSanitizer.safeMessage(e));
         }
     }

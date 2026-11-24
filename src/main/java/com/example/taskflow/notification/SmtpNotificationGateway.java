@@ -3,18 +3,17 @@ package com.example.taskflow.notification;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
-import org.springframework.mail.MailAuthenticationException;
-import org.springframework.mail.MailPreparationException;
-import org.springframework.mail.MailSendException;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
-
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.mail.MailAuthenticationException;
+import org.springframework.mail.MailPreparationException;
+import org.springframework.mail.MailSendException;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 
 /** SMTP accepts EMAIL only. Existing outbox content is plain text, never interpreted as HTML. */
 final class SmtpNotificationGateway implements NotificationGateway {
@@ -106,7 +105,8 @@ final class SmtpNotificationGateway implements NotificationGateway {
     private static boolean neverConnected(MailSendException e, int batchSize) {
         Throwable cause = e.getCause();
         Map<Object, Exception> rejected = e.getFailedMessages();
-        return cause != null && rejected.size() == batchSize
+        return cause != null
+                && rejected.size() == batchSize
                 && rejected.values().stream().allMatch(exception -> exception == cause);
     }
 

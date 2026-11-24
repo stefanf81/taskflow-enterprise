@@ -1,258 +1,204 @@
+<app-admin-stats />
+
 <!-- SEARCH AND TABS CONTROLS -->
 <div class="space-y-4 mb-6">
   <div class="relative w-full">
     <label for="admin-appointment-search" class="sr-only">Search customers</label>
-    <span aria-hidden="true" class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"
-      >🔍</span
-    >
+    <app-icon
+      [icon]="icons.search"
+      class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 size-4"
+    />
     <input
       id="admin-appointment-search"
       type="text"
+      autocomplete="off"
       [value]="searchQuery()"
       (input)="onSearchChange($any($event.target).value)"
       placeholder="Search customers..."
-      class="search-input py-2.5 pl-10"
+      class="search-input"
     />
   </div>
 
-  <!-- Pill Filter Tabs -->
-  <div class="flex bg-white/5 rounded-xl p-1 border border-white/5">
-    <button
-      type="button"
-      (click)="setFilter('all')"
-      [attr.aria-pressed]="selectedFilter() === 'all'"
-      [class.bg-zinc-950]="selectedFilter() === 'all'"
-      [class.text-gold]="selectedFilter() === 'all'"
-      class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100"
-    >
-      All
-    </button>
-    <button
-      type="button"
-      (click)="setFilter('pending')"
-      [attr.aria-pressed]="selectedFilter() === 'pending'"
-      [class.bg-zinc-950]="selectedFilter() === 'pending'"
-      [class.text-gold]="selectedFilter() === 'pending'"
-      class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100"
-    >
-      Pending
-    </button>
-    <button
-      type="button"
-      (click)="setFilter('approved')"
-      [attr.aria-pressed]="selectedFilter() === 'approved'"
-      [class.bg-zinc-950]="selectedFilter() === 'approved'"
-      [class.text-gold]="selectedFilter() === 'approved'"
-      class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100"
-    >
-      Approved
-    </button>
-    <button
-      type="button"
-      (click)="setFilter('overdue')"
-      [attr.aria-pressed]="selectedFilter() === 'overdue'"
-      [class.bg-zinc-950]="selectedFilter() === 'overdue'"
-      [class.text-gold]="selectedFilter() === 'overdue'"
-      class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100 tab-btn tab-danger"
-    >
-      Overdue
-    </button>
-    <button
-      type="button"
-      (click)="setFilter('denied')"
-      [attr.aria-pressed]="selectedFilter() === 'denied'"
-      [class.bg-zinc-950]="selectedFilter() === 'denied'"
-      [class.text-gold]="selectedFilter() === 'denied'"
-      class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100"
-    >
-      Denied
-    </button>
-    <button
-      type="button"
-      (click)="setFilter('cancelled')"
-      [attr.aria-pressed]="selectedFilter() === 'cancelled'"
-      [class.bg-zinc-950]="selectedFilter() === 'cancelled'"
-      [class.text-gold]="selectedFilter() === 'cancelled'"
-      class="flex-1 text-center py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all text-zinc-400 hover:text-zinc-100"
-    >
-      Cancelled
-    </button>
-  </div>
+  <app-segmented-control
+    label="Filter by status"
+    [options]="filters"
+    [value]="selectedFilter()"
+    (valueChange)="setFilter($event)"
+  />
 </div>
 
 <!-- APPOINTMENTS LIST CONTAINER -->
-<div class="space-y-4">
-  @if (loadErrorMessage()) {
-    <div class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20">
-      <span class="text-3xl block mb-2">⚠️</span>
-      <h3 class="text-white font-bold text-sm">{{ loadErrorMessage() }}</h3>
-      <button
-        type="button"
-        class="btn btn-secondary py-2 px-4 text-xs mt-4"
-        (click)="loadAppointments()"
-      >
-        Retry
-      </button>
-    </div>
+<div class="space-y-3">
+  @if (loadErrorMessage(); as message) {
+    <app-empty-state kind="error" [title]="message">
+      <button type="button" appButton="secondary" (click)="loadAppointments()">Retry</button>
+    </app-empty-state>
   } @else if (isLoading() && appointments().length === 0) {
     <!-- Only when there is nothing to show yet: a refresh (SSE event, approve/deny/cancel) keeps
          the current rows, so focus and scroll position survive it. -->
-    <div class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20">
-      <span class="text-3xl block mb-2 animate-pulse">⏳</span>
-      <h3 class="text-white font-bold text-sm">Loading appointments…</h3>
-    </div>
+    <app-empty-state kind="loading" title="Loading appointments…" />
   } @else if (appointments().length === 0) {
-    <div class="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20">
-      <span class="text-3xl block mb-2">⌛</span>
-      <h3 class="text-white font-bold text-sm">No scheduled appointments found</h3>
-      <p class="text-xs text-zinc-500 font-light mt-1">
-        Try adjusting your filter status or search keyword.
-      </p>
+    <app-empty-state
+      title="No scheduled appointments found"
+      description="Try adjusting your filter status or search keyword."
+    >
       @if (currentPage() > 0) {
-        <button
-          type="button"
-          class="btn btn-secondary py-2 px-4 text-xs mt-4"
-          (click)="firstPage()"
-        >
+        <button type="button" appButton="secondary" (click)="firstPage()">
           Back to first page
         </button>
       }
-    </div>
+    </app-empty-state>
   } @else {
-    @for (appt of appointments(); track appt.id) {
+    <!-- BULK APPROVE: only pending bookings can be ticked; the bar shows once there are some. -->
+    @if (pendingOnPage().length > 0) {
       <div
-        class="card p-5 border border-white/5 bg-zinc-900/20 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:border-white/10"
-        [class.completed]="appt.status === 'APPROVED'"
-        [class.overdue]="appt.status === 'PENDING' && isOverdue(appt)"
+        class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5"
       >
-        <div class="flex-1 min-width-0">
-          <div class="flex items-center gap-3">
-            <h3 class="text-zinc-100 font-extrabold text-base m-0 leading-normal">
-              {{ appt.customerName }}
-            </h3>
+        <label class="flex items-center gap-2.5 text-xs font-semibold text-zinc-300 cursor-pointer">
+          <input
+            type="checkbox"
+            class="size-4 accent-[var(--color-accent)]"
+            [checked]="allPendingSelected()"
+            [indeterminate]="someSelected() && !allPendingSelected()"
+            [disabled]="isBulkApproving()"
+            (change)="toggleAllPending()"
+          />
+          Select all {{ pendingOnPage().length }} pending on this page
+        </label>
+        <span class="text-xs text-zinc-500" aria-live="polite">
+          {{ selectedCount() }} selected
+        </span>
+        <button
+          type="button"
+          appButton
+          class="ml-auto px-4 py-1.5 text-xs"
+          [disabled]="selectedCount() === 0 || isBulkApproving()"
+          (click)="approveSelected()"
+        >
+          {{ isBulkApproving() ? 'Approving…' : 'Approve selected' }}
+        </button>
+      </div>
+    }
 
-            <!-- Badges -->
-            @if (appt.status === 'APPROVED') {
-              <span
-                class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider"
-                >Approved</span
-              >
-            } @else if (appt.status === 'DENIED') {
-              <span
-                class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase tracking-wider"
-                >Denied</span
-              >
-            } @else if (appt.status === 'CANCELLED') {
-              <span
-                class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 uppercase tracking-wider"
-                >Cancelled</span
-              >
-            } @else if (isOverdue(appt)) {
-              <span
-                class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold bg-red-600 text-white uppercase tracking-wider"
-                >Overdue</span
-              >
-            } @else {
-              <span
-                class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider"
-                >Pending</span
-              >
+    <ul class="space-y-2 list-none m-0 p-0">
+      @for (appt of appointments(); track appt.id) {
+        <li
+          class="appt-row card px-4 py-3 flex flex-col md:flex-row md:items-center gap-x-4 gap-y-2"
+          [class.border-l-2]="appt.status === 'PENDING' && isOverdue(appt)"
+          [class.border-l-rose-400]="appt.status === 'PENDING' && isOverdue(appt)"
+        >
+          <!-- A fixed-width cell keeps the rows' columns aligned whether or not a row is tickable. -->
+          <div class="hidden md:flex w-5 shrink-0 justify-center">
+            @if (appt.status === 'PENDING') {
+              <input
+                type="checkbox"
+                class="size-4 accent-[var(--color-accent)]"
+                [attr.aria-label]="'Select booking of ' + appt.customerName"
+                [checked]="selectedIds().has(appt.id)"
+                [disabled]="isBulkApproving() || pendingIds().has(appt.id)"
+                (change)="toggleSelected(appt.id)"
+              />
             }
           </div>
 
-          <div class="flex gap-4 text-[10px] text-zinc-500 font-light mt-1.5">
-            <span>📧 {{ appt.customerEmail }}</span>
-            <span>📞 {{ appt.customerPhone }}</span>
+          <div class="flex items-center gap-3 md:contents">
+            @if (appt.status === 'PENDING') {
+              <input
+                type="checkbox"
+                class="size-4 md:hidden accent-[var(--color-accent)]"
+                [attr.aria-label]="'Select booking of ' + appt.customerName"
+                [checked]="selectedIds().has(appt.id)"
+                [disabled]="isBulkApproving() || pendingIds().has(appt.id)"
+                (change)="toggleSelected(appt.id)"
+              />
+            }
+            <!-- When -->
+            <div
+              class="md:w-48 shrink-0 text-xs font-bold uppercase tracking-wider"
+              [class]="
+                appt.status === 'PENDING' && isOverdue(appt) ? 'text-rose-400' : 'text-zinc-400'
+              "
+            >
+              <span class="block text-zinc-100 text-sm normal-case tracking-normal">{{
+                formatTime12Hour(appt.bookingTime)
+              }}</span>
+              <app-icon [icon]="icons.calendar" class="mr-1" />{{
+                formatLocalDate(appt.bookingDate)
+              }}
+            </div>
           </div>
 
-          <p class="text-xs text-zinc-300 font-light leading-relaxed mt-2.5">
-            ✂️ Service:
-            <strong class="text-gold font-semibold">{{ appt.serviceType }}</strong>
-            with
-            <strong class="text-zinc-100 font-semibold">{{ appt.barberName }}</strong>
-          </p>
-
-          <div
-            class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mt-2 flex items-center gap-1.5"
-            [class.text-rose-400]="appt.status === 'PENDING' && isOverdue(appt)"
-          >
-            <span
-              >📅 {{ formatLocalDate(appt.bookingDate) }} at
-              {{ formatTime12Hour(appt.bookingTime) }}</span
-            >
-          </div>
-        </div>
-
-        <!-- Actions Approval buttons -->
-        <div class="flex md:flex-col gap-2 w-full md:w-auto">
-          @if (appt.status === 'PENDING') {
-            <button
-              class="flex-1 btn btn-submit py-1.5 text-xs text-center"
-              (click)="approveAppointment(appt.id)"
-              [disabled]="pendingIds().has(appt.id)"
-              title="Approve booking"
-            >
-              Approve
-            </button>
-            <button
-              class="flex-1 btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-600 hover:text-white py-1.5 text-xs text-center"
-              (click)="denyAppointment(appt.id)"
-              [disabled]="pendingIds().has(appt.id)"
-              title="Decline booking"
-            >
-              Deny
-            </button>
-          }
-          @if (appt.status === 'APPROVED') {
-            <button
-              class="flex-1 btn bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-600 hover:text-white py-1.5 text-xs text-center"
-              (click)="denyAppointment(appt.id)"
-              [disabled]="pendingIds().has(appt.id)"
-              title="Revoke and Decline booking"
-            >
-              Deny
-            </button>
-          }
-          @if (appt.status === 'DENIED') {
-            <button
-              class="flex-1 btn btn-submit py-1.5 text-xs text-center"
-              (click)="approveAppointment(appt.id)"
-              [disabled]="pendingIds().has(appt.id)"
-              title="Approve declined booking"
-            >
-              Approve
-            </button>
-          }
-          @if (appt.status === 'PENDING' || appt.status === 'APPROVED') {
-            <button
-              class="action-btn btn-delete mx-auto md:mx-0 mt-1"
-              (click)="cancelAppointment(appt.id)"
-              [disabled]="pendingIds().has(appt.id)"
-              title="Cancel booking"
-              aria-label="Cancel booking"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="2"
-                stroke="currentColor"
-                class="w-4 h-4"
-                aria-hidden="true"
+          <!-- Who and what -->
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <h3 class="text-zinc-100 font-extrabold text-sm m-0 leading-normal truncate">
+                {{ appt.customerName }}
+              </h3>
+              <app-status-badge [status]="appt.status" [overdue]="isOverdue(appt)" />
+            </div>
+            <p class="text-xs text-zinc-300 font-light mt-0.5 mb-0 truncate">
+              <strong class="text-accent font-semibold">{{ appt.serviceType }}</strong>
+              with
+              <strong class="text-zinc-100 font-semibold">{{ appt.barberName }}</strong>
+            </p>
+            <p class="flex flex-wrap gap-x-3 text-xs text-zinc-500 font-light mt-0.5 mb-0">
+              <span class="flex items-center gap-1.5 min-w-0"
+                ><app-icon [icon]="icons.mail" /><span class="truncate">{{
+                  appt.customerEmail
+                }}</span></span
               >
-                <path stroke-linecap="round" stroke-linejoin="round" d="m6 6 12 12M6 18 18 6" />
-              </svg>
-            </button>
-          }
-        </div>
-      </div>
-    }
+              <span class="flex items-center gap-1.5"
+                ><app-icon [icon]="icons.phone" />{{ appt.customerPhone }}</span
+              >
+            </p>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex items-center gap-2 md:justify-end md:w-52 shrink-0">
+            @if (appt.status === 'PENDING' || appt.status === 'DENIED') {
+              <button
+                appButton
+                class="flex-1 md:flex-none text-center px-3.5 py-1.5 text-xs"
+                (click)="approveAppointment(appt.id)"
+                [disabled]="pendingIds().has(appt.id)"
+                [title]="appt.status === 'DENIED' ? 'Approve declined booking' : 'Approve booking'"
+              >
+                Approve
+              </button>
+            }
+            @if (appt.status === 'PENDING' || appt.status === 'APPROVED') {
+              <button
+                appButton="danger"
+                class="flex-1 md:flex-none text-center px-3.5 py-1.5 text-xs"
+                (click)="denyAppointment(appt.id)"
+                [disabled]="pendingIds().has(appt.id)"
+                [title]="
+                  appt.status === 'APPROVED' ? 'Revoke and Decline booking' : 'Decline booking'
+                "
+              >
+                Deny
+              </button>
+              <button
+                class="action-btn btn-delete"
+                (click)="cancelAppointment(appt.id)"
+                [disabled]="pendingIds().has(appt.id)"
+                title="Cancel booking"
+                aria-label="Cancel booking"
+              >
+                <app-icon [icon]="icons.x" class="size-4" />
+              </button>
+            }
+          </div>
+        </li>
+      }
+    </ul>
 
     <!-- Pagination Controls -->
     @if (totalPages() > 1) {
       <div class="flex justify-between items-center border-t border-white/5 pt-5 mt-6">
         <button
-          class="btn btn-secondary btn-page"
+          appButton="secondary"
+          class="btn-page"
           [disabled]="currentPage() === 0"
           (click)="prevPage()"
         >
@@ -263,7 +209,8 @@
           <strong class="text-zinc-100">{{ totalPages() }}</strong></span
         >
         <button
-          class="btn btn-secondary btn-page"
+          appButton="secondary"
+          class="btn-page"
           [disabled]="currentPage() >= totalPages() - 1"
           (click)="nextPage()"
         >

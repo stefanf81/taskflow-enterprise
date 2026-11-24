@@ -5,13 +5,22 @@ dependency-analysis = "3.20.4"
 versions-plugin = "0.67.0"
 spotbugs-plugin = "6.5.13"
 spotbugs-tool = "4.10.5"
+# Spotless 8.12.0 (2026-11-21) is still inside the 3-day release-age hold; Renovate moves it.
+spotless-plugin = "8.11.0"
+# Java formatter run by Spotless (4-space indent, 120 columns).
+palantir-java-format = "2.103.0"
 # The companion BOM keeps every OpenTelemetry module at this security-reviewed release.
 opentelemetry = "1.68.0"
 prometheus = "1.10.0"
 commons-lang3 = "3.22.0"
 # Pinned to the 1.6 line (Spring Boot 4.2 ships 1.6.6); 1.6.x includes the
-# hardening for disallowed conditional configuration references.
+# hardening for disallowed conditional configuration references. checkBomOverrides
+# fails once the BOM manages this release or a later one.
 logback = "1.6.8"
+# Ahead of the Spring Boot 4.2.0 BOM (11.0.27) for the fixes in 11.0.29; applied as dependency
+# constraints in build.gradle. checkBomOverrides fails once the BOM manages this release or a later
+# one; then remove this entry and the three constraints.
+tomcat = "11.0.29"
 # Jackson 2.x and 3.x remain separate families and must stay internally aligned.
 jackson2 = "2.23.0"
 jackson-annotations = "2.23"
@@ -58,6 +67,9 @@ spring-boot-configuration-processor = { module = "org.springframework.boot:sprin
 
 commons-lang3 = { module = "org.apache.commons:commons-lang3", version.ref = "commons-lang3" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+tomcat-embed-core = { module = "org.apache.tomcat.embed:tomcat-embed-core", version.ref = "tomcat" }
+tomcat-embed-el = { module = "org.apache.tomcat.embed:tomcat-embed-el", version.ref = "tomcat" }
+tomcat-embed-websocket = { module = "org.apache.tomcat.embed:tomcat-embed-websocket", version.ref = "tomcat" }
 log4j2-api = { module = "org.apache.logging.log4j:log4j-api", version.ref = "log4j2" }
 log4j2-to-slf4j = { module = "org.apache.logging.log4j:log4j-to-slf4j", version.ref = "log4j2" }
 jackson2-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson2" }
@@ -92,6 +104,8 @@ archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
 findsecbugs-plugin = { module = "com.h3xstream.findsecbugs:findsecbugs-plugin", version.ref = "findsecbugs" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+# Not a dependency: Spotless resolves the formatter itself. Declared so Renovate tracks the version.
+palantir-java-format = { module = "com.palantir.javaformat:palantir-java-format", version.ref = "palantir-java-format" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
@@ -99,3 +113,4 @@ dependency-check = { id = "org.owasp.dependencycheck", version.ref = "dependency
 versions = { id = "io.github.ben-manes.versions", version.ref = "versions-plugin" }
 spotbugs = { id = "com.github.spotbugs", version.ref = "spotbugs-plugin" }
 dependency-analysis = { id = "com.autonomousapps.dependency-analysis", version.ref = "dependency-analysis" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless-plugin" }
