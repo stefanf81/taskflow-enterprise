@@ -196,8 +196,12 @@ class NotificationRelayScheduler {
                 List<NotificationSender.Claim> chunk =
                         claims.subList(index, Math.min(index + SEND_BATCH_SIZE, claims.size()));
                 try {
-                    sender.process(chunk);
-                    transportReachable();
+                    // Only a message the server accepted proves the transport is back: a chunk whose
+                    // claims were all lost meanwhile, or whose messages could not be built, never
+                    // contacted it, and must not end an outage pause.
+                    if (sender.process(chunk) > 0) {
+                        transportReachable();
+                    }
                 } catch (TransportUnavailableException e) {
                     // The sender returned this chunk without an attempt; the rest of the run's
                     // claims go back the same way, and no further batch is claimed.

@@ -86,10 +86,13 @@ class NotificationSenderTest {
         when(outboxRepository.markFailedIfClaimed(anyLong(), anyString(), any(), anyInt(), any()))
                 .thenReturn(1);
 
-        sender.process(List.of(
+        int accepted = sender.process(List.of(
                 claim,
                 new NotificationSender.Claim(2L, WORKER, CLAIMED_AT),
                 new NotificationSender.Claim(3L, WORKER, CLAIMED_AT)));
+
+        // Only row 1 was accepted: row 2 was rejected, row 3 never sent.
+        assertEquals(1, accepted);
 
         // One call for both rows this worker still owns; the row claimed elsewhere is not sent.
         verify(gateway)
@@ -110,9 +113,19 @@ class NotificationSenderTest {
         when(outboxRepository.markFailedIfClaimed(anyLong(), anyString(), any(), anyInt(), any()))
                 .thenReturn(1);
 
-        sender.process(List.of(claim));
+        assertEquals(0, sender.process(List.of(claim)));
 
         verify(outboxRepository).markFailedIfClaimed(eq(1L), eq(WORKER), eq(CLAIMED_AT), eq(1), any());
+    }
+
+    @Test
+    void batchReportsNothingSentWhenEveryClaimWasLost() {
+        outbox.setClaimedBy("another-worker");
+        when(outboxRepository.findAllById(List.of(1L))).thenReturn(List.of(outbox));
+
+        // The relay must not read this as the mail server being reachable again.
+        assertEquals(0, sender.process(List.of(claim)));
+        verifyNoInteractions(gateway);
     }
 
     @Test
