@@ -1,8 +1,15 @@
 package com.example.taskflow.testsupport;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
 
 /**
  * The PostgreSQL server of a test JVM: every Spring context of the {@code test} task gets its own
@@ -14,11 +21,14 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 public final class PostgresTestServer {
 
     /**
-     * The production image, postgres:18.7-alpine, by the digest docker-compose.yml and ci.yml pin.
-     * Digest only: Testcontainers cannot parse a reference that has both a tag and a digest.
+     * The image of the compose {@code db} service ({@code postgres:<tag>@sha256:<digest>}, the pin
+     * ci.yml shares). Read from docker-compose.yml so the local stack and the tests always run the
+     * same server: Renovate ignores {@code src/test}, so an image written here would stay behind on
+     * the next update. Testcontainers does not recognise a reference with both a tag and a digest as
+     * a postgres image on its own, hence the declared substitute.
      */
-    public static final String IMAGE =
-            "postgres@sha256:ff64c9e3bdf8e2120107d3559de8db314e8305f7e38c5105903c6295876738ff";
+    public static final DockerImageName IMAGE =
+            DockerImageName.parse(composeImage()).asCompatibleSubstituteFor("postgres");
 
     /**
      * Room for every cached Spring context of one fork: each holds at most one idle connection
@@ -58,6 +68,20 @@ public final class PostgresTestServer {
     /** Whether {@code TASKFLOW_TEST_POSTGRES_URL} names a server, instead of a container per JVM. */
     public static boolean isExternal() {
         return hasExternalServer();
+    }
+
+    private static String composeImage() {
+        String compose;
+        try {
+            compose = Files.readString(Path.of("docker-compose.yml"));
+        } catch (IOException e) {
+            throw new UncheckedIOException("the PostgreSQL tests read their image from docker-compose.yml", e);
+        }
+        Matcher image = Pattern.compile("(?m)^\\s+image: (postgres:\\S+)$").matcher(compose);
+        if (!image.find()) {
+            throw new IllegalStateException("docker-compose.yml names no postgres image");
+        }
+        return image.group(1);
     }
 
     private static boolean hasExternalServer() {

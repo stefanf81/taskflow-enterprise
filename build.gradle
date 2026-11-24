@@ -289,7 +289,17 @@ spotbugs {
 	reportLevel = com.github.spotbugs.snom.Confidence.valueOf('HIGH')
 	excludeFilter = file("spotbugs-exclude.xml")
 }
+// The PostgreSQL tests (test and testcontainersTest) take their image from the
+// compose `db` service (PostgresTestServer.IMAGE). Only that image is an input,
+// so an image update reruns both suites instead of restoring them from the build
+// cache, while other docker-compose.yml edits leave their cache alone.
+def composePostgresImage = providers.fileContents(layout.projectDirectory.file("docker-compose.yml")).asText.map { text ->
+	def image = text =~ /(?m)^\s+image: (postgres:\S+)$/
+	image.find() ? image.group(1) : "none"
+}
+
 tasks.named("test") {
+	inputs.property("postgresImage", composePostgresImage)
 	useJUnitPlatform {
 		// container-config guards run in containerConfigTest below, so their
 		// file inputs never invalidate this (Spring-context) suite's cache.
@@ -421,6 +431,7 @@ tasks.register("testcontainersTest", Test) {
 	testClassesDirs = sourceSets.test.output.classesDirs
 	classpath = sourceSets.test.runtimeClasspath
 	maxParallelForks = 1
+	inputs.property("postgresImage", composePostgresImage)
 	// jacocoTestReport/-Verification read `test` only, so the agent here only
 	// slowed every Spring context start (see the `test` task).
 	jacoco {
