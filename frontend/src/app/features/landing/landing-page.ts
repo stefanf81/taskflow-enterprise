@@ -1,19 +1,23 @@
 import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthState } from '../../core/auth/auth.state';
-import { formatUsd } from '../../core/format';
 import { DashboardPrefetch } from '../../dashboard-loaders';
-import { ServiceCatalogStore } from '../../core/catalog/service-catalog.store';
 import { FlashMessages } from '../../core/ui/flash-messages';
 import { ShopClock } from '../../core/shop-clock';
-import { isOpenAt, openingHoursRows } from '@taskflow/domain';
+import { isOpenAt } from '@taskflow/domain';
 import { AnnouncementBarComponent } from './announcement-bar/announcement-bar';
 import { AuthModalComponent } from './auth-modal/auth-modal';
+import { BookBar } from './book-bar/book-bar';
 import { FaqSectionComponent } from './faq-section/faq-section';
 import { LookbookComponent } from './lookbook/lookbook';
 import { PostBookingActionsComponent } from './post-booking-actions/post-booking-actions';
 import { BookingWizard } from '../booking/booking-wizard';
 import { LookbookSelectionBus } from '../booking/lookbook-selection';
+import { ShopDetails } from './shop-details/shop-details';
+import { circleCheckIcon } from '../../core/ui/icons/circle-check';
+import { hourglassIcon } from '../../core/ui/icons/hourglass';
+import { lockIcon } from '../../core/ui/icons/lock';
+import { Icon } from '../../core/ui/icon';
 
 /**
  * Guest landing page (route `/`).
@@ -28,41 +32,36 @@ import { LookbookSelectionBus } from '../booking/lookbook-selection';
   imports: [
     AnnouncementBarComponent,
     AuthModalComponent,
+    BookBar,
     FaqSectionComponent,
     LookbookComponent,
     PostBookingActionsComponent,
     BookingWizard,
+    ShopDetails,
+    Icon,
   ],
   templateUrl: './landing-page.html',
 })
 export class LandingPage {
+  protected readonly icons = {
+    circleCheck: circleCheckIcon,
+    hourglass: hourglassIcon,
+    lock: lockIcon,
+  };
   private readonly authState = inject(AuthState);
   private readonly lookbookSelection = inject(LookbookSelectionBus);
   private readonly flash = inject(FlashMessages);
-  private readonly catalogStore = inject(ServiceCatalogStore);
   private readonly router = inject(Router);
   private readonly dashboardPrefetch = inject(DashboardPrefetch);
   private readonly shopClock = inject(ShopClock);
 
-  /**
-   * The week's hours from the barbers' schedules (`/public/shop`). The prerendered page shows the
-   * server's defaults, which the browser replaces once the real hours have loaded.
-   */
-  protected readonly openingHours = computed(() => openingHoursRows(this.shopClock.rules()));
   /** Open right now in the shop's time zone; null until the real hours are known (and prerendering). */
   protected readonly openNow = computed(() =>
     this.shopClock.loaded() ? isOpenAt(this.shopClock.now(), this.shopClock.rules()) : null,
   );
 
   protected readonly isLoggedIn = this.authState.isLoggedIn;
-  protected readonly formatUsd = formatUsd;
   readonly showAdminLoginModal = signal(false);
-  protected readonly services = this.catalogStore.services;
-  readonly servicesLoading = this.catalogStore.isLoading;
-  protected readonly servicesError = this.catalogStore.errorMessage;
-  protected readonly servicesLoaded = this.catalogStore.hasLoaded;
-  /** Placeholder rows shown until the catalog arrives; the seeded catalog has five services. */
-  protected readonly skeletonRows = [0, 1, 2, 3, 4];
 
   constructor() {
     this.shopClock.watch(inject(DestroyRef));
@@ -89,10 +88,6 @@ export class LandingPage {
         void this.router.navigateByUrl(this.authState.dashboardPathFor(role));
       }
     });
-  }
-
-  retryServices(): void {
-    this.catalogStore.loadServices();
   }
 
   protected selectLookbookStyle(serviceName: string, category: string): void {

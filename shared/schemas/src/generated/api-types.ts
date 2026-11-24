@@ -5,6 +5,15 @@
  * DO NOT EDIT MANUALLY — run `npm run sync:api-types` to regenerate.
  */
 
+export interface AnnouncementRequest {
+  message?: string;
+}
+
+export interface AnnouncementResponse {
+  active: boolean;
+  message: string;
+}
+
 export interface AppointmentCreateRequest {
   barberName: string;
   bookingDate: string;
@@ -208,6 +217,21 @@ export interface RescheduleRequest {
   bookingTime: string;
 }
 
+export interface RetailProductRequest {
+  name: string;
+  price: number;
+  sizeLabel?: string;
+  sortOrder: number;
+}
+
+export interface RetailProductResponse {
+  id: number;
+  name: string;
+  price: number;
+  sizeLabel: string;
+  sortOrder: number;
+}
+
 export interface ReviewRequest {
   comment?: string;
   customerEmail: string;
@@ -250,6 +274,7 @@ export interface ServiceItemResponse {
 }
 
 export interface ShopInfoResponse {
+  announcement: string;
   maxAdvanceDays: number;
   openingHours: OpeningHoursResponse[];
   timeZone: string;

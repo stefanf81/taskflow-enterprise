@@ -16,7 +16,7 @@ export interface StylistProfile {
     <button
       type="button"
       [attr.aria-pressed]="isSelected()"
-      class="card w-full text-left p-4 border border-white/5 bg-zinc-900/30 hover:border-gold/30 hover:bg-gold/5 flex items-center gap-4 cursor-pointer transition-all"
+      class="card w-full text-left p-4 flex items-center gap-4 cursor-pointer"
       [class.selected-service-item]="isSelected()"
       (click)="selected.emit()"
     >
@@ -25,7 +25,7 @@ export interface StylistProfile {
            fails WCAG 2.5.3 (axe label-content-name-mismatch). -->
       <span
         aria-hidden="true"
-        class="w-12 h-12 rounded-full bg-gradient-to-r from-gold to-gold-dark flex items-center justify-center text-sm font-black text-black"
+        class="w-12 h-12 rounded-full bg-gradient-to-r from-accent to-accent-muted flex items-center justify-center text-sm font-black text-black"
       >
         {{ profile().name.charAt(0) }}
       </span>
@@ -35,20 +35,18 @@ export interface StylistProfile {
             <span class="m-0 text-zinc-100 font-extrabold text-sm">{{ profile().name }}</span>
             @if (profile().badge) {
               <span
-                class="text-[9px] uppercase font-black tracking-wider px-1.5 py-0.5 rounded bg-gold/20 text-gold border border-gold/30"
+                class="text-xs uppercase font-black tracking-wider px-1.5 py-0.5 rounded bg-accent/20 text-accent border border-accent/30"
               >
                 {{ profile().badge }}
               </span>
             }
           </span>
-          <span class="text-xs font-bold text-gold"
+          <span class="text-xs font-bold text-accent"
             >{{ profile().rating }}
-            <span class="text-[10px] text-zinc-500 font-light"
-              >({{ profile().reviews }})</span
-            ></span
+            <span class="text-xs text-zinc-500 font-light">({{ profile().reviews }})</span></span
           >
         </span>
-        <span class="block m-0 text-[11px] font-semibold text-gold mt-0.5">
+        <span class="block m-0 text-xs font-semibold text-accent mt-0.5">
           {{ profile().title }}
         </span>
         <span class="block m-0 text-xs text-zinc-500 font-light mt-1 leading-normal">

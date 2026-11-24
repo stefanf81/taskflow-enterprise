@@ -763,6 +763,79 @@ class BookingRulesIntegrationTest {
         assertSearch("%", 0, null);
     }
 
+    @Test
+    void adminListCanBeLimitedToADateRangeBothEndsInclusive() throws Exception {
+        Appointment before = appointmentRepository.save(new Appointment(
+                "Range Before", "rb@example.com", "555-0001", BARBER, TODAY.minusDays(5), "10:00", CUT));
+        Appointment first = appointmentRepository.save(
+                new Appointment("Range First", "rf@example.com", "555-0002", BARBER, TODAY.minusDays(4), "10:00", CUT));
+        Appointment last = appointmentRepository.save(
+                new Appointment("Range Last", "rl@example.com", "555-0003", BARBER, TODAY.minusDays(2), "11:00", CUT));
+        Appointment after = appointmentRepository.save(
+                new Appointment("Range After", "ra@example.com", "555-0004", BARBER, TODAY.minusDays(1), "10:00", CUT));
+
+        String from = TODAY.minusDays(4).toString();
+        String to = TODAY.minusDays(2).toString();
+        mockMvc.perform(get("/api/v1/appointments")
+                        .param("from", from)
+                        .param("to", to)
+                        .header("Authorization", adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.content", hasSize(2)))
+                // newest first, and the count is the range's own, not the table's
+                .andExpect(jsonPath("$.page.content[0].id", is(last.getId().intValue())))
+                .andExpect(jsonPath("$.page.content[1].id", is(first.getId().intValue())))
+                .andExpect(jsonPath("$.page.page.totalElements", is(2)));
+        // one end alone, and a day (from == to)
+        mockMvc.perform(get("/api/v1/appointments")
+                        .param("from", TODAY.minusDays(1).toString())
+                        .header("Authorization", adminToken))
+                .andExpect(jsonPath("$.page.content[?(@.id == " + after.getId() + ")]", hasSize(1)))
+                .andExpect(jsonPath("$.page.content[?(@.id == " + before.getId() + ")]", hasSize(0)));
+        mockMvc.perform(get("/api/v1/appointments").param("to", from).header("Authorization", adminToken))
+                .andExpect(jsonPath("$.page.content[?(@.id == " + before.getId() + ")]", hasSize(1)))
+                .andExpect(jsonPath("$.page.content[?(@.id == " + last.getId() + ")]", hasSize(0)));
+        mockMvc.perform(get("/api/v1/appointments")
+                        .param("from", to)
+                        .param("to", to)
+                        .header("Authorization", adminToken))
+                .andExpect(jsonPath("$.page.content", hasSize(1)))
+                .andExpect(jsonPath("$.page.content[0].id", is(last.getId().intValue())));
+        // it combines with the other filters
+        mockMvc.perform(get("/api/v1/appointments")
+                        .param("from", from)
+                        .param("to", to)
+                        .param("search", "first")
+                        .header("Authorization", adminToken))
+                .andExpect(jsonPath("$.page.content", hasSize(1)))
+                .andExpect(jsonPath("$.page.content[0].id", is(first.getId().intValue())));
+        mockMvc.perform(get("/api/v1/appointments")
+                        .param("from", from)
+                        .param("to", to)
+                        .param("status", "OVERDUE")
+                        .header("Authorization", adminToken))
+                .andExpect(jsonPath("$.page.content", hasSize(2)));
+        mockMvc.perform(get("/api/v1/appointments")
+                        .param("from", from)
+                        .param("to", to)
+                        .param("status", "APPROVED")
+                        .header("Authorization", adminToken))
+                .andExpect(jsonPath("$.page.content", hasSize(0)));
+    }
+
+    @Test
+    void adminListRejectsAnInvertedOrMalformedDateRange() throws Exception {
+        mockMvc.perform(get("/api/v1/appointments")
+                        .param("from", "2030-01-02")
+                        .param("to", "2030-01-01")
+                        .header("Authorization", adminToken))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/appointments")
+                        .param("from", "next tuesday")
+                        .header("Authorization", adminToken))
+                .andExpect(status().isBadRequest());
+    }
+
     private void assertSearch(String term, int expected, Long expectedId) throws Exception {
         ResultActions result = mockMvc.perform(
                         get("/api/v1/appointments").param("search", term).header("Authorization", adminToken))

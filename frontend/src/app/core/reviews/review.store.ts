@@ -6,6 +6,7 @@ import { PUBLIC_REQUEST } from '../http/public-request.token';
 import { safeResourceValue } from '../resource-utils';
 import { isServerRender } from '../platform';
 import { barberRatingResponseListSchema } from '@taskflow/schemas';
+import { summarizeShopRatings } from '@taskflow/domain';
 
 @Injectable({ providedIn: 'root' })
 export class ReviewStore {
@@ -31,6 +32,17 @@ export class ReviewStore {
   /** Error-safe: an empty list (never a throw) while loading or after a failed load. */
   readonly ratings = safeResourceValue<BarberRating[]>(this.ratingsResource, []);
   readonly isLoading = this.ratingsResource.isLoading;
+  /**
+   * Whether the request has produced a list. False while prerendering (no request is made) and
+   * while the first load is in flight, so the prerendered page and the browser's first render
+   * agree; once true, an empty list really means "no reviews yet".
+   */
+  readonly hasLoaded = computed(() => {
+    const status = this.ratingsResource.status();
+    return status === 'resolved' || status === 'local';
+  });
+  /** The shop's rating across every barber, or null when nobody has been reviewed. */
+  readonly shopSummary = computed(() => summarizeShopRatings(this.ratings()));
   readonly errorMessage = computed(() => {
     const err = this.ratingsResource.error();
     return err ? 'Could not load barber ratings.' : null;

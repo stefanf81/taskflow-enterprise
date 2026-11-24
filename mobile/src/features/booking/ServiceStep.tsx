@@ -6,7 +6,7 @@ import { EmptyState } from '../../components/common/EmptyState';
 import { ErrorState } from '../../components/common/ErrorState';
 import { LoadingIndicator } from '../../components/common/LoadingIndicator';
 import { ServiceItem } from '../../types/api';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 import { filterServices } from './bookingWizard';
 import { wizardStyles } from './wizardStyles';
 
@@ -109,7 +109,7 @@ export const ServiceStep: React.FC<ServiceStepProps> = ({
           >
             <View style={styles.optionInfo}>
               <View style={styles.optionRow}>
-                {isSel && <Text style={styles.crownIcon}>👑</Text>}
+                {isSel && <Ionicons name="checkmark-circle" size={14} color={colors.gold.main} />}
                 <Text style={wizardStyles.optionTitle}>{svc.name}</Text>
               </View>
               <Text style={styles.optionSub}>Duration: {svc.durationMinutes} mins</Text>
@@ -136,9 +136,9 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#000000',
+    backgroundColor: semantic.page,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: withAlpha(semantic['fg-strong'], 0.1),
     borderRadius: 10,
     paddingHorizontal: 12,
     marginBottom: 12,
@@ -161,9 +161,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: withAlpha(semantic['fg-strong'], 0.05),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: withAlpha(semantic['fg-strong'], 0.05),
     marginRight: 6,
   },
   catChipSelected: {
@@ -187,9 +187,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-  },
-  crownIcon: {
-    fontSize: 14,
   },
   optionSub: {
     color: colors.text.muted,

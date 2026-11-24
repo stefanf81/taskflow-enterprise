@@ -1,4 +1,5 @@
 import { array, gte, lte, minLength, number, object, string, type infer as zInfer } from "zod/mini";
+import { omittedAsEmptyString } from "./catalog";
 import { timeSchema } from "./formats";
 
 /** One weekday's hours in the shop info: ISO weekday (1 = Monday) and HH:mm opening/closing times. */
@@ -16,6 +17,8 @@ export const shopInfoResponseSchema = object({
   timeZone: string().check(minLength(1)),
   maxAdvanceDays: number().check(gte(1)),
   openingHours: array(openingHoursSchema),
+  // The owner's promo strip for the landing pages; "" when there is none (omitted when null).
+  announcement: omittedAsEmptyString(),
 });
 
 export type ShopInfoResponse = zInfer<typeof shopInfoResponseSchema>;

@@ -42,6 +42,41 @@ describe('appointmentsApi', () => {
     updatedAt: '',
   };
 
+  describe('getAppointmentsInRange', () => {
+    const page = (content: unknown[], number: number, totalPages: number) => ({
+      data: {
+        ...emptyDashboard,
+        page: { content, page: { number, size: 100, totalElements: content.length, totalPages } },
+      },
+    });
+
+    it('asks for the inclusive range at the largest page size', async () => {
+      mockedGet.mockResolvedValueOnce(page([mockAppt], 0, 1));
+      const { signal } = new AbortController();
+
+      const result = await appointmentsApi.getAppointmentsInRange('2026-08-01', '2026-08-07', { signal });
+
+      expect(mockedGet).toHaveBeenCalledTimes(1);
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments', {
+        params: { from: '2026-08-01', to: '2026-08-07', page: 0, size: 100 },
+        signal,
+      });
+      expect(result).toEqual([mockAppt]);
+    });
+
+    it('fetches the remaining pages of a busy range and joins them in order', async () => {
+      mockedGet
+        .mockResolvedValueOnce(page([{ ...mockAppt, id: 1 }], 0, 3))
+        .mockResolvedValueOnce(page([{ ...mockAppt, id: 2 }], 1, 3))
+        .mockResolvedValueOnce(page([{ ...mockAppt, id: 3 }], 2, 3));
+
+      const result = await appointmentsApi.getAppointmentsInRange('2026-08-01', '2026-08-07');
+
+      expect(mockedGet.mock.calls.map((call) => call[1].params.page)).toEqual([0, 1, 2]);
+      expect(result.map((item) => item.id)).toEqual([1, 2, 3]);
+    });
+  });
+
   describe('getAllAppointments', () => {
     it('fetches appointments with default params', async () => {
       const mockResponse: AppointmentDashboardResponse = emptyDashboard;
@@ -119,8 +154,14 @@ describe('appointmentsApi', () => {
     it('reads the shop zone, booking window and hours from the public endpoint', async () => {
       mockedGet.mockResolvedValueOnce({ data: shopInfo });
       const { signal } = new AbortController();
-      await expect(appointmentsApi.getShopInfo({ signal })).resolves.toEqual(shopInfo);
+      // No promo strip set: the omitted field reads as ''.
+      await expect(appointmentsApi.getShopInfo({ signal })).resolves.toEqual({ ...shopInfo, announcement: '' });
       expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments/public/shop', { signal });
+    });
+
+    it("carries the owner's promo strip", async () => {
+      mockedGet.mockResolvedValueOnce({ data: { ...shopInfo, announcement: 'Half-price Tuesdays' } });
+      await expect(appointmentsApi.getShopInfo()).resolves.toMatchObject({ announcement: 'Half-price Tuesdays' });
     });
 
     it('rejects a response without a zone', async () => {

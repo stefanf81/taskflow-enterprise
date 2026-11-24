@@ -21,6 +21,7 @@ import { AppointmentsApi } from '../api/appointments-api';
 import { extractApiError } from '../api/extract-api-error';
 import { refreshResource, safeResourceValue } from '../resource-utils';
 import { ShopClock } from '../shop-clock';
+import { Button } from './button';
 
 /** The slot a booking should move to. */
 export interface RescheduleSelection {
@@ -37,6 +38,7 @@ export interface RescheduleSelection {
  */
 @Component({
   selector: 'app-reschedule-picker',
+  imports: [Button],
   template: `
     <div
       class="p-3 rounded-xl border border-white/10 bg-zinc-900/60 space-y-3 mt-1"
@@ -44,15 +46,15 @@ export interface RescheduleSelection {
       aria-label="Choose a new date and time"
     >
       <div>
-        <p class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">New date</p>
+        <p class="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">New date</p>
         <div class="flex flex-wrap gap-1.5">
           @for (date of dates(); track date) {
             <button
               type="button"
-              class="px-2.5 py-1.5 rounded-lg text-[11px] border transition-all"
+              class="px-2.5 py-1.5 rounded-lg text-xs border transition-all"
               [class]="
                 date === selectedDate()
-                  ? 'bg-gold/20 border-gold text-gold'
+                  ? 'bg-accent/20 border-accent text-accent'
                   : 'border-white/10 text-zinc-300 hover:border-white/30'
               "
               [attr.aria-pressed]="date === selectedDate()"
@@ -67,25 +69,23 @@ export interface RescheduleSelection {
       </div>
 
       <div>
-        <p class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">New time</p>
+        <p class="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">New time</p>
         @if (loadingSlots()) {
           <p class="text-xs text-zinc-500" role="status">Checking availability…</p>
         } @else if (slotsError()) {
           <div class="flex items-center gap-2" role="alert">
             <p class="text-xs text-rose-400">{{ slotsError() }}</p>
-            <button type="button" class="btn btn-secondary py-1 px-2 text-[11px]" (click)="retry()">
-              Retry
-            </button>
+            <button type="button" appButton="secondary" (click)="retry()">Retry</button>
           </div>
         } @else {
           <div class="flex flex-wrap gap-1.5">
             @for (slot of slots(); track slot) {
               <button
                 type="button"
-                class="px-2.5 py-1.5 rounded-lg text-[11px] border transition-all"
+                class="px-2.5 py-1.5 rounded-lg text-xs border transition-all"
                 [class]="
                   slot === selectedTime()
-                    ? 'bg-gold/20 border-gold text-gold'
+                    ? 'bg-accent/20 border-accent text-accent'
                     : 'border-white/10 text-zinc-300 hover:border-white/30'
                 "
                 [attr.aria-pressed]="slot === selectedTime()"
@@ -103,7 +103,7 @@ export interface RescheduleSelection {
       <div class="flex flex-wrap gap-2">
         <button
           type="button"
-          class="btn btn-submit py-1.5 px-3 text-xs"
+          appButton
           [disabled]="saving() || !selectedDate() || !selectedTime()"
           (click)="confirm()"
         >
@@ -111,7 +111,7 @@ export interface RescheduleSelection {
         </button>
         <button
           type="button"
-          class="btn btn-secondary py-1.5 px-3 text-xs"
+          appButton="secondary"
           [disabled]="saving()"
           (click)="cancelled.emit()"
         >

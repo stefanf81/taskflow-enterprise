@@ -1,6 +1,7 @@
 package com.example.taskflow.appointment;
 
 import com.example.taskflow.appointment.stream.AppointmentEventStreamService;
+import com.example.taskflow.catalog.ShopAnnouncementService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -15,6 +16,8 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -39,6 +42,7 @@ class AppointmentController {
     private final AppointmentEventStreamService eventStreamService;
     private final BarberService barberService;
     private final BookingProperties bookingProperties;
+    private final ShopAnnouncementService announcements;
     private final Clock clock;
 
     public AppointmentController(
@@ -48,6 +52,7 @@ class AppointmentController {
             AppointmentEventStreamService eventStreamService,
             BarberService barberService,
             BookingProperties bookingProperties,
+            ShopAnnouncementService announcements,
             Clock clock) {
         this.queryService = queryService;
         this.bookingService = bookingService;
@@ -55,13 +60,14 @@ class AppointmentController {
         this.eventStreamService = eventStreamService;
         this.barberService = barberService;
         this.bookingProperties = bookingProperties;
+        this.announcements = announcements;
         this.clock = clock;
     }
 
     @GetMapping
     @Operation(
             summary = "View a list of scheduled appointments",
-            description = "Can be filtered by status and customer name, with pagination.")
+            description = "Can be filtered by status, customer name and booking date range, with pagination.")
     @ApiResponses(
             value = {
                 @ApiResponse(responseCode = "200", description = "Successfully retrieved paginated appointments"),
@@ -81,10 +87,18 @@ class AppointmentController {
                                     "Search by customer name, e-mail or phone (contains, case-insensitive) or by exact public id")
                     @RequestParam(required = false)
                     String search,
+            @Parameter(description = "Only bookings on or after this date (YYYY-MM-DD, inclusive)")
+                    @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate from,
+            @Parameter(description = "Only bookings on or before this date (YYYY-MM-DD, inclusive)")
+                    @RequestParam(required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate to,
             @Parameter(description = "Page number (0-indexed)") @RequestParam(defaultValue = "0") @Min(0) int page,
             @Parameter(description = "Page size") @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size) {
 
-        AppointmentDashboardResponse response = queryService.getAllAppointments(status, search, page, size);
+        AppointmentDashboardResponse response = queryService.getAllAppointments(status, search, from, to, page, size);
         // Customer names, e-mails and phones: no-store keeps them out of the browser and
         // device HTTP caches, where they would outlive the session.
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(response);
@@ -132,10 +146,15 @@ class AppointmentController {
         // The zone and window change only with a deployment, but the hours change whenever an admin
         // adds a barber or edits a weekly schedule, after which both clients refetch this. Revalidate
         // with the ETag (304) like the catalog; the server-side openingHours cache serves the body.
+        // The owner's promo strip rides along (catalog's cached ShopAnnouncementService), so the
+        // landing pages need no request of their own for it; a new message changes the ETag.
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noCache().cachePublic())
                 .body(new ShopInfoResponse(
-                        clock.getZone().getId(), bookingProperties.maxAdvanceDays(), barberService.getOpeningHours()));
+                        clock.getZone().getId(),
+                        bookingProperties.maxAdvanceDays(),
+                        barberService.getOpeningHours(),
+                        announcements.current().message()));
     }
 
     @GetMapping("/public/busy-slots")

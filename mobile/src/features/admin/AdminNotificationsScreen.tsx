@@ -7,7 +7,7 @@ import { LoadingIndicator } from '../../components/common/LoadingIndicator';
 import { EmptyState } from '../../components/common/EmptyState';
 import { ErrorState } from '../../components/common/ErrorState';
 import { useNotifications } from './useNotifications';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 
 export const AdminNotificationsScreen: React.FC = () => {
   // Poll only while this tab is the focused one (and the app is active).
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   statusBadge: {
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    backgroundColor: withAlpha(semantic.success, 0.15),
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,

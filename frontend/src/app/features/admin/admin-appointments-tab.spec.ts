@@ -244,7 +244,7 @@ describe('AdminAppointmentsTab', () => {
       await reloadWith(withStatus('CANCELLED'));
 
       const el = fixture.nativeElement as HTMLElement;
-      expect(el.querySelector('.rounded-full')?.textContent).toContain('Cancelled');
+      expect(el.querySelector('app-status-badge')?.textContent).toContain('Cancelled');
       const labels = buttonLabels();
       expect(labels).not.toContain('Approve');
       expect(labels).not.toContain('Deny');
@@ -301,6 +301,138 @@ describe('AdminAppointmentsTab', () => {
       fixture.detectChanges();
 
       expect(buttonLabels()).toContain('Back to first page');
+    });
+  });
+
+  describe('bulk approve', () => {
+    const base = mockDashboard.page.content[0]!;
+    const threePending: AppointmentDashboardResponse = {
+      ...mockDashboard,
+      page: {
+        ...mockDashboard.page,
+        content: [
+          { ...base, id: 11, customerName: 'Carol' },
+          { ...base, id: 12, customerName: 'Dave' },
+          { ...base, id: 13, customerName: 'Erin' },
+          { ...base, id: 14, customerName: 'Frank', status: 'APPROVED' },
+        ],
+      },
+    };
+    const el = () => fixture.nativeElement as HTMLElement;
+    const boxes = () =>
+      Array.from(el().querySelectorAll<HTMLInputElement>('li.appt-row input[type="checkbox"]'))
+        // the phone and the desktop checkbox of a row: count the desktop ones (one per row)
+        .filter((box) => !box.classList.contains('md:hidden'));
+    const bar = () => el().querySelector('[aria-live="polite"]')?.textContent?.trim();
+    const approveButton = () => el().querySelector<HTMLButtonElement>('button.ml-auto');
+    const statusPuts = () =>
+      httpMock.match((r) => /\/api\/v1\/appointments\/\d+$/.test(r.url) && r.method === 'PUT');
+
+    beforeEach(async () => {
+      component.loadAppointments();
+      fixture.detectChanges();
+      httpMock
+        .expectOne((r) => r.url.includes('/api/v1/appointments') && r.method === 'GET')
+        .flush(threePending);
+      await fixture.whenStable();
+      fixture.detectChanges();
+    });
+
+    it('lets only pending bookings be ticked, and counts them', () => {
+      // Three pending rows have a box; the approved one has none.
+      expect(boxes().filter((box) => box.getAttribute('aria-label')).length).toBe(3);
+      expect(bar()).toBe('0 selected');
+      expect(approveButton()?.disabled).toBe(true);
+
+      boxes()[0]!.click();
+      fixture.detectChanges();
+      expect(bar()).toBe('1 selected');
+      expect(approveButton()?.disabled).toBe(false);
+    });
+
+    it('selects and clears every pending booking on the page at once', () => {
+      const all = el().querySelector<HTMLInputElement>('label input[type="checkbox"]')!;
+      all.click();
+      fixture.detectChanges();
+      expect(bar()).toBe('3 selected');
+      expect(all.checked).toBe(true);
+
+      all.click();
+      fixture.detectChanges();
+      expect(bar()).toBe('0 selected');
+    });
+
+    it('approves the ticked bookings one request each and reports the count', async () => {
+      el().querySelector<HTMLInputElement>('label input[type="checkbox"]')!.click();
+      fixture.detectChanges();
+      approveButton()!.click();
+      fixture.detectChanges();
+
+      const puts = statusPuts();
+      expect(puts.map((r) => r.request.url.split('/').pop()).sort()).toEqual(['11', '12', '13']);
+      expect(puts.every((r) => r.request.body.status === 'APPROVED')).toBe(true);
+      expect(approveButton()?.textContent).toContain('Approving');
+      puts.forEach((r) => r.flush({ ...base, status: 'APPROVED' }));
+      await new Promise((resolve) => setTimeout(resolve));
+      fixture.detectChanges();
+
+      httpMock
+        .expectOne((r) => r.url.includes('/api/v1/appointments') && r.method === 'GET')
+        .flush(mockDashboard);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(TestBed.inject(FlashMessages).successMessage()).toContain('3 appointments APPROVED');
+      expect(TestBed.inject(FlashMessages).errorMessage()).toBeNull();
+    });
+
+    it('goes on after one failure and says how many were approved', async () => {
+      el().querySelector<HTMLInputElement>('label input[type="checkbox"]')!.click();
+      fixture.detectChanges();
+      approveButton()!.click();
+
+      const puts = statusPuts();
+      puts.forEach((r) =>
+        r.request.url.endsWith('/12')
+          ? r.flush({ message: 'Slot already taken' }, { status: 409, statusText: 'Conflict' })
+          : r.flush({ ...base, status: 'APPROVED' }),
+      );
+      await new Promise((resolve) => setTimeout(resolve));
+      fixture.detectChanges();
+      httpMock
+        .expectOne((r) => r.url.includes('/api/v1/appointments') && r.method === 'GET')
+        .flush(threePending);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const flash = TestBed.inject(FlashMessages);
+      expect(flash.errorMessage()).toContain('Approved 2 of 3; 1 could not be approved.');
+      expect(flash.successMessage()).toBeNull();
+      expect(bar()).toBe('0 selected');
+    });
+
+    it('forgets a ticked booking that is no longer pending after a refresh', async () => {
+      boxes()[0]!.click();
+      fixture.detectChanges();
+      expect(bar()).toBe('1 selected');
+
+      component.loadAppointments();
+      fixture.detectChanges();
+      httpMock
+        .expectOne((r) => r.url.includes('/api/v1/appointments') && r.method === 'GET')
+        .flush({
+          ...threePending,
+          page: {
+            ...threePending.page,
+            content: threePending.page.content.map((a) =>
+              a.id === 11 ? { ...a, status: 'DENIED' as const } : a,
+            ),
+          },
+        });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(bar()).toBe('0 selected');
     });
   });
 });

@@ -54,6 +54,7 @@ class OpenApiSecurityConfig {
             "POST /api/v1/appointments",
             "GET /api/v1/catalog",
             "GET /api/v1/catalog/{id}",
+            "GET /api/v1/catalog/products",
             "GET /api/v1/barbers",
             "GET /api/v1/reviews/public/barber-ratings",
             "POST /api/v1/reviews/public/{publicId}",

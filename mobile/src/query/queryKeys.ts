@@ -17,6 +17,11 @@ export const queryKeys = {
     list: (filter: string | undefined, search: string | undefined, page: number, size: number) =>
       ['appointments', filter, search, page, size] as const,
   },
+  /** The owner's calendar: every booking of one day or week (a plain list, not a page). */
+  calendarAppointments: {
+    all: ['calendarAppointments'] as const,
+    range: (from: string, to: string) => ['calendarAppointments', from, to] as const,
+  },
   customerAppointments: {
     all: ['customerAppointments'] as const,
     page: (page: number, size: number) => ['customerAppointments', page, size] as const,
@@ -26,6 +31,10 @@ export const queryKeys = {
     // A separate root: invalidating the public menu must not be the only way to refresh it, and the
     // admin-only retired list must not share a cache entry prefix with it.
     retired: ['retiredServices'] as const,
+  },
+  /** Retail products (display only); a root of its own, like the menu. */
+  retailProducts: {
+    all: ['retailProducts'] as const,
   },
   busySlots: {
     all: ['busySlots'] as const,
@@ -53,6 +62,7 @@ export function invalidateBookingQueries(
   { refetchBusySlots = true }: { refetchBusySlots?: boolean } = {},
 ): void {
   queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
+  queryClient.invalidateQueries({ queryKey: queryKeys.calendarAppointments.all });
   queryClient.invalidateQueries({ queryKey: queryKeys.customerAppointments.all });
   if (refetchBusySlots) {
     queryClient.invalidateQueries({ queryKey: queryKeys.busySlots.all });
@@ -93,6 +103,14 @@ export function updateCachedBooking(
       return content === old.page.content ? old : { ...old, page: { ...old.page, content } };
     },
   );
+  queryClient.setQueriesData<AppointmentItem[]>(
+    { queryKey: queryKeys.calendarAppointments.all },
+    (old) => {
+      if (!old) return old;
+      const content = update(old);
+      return content === old ? old : content;
+    },
+  );
   queryClient.setQueriesData<AppointmentPage>(
     { queryKey: queryKeys.customerAppointments.all },
     (old) => {
@@ -106,11 +124,12 @@ export function updateCachedBooking(
 /**
  * Roots of the queries that read public endpoints (api/publicEndpoints.ts: sent without a token,
  * so the answer is the same for every user): the shop's hours and booking window, the service
- * menu, the barbers and their ratings. Everything else is, or may be, the signed-in user's.
+ * menu and retail products, the barbers and their ratings. Everything else is, or may be, the signed-in user's.
  */
 const PUBLIC_QUERY_ROOTS: ReadonlySet<unknown> = new Set([
   'shopInfo',
   queryKeys.catalog.all[0],
+  queryKeys.retailProducts.all[0],
   'publicBarbers',
   'barberRatings',
 ]);

@@ -1,6 +1,30 @@
 {
   "components": {
     "schemas": {
+      "AnnouncementRequest": {
+        "properties": {
+          "message": {
+            "maxLength": 120,
+            "minLength": 0,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AnnouncementResponse": {
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "active"
+        ],
+        "type": "object"
+      },
       "AppointmentCreateRequest": {
         "properties": {
           "barberName": {
@@ -766,6 +790,64 @@
         ],
         "type": "object"
       },
+      "RetailProductRequest": {
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string"
+          },
+          "price": {
+            "exclusiveMinimum": 0,
+            "type": "number"
+          },
+          "sizeLabel": {
+            "maxLength": 30,
+            "minLength": 0,
+            "type": "string"
+          },
+          "sortOrder": {
+            "format": "int32",
+            "maximum": 9999,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "price",
+          "sortOrder"
+        ],
+        "type": "object"
+      },
+      "RetailProductResponse": {
+        "properties": {
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          },
+          "sizeLabel": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "price",
+          "sortOrder"
+        ],
+        "type": "object"
+      },
       "ReviewRequest": {
         "properties": {
           "comment": {
@@ -932,6 +1014,9 @@
       },
       "ShopInfoResponse": {
         "properties": {
+          "announcement": {
+            "type": "string"
+          },
           "maxAdvanceDays": {
             "format": "int32",
             "type": "integer"
@@ -1001,7 +1086,7 @@
   "paths": {
     "/api/v1/appointments": {
       "get": {
-        "description": "Can be filtered by status and customer name, with pagination.",
+        "description": "Can be filtered by status, customer name and booking date range, with pagination.",
         "operationId": "getAllAppointments",
         "parameters": [
           {
@@ -1019,6 +1104,26 @@
             "name": "search",
             "required": false,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only bookings on or after this date (YYYY-MM-DD, inclusive)",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only bookings on or before this date (YYYY-MM-DD, inclusive)",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date",
               "type": "string"
             }
           },
@@ -2732,6 +2837,228 @@
         ]
       }
     },
+    "/api/v1/catalog/announcement": {
+      "put": {
+        "operationId": "updateAnnouncement",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnouncementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementResponse"
+                }
+              }
+            },
+            "description": "Announcement saved"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Message longer than 120 characters"
+          }
+        },
+        "summary": "Set the landing pages' announcement; a blank message turns it off (Admin Access)",
+        "tags": [
+          "Shop Announcement"
+        ]
+      }
+    },
+    "/api/v1/catalog/products": {
+      "get": {
+        "operationId": "listProducts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RetailProductResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Products in the shop's order"
+          }
+        },
+        "security": [],
+        "summary": "Get the retail products (Public Access)",
+        "tags": [
+          "Retail Products"
+        ]
+      },
+      "post": {
+        "operationId": "createProduct",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetailProductRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetailProductResponse"
+                }
+              }
+            },
+            "description": "Product created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid product data"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A product with that name exists"
+          }
+        },
+        "summary": "Create a retail product (Admin Access)",
+        "tags": [
+          "Retail Products"
+        ]
+      }
+    },
+    "/api/v1/catalog/products/{id}": {
+      "delete": {
+        "operationId": "deleteProduct",
+        "parameters": [
+          {
+            "description": "Product database ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Product deleted"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Product not found"
+          }
+        },
+        "summary": "Delete a retail product (Admin Access)",
+        "tags": [
+          "Retail Products"
+        ]
+      },
+      "put": {
+        "operationId": "updateProduct",
+        "parameters": [
+          {
+            "description": "Product database ID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetailProductRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetailProductResponse"
+                }
+              }
+            },
+            "description": "Product updated"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid product data"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Product not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A product with that name exists"
+          }
+        },
+        "summary": "Update a retail product (Admin Access)",
+        "tags": [
+          "Retail Products"
+        ]
+      }
+    },
     "/api/v1/catalog/retired": {
       "get": {
         "description": "Services that still have appointments were retired instead of deleted. They are not bookable and are not in the public list until restored.",
@@ -3234,8 +3561,16 @@
       "name": "Barber Appointment Management System"
     },
     {
+      "description": "The promo strip at the top of the landing pages",
+      "name": "Shop Announcement"
+    },
+    {
       "description": "Operations for managing barbers, schedules, and time-off",
       "name": "Barber Management"
+    },
+    {
+      "description": "Products the shop sells over the counter (display only)",
+      "name": "Retail Products"
     },
     {
       "description": "Public review submissions and rating aggregates",

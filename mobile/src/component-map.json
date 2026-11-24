@@ -20,7 +20,7 @@
     },
     {
       "feature": "Booking Wizard & Slot Picker",
-      "description": "4-step wizard: Treatment \u2192 Stylist \u2192 Date/Slot \u2192 Contact (aligned across both platforms)",
+      "description": "4-step wizard: Treatment → Stylist → Date/Slot → Contact (aligned across both platforms)",
       "webComponent": "frontend/src/app/features/booking/booking-wizard.ts",
       "webTemplate": "frontend/src/app/features/booking/booking-wizard.html",
       "mobileComponent": "mobile/src/features/booking/BookingScreen.tsx",
@@ -52,7 +52,9 @@
       },
       "mobileQueryHooks": [
         "mobile/src/core/appointments/useAppointments.ts"
-      ]
+      ],
+      "webSummary": "frontend/src/app/features/booking/summary/booking-summary.ts",
+      "notes": "The web wizard also has a sticky reservation summary (BookingSummary) beside the steps from lg, only free slots grouped by part of the day, a \"Check the next day\" action for a full day, and a date carousel that pages through the booking window."
     },
     {
       "feature": "Customer Portal & History",
@@ -87,7 +89,20 @@
         "frontend/src/app/features/admin/admin-services-tab.ts",
         "frontend/src/app/features/admin/admin-schedules-tab.ts",
         "frontend/src/app/features/admin/admin-notifications-tab.ts"
-      ]
+      ],
+      "notes": "Web: the sections are child routes of /admin (/admin/appointments, services, schedules, notifications) in a sidebar; the booking numbers are features/admin/admin-stats.ts at the top of the appointments section. Mobile keeps its own screens."
+    },
+    {
+      "feature": "Admin Calendar (day per barber, week per day)",
+      "webComponent": "frontend/src/app/features/admin/admin-calendar-tab.ts",
+      "webTemplate": "frontend/src/app/features/admin/admin-calendar-tab.html",
+      "mobileComponent": "mobile/src/features/admin/AdminCalendarScreen.tsx",
+      "storeHook": {
+        "web": "frontend/src/app/features/admin/calendar.store.ts",
+        "mobile": "mobile/src/core/appointments/useAppointments.ts"
+      },
+      "rangeRules": "shared/domain/src/calendar.ts",
+      "notes": "Web draws a column per barber (day) or per day (week); a phone has no room for columns, so mobile lists the bookings per day with the barber as a filter (features/admin/calendarAgenda.ts). The data is GET /api/v1/appointments with from/to, all pages. Approve/decline/cancel: features/admin/useBookingActions.ts (mobile) and features/admin/appointment-actions.ts (web)."
     },
     {
       "feature": "Admin Service Catalog Management",
@@ -221,13 +236,46 @@
       "webVitals": "frontend/src/app/core/telemetry/web-vitals.ts",
       "mobileComponent": "mobile/src/core/telemetry/appTelemetry.ts",
       "mobileClient": "mobile/src/core/telemetry/clientTelemetry.ts"
+    },
+    {
+      "feature": "Retail Products (display only)",
+      "description": "The shop's over-the-counter products from GET /api/v1/catalog/products (V44); never booked. Web loads the landing rows in a deferred block (outside main.js); both admins add, edit and delete.",
+      "webComponent": "frontend/src/app/features/landing/retail-products/retail-products.ts",
+      "webAdmin": "frontend/src/app/features/admin/admin-retail-products.ts",
+      "mobileComponent": "mobile/src/features/landing/ShopInfo.tsx",
+      "mobileAdmin": "mobile/src/features/admin/RetailProductsPanel.tsx",
+      "storeHook": {
+        "web": "frontend/src/app/core/catalog/retail-product.store.ts",
+        "mobile": "mobile/src/core/catalog/useRetailProducts.ts"
+      },
+      "api": {
+        "web": "frontend/src/app/core/api/retail-products-api.ts",
+        "mobile": "mobile/src/core/catalog/retailProducts.ts"
+      }
+    },
+    {
+      "feature": "Landing Announcement (promo strip)",
+      "description": "The owner's promo strip from `announcement` in GET /api/v1/appointments/public/shop (V45, catalog's ShopAnnouncementService); set with PUT /api/v1/catalog/announcement, empty hides it. Web reserves the strip's height in the prerendered page.",
+      "webComponent": "frontend/src/app/features/landing/announcement-bar/announcement-bar.ts",
+      "webAdmin": "frontend/src/app/features/admin/admin-announcement.ts",
+      "mobileComponent": "mobile/src/features/landing/AnnouncementBar.tsx",
+      "mobileAdmin": "mobile/src/features/admin/AnnouncementEditor.tsx",
+      "storeHook": {
+        "web": "frontend/src/app/core/shop-clock.ts",
+        "mobile": "mobile/src/core/shop/useShopInfo.ts"
+      },
+      "api": {
+        "web": "frontend/src/app/core/api/announcement-api.ts",
+        "mobile": "mobile/src/core/catalog/announcement.ts"
+      }
     }
   ],
   "platformContracts": {
     "webApiTypes": "frontend/src/app/types/api.ts",
     "mobileApiTypes": "mobile/src/types/api.ts",
-    "webThemeTokens": "frontend/src/theme/tokens.json",
-    "mobileThemeTokens": "mobile/src/theme/tokens.json",
+    "sharedThemeTokens": "shared/theme/tokens.json",
+    "webThemeGenerated": "frontend/src/theme/tokens.generated.css",
+    "mobileThemeColors": "mobile/src/theme/colors.ts",
     "webTimeUtils": "frontend/src/app/core/time-utils.ts",
     "mobileTimeUtils": "mobile/src/utils/time-utils.ts"
   }

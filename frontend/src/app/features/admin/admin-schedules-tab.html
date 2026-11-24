@@ -1,16 +1,11 @@
 <div class="space-y-6 animate-fadeIn">
   <h3 class="text-white font-bold text-lg">Barber Schedules & Time-Off</h3>
 
-  @if (loadError()) {
-    <div
-      role="alert"
-      class="alert alert-error py-3 px-4 rounded-xl text-xs flex items-center gap-3 border border-red-500/20"
-    >
-      <span class="text-rose-400 leading-normal font-medium flex-1">{{ loadError() }}</span>
-      <button type="button" class="btn btn-secondary py-2 px-4 text-xs" (click)="retryLoad()">
-        Retry
-      </button>
-    </div>
+  @if (loadError(); as message) {
+    <app-alert tone="error">
+      {{ message }}
+      <button type="button" appButton="secondary" alertAction (click)="retryLoad()">Retry</button>
+    </app-alert>
   }
 
   <div class="flex flex-col md:flex-row gap-6">
@@ -26,7 +21,7 @@
           class="p-4 rounded-xl border cursor-pointer transition-all"
           [class]="
             selectedBarberId() === barber.id
-              ? 'bg-gold/20 border-gold'
+              ? 'bg-accent/20 border-accent'
               : 'bg-zinc-900 border-white/5'
           "
           (click)="selectAdminBarber(barber.id)"
@@ -35,45 +30,49 @@
         >
           <p
             class="text-sm font-extrabold"
-            [class.text-gold]="selectedBarberId() === barber.id"
+            [class.text-accent]="selectedBarberId() === barber.id"
             [class.text-zinc-300]="selectedBarberId() !== barber.id"
           >
             {{ barber.name }}
           </p>
-          <p class="text-[10px] text-zinc-500 mt-1">{{ barber.email }}</p>
+          <p class="text-xs text-zinc-500 mt-1">{{ barber.email }}</p>
         </div>
       }
 
       <!-- Add Barber Form -->
-      <div class="card p-4 border border-white/5 bg-zinc-900/30 rounded-2xl space-y-2.5 mt-4">
+      <div class="card p-4 space-y-2.5 mt-4">
         <h4 class="text-zinc-200 text-xs font-extrabold uppercase tracking-wider">Add Barber</h4>
         <input
           type="text"
+          autocomplete="off"
           aria-label="New barber name"
           placeholder="Name *"
           [value]="newBarberName()"
           (input)="newBarberName.set($any($event.target).value)"
-          class="form-control w-full p-2 rounded-xl text-xs bg-zinc-950 border border-white/10 text-white"
+          class="form-control w-full"
         />
         <input
           type="email"
+          autocomplete="off"
           aria-label="New barber email"
           placeholder="Email"
           [value]="newBarberEmail()"
           (input)="newBarberEmail.set($any($event.target).value)"
-          class="form-control w-full p-2 rounded-xl text-xs bg-zinc-950 border border-white/10 text-white"
+          class="form-control w-full"
         />
         <input
-          type="text"
+          type="tel"
+          autocomplete="off"
           aria-label="New barber phone"
           placeholder="Phone"
           [value]="newBarberPhone()"
           (input)="newBarberPhone.set($any($event.target).value)"
-          class="form-control w-full p-2 rounded-xl text-xs bg-zinc-950 border border-white/10 text-white"
+          class="form-control w-full"
         />
         <button
           type="button"
-          class="btn btn-secondary w-full py-2 text-xs"
+          appButton="secondary"
+          class="w-full"
           [disabled]="isSaving()"
           (click)="createBarber()"
         >
@@ -86,40 +85,15 @@
     <div class="w-full md:w-2/3 space-y-6">
       <!-- One banner for every action of this tab (add barber, weekly hours, time off). -->
       @if (timeOffActionError()) {
-        <div
-          role="alert"
-          class="alert alert-error py-2.5 px-4 rounded-xl text-xs border border-red-500/20 flex items-center gap-2"
-        >
-          <span class="text-rose-400 leading-normal font-medium">{{ timeOffActionError() }}</span>
-          <button
-            type="button"
-            class="text-base font-bold opacity-60 hover:opacity-100 ml-auto"
-            (click)="timeOffActionError.set(null)"
-            aria-label="Dismiss error"
-          >
-            &times;
-          </button>
-        </div>
+        <app-alert tone="error" dismissible (dismissed)="timeOffActionError.set(null)">
+          {{ timeOffActionError() }}
+        </app-alert>
       }
 
       @if (timeOffActionSuccess()) {
-        <div
-          role="status"
-          aria-live="polite"
-          class="alert alert-success py-2.5 px-4 rounded-xl text-xs border border-emerald-500/10 flex items-center gap-2"
-        >
-          <span class="text-emerald-400 leading-normal font-medium">{{
-            timeOffActionSuccess()
-          }}</span>
-          <button
-            type="button"
-            class="text-base font-bold opacity-60 hover:opacity-100 ml-auto"
-            (click)="timeOffActionSuccess.set(null)"
-            aria-label="Dismiss"
-          >
-            &times;
-          </button>
-        </div>
+        <app-alert tone="success" dismissible (dismissed)="timeOffActionSuccess.set(null)">
+          {{ timeOffActionSuccess() }}
+        </app-alert>
       }
 
       @if (selectedBarberId()) {
@@ -127,7 +101,7 @@
       }
 
       <!-- Add Time Off Form -->
-      <div class="card p-5 border border-white/5 bg-zinc-900/30 rounded-2xl">
+      <div class="card p-5">
         <h4 class="text-zinc-100 font-extrabold mb-4 border-b border-white/5 pb-2">
           Add Time-Off (Vacation/Sick)
         </h4>
@@ -135,34 +109,34 @@
           <div>
             <label
               for="timeOffStartDate"
-              class="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2"
+              class="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2"
               >Start Date</label
             >
             <input
               id="timeOffStartDate"
               type="date"
               [formField]="timeOffForm.startDate"
-              class="form-control w-full p-2.5 rounded-xl text-sm bg-zinc-950 border border-white/10 text-white"
+              class="form-control w-full"
             />
           </div>
           <div>
             <label
               for="timeOffEndDate"
-              class="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2"
+              class="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2"
               >End Date</label
             >
             <input
               id="timeOffEndDate"
               type="date"
               [formField]="timeOffForm.endDate"
-              class="form-control w-full p-2.5 rounded-xl text-sm bg-zinc-950 border border-white/10 text-white"
+              class="form-control w-full"
             />
           </div>
         </div>
         <div class="mb-5">
           <label
             for="timeOffReason"
-            class="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2"
+            class="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2"
             >Reason</label
           >
           <input
@@ -170,10 +144,10 @@
             type="text"
             [formField]="timeOffForm.reason"
             placeholder="e.g. Vacation"
-            class="form-control w-full p-2.5 rounded-xl text-sm bg-zinc-950 border border-white/10 text-white"
+            class="form-control w-full"
           />
         </div>
-        <button class="btn btn-submit w-full py-2.5" [disabled]="isSaving()" (click)="addTimeOff()">
+        <button appButton class="w-full" [disabled]="isSaving()" (click)="addTimeOff()">
           {{ isSaving() ? 'Saving…' : 'Save Time-Off' }}
         </button>
       </div>
@@ -184,11 +158,7 @@
           Scheduled Time-Off
         </h4>
         @if (timeOffs().length === 0) {
-          <div
-            class="text-center py-8 border border-dashed border-white/10 rounded-2xl bg-zinc-900/20"
-          >
-            <p class="text-xs text-zinc-500 font-light italic">No time-off scheduled.</p>
-          </div>
+          <app-empty-state [icon]="icons.calendar" title="No time-off scheduled." />
         } @else {
           <div class="space-y-3">
             @for (to of timeOffs(); track to.id) {
@@ -197,10 +167,11 @@
               >
                 <div>
                   <p class="text-sm font-bold text-rose-400">
-                    ⛔ {{ formatLocalDate(to.startDate) }} &rarr;
+                    <app-icon [icon]="icons.ban" class="mr-1" />{{ formatLocalDate(to.startDate) }}
+                    &rarr;
                     {{ formatLocalDate(to.endDate) }}
                   </p>
-                  <p class="text-[11px] text-zinc-400 mt-1 font-light">
+                  <p class="text-xs text-zinc-400 mt-1 font-light">
                     {{ to.reason }}
                   </p>
                 </div>

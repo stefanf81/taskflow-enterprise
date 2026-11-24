@@ -1,376 +1,472 @@
-/* ==========================================
-   💈 PREMIUM MINIMALIST SAAS DESIGN SYSTEM
-   ==========================================
-   Theme: Obsidian & Gold — dark slate background with warm metallic gold accents
-   Features: Minimalist lines, clean whitespace, high typographic contrast
-*/
+/* TaskFlow's shared component classes (dark "obsidian & gold" theme).
 
-:root {
-  --bg-slate-light: #000000;
-  --bg-white-card: #09090b;
+   Every colour, radius, shadow and the font come from shared/theme/tokens.json, generated into
+   tokens.generated.css as Tailwind theme variables (`--color-accent`, `--radius-md`,
+   `--shadow-ring`, …). Nothing here defines its own palette: change a colour in the JSON.
 
-  --primary-gold: #c5a059;
-  --primary-gold-hover: #d4af37;
-  --primary-gold-light: #1a1610;
-  --primary-gold-border: #3d3220;
+   The classes live in `@layer components`, so a Tailwind utility on the same element wins over
+   them (`btn btn-submit py-2 px-6`). Before this layer existed they were unlayered and silently
+   beat every utility next to them; templates must not rely on that any more. */
 
-  --text-main: #f4f4f5;
-  --text-muted: #a1a1aa;
-  --text-dim: #7e7e8a;
+@layer base {
+  body,
+  html {
+    margin: 0;
+    padding: 0;
+    background-color: var(--color-page);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    scroll-behavior: smooth;
+  }
 
-  --success-color: #34d399;
-  --success-bg: rgba(16, 185, 129, 0.1);
-  --success-border: rgba(16, 185, 129, 0.2);
-
-  --warning-color: #fbbf24;
-  --warning-bg: rgba(245, 158, 11, 0.1);
-  --warning-border: rgba(245, 158, 11, 0.2);
-
-  --danger-color: #f87171;
-  --danger-bg: rgba(239, 68, 68, 0.1);
-  --danger-border: rgba(239, 68, 68, 0.2);
-
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-full: 9999px;
-
-  --shadow-saas-sm: 0 0 0 1px rgba(255, 255, 255, 0.05);
-  --shadow-saas-md:
-    0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(255, 255, 255, 0.05);
-  --shadow-saas-lg:
-    0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(255, 255, 255, 0.05);
-  --shadow-gold-glow: 0 0 20px rgba(197, 160, 89, 0.15);
-
-  /* Gold palette (mirrors --color-gold* defined in styles.css @theme) */
-  --gold-metallic: #c5a059;
-  --gold-metallic-dim: #8e7a5c;
-
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-
-  --font-sans:
-    'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-page);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-fg-disabled);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-fg-muted);
+  }
 }
 
-/* Base resets & scrollbars */
-body,
-html {
-  margin: 0;
-  padding: 0;
-  background-color: var(--bg-slate-light);
-  color: var(--text-main);
-  font-family: var(--font-sans);
-  scroll-behavior: smooth;
+@layer components {
+  /* Card */
+  .card {
+    background-color: var(--color-surface);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-ring);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .card:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: var(--shadow-raised);
+  }
+
+  /* A selectable card (service, stylist) that is selected; it keeps its look on hover. */
+  .selected-service-item,
+  .selected-service-item:hover {
+    border-color: var(--color-accent);
+    background-color: var(--color-accent-tint);
+    box-shadow: var(--shadow-glow);
+  }
+
+  /* Buttons */
+  /* One line height for every button and input (they used to inherit 21 px, or 18.7/20 px from a
+     text-xs/text-sm class whose font size the component overrode). */
+  .btn {
+    font-family: inherit;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 600;
+    padding: 0.65rem 1.25rem;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  .btn-submit {
+    /* Containing block for the hover hit-area strip below. */
+    position: relative;
+    background-color: var(--color-accent);
+    color: var(--color-on-accent);
+    box-shadow: 0 2px 4px rgba(197, 160, 89, 0.15);
+  }
+
+  .btn-submit:hover:not(:disabled) {
+    background-color: var(--color-accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(197, 160, 89, 0.25);
+  }
+
+  /* The 1px lift moves the hit box off a pointer resting on the bottom edge: the button loses
+     :hover, drops back, regains it, and flickers forever (an E2E click on it then never sees a
+     stable box). This invisible strip fills the pixel the lift vacates, so the pointer stays
+     over the button. */
+  .btn-submit:hover:not(:disabled)::after {
+    content: '';
+    position: absolute;
+    inset: 0 0 -1px;
+  }
+
+  .btn-submit:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  .btn-secondary {
+    background-color: var(--color-surface);
+    color: var(--color-fg-muted);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(0, 0, 0, 0.15);
+    color: var(--color-fg);
+  }
+
+  .btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  /* Destructive actions: cancel, deny, sign out. */
+  .btn-danger {
+    background-color: color-mix(in oklab, var(--color-danger) 10%, transparent);
+    color: var(--color-danger);
+    border: 1px solid color-mix(in oklab, var(--color-danger) 20%, transparent);
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background-color: var(--color-danger-strong);
+    color: #ffffff;
+  }
+
+  .btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* <app-icon>: 1em square by default (scales with the text next to it); a size utility on the
+     element overrides it. */
+  .app-icon {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+    vertical-align: -0.125em;
+  }
+
+  .app-icon > svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Status colours for badges and alerts: one rule set per component, tinted by --tone. */
+  .tone-success {
+    --tone: var(--color-success);
+  }
+  .tone-warning {
+    --tone: var(--color-warning);
+  }
+  .tone-danger {
+    --tone: var(--color-danger);
+  }
+  .tone-neutral {
+    --tone: var(--color-fg-muted);
+  }
+
+  /* <app-status-badge> */
+  .status-badge {
+    display: inline-block;
+    padding: 0.125rem 0.625rem;
+    border-radius: 9999px;
+    border: 1px solid color-mix(in oklab, var(--tone) 20%, transparent);
+    background-color: color-mix(in oklab, var(--tone) 10%, transparent);
+    color: var(--tone);
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .status-badge.alarm {
+    border-color: var(--color-danger-strong);
+    background-color: var(--color-danger-strong);
+    color: #ffffff;
+  }
+
+  /* <app-alert> */
+  .alert {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid color-mix(in oklab, var(--tone) 20%, transparent);
+    background-color: color-mix(in oklab, var(--tone) 5%, transparent);
+    color: var(--tone);
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+
+  /* Square icon button (delete, …) */
+  .action-btn {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--color-fg-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .action-btn.btn-delete:hover:not(:disabled) {
+    color: var(--color-danger);
+    border-color: rgba(248, 113, 113, 0.4);
+    background-color: rgba(248, 113, 113, 0.1);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Form inputs */
+  .form-control {
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1.25rem;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    color: var(--color-fg);
+    background-color: var(--color-surface);
+    transition: all 0.2s;
+    outline: none;
+  }
+
+  .form-control:focus {
+    border-color: var(--color-accent);
+    background-color: var(--color-surface);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+  }
+
+  .search-input {
+    width: 100%;
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1.25rem;
+    padding: 0.65rem 1rem 0.65rem 2.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    background-color: var(--color-surface);
+    color: var(--color-fg);
+    outline: none;
+    transition: all 0.2s ease;
+  }
+
+  .search-input:focus {
+    background-color: var(--color-surface);
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+  }
+
+  .modal-card {
+    position: relative;
+    max-width: 440px;
+    width: 90%;
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+    background-color: var(--color-surface);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  }
+
+  .modal-card > .modal-close {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--color-fg-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .modal-card > .modal-close:hover {
+    color: var(--color-fg);
+    border-color: var(--color-accent);
+  }
+
+  /* Booking wizard: step tracker */
+  .wizard-step-node {
+    border: 1px solid;
+    background-color: var(--color-zinc-950);
+    color: var(--color-fg-subtle);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .wizard-step-node.active {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    box-shadow: var(--shadow-glow);
+  }
+
+  .wizard-step-node.completed {
+    background-color: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-on-accent);
+  }
+
+  /* Booking wizard: date chips and time slots. One self-contained component per element (no
+     .card/.btn underneath), so the states below need no !important. */
+  .slot-picker-btn {
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-md);
+    background-color: var(--color-page);
+    color: var(--color-fg-muted);
+    transition: all 0.15s ease;
+  }
+
+  .slot-picker-btn:hover:not(:disabled):not(.slot-selected) {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    background-color: var(--color-accent-tint);
+  }
+
+  /* A selected chip/slot keeps its gold fill on hover (its labels are black). */
+  .slot-picker-btn.slot-selected {
+    background: var(--color-accent);
+    color: var(--color-on-accent);
+    border-color: var(--color-accent);
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.15);
+  }
+
+  .slot-picker-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  .date-chip-btn {
+    padding: 0.75rem 0.5rem;
+    text-align: center;
+    box-shadow: var(--shadow-ring);
+  }
+
+  .date-chip-btn:hover:not(.slot-selected) {
+    box-shadow: var(--shadow-raised);
+  }
+
+  .time-slot-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.65rem 0.5rem;
+    font-size: 0.825rem;
+    font-weight: 600;
+    letter-spacing: normal;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Date chip labels. A selected chip has a gold fill, so its labels switch to black: the
+     default muted/white/dim-gold text would drop to 1.0–2.5:1 on gold. */
+  .date-chip-weekday,
+  .date-chip-day,
+  .date-chip-month {
+    display: block;
+    pointer-events: none;
+  }
+
+  .date-chip-weekday {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--color-fg-muted);
+  }
+
+  .date-chip-day {
+    font-size: 1.35rem;
+    font-weight: 900;
+    margin: 0.15rem 0;
+    color: #ffffff;
+  }
+
+  .date-chip-month {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--color-accent-muted);
+  }
+
+  .slot-picker-btn:hover:not(:disabled):not(.slot-selected) .date-chip-month {
+    color: var(--color-accent);
+  }
+
+  .slot-selected .date-chip-weekday,
+  .slot-selected .date-chip-day,
+  .slot-selected .date-chip-month {
+    color: var(--color-on-accent);
+  }
+
+  /* Integrated Faint Background.
+     The image sits on a viewport-fixed pseudo-element instead of `background-attachment: fixed`,
+     which repaints the whole background on every scroll frame (and is ignored by iOS Safari).
+     barber-bg.jpg is 1280 px wide at quality 60 (33 kB, was 1920 px / 200 kB): it is dimmed to
+     ~6 % by the overlay, so the extra resolution was never visible. Referenced relatively, so the
+     build content-hashes it under /media/ (cached immutable, see styles.css). */
+  .bg-faint-barber {
+    /* Own stacking context, so the fixed layer below stays behind this container's content.
+       Anything that must show above the layer belongs inside the container (a static sibling
+       placed before it would be painted over, since the container is positioned). */
+    position: relative;
+    isolation: isolate;
+    background-color: var(--color-page);
+  }
+
+  .bg-faint-barber::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(to bottom, rgba(0, 0, 0, 0.9), rgba(9, 13, 22, 0.94)),
+      url('../assets/barber-bg.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
 }
 
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: var(--bg-slate-light);
-}
-::-webkit-scrollbar-thumb {
-  background: var(--text-dim);
-  border-radius: var(--radius-full);
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
-
-/* Common reusable transition presets */
-.saas-transition {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Step tracker line animations */
-.wizard-step-node {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.wizard-step-node.active {
-  border-color: var(--primary-gold) !important;
-  color: var(--primary-gold) !important;
-  box-shadow: var(--shadow-gold-glow);
-}
-
-.wizard-step-node.completed {
-  background-color: var(--primary-gold) !important;
-  border-color: var(--primary-gold) !important;
-  color: #000000 !important;
-}
-
-/* Selection highlights */
-.selected-service-item {
-  border-color: var(--primary-gold) !important;
-  background-color: var(--primary-gold-light) !important;
-  box-shadow: var(--shadow-gold-glow) !important;
-}
-
-.slot-picker-btn {
-  border: 1px solid rgba(255, 255, 255, 0.05) !important;
-  background-color: #000000 !important;
-  color: var(--text-muted) !important;
-  transition: all 0.15s ease;
-}
-
-/* A selected chip/slot keeps its gold fill on hover (its labels are black). */
-.slot-picker-btn:hover:not(:disabled):not(.slot-selected) {
-  border-color: var(--primary-gold) !important;
-  color: var(--primary-gold) !important;
-  background-color: var(--primary-gold-light) !important;
-}
-
-.slot-selected {
-  background: var(--primary-gold) !important;
-  color: #000000 !important;
-  border-color: var(--primary-gold) !important;
-  box-shadow: 0 0 15px rgba(255, 255, 255, 0.15) !important;
-}
-
-/* Date carousel chip labels. A selected chip has a gold fill, so its labels switch to
-   black: the default muted/white/dim-gold text would drop to 1.0–2.5:1 on gold. */
-.date-chip-weekday,
-.date-chip-day,
-.date-chip-month {
-  display: block;
-  pointer-events: none;
-}
-
-.date-chip-weekday {
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.date-chip-day {
-  font-size: 1.35rem;
-  font-weight: 900;
-  margin: 0.15rem 0;
-  color: #ffffff;
-}
-
-.date-chip-month {
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: var(--gold-metallic-dim);
-}
-
-.slot-picker-btn:hover:not(:disabled):not(.slot-selected) .date-chip-month {
-  color: var(--primary-gold);
-}
-
-.slot-selected .date-chip-weekday,
-.slot-selected .date-chip-day,
-.slot-selected .date-chip-month {
-  color: #000000;
-}
-
-.slot-busy {
-  background-color: rgba(255, 255, 255, 0.05) !important;
-  color: var(--text-dim) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-  cursor: not-allowed !important;
-  text-decoration: line-through;
-  opacity: 0.6;
-}
-
-/* Card presets */
-.card {
-  background-color: var(--bg-white-card);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-saas-sm);
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.card:hover {
-  border-color: rgba(255, 255, 255, 0.15);
-  box-shadow: var(--shadow-saas-md);
-}
-
-/* Buttons */
-.btn {
-  font-family: inherit;
-  font-size: 0.875rem;
-  font-weight: 600;
-  padding: 0.65rem 1.25rem;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  text-transform: none;
-  letter-spacing: normal;
-}
-
-.btn-submit {
-  /* Containing block for the hover hit-area strip below. */
-  position: relative;
-  background-color: var(--primary-gold);
-  color: #000000;
-  box-shadow: 0 2px 4px rgba(197, 160, 89, 0.15);
-}
-
-.btn-submit:hover:not(:disabled) {
-  background-color: var(--primary-gold-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(197, 160, 89, 0.25);
-}
-
-/* The 1px lift moves the hit box off a pointer resting on the bottom edge: the button loses
-   :hover, drops back, regains it, and flickers forever (an E2E click on it then never sees a
-   stable box). This invisible strip fills the pixel the lift vacates, so the pointer stays
-   over the button. */
-.btn-submit:hover:not(:disabled)::after {
-  content: '';
-  position: absolute;
-  inset: 0 0 -1px;
-}
-
-.btn-submit:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.btn-secondary {
-  background-color: #09090b;
-  color: var(--text-muted);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: var(--shadow-sm);
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.05);
-  border-color: rgba(0, 0, 0, 0.15);
-  color: var(--text-main);
-}
-
-.btn-secondary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-/* Forms input controls */
-.form-control {
-  font-family: inherit;
-  font-size: 0.9rem;
-  padding: 0.65rem 0.85rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-md);
-  color: var(--text-main);
-  background-color: var(--bg-white-card);
-  transition: all 0.2s;
-  outline: none;
-}
-
-.form-control:focus {
-  border-color: var(--gold-metallic);
-  background-color: var(--bg-white-card);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
-}
-
-/* Overlay modal */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-}
-
-.modal-card {
-  position: relative;
-  max-width: 440px;
-  width: 90%;
-  max-height: calc(100dvh - 2rem);
-  overflow-y: auto;
-  background-color: var(--bg-white-card);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-}
-
-.modal-card > .modal-close {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background-color: rgba(255, 255, 255, 0.05);
-  color: var(--text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.modal-card > .modal-close:hover {
-  color: var(--text-main);
-  border-color: var(--primary-gold);
-}
-
-.action-btn {
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background-color: rgba(255, 255, 255, 0.05);
-  color: var(--text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.action-btn.btn-delete:hover:not(:disabled) {
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.4);
-  background-color: rgba(248, 113, 113, 0.1);
-}
-
-.action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Search input specific */
-.search-input {
-  width: 100%;
-  font-family: inherit;
-  font-size: 0.9rem;
-  padding: 0.65rem 1rem 0.65rem 2.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-md);
-  background-color: var(--bg-white-card);
-  color: var(--text-main);
-  outline: none;
-  transition: all 0.2s ease;
-}
-
-.search-input:focus {
-  background-color: var(--bg-white-card);
-  border-color: var(--primary-gold);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
-}
-
-/* Animations */
+/* Entrance animation for content that follows an interaction (modals, alerts, wizard steps). A
+   utility, so it applies whatever component class the element also has. */
 @keyframes fadeInUp {
   from {
     opacity: 0;
@@ -382,64 +478,10 @@ html {
   }
 }
 
-.animate-fadeIn {
-  animation: fadeInUp 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-/* Integrated Faint Background.
-   The image sits on a viewport-fixed pseudo-element instead of `background-attachment: fixed`,
-   which repaints the whole background on every scroll frame (and is ignored by iOS Safari).
-   barber-bg.jpg is 1280 px wide at quality 60 (33 kB, was 1920 px / 200 kB): it is dimmed to
-   ~6 % by the overlay, so the extra resolution was never visible. Referenced relatively, so the
-   build content-hashes it under /media/ (cached immutable, see styles.css). */
-.bg-faint-barber {
-  /* Own stacking context, so the fixed layer below stays behind this container's content. Anything
-     that must show above the layer belongs inside the container (a static sibling placed before it
-     would be painted over, since the container is positioned). */
-  position: relative;
-  isolation: isolate;
-  background-color: #000000;
-}
-
-.bg-faint-barber::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-image:
-    linear-gradient(to bottom, rgba(0, 0, 0, 0.9), rgba(9, 13, 22, 0.94)),
-    url('../assets/barber-bg.jpg');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-/* Former inline styles (the CSP has style-src 'self', no 'unsafe-inline', #224). They sit here,
-   after .btn, .card and .modal-card, because those unlayered rules beat Tailwind's utilities. */
-.date-chip-btn {
-  padding: 0.75rem 0.5rem;
-  text-align: center;
-  border-radius: var(--radius-md);
-}
-
-.time-slot-btn {
-  padding: 0.65rem 0.5rem;
-  font-size: 0.825rem;
-  font-weight: 600;
-  text-transform: none;
-}
-
-.wizard-back-btn {
-  padding: 0.5rem 1.25rem;
-}
-
-.wizard-next-btn {
-  padding: 0.5rem 1.5rem;
-}
-
-.receipt-modal-card {
-  max-width: 480px;
+@layer utilities {
+  .animate-fadeIn {
+    animation: fadeInUp 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

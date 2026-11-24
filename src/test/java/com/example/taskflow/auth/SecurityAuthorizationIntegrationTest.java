@@ -115,6 +115,16 @@ class SecurityAuthorizationIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Ghost\",\"email\":\"ghost@taskflow.com\",\"phone\":\"555-0009\"}"))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/catalog/products")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Ghost Wax\",\"price\":9.0,\"sortOrder\":1}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(put("/api/v1/catalog/announcement")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"Free cuts\"}"))
+                .andExpect(status().isUnauthorized());
     }
 
     // ------------------------------------------------------------------
@@ -171,6 +181,26 @@ class SecurityAuthorizationIntegrationTest {
         mockMvc.perform(get("/api/v1/catalog/retired").header("Authorization", customerToken))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/catalog/1/restore").header("Authorization", customerToken))
+                .andExpect(status().isForbidden());
+        // Retail products: public to read, admin-only to write (the catalog's /** write rules).
+        String product = "{\"name\":\"Ghost Wax\",\"price\":9.0,\"sortOrder\":1}";
+        mockMvc.perform(post("/api/v1/catalog/products")
+                        .header("Authorization", customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(product))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/catalog/products/1")
+                        .header("Authorization", customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(product))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/v1/catalog/products/1").header("Authorization", customerToken))
+                .andExpect(status().isForbidden());
+        // The landing pages' promo strip: guests read it from /public/shop, only the owner sets it.
+        mockMvc.perform(put("/api/v1/catalog/announcement")
+                        .header("Authorization", customerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"Free cuts\"}"))
                 .andExpect(status().isForbidden());
     }
 
@@ -287,6 +317,8 @@ class SecurityAuthorizationIntegrationTest {
                 .andExpect(status().isNotFound());
         mockMvc.perform(head("/api/v1/catalog/999999")).andExpect(status().isNotFound());
         mockMvc.perform(head("/api/v1/catalog")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/catalog/products")).andExpect(status().isOk());
+        mockMvc.perform(head("/api/v1/catalog/products")).andExpect(status().isOk());
         mockMvc.perform(head("/api/v1/barbers")).andExpect(status().isOk());
         mockMvc.perform(head("/api/v1/auth/csrf")).andExpect(status().isOk());
         mockMvc.perform(head("/api/v1/appointments/public/busy-slots")

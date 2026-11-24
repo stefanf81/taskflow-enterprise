@@ -6,6 +6,9 @@ import { AdminTabNavigator } from '../src/navigation/AdminTabNavigator';
 jest.mock('../src/features/admin/AdminDashboardScreen', () => ({
   AdminDashboardScreen: () => <>{null}</>,
 }));
+jest.mock('../src/features/admin/AdminCalendarScreen', () => ({
+  AdminCalendarScreen: () => <>{null}</>,
+}));
 jest.mock('../src/features/admin/AdminCatalogScreen', () => ({
   AdminCatalogScreen: () => <>{null}</>,
 }));

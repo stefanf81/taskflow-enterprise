@@ -7,6 +7,10 @@ import { AuthApi } from '../../../core/api/auth-api';
 import { AuthState } from '../../../core/auth/auth.state';
 import { NETWORK_ERROR_MESSAGE, extractApiError } from '../../../core/api/extract-api-error';
 import { RequestValidationError } from '../../../core/api/request-validation';
+import { Button } from '../../../core/ui/button';
+import { Alert } from '../../../core/ui/alert';
+import { lockIcon } from '../../../core/ui/icons/lock';
+import { Icon } from '../../../core/ui/icon';
 
 /** Model shape for the Signal Forms login / register wizard. */
 interface AuthFormModel {
@@ -21,7 +25,7 @@ interface AuthFormModel {
  *
  * Displays an overlay dialog with sign-in and create-account forms.
  * Designed for @defer lazy-loading since the modal only appears on-demand
- * when the user clicks "Owner Portal".
+ * when the user clicks "Sign in" in the landing page's nav.
  *
  * Migrated to Angular 22 Signal Forms (`@angular/forms/signals`) to match
  * the booking wizard in `app.ts`: a single signal-backed model is bound to
@@ -30,7 +34,7 @@ interface AuthFormModel {
  */
 @Component({
   selector: 'app-auth-modal',
-  imports: [FormField, A11yModule],
+  imports: [FormField, A11yModule, Button, Alert, Icon],
   template: `
     <div class="modal-overlay" tabindex="-1" (keydown.escape)="closeModal()">
       <div
@@ -39,26 +43,13 @@ interface AuthFormModel {
         aria-labelledby="authModalTitle"
         cdkTrapFocus
         cdkTrapFocusAutoCapture
-        class="login-card modal-card animate-fadeIn p-8 rounded-3xl border border-white/10 shadow-2xl shadow-black/50"
+        class="login-card modal-card animate-fadeIn p-8 rounded-3xl"
       >
         <button type="button" class="modal-close" aria-label="Close" (click)="closeModal()">
           &times;
         </button>
         <div class="login-header text-center mb-6">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke-width="2.5"
-            stroke="currentColor"
-            class="w-10 h-10 text-gold mx-auto mb-3"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
-            />
-          </svg>
+          <app-icon [icon]="icons.lock" class="block size-10 text-accent mx-auto mb-3" />
           <h2 id="authModalTitle" class="text-xl font-black text-zinc-100 tracking-tight uppercase">
             {{ isRegisterMode() ? 'Create Account' : 'Sign In' }}
           </h2>
@@ -72,29 +63,15 @@ interface AuthFormModel {
         </div>
 
         @if (sessionNotice() && !errorMessage()) {
-          <div
-            role="status"
-            class="alert mb-4 py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-amber-500/20 bg-amber-500/10"
-          >
-            <span class="text-amber-400 leading-normal font-medium">{{ sessionNotice() }}</span>
-          </div>
+          <app-alert tone="warning" class="mb-4">{{ sessionNotice() }}</app-alert>
         }
 
-        @if (errorMessage()) {
-          <div
-            role="alert"
-            class="alert alert-error mb-4 py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-red-500/20"
-          >
-            <span class="text-rose-400 leading-normal font-medium">{{ errorMessage() }}</span>
-          </div>
+        @if (errorMessage(); as message) {
+          <app-alert tone="error" class="mb-4">{{ message }}</app-alert>
         }
 
-        @if (successMessage()) {
-          <div
-            class="alert alert-success mb-4 py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-emerald-500/10"
-          >
-            <span class="text-emerald-400 leading-normal font-medium">{{ successMessage() }}</span>
-          </div>
+        @if (successMessage(); as message) {
+          <app-alert tone="success" class="mb-4">{{ message }}</app-alert>
         }
 
         <form method="post" (submit)="$event.preventDefault(); onLogin()" class="space-y-4">
@@ -106,6 +83,7 @@ interface AuthFormModel {
               <input
                 type="text"
                 id="regName"
+                autocomplete="name"
                 [formField]="authForm.fullName"
                 placeholder="John Doe"
                 class="form-control"
@@ -121,7 +99,7 @@ interface AuthFormModel {
                 "
               />
               @if (authForm.fullName().touched() && !authModel().fullName.trim()) {
-                <span id="regName-error" class="text-rose-400 text-[10px]">
+                <span id="regName-error" class="text-rose-400 text-sm">
                   Full name is required.
                 </span>
               }
@@ -131,8 +109,9 @@ interface AuthFormModel {
                 >Phone</label
               >
               <input
-                type="text"
+                type="tel"
                 id="regPhone"
+                autocomplete="tel"
                 [formField]="authForm.phone"
                 placeholder="555-1234"
                 class="form-control"
@@ -147,9 +126,12 @@ interface AuthFormModel {
             <input
               type="text"
               id="username"
+              autocomplete="username"
+              autocapitalize="none"
+              spellcheck="false"
               cdkFocusInitial
               [formField]="authForm.username"
-              placeholder="e.g., admin"
+              placeholder="you@example.com"
               class="form-control"
               [attr.aria-invalid]="
                 authForm.username().touched() && authForm.username().invalid() ? 'true' : null
@@ -161,9 +143,7 @@ interface AuthFormModel {
               "
             />
             @if (authForm.username().touched() && authForm.username().invalid()) {
-              <span id="username-error" class="text-rose-400 text-[10px]">
-                Username is required.
-              </span>
+              <span id="username-error" class="text-rose-400 text-sm"> Username is required. </span>
             }
           </div>
 
@@ -174,8 +154,8 @@ interface AuthFormModel {
             <input
               type="password"
               id="password"
+              [attr.autocomplete]="isRegisterMode() ? 'new-password' : 'current-password'"
               [formField]="authForm.password"
-              placeholder="e.g., admin-password"
               class="form-control"
               [attr.aria-invalid]="
                 authForm.password().touched() && authForm.password().invalid() ? 'true' : null
@@ -183,22 +163,16 @@ interface AuthFormModel {
               [attr.aria-describedby]="passwordDescribedBy()"
             />
             @if (authForm.password().touched() && authForm.password().invalid()) {
-              <span id="password-error" class="text-rose-400 text-[10px]">
-                Password is required.
-              </span>
+              <span id="password-error" class="text-rose-400 text-sm"> Password is required. </span>
             }
             @if (isRegisterMode()) {
-              <span id="password-policy" class="text-zinc-500 text-[10px]">
+              <span id="password-policy" class="text-zinc-500 text-xs">
                 {{ passwordPolicy }}
               </span>
             }
           </div>
 
-          <button
-            type="submit"
-            class="btn btn-submit w-full mt-2 py-3 text-xs tracking-wide uppercase font-black"
-            [disabled]="isSubmitting()"
-          >
+          <button type="submit" appButton class="w-full mt-2" [disabled]="isSubmitting()">
             {{ isSubmitting() ? 'Processing...' : isRegisterMode() ? 'Register' : 'Sign In' }}
           </button>
         </form>
@@ -209,7 +183,7 @@ interface AuthFormModel {
                mouse was released, so the click was lost (BENCHMARKS.md §74). -->
           <button
             type="button"
-            class="text-xs text-gold font-bold hover:text-white"
+            class="text-xs text-accent font-bold hover:text-white"
             (mousedown)="$event.preventDefault()"
             (click)="toggleMode()"
           >
@@ -223,6 +197,9 @@ interface AuthFormModel {
   `,
 })
 export class AuthModalComponent {
+  protected readonly icons = {
+    lock: lockIcon,
+  };
   private readonly authApi = inject(AuthApi);
   private readonly authState = inject(AuthState);
   private readonly destroyRef = inject(DestroyRef);

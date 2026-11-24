@@ -162,7 +162,11 @@ class HttpCacheHeadersIntegrationTest {
     void adminEditableReferenceDataIsPublicButRevalidated() throws Exception {
         Long serviceId = serviceItemRepository.findAll().getFirst().getId();
         for (String path : new String[] {
-            "/api/v1/catalog", "/api/v1/catalog/" + serviceId, "/api/v1/barbers", "/api/v1/appointments/public/shop"
+            "/api/v1/catalog",
+            "/api/v1/catalog/" + serviceId,
+            "/api/v1/catalog/products",
+            "/api/v1/barbers",
+            "/api/v1/appointments/public/shop"
         }) {
             String etag = mockMvc.perform(get(path))
                     .andExpect(status().isOk())

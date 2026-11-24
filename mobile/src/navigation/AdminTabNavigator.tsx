@@ -2,6 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AdminDashboardScreen } from '../features/admin/AdminDashboardScreen';
+import { AdminCalendarScreen } from '../features/admin/AdminCalendarScreen';
 import { AdminCatalogScreen } from '../features/admin/AdminCatalogScreen';
 import { AdminSchedulesScreen } from '../features/admin/AdminSchedulesScreen';
 import { AdminNotificationsScreen } from '../features/admin/AdminNotificationsScreen';
@@ -27,6 +28,7 @@ export const AdminTabNavigator: React.FC = () => {
           let iconName: keyof typeof Ionicons.glyphMap = 'grid';
 
           if (route.name === 'AdminAppointments') iconName = 'grid-outline';
+          else if (route.name === 'AdminCalendar') iconName = 'calendar-outline';
           else if (route.name === 'AdminCatalog') iconName = 'cut-outline';
           else if (route.name === 'AdminSchedules') iconName = 'people-outline';
           else if (route.name === 'AdminNotifications') iconName = 'mail-outline';
@@ -39,6 +41,11 @@ export const AdminTabNavigator: React.FC = () => {
         name="AdminAppointments"
         component={AdminDashboardScreen}
         options={{ tabBarLabel: 'Dashboard' }}
+      />
+      <Tab.Screen
+        name="AdminCalendar"
+        component={AdminCalendarScreen}
+        options={{ tabBarLabel: 'Calendar' }}
       />
       <Tab.Screen
         name="AdminCatalog"

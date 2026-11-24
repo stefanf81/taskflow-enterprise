@@ -1,19 +1,31 @@
-import { Component, inject, signal } from '@angular/core';
-import { finalize } from 'rxjs';
-import { AppointmentsApi } from '../../core/api/appointments-api';
+import { Component, computed, inject, signal } from '@angular/core';
+import { extractApiError } from '../../core/api/extract-api-error';
 import { FlashMessages } from '../../core/ui/flash-messages';
+import { Button } from '../../core/ui/button';
+import { EmptyState } from '../../core/ui/empty-state';
+import { Icon } from '../../core/ui/icon';
+import { calendarIcon } from '../../core/ui/icons/calendar';
+import { mailIcon } from '../../core/ui/icons/mail';
+import { phoneIcon } from '../../core/ui/icons/phone';
+import { scissorsIcon } from '../../core/ui/icons/scissors';
+import { searchIcon } from '../../core/ui/icons/search';
+import { xIcon } from '../../core/ui/icons/x';
+import { SegmentedControl, SegmentOption } from '../../core/ui/segmented-control';
+import { StatusBadge } from '../../core/ui/status-badge';
+import { AdminStats } from './admin-stats';
+import { AppointmentActions } from './appointment-actions';
 import { AppointmentStore } from './appointment.store';
 import { ShopClock } from '../../core/shop-clock';
 import { formatTime12Hour, formatLocalDate, isOverdue } from '../../core/time-utils';
 
-/** Owner dashboard · appointments tab (list, filter, search, approve/deny/cancel). */
+/** Owner dashboard · appointments tab (list, filter, search, approve/deny/cancel, bulk approve). */
 @Component({
   selector: 'app-admin-appointments-tab',
-  imports: [],
+  imports: [AdminStats, Button, EmptyState, Icon, SegmentedControl, StatusBadge],
   templateUrl: './admin-appointments-tab.html',
 })
 export class AdminAppointmentsTab {
-  private readonly appointmentsApi = inject(AppointmentsApi);
+  private readonly actions = inject(AppointmentActions);
   private readonly store = inject(AppointmentStore);
   private readonly flash = inject(FlashMessages);
   private readonly shopClock = inject(ShopClock);
@@ -25,7 +37,40 @@ export class AdminAppointmentsTab {
   readonly totalPages = this.store.totalPages;
   protected readonly isLoading = this.store.isLoading;
   protected readonly loadErrorMessage = this.store.loadErrorMessage;
-  protected readonly pendingIds = signal<ReadonlySet<number>>(new Set());
+  protected readonly pendingIds = this.actions.pendingIds;
+
+  /** Ticked bookings. Only ones still pending and on screen count (see `selectedPending`). */
+  protected readonly selectedIds = signal<ReadonlySet<number>>(new Set());
+  protected readonly isBulkApproving = signal(false);
+  protected readonly pendingOnPage = computed(() =>
+    this.appointments().filter((appt) => appt.status === 'PENDING'),
+  );
+  /** The ticked bookings that can still be approved: a refresh may have changed or dropped some. */
+  private readonly selectedPending = computed(() => {
+    const selected = this.selectedIds();
+    return this.pendingOnPage().filter((appt) => selected.has(appt.id));
+  });
+  protected readonly selectedCount = computed(() => this.selectedPending().length);
+  protected readonly someSelected = computed(() => this.selectedCount() > 0);
+  protected readonly allPendingSelected = computed(
+    () => this.pendingOnPage().length > 0 && this.selectedCount() === this.pendingOnPage().length,
+  );
+  protected readonly filters: readonly SegmentOption<string>[] = [
+    { value: 'all', label: 'All' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'approved', label: 'Approved' },
+    { value: 'overdue', label: 'Overdue' },
+    { value: 'denied', label: 'Denied' },
+    { value: 'cancelled', label: 'Cancelled' },
+  ];
+  protected readonly icons = {
+    calendar: calendarIcon,
+    mail: mailIcon,
+    phone: phoneIcon,
+    scissors: scissorsIcon,
+    search: searchIcon,
+    x: xIcon,
+  };
 
   setFilter(filter: string): void {
     this.store.setFilter(filter);
@@ -51,71 +96,65 @@ export class AdminAppointmentsTab {
     this.store.refresh();
   }
 
+  protected toggleSelected(id: number): void {
+    this.selectedIds.update((ids) => {
+      const next = new Set(ids);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
+  protected toggleAllPending(): void {
+    this.selectedIds.set(
+      this.allPendingSelected() ? new Set() : new Set(this.pendingOnPage().map((appt) => appt.id)),
+    );
+  }
+
+  /**
+   * Approves every ticked booking, a few at a time. The outcome goes to the banner: how many went
+   * through, and the server's reason for the first failure.
+   */
+  protected approveSelected(): void {
+    const ids = this.selectedPending()
+      .map((appt) => appt.id)
+      .filter((id) => !this.pendingIds().has(id));
+    if (ids.length === 0 || this.isBulkApproving()) return;
+    this.isBulkApproving.set(true);
+
+    void this.actions.approveMany(ids).then((results) => {
+      this.isBulkApproving.set(false);
+      const failed = results.filter((result) => result.error !== null);
+      const approved = results.length - failed.length;
+      // Whatever was ticked is dealt with: approved ones are no longer pending, and a failed
+      // one is better ticked again on purpose than retried blindly.
+      this.selectedIds.set(new Set());
+      if (failed.length === 0) {
+        this.flash.showSuccess(
+          `${approved} ${approved === 1 ? 'appointment' : 'appointments'} APPROVED! Client notification emails queued.`,
+        );
+      } else if ((failed[0]!.error as { status?: number } | null)?.status !== 401) {
+        // The server's reason for the first failure (e.g. "slot already taken") follows the count.
+        const reason = extractApiError(failed[0]!.error, 'Please try again.');
+        this.flash.errorMessage.set(
+          approved === 0
+            ? `None of the ${results.length} selected appointments could be approved. ${reason}`
+            : `Approved ${approved} of ${results.length}; ${failed.length} could not be approved. ${reason}`,
+        );
+      }
+    });
+  }
+
   approveAppointment(id: number): void {
-    if (!this.beginAction(id)) return;
-    this.appointmentsApi
-      .updateAppointmentStatus(id, 'APPROVED')
-      .pipe(finalize(() => this.finishAction(id)))
-      .subscribe({
-        next: () => {
-          this.flash.showSuccess('Appointment APPROVED! Client notification email queued.');
-          this.loadAppointments();
-        },
-        // 409 = invalid transition / conflict: the server's message says why.
-        error: (err) => this.flash.reportActionError(err, 'Failed to approve appointment.'),
-      });
+    this.actions.approve(id);
   }
 
   denyAppointment(id: number): void {
-    if (!this.beginAction(id)) return;
-    this.appointmentsApi
-      .updateAppointmentStatus(id, 'DENIED')
-      .pipe(finalize(() => this.finishAction(id)))
-      .subscribe({
-        next: () => {
-          this.flash.showSuccess('Appointment DECLINED. Client notification email queued.');
-          this.loadAppointments();
-        },
-        error: (err) => this.flash.reportActionError(err, 'Failed to decline appointment.'),
-      });
+    this.actions.deny(id);
   }
 
   cancelAppointment(id: number): void {
     const appointment = this.appointments().find((item) => item.id === id);
-    if (
-      this.pendingIds().has(id) ||
-      (appointment?.status !== 'PENDING' && appointment?.status !== 'APPROVED')
-    ) {
-      return;
-    }
-    if (!confirm('Are you sure you want to cancel this booking?')) return;
-    if (!this.beginAction(id)) return;
-
-    this.appointmentsApi
-      .deleteAppointment(id)
-      .pipe(finalize(() => this.finishAction(id)))
-      .subscribe({
-        next: () => {
-          this.flash.showSuccess('Booking cancelled.');
-          // If this emptied the last page, AppointmentStore steps back by itself.
-          this.loadAppointments();
-        },
-        error: (err) => this.flash.reportActionError(err, 'Failed to cancel booking.'),
-      });
-  }
-
-  private beginAction(id: number): boolean {
-    if (this.pendingIds().has(id)) return false;
-    this.pendingIds.update((ids) => new Set([...ids, id]));
-    return true;
-  }
-
-  private finishAction(id: number): void {
-    this.pendingIds.update((ids) => {
-      const remaining = new Set(ids);
-      remaining.delete(id);
-      return remaining;
-    });
+    if (appointment) this.actions.cancel(appointment);
   }
 
   isOverdue(appt: { bookingDate?: string } | string): boolean {

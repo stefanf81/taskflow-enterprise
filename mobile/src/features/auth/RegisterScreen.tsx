@@ -106,6 +106,7 @@ export const RegisterScreen: React.FC = () => {
                   <Input
                     label="Full Name *"
                     placeholder="e.g. Jane Smith"
+                    autoComplete="name"
                     value={value}
                     onBlur={onBlur}
                     onChangeText={onChange}
@@ -121,6 +122,7 @@ export const RegisterScreen: React.FC = () => {
                   <Input
                     label="Email Address *"
                     placeholder="jane.smith@example.com"
+                    autoComplete="email"
                     value={value}
                     onBlur={onBlur}
                     onChangeText={onChange}
@@ -138,6 +140,7 @@ export const RegisterScreen: React.FC = () => {
                   <Input
                     label="Phone Number *"
                     placeholder="+1 (555) 000-0000"
+                    autoComplete="tel"
                     value={value}
                     onBlur={onBlur}
                     onChangeText={onChange}
@@ -154,6 +157,7 @@ export const RegisterScreen: React.FC = () => {
                   <Input
                     label="Password *"
                     placeholder="••••••••"
+                    autoComplete="new-password"
                     value={value}
                     onBlur={onBlur}
                     onChangeText={onChange}

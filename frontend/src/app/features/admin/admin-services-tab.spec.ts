@@ -3,6 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuthState } from '../../core/auth/auth.state';
+import { DEFAULT_SHOP_RULES } from '@taskflow/domain';
 import { AdminServicesTab } from './admin-services-tab';
 
 describe('AdminServicesTab', () => {
@@ -21,8 +22,9 @@ describe('AdminServicesTab', () => {
   }
 
   /**
-   * Answers the two requests the tab makes on mount. Both are flushed before waiting: whenStable()
-   * does not settle while either one is pending.
+   * Answers the requests the tab makes on mount (menu, retired services, retail products, and the
+   * shop info the announcement editor starts from).
+   * All are flushed before waiting: whenStable() does not settle while one is pending.
    */
   async function respond(
     body: object,
@@ -31,6 +33,10 @@ describe('AdminServicesTab', () => {
   ): Promise<void> {
     flush('/api/v1/catalog', body, status);
     flush('/api/v1/catalog/retired', retired.body, retired.status);
+    flush('/api/v1/catalog/products', []);
+    httpMock
+      .match((r) => r.url.endsWith('/public/shop'))
+      .forEach((r) => r.flush({ ...DEFAULT_SHOP_RULES, timeZone: 'UTC' }));
     await fixture.whenStable();
     fixture.detectChanges();
   }

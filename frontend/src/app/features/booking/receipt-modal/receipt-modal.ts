@@ -8,13 +8,23 @@ import { extractApiError } from '../../../core/api/extract-api-error';
 import { downloadTextFile, ICS_MIME_TYPE } from '../../../core/download';
 import { AppointmentItem } from '../../../types/api';
 import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
+import { calendarIcon } from '../../../core/ui/icons/calendar';
+import { checkIcon } from '../../../core/ui/icons/check';
+import { downloadIcon } from '../../../core/ui/icons/download';
+import { infoIcon } from '../../../core/ui/icons/info';
+import { keyRoundIcon } from '../../../core/ui/icons/key-round';
+import { scissorsIcon } from '../../../core/ui/icons/scissors';
+import { userIcon } from '../../../core/ui/icons/user';
+import { userRoundIcon } from '../../../core/ui/icons/user-round';
+import { Icon } from '../../../core/ui/icon';
+import { Button } from '../../../core/ui/button';
 
 @Component({
   selector: 'app-receipt-modal',
-  imports: [A11yModule],
+  imports: [A11yModule, Icon, Button],
   template: `
     <div
-      class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn"
+      class="modal-overlay inset-0 p-4 animate-fadeIn"
       tabindex="-1"
       (click)="onBackdropClick($event)"
       (keydown.escape)="closed.emit()"
@@ -25,7 +35,7 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
         aria-labelledby="receiptModalTitle"
         cdkTrapFocus
         cdkTrapFocusAutoCapture
-        class="login-card modal-card receipt-modal-card animate-fadeIn p-8 rounded-3xl border border-white/10 shadow-2xl shadow-black/50"
+        class="login-card modal-card max-w-[480px] animate-fadeIn p-8 rounded-3xl"
       >
         <button
           type="button"
@@ -40,16 +50,7 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
           <div
             class="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-3"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width="3"
-              stroke="currentColor"
-              class="w-6 h-6 text-emerald-600"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
+            <app-icon [icon]="icons.check" class="size-6 text-emerald-600" />
           </div>
           <h2
             id="receiptModalTitle"
@@ -71,23 +72,25 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
 
           <div class="space-y-3 text-xs text-zinc-400 font-light">
             <p class="flex justify-between">
-              <span>🔑 Booking Code:</span>
-              <strong class="text-gold font-bold select-all">{{ appointment()?.publicId }}</strong>
+              <span><app-icon [icon]="icons.keyRound" /> Booking Code:</span>
+              <strong class="text-accent font-bold select-all">{{
+                appointment()?.publicId
+              }}</strong>
             </p>
             <p class="flex justify-between">
-              <span>👤 Customer:</span>
+              <span><app-icon [icon]="icons.user" /> Customer:</span>
               <strong class="text-zinc-100 font-semibold">{{ appointment()?.customerName }}</strong>
             </p>
             <p class="flex justify-between">
-              <span>✂️ Service:</span>
+              <span><app-icon [icon]="icons.scissors" /> Service:</span>
               <strong class="text-zinc-100 font-semibold">{{ appointment()?.serviceType }}</strong>
             </p>
             <p class="flex justify-between">
-              <span>💈 Stylist:</span>
+              <span><app-icon [icon]="icons.userRound" /> Stylist:</span>
               <strong class="text-zinc-100 font-semibold">{{ appointment()?.barberName }}</strong>
             </p>
             <p class="flex justify-between">
-              <span>📅 Scheduled:</span>
+              <span><app-icon [icon]="icons.calendar" /> Scheduled:</span>
               <strong class="text-zinc-100 font-semibold"
                 >{{ formatLocalDate(appointment()?.bookingDate ?? '') }} at
                 {{ formatTime12Hour(appointment()?.bookingTime ?? '') }}</strong
@@ -96,13 +99,15 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
             <hr class="border-t border-dashed border-slate-300 my-2" />
             <p class="flex justify-between text-sm font-bold text-zinc-100 pt-1">
               <span>Estimated Price:</span>
-              <span class="text-gold">\${{ checkoutTotalLabel() }}</span>
+              <span class="text-accent">\${{ checkoutTotalLabel() }}</span>
             </p>
           </div>
         </div>
 
-        <div class="text-center text-[11px] text-zinc-500 leading-relaxed font-light mb-6">
-          <p class="font-bold text-zinc-300 mb-1">📝 What happens next?</p>
+        <div class="text-center text-xs text-zinc-500 leading-relaxed font-light mb-6">
+          <p class="font-bold text-zinc-300 mb-1">
+            <app-icon [icon]="icons.info" /> What happens next?
+          </p>
           <p>
             The shop owner will review your slot request and confirm it. Keep your booking code:
             with your email address it lets you cancel, reschedule or review this booking.
@@ -112,20 +117,21 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
         <div class="space-y-2.5">
           <button
             type="button"
-            class="btn btn-secondary w-full py-2.5 text-xs font-bold tracking-wide uppercase"
+            appButton="secondary"
+            class="w-full"
             [disabled]="exportingCalendar() || !appointment()"
             (click)="downloadCalendar()"
           >
-            {{ exportingCalendar() ? 'Exporting Calendar…' : '📅 Download .ics Calendar' }}
+            @if (exportingCalendar()) {
+              Exporting Calendar…
+            } @else {
+              <app-icon [icon]="icons.download" /> Download .ics Calendar
+            }
           </button>
           @if (calendarError(); as message) {
-            <p role="alert" class="text-center text-[11px] text-rose-400">{{ message }}</p>
+            <p role="alert" class="text-center text-sm text-rose-400">{{ message }}</p>
           }
-          <button
-            type="button"
-            class="btn btn-submit w-full py-3 font-bold tracking-wide uppercase"
-            (click)="closed.emit()"
-          >
+          <button type="button" appButton class="w-full" (click)="closed.emit()">
             Got It, Thanks!
           </button>
         </div>
@@ -134,6 +140,16 @@ import { formatTime12Hour, formatLocalDate } from '../../../core/time-utils';
   `,
 })
 export class ReceiptModalComponent {
+  protected readonly icons = {
+    calendar: calendarIcon,
+    check: checkIcon,
+    download: downloadIcon,
+    info: infoIcon,
+    keyRound: keyRoundIcon,
+    scissors: scissorsIcon,
+    user: userIcon,
+    userRound: userRoundIcon,
+  };
   private readonly appointmentsApi = inject(AppointmentsApi);
   private readonly destroyRef = inject(DestroyRef);
   readonly appointment = input<AppointmentItem | null>(null);

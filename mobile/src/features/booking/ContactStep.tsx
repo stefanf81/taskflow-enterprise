@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Card } from '../../components/common/Card';
 import { Input } from '../../components/common/Input';
-import { colors } from '../../theme/colors';
+import { colors, semantic, withAlpha } from '../../theme/colors';
 import { formatTime12Hour } from '../../utils/time-utils';
 import { BookingSummary, ContactDetails } from './bookingWizard';
 import { StepNavigation } from './StepNavigation';
@@ -74,6 +74,7 @@ export const ContactStep: React.FC<ContactStepProps> = ({
     <Input
       label="Full Name *"
       placeholder="e.g. John Doe"
+      autoComplete="name"
       value={contact.name}
       onChangeText={(value) => onChangeContact('name', value)}
       testID="customer-name-input"
@@ -82,6 +83,7 @@ export const ContactStep: React.FC<ContactStepProps> = ({
     <Input
       label="Email Address *"
       placeholder="john.doe@example.com"
+      autoComplete="email"
       value={contact.email}
       onChangeText={(value) => onChangeContact('email', value)}
       keyboardType="email-address"
@@ -95,6 +97,7 @@ export const ContactStep: React.FC<ContactStepProps> = ({
       value={contact.phone}
       onChangeText={(value) => onChangeContact('phone', value)}
       keyboardType="phone-pad"
+      autoComplete="tel"
       testID="customer-phone-input"
     />
 
@@ -138,7 +141,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: withAlpha(semantic['fg-strong'], 0.1),
     marginVertical: 8,
   },
   totalRow: {

@@ -19,6 +19,7 @@
       "ignoreBinaries": ["eas"]
     },
     "shared/domain": {},
-    "shared/schemas": {}
+    "shared/schemas": {},
+    "shared/theme": {}
   }
 }

@@ -1,0 +1,256 @@
+<!-- HEADER: what is shown, with previous / today / next -->
+<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 mb-4">
+  <div class="min-w-0">
+    <h2 class="text-lg font-extrabold text-zinc-100 m-0 leading-tight" aria-live="polite">
+      {{ title() }}
+    </h2>
+    <p class="text-xs text-zinc-500 m-0 mt-1 flex flex-wrap items-center gap-x-3">
+      <span>{{ bookingCount() }} {{ bookingCount() === 1 ? 'booking' : 'bookings' }}</span>
+      <span class="flex items-center gap-1.5"
+        ><span class="size-2 rounded-full bg-amber-400" aria-hidden="true"></span>Pending</span
+      >
+      <span class="flex items-center gap-1.5"
+        ><span class="size-2 rounded-full bg-emerald-500" aria-hidden="true"></span>Approved</span
+      >
+    </p>
+  </div>
+  <div class="flex items-center gap-2">
+    <button
+      type="button"
+      class="action-btn"
+      aria-label="Previous {{ view() }}"
+      title="Previous {{ view() }}"
+      (click)="step(-1)"
+    >
+      <app-icon [icon]="icons.previous" class="size-4" />
+    </button>
+    <button type="button" appButton="secondary" class="px-4 py-2 text-xs" (click)="goToToday()">
+      Today
+    </button>
+    <button
+      type="button"
+      class="action-btn"
+      aria-label="Next {{ view() }}"
+      title="Next {{ view() }}"
+      (click)="step(1)"
+    >
+      <app-icon [icon]="icons.next" class="size-4" />
+    </button>
+  </div>
+</div>
+
+<!-- CONTROLS: day/week, jump to a date, barber (week) -->
+<div class="flex flex-wrap items-center gap-3 mb-5">
+  <app-segmented-control
+    class="w-44"
+    label="Calendar view"
+    [options]="views"
+    [value]="view()"
+    (valueChange)="setView($event)"
+  />
+  <label class="sr-only" for="calendar-date">Go to date</label>
+  <input
+    id="calendar-date"
+    type="date"
+    class="form-control w-auto py-2"
+    [value]="anchor()"
+    (change)="goTo($any($event.target).value)"
+  />
+  @if (view() === 'week') {
+    <label class="sr-only" for="calendar-barber">Barber</label>
+    <select
+      id="calendar-barber"
+      class="form-control w-auto py-2"
+      [value]="barberFilter()"
+      (change)="setBarber($any($event.target).value)"
+    >
+      <option [value]="allBarbers">All barbers</option>
+      @for (name of barberNames(); track name) {
+        <option [value]="name">{{ name }}</option>
+      }
+    </select>
+  }
+</div>
+
+@if (loadError(); as message) {
+  <app-empty-state kind="error" [title]="message">
+    <button type="button" appButton="secondary" (click)="retry()">Retry</button>
+  </app-empty-state>
+} @else {
+  @if (closedNotice(); as notice) {
+    <p class="text-sm text-zinc-400 mb-3">{{ notice }}</p>
+  }
+
+  @if (columns().length === 0) {
+    <app-empty-state
+      title="No barbers yet"
+      description="Add a barber under Schedules & Time-Off to see their column."
+    />
+  } @else {
+    @if (selected(); as appt) {
+      <section
+        class="card mb-4 flex flex-col gap-3 p-4 sm:flex-row sm:items-center"
+        aria-label="Selected booking"
+      >
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2.5">
+            <h3 class="m-0 text-sm font-extrabold text-zinc-100">{{ appt.customerName }}</h3>
+            <app-status-badge [status]="appt.status" />
+          </div>
+          <p class="m-0 mt-0.5 text-xs text-zinc-300">
+            <strong class="font-semibold text-accent">{{ appt.serviceType }}</strong>
+            with <strong class="font-semibold text-zinc-100">{{ appt.barberName }}</strong> ·
+            {{ date(appt.bookingDate) }} at {{ time(appt.bookingTime) }}
+          </p>
+          <p class="m-0 mt-0.5 text-xs text-zinc-500">
+            {{ appt.customerEmail }} · {{ appt.customerPhone }}
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          @if (appt.status === 'PENDING') {
+            <button
+              type="button"
+              appButton
+              class="px-3.5 py-1.5 text-xs"
+              [disabled]="pendingIds().has(appt.id)"
+              (click)="approve(appt.id)"
+            >
+              Approve
+            </button>
+          }
+          <button
+            type="button"
+            appButton="danger"
+            class="px-3.5 py-1.5 text-xs"
+            [disabled]="pendingIds().has(appt.id)"
+            [title]="appt.status === 'APPROVED' ? 'Revoke and decline booking' : 'Decline booking'"
+            (click)="deny(appt.id)"
+          >
+            Deny
+          </button>
+          <button
+            type="button"
+            class="action-btn btn-delete"
+            [disabled]="pendingIds().has(appt.id)"
+            aria-label="Cancel booking"
+            title="Cancel booking"
+            (click)="cancel(appt)"
+          >
+            <app-icon [icon]="icons.close" class="size-4" />
+          </button>
+          <button
+            type="button"
+            appButton="secondary"
+            class="px-3.5 py-1.5 text-xs"
+            (click)="closeDetails()"
+          >
+            Close
+          </button>
+        </div>
+      </section>
+    }
+
+    <!-- aria-busy while a range loads: the rows already shown stay until the new ones arrive -->
+    <div
+      class="overflow-x-auto rounded-xl border border-white/10"
+      [attr.aria-busy]="isLoading()"
+      [class.opacity-60]="isLoading()"
+    >
+      <table class="w-full border-collapse text-left">
+        <caption class="sr-only">
+          Bookings for
+          {{
+            title()
+          }}
+        </caption>
+        <thead>
+          <tr class="bg-white/[0.03]">
+            <th scope="col" class="w-16 px-3 py-2.5"><span class="sr-only">Hour</span></th>
+            @for (column of columns(); track column.key) {
+              <th
+                scope="col"
+                class="min-w-28 border-l border-white/10 px-3 py-2.5 text-xs font-bold uppercase tracking-wider"
+                [class]="
+                  column.today ? 'text-accent' : column.closed ? 'text-zinc-600' : 'text-zinc-300'
+                "
+              >
+                @if (view() === 'week') {
+                  <button
+                    type="button"
+                    class="flex items-baseline gap-2 uppercase tracking-wider font-bold hover:text-accent transition-colors"
+                    [attr.aria-label]="
+                      'Open ' + column.label + ' ' + column.detail + ' in the day view'
+                    "
+                    (click)="openDay(column.key)"
+                  >
+                    {{ column.label }}
+                    <span class="text-base font-black normal-case tracking-normal">{{
+                      column.detail
+                    }}</span>
+                  </button>
+                } @else {
+                  {{ column.label }}
+                }
+              </th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.hour) {
+            <tr class="border-t border-white/10 align-top">
+              <th
+                scope="row"
+                class="px-3 py-2.5 text-xs font-bold text-zinc-500 whitespace-nowrap align-top"
+              >
+                {{ hourLabel(row.hour) }}
+              </th>
+              @for (cell of row.cells; track $index) {
+                <td
+                  class="border-l border-white/10 p-1.5 min-h-14"
+                  [class.bg-white/[0.02]]="columns()[$index]?.closed"
+                >
+                  @for (appt of cell; track appt.id) {
+                    <button
+                      type="button"
+                      class="calendar-event block w-full text-left rounded-lg border px-2.5 py-1.5 text-xs leading-snug transition-colors"
+                      [class]="
+                        appt.status === 'PENDING'
+                          ? 'border-amber-500/30 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20'
+                          : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20'
+                      "
+                      [class.ring-2]="appt.id === selectedId()"
+                      [class.ring-accent]="appt.id === selectedId()"
+                      [class.mb-1.5]="!$last"
+                      [attr.aria-pressed]="appt.id === selectedId()"
+                      [attr.aria-label]="
+                        time(appt.bookingTime) +
+                        ', ' +
+                        appt.customerName +
+                        ', ' +
+                        appt.serviceType +
+                        ' with ' +
+                        appt.barberName +
+                        ', ' +
+                        appt.status.toLowerCase()
+                      "
+                      (click)="select(appt)"
+                    >
+                      <span class="font-bold">{{ time(appt.bookingTime) }}</span>
+                      <span class="font-semibold"> {{ appt.customerName }}</span>
+                      <span class="block opacity-70">
+                        {{ appt.serviceType }}
+                        @if (view() === 'week' && barberFilter() === allBarbers) {
+                          · {{ appt.barberName }}
+                        }
+                      </span>
+                    </button>
+                  }
+                </td>
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+}

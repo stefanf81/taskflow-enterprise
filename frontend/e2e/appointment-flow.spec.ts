@@ -91,7 +91,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
 
   test('should support new customer account registration flow', async ({ page }) => {
     // 1. Open the Admin Login Modal
-    await page.click('button:has-text("Owner Portal")');
+    await page.getByRole('button', { name: /^sign in$/i }).click();
     await expect(page.locator('.modal-overlay')).toBeVisible();
 
     // 2. Switch from Sign In mode to Register Account mode
@@ -116,7 +116,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
 
   test('should show error alert on invalid admin login credentials', async ({ page }) => {
     // 1. Open the Admin Login Modal
-    await page.click('button:has-text("Owner Portal")');
+    await page.getByRole('button', { name: /^sign in$/i }).click();
     await expect(page.locator('.modal-overlay')).toBeVisible();
 
     // 2. Input invalid credentials
@@ -146,7 +146,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
 
     // Step 3: Pick Date & Time
     await page.locator('.form-group .slot-picker-btn').first().click();
-    await page.locator('.time-slots-grid .slot-picker-btn:not(.slot-busy)').first().click();
+    await page.locator('.time-slots-grid .slot-picker-btn').first().click();
     await page.click('.wizard-footer-controls .btn-submit');
 
     // Step 4: Contact Info & Confirm
@@ -166,7 +166,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await expect(receiptModal).toContainText('Reservation Requested!');
 
     // Extract the unique Booking Code (publicId) from the receipt modal
-    const rawBookingCode = await page.locator('.modal-card strong.text-gold').textContent();
+    const rawBookingCode = await page.locator('.modal-card strong.text-accent').textContent();
     const bookingCode = rawBookingCode?.trim() || '';
     console.log(`[E2E] Extracted Booking Reference Code: ${bookingCode}`);
     expect(bookingCode.length).toBeGreaterThan(5);
@@ -178,8 +178,8 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     // ----------------------------------------------------
     // PHASE 2: ADMINISTRATIVE PANEL CONTROL PLANE
     // ----------------------------------------------------
-    // Open Owner Portal and Log In as Admin
-    await page.click('button:has-text("Owner Portal")');
+    // Open the sign-in modal and log in as admin
+    await page.getByRole('button', { name: /^sign in$/i }).click();
     await page.fill('#username', 'admin');
     await page.fill('#password', 'admin-password');
     await page.click('.modal-card button[type="submit"]');
@@ -189,11 +189,11 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await expect(page.locator('.alert-success')).toContainText('Welcome back, Owner!');
 
     // Nav Tab 1: Check Notification Outbox
-    await page.click('button:has-text("Notification Outbox")');
+    await page.getByRole('link', { name: 'Notification Outbox' }).click();
     await expect(page.locator('h3:has-text("Automated Notification Outbox")')).toBeVisible();
 
     // Nav Tab 2: Check Schedules & Time-Off, and Add Barber Time-Off
-    await page.click('button:has-text("Schedules & Time-Off")');
+    await page.getByRole('link', { name: 'Schedules & Time-Off' }).click();
     const schedulesContainer = page.locator('.card:has-text("Barber Schedules & Time-Off")');
     await expect(schedulesContainer).toBeVisible();
 
@@ -229,14 +229,14 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     );
 
     // Nav Tab 3: Appointments List, Filter, Search, Deny & Approve
-    await page.click('button:has-text("Appointments")');
+    await page.getByRole('link', { name: 'Appointments', exact: true }).click();
 
     // Search for our newly generated guest name using exact placeholder to avoid clash with other inputs
     const searchInput = page.locator('input[placeholder="Search customers..."]');
     await searchInput.fill(guestUniqueName);
 
-    // Locate the booking card matching our guest name - using .card.p-5 to uniquely target child items
-    const bookingCard = page.locator('.card.p-5', { hasText: guestUniqueName });
+    // Locate the booking row matching our guest name
+    const bookingCard = page.locator('.appt-row', { hasText: guestUniqueName });
     await expect(bookingCard).toBeVisible();
     await expect(bookingCard).toContainText('Pending');
 

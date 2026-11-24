@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, ViewProps } from 'react-native';
-import { colors } from '../../theme/colors';
+import { colors, semantic } from '../../theme/colors';
 
 interface CardProps extends ViewProps {
   variant?: 'default' | 'goldBorder';
@@ -28,7 +28,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: colors.obsidian.border,
-    shadowColor: '#000',
+    shadowColor: semantic.page,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,

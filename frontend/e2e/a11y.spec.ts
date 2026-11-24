@@ -100,7 +100,7 @@ test.describe('Accessibility (axe-core, WCAG 2.x AA)', () => {
     });
 
     await test.step('login modal', async () => {
-      await page.click('button:has-text("Owner Portal")');
+      await page.getByRole('button', { name: /^sign in$/i }).click();
       await expect(page.locator('[role="dialog"]')).toBeVisible();
       await expectNoBlockingViolations(page, 'login modal', requestsInFlight);
       await page.click('.modal-close');
@@ -108,7 +108,7 @@ test.describe('Accessibility (axe-core, WCAG 2.x AA)', () => {
     });
 
     await test.step('admin dashboard', async () => {
-      await page.click('button:has-text("Owner Portal")');
+      await page.getByRole('button', { name: /^sign in$/i }).click();
       await page.fill('#username', 'admin');
       await page.fill('#password', 'admin-password');
       await page.click('.modal-card button[type="submit"]');
@@ -123,7 +123,7 @@ test.describe('Accessibility (axe-core, WCAG 2.x AA)', () => {
       const email = `a11y-customer-${crypto.randomUUID()}@example.com`;
       const password = 'a11y-password-123';
 
-      await page.click('button:has-text("Owner Portal")');
+      await page.getByRole('button', { name: /^sign in$/i }).click();
       await page.click('button:has-text("Need an account? Register")');
       await page.fill('#regName', 'A11y Tester');
       await page.fill('#regPhone', '+1-555-0100');

@@ -156,9 +156,22 @@ export class BookingStore {
   readonly today = computed(() => toLocalDateString(this.now()));
   /** Booking window and opening days, from the backend (`ShopClock`). */
   readonly shopRules = this.shopClock.rules;
-  readonly upcomingBookingDays = computed(() =>
-    calendar.upcomingBookingDays(this.now(), this.timeSlots, this.shopRules()),
+  /** Every day a booking can be made on, today first (the date carousel pages through them). */
+  private readonly bookableDays = computed(() =>
+    calendar.bookableDays(this.now(), this.timeSlots, this.shopRules()),
   );
+  /** Carousel page the visitor asked for; clamped by {@link dayPage} when the window shrinks. */
+  private readonly requestedDayPage = signal(0);
+  readonly dayPageCount = computed(() => calendar.dayPageCount(this.bookableDays().length));
+  readonly dayPage = computed(() =>
+    Math.min(this.requestedDayPage(), Math.max(0, this.dayPageCount() - 1)),
+  );
+  /** The days on the carousel's current page: the next seven bookable days on the first page. */
+  readonly upcomingBookingDays = computed(() =>
+    calendar.daysOfPage(this.bookableDays(), this.dayPage()),
+  );
+  readonly hasEarlierDays = computed(() => this.dayPage() > 0);
+  readonly hasLaterDays = computed(() => this.dayPage() < this.dayPageCount() - 1);
 
   /** Read by the availability request so a retry can restart a lookup already in flight. */
   private readonly slotsRefreshTick = signal(0);
@@ -388,7 +401,7 @@ export class BookingStore {
     this.bookingModel.update((m) => ({ ...m, serviceType: serviceName }));
     this.selectedCategory.set(category);
     this.activeStep.set(2);
-    this.flash.showSuccess(`✨ Lookbook Style selected: ${serviceName}! Choose your stylist next.`);
+    this.flash.showSuccess(`Lookbook Style selected: ${serviceName}! Choose your stylist next.`);
   }
 
   isStepValid(step: number): boolean {
@@ -418,6 +431,21 @@ export class BookingStore {
     }
     return false;
   }
+
+  /**
+   * The slots of the selected date a visitor can still pick, grouped into morning, afternoon and
+   * evening: taken and already started slots are left out instead of greyed out.
+   */
+  readonly freeSlotGroups = computed(() =>
+    calendar.groupSlotsByPartOfDay(this.timeSlots.filter((slot) => !this.isSlotUnavailable(slot))),
+  );
+
+  /** The bookable day after the selected one ('' when it is the last, or none is selected). */
+  readonly nextBookableDay = computed(() => {
+    const days = this.bookableDays();
+    const index = days.findIndex((day) => day.dateStr === this.bookingDate());
+    return index < 0 ? '' : (days[index + 1]?.dateStr ?? '');
+  });
 
   /** A slot of the selected date that cannot be chosen: taken, or already started today. */
   isSlotUnavailable(slot: string): boolean {
@@ -533,6 +561,27 @@ export class BookingStore {
     if (this.activeStep() > 1) {
       this.activeStep.update((s) => s - 1);
     }
+  }
+
+  showEarlierDays(): void {
+    this.requestedDayPage.set(Math.max(0, this.dayPage() - 1));
+  }
+
+  showLaterDays(): void {
+    this.requestedDayPage.set(Math.min(this.dayPageCount() - 1, this.dayPage() + 1));
+  }
+
+  /** Pages the carousel to the days around `dateStr` (the selected day, when step 3 is shown). */
+  showDayPageOf(dateStr: string): void {
+    this.requestedDayPage.set(calendar.pageOfDay(this.bookableDays(), dateStr));
+  }
+
+  /** Jumps to the next bookable day (a full day's "check the next day"), paging to it. */
+  selectNextDay(): void {
+    const next = this.nextBookableDay();
+    if (!next) return;
+    this.selectBookingDate(next);
+    this.showDayPageOf(next);
   }
 
   selectBookingDate(dateStr: string): void {

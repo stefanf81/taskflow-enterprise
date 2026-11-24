@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Generates the Tailwind v4 @theme block from src/theme/tokens.json.
+ * Generates the Tailwind v4 @theme block from shared/theme/tokens.json (@taskflow/theme, the
+ * tokens the mobile app renders with too).
  *
  * The JSON file stays the single source of truth for the design system;
  * `styles.css` imports the generated CSS instead of hand-maintaining hex
@@ -15,31 +16,37 @@ import prettier from 'prettier';
 import { evaluateContrast } from './theme-contrast.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const tokensPath = resolve(root, 'src/theme/tokens.json');
+const tokensPath = resolve(root, '../shared/theme/tokens.json');
 const outputPath = resolve(root, 'src/theme/tokens.generated.css');
 
 const tokens = JSON.parse(readFileSync(tokensPath, 'utf8'));
 
 const contrastFailures = evaluateContrast(tokens).filter((result) => !result.pass);
 if (contrastFailures.length > 0) {
-  console.error('src/theme/tokens.json fails WCAG AA contrast:');
+  console.error('shared/theme/tokens.json fails WCAG AA contrast:');
   for (const { fg, bg, ratio, min } of contrastFailures) {
     console.error(`  ${fg} on ${bg}: ${ratio.toFixed(2)}:1 (needs ${min}:1)`);
   }
   process.exit(1);
 }
 
-const colors = [
-  ['--color-gold-light', tokens.colors.gold.light],
-  ['--color-gold', tokens.colors.gold.main],
-  ['--color-gold-dark', tokens.colors.gold.dark],
-  ['--color-obsidian-light', tokens.colors.obsidian.light],
-  ['--color-obsidian', tokens.colors.obsidian.bg],
-  ['--color-obsidian-dark', tokens.colors.obsidian.dark],
-  ['--color-status-pending', tokens.colors.status.pending],
-  ['--color-status-approved', tokens.colors.status.approved],
-  ['--color-status-denied', tokens.colors.status.denied],
-  ['--color-status-info', tokens.colors.status.info],
+/** `gold.main` -> `#c5a059`: a semantic token names a palette colour. */
+function paletteColor(path) {
+  const value = path.split('.').reduce((node, key) => node?.[key], tokens.colors);
+  if (typeof value !== 'string')
+    throw new Error(`semantic token points at unknown colour "${path}"`);
+  return value;
+}
+
+// Only purpose names reach the theme (and so Tailwind's utilities: bg-surface, text-accent, …).
+// The palette under `colors` is the raw material the contrast rules check.
+const variables = [
+  ...Object.entries(tokens.semantic)
+    .filter(([name]) => !name.startsWith('$'))
+    .map(([name, path]) => [`--color-${name}`, paletteColor(path)]),
+  ...Object.entries(tokens.radius).map(([name, value]) => [`--radius-${name}`, value]),
+  ...Object.entries(tokens.shadow).map(([name, value]) => [`--shadow-${name}`, value]),
+  ...Object.entries(tokens.font).map(([name, value]) => [`--font-${name}`, value]),
 ];
 
 // Format with the repo's Prettier config so `prettier --check .` stays green
@@ -47,15 +54,15 @@ const colors = [
 const generated = await prettier.format(
   [
     '/* GENERATED FILE — do not edit.',
-    ' * Source: src/theme/tokens.json',
+    ' * Source: shared/theme/tokens.json',
     ' * Regenerate with: npm run theme:build',
     ' */',
     '@theme {',
-    ...colors.map(([name, value]) => `  ${name}: ${value};`),
+    ...variables.map(([name, value]) => `  ${name}: ${value};`),
     '}',
     '',
   ].join('\n'),
-  { parser: 'css' },
+  { ...(await prettier.resolveConfig(outputPath)), parser: 'css' },
 );
 
 if (process.argv.includes('--check')) {

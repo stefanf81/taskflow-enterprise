@@ -39,7 +39,7 @@ const EMPTY_DASHBOARD: AppointmentDashboardResponse = {
  *   reads the separate `searchDebounced` signal, so typing does not trigger a
  *   request per keystroke and the 300ms coalescing window actually works.
  * - `refresh()` is reserved for cases where no reactive signal changed but the
- *   server data may have (approve/deny/delete success, Sync DB button, Retry).
+ *   server data may have (approve/deny/delete success, Retry).
  *   It never drops a refresh: `reload()` is a no-op while a load is in flight, so
  *   `refresh()` falls back to bumping a counter the request function reads, which
  *   restarts the load.
@@ -177,7 +177,7 @@ export class AppointmentStore {
 
   /**
    * Forces an explicit refetch — used when the server data changed without any
-   * reactive signal changing (approve/deny/delete success, Sync DB button).
+   * reactive signal changing (approve/deny/delete success).
    */
   loadAppointments(selectedFilter?: string, searchQuery?: string): void {
     if (selectedFilter !== undefined) this.selectedFilter.set(selectedFilter);

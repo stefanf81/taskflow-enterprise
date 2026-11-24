@@ -817,6 +817,15 @@ jobs:
           npm run typecheck
           npm test
 
+      # The design tokens both clients render with (@taskflow/theme): type check and tests. The
+      # web's contrast check on the same tokens runs in `npm run lint` (theme:check).
+      - name: Shared theme tokens
+        if: env.RUN_TESTS == 'true'
+        working-directory: shared/theme
+        run: |
+          npm run typecheck
+          npm test
+
       - name: Cache Angular Build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

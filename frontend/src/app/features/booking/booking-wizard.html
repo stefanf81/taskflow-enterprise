@@ -1,172 +1,131 @@
-<section class="card bg-zinc-950 border border-white/10 rounded-3xl p-8 relative">
-  <h2 class="text-xl font-black text-zinc-100 tracking-tight uppercase mb-1">
-    📅 Booking Assistant
-  </h2>
-  <p class="text-xs text-zinc-400 font-light leading-relaxed mb-8">
-    Follow our step-by-step assistant to secure your premium stylist, date, and available slot
-    request.
-  </p>
+<!-- The steps, and beside them (from lg) the reservation summary, sticky while the steps scroll. -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+  <section class="card p-8 relative lg:col-span-8">
+    <h2 class="text-xl font-black text-zinc-100 tracking-tight uppercase mb-1">
+      <app-icon [icon]="icons.calendar" /> Booking Assistant
+    </h2>
+    <p class="text-xs text-zinc-400 font-light leading-relaxed mb-8">
+      Follow our step-by-step assistant to secure your premium stylist, date, and available slot
+      request.
+    </p>
 
-  <!-- STEP TIMELINE METRICS TRACKER -->
-  <div
-    role="tablist"
-    aria-label="Booking steps"
-    class="relative flex items-center justify-between mb-8 px-1"
-  >
-    <div class="absolute left-0 right-0 h-0.5 bg-white/5 z-0 top-1/2 -translate-y-1/2"></div>
+    <!-- STEP TIMELINE METRICS TRACKER -->
     <div
-      class="absolute left-0 h-0.5 bg-gold-dark z-10 top-1/2 -translate-y-1/2 transition-all duration-300"
-      [class]="progressWidthClass()"
-    ></div>
+      role="tablist"
+      aria-label="Booking steps"
+      class="relative flex items-center justify-between mb-8 px-1"
+    >
+      <div class="absolute left-0 right-0 h-0.5 bg-white/5 z-0 top-1/2 -translate-y-1/2"></div>
+      <div
+        class="absolute left-0 h-0.5 bg-accent-muted z-10 top-1/2 -translate-y-1/2 transition-all duration-300"
+        [class]="progressWidthClass()"
+      ></div>
 
-    <!-- WAI-ARIA tabs, manual activation: arrows/Home/End move focus (onStepKeydown),
+      <!-- WAI-ARIA tabs, manual activation: arrows/Home/End move focus (onStepKeydown),
          Enter/Space activate. A gated step stays focusable but is aria-disabled. -->
-    @for (step of steps; track step.num; let i = $index) {
-      <button
-        #stepTab
-        type="button"
-        role="tab"
-        [attr.id]="'step-tab-' + step.num"
-        [attr.aria-selected]="store.activeStep() === step.num"
-        [attr.aria-controls]="store.activeStep() === step.num ? 'step-panel-' + step.num : null"
-        [attr.aria-disabled]="store.isStepReachable(step.num) ? null : 'true'"
-        [attr.aria-label]="stepTabLabel(step.num)"
-        [attr.tabindex]="store.activeStep() === step.num ? '0' : '-1'"
-        (click)="store.setStep(step.num)"
-        (keydown)="onStepKeydown($event, i)"
-        class="wizard-step-node relative z-20 w-9 h-9 rounded-full border bg-zinc-950 text-zinc-500 text-xs font-black flex items-center justify-center transition-all duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
-        [class.cursor-pointer]="store.isStepReachable(step.num)"
-        [class.cursor-not-allowed]="!store.isStepReachable(step.num)"
-        [class.active]="store.activeStep() === step.num"
-        [class.completed]="store.activeStep() > step.num"
-      >
-        @if (store.activeStep() > step.num) {
-          ✓
-        } @else {
-          {{ step.num }}
-        }
-      </button>
-    }
-  </div>
-
-  <!-- Active Step Indicator Badge label -->
-  <div class="text-center font-bold text-xs text-gold uppercase tracking-wider mb-6">
-    {{ store.activeStep() }}. {{ activeStepLabel() }}
-  </div>
-
-  <!-- STATUS BANNERS -->
-  @if (flash.errorMessage()) {
-    <div
-      role="alert"
-      class="alert alert-error mb-6 animate-fadeIn py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-red-500/20"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke-width="2"
-        stroke="currentColor"
-        class="w-5 h-5 flex-shrink-0"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
-        />
-      </svg>
-      <span class="flex-1 leading-normal text-rose-400 font-medium">{{
-        flash.errorMessage()
-      }}</span>
-      <button
-        type="button"
-        class="text-base font-bold opacity-60 hover:opacity-100"
-        (click)="flash.errorMessage.set(null)"
-        aria-label="Dismiss error"
-      >
-        &times;
-      </button>
+      @for (step of steps; track step.num; let i = $index) {
+        <button
+          #stepTab
+          type="button"
+          role="tab"
+          [attr.id]="'step-tab-' + step.num"
+          [attr.aria-selected]="store.activeStep() === step.num"
+          [attr.aria-controls]="store.activeStep() === step.num ? 'step-panel-' + step.num : null"
+          [attr.aria-disabled]="store.isStepReachable(step.num) ? null : 'true'"
+          [attr.aria-label]="stepTabLabel(step.num)"
+          [attr.tabindex]="store.activeStep() === step.num ? '0' : '-1'"
+          (click)="store.setStep(step.num)"
+          (keydown)="onStepKeydown($event, i)"
+          class="wizard-step-node relative z-20 w-9 h-9 rounded-full text-xs font-black flex items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          [class.cursor-pointer]="store.isStepReachable(step.num)"
+          [class.cursor-not-allowed]="!store.isStepReachable(step.num)"
+          [class.active]="store.activeStep() === step.num"
+          [class.completed]="store.activeStep() > step.num"
+        >
+          @if (store.activeStep() > step.num) {
+            <app-icon [icon]="icons.check" class="size-4" />
+          } @else {
+            {{ step.num }}
+          }
+        </button>
+      }
     </div>
-  }
 
-  @if (flash.successMessage()) {
-    <div
-      role="status"
-      aria-live="polite"
-      class="alert alert-success mb-6 animate-fadeIn py-3 px-4 rounded-xl text-xs flex items-center gap-2 border border-emerald-500/10"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke-width="2"
-        stroke="currentColor"
-        class="w-5 h-5 flex-shrink-0"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-        />
-      </svg>
-      <span class="flex-1 leading-normal text-emerald-400 font-medium">{{
-        flash.successMessage()
-      }}</span>
-      <button
-        type="button"
-        class="text-base font-bold opacity-60 hover:opacity-100"
-        (click)="flash.successMessage.set(null)"
-        aria-label="Dismiss"
-      >
-        &times;
-      </button>
+    <!-- Active Step Indicator Badge label -->
+    <div class="text-center font-bold text-xs text-accent uppercase tracking-wider mb-6">
+      {{ store.activeStep() }}. {{ activeStepLabel() }}
     </div>
-  }
 
-  <!-- One component per step; each renders its own tabpanel (#step-panel-N). -->
-  @switch (store.activeStep()) {
-    @case (1) {
-      <app-booking-service-step />
+    <!-- STATUS BANNERS -->
+    @if (flash.errorMessage(); as message) {
+      <app-alert tone="error" class="mb-6" dismissible (dismissed)="flash.errorMessage.set(null)">
+        {{ message }}
+      </app-alert>
     }
-    @case (2) {
-      <app-booking-stylist-step />
-    }
-    @case (3) {
-      <app-booking-date-time-step />
-    }
-    @case (4) {
-      <app-booking-contact-step (submitted)="submitBooking()" />
-    }
-  }
 
-  <!-- Wizard Step Navigation Controls Footer -->
-  <div
-    class="wizard-footer-controls flex justify-between items-center mt-8 border-t border-white/5 pt-5"
-  >
-    <!-- (mousedown) keeps the focus in the step: blurring an empty contact field showed its
+    @if (flash.successMessage(); as message) {
+      <app-alert
+        tone="success"
+        class="mb-6"
+        dismissible
+        (dismissed)="flash.successMessage.set(null)"
+      >
+        {{ message }}
+      </app-alert>
+    }
+
+    <!-- One component per step; each renders its own tabpanel (#step-panel-N). -->
+    @switch (store.activeStep()) {
+      @case (1) {
+        <app-booking-service-step />
+      }
+      @case (2) {
+        <app-booking-stylist-step />
+      }
+      @case (3) {
+        <app-booking-date-time-step />
+      }
+      @case (4) {
+        <app-booking-contact-step (submitted)="submitBooking()" />
+      }
+    }
+
+    <!-- Wizard Step Navigation Controls Footer -->
+    <div
+      class="wizard-footer-controls flex justify-between items-center mt-8 border-t border-white/5 pt-5"
+    >
+      <!-- (mousedown) keeps the focus in the step: blurring an empty contact field showed its
          "required" message and moved Back 19 px down before the mouse was released, so the click
          was lost (BENCHMARKS.md §74). -->
-    <button
-      type="button"
-      class="btn btn-secondary text-xs wizard-back-btn"
-      [disabled]="store.activeStep() === 1"
-      (mousedown)="$event.preventDefault()"
-      (click)="store.goToPrevStep()"
-    >
-      &larr; Back
-    </button>
-
-    @if (store.activeStep() < 4) {
       <button
         type="button"
-        class="btn btn-submit text-xs wizard-next-btn"
-        [disabled]="!store.isStepValid(store.activeStep())"
-        (click)="store.goToNextStep()"
+        appButton="secondary"
+        class="wizard-back-btn py-2 px-5"
+        [disabled]="store.activeStep() === 1"
+        (mousedown)="$event.preventDefault()"
+        (click)="store.goToPrevStep()"
       >
-        Next &rarr;
+        &larr; Back
       </button>
-    }
-  </div>
-</section>
+
+      @if (store.activeStep() < 4) {
+        <button
+          type="button"
+          appButton
+          class="wizard-next-btn py-2 px-6"
+          [disabled]="!store.isStepValid(store.activeStep())"
+          (click)="store.goToNextStep()"
+        >
+          Next &rarr;
+        </button>
+      }
+    </div>
+  </section>
+
+  <aside class="hidden lg:block lg:col-span-4 lg:sticky lg:top-6" aria-label="Your reservation">
+    <app-booking-summary />
+  </aside>
+</div>
 
 <!-- Squire-Style Interactive Booking Confirmation Receipt Modal (lazy chunk — P1).
      @defer (when ...) renders it the first time a booking completes (the chunk is prefetched once

@@ -8,6 +8,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.taskflow.appointment.stream.AppointmentEventStreamService;
+import com.example.taskflow.catalog.AnnouncementResponse;
+import com.example.taskflow.catalog.ShopAnnouncementService;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,7 @@ class AppointmentControllerEventStreamTest {
     private final AppointmentLifecycleService lifecycleService = mock(AppointmentLifecycleService.class);
     private final AppointmentEventStreamService streams = mock(AppointmentEventStreamService.class);
     private final BarberService barberService = mock(BarberService.class);
+    private final ShopAnnouncementService announcements = mock(ShopAnnouncementService.class);
     private final AppointmentController controller = new AppointmentController(
             queryService,
             bookingService,
@@ -32,6 +35,7 @@ class AppointmentControllerEventStreamTest {
             streams,
             barberService,
             BookingProperties.defaults(),
+            announcements,
             java.time.Clock.systemUTC());
 
     @Test
@@ -72,6 +76,7 @@ class AppointmentControllerEventStreamTest {
         List<OpeningHoursResponse> hours = List.of(new OpeningHoursResponse(1, "09:00", "17:00"));
         when(barberService.getOpeningHours()).thenReturn(hours);
         BookingProperties window = new BookingProperties(30, 5, "09:00", "17:00", List.of(1));
+        when(announcements.current()).thenReturn(new AnnouncementResponse(true, "Half-price beard trims on Tuesdays"));
         AppointmentController inNewYork = new AppointmentController(
                 queryService,
                 bookingService,
@@ -79,6 +84,7 @@ class AppointmentControllerEventStreamTest {
                 streams,
                 barberService,
                 window,
+                announcements,
                 java.time.Clock.system(java.time.ZoneId.of("America/New_York")));
 
         var response = inNewYork.getShopInfo();
@@ -86,6 +92,7 @@ class AppointmentControllerEventStreamTest {
         assertEquals("America/New_York", response.getBody().timeZone());
         assertEquals(30, response.getBody().maxAdvanceDays());
         assertEquals(hours, response.getBody().openingHours());
+        assertEquals("Half-price beard trims on Tuesdays", response.getBody().announcement());
         // Public, but revalidated: an admin's schedule change must not hide behind a max-age.
         assertEquals("no-cache, public", response.getHeaders().getCacheControl());
     }

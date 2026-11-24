@@ -38,7 +38,7 @@ describe('LoginScreen', () => {
     await render(<LoginScreen />);
     expect(screen.getByText('Sign In to TaskFlow')).toBeTruthy();
     expect(
-      screen.getByPlaceholderText('admin or customer@example.com'),
+      screen.getByPlaceholderText('you@example.com'),
     ).toBeTruthy();
     expect(screen.getByPlaceholderText('••••••••')).toBeTruthy();
   });
@@ -52,7 +52,7 @@ describe('LoginScreen', () => {
 
     await act(async () => {
       fireEvent.changeText(
-        screen.getByPlaceholderText('admin or customer@example.com'),
+        screen.getByPlaceholderText('you@example.com'),
         'admin',
       );
     });
@@ -89,7 +89,7 @@ describe('LoginScreen', () => {
     expect(screen.queryByText('Email already registered')).toBeNull();
 
     await act(async () => {
-      fireEvent.changeText(screen.getByPlaceholderText('admin or customer@example.com'), 'admin');
+      fireEvent.changeText(screen.getByPlaceholderText('you@example.com'), 'admin');
     });
     await act(async () => {
       fireEvent.changeText(screen.getByPlaceholderText('••••••••'), 'wrong');

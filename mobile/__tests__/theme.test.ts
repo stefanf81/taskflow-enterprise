@@ -1,6 +1,16 @@
-import { colors } from '../src/theme/colors';
+import { readdirSync, readFileSync } from 'fs';
+import { join } from 'path';
+import { palette } from '@taskflow/theme';
+import { colors, semantic, withAlpha } from '../src/theme/colors';
 
 describe('theme/colors', () => {
+  it('renders with the tokens the web app uses (shared/theme/tokens.json)', () => {
+    expect(colors).toBe(palette);
+    expect(semantic.accent).toBe(colors.gold.main);
+    expect(semantic['fg-muted']).toBe(colors.text.secondary);
+    expect(withAlpha(colors.status.approved, 0.12)).toBe('rgba(52, 211, 153, 0.12)');
+  });
+
   it('has obsidian color keys', () => {
     expect(colors.obsidian).toBeDefined();
     expect(colors.obsidian.bg).toBe('#090d16');
@@ -81,5 +91,24 @@ describe('theme/colors', () => {
         expect(contrast(colors.obsidian.bg, fill)).toBeGreaterThanOrEqual(4.5);
       }
     });
+  });
+
+  it('has no hard-coded colours in the app source (use colors, semantic or withAlpha)', () => {
+    const offenders: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) walk(path);
+        else if (/\.tsx?$/.test(entry.name) && !path.endsWith(join('theme', 'colors.ts'))) {
+          readFileSync(path, 'utf8')
+            .split('\n')
+            .forEach((line, i) => {
+              if (/['"`](#[0-9a-f]{3,8}|rgba?\()/i.test(line)) offenders.push(`${path}:${i + 1}`);
+            });
+        }
+      }
+    };
+    walk(join(__dirname, '..', 'src'));
+    expect(offenders).toEqual([]);
   });
 });

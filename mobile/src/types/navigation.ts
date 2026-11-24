@@ -22,6 +22,7 @@ export type CustomerTabParamList = {
 
 export type AdminTabParamList = {
   AdminAppointments: undefined;
+  AdminCalendar: undefined;
   AdminCatalog: undefined;
   AdminSchedules: undefined;
   AdminNotifications: undefined;
