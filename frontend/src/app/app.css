@@ -366,14 +366,6 @@
     box-shadow: 0 0 15px rgba(255, 255, 255, 0.15);
   }
 
-  .slot-picker-btn.slot-busy {
-    background-color: rgba(255, 255, 255, 0.05);
-    color: var(--color-fg-disabled);
-    border-color: rgba(255, 255, 255, 0.1);
-    cursor: not-allowed;
-    text-decoration: line-through;
-  }
-
   .slot-picker-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;

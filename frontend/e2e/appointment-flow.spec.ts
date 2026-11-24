@@ -146,7 +146,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
 
     // Step 3: Pick Date & Time
     await page.locator('.form-group .slot-picker-btn').first().click();
-    await page.locator('.time-slots-grid .slot-picker-btn:not(.slot-busy)').first().click();
+    await page.locator('.time-slots-grid .slot-picker-btn').first().click();
     await page.click('.wizard-footer-controls .btn-submit');
 
     // Step 4: Contact Info & Confirm

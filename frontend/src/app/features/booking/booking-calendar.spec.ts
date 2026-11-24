@@ -3,7 +3,12 @@ import { DEFAULT_SHOP_RULES, type ShopRules } from '@taskflow/domain';
 import { DEFAULT_TIME_SLOTS } from '../../core/time-utils';
 import {
   CAROUSEL_DAY_COUNT,
+  bookableDays,
+  dayPageCount,
+  daysOfPage,
   firstOpenSlot,
+  groupSlotsByPartOfDay,
+  pageOfDay,
   isClosedDay,
   isDayOver,
   isSlotUnavailable,
@@ -84,6 +89,65 @@ describe('booking calendar rules', () => {
         maxAdvanceDays: 2,
       });
       expect(days.map((d) => d.dateStr)).toEqual(['2026-10-12', '2026-10-13', '2026-10-14']);
+    });
+  });
+
+  describe('paging through the booking window', () => {
+    it('lists every bookable day of the window, then pages seven at a time', () => {
+      const all = bookableDays(MONDAY_AFTERNOON, DEFAULT_TIME_SLOTS, RULES);
+      // Today..today+90 (91 days), minus the 13 Sundays among them.
+      expect(all).toHaveLength(78);
+      expect(all[0]?.dateStr).toBe('2026-10-12');
+      expect(all.at(-1)?.dateStr).toBe('2027-01-09'); // the last Saturday inside the window
+      expect(dayPageCount(all.length)).toBe(12);
+
+      expect(daysOfPage(all, 1).map((d) => d.dateStr)).toEqual([
+        '2026-10-20',
+        '2026-10-21',
+        '2026-10-22',
+        '2026-10-23',
+        '2026-10-24',
+        '2026-10-26',
+        '2026-10-27',
+      ]);
+      expect(daysOfPage(all, 11)).toHaveLength(78 - 11 * CAROUSEL_DAY_COUNT);
+      expect(upcomingBookingDays(MONDAY_AFTERNOON, DEFAULT_TIME_SLOTS, RULES, 1)).toEqual(
+        daysOfPage(all, 1),
+      );
+    });
+
+    it('always has one page, and finds the page of a day', () => {
+      expect(dayPageCount(0)).toBe(1);
+      expect(dayPageCount(7)).toBe(1);
+      expect(dayPageCount(8)).toBe(2);
+
+      const all = bookableDays(MONDAY_AFTERNOON, DEFAULT_TIME_SLOTS, RULES);
+      expect(pageOfDay(all, '2026-10-12')).toBe(0);
+      expect(pageOfDay(all, '2026-10-19')).toBe(0);
+      expect(pageOfDay(all, '2026-10-20')).toBe(1);
+      expect(pageOfDay(all, '2026-10-18')).toBe(0); // a Sunday: not bookable
+      expect(pageOfDay(all, '')).toBe(0);
+    });
+  });
+
+  describe('groupSlotsByPartOfDay', () => {
+    it('splits the default grid into morning and afternoon, leaving out the empty evening', () => {
+      expect(groupSlotsByPartOfDay(DEFAULT_TIME_SLOTS)).toEqual([
+        { part: 'morning', label: 'Morning', slots: ['09:00', '10:00', '11:00'] },
+        { part: 'afternoon', label: 'Afternoon', slots: ['13:00', '14:00', '15:00', '16:00'] },
+      ]);
+    });
+
+    it('puts 12:00 in the afternoon and 17:00 in the evening, and drops empty parts', () => {
+      expect(groupSlotsByPartOfDay(['11:30', '12:00', '16:59', '17:00', '19:30'])).toEqual([
+        { part: 'morning', label: 'Morning', slots: ['11:30'] },
+        { part: 'afternoon', label: 'Afternoon', slots: ['12:00', '16:59'] },
+        { part: 'evening', label: 'Evening', slots: ['17:00', '19:30'] },
+      ]);
+      expect(groupSlotsByPartOfDay(['16:00'])).toEqual([
+        { part: 'afternoon', label: 'Afternoon', slots: ['16:00'] },
+      ]);
+      expect(groupSlotsByPartOfDay([])).toEqual([]);
     });
   });
 

@@ -26,7 +26,7 @@ import { PageHeader } from '../../core/ui/page-header';
       >
         <a routerLink="/customer" appButton="secondary">&larr; My Appointments</a>
       </app-page-header>
-      <div class="max-w-3xl mx-auto">
+      <div class="max-w-6xl mx-auto">
         <app-booking-wizard />
       </div>
     </div>

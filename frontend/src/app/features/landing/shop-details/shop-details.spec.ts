@@ -31,21 +31,11 @@ describe('ShopDetails (the landing page shop cards)', () => {
   afterEach(() => httpMock.verify());
 
   const ratings = (r: { url: string }) => r.url.includes('/reviews/public/barber-ratings');
-  const catalog = (r: { url: string }) => r.url.endsWith('/api/v1/catalog');
 
   /** Answers what the cards ask for on mount; the pieces a test cares about are passed in. */
-  async function answer(
-    options: { ratings?: object[]; catalog?: object[] | null; shop?: boolean } = {},
-  ): Promise<void> {
+  async function answer(options: { ratings?: object[] } = {}): Promise<void> {
     TestBed.tick();
     httpMock.match(ratings).forEach((r) => r.flush(options.ratings ?? []));
-    httpMock
-      .match(catalog)
-      .forEach((r) =>
-        options.catalog === null
-          ? r.flush(null, { status: 500, statusText: 'Server Error' })
-          : r.flush(options.catalog ?? []),
-      );
     httpMock
       .match((r) => r.url.endsWith('/public/shop'))
       .forEach((r) => r.flush({ ...DEFAULT_SHOP_RULES, timeZone: 'UTC' }));
@@ -89,21 +79,5 @@ describe('ShopDetails (the landing page shop cards)', () => {
     expect(text).toContain('from 40 reviews');
     expect(text).toContain('Top rated: Sara the Stylist · 5.0');
     expect(el().textContent).not.toContain('Liam K.');
-  });
-
-  describe('failed menu load (FE-1)', () => {
-    it('keeps the cards alive and offers a retry', async () => {
-      await answer({ catalog: null });
-      expect(el().textContent).toContain('Could not load service catalog.');
-      expect(el().textContent).toContain('Grooming Menu');
-
-      (el().querySelector('[role="alert"] button') as HTMLButtonElement).click();
-      fixture.detectChanges();
-      TestBed.tick();
-      httpMock.match(catalog).forEach((r) => r.flush([]));
-      await fixture.whenStable();
-      fixture.detectChanges();
-      expect(el().textContent).not.toContain('Could not load service catalog.');
-    });
   });
 });

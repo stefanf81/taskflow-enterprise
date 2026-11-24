@@ -75,50 +75,9 @@
       </div>
     </div>
 
-    <!-- Real-Time Booking Summary Card -->
-    <div class="booking-summary-card card animate-fadeIn p-5 mt-6">
-      <h3
-        class="text-zinc-100 font-extrabold text-sm border-b border-white/10 pb-3 mb-4 flex items-center gap-1.5"
-      >
-        <span><app-icon [icon]="icons.clipboardList" /> Reservation Summary</span>
-      </h3>
-      <div class="space-y-3 text-xs text-zinc-400 font-light">
-        <p class="flex justify-between">
-          <span><app-icon [icon]="icons.scissors" /> Treatment:</span>
-          <strong class="text-zinc-100 font-semibold">{{ store.bookingService() }}</strong>
-        </p>
-        <p class="flex justify-between">
-          <span><app-icon [icon]="icons.timer" /> Duration:</span>
-          <strong class="text-zinc-100 font-semibold"
-            >{{ store.selectedServiceObj()?.durationMinutes }} mins</strong
-          >
-        </p>
-        <p class="flex justify-between">
-          <span><app-icon [icon]="icons.userRound" /> Stylist:</span>
-          <strong class="text-zinc-100 font-semibold">{{ store.bookingBarber() }}</strong>
-        </p>
-        <p class="flex justify-between">
-          <span><app-icon [icon]="icons.calendar" /> Scheduled:</span>
-          <strong class="text-zinc-100 font-semibold">
-            {{ formatLocalDate(store.bookingDate()) }} at
-            {{ formatTime12Hour(store.bookingTime()) }}
-          </strong>
-        </p>
-        @if (store.estimatedEndTime()) {
-          <p class="flex justify-between">
-            <span><app-icon [icon]="icons.alarmClock" /> Est. End Time:</span>
-            <strong class="text-accent font-bold">{{
-              formatTime12Hour(store.estimatedEndTime())
-            }}</strong>
-          </p>
-        }
-        <hr class="border-t border-white/10 my-2" />
-        <p class="flex justify-between text-sm font-bold text-zinc-100 pt-1">
-          <span>Total Est. Price:</span>
-          <span class="text-accent">{{ store.formattedTotal() }}</span>
-        </p>
-      </div>
-    </div>
+    <!-- On a desktop the summary sits beside the steps (the wizard's sticky aside); on a phone it
+         is shown here, above the confirm button. -->
+    <div class="lg:hidden mt-6"><app-booking-summary /></div>
 
     <button type="submit" appButton class="login-btn w-full mt-6" [disabled]="store.isSubmitting()">
       {{ store.isSubmitting() ? 'Securing Slot...' : 'Confirm & Request Booking' }}

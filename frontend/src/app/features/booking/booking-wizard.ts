@@ -11,6 +11,7 @@ import {
 import { FlashMessages } from '../../core/ui/flash-messages';
 import { ReceiptModalComponent } from './receipt-modal/receipt-modal';
 import { ContactStep } from './steps/contact-step';
+import { BookingSummary } from './summary/booking-summary';
 import { DateTimeStep } from './steps/date-time-step';
 import { ServiceStep } from './steps/service-step';
 import { StylistStep } from './steps/stylist-step';
@@ -40,6 +41,7 @@ const STEP_PROGRESS_WIDTHS = ['w-0', 'w-1/3', 'w-2/3', 'w-full'] as const;
     StylistStep,
     DateTimeStep,
     ContactStep,
+    BookingSummary,
     Icon,
     Button,
     Alert,

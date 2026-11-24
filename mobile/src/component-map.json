@@ -52,7 +52,9 @@
       },
       "mobileQueryHooks": [
         "mobile/src/core/appointments/useAppointments.ts"
-      ]
+      ],
+      "webSummary": "frontend/src/app/features/booking/summary/booking-summary.ts",
+      "notes": "The web wizard also has a sticky reservation summary (BookingSummary) beside the steps from lg, only free slots grouped by part of the day, a \"Check the next day\" action for a full day, and a date carousel that pages through the booking window."
     },
     {
       "feature": "Customer Portal & History",

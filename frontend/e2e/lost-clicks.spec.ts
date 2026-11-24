@@ -51,7 +51,7 @@ test.describe('Clicks next to a field that validates on blur', () => {
     await page.click('.card:has-text("Alex the Barber")');
     await page.click('.wizard-footer-controls .btn-submit');
     await page.locator('.form-group .slot-picker-btn').first().click();
-    await page.locator('.time-slots-grid .slot-picker-btn:not(.slot-busy)').first().click();
+    await page.locator('.time-slots-grid .slot-picker-btn').first().click();
     await page.click('.wizard-footer-controls .btn-submit');
     await expect(page.locator('.wizard-step-node.active')).toHaveText('4');
     // An empty contact field, focused: leaving it shows its "required" message above Back.

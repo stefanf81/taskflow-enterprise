@@ -75,48 +75,44 @@
         <div class="h-64 mb-16"></div>
       }
 
-      <!-- TWO-COLUMN WORKSPACE GRID -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        <!-- LEFT COLUMN: STATIC MENU, HOURS & TESTIMONIALS (5 COLS) -->
-        <div class="lg:col-span-5 space-y-6">
-          <!-- The shop cards (menu, hours, products, ratings) are prerendered like the rest but live in
-               their own chunk: they keep two stores, two API clients and their schemas out of main.js.
-               Hydrated on viewport, not on interaction: the cards show live data (hours, ratings,
-               the catalog), which a dehydrated block would never update. Below the fold on a phone,
-               so it hydrates when scrolled to; beside the wizard on a desktop, so at once. -->
-          @defer (on idle; hydrate on viewport) {
-            <app-shop-details />
-          } @placeholder {
-            <!-- Only shown on client-side navigation to `/`: the prerendered page renders the cards. -->
-            <div class="h-[1150px]"></div>
-          }
-        </div>
+      <!-- BOOKING: the guided wizard with its sticky summary beside the steps (from lg). The menu
+           is step 1, so there is no second copy of it on the page. `#booking` is where the phone's
+           sticky "Book" bar jumps to. -->
+      <section id="booking" class="scroll-mt-6" aria-label="Book an appointment">
+        <!-- Prerendered like the sections above, so first paint is unchanged, but its chunk
+             (the wizard + Signal Forms, ~105 kB raw) is fetched on idle instead of riding in
+             main.js.
+             Hydration is `on idle`, NOT `on interaction` like the lookbook: this block is not
+             self-contained (so a click on it made before main.js has run is not replayed).
+             The lookbook drives it from outside (through LookbookSelectionBus), its service
+             list has to render before anyone touches the wizard, and the guest page's shared
+             `.alert-error` / `.alert-success` banners live in its template. With
+             `hydrate on interaction` none of that happened until the wizard itself was
+             clicked — four appointment-flow e2e tests caught it.
+             `prefetch on immediate` starts its chunks as soon as the app has booted rather
+             than at idle: they load in two round trips (a small wrapper chunk, then the
+             wizard), and a click on the wizard before it has hydrated is lost (§81). -->
+        @defer (on idle; prefetch on immediate; hydrate on idle) {
+          <app-booking-wizard />
+        } @placeholder {
+          <!-- Only shown on client-side navigation to `/` (the prerendered page renders the
+               wizard itself). Matches its prerendered step-1 height: 847 px at 1280 px wide,
+               867 px at 390 px. -->
+          <div class="h-[850px]"></div>
+        }
+      </section>
 
-        <!-- RIGHT COLUMN: GUIDED STEPPER WIZARD (7 COLS) -->
-        <div class="lg:col-span-7">
-          <!-- Prerendered like the sections above, so first paint is unchanged, but its chunk
-               (the wizard + Signal Forms, ~105 kB raw) is fetched on idle instead of riding in
-               main.js.
-               Hydration is `on idle`, NOT `on interaction` like the lookbook: this block is not
-               self-contained (so a click on it made before main.js has run is not replayed).
-               The lookbook drives it from outside (through LookbookSelectionBus), its service
-               list has to render before anyone touches the wizard, and the guest page's shared
-               `.alert-error` / `.alert-success` banners live in its template. With
-               `hydrate on interaction` none of that happened until the wizard itself was
-               clicked — four appointment-flow e2e tests caught it.
-               `prefetch on immediate` starts its chunks as soon as the app has booted rather
-               than at idle: they load in two round trips (a small wrapper chunk, then the
-               wizard), and a click on the wizard before it has hydrated is lost (§81). -->
-          @defer (on idle; prefetch on immediate; hydrate on idle) {
-            <app-booking-wizard />
-          } @placeholder {
-            <!-- Only shown on client-side navigation to `/` (the prerendered page renders the
-                 wizard itself). Matches its prerendered step-1 height: 847 px at 1280 px wide,
-                 867 px at 390 px. -->
-            <div class="h-[850px]"></div>
-          }
-        </div>
-      </div>
+      <!-- The shop cards (hours, products, ratings) are prerendered like the rest but live in
+           their own chunk: they keep two stores, two API clients and their schemas out of main.js.
+           Hydrated on viewport, not on interaction: the cards show live data (hours, ratings),
+           which a dehydrated block would never update. Below the wizard, so it hydrates when
+           scrolled to. -->
+      @defer (on idle; hydrate on viewport) {
+        <app-shop-details />
+      } @placeholder {
+        <!-- Only shown on client-side navigation to `/`: the prerendered page renders the cards. -->
+        <div class="mt-16 h-[300px]"></div>
+      }
 
       <!-- Defer loading of non-critical FAQ sections to maximize First Contentful Paint speed
            (prerendered; hydrated on interaction with its chunk prefetched, like the lookbook).
@@ -148,6 +144,9 @@
           standard SSL/TLS and stateless RSA-2048 OAuth2 encryption protocols.
         </p>
       </footer>
+
+      <!-- Phones: a fixed "Book an appointment" bar until the wizard is on screen. -->
+      <app-book-bar />
 
       <!-- Login/Register Modal Dialog (deferred — rendered when showAdminLoginModal() first turns true;
            the chunk is prefetched once the browser is idle, so the first click does not wait for it) -->

@@ -25,12 +25,16 @@ import { Icon } from '../../../core/ui/icon';
         treatment package directly into your guided assistant wizard!
       </p>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <!-- A snap-scrolling strip on a phone (four stacked cards pushed the booking wizard ~900 px
+           further down), a grid from sm. -->
+      <div
+        class="-mx-8 px-8 pb-2 flex gap-4 overflow-x-auto snap-x snap-mandatory sm:mx-0 sm:px-0 sm:pb-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:gap-6 sm:overflow-visible"
+      >
         <!-- Style 1 -->
         <button
           type="button"
           (click)="selectStyle('Classic Haircut', 'hair')"
-          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
+          class="group shrink-0 w-[78%] snap-center sm:w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
           <span class="text-3xl block mb-3"><app-icon [icon]="icons.scissors" /></span>
           <span
@@ -51,7 +55,7 @@ import { Icon } from '../../../core/ui/icon';
         <button
           type="button"
           (click)="selectStyle('Modern Skin Fade', 'hair')"
-          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
+          class="group shrink-0 w-[78%] snap-center sm:w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
           <span class="text-3xl block mb-3"><app-icon [icon]="icons.wind" /></span>
           <span
@@ -72,7 +76,7 @@ import { Icon } from '../../../core/ui/icon';
         <button
           type="button"
           (click)="selectStyle('Beard Trim & Shave', 'beard')"
-          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
+          class="group shrink-0 w-[78%] snap-center sm:w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
           <span class="text-3xl block mb-3"><app-icon [icon]="icons.sparkles" /></span>
           <span
@@ -93,7 +97,7 @@ import { Icon } from '../../../core/ui/icon';
         <button
           type="button"
           (click)="selectStyle('The Executive Package', 'combo')"
-          class="group w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
+          class="group shrink-0 w-[78%] snap-center sm:w-full p-6 rounded-2xl border border-white/5 bg-zinc-900/50 hover:bg-accent/10 hover:border-accent/30 hover:shadow-[0_0_15px_rgba(197,160,89,0.2)] cursor-pointer text-center transition-all duration-300"
         >
           <span class="text-3xl block mb-3"><app-icon [icon]="icons.crown" /></span>
           <span

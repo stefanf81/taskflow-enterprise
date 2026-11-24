@@ -353,19 +353,113 @@ describe('BookingWizard UI (FE-5, FE-10, FE-11, FE-1)', () => {
     vi.useRealTimers();
   });
 
-  it('disables slots that already started today and labels them', async () => {
+  it('offers only the slots that have not started today, grouped by part of the day', async () => {
     store.activeStep.set(3);
     store.selectBookingDate('2026-10-12');
     await answerBusySlots((r) => r.flush([]));
 
-    const slotButtons = buttons().filter((b) => b.classList.contains('slot-picker-btn'));
-    const passed = slotButtons.filter((b) => b.textContent?.includes('Passed'));
-    const open = slotButtons.filter((b) => !b.disabled);
-    expect(passed).toHaveLength(5); // 09:00 10:00 11:00 13:00 14:00
-    expect(passed.every((b) => b.disabled)).toBe(true);
-    expect(open.map((b) => b.textContent?.trim())).toEqual(
-      expect.arrayContaining(['3:00 PM', '4:00 PM']),
+    const slotButtons = Array.from(
+      el().querySelectorAll<HTMLButtonElement>('.time-slots-grid .slot-picker-btn'),
     );
+    // 09:00 10:00 11:00 13:00 14:00 are over; nothing is struck out, labelled or disabled.
+    expect(slotButtons.map((b) => b.textContent?.trim())).toEqual(['3:00 PM', '4:00 PM']);
+    expect(slotButtons.every((b) => !b.disabled)).toBe(true);
+    expect(el().textContent).not.toContain('Passed');
+    // The morning is over, so only the afternoon group is left.
+    const headings = Array.from(el().querySelectorAll('[id^="slot-group-"]')).map((h) =>
+      h.textContent?.trim(),
+    );
+    expect(headings).toEqual(['Afternoon']);
+  });
+
+  const timeButtons = () =>
+    Array.from(el().querySelectorAll<HTMLButtonElement>('.time-slots-grid .slot-picker-btn')).map(
+      (b) => b.textContent?.trim(),
+    );
+  const slotHeadings = () =>
+    Array.from(el().querySelectorAll('[id^="slot-group-"]')).map((h) => h.textContent?.trim());
+
+  it('hides the taken slots and groups the free ones into morning and afternoon', async () => {
+    store.activeStep.set(3);
+    store.selectBookingDate('2026-10-13');
+    await answerBusySlots((r) => r.flush(['10:00', '14:00']));
+
+    expect(slotHeadings()).toEqual(['Morning', 'Afternoon']);
+    expect(timeButtons()).toEqual(['9:00 AM', '11:00 AM', '1:00 PM', '3:00 PM', '4:00 PM']);
+    expect(el().textContent).not.toContain('Taken');
+    expect(el().querySelectorAll('.time-slots-grid .slot-picker-btn[disabled]')).toHaveLength(0);
+  });
+
+  it('drops a group once all of its slots are taken', async () => {
+    store.activeStep.set(3);
+    store.selectBookingDate('2026-10-13');
+    await answerBusySlots((r) => r.flush(['09:00', '10:00', '11:00']));
+
+    expect(slotHeadings()).toEqual(['Afternoon']);
+  });
+
+  it('says a day is full and offers the next bookable day', async () => {
+    store.activeStep.set(3);
+    store.selectBookingDate('2026-10-17'); // a Saturday: the next bookable day skips Sunday
+    await answerBusySlots((r) =>
+      r.flush(['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00']),
+    );
+
+    expect(timeButtons()).toEqual([]);
+    expect(el().querySelector('[role="status"]')?.textContent).toContain(
+      'No free times left on this day.',
+    );
+
+    buttons()
+      .find((b) => b.textContent?.trim() === 'Check the next day')!
+      .click();
+    await answerBusySlots((r) => r.flush([]));
+
+    expect(store.bookingDate()).toBe('2026-10-19');
+    expect(timeButtons().length).toBeGreaterThan(0);
+  });
+
+  it('pages the date carousel through the whole booking window', async () => {
+    store.activeStep.set(3);
+    fixture.detectChanges();
+    const chips = () =>
+      Array.from(el().querySelectorAll('.date-chip-btn')).map((chip) =>
+        ['.date-chip-weekday', '.date-chip-day', '.date-chip-month']
+          .map((part) => chip.querySelector(part)?.textContent?.trim())
+          .join(' '),
+      );
+    const pager = (label: string) =>
+      el().querySelector(`button[aria-label="${label}"]`) as HTMLButtonElement;
+
+    expect(chips()[0]).toBe('Mon 12 Oct'); // 14:30: the 15:00 and 16:00 slots are still free
+    expect(pager('Earlier days').disabled).toBe(true);
+    expect(el().textContent).toContain('12 Oct \u2013 19 Oct');
+
+    pager('Later days').click();
+    fixture.detectChanges();
+
+    expect(chips()[0]).toBe('Tue 20 Oct');
+    expect(pager('Earlier days').disabled).toBe(false);
+    expect(chips()).toHaveLength(7);
+
+    pager('Earlier days').click();
+    fixture.detectChanges();
+    expect(chips()[0]).toBe('Mon 12 Oct');
+  });
+
+  it('shows the carousel page of the chosen day when step 3 is entered again', async () => {
+    store.activeStep.set(3);
+    store.showLaterDays();
+    store.selectBookingDate(store.upcomingBookingDays()[2]!.dateStr); // 22 Oct
+    store.activeStep.set(2);
+    fixture.detectChanges();
+    store.showEarlierDays();
+
+    store.activeStep.set(3);
+    fixture.detectChanges();
+
+    expect(store.dayPage()).toBe(1);
+    expect(el().querySelector('.date-chip-btn.slot-selected')?.textContent).toContain('22');
   });
 
   it('shows an error with a retry (not an all-free grid) when availability fails to load', async () => {

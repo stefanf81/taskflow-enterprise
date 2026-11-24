@@ -53,7 +53,8 @@
         "mobile": "mobile/src/features/booking/useBookingWizard.ts"
       },
       "mobileQueryHooks": ["mobile/src/core/appointments/useAppointments.ts"],
-      "notes": "Web: the wizard shell keeps the WAI-ARIA tabs stepper, focus management, the app-wide banner, the footer navigation and the receipt; each step component reads BookingStore directly. Availability is an httpResource keyed on barber, date and service."
+      "notes": "Web: the wizard shell keeps the WAI-ARIA tabs stepper, focus management, the app-wide banner, the footer navigation and the receipt; each step component reads BookingStore directly. Availability is an httpResource keyed on barber, date and service. The web wizard also has a sticky reservation summary (BookingSummary) beside the steps from lg, only free slots grouped by part of the day, a \"Check the next day\" action for a full day, and a date carousel that pages through the booking window.",
+      "webSummary": "frontend/src/app/features/booking/summary/booking-summary.ts"
     },
     {
       "feature": "Customer Booking Entry (signed in)",

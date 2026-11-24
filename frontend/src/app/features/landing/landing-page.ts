@@ -7,6 +7,7 @@ import { ShopClock } from '../../core/shop-clock';
 import { isOpenAt } from '@taskflow/domain';
 import { AnnouncementBarComponent } from './announcement-bar/announcement-bar';
 import { AuthModalComponent } from './auth-modal/auth-modal';
+import { BookBar } from './book-bar/book-bar';
 import { FaqSectionComponent } from './faq-section/faq-section';
 import { LookbookComponent } from './lookbook/lookbook';
 import { PostBookingActionsComponent } from './post-booking-actions/post-booking-actions';
@@ -31,6 +32,7 @@ import { Icon } from '../../core/ui/icon';
   imports: [
     AnnouncementBarComponent,
     AuthModalComponent,
+    BookBar,
     FaqSectionComponent,
     LookbookComponent,
     PostBookingActionsComponent,

@@ -1,9 +1,9 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { formatTime12Hour } from '../../../core/time-utils';
 import { BookingStore } from '../booking.store';
-import { banIcon } from '../../../core/ui/icons/ban';
+import { chevronLeftIcon } from '../../../core/ui/icons/chevron-left';
+import { chevronRightIcon } from '../../../core/ui/icons/chevron-right';
 import { calendarIcon } from '../../../core/ui/icons/calendar';
-import { timerIcon } from '../../../core/ui/icons/timer';
 import { Icon } from '../../../core/ui/icon';
 import { Button } from '../../../core/ui/button';
 import { Alert } from '../../../core/ui/alert';
@@ -18,10 +18,25 @@ import { Alert } from '../../../core/ui/alert';
 })
 export class DateTimeStep {
   protected readonly icons = {
-    ban: banIcon,
     calendar: calendarIcon,
-    timer: timerIcon,
+    chevronLeft: chevronLeftIcon,
+    chevronRight: chevronRightIcon,
   };
   protected readonly store = inject(BookingStore);
   protected readonly formatTime12Hour = formatTime12Hour;
+
+  /** "12 Oct - 20 Oct": the days of the current carousel page. */
+  protected readonly dayRange = computed(() => {
+    const days = this.store.upcomingBookingDays();
+    const first = days[0];
+    const last = days.at(-1);
+    if (!first || !last) return '';
+    const label = (d: typeof first) => `${d.dayNum} ${d.monthName}`;
+    return first === last ? label(first) : `${label(first)} \u2013 ${label(last)}`;
+  });
+
+  constructor() {
+    // Back on this step: show the carousel page of the day already chosen, not the first one.
+    this.store.showDayPageOf(this.store.bookingDate());
+  }
 }
