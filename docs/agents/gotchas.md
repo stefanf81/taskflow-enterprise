@@ -4,15 +4,21 @@ Things that bite: which Gradle task needs Docker, guard tests, cache/header alig
 
 _Detail moved out of [`AGENTS.md`](../../AGENTS.md); the text is unchanged._
 
-- **Testcontainers** are used for PostgreSQL integration tests. The tagged
-  `testcontainersTest` task requires Docker; the default `test` task excludes
-  those tests and runs against H2 without Docker.
-- **Module boundaries** are enforced by Spring Modulith (`ModularityTest`, ADR-022): each module's `package-info.java` lists `allowedDependencies`, and only a module's public root-package types are its API. A new cross-module call needs the dependency declared there; hand other modules snapshots (`AppointmentDetails`), never the `Appointment` entity; keep controllers, `*Impl` classes and glue package-private. `ArchitectureTest` (ArchUnit) only keeps the coding-standard rules. Each module has an `@ApplicationModuleTest` (`*ModuleTest`) that boots just that module; give it its own uniquely named fixtures, because the in-memory H2 database is shared with other test classes that delete the seed rows.
+- **Testcontainers** start the PostgreSQL server of every test JVM. The default
+  `test` task gives each Spring context its own database, cloned from a
+  Flyway-migrated template (`testsupport/PostgresTestDatabases`); the tagged
+  `testcontainersTest` task creates its own schemas and databases. Both need
+  Docker, or `TASKFLOW_TEST_POSTGRES_URL` (plus `_USER`/`_PASSWORD`) naming a
+  server. H2 is left to `bootRun`, the offline AOT-cache training and
+  `H2DefaultProfileSmokeTest`, which pins it.
+- **Module boundaries** are enforced by Spring Modulith (`ModularityTest`, ADR-022): each module's `package-info.java` lists `allowedDependencies`, and only a module's public root-package types are its API. A new cross-module call needs the dependency declared there; hand other modules snapshots (`AppointmentDetails`), never the `Appointment` entity; keep controllers, `*Impl` classes and glue package-private. `ArchitectureTest` (ArchUnit) only keeps the coding-standard rules. Each module has an `@ApplicationModuleTest` (`*ModuleTest`) that boots just that module; give it its own uniquely named fixtures, because a Spring context's database is shared with every other test class that reuses that cached context, and some of them delete the seed rows.
 ## Gotchas
 
-- `./gradlew test` runs the Docker-independent H2 test suite. Use
-  `./gradlew testcontainersTest` for the tagged PostgreSQL/Testcontainers suite;
-  that task requires Docker.
+- `./gradlew test` runs on PostgreSQL (BENCHMARKS.md §85): it needs Docker, or
+  `TASKFLOW_TEST_POSTGRES_URL` pointing at a server where the user may create
+  databases. `./gradlew testcontainersTest` runs the tagged PostgreSQL suite.
+  A test that must run on H2 pins `spring.datasource.url` in
+  `@SpringBootTest(properties = …)`.
 - Full `./verify.sh` also requires `psql` on `PATH` for the migration-preparation script tests. Homebrew's `libpq` is keg-only: use `PATH="$(brew --prefix libpq)/bin:$PATH" ./verify.sh` after installing it.
 - On macOS Rancher Desktop (`unix://…/.rd/docker.sock`), `verify.sh` sets `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock` for Ryuk unless already explicitly set. Direct Gradle invocations need that environment override too; do not disable Ryuk or change the host Docker endpoint to fix the VM mount.
 - Refresh `api/openapi.json` only with `npm run api:spec:update` against a running backend (`./gradlew bootRun`). A document dumped from a test context (MockMvc) lists `servers` as `http://localhost` instead of `http://localhost:8080`, and CI's OpenAPI Contract job compares the live document exactly; `verify.sh` does not catch it.

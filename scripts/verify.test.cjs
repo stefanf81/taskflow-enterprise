@@ -206,16 +206,17 @@ test('partial startup failure prints diagnostics and cleans exactly once', async
   assert.doesNotMatch(f.calls(), /npm --prefix frontend run e2e/);
 });
 
-test('Rancher Desktop uses its VM socket only for full-mode Testcontainers', async (t) => {
+test('Rancher Desktop uses its VM socket for every Testcontainers run', async (t) => {
   const f = fixture(t, {
     PLATFORM: 'Darwin',
     DOCKER_ENDPOINT: 'unix:///Users/test/.rd/docker.sock',
   });
   const result = await f.start().done;
   assert.equal(result.code, 0, result.output);
+  // `check` runs the Spring-context tests on a PostgreSQL container too, not only testcontainersTest.
   assert.equal(
     fs.readFileSync(path.join(f.dir, 'socket-overrides'), 'utf8'),
-    'unset\n/var/run/docker.sock\n',
+    '/var/run/docker.sock\n/var/run/docker.sock\n',
   );
 });
 

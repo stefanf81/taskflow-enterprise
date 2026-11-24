@@ -1,5 +1,13 @@
 package com.example.taskflow.auth;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.time.Duration;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
@@ -7,15 +15,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
-
-import java.time.Duration;
-import java.time.Instant;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * {@code app.state.store} wiring: no Redis beans by default, Redis-backed state with {@code redis},
@@ -64,7 +63,8 @@ class SharedSecurityStateConfigTest {
             assertThat(context).hasSingleBean(RedisTokenRevocationStore.class);
             assertThat(context).hasSingleBean(RedisLoginFailureCounter.class);
             assertThat(context).hasSingleBean(RevocationChannelSubscriber.class);
-            assertFalse(context.getBean(RedisMessageListenerContainer.class).isRunning(),
+            assertFalse(
+                    context.getBean(RedisMessageListenerContainer.class).isRunning(),
                     "the subscription is not started during refresh");
 
             TokenRevocationList list = context.getBean(TokenRevocationList.class);
@@ -90,14 +90,16 @@ class SharedSecurityStateConfigTest {
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();
         container.setConnectionFactory(factory);
         container.setAutoStartup(false);
-        container.addMessageListener((message, pattern) -> { },
+        container.addMessageListener(
+                (message, pattern) -> {},
                 new org.springframework.data.redis.listener.ChannelTopic(RedisTokenRevocationStore.CHANNEL));
         container.afterPropertiesSet();
         RevocationChannelSubscriber subscriber = new RevocationChannelSubscriber(container, 50);
         try {
             long start = System.nanoTime();
             subscriber.subscribe();
-            assertTrue(Duration.ofNanos(System.nanoTime() - start).toMillis() < 500,
+            assertTrue(
+                    Duration.ofNanos(System.nanoTime() - start).toMillis() < 500,
                     "subscribing never blocks the caller (application startup)");
             Thread.sleep(300);
             assertFalse(subscriber.isListening());

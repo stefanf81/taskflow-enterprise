@@ -10,7 +10,9 @@ Usage: ./verify.sh [--quick] [--stop-docker] [--help]
 
 Default: lint, baseline/type checks, web/mobile coverage, backend check,
 PostgreSQL tests, a fresh Docker build, and Playwright through nginx.
---quick        Skip PostgreSQL tests, Docker startup and Playwright.
+--quick        Skip the PostgreSQL parity tests, Docker startup and Playwright.
+               The backend check still runs on PostgreSQL: it needs Docker for
+               Testcontainers, or TASKFLOW_TEST_POSTGRES_URL naming a server.
 --stop-docker  Compatibility flag: owned containers are always stopped.
 --help         Show this help.
 
@@ -145,17 +147,17 @@ run_step 'OpenAPI baseline validation (not live drift)' npm run api:spec:check
 run_step 'generated API types' npm run sync:api-types:check
 run_step 'frontend tests and coverage' npm --prefix frontend test -- --watch=false --coverage
 run_step 'mobile security tests and coverage' npm --prefix mobile test -- --ci --coverage --maxWorkers=50%
-run_step 'backend tests, coverage and static checks' ./gradlew check
-
-if [ "$QUICK" = true ]; then
-  printf '\nSKIPPED (--quick): PostgreSQL tests, Docker image build, ingress and Playwright.\n'
-  exit 0
+if [ "$QUICK" = true ] && [ -z "${TASKFLOW_TEST_POSTGRES_URL:-}" ]; then
+  command -v docker >/dev/null 2>&1 || {
+    printf 'The backend tests run on PostgreSQL: install Docker or set TASKFLOW_TEST_POSTGRES_URL.\n' >&2
+    exit 1
+  }
 fi
-
 # Rancher Desktop exposes a macOS client socket at ~/.rd/docker.sock, but Ryuk
 # runs inside the Linux VM and must mount its /var/run/docker.sock instead.
 # Keep the host connection untouched and always respect an explicit override.
-if [ -z "${TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE+x}" ] && [ "$(uname -s)" = Darwin ]; then
+if [ -z "${TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE+x}" ] && [ "$(uname -s)" = Darwin ] \
+  && command -v docker >/dev/null 2>&1; then
   DOCKER_ENDPOINT="${DOCKER_HOST:-$(docker context inspect --format '{{.Endpoints.docker.Host}}')}"
   case "$DOCKER_ENDPOINT" in
     unix://*/.rd/docker.sock)
@@ -164,6 +166,13 @@ if [ -z "${TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE+x}" ] && [ "$(uname -s)" = Darw
       ;;
   esac
 fi
+run_step 'backend tests, coverage and static checks' ./gradlew check
+
+if [ "$QUICK" = true ]; then
+  printf '\nSKIPPED (--quick): PostgreSQL parity tests, Docker image build, ingress and Playwright.\n'
+  exit 0
+fi
+
 run_step 'PostgreSQL parity tests' ./gradlew testcontainersTest
 # Recheck after the tests: never silently adopt a stack started in the meantime.
 run_step 'fresh-stack ownership check' assert_fresh_stack

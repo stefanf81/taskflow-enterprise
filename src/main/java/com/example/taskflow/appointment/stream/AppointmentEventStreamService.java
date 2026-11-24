@@ -1,20 +1,9 @@
 package com.example.taskflow.appointment.stream;
-import com.example.taskflow.core.SchedulerProperties;
 
-import jakarta.annotation.PreDestroy;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.event.ContextClosedEvent;
-import org.springframework.context.event.EventListener;
 import com.example.taskflow.auth.AccountTokensRevokedEvent;
 import com.example.taskflow.auth.TokenRevokedEvent;
-import org.springframework.http.HttpStatus;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-
+import com.example.taskflow.core.SchedulerProperties;
+import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
@@ -30,6 +19,16 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.ContextClosedEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * Maintains the local SSE connections for authenticated administrator dashboards.
@@ -81,8 +80,7 @@ public class AppointmentEventStreamService {
      * One open dashboard stream; {@code expiresAt} is the access token's expiry and {@code tokenId}
      * its {@code jti} ({@code null} = unknown).
      */
-    private record Subscription(SseEmitter emitter, Instant expiresAt, String tokenId) {
-    }
+    private record Subscription(SseEmitter emitter, Instant expiresAt, String tokenId) {}
 
     /** Name of the event that tells a client its stream was replaced and it must not reconnect. */
     static final String EVICTED_EVENT = "evicted";
@@ -128,7 +126,10 @@ public class AppointmentEventStreamService {
         // created once the queue is full; idle threads still time out. AbortPolicy: when the queue
         // is full the task is rejected (and dropped by the caller) - never run on the caller thread.
         ThreadPoolExecutor executor = new ThreadPoolExecutor(
-                DISPATCH_THREADS, DISPATCH_THREADS, 30, TimeUnit.SECONDS,
+                DISPATCH_THREADS,
+                DISPATCH_THREADS,
+                30,
+                TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(DISPATCH_QUEUE_CAPACITY),
                 runnable -> {
                     Thread thread = new Thread(runnable, "sse-dispatch-" + counter.incrementAndGet());
@@ -199,8 +200,8 @@ public class AppointmentEventStreamService {
             return emitter;
         } catch (IOException ex) {
             remove(adminName, emitter);
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "Unable to open dashboard event stream.", ex);
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "Unable to open dashboard event stream.", ex);
         }
     }
 
@@ -238,12 +239,16 @@ public class AppointmentEventStreamService {
         emittersByAdmin.forEach((adminName, subscriptions) -> {
             for (Subscription subscription : subscriptions) {
                 try {
-                    dispatcher.execute(() -> send(adminName, subscription.emitter(),
+                    dispatcher.execute(() -> send(
+                            adminName,
+                            subscription.emitter(),
                             SseEmitter.event().name(eventName).data(event)));
                 } catch (RejectedExecutionException ex) {
                     long dropped = droppedEvents.incrementAndGet();
-                    logger.warn("SSE dispatch queue saturated; dropped appointment event for one dashboard "
-                            + "stream ({} dropped in total)", dropped);
+                    logger.warn(
+                            "SSE dispatch queue saturated; dropped appointment event for one dashboard "
+                                    + "stream ({} dropped in total)",
+                            dropped);
                 }
             }
         });
@@ -272,14 +277,17 @@ public class AppointmentEventStreamService {
         Instant now = clock.instant();
         emittersByAdmin.forEach((adminName, subscriptions) -> {
             for (Subscription subscription : subscriptions) {
-                if (subscription.expiresAt() != null && !subscription.expiresAt().isAfter(now)) {
+                if (subscription.expiresAt() != null
+                        && !subscription.expiresAt().isAfter(now)) {
                     logger.debug("Closing dashboard event stream: access token expired");
                     remove(adminName, subscription.emitter());
                     subscription.emitter().complete();
                     continue;
                 }
                 try {
-                    dispatcher.execute(() -> send(adminName, subscription.emitter(),
+                    dispatcher.execute(() -> send(
+                            adminName,
+                            subscription.emitter(),
                             SseEmitter.event().comment("keepalive")));
                 } catch (RejectedExecutionException ex) {
                     logger.debug("SSE dispatch queue saturated; skipped one keepalive");

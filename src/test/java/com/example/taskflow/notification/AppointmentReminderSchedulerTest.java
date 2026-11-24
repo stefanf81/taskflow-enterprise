@@ -1,18 +1,13 @@
 package com.example.taskflow.notification;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
 import com.example.taskflow.appointment.AppointmentDetails;
 import com.example.taskflow.appointment.AppointmentService;
 import com.example.taskflow.appointment.AppointmentStatus;
 import com.example.taskflow.notification.internal.NotificationOutboxRepository;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-import org.springframework.beans.factory.ObjectProvider;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -20,10 +15,13 @@ import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 
 /**
  * Tests {@link AppointmentReminderScheduler}. The scheduler accesses appointments through the
@@ -58,18 +56,33 @@ class AppointmentReminderSchedulerTest {
         reminderScheduler = new AppointmentReminderScheduler(
                 appointmentService, notificationOutboxRepository, selfProvider, clock, true);
 
-        app1 = new AppointmentDetails(1L, "pub-1", "John Doe", "john.doe@example.com", "Barber Alex",
-                "Haircut", TOMORROW, "10:00", AppointmentStatus.APPROVED);
-        app2 = new AppointmentDetails(2L, "pub-2", "Jane Smith", null /* null e-mail must not break the sweep */,
-                "Barber Sam", "Shave", TOMORROW, "11:00", AppointmentStatus.APPROVED);
+        app1 = new AppointmentDetails(
+                1L,
+                "pub-1",
+                "John Doe",
+                "john.doe@example.com",
+                "Barber Alex",
+                "Haircut",
+                TOMORROW,
+                "10:00",
+                AppointmentStatus.APPROVED);
+        app2 = new AppointmentDetails(
+                2L,
+                "pub-2",
+                "Jane Smith",
+                null /* null e-mail must not break the sweep */,
+                "Barber Sam",
+                "Shave",
+                TOMORROW,
+                "11:00",
+                AppointmentStatus.APPROVED);
     }
 
     @Test
     void testProcessReminders_QueuesPendingRowsForEveryClaimedAppointment() {
         when(selfProvider.getIfAvailable()).thenReturn(reminderScheduler);
         // 2031-03-10 23:30 in the shop => tomorrow is 03-11 (UTC "now" is already 03-11 => 03-12 if wrong)
-        when(appointmentService.findAppointmentIdsNeedingReminders(TOMORROW))
-                .thenReturn(Arrays.asList(1L, 2L));
+        when(appointmentService.findAppointmentIdsNeedingReminders(TOMORROW)).thenReturn(Arrays.asList(1L, 2L));
         when(appointmentService.claimReminder(1L, TOMORROW)).thenReturn(Optional.of(app1));
         when(appointmentService.claimReminder(2L, TOMORROW)).thenReturn(Optional.of(app2));
         when(notificationOutboxRepository.save(any(NotificationOutbox.class)))
@@ -96,8 +109,7 @@ class AppointmentReminderSchedulerTest {
 
     @Test
     void testProcessReminders_EmptyList() {
-        when(appointmentService.findAppointmentIdsNeedingReminders(TOMORROW))
-                .thenReturn(Collections.emptyList());
+        when(appointmentService.findAppointmentIdsNeedingReminders(TOMORROW)).thenReturn(Collections.emptyList());
 
         reminderScheduler.processReminders();
 

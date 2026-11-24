@@ -1,13 +1,16 @@
 package com.example.taskflow.benchmark;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
 import com.example.taskflow.appointment.Barber;
 import com.example.taskflow.appointment.BarberResponse;
 import com.example.taskflow.appointment.BarberService;
 import com.example.taskflow.appointment.PublicBarberResponse;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
-import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.auth.TestSecurityConfig;
 import com.example.taskflow.catalog.CatalogService;
 import com.example.taskflow.catalog.ServiceItem;
@@ -15,6 +18,9 @@ import com.example.taskflow.catalog.ServiceItemRequest;
 import com.example.taskflow.catalog.ServiceItemResponse;
 import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.example.taskflow.review.internal.ReviewRepository;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -23,13 +29,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Import;
-
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Verifies the P0-2 fix: {@code @Cacheable(sync=true)} on reference-data services.
@@ -44,11 +43,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * }</pre>
  */
 @Tag("benchmark")
-@SpringBootTest(properties = {
-        "app.rate-limit.enabled=false",
-        "spring.cache.type=simple",
-        "spring.jpa.properties.hibernate.cache.use_second_level_cache=false"
-})
+@SpringBootTest(
+        properties = {
+            "app.rate-limit.enabled=false",
+            "spring.cache.type=simple",
+            "spring.jpa.properties.hibernate.cache.use_second_level_cache=false"
+        })
 @Import(TestSecurityConfig.class)
 class ReferenceDataCacheBenchmarkTest {
 
@@ -57,15 +57,32 @@ class ReferenceDataCacheBenchmarkTest {
     private static final int WARMUP = 2_000;
     private static final int MEASUREMENT = 10_000;
 
-    @Autowired private BarberRepository barberRepository;
-    @Autowired private ServiceItemRepository serviceItemRepository;
-    @Autowired private BarberService barberService;
-    @Autowired private CatalogService catalogService;
-    @Autowired private CacheManager cacheManager;
-    @Autowired private AppointmentRepository appointmentRepository;
-    @Autowired private ReviewRepository reviewRepository;
-    @Autowired private BarberTimeOffRepository timeOffRepository;
-    @Autowired private BarberScheduleRepository scheduleRepository;
+    @Autowired
+    private BarberRepository barberRepository;
+
+    @Autowired
+    private ServiceItemRepository serviceItemRepository;
+
+    @Autowired
+    private BarberService barberService;
+
+    @Autowired
+    private CatalogService catalogService;
+
+    @Autowired
+    private CacheManager cacheManager;
+
+    @Autowired
+    private AppointmentRepository appointmentRepository;
+
+    @Autowired
+    private ReviewRepository reviewRepository;
+
+    @Autowired
+    private BarberTimeOffRepository timeOffRepository;
+
+    @Autowired
+    private BarberScheduleRepository scheduleRepository;
 
     @BeforeEach
     void setUp() {
@@ -179,8 +196,8 @@ class ReferenceDataCacheBenchmarkTest {
         assertNotNull(publicCache);
         System.out.println("  Before create: barbers cache present");
         // Create should evict both caches
-        barberService.createBarber(new com.example.taskflow.appointment.BarberRequest(
-                "New Barber X", "newx@example.com", "555-9999"));
+        barberService.createBarber(
+                new com.example.taskflow.appointment.BarberRequest("New Barber X", "newx@example.com", "555-9999"));
         System.out.println("  After createBarber: checking eviction");
         // After evict allEntries=true, next call must reload from DB and include new row
         List<BarberResponse> after = barberService.getAllBarbers();
@@ -227,12 +244,14 @@ class ReferenceDataCacheBenchmarkTest {
         catalogService.getAllServices();
         System.out.println("  Primed services cache");
         // Create
-        catalogService.createService(new ServiceItemRequest("Extra Service", BigDecimal.valueOf(42), 30, "hair", "extra"));
+        catalogService.createService(
+                new ServiceItemRequest("Extra Service", BigDecimal.valueOf(42), 30, "hair", "extra"));
         assertEquals(SERVICE_COUNT + 1, catalogService.getAllServices().size());
         System.out.println("  ✓ createService evicted → size " + (SERVICE_COUNT + 1));
         // Update
         ServiceItemResponse first = catalogService.getAllServices().get(0);
-        catalogService.updateService(first.id(), new ServiceItemRequest("Updated Name", BigDecimal.valueOf(99), 45, "beard", "updated"));
+        catalogService.updateService(
+                first.id(), new ServiceItemRequest("Updated Name", BigDecimal.valueOf(99), 45, "beard", "updated"));
         assertEquals(SERVICE_COUNT + 1, catalogService.getAllServices().size());
         System.out.println("  ✓ updateService evicted");
         // Delete
@@ -268,9 +287,11 @@ class ReferenceDataCacheBenchmarkTest {
         printCompare("Services no-cache", serviceNoCache, null);
         printCompare("Services @Cacheable", serviceCached, serviceNoCache);
         System.out.println("  " + "-".repeat(70));
-        System.out.printf("  Barbers speedup:  %.1f× faster (%.2f µs → %.3f µs)%n",
+        System.out.printf(
+                "  Barbers speedup:  %.1f× faster (%.2f µs → %.3f µs)%n",
                 barberNoCache.avgUs / Math.max(barberCached.avgUs, 0.001), barberNoCache.avgUs, barberCached.avgUs);
-        System.out.printf("  Services speedup: %.1f× faster (%.2f µs → %.3f µs)%n",
+        System.out.printf(
+                "  Services speedup: %.1f× faster (%.2f µs → %.3f µs)%n",
                 serviceNoCache.avgUs / Math.max(serviceCached.avgUs, 0.001), serviceNoCache.avgUs, serviceCached.avgUs);
         System.out.println("  Expected §31: 46 µs → 0.037 µs ≈ 1200× on 200 rows");
         System.out.println("=".repeat(80));
@@ -281,14 +302,20 @@ class ReferenceDataCacheBenchmarkTest {
         double barberSpeedup = barberNoCache.avgUs / Math.max(barberCached.avgUs, 0.001);
         double serviceSpeedup = serviceNoCache.avgUs / Math.max(serviceCached.avgUs, 0.001);
         // Also verify absolute cached latency is near-nanosecond (ConcurrentHashMap get)
-        System.out.printf("  Barbers cached avg: %.3f µs (%.0f ns) — expect <2 µs%n", barberCached.avgUs, barberCached.avgUs*1000);
-        System.out.printf("  Services cached avg: %.3f µs (%.0f ns) — expect <2 µs%n", serviceCached.avgUs, serviceCached.avgUs*1000);
+        System.out.printf(
+                "  Barbers cached avg: %.3f µs (%.0f ns) — expect <2 µs%n",
+                barberCached.avgUs, barberCached.avgUs * 1000);
+        System.out.printf(
+                "  Services cached avg: %.3f µs (%.0f ns) — expect <2 µs%n",
+                serviceCached.avgUs, serviceCached.avgUs * 1000);
         // Soft thresholds — fail if cache is not effective
         if (barberSpeedup < 20) {
-            System.out.println("  ⚠ Barbers speedup " + String.format("%.1fx", barberSpeedup) + " weaker than expected — cache may be bypassed");
+            System.out.println("  ⚠ Barbers speedup " + String.format("%.1fx", barberSpeedup)
+                    + " weaker than expected — cache may be bypassed");
         }
         if (serviceSpeedup < 20) {
-            System.out.println("  ⚠ Services speedup " + String.format("%.1fx", serviceSpeedup) + " weaker than expected — cache may be bypassed");
+            System.out.println("  ⚠ Services speedup " + String.format("%.1fx", serviceSpeedup)
+                    + " weaker than expected — cache may be bypassed");
         }
     }
 

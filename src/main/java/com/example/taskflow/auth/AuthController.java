@@ -1,6 +1,6 @@
 package com.example.taskflow.auth;
-import com.example.taskflow.auth.internal.UserRepository;
 
+import com.example.taskflow.auth.internal.UserRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -10,28 +10,27 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.time.Duration;
+import java.util.Locale;
 import org.jspecify.annotations.Nullable;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.CacheControl;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.csrf.CsrfToken;
-
-import java.time.Duration;
-import java.util.Locale;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -52,10 +51,15 @@ class AuthController {
     private final RefreshSessionService refreshSessions;
     private final boolean cookieSecure;
 
-    public AuthController(AuthenticationManager authenticationManager, TokenProvider tokenProvider,
-                          UserRepository userRepository, PasswordEncoder passwordEncoder,
-                          LoginAttemptLimiter loginAttemptLimiter, TokenRevocationList tokenRevocationList,
-                          CookieProperties cookieProperties, RefreshSessionService refreshSessions) {
+    public AuthController(
+            AuthenticationManager authenticationManager,
+            TokenProvider tokenProvider,
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            LoginAttemptLimiter loginAttemptLimiter,
+            TokenRevocationList tokenRevocationList,
+            CookieProperties cookieProperties,
+            RefreshSessionService refreshSessions) {
         this.authenticationManager = authenticationManager;
         this.tokenProvider = tokenProvider;
         this.userRepository = userRepository;
@@ -91,18 +95,24 @@ class AuthController {
 
     @PostMapping("/login")
     @Operation(summary = "Authenticate user and issue an HttpOnly JWT cookie")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Login successful — JWT set in HttpOnly cookie"),
-            @ApiResponse(responseCode = "400", description = "Invalid login payload"),
-            @ApiResponse(responseCode = "401", description = "Invalid username or password"),
-            @ApiResponse(responseCode = "429", description = "Too many failed login attempts"),
-            @ApiResponse(responseCode = "500", description = "Authentication service failure"),
-            @ApiResponse(responseCode = "503", description = "Authentication service temporarily unavailable",
-                    headers = @Header(name = "Retry-After", description = "Seconds before retrying",
-                            schema = @Schema(type = "integer", example = "1")))
-    })
-    public ResponseEntity<LoginResponse> authenticateUser(@Valid @RequestBody LoginRequest loginRequest,
-                                                          HttpServletResponse response) {
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "200", description = "Login successful — JWT set in HttpOnly cookie"),
+                @ApiResponse(responseCode = "400", description = "Invalid login payload"),
+                @ApiResponse(responseCode = "401", description = "Invalid username or password"),
+                @ApiResponse(responseCode = "429", description = "Too many failed login attempts"),
+                @ApiResponse(responseCode = "500", description = "Authentication service failure"),
+                @ApiResponse(
+                        responseCode = "503",
+                        description = "Authentication service temporarily unavailable",
+                        headers =
+                                @Header(
+                                        name = "Retry-After",
+                                        description = "Seconds before retrying",
+                                        schema = @Schema(type = "integer", example = "1")))
+            })
+    public ResponseEntity<LoginResponse> authenticateUser(
+            @Valid @RequestBody LoginRequest loginRequest, HttpServletResponse response) {
         Authentication authentication = authenticate(loginRequest);
 
         RefreshSessionService.Issued session = refreshSessions.create(authentication);
@@ -116,18 +126,23 @@ class AuthController {
 
     @PostMapping("/mobile/login")
     @Operation(summary = "Authenticate a native client and issue a bearer token")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Login successful — bearer token returned"),
-            @ApiResponse(responseCode = "400", description = "Invalid login payload"),
-            @ApiResponse(responseCode = "401", description = "Invalid username or password"),
-            @ApiResponse(responseCode = "429", description = "Too many failed login attempts"),
-            @ApiResponse(responseCode = "500", description = "Authentication service failure"),
-            @ApiResponse(responseCode = "503", description = "Authentication service temporarily unavailable",
-                    headers = @Header(name = "Retry-After", description = "Seconds before retrying",
-                            schema = @Schema(type = "integer", example = "1")))
-    })
-    public ResponseEntity<MobileLoginResponse> authenticateMobileUser(
-            @Valid @RequestBody LoginRequest loginRequest) {
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "200", description = "Login successful — bearer token returned"),
+                @ApiResponse(responseCode = "400", description = "Invalid login payload"),
+                @ApiResponse(responseCode = "401", description = "Invalid username or password"),
+                @ApiResponse(responseCode = "429", description = "Too many failed login attempts"),
+                @ApiResponse(responseCode = "500", description = "Authentication service failure"),
+                @ApiResponse(
+                        responseCode = "503",
+                        description = "Authentication service temporarily unavailable",
+                        headers =
+                                @Header(
+                                        name = "Retry-After",
+                                        description = "Seconds before retrying",
+                                        schema = @Schema(type = "integer", example = "1")))
+            })
+    public ResponseEntity<MobileLoginResponse> authenticateMobileUser(@Valid @RequestBody LoginRequest loginRequest) {
         Authentication authentication = authenticate(loginRequest);
         RefreshSessionService.Issued session = refreshSessions.create(authentication);
 
@@ -137,22 +152,20 @@ class AuthController {
                 tokenProvider.getTokenLifetimeSeconds(),
                 authentication.getName(),
                 extractRole(authentication),
-                session.refreshToken()
-        );
+                session.refreshToken());
 
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .body(response);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(response);
     }
 
     @PostMapping("/refresh")
     @Operation(summary = "Rotate the browser session credential (requires CSRF)")
-    @ApiResponses({@ApiResponse(responseCode = "200", description = "Session renewed"),
-            @ApiResponse(responseCode = "401", description = "Session expired or revoked"),
-            @ApiResponse(responseCode = "403", description = "CSRF token missing or invalid")})
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Session renewed"),
+        @ApiResponse(responseCode = "401", description = "Session expired or revoked"),
+        @ApiResponse(responseCode = "403", description = "CSRF token missing or invalid")
+    })
     public ResponseEntity<LoginResponse> refresh(
-            @CookieValue(name = REFRESH_COOKIE, required = false) String secret,
-            HttpServletResponse response) {
+            @CookieValue(name = REFRESH_COOKIE, required = false) String secret, HttpServletResponse response) {
         java.util.Optional<RefreshSessionService.Issued> renewed = refreshSessions.rotate(secret);
         if (renewed.isEmpty()) {
             // A dead credential: drop it and the hint, so the SPA stops trying to renew.
@@ -162,21 +175,31 @@ class AuthController {
         RefreshSessionService.Issued session = renewed.get();
         addAuthCookie(response, issueAccessToken(session.authentication(), session));
         addRefreshCookie(response, session);
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
                 .body(new LoginResponse(session.username(), session.role()));
     }
 
     @PostMapping("/mobile/refresh")
     @Operation(summary = "Rotate a native client's one-use refresh credential")
-    @ApiResponses({@ApiResponse(responseCode = "200", description = "Session renewed"),
-            @ApiResponse(responseCode = "400", description = "Invalid refresh payload"),
-            @ApiResponse(responseCode = "401", description = "Session expired or revoked")})
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Session renewed"),
+        @ApiResponse(responseCode = "400", description = "Invalid refresh payload"),
+        @ApiResponse(responseCode = "401", description = "Session expired or revoked")
+    })
     public ResponseEntity<MobileLoginResponse> refreshMobile(@Valid @RequestBody RefreshRequest request) {
-        RefreshSessionService.Issued session = refreshSessions.rotate(request.refreshToken())
+        RefreshSessionService.Issued session = refreshSessions
+                .rotate(request.refreshToken())
                 .orElseThrow(() -> new BadCredentialsException("Session expired or revoked."));
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new MobileLoginResponse(
-                issueAccessToken(session.authentication(), session),
-                "Bearer", tokenProvider.getTokenLifetimeSeconds(), session.username(), session.role(), session.refreshToken()));
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new MobileLoginResponse(
+                        issueAccessToken(session.authentication(), session),
+                        "Bearer",
+                        tokenProvider.getTokenLifetimeSeconds(),
+                        session.username(),
+                        session.role(),
+                        session.refreshToken()));
     }
 
     /** Access tokens name their session family, so logout or reuse detection can revoke them. */
@@ -186,10 +209,11 @@ class AuthController {
 
     @PostMapping("/register")
     @Operation(summary = "Register a new customer account")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Account created successfully"),
-            @ApiResponse(responseCode = "400", description = "Email already registered or invalid input")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "201", description = "Account created successfully"),
+                @ApiResponse(responseCode = "400", description = "Email already registered or invalid input")
+            })
     public ResponseEntity<RegisterResponse> registerUser(@Valid @RequestBody RegisterRequest request) {
         // Normalise once and use the same value for the duplicate check and the
         // insert. Checking the raw input but storing the trimmed/lower-cased form
@@ -200,12 +224,11 @@ class AuthController {
         }
 
         AppUser user = new AppUser(
-            email,
-            passwordEncoder.encode(request.password()),
-            request.fullName(),
-            request.phone(),
-            "ROLE_CUSTOMER"
-        );
+                email,
+                passwordEncoder.encode(request.password()),
+                request.fullName(),
+                request.phone(),
+                "ROLE_CUSTOMER");
         try {
             userRepository.save(user);
         } catch (DataIntegrityViolationException e) {
@@ -240,20 +263,20 @@ class AuthController {
     @Operation(summary = "Get CSRF token for authenticated state-changing requests")
     @ApiResponse(responseCode = "200", description = "CSRF token returned (also set in XSRF-TOKEN cookie)")
     public ResponseEntity<CsrfToken> csrf(@Parameter(hidden = true) CsrfToken token) {
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .body(token);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(token);
     }
 
     @GetMapping("/me")
     @Operation(summary = "Return the currently authenticated principal's role")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Authenticated user's role returned"),
-            @ApiResponse(responseCode = "401", description = "No valid cookie or bearer token present")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "200", description = "Authenticated user's role returned"),
+                @ApiResponse(responseCode = "401", description = "No valid cookie or bearer token present")
+            })
     public ResponseEntity<LoginResponse> currentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()
+        if (authentication == null
+                || !authentication.isAuthenticated()
                 || "anonymousUser".equals(authentication.getName())) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .cacheControl(CacheControl.noStore())
@@ -285,16 +308,18 @@ class AuthController {
     @PostMapping("/logout")
     @Operation(summary = "Clear the HttpOnly JWT cookie")
     @ApiResponse(responseCode = "204", description = "JWT cookie cleared — session ended")
-    public ResponseEntity<Void> logout(@Parameter(hidden = true) @Nullable Authentication authentication,
-                                       @CookieValue(name = REFRESH_COOKIE, required = false) String refreshCookie,
-                                       @RequestBody(required = false) @Nullable RefreshRequest request,
-                                       HttpServletResponse response) {
+    public ResponseEntity<Void> logout(
+            @Parameter(hidden = true) @Nullable Authentication authentication,
+            @CookieValue(name = REFRESH_COOKIE, required = false) String refreshCookie,
+            @RequestBody(required = false) @Nullable RefreshRequest request,
+            HttpServletResponse response) {
         // Deny the presented token for the rest of its lifetime. Without this a
         // copied cookie or mobile bearer token stays usable for up to an hour
         // after the user "logged out". Anonymous callers (already expired) still
         // revoke the refresh credential they present and get the cookies cleared.
         if (authentication instanceof JwtAuthenticationToken jwtAuthentication) {
-            tokenRevocationList.revoke(jwtAuthentication.getToken().getId(),
+            tokenRevocationList.revoke(
+                    jwtAuthentication.getToken().getId(),
                     jwtAuthentication.getToken().getExpiresAt());
             String sessionId = jwtAuthentication.getToken().getClaimAsString(RefreshSessionService.SESSION_CLAIM);
             if (sessionId != null) {
@@ -335,22 +360,48 @@ class AuthController {
      */
     private void addRefreshCookie(HttpServletResponse response, RefreshSessionService.Issued session) {
         Duration remaining = Duration.between(java.time.Instant.now(TokenProvider.TOKEN_CLOCK), session.expiresAt());
-        response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from(REFRESH_COOKIE, session.refreshToken())
-                .httpOnly(true).secure(cookieSecure).sameSite("Strict").path("/api/v1/auth")
-                .maxAge(remaining)
-                .build().toString());
-        response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from(SESSION_HINT_COOKIE, "1")
-                .httpOnly(false).secure(cookieSecure).sameSite("Strict").path("/")
-                .maxAge(remaining)
-                .build().toString());
+        response.addHeader(
+                HttpHeaders.SET_COOKIE,
+                ResponseCookie.from(REFRESH_COOKIE, session.refreshToken())
+                        .httpOnly(true)
+                        .secure(cookieSecure)
+                        .sameSite("Strict")
+                        .path("/api/v1/auth")
+                        .maxAge(remaining)
+                        .build()
+                        .toString());
+        response.addHeader(
+                HttpHeaders.SET_COOKIE,
+                ResponseCookie.from(SESSION_HINT_COOKIE, "1")
+                        .httpOnly(false)
+                        .secure(cookieSecure)
+                        .sameSite("Strict")
+                        .path("/")
+                        .maxAge(remaining)
+                        .build()
+                        .toString());
     }
 
     private void clearRefreshCookies(HttpServletResponse response) {
-        response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from(REFRESH_COOKIE, "")
-                .httpOnly(true).secure(cookieSecure).sameSite("Strict").path("/api/v1/auth").maxAge(0)
-                .build().toString());
-        response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from(SESSION_HINT_COOKIE, "")
-                .httpOnly(false).secure(cookieSecure).sameSite("Strict").path("/").maxAge(0)
-                .build().toString());
+        response.addHeader(
+                HttpHeaders.SET_COOKIE,
+                ResponseCookie.from(REFRESH_COOKIE, "")
+                        .httpOnly(true)
+                        .secure(cookieSecure)
+                        .sameSite("Strict")
+                        .path("/api/v1/auth")
+                        .maxAge(0)
+                        .build()
+                        .toString());
+        response.addHeader(
+                HttpHeaders.SET_COOKIE,
+                ResponseCookie.from(SESSION_HINT_COOKIE, "")
+                        .httpOnly(false)
+                        .secure(cookieSecure)
+                        .sameSite("Strict")
+                        .path("/")
+                        .maxAge(0)
+                        .build()
+                        .toString());
     }
 }

@@ -1,9 +1,17 @@
 package com.example.taskflow.auth;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.example.taskflow.auth.internal.RevokedTokenRepository;
 import com.example.taskflow.auth.internal.UserRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -13,15 +21,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.util.Map;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * https://github.com/stefanf81/taskflow-enterprise/issues/218 through the real filter chain and the H2
@@ -34,14 +33,29 @@ class AccountTokenRevocationIntegrationTest {
 
     private static final String PASSWORD = "member-password";
 
-    @Autowired private MockMvc mockMvc;
-    @Autowired private UserRepository users;
-    @Autowired private PasswordEncoder passwordEncoder;
-    @Autowired private AccountTokenCheck accounts;
-    @Autowired private JdbcTemplate jdbc;
-    @Autowired private JwtDecoder jwtDecoder;
-    @Autowired private PersistentTokenRevocations persistent;
-    @Autowired private RevokedTokenRepository revokedTokens;
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private UserRepository users;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private AccountTokenCheck accounts;
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    @Autowired
+    private JwtDecoder jwtDecoder;
+
+    @Autowired
+    private PersistentTokenRevocations persistent;
+
+    @Autowired
+    private RevokedTokenRepository revokedTokens;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -56,14 +70,18 @@ class AccountTokenRevocationIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("username", email, "password", PASSWORD))))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         JsonNode json = objectMapper.readTree(body);
         return json.get("accessToken").asText();
     }
 
     private int customerListStatus(String token) throws Exception {
         return mockMvc.perform(get("/api/v1/customer/appointments").header("Authorization", "Bearer " + token))
-                .andReturn().getResponse().getStatus();
+                .andReturn()
+                .getResponse()
+                .getStatus();
     }
 
     @Test

@@ -1,12 +1,8 @@
 package com.example.taskflow.core.cache;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.concurrent.ConcurrentMapCache;
-import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
-import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -20,10 +16,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.concurrent.ConcurrentMapCache;
+import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 /**
  * The cross-replica path of {@link SingleFlightCacheManager}: two manager instances over one shared
@@ -141,8 +140,8 @@ class SingleFlightDistributedLockTest {
         Future<String> loser = pool.submit(() -> replicaB.get("k", () -> "loaded-by-b"));
 
         assertEquals("loaded-by-b", loser.get(5, TimeUnit.SECONDS));
-        assertTrue(Duration.ofNanos(System.nanoTime() - start).toMillis() < 2_000,
-                "the loser did not sit out max-wait");
+        assertTrue(
+                Duration.ofNanos(System.nanoTime() - start).toMillis() < 2_000, "the loser did not sit out max-wait");
         assertThrows(java.util.concurrent.ExecutionException.class, () -> winner.get(5, TimeUnit.SECONDS));
         pool.shutdownNow();
         assertTrue(lock.held.isEmpty());
@@ -152,8 +151,9 @@ class SingleFlightDistributedLockTest {
     void aLeaseThatIsNeverReleasedCostsAtMostMaxWait() {
         FakeLock lock = new FakeLock();
         lock.held.put("services:k", "a-replica-that-died");
-        Cache cache = new SingleFlightCacheManager(sharedNaiveManager(new ConcurrentHashMap<>()), lock,
-                Duration.ofMillis(300)).getCache("services");
+        Cache cache = new SingleFlightCacheManager(
+                        sharedNaiveManager(new ConcurrentHashMap<>()), lock, Duration.ofMillis(300))
+                .getCache("services");
         AtomicInteger loads = new AtomicInteger();
 
         long start = System.nanoTime();
@@ -182,7 +182,7 @@ class SingleFlightDistributedLockTest {
 
         Thread.sleep(100);
         redis.put("k", "from-other-replica"); // the winner writes ...
-        lock.held.remove("services:k");        // ... and releases
+        lock.held.remove("services:k"); // ... and releases
 
         assertEquals("from-other-replica", waiting.get(5, TimeUnit.SECONDS));
         pool.shutdownNow();
@@ -201,8 +201,9 @@ class SingleFlightDistributedLockTest {
                 throw new AssertionError("nothing was acquired");
             }
         };
-        Cache cache = new SingleFlightCacheManager(sharedNaiveManager(new ConcurrentHashMap<>()), broken,
-                Duration.ofSeconds(5)).getCache("services");
+        Cache cache = new SingleFlightCacheManager(
+                        sharedNaiveManager(new ConcurrentHashMap<>()), broken, Duration.ofSeconds(5))
+                .getCache("services");
 
         assertEquals("v", cache.get("k", () -> "v"));
         assertEquals("v", cache.get("k", () -> "unused"), "and the value is cached as usual");
@@ -217,8 +218,9 @@ class SingleFlightDistributedLockTest {
         try {
             StringRedisTemplate template = new StringRedisTemplate(factory);
             RedisCacheLoadLock lock = new RedisCacheLoadLock(() -> template, Duration.ofSeconds(10));
-            Cache cache = new SingleFlightCacheManager(sharedNaiveManager(new ConcurrentHashMap<>()), lock,
-                    Duration.ofSeconds(5)).getCache("services");
+            Cache cache = new SingleFlightCacheManager(
+                            sharedNaiveManager(new ConcurrentHashMap<>()), lock, Duration.ofSeconds(5))
+                    .getCache("services");
 
             assertEquals("a", cache.get("a", () -> "a"));
             long start = System.nanoTime();
@@ -226,7 +228,8 @@ class SingleFlightDistributedLockTest {
                 String key = "k" + i;
                 assertEquals(key, cache.get(key, () -> key));
             }
-            assertTrue(Duration.ofNanos(System.nanoTime() - start).toMillis() < 1_000,
+            assertTrue(
+                    Duration.ofNanos(System.nanoTime() - start).toMillis() < 1_000,
                     "within the back-off Redis is not asked again");
             assertThrows(RuntimeException.class, () -> lock.tryAcquire("services", "x"));
         } finally {

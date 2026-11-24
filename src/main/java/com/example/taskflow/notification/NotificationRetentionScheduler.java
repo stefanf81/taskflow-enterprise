@@ -1,16 +1,15 @@
 package com.example.taskflow.notification;
-import com.example.taskflow.core.SchedulerProperties;
 
+import com.example.taskflow.core.SchedulerProperties;
 import com.example.taskflow.notification.internal.NotificationOutboxRepository;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.time.LocalDateTime;
 
 /**
  * Keeps the outbox table bounded: once a day, deletes delivered ({@code SENT}) rows that are older
@@ -32,15 +31,16 @@ class NotificationRetentionScheduler {
     private final boolean schedulersEnabled;
 
     @Autowired
-    public NotificationRetentionScheduler(NotificationOutboxRepository outboxRepository,
-                                          Clock clock,
-                                          NotificationProperties properties,
-                                          SchedulerProperties schedulers) {
+    public NotificationRetentionScheduler(
+            NotificationOutboxRepository outboxRepository,
+            Clock clock,
+            NotificationProperties properties,
+            SchedulerProperties schedulers) {
         this(outboxRepository, clock, properties.retentionDays(), schedulers.enabled());
     }
 
-    NotificationRetentionScheduler(NotificationOutboxRepository outboxRepository, Clock clock,
-                                   int retentionDays, boolean schedulersEnabled) {
+    NotificationRetentionScheduler(
+            NotificationOutboxRepository outboxRepository, Clock clock, int retentionDays, boolean schedulersEnabled) {
         this.outboxRepository = outboxRepository;
         this.clock = clock;
         this.retentionDays = retentionDays;

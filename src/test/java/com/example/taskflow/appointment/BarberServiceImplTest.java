@@ -1,20 +1,16 @@
 package com.example.taskflow.appointment;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
 import com.example.taskflow.appointment.internal.Appointment;
-import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
-import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
-import com.example.taskflow.appointment.internal.BarberScheduleRepository;
-import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
-
+import com.example.taskflow.appointment.internal.BarberRepository;
+import com.example.taskflow.appointment.internal.BarberScheduleRepository;
+import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
+import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
 import com.example.taskflow.core.ResourceNotFoundException;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -23,10 +19,13 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 class BarberServiceImplTest {
@@ -54,9 +53,18 @@ class BarberServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        barberService = new BarberServiceImpl(barberRepository, scheduleRepository, timeOffRepository,
-                appointmentRepository, eventPublisher, CLOCK, BookingProperties.defaults());
-        lenient().doAnswer(inv -> events.add(inv.getArgument(0))).when(eventPublisher).publishEvent(any(Object.class));
+        barberService = new BarberServiceImpl(
+                barberRepository,
+                scheduleRepository,
+                timeOffRepository,
+                appointmentRepository,
+                eventPublisher,
+                CLOCK,
+                BookingProperties.defaults());
+        lenient()
+                .doAnswer(inv -> events.add(inv.getArgument(0)))
+                .when(eventPublisher)
+                .publishEvent(any(Object.class));
     }
 
     private <T> List<T> eventsOfType(Class<T> type) {
@@ -65,20 +73,32 @@ class BarberServiceImplTest {
 
     @Test
     void openingHoursAreTheWeekdaysAnyoneWorksWithHhMmTimes() {
-        when(scheduleRepository.findWeekdayHours()).thenReturn(List.of(
-                weekday(1, LocalTime.of(9, 0), LocalTime.of(17, 30)),
-                weekday(6, LocalTime.of(10, 0), LocalTime.of(16, 0))));
+        when(scheduleRepository.findWeekdayHours())
+                .thenReturn(List.of(
+                        weekday(1, LocalTime.of(9, 0), LocalTime.of(17, 30)),
+                        weekday(6, LocalTime.of(10, 0), LocalTime.of(16, 0))));
 
-        assertEquals(List.of(new OpeningHoursResponse(1, "09:00", "17:30"),
-                        new OpeningHoursResponse(6, "10:00", "16:00")),
+        assertEquals(
+                List.of(new OpeningHoursResponse(1, "09:00", "17:30"), new OpeningHoursResponse(6, "10:00", "16:00")),
                 barberService.getOpeningHours());
     }
 
     private static BarberScheduleRepository.WeekdayHours weekday(int day, LocalTime opens, LocalTime closes) {
         return new BarberScheduleRepository.WeekdayHours() {
-            @Override public Integer getDayOfWeek() { return day; }
-            @Override public LocalTime getOpens() { return opens; }
-            @Override public LocalTime getCloses() { return closes; }
+            @Override
+            public Integer getDayOfWeek() {
+                return day;
+            }
+
+            @Override
+            public LocalTime getOpens() {
+                return opens;
+            }
+
+            @Override
+            public LocalTime getCloses() {
+                return closes;
+            }
         };
     }
 
@@ -123,9 +143,10 @@ class BarberServiceImplTest {
 
     @Test
     void createBarber_refusesTheNoPreferenceSentinelAsAName() {
-        for (String name : List.of(AppointmentBookingService.NO_PREFERENCE_BARBER,
-                "  no preference (first available) ")) {
-            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+        for (String name :
+                List.of(AppointmentBookingService.NO_PREFERENCE_BARBER, "  no preference (first available) ")) {
+            IllegalArgumentException ex = assertThrows(
+                    IllegalArgumentException.class,
                     () -> barberService.createBarber(new BarberRequest(name, null, null)));
             assertTrue(ex.getMessage().contains("reserved"), ex.getMessage());
         }
@@ -147,7 +168,9 @@ class BarberServiceImplTest {
         verify(scheduleRepository).saveAll(captor.capture());
         List<BarberSchedule> schedules = captor.getValue();
         assertEquals(6, schedules.size());
-        assertEquals(List.of(1, 2, 3, 4, 5, 6), schedules.stream().map(BarberSchedule::getDayOfWeek).toList());
+        assertEquals(
+                List.of(1, 2, 3, 4, 5, 6),
+                schedules.stream().map(BarberSchedule::getDayOfWeek).toList());
         schedules.forEach(schedule -> {
             assertEquals(LocalTime.of(9, 0), schedule.getStartTime());
             assertEquals(LocalTime.of(17, 0), schedule.getEndTime());
@@ -158,8 +181,13 @@ class BarberServiceImplTest {
     @Test
     @SuppressWarnings("unchecked")
     void createBarber_defaultShiftIsConfigurable() {
-        BarberServiceImpl custom = new BarberServiceImpl(barberRepository, scheduleRepository, timeOffRepository,
-                appointmentRepository, eventPublisher, CLOCK,
+        BarberServiceImpl custom = new BarberServiceImpl(
+                barberRepository,
+                scheduleRepository,
+                timeOffRepository,
+                appointmentRepository,
+                eventPublisher,
+                CLOCK,
                 new BookingProperties(90, 5, "10:00", "15:30", List.of(2, 4)));
         Barber saved = new Barber();
         saved.setId(5L);
@@ -170,7 +198,9 @@ class BarberServiceImplTest {
 
         ArgumentCaptor<List<BarberSchedule>> captor = ArgumentCaptor.forClass(List.class);
         verify(scheduleRepository).saveAll(captor.capture());
-        assertEquals(List.of(2, 4), captor.getValue().stream().map(BarberSchedule::getDayOfWeek).toList());
+        assertEquals(
+                List.of(2, 4),
+                captor.getValue().stream().map(BarberSchedule::getDayOfWeek).toList());
         assertEquals(LocalTime.of(10, 0), captor.getValue().get(0).getStartTime());
         assertEquals(LocalTime.of(15, 30), captor.getValue().get(0).getEndTime());
     }
@@ -205,7 +235,8 @@ class BarberServiceImplTest {
         barber.setName("Alex the Barber");
         when(barberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(barber));
 
-        BarberTimeOffRequest request = new BarberTimeOffRequest(LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
+        BarberTimeOffRequest request =
+                new BarberTimeOffRequest(LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
         BarberTimeOff saved = new BarberTimeOff();
         saved.setId(1L);
         saved.setStartDate(LocalDate.of(2026, 7, 22));
@@ -219,7 +250,8 @@ class BarberServiceImplTest {
         assertEquals(LocalDate.of(2026, 7, 22), result.startDate());
         // The full inclusive range is published; the AFTER_COMMIT listener evicts
         // both the concrete and the First-Available aggregate key per date.
-        AvailabilityChangedEvent event = eventsOfType(AvailabilityChangedEvent.class).get(0);
+        AvailabilityChangedEvent event =
+                eventsOfType(AvailabilityChangedEvent.class).get(0);
         assertFalse(event.affectsAllBarbers());
         assertEquals("Alex the Barber", event.barberName());
         assertEquals(LocalDate.of(2026, 7, 22), event.startDate());
@@ -230,7 +262,8 @@ class BarberServiceImplTest {
     void addTimeOff_shouldThrowWhenBarberNotFound() {
         when(barberRepository.findByIdForUpdate(99L)).thenReturn(Optional.empty());
 
-        BarberTimeOffRequest request = new BarberTimeOffRequest(LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
+        BarberTimeOffRequest request =
+                new BarberTimeOffRequest(LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
 
         assertThrows(ResourceNotFoundException.class, () -> barberService.addTimeOff(99L, request));
     }
@@ -241,7 +274,8 @@ class BarberServiceImplTest {
         barber.setId(1L);
         when(barberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(barber));
 
-        BarberTimeOffRequest request = new BarberTimeOffRequest(LocalDate.of(2026, 7, 25), LocalDate.of(2026, 7, 22), "Bad range");
+        BarberTimeOffRequest request =
+                new BarberTimeOffRequest(LocalDate.of(2026, 7, 25), LocalDate.of(2026, 7, 22), "Bad range");
 
         assertThrows(IllegalArgumentException.class, () -> barberService.addTimeOff(1L, request));
     }
@@ -249,7 +283,8 @@ class BarberServiceImplTest {
     // ── BKG-6a: time off cancels the bookings it makes impossible ─────────────
 
     private Appointment booking(long id, String barberName, LocalDate date, String time, AppointmentStatus status) {
-        Appointment appointment = new Appointment("Cust " + id, "c" + id + "@test.com", "1", barberName, date, time, "Haircut");
+        Appointment appointment =
+                new Appointment("Cust " + id, "c" + id + "@test.com", "1", barberName, date, time, "Haircut");
         appointment.setId(id);
         appointment.setStatus(status);
         return appointment;
@@ -267,21 +302,24 @@ class BarberServiceImplTest {
         saved.setEndDate(LocalDate.of(2026, 7, 22));
         when(timeOffRepository.save(any(BarberTimeOff.class))).thenReturn(saved);
 
-        Appointment pending = booking(10, "Alex the Barber", LocalDate.of(2026, 7, 21), "10:00", AppointmentStatus.PENDING);
-        Appointment approved = booking(11, "Alex the Barber", LocalDate.of(2026, 7, 22), "14:00", AppointmentStatus.APPROVED);
-        when(appointmentRepository.findActiveForBarberInRange("Alex the Barber",
-                LocalDate.of(2026, 7, 21), LocalDate.of(2026, 7, 22))).thenReturn(List.of(pending, approved));
+        Appointment pending =
+                booking(10, "Alex the Barber", LocalDate.of(2026, 7, 21), "10:00", AppointmentStatus.PENDING);
+        Appointment approved =
+                booking(11, "Alex the Barber", LocalDate.of(2026, 7, 22), "14:00", AppointmentStatus.APPROVED);
+        when(appointmentRepository.findActiveForBarberInRange(
+                        "Alex the Barber", LocalDate.of(2026, 7, 21), LocalDate.of(2026, 7, 22)))
+                .thenReturn(List.of(pending, approved));
         when(appointmentRepository.save(any(Appointment.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        barberService.addTimeOff(1L, new BarberTimeOffRequest(
-                LocalDate.of(2026, 7, 21), LocalDate.of(2026, 7, 22), "Vacation"));
+        barberService.addTimeOff(
+                1L, new BarberTimeOffRequest(LocalDate.of(2026, 7, 21), LocalDate.of(2026, 7, 22), "Vacation"));
 
         assertEquals(AppointmentStatus.CANCELLED, pending.getStatusEnum());
         assertEquals(AppointmentStatus.CANCELLED, approved.getStatusEnum());
         List<AppointmentCancelledEvent> cancelled = eventsOfType(AppointmentCancelledEvent.class);
         assertEquals(2, cancelled.size());
-        assertTrue(cancelled.stream().allMatch(
-                e -> e.cancelledBy() == AppointmentCancelledEvent.CancelledBy.BARBER_UNAVAILABLE));
+        assertTrue(cancelled.stream()
+                .allMatch(e -> e.cancelledBy() == AppointmentCancelledEvent.CancelledBy.BARBER_UNAVAILABLE));
         // caches are evicted for the whole range and the admin dashboards are refreshed
         assertEquals(1, eventsOfType(AvailabilityChangedEvent.class).size());
         assertEquals(2, eventsOfType(AppointmentAdminEvent.class).size());
@@ -296,14 +334,17 @@ class BarberServiceImplTest {
         when(timeOffRepository.save(any(BarberTimeOff.class))).thenAnswer(inv -> inv.getArgument(0));
 
         // The clock reads Monday 2026-07-20 08:00. The range starts last week: only [today, end] is queried.
-        Appointment earlierToday = booking(10, "Alex the Barber", LocalDate.of(2026, 7, 20), "07:00", AppointmentStatus.APPROVED);
-        Appointment laterToday = booking(11, "Alex the Barber", LocalDate.of(2026, 7, 20), "09:00", AppointmentStatus.APPROVED);
-        when(appointmentRepository.findActiveForBarberInRange("Alex the Barber",
-                LocalDate.of(2026, 7, 20), LocalDate.of(2026, 7, 24))).thenReturn(List.of(earlierToday, laterToday));
+        Appointment earlierToday =
+                booking(10, "Alex the Barber", LocalDate.of(2026, 7, 20), "07:00", AppointmentStatus.APPROVED);
+        Appointment laterToday =
+                booking(11, "Alex the Barber", LocalDate.of(2026, 7, 20), "09:00", AppointmentStatus.APPROVED);
+        when(appointmentRepository.findActiveForBarberInRange(
+                        "Alex the Barber", LocalDate.of(2026, 7, 20), LocalDate.of(2026, 7, 24)))
+                .thenReturn(List.of(earlierToday, laterToday));
         when(appointmentRepository.save(any(Appointment.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        barberService.addTimeOff(1L, new BarberTimeOffRequest(
-                LocalDate.of(2026, 7, 13), LocalDate.of(2026, 7, 24), "Long leave"));
+        barberService.addTimeOff(
+                1L, new BarberTimeOffRequest(LocalDate.of(2026, 7, 13), LocalDate.of(2026, 7, 24), "Long leave"));
 
         assertEquals(AppointmentStatus.APPROVED, earlierToday.getStatusEnum());
         assertEquals(AppointmentStatus.CANCELLED, laterToday.getStatusEnum());
@@ -318,8 +359,8 @@ class BarberServiceImplTest {
         when(barberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(barber));
         when(timeOffRepository.save(any(BarberTimeOff.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        barberService.addTimeOff(1L, new BarberTimeOffRequest(
-                LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 3), "Backfilled"));
+        barberService.addTimeOff(
+                1L, new BarberTimeOffRequest(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 3), "Backfilled"));
 
         verify(appointmentRepository, never()).findActiveForBarberInRange(any(), any(), any());
         assertTrue(eventsOfType(AppointmentCancelledEvent.class).isEmpty());

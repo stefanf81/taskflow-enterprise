@@ -1,17 +1,16 @@
 package com.example.taskflow.appointment;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
+
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.time.LocalDate;
-
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class AvailabilityCacheEvictionListenerTest {
@@ -55,9 +54,10 @@ class AvailabilityCacheEvictionListenerTest {
     @Test
     void evictionFailure_shouldBeSwallowed() {
         doThrow(new IllegalStateException("Redis down"))
-                .when(statsService).clearAvailabilityCache(anyString(), any(LocalDate.class), any(LocalDate.class));
+                .when(statsService)
+                .clearAvailabilityCache(anyString(), any(LocalDate.class), any(LocalDate.class));
 
-        assertDoesNotThrow(() -> listener.onAvailabilityChanged(
-                AvailabilityChangedEvent.single("Alex", LocalDate.of(2026, 5, 16))));
+        assertDoesNotThrow(() ->
+                listener.onAvailabilityChanged(AvailabilityChangedEvent.single("Alex", LocalDate.of(2026, 5, 16))));
     }
 }

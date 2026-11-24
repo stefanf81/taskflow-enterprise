@@ -6,15 +6,14 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.http.CacheControl;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/barbers")
@@ -47,17 +46,16 @@ class BarberController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<BarberResponse>> getAdminBarbers() {
         // Admin barbers carry staff e-mails and phones: never stored by an HTTP cache
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .body(barberService.getAllBarbers());
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(barberService.getAllBarbers());
     }
 
     @PostMapping
     @Operation(summary = "Add a new barber")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Barber created successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid barber data")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "201", description = "Barber created successfully"),
+                @ApiResponse(responseCode = "400", description = "Invalid barber data")
+            })
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<BarberResponse> createBarber(@Valid @RequestBody BarberRequest request) {
         return new ResponseEntity<>(barberService.createBarber(request), HttpStatus.CREATED);
@@ -65,26 +63,29 @@ class BarberController {
 
     @GetMapping("/{barberId}/time-off")
     @Operation(summary = "Get time-off for a barber")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "List of time-off periods returned"),
-            @ApiResponse(responseCode = "404", description = "Barber not found")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "200", description = "List of time-off periods returned"),
+                @ApiResponse(responseCode = "404", description = "Barber not found")
+            })
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<BarberTimeOffResponse>> getTimeOff(@Parameter(description = "Barber database ID") @PathVariable Long barberId) {
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .body(barberService.getTimeOff(barberId));
+    public ResponseEntity<List<BarberTimeOffResponse>> getTimeOff(
+            @Parameter(description = "Barber database ID") @PathVariable Long barberId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(barberService.getTimeOff(barberId));
     }
 
     @PostMapping("/{barberId}/time-off")
     @Operation(summary = "Add time-off for a barber")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Time-off period created"),
-            @ApiResponse(responseCode = "400", description = "Invalid time-off data"),
-            @ApiResponse(responseCode = "404", description = "Barber not found")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "201", description = "Time-off period created"),
+                @ApiResponse(responseCode = "400", description = "Invalid time-off data"),
+                @ApiResponse(responseCode = "404", description = "Barber not found")
+            })
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<BarberTimeOffResponse> addTimeOff(@Parameter(description = "Barber database ID") @PathVariable Long barberId, @Valid @RequestBody BarberTimeOffRequest request) {
+    public ResponseEntity<BarberTimeOffResponse> addTimeOff(
+            @Parameter(description = "Barber database ID") @PathVariable Long barberId,
+            @Valid @RequestBody BarberTimeOffRequest request) {
         // Today is the shop's today (app.shop.time-zone), not the JVM's.
         if (request.startDate().isBefore(LocalDate.now(clock))) {
             throw new IllegalArgumentException("Start date must be today or in the future.");

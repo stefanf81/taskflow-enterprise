@@ -5,6 +5,10 @@ dependency-analysis = "3.20.4"
 versions-plugin = "0.67.0"
 spotbugs-plugin = "6.5.13"
 spotbugs-tool = "4.10.5"
+# Spotless 8.12.0 (2026-11-21) is still inside the 3-day release-age hold; Renovate moves it.
+spotless-plugin = "8.11.0"
+# Java formatter run by Spotless (4-space indent, 120 columns).
+palantir-java-format = "2.103.0"
 # The companion BOM keeps every OpenTelemetry module at this security-reviewed release.
 opentelemetry = "1.68.0"
 prometheus = "1.10.0"
@@ -100,6 +104,8 @@ archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
 findsecbugs-plugin = { module = "com.h3xstream.findsecbugs:findsecbugs-plugin", version.ref = "findsecbugs" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+# Not a dependency: Spotless resolves the formatter itself. Declared so Renovate tracks the version.
+palantir-java-format = { module = "com.palantir.javaformat:palantir-java-format", version.ref = "palantir-java-format" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
@@ -107,3 +113,4 @@ dependency-check = { id = "org.owasp.dependencycheck", version.ref = "dependency
 versions = { id = "io.github.ben-manes.versions", version.ref = "versions-plugin" }
 spotbugs = { id = "com.github.spotbugs", version.ref = "spotbugs-plugin" }
 dependency-analysis = { id = "com.autonomousapps.dependency-analysis", version.ref = "dependency-analysis" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless-plugin" }

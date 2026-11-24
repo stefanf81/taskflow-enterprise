@@ -1,10 +1,14 @@
 package com.example.taskflow.notification;
-import com.example.taskflow.core.SchedulerProperties;
-import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 
 import com.example.taskflow.appointment.AppointmentDetails;
 import com.example.taskflow.appointment.AppointmentService;
 import com.example.taskflow.core.LogSanitizer;
+import com.example.taskflow.core.SchedulerProperties;
+import com.example.taskflow.notification.internal.NotificationOutboxRepository;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -12,11 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.List;
 
 @Component
 class AppointmentReminderScheduler {
@@ -30,19 +29,21 @@ class AppointmentReminderScheduler {
     private final boolean schedulersEnabled;
 
     @Autowired
-    public AppointmentReminderScheduler(AppointmentService appointmentService,
-                                        NotificationOutboxRepository notificationOutboxRepository,
-                                        ObjectProvider<AppointmentReminderScheduler> selfProvider,
-                                        Clock clock,
-                                        SchedulerProperties schedulers) {
+    public AppointmentReminderScheduler(
+            AppointmentService appointmentService,
+            NotificationOutboxRepository notificationOutboxRepository,
+            ObjectProvider<AppointmentReminderScheduler> selfProvider,
+            Clock clock,
+            SchedulerProperties schedulers) {
         this(appointmentService, notificationOutboxRepository, selfProvider, clock, schedulers.enabled());
     }
 
-    AppointmentReminderScheduler(AppointmentService appointmentService,
-                                 NotificationOutboxRepository notificationOutboxRepository,
-                                 ObjectProvider<AppointmentReminderScheduler> selfProvider,
-                                 Clock clock,
-                                 boolean schedulersEnabled) {
+    AppointmentReminderScheduler(
+            AppointmentService appointmentService,
+            NotificationOutboxRepository notificationOutboxRepository,
+            ObjectProvider<AppointmentReminderScheduler> selfProvider,
+            Clock clock,
+            boolean schedulersEnabled) {
         this.appointmentService = appointmentService;
         this.notificationOutboxRepository = notificationOutboxRepository;
         this.selfProvider = selfProvider;
@@ -101,25 +102,25 @@ class AppointmentReminderScheduler {
         // on commit, not for the whole sweep. It re-checks status, date and reminderSent under
         // the lock and marks the reminder as sent in the same transaction as the outbox row below.
         LocalDate tomorrow = LocalDate.now(clock).plusDays(1);
-        AppointmentDetails appointment = appointmentService.claimReminder(appointmentId, tomorrow).orElse(null);
+        AppointmentDetails appointment =
+                appointmentService.claimReminder(appointmentId, tomorrow).orElse(null);
         if (appointment == null) {
             return;
         }
 
         logger.info("Queueing reminder for appointment id={} on {}", appointment.id(), appointment.bookingDate());
 
-        String message = String.format("Hi %s, this is a reminder for your %s appointment with %s tomorrow at %s.",
-                appointment.customerName(), appointment.serviceType(), appointment.barberName(), appointment.bookingTime());
+        String message = String.format(
+                "Hi %s, this is a reminder for your %s appointment with %s tomorrow at %s.",
+                appointment.customerName(),
+                appointment.serviceType(),
+                appointment.barberName(),
+                appointment.bookingTime());
 
         // Enqueue as PENDING: the relay claims PENDING/FAILED rows only, so this is what actually
         // gets the e-mail sent. (It used to be inserted as already-SENT and was never dispatched.)
         NotificationOutbox outbox = new NotificationOutbox(
-                appointment.customerEmail(),
-                "EMAIL",
-                message,
-                LocalDateTime.now(clock),
-                "PENDING"
-        );
+                appointment.customerEmail(), "EMAIL", message, LocalDateTime.now(clock), "PENDING");
 
         notificationOutboxRepository.save(outbox);
     }

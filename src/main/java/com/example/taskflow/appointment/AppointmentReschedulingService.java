@@ -6,13 +6,6 @@ import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.CreationRequestFingerprint;
 import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
 import com.example.taskflow.core.ConflictException;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.dao.OptimisticLockingFailureException;
-import org.springframework.dao.PessimisticLockingFailureException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -20,6 +13,12 @@ import java.time.LocalTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /** Moves one existing row atomically; never cancels and recreates a booking. */
 @Service
@@ -33,9 +32,15 @@ class AppointmentReschedulingService {
     private final BookingProperties properties;
     private final Clock clock;
 
-    AppointmentReschedulingService(AppointmentRepository repository, AppointmentOwnership ownership, BarberRepository barbers,
-            BusySlotsService availability, AppointmentChangePublisher changes,
-            ApplicationEventPublisher events, BookingProperties properties, Clock clock) {
+    AppointmentReschedulingService(
+            AppointmentRepository repository,
+            AppointmentOwnership ownership,
+            BarberRepository barbers,
+            BusySlotsService availability,
+            AppointmentChangePublisher changes,
+            ApplicationEventPublisher events,
+            BookingProperties properties,
+            Clock clock) {
         this.repository = repository;
         this.ownership = ownership;
         this.barbers = barbers;
@@ -69,13 +74,14 @@ class AppointmentReschedulingService {
         Set<String> refused = new HashSet<>(
                 availability.busySlotsForMove(barber, date, BusySlotsService.durationOf(item), item.getId()));
         return BusySlotsService.ALL_SLOTS.stream()
-                .filter(slot -> refused.contains(slot) || !LocalDateTime.of(date, LocalTime.parse(slot)).isAfter(now))
+                .filter(slot -> refused.contains(slot)
+                        || !LocalDateTime.of(date, LocalTime.parse(slot)).isAfter(now))
                 .toList();
     }
 
     @Transactional
-    public AppointmentResponse reschedule(String publicId, String email, RescheduleRequest request,
-            AppointmentRescheduledEvent.RescheduledBy actor) {
+    public AppointmentResponse reschedule(
+            String publicId, String email, RescheduleRequest request, AppointmentRescheduledEvent.RescheduledBy actor) {
         Appointment item = ownership.requireOwned(publicId, email);
         LocalDateTime now = LocalDateTime.now(clock);
         LocalTime oldStart = LocalTime.parse(item.getBookingTime());
@@ -88,14 +94,17 @@ class AppointmentReschedulingService {
             throw new IllegalArgumentException("The appointment must be in the future.");
         }
         if (request.bookingDate().isAfter(now.toLocalDate().plusDays(properties.maxAdvanceDays()))) {
-            throw new IllegalArgumentException("Appointments can be booked at most "
-                    + properties.maxAdvanceDays() + " days in advance.");
+            throw new IllegalArgumentException(
+                    "Appointments can be booked at most " + properties.maxAdvanceDays() + " days in advance.");
         }
         Barber barber = barbers.findByIdForBooking(requireAssignedBarber(item).getId())
                 .orElseThrow(() -> new ConflictException("The assigned barber is no longer available."));
         int duration = BusySlotsService.durationOf(item);
-        availability.findConflict(barber, request.bookingDate(), start, duration, item.getId())
-                .ifPresent(message -> { throw new ConflictException(message); });
+        availability
+                .findConflict(barber, request.bookingDate(), start, duration, item.getId())
+                .ifPresent(message -> {
+                    throw new ConflictException(message);
+                });
         // A retry selecting the existing slot must not demote an already approved appointment.
         if (item.getBookingDate().equals(request.bookingDate()) && oldStart.equals(start)) {
             return AppointmentResponse.fromEntity(item);

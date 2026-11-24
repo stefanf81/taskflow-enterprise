@@ -1,6 +1,10 @@
 package com.example.taskflow.auth;
-import com.example.taskflow.auth.internal.UserRepository;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+import com.example.taskflow.auth.internal.UserRepository;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -8,11 +12,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
-
-import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CustomUserDetailsServiceTest {
@@ -45,8 +44,8 @@ class CustomUserDetailsServiceTest {
     void loadUserByUsername_shouldThrowWhenNotFound() {
         when(userRepository.findByEmailIgnoreCase("unknown@example.com")).thenReturn(Optional.empty());
 
-        assertThrows(UsernameNotFoundException.class,
-                () -> userDetailsService.loadUserByUsername("unknown@example.com"));
+        assertThrows(
+                UsernameNotFoundException.class, () -> userDetailsService.loadUserByUsername("unknown@example.com"));
     }
 
     @Test
@@ -68,6 +67,7 @@ class CustomUserDetailsServiceTest {
         UserDetails userDetails = userDetailsService.loadUserByUsername("admin@example.com");
 
         assertEquals(1, userDetails.getAuthorities().size());
-        assertEquals("ROLE_ADMIN", userDetails.getAuthorities().iterator().next().getAuthority());
+        assertEquals(
+                "ROLE_ADMIN", userDetails.getAuthorities().iterator().next().getAuthority());
     }
 }

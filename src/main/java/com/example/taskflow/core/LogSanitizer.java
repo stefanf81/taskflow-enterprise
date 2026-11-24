@@ -36,7 +36,8 @@ public final class LogSanitizer {
             return "****";
         }
         return (safe.substring(0, 2) + "****" + safe.substring(safe.length() - 2))
-                .replace("\n", "").replace("\r", "");
+                .replace("\n", "")
+                .replace("\r", "");
     }
 
     /**

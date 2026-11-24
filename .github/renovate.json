@@ -72,6 +72,7 @@
   "gitAuthor": "stefanf81 <17823566+stefanf81@users.noreply.github.com>",
   "prHourlyLimit": 0,
   "prConcurrentLimit": 10,
+  "internalChecksFilter": "strict",
   "branchConcurrentLimit": 10,
   "postUpdateOptions": ["npmDedupe"],
   "vulnerabilityAlerts": {
@@ -359,6 +360,31 @@
       "description": "Group GitHub Actions updates",
       "matchManagers": ["github-actions"],
       "groupName": "GitHub Actions"
+    },
+    {
+      "description": "A digest-only change of a version-pinned action means its tag was moved to another commit (how 76 of 77 aquasecurity/trivy-action tags were hijacked in March 2026). Renovate ages such an update against the tag's original release date, so the 3-day soak does not hold it back. Never automerge it, and keep it out of the automerged groups. This costs nothing in normal operation: every pin carries its full '# vX.Y.Z' comment, so a regular release is a patch, minor or major update. Must stay below the first rule (automerge) and below 'Group GitHub Actions updates': later packageRules override earlier ones.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["digest"],
+      "groupName": "GitHub Actions whose tag was moved",
+      "groupSlug": "github-actions-moved-tag",
+      "automerge": false
+    },
+    {
+      "description": "Actions that publish, sign or attest the release images, hand the scan report to the signing job, or run Renovate (pushdockerimage.yml push/scan/promote: packages: write, id-token: write, attestations: write; renovate.yml: RENOVATE_TOKEN). No check of the update pull request runs their new version with those credentials, so review every update, patches included. Their own group keeps them out of the automerged batches (one non-automerge member would hold that whole branch back). Must stay below the first rule (automerge) and below 'Group GitHub Actions updates'; add an action here when it starts to run in such a job.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": [
+        "renovatebot/github-action",
+        "sigstore/cosign-installer",
+        "actions/attest",
+        "actions/upload-artifact",
+        "actions/download-artifact",
+        "docker/login-action",
+        "docker/build-push-action",
+        "docker/setup-buildx-action"
+      ],
+      "groupName": "Privileged GitHub Actions",
+      "groupSlug": "privileged-actions",
+      "automerge": false
     },
     {
       "description": "Blocked on Expo: babel-preset-expo (SDK 58 and canary) is built on Babel 7, so @babel/core 8 and babel-plugin-transform-import-meta 3 (requires Babel 8) cannot move. Fully suppressed: no branch, no PR, dashboard-only.",

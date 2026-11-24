@@ -1,13 +1,13 @@
 package com.example.taskflow.auth;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class CorsConfigTest {
 
@@ -20,13 +20,13 @@ class CorsConfigTest {
         assertNotNull(source);
         assertNotNull(corsConfiguration);
         assertEquals(
-                "http://localhost:4200,http://127.0.0.1:4200",
-                String.join(",", corsConfiguration.getAllowedOrigins()));
+                "http://localhost:4200,http://127.0.0.1:4200", String.join(",", corsConfiguration.getAllowedOrigins()));
     }
 
     @Test
     void exposesNoForbiddenResponseHeader() {
-        CorsConfiguration corsConfiguration = new CorsConfig(new CorsProperties("http://localhost:4200")).corsConfigurationSource()
+        CorsConfiguration corsConfiguration = new CorsConfig(new CorsProperties("http://localhost:4200"))
+                .corsConfigurationSource()
                 .getCorsConfiguration(new MockHttpServletRequest());
 
         assertNotNull(corsConfiguration);

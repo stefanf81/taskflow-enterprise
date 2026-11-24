@@ -1,12 +1,12 @@
 package com.example.taskflow.appointment;
-import com.example.taskflow.appointment.internal.Appointment;
-
-import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.example.taskflow.appointment.internal.Appointment;
+import org.junit.jupiter.api.Test;
 
 class AppointmentStatusTest {
 
@@ -27,8 +27,8 @@ class AppointmentStatusTest {
 
     @Test
     void unknownStatusIsRejectedInsteadOfSilentlyBecomingPending() {
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> AppointmentStatus.fromString("BOGUS"));
+        IllegalArgumentException ex =
+                assertThrows(IllegalArgumentException.class, () -> AppointmentStatus.fromString("BOGUS"));
         assertTrue(ex.getMessage().contains("Unknown status 'BOGUS'"), ex.getMessage());
         assertTrue(ex.getMessage().contains("CANCELLED"), "lists the valid values: " + ex.getMessage());
         assertThrows(IllegalArgumentException.class, () -> new Appointment().setStatus("nonsense"));
@@ -37,8 +37,8 @@ class AppointmentStatusTest {
     @Test
     void errorMessageDoesNotEchoControlCharactersOrUnboundedInput() {
         String hostile = "x\r\nINJECT" + "y".repeat(500);
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> AppointmentStatus.fromString(hostile));
+        IllegalArgumentException ex =
+                assertThrows(IllegalArgumentException.class, () -> AppointmentStatus.fromString(hostile));
         assertFalse(ex.getMessage().contains("\n"));
         assertFalse(ex.getMessage().contains("\r"));
         assertTrue(ex.getMessage().length() < 200);
@@ -50,6 +50,7 @@ class AppointmentStatusTest {
         assertTrue(AppointmentStatus.APPROVED.isActive());
         assertFalse(AppointmentStatus.DENIED.isActive());
         assertFalse(AppointmentStatus.CANCELLED.isActive());
-        assertEquals(java.util.List.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED), AppointmentStatus.ACTIVE);
+        assertEquals(
+                java.util.List.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED), AppointmentStatus.ACTIVE);
     }
 }

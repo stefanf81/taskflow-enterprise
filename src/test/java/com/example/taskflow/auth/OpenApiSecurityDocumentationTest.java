@@ -1,7 +1,20 @@
 package com.example.taskflow.auth;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeSet;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,20 +29,6 @@ import org.springframework.security.test.web.support.WebTestUtils;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.context.WebApplicationContext;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeSet;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 
 /**
  * The OpenAPI document says which operations anyone may call ({@code security: []}) and which need
@@ -78,22 +77,28 @@ class OpenApiSecurityDocumentationTest {
 
     @Test
     void theSpecMarksExactlyTheOperationsTheFilterChainLetsAnonymousCallersReach() throws Exception {
-        JsonNode spec = objectMapper.readTree(mockMvc.perform(get("/v3/api-docs").with(user("admin").roles("ADMIN")))
-                .andReturn().getResponse().getContentAsString());
+        JsonNode spec = objectMapper.readTree(
+                mockMvc.perform(get("/v3/api-docs").with(user("admin").roles("ADMIN")))
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString());
 
         List<String> mismatches = new ArrayList<>();
         TreeSet<String> documentedPublic = new TreeSet<>();
         for (Map.Entry<String, JsonNode> path : spec.get("paths").properties()) {
             for (Map.Entry<String, JsonNode> op : path.getValue().properties()) {
                 String operation = op.getKey().toUpperCase() + " " + path.getKey();
-                boolean markedPublic = op.getValue().has("security") && op.getValue().get("security").isEmpty();
+                boolean markedPublic = op.getValue().has("security")
+                        && op.getValue().get("security").isEmpty();
                 if (markedPublic) {
                     documentedPublic.add(operation);
                 }
                 boolean reachable = reachableAnonymously(op.getKey(), path.getKey());
                 if (reachable != markedPublic) {
-                    mismatches.add(operation + (markedPublic ? " is documented public but refused anonymously"
-                            : " needs authentication in the spec but is reachable anonymously"));
+                    mismatches.add(operation
+                            + (markedPublic
+                                    ? " is documented public but refused anonymously"
+                                    : " needs authentication in the spec but is reachable anonymously"));
                 }
             }
         }
@@ -101,7 +106,9 @@ class OpenApiSecurityDocumentationTest {
         assertEquals(List.of(), mismatches);
         // Every listed operation exists (a typo in the list would silently document nothing).
         assertEquals(new TreeSet<>(OpenApiSecurityConfig.PUBLIC_OPERATIONS), documentedPublic);
-        assertEquals("[{\"cookieAuth\":[]},{\"bearerAuth\":[]}]", spec.get("security").toString());
+        assertEquals(
+                "[{\"cookieAuth\":[]},{\"bearerAuth\":[]}]",
+                spec.get("security").toString());
 
         // Telemetry documents 204 and intentionally empty 400/413 error responses, with all event fields required.
         JsonNode telemetryResponses = spec.at("/paths/~1api~1v1~1telemetry/post/responses");
@@ -109,7 +116,8 @@ class OpenApiSecurityDocumentationTest {
         assertFalse(telemetryResponses.has("200"));
         assertFalse(telemetryResponses.path("400").has("content"));
         assertFalse(telemetryResponses.path("413").has("content"));
-        assertEquals("[\"name\",\"platform\",\"route\",\"value\"]",
+        assertEquals(
+                "[\"name\",\"platform\",\"route\",\"value\"]",
                 spec.at("/components/schemas/ClientTelemetryEvent/required").toString());
 
         // Browser refresh CSRF 403 is answered by CsrfFilter without a body; 401 still carries ErrorResponse.
@@ -119,21 +127,24 @@ class OpenApiSecurityDocumentationTest {
 
         for (String path : List.of("~1api~1v1~1auth~1login", "~1api~1v1~1auth~1mobile~1login")) {
             JsonNode unavailable = spec.at("/paths/" + path + "/post/responses/503");
-            assertEquals("integer", unavailable.at("/headers/Retry-After/schema/type").asText());
-            assertEquals("#/components/schemas/ErrorResponse",
+            assertEquals(
+                    "integer",
+                    unavailable.at("/headers/Retry-After/schema/type").asText());
+            assertEquals(
+                    "#/components/schemas/ErrorResponse",
                     unavailable.at("/content/application~1json/schema/$ref").asText());
         }
     }
 
     private boolean reachableAnonymously(String method, String pathTemplate) throws Exception {
-        String uri = pathTemplate
-                .replace("{publicId}", UUID.randomUUID().toString())
-                .replaceAll("\\{[^}]+}", "1");
+        String uri =
+                pathTemplate.replace("{publicId}", UUID.randomUUID().toString()).replaceAll("\\{[^}]+}", "1");
         MockHttpServletResponse response = mockMvc.perform(request(HttpMethod.valueOf(method.toUpperCase()), uri)
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
-                .andReturn().getResponse();
+                .andReturn()
+                .getResponse();
         boolean refusedByFilterChain = (response.getStatus() == 401 || response.getStatus() == 403)
                 && response.getContentAsString().isEmpty();
         return !refusedByFilterChain;

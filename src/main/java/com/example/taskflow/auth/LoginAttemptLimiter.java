@@ -3,13 +3,12 @@ package com.example.taskflow.auth;
 import com.example.taskflow.core.ClientAddresses;
 import com.example.taskflow.core.FixedWindowCounter;
 import com.example.taskflow.core.SharedStateStore;
+import java.util.Locale;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-
-import java.util.Locale;
 
 /**
  * Per-account throttle on <em>failed</em> logins.
@@ -85,9 +84,10 @@ class LoginAttemptLimiter {
             if (count != RedisLoginFailureCounter.UNAVAILABLE) {
                 if (count >= maxFailures) {
                     long retryAfter = shared.secondsUntilReset(key);
-                    throw new TooManyLoginAttemptsException(retryAfter == RedisLoginFailureCounter.UNAVAILABLE
-                            ? failures.secondsUntilReset(key)
-                            : retryAfter);
+                    throw new TooManyLoginAttemptsException(
+                            retryAfter == RedisLoginFailureCounter.UNAVAILABLE
+                                    ? failures.secondsUntilReset(key)
+                                    : retryAfter);
                 }
                 // Redis is healthy and says the account is fine. The local copy only gets a say
                 // while it may still hold failures from an outage Redis knows nothing about;

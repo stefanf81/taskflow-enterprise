@@ -6,14 +6,13 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.Arrays;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.web.filter.OncePerRequestFilter;
-
-import java.io.IOException;
-import java.util.Arrays;
 
 /**
  * Stops a dead {@code access_token} cookie from breaking the whole API.
@@ -45,8 +44,8 @@ class StaleAccessTokenCookieFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
-                                    FilterChain chain) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
         Cookie[] cookies = request.getCookies();
         if (cookies == null) {
             chain.doFilter(request, response);
@@ -54,15 +53,19 @@ class StaleAccessTokenCookieFilter extends OncePerRequestFilter {
         }
         for (Cookie cookie : cookies) {
             if (COOKIE_NAME.equals(cookie.getName())
-                    && cookie.getValue() != null && !cookie.getValue().isBlank()
+                    && cookie.getValue() != null
+                    && !cookie.getValue().isBlank()
                     && !isValid(cookie.getValue())) {
-                response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from(COOKIE_NAME, "")
-                        .httpOnly(true)
-                        .secure(cookieSecure)
-                        .sameSite("Strict")
-                        .path("/")
-                        .maxAge(0)
-                        .build().toString());
+                response.addHeader(
+                        HttpHeaders.SET_COOKIE,
+                        ResponseCookie.from(COOKIE_NAME, "")
+                                .httpOnly(true)
+                                .secure(cookieSecure)
+                                .sameSite("Strict")
+                                .path("/")
+                                .maxAge(0)
+                                .build()
+                                .toString());
                 chain.doFilter(new WithoutAccessTokenCookie(request), response);
                 return;
             }

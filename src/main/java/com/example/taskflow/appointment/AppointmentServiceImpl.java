@@ -1,16 +1,15 @@
 package com.example.taskflow.appointment;
+
 import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
-
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Optional;
 
 /**
  * The cross-module {@link AppointmentService}: booking lookup for {@code review}, reminder selection
@@ -55,8 +54,11 @@ class AppointmentServiceImpl implements AppointmentService {
         // customer about a booking that no longer exists.
         if (appointment.getStatusEnum() != AppointmentStatus.APPROVED
                 || !tomorrow.equals(appointment.getBookingDate())) {
-            logger.info("Skipping reminder for appointment id={}: status={} date={} no longer qualifies",
-                    appointment.getId(), appointment.getStatus(), appointment.getBookingDate());
+            logger.info(
+                    "Skipping reminder for appointment id={}: status={} date={} no longer qualifies",
+                    appointment.getId(),
+                    appointment.getStatus(),
+                    appointment.getBookingDate());
             return Optional.empty();
         }
         appointment.setReminderSent(true);

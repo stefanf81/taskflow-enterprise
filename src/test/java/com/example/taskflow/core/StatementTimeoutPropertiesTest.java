@@ -1,14 +1,13 @@
 package com.example.taskflow.core;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.convert.DurationStyle;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
 import java.util.Properties;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.convert.DurationStyle;
 
 /**
  * Every database access path in production has a statement timeout, and they agree. JPA queries had
@@ -24,8 +23,8 @@ class StatementTimeoutPropertiesTest {
             prod.load(in);
         }
 
-        Duration jpa = Duration.ofMillis(Long.parseLong(
-                prod.getProperty("spring.jpa.properties.jakarta.persistence.query.timeout")));
+        Duration jpa = Duration.ofMillis(
+                Long.parseLong(prod.getProperty("spring.jpa.properties.jakarta.persistence.query.timeout")));
         String jdbc = prod.getProperty("spring.jdbc.template.query-timeout");
 
         assertThat(jdbc).as("spring.jdbc.template.query-timeout").isNotNull();

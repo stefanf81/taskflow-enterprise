@@ -3,10 +3,9 @@ package com.example.taskflow.auth;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.util.function.Supplier;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
-
-import java.util.function.Supplier;
 
 /**
  * Resolve Angular's plain double-submit header and refresh its cookie after authentication.
@@ -24,7 +23,8 @@ final class CookieCsrfTokenRequestHandler extends CsrfTokenRequestAttributeHandl
         if (cookies != null) {
             for (Cookie cookie : cookies) {
                 if (StaleAccessTokenCookieFilter.COOKIE_NAME.equals(cookie.getName())
-                        && cookie.getValue() != null && !cookie.getValue().isBlank()) {
+                        && cookie.getValue() != null
+                        && !cookie.getValue().isBlank()) {
                     csrfToken.get();
                     return;
                 }

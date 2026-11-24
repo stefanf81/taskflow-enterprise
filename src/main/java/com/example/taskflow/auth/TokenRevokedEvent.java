@@ -7,5 +7,4 @@ package com.example.taskflow.auth;
  *
  * @param tokenId the revoked token's {@code jti}
  */
-public record TokenRevokedEvent(String tokenId) {
-}
+public record TokenRevokedEvent(String tokenId) {}

@@ -1,43 +1,39 @@
 package com.example.taskflow.features;
 
-import com.example.taskflow.appointment.internal.Appointment;
-import com.example.taskflow.appointment.internal.AppointmentRepository;
+import static org.hamcrest.Matchers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.example.taskflow.appointment.Barber;
-import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.BarberSchedule;
-import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.BarberTimeOff;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
+import com.example.taskflow.appointment.internal.BarberRepository;
+import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
 import com.example.taskflow.auth.AppUser;
 import com.example.taskflow.auth.internal.UserRepository;
-import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.catalog.internal.ServiceItemRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import com.example.taskflow.testsupport.MutableTestClock;
-import org.springframework.http.MediaType;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.web.servlet.MockMvc;
-
-import java.math.BigDecimal;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.Map;
-
-import static org.hamcrest.Matchers.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
+import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(properties = {"app.rate-limit.enabled=false", "app.stats.cache.ttl=0"})
 @AutoConfigureMockMvc
@@ -101,7 +97,8 @@ public class FeaturesIntegrationTest {
         userRepository.deleteAll();
 
         // 1. Create default admin user
-        AppUser admin = new AppUser("admin@taskflow.com", passwordEncoder.encode("admin-password"), "Shop Owner", "555-1234", "ROLE_ADMIN");
+        AppUser admin = new AppUser(
+                "admin@taskflow.com", passwordEncoder.encode("admin-password"), "Shop Owner", "555-1234", "ROLE_ADMIN");
         userRepository.save(admin);
 
         // 2. Perform admin login
@@ -115,7 +112,10 @@ public class FeaturesIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("access_token").getValue();
+                .andReturn()
+                .getResponse()
+                .getCookie("access_token")
+                .getValue();
 
         adminToken = "Bearer " + cookie;
     }
@@ -160,7 +160,8 @@ public class FeaturesIntegrationTest {
                 .andExpect(status().isCreated());
 
         // A Thursday inside the booking window (bookings must be in the future and within 90 days)
-        LocalDate thursday = LocalDate.now(clock).plusDays(7)
+        LocalDate thursday = LocalDate.now(clock)
+                .plusDays(7)
                 .with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.THURSDAY));
 
         // Login Customer
@@ -175,7 +176,10 @@ public class FeaturesIntegrationTest {
                         .content(objectMapper.writeValueAsString(customerLogin)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role", is("ROLE_CUSTOMER")))
-                .andReturn().getResponse().getCookie("access_token").getValue();
+                .andReturn()
+                .getResponse()
+                .getCookie("access_token")
+                .getValue();
 
         String customerToken = "Bearer " + customerCookie;
 
@@ -193,8 +197,7 @@ public class FeaturesIntegrationTest {
         barberTimeOffRepository.save(timeOff);
 
         // Fetch time-off for barber and verify it serializes correctly
-        mockMvc.perform(get("/api/v1/barbers/" + barber.getId() + "/time-off")
-                        .header("Authorization", adminToken))
+        mockMvc.perform(get("/api/v1/barbers/" + barber.getId() + "/time-off").header("Authorization", adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].reason", is("Training")));
@@ -228,7 +231,9 @@ public class FeaturesIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(apptRequest)))
                 .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
 
         @SuppressWarnings("unchecked")
         Map<String, Object> apptMap = objectMapper.readValue(apptJson, Map.class);
@@ -261,7 +266,8 @@ public class FeaturesIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(wrongEmailReview)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message", is("Verification failed: the provided email does not match this booking.")));
+                .andExpect(jsonPath(
+                        "$.message", is("Verification failed: the provided email does not match this booking.")));
 
         // Now let's approve the appointment via admin token so it can be reviewed
         mockMvc.perform(put("/api/v1/appointments/" + apptMap.get("id"))
@@ -275,7 +281,8 @@ public class FeaturesIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(reviewRequest)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message", is("This appointment has not taken place yet and cannot be reviewed.")));
+                .andExpect(
+                        jsonPath("$.message", is("This appointment has not taken place yet and cannot be reviewed.")));
 
         // ... but once it has taken place it can
         clock.set(Instant.parse("2030-05-17T09:00:00Z"));
@@ -295,8 +302,7 @@ public class FeaturesIntegrationTest {
 
         // --- FEATURE 5: Customer Dashboard & Private Cancellation ---
         // Fetch customer appointments (returns 1 appointment for jane@example.com)
-        mockMvc.perform(get("/api/v1/customer/appointments?size=1")
-                        .header("Authorization", customerToken))
+        mockMvc.perform(get("/api/v1/customer/appointments?size=1").header("Authorization", customerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(1)))
                 .andExpect(jsonPath("$.page.number", is(0)))
@@ -331,26 +337,26 @@ public class FeaturesIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(bobLogin)))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("access_token").getValue();
+                .andReturn()
+                .getResponse()
+                .getCookie("access_token")
+                .getValue();
 
         String bobToken = "Bearer " + bobCookie;
 
         // Bob tries to cancel Jane's appointment (should fail with 404 Not Found / Unauthorized)
-        mockMvc.perform(delete("/api/v1/customer/appointments/" + publicId)
-                        .header("Authorization", bobToken))
+        mockMvc.perform(delete("/api/v1/customer/appointments/" + publicId).header("Authorization", bobToken))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message", is("Appointment not found or unauthorized.")));
 
         // The appointment has already taken place (the clock was moved past it for the
         // review above), so even its owner can no longer cancel it online.
-        mockMvc.perform(delete("/api/v1/customer/appointments/" + publicId)
-                        .header("Authorization", customerToken))
+        mockMvc.perform(delete("/api/v1/customer/appointments/" + publicId).header("Authorization", customerToken))
                 .andExpect(status().isBadRequest());
 
         // Before it starts, Jane cancels her own appointment successfully (204 No Content)
         clock.set(Instant.parse("2030-05-02T09:00:00Z"));
-        mockMvc.perform(delete("/api/v1/customer/appointments/" + publicId)
-                        .header("Authorization", customerToken))
+        mockMvc.perform(delete("/api/v1/customer/appointments/" + publicId).header("Authorization", customerToken))
                 .andExpect(status().isNoContent());
     }
 }

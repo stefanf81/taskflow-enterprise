@@ -16,8 +16,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableSpringDataWebSupport(pageSerializationMode = EnableSpringDataWebSupport.PageSerializationMode.VIA_DTO)
 public class TaskflowApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(TaskflowApplication.class, args);
-	}
-
+    public static void main(String[] args) {
+        SpringApplication.run(TaskflowApplication.class, args);
+    }
 }

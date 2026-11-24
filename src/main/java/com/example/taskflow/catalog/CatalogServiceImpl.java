@@ -1,7 +1,9 @@
 package com.example.taskflow.catalog;
-import com.example.taskflow.catalog.internal.ServiceItemRepository;
 
+import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.example.taskflow.core.ResourceNotFoundException;
+import java.util.List;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.Cacheable;
@@ -10,9 +12,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-
-import java.util.List;
-import java.util.Optional;
 
 @Service
 @Transactional
@@ -38,7 +37,8 @@ class CatalogServiceImpl implements CatalogService {
     @Override
     @Transactional(readOnly = true)
     public ServiceItemResponse getServiceById(Long id) {
-        ServiceItem item = repository.findById(id)
+        ServiceItem item = repository
+                .findById(id)
                 .filter(ServiceItem::isActive)
                 .orElseThrow(() -> new ResourceNotFoundException("Service not found with id: " + id));
         return ServiceItemResponse.fromEntity(item);
@@ -72,7 +72,8 @@ class CatalogServiceImpl implements CatalogService {
 
     @Override
     public ServiceItemResponse updateService(Long id, ServiceItemRequest request) {
-        ServiceItem item = repository.findById(id)
+        ServiceItem item = repository
+                .findById(id)
                 .filter(ServiceItem::isActive)
                 .orElseThrow(() -> new ResourceNotFoundException("Service not found with id: " + id));
 
@@ -94,7 +95,8 @@ class CatalogServiceImpl implements CatalogService {
      */
     @Override
     public void deleteService(Long id) {
-        ServiceItem item = repository.findById(id)
+        ServiceItem item = repository
+                .findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Service not found with id: " + id));
         if (repository.countAppointmentsReferencing(id) > 0) {
             if (item.isActive()) {
@@ -121,7 +123,8 @@ class CatalogServiceImpl implements CatalogService {
      */
     @Override
     public ServiceItemResponse restoreService(Long id) {
-        ServiceItem item = repository.findById(id)
+        ServiceItem item = repository
+                .findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Service not found with id: " + id));
         if (!item.isActive()) {
             item.setActive(true);
@@ -153,7 +156,8 @@ class CatalogServiceImpl implements CatalogService {
     }
 
     private static ResponseStatusException nameConflict(String name) {
-        return new ResponseStatusException(HttpStatus.CONFLICT,
+        return new ResponseStatusException(
+                HttpStatus.CONFLICT,
                 "A service named '" + name.replace("\n", "").replace("\r", "") + "' already exists.");
     }
 }

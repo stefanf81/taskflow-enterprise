@@ -1,19 +1,18 @@
 package com.example.taskflow.core.web;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-
-import java.util.regex.Pattern;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** https://github.com/stefanf81/taskflow-enterprise/issues/219: the trusted-proxy regex and its symptom. */
 class TrustedProxyConfigTest {
@@ -31,7 +30,8 @@ class TrustedProxyConfigTest {
     /** The YAML/env-file mistake: {@code \\.} reaches the JVM literally and never matches an address. */
     @Test
     void aDoubledBackslashIsRefused() {
-        IllegalStateException e = assertThrows(IllegalStateException.class,
+        IllegalStateException e = assertThrows(
+                IllegalStateException.class,
                 () -> TrustedProxyConfig.trustedProxies("^172\\\\.30\\\\.0\\\\.\\\\d{1,3}$"));
         assertTrue(e.getMessage().contains("doubled backslash"), e.getMessage());
     }
@@ -40,8 +40,8 @@ class TrustedProxyConfigTest {
     void anEmptyOrInvalidValueIsRefused() {
         assertThrows(IllegalStateException.class, () -> TrustedProxyConfig.trustedProxies(null));
         assertThrows(IllegalStateException.class, () -> TrustedProxyConfig.trustedProxies("  "));
-        IllegalStateException invalid = assertThrows(IllegalStateException.class,
-                () -> TrustedProxyConfig.trustedProxies("^172\\.30\\.0\\.(\\d{1,3}$"));
+        IllegalStateException invalid = assertThrows(
+                IllegalStateException.class, () -> TrustedProxyConfig.trustedProxies("^172\\.30\\.0\\.(\\d{1,3}$"));
         assertTrue(invalid.getMessage().contains("not a valid regular expression"), invalid.getMessage());
     }
 
@@ -101,13 +101,15 @@ class TrustedProxyConfigTest {
                 .run(context -> assertEquals(1, context.getBeansOfType(filter).size()));
         runner.withPropertyValues("server.request.header.forwarded.strategy=framework", proxies)
                 .run(context -> assertTrue(context.getBeansOfType(filter).isEmpty()));
-        runner.withPropertyValues("server.request.header.forwarded.strategy=web-server",
+        runner.withPropertyValues(
+                        "server.request.header.forwarded.strategy=web-server",
                         TrustedProxyConfig.PROXIES_PROPERTY + "=^172\\\\.30\\\\.0\\\\.\\\\d{1,3}$")
-                .run(context -> assertTrue(context.getStartupFailure() != null,
-                        "a doubled backslash must stop the start"));
-        runner.withPropertyValues("server.request.header.forwarded.strategy=web-server",
-                        "server.forward-headers-strategy=native", proxies)
-                .run(context -> assertTrue(context.getStartupFailure() != null,
-                        "Boot refuses both keys at once"));
+                .run(context ->
+                        assertTrue(context.getStartupFailure() != null, "a doubled backslash must stop the start"));
+        runner.withPropertyValues(
+                        "server.request.header.forwarded.strategy=web-server",
+                        "server.forward-headers-strategy=native",
+                        proxies)
+                .run(context -> assertTrue(context.getStartupFailure() != null, "Boot refuses both keys at once"));
     }
 }

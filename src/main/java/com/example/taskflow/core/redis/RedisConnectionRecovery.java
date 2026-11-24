@@ -1,14 +1,13 @@
 package com.example.taskflow.core.redis;
+
 import com.example.taskflow.core.LogSanitizer;
-
 import io.lettuce.core.RedisCommandTimeoutException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.dao.QueryTimeoutException;
-
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.QueryTimeoutException;
 
 /**
  * Replaces the shared Redis connection after repeated command timeouts.
@@ -36,6 +35,7 @@ public final class RedisConnectionRecovery {
 
     /** Consecutive command timeouts that trigger a reset. */
     public static final int DEFAULT_THRESHOLD = 3;
+
     private static final long NEVER = Long.MIN_VALUE;
 
     private final Runnable reset;

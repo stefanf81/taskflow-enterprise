@@ -10,14 +10,40 @@ public record ClientTelemetryEvent(
         @NotNull Platform platform,
         @NotNull Route route,
         @NotNull Name name,
+
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) @DecimalMin("0.0") @DecimalMax("600000.0") double value) {
-    public enum Platform { WEB, MOBILE }
-    public enum Route { LANDING, BOOKING, CUSTOMER, ADMIN, AUTH, OTHER }
-    public enum Name { LCP, FCP, CLS, INP, SCREEN_LOAD, JS_ERROR, UNHANDLED_REJECTION, RENDER_ERROR }
+    public enum Platform {
+        WEB,
+        MOBILE
+    }
+
+    public enum Route {
+        LANDING,
+        BOOKING,
+        CUSTOMER,
+        ADMIN,
+        AUTH,
+        OTHER
+    }
+
+    public enum Name {
+        LCP,
+        FCP,
+        CLS,
+        INP,
+        SCREEN_LOAD,
+        JS_ERROR,
+        UNHANDLED_REJECTION,
+        RENDER_ERROR
+    }
 
     public ClientTelemetryEvent {
-        if (platform == null || route == null || name == null || !Double.isFinite(value)
-                || value < 0 || value > (name == Name.CLS ? 10 : 600_000)
+        if (platform == null
+                || route == null
+                || name == null
+                || !Double.isFinite(value)
+                || value < 0
+                || value > (name == Name.CLS ? 10 : 600_000)
                 || (isError(name) && value != 0)) {
             throw new IllegalArgumentException("Invalid telemetry event");
         }

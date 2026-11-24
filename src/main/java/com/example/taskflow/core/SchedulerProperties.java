@@ -14,5 +14,4 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * </ul>
  */
 @ConfigurationProperties(prefix = "app.schedulers")
-public record SchedulerProperties(@DefaultValue("true") boolean enabled) {
-}
+public record SchedulerProperties(@DefaultValue("true") boolean enabled) {}
