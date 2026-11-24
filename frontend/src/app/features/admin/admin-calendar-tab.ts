@@ -3,15 +3,18 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { asyncScheduler, throttleTime } from 'rxjs';
 import { hoursOn, isoWeekday, parseLocalDate, toLocalDateString } from '@taskflow/domain';
 import { ShopClock } from '../../core/shop-clock';
-import { formatTime12Hour } from '../../core/time-utils';
+import { formatLocalDate, formatTime12Hour } from '../../core/time-utils';
 import { Button } from '../../core/ui/button';
 import { EmptyState } from '../../core/ui/empty-state';
 import { Icon } from '../../core/ui/icon';
+import { StatusBadge } from '../../core/ui/status-badge';
+import { xIcon } from '../../core/ui/icons/x';
 import { chevronLeftIcon } from '../../core/ui/icons/chevron-left';
 import { chevronRightIcon } from '../../core/ui/icons/chevron-right';
 import { SegmentedControl, SegmentOption } from '../../core/ui/segmented-control';
 import { AppointmentResponse } from '../../types/api';
 import { AdminEventsService } from './admin-events.service';
+import { AppointmentActions } from './appointment-actions';
 import {
   CalendarRow,
   CalendarView,
@@ -52,19 +55,20 @@ interface CalendarColumn {
  */
 @Component({
   selector: 'app-admin-calendar-tab',
-  imports: [Button, EmptyState, Icon, SegmentedControl],
+  imports: [Button, EmptyState, Icon, SegmentedControl, StatusBadge],
   templateUrl: './admin-calendar-tab.html',
 })
 export class AdminCalendarTab {
   private readonly store = inject(CalendarStore);
   private readonly barberStore = inject(BarberStore);
   private readonly shopClock = inject(ShopClock);
+  private readonly actions = inject(AppointmentActions);
 
   protected readonly view = this.store.view;
   protected readonly anchor = this.store.anchor;
   protected readonly isLoading = this.store.isLoading;
   protected readonly loadError = this.store.loadError;
-  protected readonly icons = { previous: chevronLeftIcon, next: chevronRightIcon };
+  protected readonly icons = { previous: chevronLeftIcon, next: chevronRightIcon, close: xIcon };
   protected readonly views: readonly SegmentOption<CalendarView>[] = [
     { value: 'day', label: 'Day' },
     { value: 'week', label: 'Week' },
@@ -86,6 +90,13 @@ export class AdminCalendarTab {
   });
 
   /** The roster, plus any barber that only appears in a booking (left the shop since). */
+  /** The booking whose details are open (by id, so it follows the booking through a reload). */
+  protected readonly selectedId = signal<number | null>(null);
+  protected readonly selected = computed(
+    () => this.shown().find((appointment) => appointment.id === this.selectedId()) ?? null,
+  );
+  protected readonly pendingIds = this.actions.pendingIds;
+
   protected readonly barberNames = computed(() => {
     const names = this.barberStore.barbers().map((barber) => barber.name);
     for (const appointment of this.store.appointments()) {
@@ -157,6 +168,32 @@ export class AdminCalendarTab {
         takeUntilDestroyed(),
       )
       .subscribe(() => this.store.refresh());
+    // The owner approved, denied or cancelled a booking from the panel.
+    this.actions.changed.pipe(takeUntilDestroyed()).subscribe(() => this.store.refresh());
+  }
+
+  protected select(appointment: AppointmentResponse): void {
+    this.selectedId.update((id) => (id === appointment.id ? null : appointment.id));
+  }
+
+  protected closeDetails(): void {
+    this.selectedId.set(null);
+  }
+
+  protected approve(id: number): void {
+    this.actions.approve(id);
+  }
+
+  protected deny(id: number): void {
+    this.actions.deny(id);
+  }
+
+  protected cancel(appointment: AppointmentResponse): void {
+    this.actions.cancel(appointment);
+  }
+
+  protected date(date: string): string {
+    return formatLocalDate(date);
   }
 
   protected setView(view: CalendarView): void {

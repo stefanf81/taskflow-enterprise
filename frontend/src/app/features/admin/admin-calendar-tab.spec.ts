@@ -231,4 +231,73 @@ describe('AdminCalendarTab', () => {
     await answer([]);
     expect(el().querySelector('table')).not.toBeNull();
   });
+
+  describe('selected booking', () => {
+    const chip = (text: string) =>
+      Array.from(el().querySelectorAll<HTMLButtonElement>('.calendar-event')).find((b) =>
+        b.textContent?.includes(text),
+      )!;
+    const panel = () => el().querySelector('section[aria-label="Selected booking"]');
+    const panelButtons = () =>
+      Array.from(panel()?.querySelectorAll('button') ?? []).map(
+        (b) => b.textContent?.trim() || b.getAttribute('aria-label'),
+      );
+
+    it('opens a booking panel with its details, and closes it again', () => {
+      expect(panel()).toBeNull();
+      chip('Customer 2').click();
+      fixture.detectChanges();
+
+      expect(panel()?.textContent).toContain('Customer 2');
+      expect(panel()?.textContent).toContain('c@example.com');
+      expect(panel()?.textContent).toContain('Pending');
+      expect(chip('Customer 2').getAttribute('aria-pressed')).toBe('true');
+      // A pending booking can be approved, denied or cancelled.
+      expect(panelButtons()).toEqual(['Approve', 'Deny', 'Cancel booking', 'Close']);
+
+      chip('Customer 2').click(); // the same chip again
+      fixture.detectChanges();
+      expect(panel()).toBeNull();
+    });
+
+    it('offers no Approve on an approved booking', () => {
+      chip('Customer 1').click();
+      fixture.detectChanges();
+      expect(panelButtons()).toEqual(['Deny', 'Cancel booking', 'Close']);
+    });
+
+    it('approves from the panel and reloads the calendar', async () => {
+      chip('Customer 2').click();
+      fixture.detectChanges();
+      (
+        Array.from(panel()!.querySelectorAll('button')).find(
+          (b) => b.textContent?.trim() === 'Approve',
+        ) as HTMLButtonElement
+      ).click();
+
+      const put = http.expectOne(
+        (r) => r.url.endsWith('/api/v1/appointments/2') && r.method === 'PUT',
+      );
+      expect(put.request.body).toEqual({ status: 'APPROVED' });
+      put.flush({ ...item(2, 'Sara', '2026-11-24', '10:30', 'APPROVED') });
+      await new Promise((resolve) => setTimeout(resolve));
+      fixture.detectChanges();
+
+      // The calendar asked for its range again.
+      await answer([
+        item(1, 'Alex', '2026-11-24', '09:00', 'APPROVED'),
+        item(2, 'Sara', '2026-11-24', '10:30', 'APPROVED'),
+      ]);
+      expect(panel()?.textContent).toContain('Approved');
+      expect(panelButtons()).not.toContain('Approve');
+    });
+
+    it('closes the panel when its booking leaves the calendar', async () => {
+      chip('Customer 2').click();
+      fixture.detectChanges();
+      store.refresh();
+      await answer([item(1, 'Alex', '2026-11-24', '09:00', 'APPROVED')]);
+      expect(panel()).toBeNull();
+    });
+  });
 });

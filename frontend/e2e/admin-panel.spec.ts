@@ -111,6 +111,17 @@ test.describe('owner panel', () => {
     });
     expect(column).toBe(BARBER);
 
+    // Open the booking and approve it from the panel.
+    await event.click();
+    const details = page.getByRole('region', { name: 'Selected booking' });
+    await expect(details).toContainText(name);
+    await expect(details).toContainText('Pending');
+    await details.getByRole('button', { name: 'Approve' }).click();
+    await expect(details).toContainText('Approved');
+    await expect(details.getByRole('button', { name: 'Approve' })).toHaveCount(0);
+    await details.getByRole('button', { name: 'Close' }).click();
+    await expect(details).toHaveCount(0);
+
     await page.getByRole('button', { name: 'Week', exact: true }).click();
     await expect(page.locator('.calendar-event', { hasText: name })).toBeVisible();
     await page.getByLabel('Barber').selectOption('Alex the Barber');

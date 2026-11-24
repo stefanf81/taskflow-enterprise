@@ -87,6 +87,69 @@
       description="Add a barber under Schedules & Time-Off to see their column."
     />
   } @else {
+    @if (selected(); as appt) {
+      <section
+        class="card mb-4 flex flex-col gap-3 p-4 sm:flex-row sm:items-center"
+        aria-label="Selected booking"
+      >
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2.5">
+            <h3 class="m-0 text-sm font-extrabold text-zinc-100">{{ appt.customerName }}</h3>
+            <app-status-badge [status]="appt.status" />
+          </div>
+          <p class="m-0 mt-0.5 text-xs text-zinc-300">
+            <strong class="font-semibold text-accent">{{ appt.serviceType }}</strong>
+            with <strong class="font-semibold text-zinc-100">{{ appt.barberName }}</strong> ·
+            {{ date(appt.bookingDate) }} at {{ time(appt.bookingTime) }}
+          </p>
+          <p class="m-0 mt-0.5 text-xs text-zinc-500">
+            {{ appt.customerEmail }} · {{ appt.customerPhone }}
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          @if (appt.status === 'PENDING') {
+            <button
+              type="button"
+              appButton
+              class="px-3.5 py-1.5 text-xs"
+              [disabled]="pendingIds().has(appt.id)"
+              (click)="approve(appt.id)"
+            >
+              Approve
+            </button>
+          }
+          <button
+            type="button"
+            appButton="danger"
+            class="px-3.5 py-1.5 text-xs"
+            [disabled]="pendingIds().has(appt.id)"
+            [title]="appt.status === 'APPROVED' ? 'Revoke and decline booking' : 'Decline booking'"
+            (click)="deny(appt.id)"
+          >
+            Deny
+          </button>
+          <button
+            type="button"
+            class="action-btn btn-delete"
+            [disabled]="pendingIds().has(appt.id)"
+            aria-label="Cancel booking"
+            title="Cancel booking"
+            (click)="cancel(appt)"
+          >
+            <app-icon [icon]="icons.close" class="size-4" />
+          </button>
+          <button
+            type="button"
+            appButton="secondary"
+            class="px-3.5 py-1.5 text-xs"
+            (click)="closeDetails()"
+          >
+            Close
+          </button>
+        </div>
+      </section>
+    }
+
     <!-- aria-busy while a range loads: the rows already shown stay until the new ones arrive -->
     <div
       class="overflow-x-auto rounded-xl border border-white/10"
@@ -147,23 +210,30 @@
                   [class.bg-white/[0.02]]="columns()[$index]?.closed"
                 >
                   @for (appt of cell; track appt.id) {
-                    <div
-                      class="calendar-event rounded-lg border px-2.5 py-1.5 text-xs leading-snug"
+                    <button
+                      type="button"
+                      class="calendar-event block w-full text-left rounded-lg border px-2.5 py-1.5 text-xs leading-snug transition-colors"
                       [class]="
                         appt.status === 'PENDING'
-                          ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
-                          : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+                          ? 'border-amber-500/30 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20'
+                          : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20'
                       "
+                      [class.ring-2]="appt.id === selectedId()"
+                      [class.ring-accent]="appt.id === selectedId()"
                       [class.mb-1.5]="!$last"
-                      [title]="
+                      [attr.aria-pressed]="appt.id === selectedId()"
+                      [attr.aria-label]="
+                        time(appt.bookingTime) +
+                        ', ' +
                         appt.customerName +
-                        ' · ' +
+                        ', ' +
                         appt.serviceType +
-                        ' · ' +
+                        ' with ' +
                         appt.barberName +
-                        ' · ' +
-                        appt.status
+                        ', ' +
+                        appt.status.toLowerCase()
                       "
+                      (click)="select(appt)"
                     >
                       <span class="font-bold">{{ time(appt.bookingTime) }}</span>
                       <span class="font-semibold"> {{ appt.customerName }}</span>
@@ -173,7 +243,7 @@
                           · {{ appt.barberName }}
                         }
                       </span>
-                    </div>
+                    </button>
                   }
                 </td>
               }

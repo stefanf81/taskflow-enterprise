@@ -1,6 +1,4 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { finalize, firstValueFrom } from 'rxjs';
-import { AppointmentsApi } from '../../core/api/appointments-api';
 import { extractApiError } from '../../core/api/extract-api-error';
 import { FlashMessages } from '../../core/ui/flash-messages';
 import { Button } from '../../core/ui/button';
@@ -15,12 +13,10 @@ import { xIcon } from '../../core/ui/icons/x';
 import { SegmentedControl, SegmentOption } from '../../core/ui/segmented-control';
 import { StatusBadge } from '../../core/ui/status-badge';
 import { AdminStats } from './admin-stats';
+import { AppointmentActions } from './appointment-actions';
 import { AppointmentStore } from './appointment.store';
 import { ShopClock } from '../../core/shop-clock';
 import { formatTime12Hour, formatLocalDate, isOverdue } from '../../core/time-utils';
-
-/** How many approvals a bulk approve has in flight at once. */
-const BULK_CONCURRENCY = 4;
 
 /** Owner dashboard · appointments tab (list, filter, search, approve/deny/cancel, bulk approve). */
 @Component({
@@ -29,7 +25,7 @@ const BULK_CONCURRENCY = 4;
   templateUrl: './admin-appointments-tab.html',
 })
 export class AdminAppointmentsTab {
-  private readonly appointmentsApi = inject(AppointmentsApi);
+  private readonly actions = inject(AppointmentActions);
   private readonly store = inject(AppointmentStore);
   private readonly flash = inject(FlashMessages);
   private readonly shopClock = inject(ShopClock);
@@ -41,7 +37,7 @@ export class AdminAppointmentsTab {
   readonly totalPages = this.store.totalPages;
   protected readonly isLoading = this.store.isLoading;
   protected readonly loadErrorMessage = this.store.loadErrorMessage;
-  protected readonly pendingIds = signal<ReadonlySet<number>>(new Set());
+  protected readonly pendingIds = this.actions.pendingIds;
 
   /** Ticked bookings. Only ones still pending and on screen count (see `selectedPending`). */
   protected readonly selectedIds = signal<ReadonlySet<number>>(new Set());
@@ -115,24 +111,23 @@ export class AdminAppointmentsTab {
   }
 
   /**
-   * Approves every ticked booking through the per-booking endpoint, a few at a time. Each one
-   * succeeds or fails on its own (another request may have taken the slot or changed the
-   * status), so one failure never stops the rest; the banner tells how many went through.
+   * Approves every ticked booking, a few at a time. The outcome goes to the banner: how many went
+   * through, and the server's reason for the first failure.
    */
   protected approveSelected(): void {
-    const targets = this.selectedPending().filter((appt) => !this.pendingIds().has(appt.id));
-    if (targets.length === 0 || this.isBulkApproving()) return;
+    const ids = this.selectedPending()
+      .map((appt) => appt.id)
+      .filter((id) => !this.pendingIds().has(id));
+    if (ids.length === 0 || this.isBulkApproving()) return;
     this.isBulkApproving.set(true);
-    targets.forEach((appt) => this.beginAction(appt.id));
 
-    void this.approveAll(targets.map((appt) => appt.id)).then((results) => {
+    void this.actions.approveMany(ids).then((results) => {
       this.isBulkApproving.set(false);
       const failed = results.filter((result) => result.error !== null);
       const approved = results.length - failed.length;
       // Whatever was ticked is dealt with: approved ones are no longer pending, and a failed
       // one is better ticked again on purpose than retried blindly.
       this.selectedIds.set(new Set());
-      this.loadAppointments();
       if (failed.length === 0) {
         this.flash.showSuccess(
           `${approved} ${approved === 1 ? 'appointment' : 'appointments'} APPROVED! Client notification emails queued.`,
@@ -149,92 +144,17 @@ export class AdminAppointmentsTab {
     });
   }
 
-  /** Approves each id through the per-booking endpoint, `BULK_CONCURRENCY` at a time. */
-  private async approveAll(ids: readonly number[]): Promise<{ id: number; error: unknown }[]> {
-    const results: { id: number; error: unknown }[] = [];
-    let next = 0;
-    const worker = async (): Promise<void> => {
-      while (next < ids.length) {
-        const id = ids[next++]!;
-        try {
-          await firstValueFrom(this.appointmentsApi.updateAppointmentStatus(id, 'APPROVED'));
-          results.push({ id, error: null });
-        } catch (error) {
-          results.push({ id, error });
-        } finally {
-          this.finishAction(id);
-        }
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(BULK_CONCURRENCY, ids.length) }, worker));
-    return results;
-  }
-
   approveAppointment(id: number): void {
-    if (!this.beginAction(id)) return;
-    this.appointmentsApi
-      .updateAppointmentStatus(id, 'APPROVED')
-      .pipe(finalize(() => this.finishAction(id)))
-      .subscribe({
-        next: () => {
-          this.flash.showSuccess('Appointment APPROVED! Client notification email queued.');
-          this.loadAppointments();
-        },
-        // 409 = invalid transition / conflict: the server's message says why.
-        error: (err) => this.flash.reportActionError(err, 'Failed to approve appointment.'),
-      });
+    this.actions.approve(id);
   }
 
   denyAppointment(id: number): void {
-    if (!this.beginAction(id)) return;
-    this.appointmentsApi
-      .updateAppointmentStatus(id, 'DENIED')
-      .pipe(finalize(() => this.finishAction(id)))
-      .subscribe({
-        next: () => {
-          this.flash.showSuccess('Appointment DECLINED. Client notification email queued.');
-          this.loadAppointments();
-        },
-        error: (err) => this.flash.reportActionError(err, 'Failed to decline appointment.'),
-      });
+    this.actions.deny(id);
   }
 
   cancelAppointment(id: number): void {
     const appointment = this.appointments().find((item) => item.id === id);
-    if (
-      this.pendingIds().has(id) ||
-      (appointment?.status !== 'PENDING' && appointment?.status !== 'APPROVED')
-    ) {
-      return;
-    }
-    if (!confirm('Are you sure you want to cancel this booking?')) return;
-    if (!this.beginAction(id)) return;
-
-    this.appointmentsApi
-      .deleteAppointment(id)
-      .pipe(finalize(() => this.finishAction(id)))
-      .subscribe({
-        next: () => {
-          this.flash.showSuccess('Booking cancelled.');
-          // If this emptied the last page, AppointmentStore steps back by itself.
-          this.loadAppointments();
-        },
-        error: (err) => this.flash.reportActionError(err, 'Failed to cancel booking.'),
-      });
-  }
-
-  private beginAction(id: number): boolean {
-    if (this.pendingIds().has(id)) return false;
-    this.pendingIds.update((ids) => new Set([...ids, id]));
-    return true;
-  }
-
-  private finishAction(id: number): void {
-    this.pendingIds.update((ids) => {
-      const remaining = new Set(ids);
-      remaining.delete(id);
-      return remaining;
-    });
+    if (appointment) this.actions.cancel(appointment);
   }
 
   isOverdue(appt: { bookingDate?: string } | string): boolean {
