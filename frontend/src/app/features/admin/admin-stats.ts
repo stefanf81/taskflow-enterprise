@@ -32,7 +32,7 @@ import { AppointmentStore } from './appointment.store';
             }}</span>
           </div>
           <div
-            class="w-10 h-10 rounded-xl bg-white/5 text-zinc-400 flex items-center justify-center font-bold"
+            class="w-10 h-10 rounded-xl xl:max-2xl:hidden bg-white/5 text-zinc-400 flex items-center justify-center font-bold"
           >
             <app-icon [icon]="icons.clipboardList" class="size-5" />
           </div>
@@ -49,7 +49,7 @@ import { AppointmentStore } from './appointment.store';
             }}</span>
           </div>
           <div
-            class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold"
+            class="w-10 h-10 rounded-xl xl:max-2xl:hidden bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold"
           >
             <app-icon [icon]="icons.hourglass" class="size-5" />
           </div>
@@ -66,7 +66,7 @@ import { AppointmentStore } from './appointment.store';
             }}</span>
           </div>
           <div
-            class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold"
+            class="w-10 h-10 rounded-xl xl:max-2xl:hidden bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold"
           >
             <app-icon [icon]="icons.check" class="size-5" />
           </div>
@@ -83,7 +83,7 @@ import { AppointmentStore } from './appointment.store';
             }}</span>
           </div>
           <div
-            class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center font-bold"
+            class="w-10 h-10 rounded-xl xl:max-2xl:hidden bg-rose-500/10 text-rose-500 flex items-center justify-center font-bold"
           >
             <app-icon [icon]="icons.triangleExclamationPoint" class="size-5" />
           </div>
@@ -100,7 +100,7 @@ import { AppointmentStore } from './appointment.store';
             }}</span>
           </div>
           <div
-            class="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center font-extrabold"
+            class="w-10 h-10 rounded-xl xl:max-2xl:hidden bg-accent/10 text-accent flex items-center justify-center font-extrabold"
           >
             <app-icon [icon]="icons.dollarSign" class="size-5" />
           </div>
@@ -108,7 +108,7 @@ import { AppointmentStore } from './appointment.store';
       </section>
 
       <!-- APPROVAL PROGRESS RATE BAR -->
-      <div class="card p-5 mb-10">
+      <div class="card p-5 mb-6">
         <div
           class="flex justify-between items-center text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2"
         >

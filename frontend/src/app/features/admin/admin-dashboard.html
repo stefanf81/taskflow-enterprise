@@ -30,7 +30,7 @@
   <!-- Every section has its own URL (/admin/appointments, /admin/calendar, …), so a reload and the
        Back button keep the owner where they were. A row of links on a phone, a sidebar from lg. -->
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-    <nav aria-label="Owner sections" class="lg:col-span-3 xl:col-span-2 lg:sticky lg:top-6">
+    <nav aria-label="Owner sections" class="lg:col-span-3 lg:sticky lg:top-6">
       <ul class="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
         @for (section of sections; track section.path) {
           <li class="shrink-0 lg:shrink">
@@ -52,7 +52,7 @@
       </ul>
     </nav>
 
-    <main class="lg:col-span-9 xl:col-span-10 min-w-0">
+    <main class="lg:col-span-9 min-w-0">
       <div class="card p-6">
         <router-outlet />
       </div>

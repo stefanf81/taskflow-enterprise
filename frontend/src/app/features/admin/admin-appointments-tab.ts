@@ -1,6 +1,7 @@
-import { Component, inject, signal } from '@angular/core';
-import { finalize } from 'rxjs';
+import { Component, computed, inject, signal } from '@angular/core';
+import { finalize, firstValueFrom } from 'rxjs';
 import { AppointmentsApi } from '../../core/api/appointments-api';
+import { extractApiError } from '../../core/api/extract-api-error';
 import { FlashMessages } from '../../core/ui/flash-messages';
 import { Button } from '../../core/ui/button';
 import { EmptyState } from '../../core/ui/empty-state';
@@ -18,7 +19,10 @@ import { AppointmentStore } from './appointment.store';
 import { ShopClock } from '../../core/shop-clock';
 import { formatTime12Hour, formatLocalDate, isOverdue } from '../../core/time-utils';
 
-/** Owner dashboard · appointments tab (list, filter, search, approve/deny/cancel). */
+/** How many approvals a bulk approve has in flight at once. */
+const BULK_CONCURRENCY = 4;
+
+/** Owner dashboard · appointments tab (list, filter, search, approve/deny/cancel, bulk approve). */
 @Component({
   selector: 'app-admin-appointments-tab',
   imports: [AdminStats, Button, EmptyState, Icon, SegmentedControl, StatusBadge],
@@ -38,6 +42,23 @@ export class AdminAppointmentsTab {
   protected readonly isLoading = this.store.isLoading;
   protected readonly loadErrorMessage = this.store.loadErrorMessage;
   protected readonly pendingIds = signal<ReadonlySet<number>>(new Set());
+
+  /** Ticked bookings. Only ones still pending and on screen count (see `selectedPending`). */
+  protected readonly selectedIds = signal<ReadonlySet<number>>(new Set());
+  protected readonly isBulkApproving = signal(false);
+  protected readonly pendingOnPage = computed(() =>
+    this.appointments().filter((appt) => appt.status === 'PENDING'),
+  );
+  /** The ticked bookings that can still be approved: a refresh may have changed or dropped some. */
+  private readonly selectedPending = computed(() => {
+    const selected = this.selectedIds();
+    return this.pendingOnPage().filter((appt) => selected.has(appt.id));
+  });
+  protected readonly selectedCount = computed(() => this.selectedPending().length);
+  protected readonly someSelected = computed(() => this.selectedCount() > 0);
+  protected readonly allPendingSelected = computed(
+    () => this.pendingOnPage().length > 0 && this.selectedCount() === this.pendingOnPage().length,
+  );
   protected readonly filters: readonly SegmentOption<string>[] = [
     { value: 'all', label: 'All' },
     { value: 'pending', label: 'Pending' },
@@ -77,6 +98,76 @@ export class AdminAppointmentsTab {
 
   loadAppointments(): void {
     this.store.refresh();
+  }
+
+  protected toggleSelected(id: number): void {
+    this.selectedIds.update((ids) => {
+      const next = new Set(ids);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
+  protected toggleAllPending(): void {
+    this.selectedIds.set(
+      this.allPendingSelected() ? new Set() : new Set(this.pendingOnPage().map((appt) => appt.id)),
+    );
+  }
+
+  /**
+   * Approves every ticked booking through the per-booking endpoint, a few at a time. Each one
+   * succeeds or fails on its own (another request may have taken the slot or changed the
+   * status), so one failure never stops the rest; the banner tells how many went through.
+   */
+  protected approveSelected(): void {
+    const targets = this.selectedPending().filter((appt) => !this.pendingIds().has(appt.id));
+    if (targets.length === 0 || this.isBulkApproving()) return;
+    this.isBulkApproving.set(true);
+    targets.forEach((appt) => this.beginAction(appt.id));
+
+    void this.approveAll(targets.map((appt) => appt.id)).then((results) => {
+      this.isBulkApproving.set(false);
+      const failed = results.filter((result) => result.error !== null);
+      const approved = results.length - failed.length;
+      // Whatever was ticked is dealt with: approved ones are no longer pending, and a failed
+      // one is better ticked again on purpose than retried blindly.
+      this.selectedIds.set(new Set());
+      this.loadAppointments();
+      if (failed.length === 0) {
+        this.flash.showSuccess(
+          `${approved} ${approved === 1 ? 'appointment' : 'appointments'} APPROVED! Client notification emails queued.`,
+        );
+      } else if ((failed[0]!.error as { status?: number } | null)?.status !== 401) {
+        // The server's reason for the first failure (e.g. "slot already taken") follows the count.
+        const reason = extractApiError(failed[0]!.error, 'Please try again.');
+        this.flash.errorMessage.set(
+          approved === 0
+            ? `None of the ${results.length} selected appointments could be approved. ${reason}`
+            : `Approved ${approved} of ${results.length}; ${failed.length} could not be approved. ${reason}`,
+        );
+      }
+    });
+  }
+
+  /** Approves each id through the per-booking endpoint, `BULK_CONCURRENCY` at a time. */
+  private async approveAll(ids: readonly number[]): Promise<{ id: number; error: unknown }[]> {
+    const results: { id: number; error: unknown }[] = [];
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      while (next < ids.length) {
+        const id = ids[next++]!;
+        try {
+          await firstValueFrom(this.appointmentsApi.updateAppointmentStatus(id, 'APPROVED'));
+          results.push({ id, error: null });
+        } catch (error) {
+          results.push({ id, error });
+        } finally {
+          this.finishAction(id);
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(BULK_CONCURRENCY, ids.length) }, worker));
+    return results;
   }
 
   approveAppointment(id: number): void {

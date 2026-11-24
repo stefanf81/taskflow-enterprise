@@ -235,8 +235,8 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     const searchInput = page.locator('input[placeholder="Search customers..."]');
     await searchInput.fill(guestUniqueName);
 
-    // Locate the booking card matching our guest name - using .card.p-5 to uniquely target child items
-    const bookingCard = page.locator('.card.p-5', { hasText: guestUniqueName });
+    // Locate the booking row matching our guest name
+    const bookingCard = page.locator('.appt-row', { hasText: guestUniqueName });
     await expect(bookingCard).toBeVisible();
     await expect(bookingCard).toContainText('Pending');
 
