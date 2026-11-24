@@ -529,7 +529,8 @@ jobs:
         with:
           cache-read-only: ${{ github.event_name != 'push' }}
 
-      - name: Testcontainers and SpotBugs
+      # spotlessCheck is listed explicitly because CI never runs `check`.
+      - name: Testcontainers, SpotBugs and Spotless
         env:
           # Same policy as `backend`: full execution on the nightly schedule
           # and on test dispatches, build cache otherwise.
@@ -540,6 +541,7 @@ jobs:
             "$GRADLE_CACHE_FLAG" \
             testcontainersTest \
             spotbugsMain \
+            spotlessCheck \
             --stacktrace
 
       - name: Upload Test Reports

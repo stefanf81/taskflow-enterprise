@@ -4,10 +4,9 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.encoder.Encoder;
 import ch.qos.logback.core.encoder.EncoderBase;
-import org.springframework.boot.logging.logback.StructuredLogEncoder;
-
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import org.springframework.boot.logging.logback.StructuredLogEncoder;
 
 /**
  * The console encoder of {@code logback-spring.xml}: Spring Boot's structured (JSON) encoder when

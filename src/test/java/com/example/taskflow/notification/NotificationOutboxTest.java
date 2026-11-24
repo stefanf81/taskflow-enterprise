@@ -1,10 +1,9 @@
 package com.example.taskflow.notification;
 
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.time.LocalDateTime;
-
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
 
 class NotificationOutboxTest {
 
@@ -21,13 +20,7 @@ class NotificationOutboxTest {
 
         // Test all-args constructor
         LocalDateTime now = LocalDateTime.now();
-        NotificationOutbox outbox2 = new NotificationOutbox(
-                "john.doe@example.com",
-                "EMAIL",
-                "Hello John",
-                now,
-                "SENT"
-        );
+        NotificationOutbox outbox2 = new NotificationOutbox("john.doe@example.com", "EMAIL", "Hello John", now, "SENT");
 
         outbox2.setId(10L);
         assertEquals(10L, outbox2.getId());

@@ -1,8 +1,5 @@
 package com.example.taskflow.core.cache;
 
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
-
 import java.time.Duration;
 import java.util.Collection;
 import java.util.concurrent.Callable;
@@ -11,6 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Supplier;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 
 /**
  * Adds "single flight" loading to every {@link Cache} of the wrapped {@link CacheManager}.
@@ -67,6 +66,7 @@ class SingleFlightCacheManager implements CacheManager {
 
     /** Default bound on how long a loser waits for another replica's load. */
     public static final Duration DEFAULT_MAX_WAIT = Duration.ofSeconds(5);
+
     private static final long FIRST_POLL_MILLIS = 10;
     private static final long MAX_POLL_MILLIS = 200;
 

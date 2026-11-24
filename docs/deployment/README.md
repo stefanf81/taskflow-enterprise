@@ -8,6 +8,7 @@ This directory contains Kubernetes manifest templates and Kustomize patches inte
 | :--- | :--- |
 | `booking-time-migration-presync-job.yaml` | ArgoCD `PreSync` Kubernetes Job executing data backfill before schema migration. |
 | `booking-time-migration-kustomization.yaml` | Kustomize resource that packages `scripts/prepare-booking-time-migration.sh` into a ConfigMap mounted by the PreSync Job. |
+| `jaeger-v2-audit.md` | Audit of the production Jaeger v2 manifests (2026-11-23) and a tested, trimmed configuration for the GitOps repository. |
 
 ---
 

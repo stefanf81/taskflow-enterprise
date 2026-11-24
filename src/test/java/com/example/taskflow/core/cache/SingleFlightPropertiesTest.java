@@ -1,11 +1,10 @@
 package com.example.taskflow.core.cache;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.mock.env.MockEnvironment;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.time.Duration;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
 
 /** The cache-load lease keeps its {@code app.cache.single-flight.*} keys and defaults. */
 class SingleFlightPropertiesTest {

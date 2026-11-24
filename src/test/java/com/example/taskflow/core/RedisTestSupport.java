@@ -1,9 +1,8 @@
 package com.example.taskflow.core;
 
+import java.net.URI;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
-
-import java.net.URI;
 
 /**
  * Connection helpers for the real-Redis suites. Each "replica" in those tests gets its own
@@ -19,8 +18,7 @@ public final class RedisTestSupport {
     /** The image docker-compose runs. */
     public static final String IMAGE = "redis:8.10.3-alpine";
 
-    private RedisTestSupport() {
-    }
+    private RedisTestSupport() {}
 
     /** A started connection factory for {@code redis://[:password@]host:port[/db]}. */
     public static LettuceConnectionFactory connect(String redisUrl) {

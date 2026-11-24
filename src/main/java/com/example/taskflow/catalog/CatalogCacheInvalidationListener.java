@@ -27,7 +27,8 @@ class CatalogCacheInvalidationListener {
                 cache.invalidate();
             }
         } catch (RuntimeException e) {
-            log.warn("Catalog cache invalidation failed; entries expire with their TTL: {}",
+            log.warn(
+                    "Catalog cache invalidation failed; entries expire with their TTL: {}",
                     LogSanitizer.safeMessage(e));
         }
     }
@@ -40,7 +41,8 @@ class CatalogCacheInvalidationListener {
                 cache.invalidate();
             }
         } catch (RuntimeException e) {
-            log.warn("Retail product cache invalidation failed; entries expire with their TTL: {}",
+            log.warn(
+                    "Retail product cache invalidation failed; entries expire with their TTL: {}",
                     LogSanitizer.safeMessage(e));
         }
     }
@@ -53,7 +55,8 @@ class CatalogCacheInvalidationListener {
                 cache.invalidate();
             }
         } catch (RuntimeException e) {
-            log.warn("Announcement cache invalidation failed; the entry expires with its TTL: {}",
+            log.warn(
+                    "Announcement cache invalidation failed; the entry expires with its TTL: {}",
                     LogSanitizer.safeMessage(e));
         }
     }

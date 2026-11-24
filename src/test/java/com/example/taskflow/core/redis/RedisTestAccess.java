@@ -8,8 +8,7 @@ import io.lettuce.core.ClientOptions;
  */
 public final class RedisTestAccess {
 
-    private RedisTestAccess() {
-    }
+    private RedisTestAccess() {}
 
     public static void enableKeepAlive(ClientOptions.Builder builder) {
         RedisConnectionConfig.enableKeepAlive(builder);

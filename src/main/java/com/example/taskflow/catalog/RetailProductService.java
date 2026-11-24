@@ -61,7 +61,8 @@ class RetailProductService {
     }
 
     private RetailProduct find(Long id) {
-        return repository.findById(id)
+        return repository
+                .findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + id));
     }
 
@@ -74,7 +75,8 @@ class RetailProductService {
     }
 
     private static ResponseStatusException nameConflict(String name) {
-        return new ResponseStatusException(HttpStatus.CONFLICT,
+        return new ResponseStatusException(
+                HttpStatus.CONFLICT,
                 "A product named '" + name.replace("\n", "").replace("\r", "") + "' already exists.");
     }
 }

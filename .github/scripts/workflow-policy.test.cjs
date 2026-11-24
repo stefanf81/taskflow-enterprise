@@ -69,12 +69,59 @@ test('job conditions use !cancelled(), never always()', () => {
   assert.deepEqual(offenders, []);
 });
 
+test('scanner and load-test images are pinned to a tag and index digest', () => {
+  // testssl.sh and Nikto only publish rolling tags, and a Docker Hub tag can be pushed again:
+  // without the digest, what probes the production perimeter changes without a pull request.
+  const pins = [
+    ['nightly-external-server-scan.yml', 'testssl-image', 'TESTSSL_VERSION', 'ghcr.io/testssl/testssl.sh'],
+    ['nightly-external-server-scan.yml', 'nikto-image', 'NIKTO_VERSION', 'ghcr.io/sullo/nikto'],
+    ['k6.yml', 'k6-image', 'K6_VERSION', 'grafana/k6'],
+  ];
+  for (const [file, marker, variable, image] of pins) {
+    const workflow = fs.readFileSync(path.join(workflowDir, file), 'utf8');
+    assert.match(workflow, new RegExp(
+      `# ${marker}: tracked by the dedicated regex manager in \\.github/renovate\\.json\\n`
+      + `\\s+${variable}: "[^@"\\s]+@sha256:[a-f0-9]{64}"`,
+    ), `${file}: pin ${variable} as "<tag>@sha256:<digest>" below the # ${marker}: marker`);
+    // Every use goes through the variable: no second, unpinned reference to the image.
+    const refs = [...workflow.matchAll(new RegExp(`${image.replace(/[.]/g, '\\.')}:(\\S+)`, 'g'))].map((m) => m[1]);
+    assert.notDeepEqual(refs, [], `${file} does not use ${image}`);
+    for (const ref of refs) {
+      assert.ok(ref.startsWith(`\${${variable}}`), `${file}: ${image}:${ref} must use \${${variable}}`);
+    }
+  }
+});
+
 test('the BuildKit image is pinned to a version and index digest', () => {
   const action = fs.readFileSync(path.join(root, 'actions', 'prepull-buildkit', 'action.yml'), 'utf8');
   const marker = '# buildkit-image: tracked by the dedicated regex manager in .github/renovate.json';
   assert.match(action, new RegExp(
     `${marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n\\s+default: "moby/buildkit:v\\d+\\.\\d+\\.\\d+@sha256:[a-f0-9]{64}"`,
   ));
+});
+
+test('the Trivy binary is pinned to a release and the checksum of its tarball', () => {
+  // The release's own checksums file proves nothing about a replaced asset or a malicious
+  // release, so install-trivy compares the tarball with a SHA-256 kept here in Git.
+  const action = fs.readFileSync(path.join(root, 'actions', 'install-trivy', 'action.yml'), 'utf8');
+  const pin = action.match(new RegExp(
+    '# trivy-release: tracked by the dedicated regex manager in \\.github/renovate\\.json\\n'
+    + '\\s+TRIVY_PINNED_VERSION: "(v\\d+\\.\\d+\\.\\d+)"\\n'
+    + '\\s+TRIVY_LINUX_64BIT_SHA256: "[a-f0-9]{64}"\\n',
+  ));
+  assert.ok(pin, 'install-trivy must pin TRIVY_PINNED_VERSION and TRIVY_LINUX_64BIT_SHA256 below the marker');
+  assert.match(action, /echo "\$\{sha256\}  \$\{work\}\/\$\{archive\}" \| sha256sum --check --strict/);
+  assert.doesNotMatch(action, /checksums\.txt"/, 'do not fall back to the release checksums file');
+
+  // The action refuses any other version at run time; fail here first, in the pull request.
+  const versions = [];
+  for (const file of workflows) {
+    for (const match of fs.readFileSync(file, 'utf8').matchAll(/^\s*TRIVY_VERSION:\s*"?(v[\d.]+)"?\s*$/gm)) {
+      versions.push(`${rel(file)}: ${match[1]}`);
+      assert.equal(match[1], pin[1], `${rel(file)} must use the Trivy version install-trivy pins`);
+    }
+  }
+  assert.ok(versions.length >= 3, `expected TRIVY_VERSION in ci.yml, security.yml and pushdockerimage.yml: ${versions}`);
 });
 
 // The lines of one job: from its key to the next job key (or the end of the file).

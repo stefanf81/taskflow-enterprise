@@ -1,6 +1,12 @@
 package com.example.taskflow.appointment;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
 import com.example.taskflow.core.ResourceNotFoundException;
+import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -9,13 +15,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
-import java.time.LocalDate;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
-
 @ExtendWith(MockitoExtension.class)
 class BarberControllerTest {
 
@@ -23,8 +22,8 @@ class BarberControllerTest {
     private BarberService barberService;
 
     /** Monday 2026-07-20 08:00 in the shop. */
-    private static final java.time.Clock CLOCK = java.time.Clock.fixed(
-            java.time.Instant.parse("2026-07-20T08:00:00Z"), java.time.ZoneOffset.UTC);
+    private static final java.time.Clock CLOCK =
+            java.time.Clock.fixed(java.time.Instant.parse("2026-07-20T08:00:00Z"), java.time.ZoneOffset.UTC);
 
     private BarberController barberController;
 
@@ -70,7 +69,8 @@ class BarberControllerTest {
 
     @Test
     void getTimeOff_shouldReturnList() {
-        BarberTimeOffResponse timeOff = new BarberTimeOffResponse(1L, LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
+        BarberTimeOffResponse timeOff =
+                new BarberTimeOffResponse(1L, LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
         when(barberService.getTimeOff(1L)).thenReturn(List.of(timeOff));
 
         ResponseEntity<List<BarberTimeOffResponse>> result = barberController.getTimeOff(1L);
@@ -81,8 +81,10 @@ class BarberControllerTest {
 
     @Test
     void addTimeOff_shouldCreateAndReturn() {
-        BarberTimeOffRequest request = new BarberTimeOffRequest(LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
-        BarberTimeOffResponse response = new BarberTimeOffResponse(1L, LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
+        BarberTimeOffRequest request =
+                new BarberTimeOffRequest(LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
+        BarberTimeOffResponse response =
+                new BarberTimeOffResponse(1L, LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
         when(barberService.addTimeOff(eq(1L), any(BarberTimeOffRequest.class))).thenReturn(response);
 
         ResponseEntity<BarberTimeOffResponse> result = barberController.addTimeOff(1L, request);
@@ -93,10 +95,11 @@ class BarberControllerTest {
 
     @Test
     void addTimeOff_rejectsAStartDateBeforeTheShopsToday() {
-        BarberTimeOffRequest request = new BarberTimeOffRequest(LocalDate.of(2026, 7, 19), LocalDate.of(2026, 7, 23), "Vacation");
+        BarberTimeOffRequest request =
+                new BarberTimeOffRequest(LocalDate.of(2026, 7, 19), LocalDate.of(2026, 7, 23), "Vacation");
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> barberController.addTimeOff(1L, request));
+        IllegalArgumentException ex =
+                assertThrows(IllegalArgumentException.class, () -> barberController.addTimeOff(1L, request));
 
         assertEquals("Start date must be today or in the future.", ex.getMessage());
         verifyNoInteractions(barberService);
@@ -105,11 +108,15 @@ class BarberControllerTest {
     /** 22:00 on the 20th in New York is already the 21st in UTC: the shop's today is still the 20th. */
     @Test
     void addTimeOff_acceptsTheShopsTodayEvenWhenItIsAlreadyTomorrowInUtc() {
-        BarberController controller = new BarberController(barberService, java.time.Clock.fixed(
-                java.time.Instant.parse("2026-07-21T02:00:00Z"), java.time.ZoneId.of("America/New_York")));
-        BarberTimeOffRequest request = new BarberTimeOffRequest(LocalDate.of(2026, 7, 20), LocalDate.of(2026, 7, 20), "Sick");
+        BarberController controller = new BarberController(
+                barberService,
+                java.time.Clock.fixed(
+                        java.time.Instant.parse("2026-07-21T02:00:00Z"), java.time.ZoneId.of("America/New_York")));
+        BarberTimeOffRequest request =
+                new BarberTimeOffRequest(LocalDate.of(2026, 7, 20), LocalDate.of(2026, 7, 20), "Sick");
         when(barberService.addTimeOff(eq(1L), any(BarberTimeOffRequest.class)))
-                .thenReturn(new BarberTimeOffResponse(1L, LocalDate.of(2026, 7, 20), LocalDate.of(2026, 7, 20), "Sick"));
+                .thenReturn(
+                        new BarberTimeOffResponse(1L, LocalDate.of(2026, 7, 20), LocalDate.of(2026, 7, 20), "Sick"));
 
         assertEquals(HttpStatus.CREATED, controller.addTimeOff(1L, request).getStatusCode());
     }
@@ -119,7 +126,8 @@ class BarberControllerTest {
         when(barberService.addTimeOff(eq(99L), any(BarberTimeOffRequest.class)))
                 .thenThrow(new ResourceNotFoundException("Barber not found with id: 99"));
 
-        BarberTimeOffRequest request = new BarberTimeOffRequest(LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
+        BarberTimeOffRequest request =
+                new BarberTimeOffRequest(LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 23), "Vacation");
 
         assertThrows(ResourceNotFoundException.class, () -> barberController.addTimeOff(99L, request));
     }

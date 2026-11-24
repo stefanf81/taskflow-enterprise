@@ -13,6 +13,12 @@
       "defaultValue": false
     },
     {
+      "name": "app.metrics.require-scrape-token",
+      "type": "java.lang.Boolean",
+      "description": "Refuse to start when app.metrics.scrape-token is missing, a placeholder or too short, instead of serving /actuator/prometheus unauthenticated (auth.MetricsScrapeTokenGuard, created only when this is true).",
+      "defaultValue": false
+    },
+    {
       "name": "app.logging.async.max-flush-time-ms",
       "type": "java.lang.Long",
       "description": "Longest time the async log appender may take to flush on shutdown (read by logback-spring.xml).",

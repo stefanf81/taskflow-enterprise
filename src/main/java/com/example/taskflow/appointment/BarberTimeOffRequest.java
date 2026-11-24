@@ -3,7 +3,6 @@ package com.example.taskflow.appointment;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-
 import java.time.LocalDate;
 
 /**
@@ -15,15 +14,11 @@ import java.time.LocalDate;
 public record BarberTimeOffRequest(
         // "Today or later" is checked by BarberController against the shop clock: a
         // @FutureOrPresent here would use the JVM time zone and refuse the shop's today.
-        @NotNull(message = "Start date is required")
-        LocalDate startDate,
+        @NotNull(message = "Start date is required") LocalDate startDate,
 
-        @NotNull(message = "End date is required")
-        LocalDate endDate,
+        @NotNull(message = "End date is required") LocalDate endDate,
 
-        @Size(max = 255, message = "Reason must be at most 255 characters")
-        String reason
-) {
+        @Size(max = 255, message = "Reason must be at most 255 characters") String reason) {
     public BarberTimeOff toEntity(Barber barber) {
         BarberTimeOff timeOff = new BarberTimeOff();
         timeOff.setBarber(barber);

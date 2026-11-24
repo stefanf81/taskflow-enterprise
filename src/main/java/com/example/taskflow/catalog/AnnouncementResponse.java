@@ -9,10 +9,9 @@ import org.jspecify.annotations.Nullable;
  * @param message the strip's text; absent when {@code active} is false
  */
 public record AnnouncementResponse(
-    boolean active,
-    // Omitted from the JSON when null (spring.jackson.default-property-inclusion=non_null).
-    @Nullable String message
-) {
+        boolean active,
+        // Omitted from the JSON when null (spring.jackson.default-property-inclusion=non_null).
+        @Nullable String message) {
     static AnnouncementResponse of(@Nullable String message) {
         return new AnnouncementResponse(message != null, message);
     }

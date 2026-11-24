@@ -1,12 +1,10 @@
 package com.example.taskflow.appointment.internal;
 
-import com.example.taskflow.appointment.AppointmentStatus;
-import com.example.taskflow.appointment.Barber;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.core.EntityTimestampListener;
-import org.junit.jupiter.api.Test;
-
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -15,9 +13,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import org.junit.jupiter.api.Test;
 
 class AppointmentTest {
 
@@ -26,7 +22,8 @@ class AppointmentTest {
 
     @Test
     void testAppointmentPrePersistAndPreUpdate() {
-        Appointment appointment = new Appointment("John", "john@test.com", "123", "Barber", LocalDate.now(), "10:00", "Haircut");
+        Appointment appointment =
+                new Appointment("John", "john@test.com", "123", "Barber", LocalDate.now(), "10:00", "Haircut");
 
         // Trigger PrePersist: JPA calls the entity listener first, then the entity's own callback
         new EntityTimestampListener(Clock.fixed(CREATED, ZoneOffset.UTC)).prePersist(appointment);
@@ -43,45 +40,47 @@ class AppointmentTest {
         new EntityTimestampListener(Clock.fixed(UPDATED, ZoneOffset.UTC)).preUpdate(appointment);
         assertNotNull(appointment.getUpdatedAt());
         assertEquals(initialUpdate.plusSeconds(90), appointment.getUpdatedAt());
-        assertEquals(LocalDateTime.ofInstant(CREATED, ZoneId.systemDefault()), appointment.getCreatedAt(),
+        assertEquals(
+                LocalDateTime.ofInstant(CREATED, ZoneId.systemDefault()),
+                appointment.getCreatedAt(),
                 "an update leaves created_at alone");
 
         // Test getters and setters
         appointment.setId(1L);
         assertEquals(1L, appointment.getId());
-        
+
         appointment.setPublicId("pub-id");
         assertEquals("pub-id", appointment.getPublicId());
-        
+
         appointment.setCustomerName("Jane");
         assertEquals("Jane", appointment.getCustomerName());
-        
+
         appointment.setCustomerEmail("jane@test.com");
         assertEquals("jane@test.com", appointment.getCustomerEmail());
-        
+
         appointment.setCustomerPhone("456");
         assertEquals("456", appointment.getCustomerPhone());
-        
+
         appointment.setBarberName("Sara");
         assertEquals("Sara", appointment.getBarberName());
-        
+
         LocalDate newDate = LocalDate.now().plusDays(1);
         appointment.setBookingDate(newDate);
         assertEquals(newDate, appointment.getBookingDate());
-        
+
         appointment.setBookingTime("11:00");
         assertEquals("11:00", appointment.getBookingTime());
-        
+
         appointment.setServiceType("Shave");
         assertEquals("Shave", appointment.getServiceType());
-        
+
         appointment.setStatus("APPROVED");
         assertEquals("APPROVED", appointment.getStatus());
-        
+
         LocalDateTime now = LocalDateTime.now();
         appointment.setCreatedAt(now);
         assertEquals(now, appointment.getCreatedAt());
-        
+
         appointment.setUpdatedAt(now);
         assertEquals(now, appointment.getUpdatedAt());
     }
@@ -99,8 +98,8 @@ class AppointmentTest {
 
     @Test
     void endTimeIsDerivedFromTheStartAndTheServiceDuration() {
-        Appointment appointment = new Appointment("John", "john@test.com", "123", "Barber",
-                LocalDate.now(), "10:00", "Haircut");
+        Appointment appointment =
+                new Appointment("John", "john@test.com", "123", "Barber", LocalDate.now(), "10:00", "Haircut");
         assertEquals(LocalTime.of(11, 0), appointment.getBookingEndTime(), "no service: one 60-minute grid step");
 
         appointment.setService(new ServiceItem("Long", BigDecimal.TEN, 90, "hair", ""));

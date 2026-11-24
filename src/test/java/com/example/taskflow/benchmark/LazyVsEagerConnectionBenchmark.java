@@ -1,6 +1,14 @@
 package com.example.taskflow.benchmark;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.example.taskflow.auth.TestSecurityConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import java.sql.Connection;
+import java.sql.Statement;
+import java.util.*;
+import java.util.concurrent.*;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,16 +18,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.*;
 import org.springframework.jdbc.datasource.LazyConnectionDataSourceProxy;
 import org.springframework.web.client.RestClientException;
-
-import com.example.taskflow.auth.TestSecurityConfig;
-
-import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.Statement;
-import java.util.*;
-import java.util.concurrent.*;
-
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A/B BENCHMARK: EAGER vs LAZY JDBC CONNECTION FETCHING
@@ -42,13 +40,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @Tag("benchmark")
 @SpringBootTest(
-    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = {
-        "spring.threads.virtual.enabled=true",
-        "app.rate-limit.enabled=false",
-        "app.stats.cache.ttl=0"
-    }
-)
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {"spring.threads.virtual.enabled=true", "app.rate-limit.enabled=false", "app.stats.cache.ttl=0"})
 @Import(TestSecurityConfig.class)
 class LazyVsEagerConnectionBenchmark {
 
@@ -61,8 +54,11 @@ class LazyVsEagerConnectionBenchmark {
     static final int MEASUREMENT_REQUESTS = 2_000;
     static final int BENCHMARK_TIMEOUT_SECONDS = 120;
 
-    @Autowired private DataSource dataSource;
-    @LocalServerPort private int port;
+    @Autowired
+    private DataSource dataSource;
+
+    @LocalServerPort
+    private int port;
 
     private BenchmarkHttp http;
     private String baseUrl;
@@ -137,7 +133,7 @@ class LazyVsEagerConnectionBenchmark {
         for (int i = 0; i < 2; i++) {
             holdout.submit(() -> {
                 try (Connection conn = hikari.getConnection();
-                     Statement stmt = conn.createStatement()) {
+                        Statement stmt = conn.createStatement()) {
                     stmt.execute("SELECT 1");
                     locked.countDown();
                     release.await(10, TimeUnit.SECONDS);
@@ -211,7 +207,8 @@ class LazyVsEagerConnectionBenchmark {
 
         double lazySec = lazyElapsedNs / 1_000_000_000.0;
         double lazyThroughput = MEASUREMENT_REQUESTS / lazySec;
-        long[] lazySorted = lazyLatencies.stream().mapToLong(Long::longValue).sorted().toArray();
+        long[] lazySorted =
+                lazyLatencies.stream().mapToLong(Long::longValue).sorted().toArray();
         double lazyAvg = Arrays.stream(lazySorted).average().orElse(0);
 
         System.out.println("\n  --- LAZY FETCHING RESULTS ---");
@@ -262,8 +259,8 @@ class LazyVsEagerConnectionBenchmark {
         System.out.println("  Pool size: 15 | Requests per level: " + requestsPerLevel);
         System.out.println("=".repeat(95));
         System.out.println();
-        System.out.printf("  %-12s %12s %12s %10s %10s %10s%n",
-                "Concurrency", "Throughput", "Avg Lat", "p50", "p95", "p99");
+        System.out.printf(
+                "  %-12s %12s %12s %10s %10s %10s%n", "Concurrency", "Throughput", "Avg Lat", "p50", "p95", "p99");
         System.out.println("  " + "-".repeat(70));
 
         for (int concurrency : concurrencies) {
@@ -277,12 +274,18 @@ class LazyVsEagerConnectionBenchmark {
 
             double sec = elapsedNs / 1_000_000_000.0;
             double throughput = requestsPerLevel / sec;
-            long[] sorted = latencies.stream().mapToLong(Long::longValue).sorted().toArray();
+            long[] sorted =
+                    latencies.stream().mapToLong(Long::longValue).sorted().toArray();
             double avg = Arrays.stream(sorted).average().orElse(0);
 
-            System.out.printf("  %-12d %12.1f %12.3f %10d %10d %10d%n",
-                    concurrency, throughput, avg,
-                    percentile(sorted, 50), percentile(sorted, 95), percentile(sorted, 99));
+            System.out.printf(
+                    "  %-12d %12.1f %12.3f %10d %10d %10d%n",
+                    concurrency,
+                    throughput,
+                    avg,
+                    percentile(sorted, 50),
+                    percentile(sorted, 95),
+                    percentile(sorted, 99));
         }
 
         System.out.println("  " + "-".repeat(70));
@@ -315,13 +318,14 @@ class LazyVsEagerConnectionBenchmark {
                     try {
                         double r = rng.nextDouble();
                         if (r < 0.50) {
-                            hitLightweightEndpoint();  // cache-hit / no DB
+                            hitLightweightEndpoint(); // cache-hit / no DB
                         } else if (r < 0.80) {
-                            hitDBReadEndpoint();       // DB read
+                            hitDBReadEndpoint(); // DB read
                         } else {
-                            hitDBWriteEndpoint(rng);   // DB write
+                            hitDBWriteEndpoint(rng); // DB write
                         }
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                    }
                     long t1 = System.nanoTime();
                     finish.countDown();
                     return (t1 - t0) / 1_000_000L;
@@ -334,7 +338,10 @@ class LazyVsEagerConnectionBenchmark {
             List<Long> latencies = new ArrayList<>(count);
             for (Future<Long> f : futures) {
                 if (f.isDone()) {
-                    try { latencies.add(f.get()); } catch (Exception ignored) {}
+                    try {
+                        latencies.add(f.get());
+                    } catch (Exception ignored) {
+                    }
                 }
             }
             return latencies;
@@ -356,9 +363,8 @@ class LazyVsEagerConnectionBenchmark {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(getToken());
         HttpEntity<Void> entity = new HttpEntity<>(headers);
-        ResponseEntity<String> r = http.exchange(
-                baseUrl + "/api/v1/appointments?page=0&size=10",
-                HttpMethod.GET, entity, String.class);
+        ResponseEntity<String> r =
+                http.exchange(baseUrl + "/api/v1/appointments?page=0&size=10", HttpMethod.GET, entity, String.class);
         if (!r.getStatusCode().is2xxSuccessful()) {
             System.err.println("  GET appointments failed: " + r.getStatusCode());
         }
@@ -369,16 +375,19 @@ class LazyVsEagerConnectionBenchmark {
         String cid = UUID.randomUUID().toString().substring(0, 8);
         String body = String.format(
                 "{\"customerId\":\"%s\",\"customerEmail\":\"%s@t.com\",\"customerPhone\":\"+1-555-0000\","
-                + "\"barberName\":\"Barber %d\",\"date\":\"2026-07-%02d\",\"time\":\"%s\",\"serviceName\":\"Service %d\"}",
-                cid, cid, rng.nextInt(10), rng.nextInt(28) + 1,
-                String.format("%02d:00", 9 + rng.nextInt(8)), rng.nextInt(10));
+                        + "\"barberName\":\"Barber %d\",\"date\":\"2026-07-%02d\",\"time\":\"%s\",\"serviceName\":\"Service %d\"}",
+                cid,
+                cid,
+                rng.nextInt(10),
+                rng.nextInt(28) + 1,
+                String.format("%02d:00", 9 + rng.nextInt(8)),
+                rng.nextInt(10));
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         try {
             ResponseEntity<String> r = http.exchange(
-                    baseUrl + "/api/v1/appointments",
-                    HttpMethod.POST, new HttpEntity<>(body, headers), String.class);
+                    baseUrl + "/api/v1/appointments", HttpMethod.POST, new HttpEntity<>(body, headers), String.class);
             // 400s expected for slot conflicts — that's fine
         } catch (RestClientException ignored) {
             // Booking conflicts and transient HTTP failures are expected benchmark outcomes.

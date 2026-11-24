@@ -2,6 +2,14 @@ package com.example.taskflow.auth;
 
 import com.example.taskflow.auth.internal.UserRepository;
 import com.example.taskflow.core.LogSanitizer;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Arrays;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,15 +20,6 @@ import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.TransactionException;
-
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Arrays;
-import java.util.Locale;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Ties every access token to the current state of its account
@@ -48,17 +47,16 @@ class AccountTokenCheck {
 
     /** The access-token claim carrying the account's token version. */
     static final String VERSION_CLAIM = "tv";
+
     static final Duration CACHE_TTL = Duration.ofSeconds(10);
     static final int MAX_CACHED = 10_000;
     private static final Duration WARN_INTERVAL = Duration.ofSeconds(30);
 
     /** What a token is checked against. */
-    record AccountState(int tokenVersion, String role) {
-    }
+    record AccountState(int tokenVersion, String role) {}
 
     /** {@code state} empty: no such account. */
-    private record Cached(Optional<AccountState> state, Instant loadedAt) {
-    }
+    private record Cached(Optional<AccountState> state, Instant loadedAt) {}
 
     private final UserRepository users;
     private final ApplicationEventPublisher events;
@@ -136,8 +134,8 @@ class AccountTokenCheck {
         if (cached != null && now.isBefore(cached.loadedAt().plus(CACHE_TTL))) {
             return cached.state();
         }
-        Optional<AccountState> state = users.findTokenState(username)
-                .map(row -> new AccountState(row.getTokenVersion(), row.getRole()));
+        Optional<AccountState> state =
+                users.findTokenState(username).map(row -> new AccountState(row.getTokenVersion(), row.getRole()));
         if (cache.size() >= MAX_CACHED) {
             cache.values().removeIf(entry -> !now.isBefore(entry.loadedAt().plus(CACHE_TTL)));
             if (cache.size() >= MAX_CACHED) {
@@ -170,8 +168,7 @@ class AccountTokenCheck {
         Instant now = Instant.now(clock);
         Instant last = lastWarning.get();
         if (now.isAfter(last.plus(WARN_INTERVAL)) && lastWarning.compareAndSet(last, now)) {
-            logger.warn("Account token check skipped, the account could not be read: {}",
-                    LogSanitizer.safeMessage(e));
+            logger.warn("Account token check skipped, the account could not be read: {}", LogSanitizer.safeMessage(e));
         }
     }
 }

@@ -43,9 +43,9 @@ public final class FixedWindowCounter {
     private final ReentrantLock makingRoom = new ReentrantLock();
 
     /** Least active first: the lowest count, then the oldest window. */
-    private static final Comparator<Map.Entry<String, Window>> LEAST_ACTIVE_FIRST =
-            Comparator.comparingLong((Map.Entry<String, Window> e) -> e.getValue().count())
-                    .thenComparingLong(e -> e.getValue().startMillis());
+    private static final Comparator<Map.Entry<String, Window>> LEAST_ACTIVE_FIRST = Comparator.comparingLong(
+                    (Map.Entry<String, Window> e) -> e.getValue().count())
+            .thenComparingLong(e -> e.getValue().startMillis());
 
     public FixedWindowCounter(long windowMillis, int maxKeys) {
         this(windowMillis, maxKeys, System::currentTimeMillis);
@@ -67,10 +67,12 @@ public final class FixedWindowCounter {
         if (windows.size() >= maxKeys && !windows.containsKey(key)) {
             makeRoom(now);
         }
-        return windows.compute(key, (k, w) ->
-                (w == null || now - w.startMillis() >= windowMillis)
-                        ? new Window(now, 1)
-                        : new Window(w.startMillis(), w.count() + 1)).count();
+        return windows.compute(
+                        key,
+                        (k, w) -> (w == null || now - w.startMillis() >= windowMillis)
+                                ? new Window(now, 1)
+                                : new Window(w.startMillis(), w.count() + 1))
+                .count();
     }
 
     /** Returns the count in the current window without recording an event. */

@@ -9,11 +9,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
  */
 public final class RateLimiterTestAccess {
 
-    private RateLimiterTestAccess() {
-    }
+    private RateLimiterTestAccess() {}
 
-    public static OncePerRequestFilter rateLimitFilter(int maxRequestsPerMinute, int authMaxRequestsPerMinute,
-                                                       StringRedisTemplate redis) {
+    public static OncePerRequestFilter rateLimitFilter(
+            int maxRequestsPerMinute, int authMaxRequestsPerMinute, StringRedisTemplate redis) {
         return new RateLimiterConfig(maxRequestsPerMinute, authMaxRequestsPerMinute).createRateLimitFilter(redis);
     }
 }

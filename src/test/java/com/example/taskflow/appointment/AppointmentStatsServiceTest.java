@@ -1,8 +1,19 @@
 package com.example.taskflow.appointment;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.catalog.CatalogService;
 import com.example.taskflow.catalog.ServiceItemResponse;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.concurrent.Callable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,18 +22,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.RedisConnectionFailureException;
-
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.util.List;
-import java.util.concurrent.Callable;
-
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
 
 /**
  * Verifies the eviction primitives. {@code evictIfPresent} (blocking DEL) and
@@ -49,8 +48,8 @@ class AppointmentStatsServiceTest {
     private AppointmentRepository appointmentRepository;
 
     /** Late evening UTC = already the next day in Tokyo: "today" must follow the shop clock. */
-    private static final java.time.Clock CLOCK = java.time.Clock.fixed(
-            java.time.Instant.parse("2026-10-11T23:30:00Z"), java.time.ZoneId.of("Asia/Tokyo"));
+    private static final java.time.Clock CLOCK =
+            java.time.Clock.fixed(java.time.Instant.parse("2026-10-11T23:30:00Z"), java.time.ZoneId.of("Asia/Tokyo"));
 
     /** A bookable day: four days after the clock's "today" (2026-10-12 in Tokyo). */
     private static final LocalDate DAY = LocalDate.of(2026, 10, 16);
@@ -59,8 +58,8 @@ class AppointmentStatsServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AppointmentStatsService(cacheManager, CLOCK, catalogService, appointmentRepository,
-                BookingProperties.defaults());
+        service = new AppointmentStatsService(
+                cacheManager, CLOCK, catalogService, appointmentRepository, BookingProperties.defaults());
     }
 
     @Test
@@ -70,16 +69,16 @@ class AppointmentStatsServiceTest {
         service.clearAvailabilityCache("Alex the Barber", DAY, DAY);
 
         verify(busySlotsCache).evictIfPresent("Alex the Barber-2026-10-16");
-        verify(busySlotsCache).evictIfPresent(
-                AppointmentBookingService.NO_PREFERENCE_BARBER + "-2026-10-16");
+        verify(busySlotsCache).evictIfPresent(AppointmentBookingService.NO_PREFERENCE_BARBER + "-2026-10-16");
         verify(busySlotsCache, never()).evict(any());
     }
 
     @Test
     void clearAvailabilityCache_shouldAlsoEvictLengthAwareListsOfLongServices() {
         when(cacheManager.getCache(AppointmentStatsService.BUSY_SLOTS_CACHE)).thenReturn(busySlotsCache);
-        when(catalogService.getAllServices()).thenReturn(List.of(
-                service("Cut", 45), service("Fade", 90), service("Package", 120), service("Fade 2", 90)));
+        when(catalogService.getAllServices())
+                .thenReturn(List.of(
+                        service("Cut", 45), service("Fade", 90), service("Package", 120), service("Fade 2", 90)));
 
         service.clearAvailabilityCache("Alex the Barber", DAY, DAY);
 
@@ -145,18 +144,19 @@ class AppointmentStatsServiceTest {
     void clearAvailabilityCache_invalidatesTheCacheForALongRange() {
         when(cacheManager.getCache(AppointmentStatsService.BUSY_SLOTS_CACHE)).thenReturn(busySlotsCache);
 
-        service.clearAvailabilityCache("Alex the Barber", DAY,
-                DAY.plusDays(AppointmentStatsService.MAX_DATES_EVICTED_BY_KEY));
+        service.clearAvailabilityCache(
+                "Alex the Barber", DAY, DAY.plusDays(AppointmentStatsService.MAX_DATES_EVICTED_BY_KEY));
 
         verify(busySlotsCache).invalidate();
         verify(busySlotsCache, never()).evictIfPresent(any());
         verifyNoInteractions(catalogService);
 
         // exactly the limit is still evicted key by key
-        service.clearAvailabilityCache("Alex the Barber", DAY,
-                DAY.plusDays(AppointmentStatsService.MAX_DATES_EVICTED_BY_KEY - 1));
+        service.clearAvailabilityCache(
+                "Alex the Barber", DAY, DAY.plusDays(AppointmentStatsService.MAX_DATES_EVICTED_BY_KEY - 1));
         verify(busySlotsCache, times(1)).invalidate();
-        verify(busySlotsCache, times(2 * AppointmentStatsService.MAX_DATES_EVICTED_BY_KEY)).evictIfPresent(any());
+        verify(busySlotsCache, times(2 * AppointmentStatsService.MAX_DATES_EVICTED_BY_KEY))
+                .evictIfPresent(any());
     }
 
     private static ServiceItemResponse service(String name, int minutes) {
@@ -187,7 +187,8 @@ class AppointmentStatsServiceTest {
     @Test
     void totalCount_isReadThroughTheStatsCache() {
         when(cacheManager.getCache(AppointmentStatsService.STATS_CACHE)).thenReturn(statsCache);
-        when(statsCache.get(eq(AppointmentStatsService.TOTAL_COUNT_KEY), any(Callable.class))).thenReturn(42L);
+        when(statsCache.get(eq(AppointmentStatsService.TOTAL_COUNT_KEY), any(Callable.class)))
+                .thenReturn(42L);
 
         assertEquals(42L, service.getTotalCountCached());
         verify(appointmentRepository, never()).count();
@@ -199,7 +200,8 @@ class AppointmentStatsServiceTest {
         when(statsCache.get(any(), any(Callable.class)))
                 .thenThrow(new RedisConnectionFailureException("Redis command timed out"));
         AppointmentStats stats = new AppointmentStats(3L, 1L, 2L, 0L, 0L, 0, 50.0);
-        when(appointmentRepository.getAppointmentStats(LocalDate.of(2026, 10, 12))).thenReturn(stats);
+        when(appointmentRepository.getAppointmentStats(LocalDate.of(2026, 10, 12)))
+                .thenReturn(stats);
         when(appointmentRepository.count()).thenReturn(7L);
 
         assertSame(stats, service.getStatsCached());
@@ -209,12 +211,11 @@ class AppointmentStatsServiceTest {
     @Test
     void failingQuery_stillPropagates() {
         when(cacheManager.getCache(AppointmentStatsService.STATS_CACHE)).thenReturn(statsCache);
-        Cache.ValueRetrievalException failure =
-                new Cache.ValueRetrievalException(LocalDate.of(2026, 10, 12), () -> null, new IllegalStateException("db"));
+        Cache.ValueRetrievalException failure = new Cache.ValueRetrievalException(
+                LocalDate.of(2026, 10, 12), () -> null, new IllegalStateException("db"));
         when(statsCache.get(any(), any(Callable.class))).thenThrow(failure);
 
-        assertSame(failure, assertThrows(Cache.ValueRetrievalException.class,
-                () -> service.getStatsCached()));
+        assertSame(failure, assertThrows(Cache.ValueRetrievalException.class, () -> service.getStatsCached()));
         verify(appointmentRepository, never()).getAppointmentStats(any());
     }
 

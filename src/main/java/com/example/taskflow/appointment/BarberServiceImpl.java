@@ -1,20 +1,12 @@
 package com.example.taskflow.appointment;
+
 import com.example.taskflow.appointment.internal.Appointment;
-import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
-import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
-import com.example.taskflow.appointment.internal.BarberScheduleRepository;
-import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
-
-import com.example.taskflow.core.LogSanitizer;
+import com.example.taskflow.appointment.internal.BarberRepository;
+import com.example.taskflow.appointment.internal.BarberScheduleRepository;
+import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
+import com.example.taskflow.appointment.stream.AppointmentAdminEvent;
 import com.example.taskflow.core.ResourceNotFoundException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -23,6 +15,12 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 class BarberServiceImpl implements BarberService {
@@ -37,13 +35,14 @@ class BarberServiceImpl implements BarberService {
     private final Clock clock;
     private final BookingProperties bookingProperties;
 
-    public BarberServiceImpl(BarberRepository barberRepository,
-                             BarberScheduleRepository scheduleRepository,
-                             BarberTimeOffRepository timeOffRepository,
-                             AppointmentRepository appointmentRepository,
-                             ApplicationEventPublisher eventPublisher,
-                             Clock clock,
-                             BookingProperties bookingProperties) {
+    public BarberServiceImpl(
+            BarberRepository barberRepository,
+            BarberScheduleRepository scheduleRepository,
+            BarberTimeOffRepository timeOffRepository,
+            AppointmentRepository appointmentRepository,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock,
+            BookingProperties bookingProperties) {
         this.barberRepository = barberRepository;
         this.scheduleRepository = scheduleRepository;
         this.timeOffRepository = timeOffRepository;
@@ -73,8 +72,10 @@ class BarberServiceImpl implements BarberService {
     public List<OpeningHoursResponse> getOpeningHours() {
         DateTimeFormatter hhmm = DateTimeFormatter.ofPattern("HH:mm");
         return scheduleRepository.findWeekdayHours().stream()
-                .map(day -> new OpeningHoursResponse(day.getDayOfWeek(),
-                        day.getOpens().format(hhmm), day.getCloses().format(hhmm)))
+                .map(day -> new OpeningHoursResponse(
+                        day.getDayOfWeek(),
+                        day.getOpens().format(hhmm),
+                        day.getCloses().format(hhmm)))
                 .toList();
     }
 
@@ -84,7 +85,8 @@ class BarberServiceImpl implements BarberService {
     public BarberResponse createBarber(BarberRequest request) {
         // The booking flow treats this exact name as "any barber" and never stores it, so a real
         // barber carrying it could be neither booked by name nor approved.
-        if (AppointmentBookingService.NO_PREFERENCE_BARBER.equalsIgnoreCase(request.name().trim())) {
+        if (AppointmentBookingService.NO_PREFERENCE_BARBER.equalsIgnoreCase(
+                request.name().trim())) {
             throw new IllegalArgumentException("'" + AppointmentBookingService.NO_PREFERENCE_BARBER
                     + "' is reserved and cannot be used as a barber name.");
         }
@@ -124,7 +126,8 @@ class BarberServiceImpl implements BarberService {
     @Override
     @Transactional
     public BarberTimeOffResponse addTimeOff(Long barberId, BarberTimeOffRequest request) {
-        Barber barber = barberRepository.findByIdForUpdate(barberId)
+        Barber barber = barberRepository
+                .findByIdForUpdate(barberId)
                 .orElseThrow(() -> new ResourceNotFoundException("Barber not found with id: " + barberId));
         if (!request.isDateRangeValid()) {
             throw new IllegalArgumentException("End date must not be before start date.");
@@ -135,8 +138,12 @@ class BarberServiceImpl implements BarberService {
         // (customers are e-mailed through the cancellation event). Dates already in the past
         // are left alone, as are earlier hours of today.
         int cancelled = cancelBookingsDuringTimeOff(barber, request.startDate(), request.endDate());
-        logger.info("Time off for barber id {} from {} to {} cancelled {} booking(s).",
-                barber.getId(), request.startDate(), request.endDate(), cancelled);
+        logger.info(
+                "Time off for barber id {} from {} to {} cancelled {} booking(s).",
+                barber.getId(),
+                request.startDate(),
+                request.endDate(),
+                cancelled);
 
         // Invalidate the busy-slots cache for every affected date after commit so
         // a freshly-added time-off immediately blocks bookings instead of waiting
@@ -155,10 +162,10 @@ class BarberServiceImpl implements BarberService {
             return 0;
         }
         int count = 0;
-        for (Appointment appointment : appointmentRepository
-                .findActiveForBarberInRange(barber.getName(), from, endDate)) {
-            LocalDateTime start = LocalDateTime.of(
-                    appointment.getBookingDate(), LocalTime.parse(appointment.getBookingTime()));
+        for (Appointment appointment :
+                appointmentRepository.findActiveForBarberInRange(barber.getName(), from, endDate)) {
+            LocalDateTime start =
+                    LocalDateTime.of(appointment.getBookingDate(), LocalTime.parse(appointment.getBookingTime()));
             if (!start.isAfter(now)) {
                 continue;
             }
@@ -167,8 +174,8 @@ class BarberServiceImpl implements BarberService {
             appointmentRepository.flush();
             eventPublisher.publishEvent(new AppointmentCancelledEvent(
                     AppointmentDetails.of(saved), AppointmentCancelledEvent.CancelledBy.BARBER_UNAVAILABLE));
-            eventPublisher.publishEvent(new AppointmentAdminEvent(
-                    AppointmentAdminEvent.Type.UPDATED, saved.getId(), Instant.now(clock)));
+            eventPublisher.publishEvent(
+                    new AppointmentAdminEvent(AppointmentAdminEvent.Type.UPDATED, saved.getId(), Instant.now(clock)));
             count++;
         }
         return count;

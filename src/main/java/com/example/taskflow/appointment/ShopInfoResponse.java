@@ -1,8 +1,7 @@
 package com.example.taskflow.appointment;
 
-import org.jspecify.annotations.Nullable;
-
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Public facts a booking client needs to apply the shop's rules the way the server does, instead
@@ -17,5 +16,8 @@ import java.util.List;
  * @param announcement   the promo strip the owner set for the landing pages (at most 120 characters), or
  *                       absent when there is none; owned by the catalog module ({@code ShopAnnouncementService})
  */
-record ShopInfoResponse(String timeZone, int maxAdvanceDays, List<OpeningHoursResponse> openingHours,
-                        @Nullable String announcement) {}
+record ShopInfoResponse(
+        String timeZone,
+        int maxAdvanceDays,
+        List<OpeningHoursResponse> openingHours,
+        @Nullable String announcement) {}

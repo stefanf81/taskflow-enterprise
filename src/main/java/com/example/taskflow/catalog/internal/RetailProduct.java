@@ -34,20 +34,41 @@ public class RetailProduct {
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
 
-    public RetailProduct() {
+    public RetailProduct() {}
+
+    public Long getId() {
+        return id;
     }
 
-    public Long getId() { return id; }
+    public String getName() {
+        return name;
+    }
 
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public void setName(String name) {
+        this.name = name;
+    }
 
-    public String getSizeLabel() { return sizeLabel; }
-    public void setSizeLabel(String sizeLabel) { this.sizeLabel = sizeLabel; }
+    public String getSizeLabel() {
+        return sizeLabel;
+    }
 
-    public BigDecimal getPrice() { return price; }
-    public void setPrice(BigDecimal price) { this.price = price; }
+    public void setSizeLabel(String sizeLabel) {
+        this.sizeLabel = sizeLabel;
+    }
 
-    public int getSortOrder() { return sortOrder; }
-    public void setSortOrder(int sortOrder) { this.sortOrder = sortOrder; }
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public void setPrice(BigDecimal price) {
+        this.price = price;
+    }
+
+    public int getSortOrder() {
+        return sortOrder;
+    }
+
+    public void setSortOrder(int sortOrder) {
+        this.sortOrder = sortOrder;
+    }
 }

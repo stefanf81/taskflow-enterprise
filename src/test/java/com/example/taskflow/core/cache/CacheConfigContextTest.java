@@ -1,5 +1,7 @@
 package com.example.taskflow.core.cache;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
@@ -14,8 +16,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 /**
  * The Redis cache manager Boot's auto-configuration builds with {@link CacheConfig} (nothing here
  * connects to Redis): decorated, and clearing with {@code SCAN}. Moved out of
@@ -25,14 +25,13 @@ class CacheConfigContextTest {
 
     @Configuration(proxyBeanMethods = false)
     @EnableCaching
-    static class Caching {
-    }
+    static class Caching {}
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(DataRedisAutoConfiguration.class, CacheAutoConfiguration.class))
             .withUserConfiguration(CacheConfig.class, Caching.class)
-            .withPropertyValues("spring.data.redis.port=1", "spring.data.redis.connect-timeout=1s",
-                    "spring.cache.type=redis");
+            .withPropertyValues(
+                    "spring.data.redis.port=1", "spring.data.redis.connect-timeout=1s", "spring.cache.type=redis");
 
     @Test
     void cacheClearUsesScanAndTheDecoratorsStillWrapTheManager() {
@@ -57,23 +56,42 @@ class CacheConfigContextTest {
     @Test
     void redisCachesAreBoundToMicrometerThroughTheDecorators() {
         new ApplicationContextRunner()
-                .withConfiguration(AutoConfigurations.of(DataRedisAutoConfiguration.class,
-                        CacheAutoConfiguration.class, CacheMetricsAutoConfiguration.class))
+                .withConfiguration(AutoConfigurations.of(
+                        DataRedisAutoConfiguration.class,
+                        CacheAutoConfiguration.class,
+                        CacheMetricsAutoConfiguration.class))
                 .withUserConfiguration(CacheConfig.class, CacheMetricsConfig.class, Caching.class, Registry.class)
-                .withPropertyValues("spring.data.redis.port=1", "spring.data.redis.connect-timeout=1s",
-                        "spring.cache.type=redis", "spring.cache.cache-names=services,barbers",
+                .withPropertyValues(
+                        "spring.data.redis.port=1",
+                        "spring.data.redis.connect-timeout=1s",
+                        "spring.cache.type=redis",
+                        "spring.cache.cache-names=services,barbers",
                         "spring.cache.redis.enable-statistics=true")
                 .run(context -> {
                     MeterRegistry registry = context.getBean(MeterRegistry.class);
                     for (String cache : new String[] {"services", "barbers"}) {
-                        assertThat(registry.find("cache.gets").tag("cache", cache).tag("result", "hit").functionCounter())
-                                .as("hits of %s", cache).isNotNull();
-                        assertThat(registry.find("cache.gets").tag("cache", cache).tag("result", "miss").functionCounter())
-                                .as("misses of %s", cache).isNotNull();
-                        assertThat(registry.find("cache.puts").tag("cache", cache).functionCounter())
-                                .as("puts of %s", cache).isNotNull();
-                        assertThat(registry.find("cache.removals").tag("cache", cache).functionCounter())
-                                .as("removals of %s", cache).isNotNull();
+                        assertThat(registry.find("cache.gets")
+                                        .tag("cache", cache)
+                                        .tag("result", "hit")
+                                        .functionCounter())
+                                .as("hits of %s", cache)
+                                .isNotNull();
+                        assertThat(registry.find("cache.gets")
+                                        .tag("cache", cache)
+                                        .tag("result", "miss")
+                                        .functionCounter())
+                                .as("misses of %s", cache)
+                                .isNotNull();
+                        assertThat(registry.find("cache.puts")
+                                        .tag("cache", cache)
+                                        .functionCounter())
+                                .as("puts of %s", cache)
+                                .isNotNull();
+                        assertThat(registry.find("cache.removals")
+                                        .tag("cache", cache)
+                                        .functionCounter())
+                                .as("removals of %s", cache)
+                                .isNotNull();
                     }
                 });
     }
@@ -81,7 +99,8 @@ class CacheConfigContextTest {
     @Test
     void theProviderReachesTheRedisCacheBeneathBothDecorators() {
         runner.withPropertyValues("spring.cache.cache-names=services").run(context -> {
-            org.springframework.cache.Cache cache = context.getBean(CacheManager.class).getCache("services");
+            org.springframework.cache.Cache cache =
+                    context.getBean(CacheManager.class).getCache("services");
             assertThat(cache).isInstanceOf(SingleFlightCacheManager.SingleFlightCache.class);
             assertThat(CacheMetricsConfig.WrappedRedisCacheMeterBinderProvider.redisCache(cache))
                     .isInstanceOf(org.springframework.data.redis.cache.RedisCache.class);

@@ -1,8 +1,16 @@
 package com.example.taskflow.notification;
-import com.example.taskflow.core.SchedulerProperties;
-import com.example.taskflow.notification.internal.NotificationOutboxRepository;
 
 import com.example.taskflow.core.LogSanitizer;
+import com.example.taskflow.core.SchedulerProperties;
+import com.example.taskflow.notification.internal.NotificationOutboxRepository;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.function.LongSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -12,15 +20,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-import java.util.function.LongSupplier;
 
 /**
  * Drains the transactional outbox: claims PENDING entries and re-attempts
@@ -96,48 +95,58 @@ class NotificationRelayScheduler {
     private volatile long transportPausedUntil;
 
     @Autowired
-    public NotificationRelayScheduler(NotificationOutboxRepository outboxRepository,
-                                      NotificationSender sender,
-                                      ObjectProvider<NotificationRelayScheduler> selfProvider,
-                                      InstanceProperties instance,
-                                      Clock clock,
-                                      SchedulerProperties schedulers) {
+    public NotificationRelayScheduler(
+            NotificationOutboxRepository outboxRepository,
+            NotificationSender sender,
+            ObjectProvider<NotificationRelayScheduler> selfProvider,
+            InstanceProperties instance,
+            Clock clock,
+            SchedulerProperties schedulers) {
         this(outboxRepository, sender, selfProvider, instance.id(), clock, schedulers.enabled());
     }
 
-    NotificationRelayScheduler(NotificationOutboxRepository outboxRepository,
-                               NotificationSender sender,
-                               ObjectProvider<NotificationRelayScheduler> selfProvider,
-                               String instanceId,
-                               Clock clock,
-                               boolean schedulersEnabled) {
+    NotificationRelayScheduler(
+            NotificationOutboxRepository outboxRepository,
+            NotificationSender sender,
+            ObjectProvider<NotificationRelayScheduler> selfProvider,
+            String instanceId,
+            Clock clock,
+            boolean schedulersEnabled) {
         this(outboxRepository, sender, selfProvider, instanceId, clock, schedulersEnabled, DRAIN_BUDGET);
     }
 
-    NotificationRelayScheduler(NotificationOutboxRepository outboxRepository,
-                               NotificationSender sender,
-                               ObjectProvider<NotificationRelayScheduler> selfProvider,
-                               String instanceId,
-                               Clock clock,
-                                boolean schedulersEnabled,
-                                Duration drainBudget) {
-        this(outboxRepository, sender, selfProvider, instanceId, clock, schedulersEnabled, drainBudget, System::nanoTime);
+    NotificationRelayScheduler(
+            NotificationOutboxRepository outboxRepository,
+            NotificationSender sender,
+            ObjectProvider<NotificationRelayScheduler> selfProvider,
+            String instanceId,
+            Clock clock,
+            boolean schedulersEnabled,
+            Duration drainBudget) {
+        this(
+                outboxRepository,
+                sender,
+                selfProvider,
+                instanceId,
+                clock,
+                schedulersEnabled,
+                drainBudget,
+                System::nanoTime);
     }
 
-    NotificationRelayScheduler(NotificationOutboxRepository outboxRepository,
-                               NotificationSender sender,
-                               ObjectProvider<NotificationRelayScheduler> selfProvider,
-                               String instanceId,
-                               Clock clock,
-                               boolean schedulersEnabled,
-                               Duration drainBudget,
-                               LongSupplier nanoTime) {
+    NotificationRelayScheduler(
+            NotificationOutboxRepository outboxRepository,
+            NotificationSender sender,
+            ObjectProvider<NotificationRelayScheduler> selfProvider,
+            String instanceId,
+            Clock clock,
+            boolean schedulersEnabled,
+            Duration drainBudget,
+            LongSupplier nanoTime) {
         this.outboxRepository = outboxRepository;
         this.sender = sender;
         this.selfProvider = selfProvider;
-        this.instanceId = (instanceId != null && !instanceId.isBlank())
-                ? instanceId
-                : "relay-" + UUID.randomUUID();
+        this.instanceId = (instanceId != null && !instanceId.isBlank()) ? instanceId : "relay-" + UUID.randomUUID();
         this.clock = clock;
         this.schedulersEnabled = schedulersEnabled;
         this.drainBudgetNanos = drainBudget.toNanos();
@@ -169,8 +178,11 @@ class NotificationRelayScheduler {
             if (claims.isEmpty()) {
                 break;
             }
-            logger.info("Notification relay claimed {} outbox entr{} via {}", claims.size(),
-                    claims.size() == 1 ? "y" : "ies", instanceId);
+            logger.info(
+                    "Notification relay claimed {} outbox entr{} via {}",
+                    claims.size(),
+                    claims.size() == 1 ? "y" : "ies",
+                    instanceId);
             for (int index = 0; index < claims.size(); index += SEND_BATCH_SIZE) {
                 if (!hasBudget(startedAt)) {
                     List<NotificationSender.Claim> unstarted = claims.subList(index, claims.size());
@@ -203,8 +215,11 @@ class NotificationRelayScheduler {
                     break;
                 } catch (Exception e) {
                     String safeMsg = LogSanitizer.safeMessage(e);
-                    logger.error("Relay failed to process outbox ids {}..{}: {}", chunk.getFirst().id(),
-                            chunk.getLast().id(), safeMsg);
+                    logger.error(
+                            "Relay failed to process outbox ids {}..{}: {}",
+                            chunk.getFirst().id(),
+                            chunk.getLast().id(),
+                            safeMsg);
                 }
             }
             if (transportDown || claims.size() < CLAIM_BATCH_SIZE) {
@@ -231,15 +246,18 @@ class NotificationRelayScheduler {
         transportFailures = failures;
         transportPausedUntil = nanoTime.getAsLong() + pause.toNanos();
         // The cause's class only: mail exceptions can contain recipients or credentials.
-        logger.warn("Mail transport unavailable ({}); outbox delivery paused for {} s ({} failure(s) in a row). "
+        logger.warn(
+                "Mail transport unavailable ({}); outbox delivery paused for {} s ({} failure(s) in a row). "
                         + "No delivery attempt was counted.",
                 e.getCause() != null ? e.getCause().getClass().getSimpleName() : "unknown",
-                pause.toSeconds(), failures);
+                pause.toSeconds(),
+                failures);
     }
 
     private void transportReachable() {
         if (transportFailures > 0) {
-            logger.info("Mail transport reachable again after {} failed run(s); outbox delivery resumed.",
+            logger.info(
+                    "Mail transport reachable again after {} failed run(s); outbox delivery resumed.",
                     transportFailures);
             transportFailures = 0;
         }
@@ -264,8 +282,8 @@ class NotificationRelayScheduler {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<NotificationSender.Claim> claimBatch() {
         Instant now = now();
-        List<NotificationOutbox> claimable = outboxRepository.findClaimableForUpdate(
-                MAX_RETRIES, now, PageRequest.of(0, CLAIM_BATCH_SIZE));
+        List<NotificationOutbox> claimable =
+                outboxRepository.findClaimableForUpdate(MAX_RETRIES, now, PageRequest.of(0, CLAIM_BATCH_SIZE));
         if (claimable.isEmpty()) {
             return List.of();
         }
@@ -290,8 +308,8 @@ class NotificationRelayScheduler {
     public void reclaimStaleClaims() {
         Instant now = now();
         Instant threshold = now.minus(Duration.ofMinutes(CLAIM_STALE_MINUTES));
-        List<NotificationOutbox> stale = outboxRepository.findStaleProcessing(
-                threshold, PageRequest.of(0, CLAIM_BATCH_SIZE));
+        List<NotificationOutbox> stale =
+                outboxRepository.findStaleProcessing(threshold, PageRequest.of(0, CLAIM_BATCH_SIZE));
         if (stale.isEmpty()) {
             return;
         }

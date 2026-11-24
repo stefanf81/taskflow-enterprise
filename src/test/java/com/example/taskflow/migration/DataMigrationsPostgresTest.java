@@ -1,12 +1,11 @@
 package com.example.taskflow.migration;
 
 import com.example.taskflow.testsupport.PostgresTestServer;
-import org.junit.jupiter.api.Tag;
-
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import org.junit.jupiter.api.Tag;
 
 /**
  * Runs the very same data-migration scenarios against a real PostgreSQL server, exercising the
@@ -32,7 +31,7 @@ class DataMigrationsPostgresTest extends AbstractDataMigrationsTest {
     protected String newUrl() throws SQLException {
         String schema = "dm_" + System.nanoTime();
         try (Connection c = DriverManager.getConnection(baseUrl(), user(), password());
-             Statement st = c.createStatement()) {
+                Statement st = c.createStatement()) {
             st.execute("CREATE SCHEMA " + schema);
         }
         return baseUrl() + (baseUrl().contains("?") ? "&" : "?") + "currentSchema=" + schema;

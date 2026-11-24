@@ -18,14 +18,18 @@ public class ShopAnnouncement {
     @Column(length = 120)
     private String message;
 
-    protected ShopAnnouncement() {
-    }
+    protected ShopAnnouncement() {}
 
     public ShopAnnouncement(String message) {
         this.id = ID;
         this.message = message;
     }
 
-    public String getMessage() { return message; }
-    public void setMessage(String message) { this.message = message; }
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
+    }
 }

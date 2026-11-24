@@ -49,11 +49,12 @@ class RetailProductController {
 
     @PostMapping
     @Operation(summary = "Create a retail product (Admin Access)")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Product created"),
-            @ApiResponse(responseCode = "400", description = "Invalid product data"),
-            @ApiResponse(responseCode = "409", description = "A product with that name exists")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "201", description = "Product created"),
+                @ApiResponse(responseCode = "400", description = "Invalid product data"),
+                @ApiResponse(responseCode = "409", description = "A product with that name exists")
+            })
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<RetailProductResponse> createProduct(@Valid @RequestBody RetailProductRequest request) {
         return new ResponseEntity<>(products.create(request), HttpStatus.CREATED);
@@ -61,12 +62,13 @@ class RetailProductController {
 
     @PutMapping("/{id}")
     @Operation(summary = "Update a retail product (Admin Access)")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Product updated"),
-            @ApiResponse(responseCode = "400", description = "Invalid product data"),
-            @ApiResponse(responseCode = "404", description = "Product not found"),
-            @ApiResponse(responseCode = "409", description = "A product with that name exists")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "200", description = "Product updated"),
+                @ApiResponse(responseCode = "400", description = "Invalid product data"),
+                @ApiResponse(responseCode = "404", description = "Product not found"),
+                @ApiResponse(responseCode = "409", description = "A product with that name exists")
+            })
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<RetailProductResponse> updateProduct(
             @Parameter(description = "Product database ID") @PathVariable Long id,
@@ -76,10 +78,11 @@ class RetailProductController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete a retail product (Admin Access)")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Product deleted"),
-            @ApiResponse(responseCode = "404", description = "Product not found")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "204", description = "Product deleted"),
+                @ApiResponse(responseCode = "404", description = "Product not found")
+            })
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteProduct(@Parameter(description = "Product database ID") @PathVariable Long id) {
         products.delete(id);

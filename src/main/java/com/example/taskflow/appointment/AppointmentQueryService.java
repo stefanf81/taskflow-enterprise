@@ -1,9 +1,14 @@
 package com.example.taskflow.appointment;
+
 import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
-
 import com.example.taskflow.core.ResourceNotFoundException;
 import jakarta.persistence.criteria.Predicate;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -14,12 +19,6 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.support.PageableExecutionUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
 
 /**
  * Read side for the controllers: the admin dashboard (status filter including OVERDUE, search,
@@ -32,8 +31,8 @@ class AppointmentQueryService {
     private final AppointmentStatsService statsService;
     private final Clock clock;
 
-    AppointmentQueryService(AppointmentRepository appointmentRepository, AppointmentStatsService statsService,
-                            Clock clock) {
+    AppointmentQueryService(
+            AppointmentRepository appointmentRepository, AppointmentStatsService statsService, Clock clock) {
         this.appointmentRepository = appointmentRepository;
         this.statsService = statsService;
         this.clock = clock;
@@ -49,8 +48,8 @@ class AppointmentQueryService {
      * inclusive, either may be omitted). The calendar view reads one day or week this way.
      */
     @Transactional(readOnly = true)
-    public AppointmentDashboardResponse getAllAppointments(String status, String searchName,
-                                                           LocalDate from, LocalDate to, int page, int size) {
+    public AppointmentDashboardResponse getAllAppointments(
+            String status, String searchName, LocalDate from, LocalDate to, int page, int size) {
         if (from != null && to != null && from.isAfter(to)) {
             throw new IllegalArgumentException("'from' must not be after 'to'.");
         }
@@ -63,7 +62,8 @@ class AppointmentQueryService {
         String term = searchName == null ? "" : searchName.trim();
         boolean overdue = "OVERDUE".equalsIgnoreCase(statusFilter);
         // Unknown statuses are a 400, not a silent fall back to PENDING.
-        AppointmentStatus parsed = overdue || statusFilter.isEmpty() ? null : AppointmentStatus.fromString(statusFilter);
+        AppointmentStatus parsed =
+                overdue || statusFilter.isEmpty() ? null : AppointmentStatus.fromString(statusFilter);
         LocalDate today = LocalDate.now(clock);
         AppointmentStats stats = statsService.getStatsCached();
 
@@ -80,21 +80,22 @@ class AppointmentQueryService {
             if (overdue) {
                 Slice<Appointment> slice = appointmentRepository.findByStatusAndBookingDateBefore(
                         AppointmentStatus.PENDING, today, pageable);
-                itemPage = PageableExecutionUtils.getPage(slice.getContent(), pageable,
+                itemPage = PageableExecutionUtils.getPage(
+                        slice.getContent(),
+                        pageable,
                         () -> appointmentRepository.countByStatusAndBookingDateBefore(
                                 AppointmentStatus.PENDING, today));
             } else if (parsed != null) {
                 Slice<Appointment> slice = appointmentRepository.findByStatus(parsed, pageable);
-                itemPage = PageableExecutionUtils.getPage(slice.getContent(), pageable,
-                        () -> appointmentRepository.countByStatus(parsed));
+                itemPage = PageableExecutionUtils.getPage(
+                        slice.getContent(), pageable, () -> appointmentRepository.countByStatus(parsed));
             } else {
                 // The unfiltered view is the whole table: its total is the cached row count, with
                 // the slice's own floor so a stale count can never swallow the next page.
                 Slice<Appointment> slice = appointmentRepository.findPageWithoutCount(pageable);
                 List<Appointment> content = slice.getContent();
                 long minTotal = pageable.getOffset() + content.size() + (slice.hasNext() ? 1L : 0L);
-                itemPage = new PageImpl<>(content, pageable,
-                        Math.max(statsService.getTotalCountCached(), minTotal));
+                itemPage = new PageImpl<>(content, pageable, Math.max(statsService.getTotalCountCached(), minTotal));
             }
         } else {
             List<Specification<Appointment>> filters = new ArrayList<>();
@@ -145,7 +146,8 @@ class AppointmentQueryService {
 
     @Transactional(readOnly = true)
     public AppointmentResponse getAppointmentById(Long id) {
-        Appointment item = appointmentRepository.findById(id)
+        Appointment item = appointmentRepository
+                .findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found with id: " + id));
         return AppointmentResponse.fromEntity(item);
     }
@@ -154,7 +156,8 @@ class AppointmentQueryService {
     public Page<AppointmentResponse> getMyAppointments(String email, int page, int size) {
         // Newest first, with a unique tiebreaker so pages stay stable when bookings share a date/time.
         Pageable pageable = newestFirstPageable(page, size);
-        return appointmentRepository.findByCustomerEmailIgnoreCase(email, pageable)
+        return appointmentRepository
+                .findByCustomerEmailIgnoreCase(email, pageable)
                 .map(AppointmentResponse::fromEntity);
     }
 
@@ -167,8 +170,12 @@ class AppointmentQueryService {
         if (page < 0 || size < 1 || (long) page * size > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("Invalid pagination parameters.");
         }
-        return PageRequest.of(page, size, Sort.by("bookingDate").descending()
-                .and(Sort.by("bookingTime").descending())
-                .and(Sort.by("id").descending()));
+        return PageRequest.of(
+                page,
+                size,
+                Sort.by("bookingDate")
+                        .descending()
+                        .and(Sort.by("bookingTime").descending())
+                        .and(Sort.by("id").descending()));
     }
 }

@@ -1,21 +1,15 @@
 package com.example.taskflow.auth;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.example.taskflow.TaskflowApplication;
 import com.example.taskflow.core.RedisTestSupport;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.builder.SpringApplicationBuilder;
-import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.listener.ChannelTopic;
-import org.springframework.data.redis.listener.RedisMessageListenerContainer;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -31,13 +25,18 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.listener.ChannelTopic;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
  * The Redis-backed denylist and login throttle against a real Redis. Two instances with their own
@@ -133,8 +132,12 @@ abstract class AbstractRedisSecurityStateTest {
 
         TokenRevocationList other = new TokenRevocationList(null, new RedisTokenRevocationStore(redisB));
         assertTrue(other.isRevoked(stored.getFirst().getJti()), "first batch written");
-        assertTrue(other.isRevoked(stored.get(RedisTokenRevocationStore.WRITE_BATCH + 5).getJti()), "second batch written");
-        Long ttl = redisA.getExpire(RedisTokenRevocationStore.key(stored.getFirst().getJti()), TimeUnit.MILLISECONDS);
+        assertTrue(
+                other.isRevoked(
+                        stored.get(RedisTokenRevocationStore.WRITE_BATCH + 5).getJti()),
+                "second batch written");
+        Long ttl =
+                redisA.getExpire(RedisTokenRevocationStore.key(stored.getFirst().getJti()), TimeUnit.MILLISECONDS);
         assertTrue(ttl != null && ttl > 110_000 && ttl <= 120_000, "TTL = remaining token lifetime: " + ttl);
         Long floor = redisA.getExpire(RedisTokenRevocationStore.key(almostExpired.getJti()), TimeUnit.MILLISECONDS);
         assertTrue(floor != null && floor > 4_000 && floor <= RedisTokenRevocationStore.MIN_TTL_MILLIS, "ttl=" + floor);
@@ -178,8 +181,8 @@ abstract class AbstractRedisSecurityStateTest {
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();
         container.setConnectionFactory(factory);
         container.setAutoStartup(false);
-        container.addMessageListener((message, pattern) ->
-                list.onRemoteRevocation(new String(message.getBody(), StandardCharsets.UTF_8)),
+        container.addMessageListener(
+                (message, pattern) -> list.onRemoteRevocation(new String(message.getBody(), StandardCharsets.UTF_8)),
                 new ChannelTopic(RedisTokenRevocationStore.CHANNEL));
         container.afterPropertiesSet();
         RevocationChannelSubscriber subscriber = new RevocationChannelSubscriber(container, 100);
@@ -201,8 +204,10 @@ abstract class AbstractRedisSecurityStateTest {
         assertDoesNotThrow(() -> replicaA.checkAllowed(user));
         replicaA.recordFailure(user);
 
-        TooManyLoginAttemptsException onB = assertThrows(TooManyLoginAttemptsException.class,
-                () -> replicaB.checkAllowed(user), "3 failures over two replicas reach the limit of 3");
+        TooManyLoginAttemptsException onB = assertThrows(
+                TooManyLoginAttemptsException.class,
+                () -> replicaB.checkAllowed(user),
+                "3 failures over two replicas reach the limit of 3");
         long retryAfter = Long.parseLong(onB.getHeaders().getFirst("Retry-After"));
         assertTrue(retryAfter > 290 && retryAfter <= 300, "Retry-After from the shared window: " + retryAfter);
         Long ttl = redisA.getExpire(RedisLoginFailureCounter.key(user + "|203.0.113.7"), TimeUnit.MILLISECONDS);
@@ -237,24 +242,32 @@ abstract class AbstractRedisSecurityStateTest {
         KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
         generator.initialize(2048);
         KeyPair keys = generator.generateKeyPair();
-        String[] args = replicaArgs(keys,
-                "jdbc:h2:mem:replicas-" + UUID.randomUUID() + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1");
+        String[] args =
+                replicaArgs(keys, "jdbc:h2:mem:replicas-" + UUID.randomUUID() + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1");
         try (ConfigurableApplicationContext a = new SpringApplicationBuilder(TaskflowApplication.class).run(args);
-             ConfigurableApplicationContext b = new SpringApplicationBuilder(TaskflowApplication.class).run(args)) {
+                ConfigurableApplicationContext b = new SpringApplicationBuilder(TaskflowApplication.class).run(args)) {
             String baseA = "http://127.0.0.1:" + a.getEnvironment().getProperty("local.server.port");
             String baseB = "http://127.0.0.1:" + b.getEnvironment().getProperty("local.server.port");
-            HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+            HttpClient http = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(5))
+                    .build();
 
-            HttpResponse<String> login = post(http, baseA + "/api/v1/auth/mobile/login",
-                    "{\"username\":\"admin\",\"password\":\"admin-password\"}", null);
+            HttpResponse<String> login = post(
+                    http,
+                    baseA + "/api/v1/auth/mobile/login",
+                    "{\"username\":\"admin\",\"password\":\"admin-password\"}",
+                    null);
             assertEquals(200, login.statusCode(), login.body());
             ObjectMapper json = new ObjectMapper();
             String token = json.readTree(login.body()).get("accessToken").asText();
-            String jti = json.readTree(Base64.getUrlDecoder().decode(token.split("\\.")[1])).get("jti").asText();
+            String jti = json.readTree(Base64.getUrlDecoder().decode(token.split("\\.")[1]))
+                    .get("jti")
+                    .asText();
             keysToDelete.add(RedisTokenRevocationStore.key(jti));
 
             assertEquals(200, get(http, baseB + "/api/v1/auth/me", token).statusCode(), "B accepts A's token");
-            assertEquals(204, post(http, baseA + "/api/v1/auth/logout", "", token).statusCode());
+            assertEquals(
+                    204, post(http, baseA + "/api/v1/auth/logout", "", token).statusCode());
             // The shared database ends the session too; the denylist entry shows that the logout
             // itself reached the other replicas through Redis.
             assertEquals(Boolean.TRUE, redisB.hasKey(RedisTokenRevocationStore.key(jti)), "denied in Redis");
@@ -264,9 +277,15 @@ abstract class AbstractRedisSecurityStateTest {
             String user = "nobody-" + UUID.randomUUID() + "@example.com";
             keysToDelete.add(RedisLoginFailureCounter.key(user + "|127.0.0.1"));
             String badLogin = "{\"username\":\"" + user + "\",\"password\":\"wrong-password\"}";
-            assertEquals(401, post(http, baseA + "/api/v1/auth/login", badLogin, null).statusCode());
-            assertEquals(401, post(http, baseB + "/api/v1/auth/login", badLogin, null).statusCode());
-            assertEquals(401, post(http, baseA + "/api/v1/auth/login", badLogin, null).statusCode());
+            assertEquals(
+                    401,
+                    post(http, baseA + "/api/v1/auth/login", badLogin, null).statusCode());
+            assertEquals(
+                    401,
+                    post(http, baseB + "/api/v1/auth/login", badLogin, null).statusCode());
+            assertEquals(
+                    401,
+                    post(http, baseA + "/api/v1/auth/login", badLogin, null).statusCode());
             HttpResponse<String> throttled = post(http, baseB + "/api/v1/auth/login", badLogin, null);
             assertEquals(429, throttled.statusCode(), "3 failures across both replicas hit the limit of 3");
             assertTrue(throttled.headers().firstValue("Retry-After").isPresent());
@@ -281,15 +300,18 @@ abstract class AbstractRedisSecurityStateTest {
                 "--spring.cache.type=redis",
                 "--spring.data.redis.host=" + uri.getHost(),
                 "--spring.data.redis.port=" + uri.getPort(),
-                "--app.rsa.private-key=" + Base64.getEncoder().encodeToString(keys.getPrivate().getEncoded()),
-                "--app.rsa.public-key=" + Base64.getEncoder().encodeToString(keys.getPublic().getEncoded()),
+                "--app.rsa.private-key="
+                        + Base64.getEncoder().encodeToString(keys.getPrivate().getEncoded()),
+                "--app.rsa.public-key="
+                        + Base64.getEncoder().encodeToString(keys.getPublic().getEncoded()),
                 "--spring.datasource.url=" + databaseUrl,
                 "--app.schedulers.enabled=false",
                 "--app.rate-limit.login-max-failures=3",
                 "--management.tracing.sampling.probability=0.0",
                 "--spring.main.keep-alive=false"));
         if (uri.getUserInfo() != null) {
-            args.add("--spring.data.redis.password=" + uri.getUserInfo().substring(uri.getUserInfo().indexOf(':') + 1));
+            args.add("--spring.data.redis.password="
+                    + uri.getUserInfo().substring(uri.getUserInfo().indexOf(':') + 1));
         }
         return args.toArray(String[]::new);
     }
@@ -320,7 +342,8 @@ abstract class AbstractRedisSecurityStateTest {
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
     }
 
-    private static void awaitTrue(java.util.function.BooleanSupplier condition, String message) throws InterruptedException {
+    private static void awaitTrue(java.util.function.BooleanSupplier condition, String message)
+            throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         while (!condition.getAsBoolean()) {
             if (System.nanoTime() > deadline) {

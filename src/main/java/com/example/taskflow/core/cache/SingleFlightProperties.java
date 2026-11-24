@@ -1,11 +1,10 @@
 package com.example.taskflow.core.cache;
 
+import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.core.env.Environment;
-
-import java.time.Duration;
 
 /**
  * The cross-replica cache-load lease of {@link SingleFlightCacheManager}, bound from

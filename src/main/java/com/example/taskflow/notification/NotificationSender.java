@@ -1,6 +1,13 @@
 package com.example.taskflow.notification;
 
 import com.example.taskflow.notification.internal.NotificationOutboxRepository;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,14 +17,6 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
-
-import java.time.Clock;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Validates and snapshots a claim in a short transaction, sends without a transaction, then
@@ -29,9 +28,9 @@ class NotificationSender {
 
     private static final Logger logger = LoggerFactory.getLogger(NotificationSender.class);
 
-    public record Claim(Long id, String claimedBy, Instant claimedAt) { }
+    public record Claim(Long id, String claimedBy, Instant claimedAt) {}
 
-    private record Delivery(Claim claim, int retryCount, NotificationGateway.Message message) { }
+    private record Delivery(Claim claim, int retryCount, NotificationGateway.Message message) {}
 
     private final NotificationOutboxRepository outboxRepository;
     private final NotificationGateway gateway;
@@ -39,8 +38,11 @@ class NotificationSender {
     private final TransactionTemplate readTransaction;
     private final TransactionTemplate outcomeTransaction;
 
-    NotificationSender(NotificationOutboxRepository outboxRepository, NotificationGateway gateway,
-                       Clock clock, PlatformTransactionManager transactions) {
+    NotificationSender(
+            NotificationOutboxRepository outboxRepository,
+            NotificationGateway gateway,
+            Clock clock,
+            PlatformTransactionManager transactions) {
         this.outboxRepository = outboxRepository;
         this.gateway = gateway;
         this.clock = clock;
@@ -77,7 +79,8 @@ class NotificationSender {
         }
         List<Delivery> deliveries = readTransaction.execute(status -> {
             Map<Long, NotificationOutbox> rows = new HashMap<>();
-            for (NotificationOutbox row : outboxRepository.findAllById(claims.stream().map(Claim::id).toList())) {
+            for (NotificationOutbox row :
+                    outboxRepository.findAllById(claims.stream().map(Claim::id).toList())) {
                 rows.put(row.getId(), row);
             }
             List<Delivery> owned = new ArrayList<>(claims.size());
@@ -108,7 +111,9 @@ class NotificationSender {
         for (Delivery delivery : deliveries) {
             RuntimeException cause = failed.get(delivery.claim().id());
             if (cause != null) {
-                logger.warn("Dispatch failed for outbox id={} ({})", delivery.claim().id(),
+                logger.warn(
+                        "Dispatch failed for outbox id={} ({})",
+                        delivery.claim().id(),
                         cause.getClass().getSimpleName());
             }
             try {
@@ -144,7 +149,9 @@ class NotificationSender {
                             outboxRepository.releaseIfClaimed(claim.id(), claim.claimedBy(), claim.claimedAt()));
                 }
             } catch (RuntimeException e) {
-                logger.warn("Could not return outbox id={} after a transport failure ({})", claim.id(),
+                logger.warn(
+                        "Could not return outbox id={} after a transport failure ({})",
+                        claim.id(),
                         e.getClass().getSimpleName());
             }
         }
@@ -160,12 +167,17 @@ class NotificationSender {
             return null;
         }
         Claim claim = expected != null ? expected : new Claim(id, row.getClaimedBy(), row.getClaimedAt());
-        if (!"PROCESSING".equals(row.getStatus()) || claim.claimedBy() == null || claim.claimedAt() == null
-                || !claim.claimedBy().equals(row.getClaimedBy()) || !claim.claimedAt().equals(row.getClaimedAt())) {
+        if (!"PROCESSING".equals(row.getStatus())
+                || claim.claimedBy() == null
+                || claim.claimedAt() == null
+                || !claim.claimedBy().equals(row.getClaimedBy())
+                || !claim.claimedAt().equals(row.getClaimedAt())) {
             logger.warn("Outbox id={} is no longer owned by this claim; skipping.", id);
             return null;
         }
-        return new Delivery(claim, row.getRetryCount(),
+        return new Delivery(
+                claim,
+                row.getRetryCount(),
                 new NotificationGateway.Message(id, row.getRecipient(), row.getType(), row.getMessage()));
     }
 
@@ -179,7 +191,10 @@ class NotificationSender {
             delivered = true;
         } catch (RuntimeException e) {
             // Mail exceptions can contain recipients, credentials or message bodies. Never log their text/cause.
-            logger.warn("Dispatch failed for outbox id={} ({})", delivery.claim().id(), e.getClass().getSimpleName());
+            logger.warn(
+                    "Dispatch failed for outbox id={} ({})",
+                    delivery.claim().id(),
+                    e.getClass().getSimpleName());
             delivered = false;
         }
         boolean success = delivered;
@@ -194,13 +209,16 @@ class NotificationSender {
             updated = outboxRepository.markSentIfClaimed(claim.id(), claim.claimedBy(), claim.claimedAt());
         } else {
             int retries = Math.min(delivery.retryCount() + 1, OutboxBackoff.MAX_ATTEMPTS);
-            Instant next = Instant.now(clock).plus(OutboxBackoff.delayAfter(retries))
-                    .truncatedTo(ChronoUnit.MILLIS);
-            updated = outboxRepository.markFailedIfClaimed(claim.id(), claim.claimedBy(), claim.claimedAt(), retries, next);
+            Instant next =
+                    Instant.now(clock).plus(OutboxBackoff.delayAfter(retries)).truncatedTo(ChronoUnit.MILLIS);
+            updated = outboxRepository.markFailedIfClaimed(
+                    claim.id(), claim.claimedBy(), claim.claimedAt(), retries, next);
         }
         if (updated == 0) {
-            logger.warn("Outbox id={} was reclaimed while being sent; outcome ({}) discarded.",
-                    claim.id(), delivered ? "SENT" : "FAILED");
+            logger.warn(
+                    "Outbox id={} was reclaimed while being sent; outcome ({}) discarded.",
+                    claim.id(),
+                    delivered ? "SENT" : "FAILED");
         }
     }
 }

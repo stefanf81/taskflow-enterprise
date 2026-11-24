@@ -16,20 +16,10 @@ import org.jspecify.annotations.Nullable;
  * oversize input is a 400 rather than a database error.
  */
 public record RetailProductRequest(
-    @NotBlank(message = "Product name is required")
-    @Size(max = 100, message = "Product name must not exceed 100 characters")
-    String name,
+        @NotBlank(message = "Product name is required") @Size(max = 100, message = "Product name must not exceed 100 characters") String name,
 
-    @Size(max = 30, message = "Size must not exceed 30 characters")
-    @Nullable String sizeLabel,
+        @Size(max = 30, message = "Size must not exceed 30 characters") @Nullable String sizeLabel,
 
-    @NotNull(message = "Price is required")
-    @Positive(message = "Price must be positive")
-    @Digits(integer = 8, fraction = 2, message = "Price must have at most 8 integer digits and 2 decimals")
-    BigDecimal price,
+        @NotNull(message = "Price is required") @Positive(message = "Price must be positive") @Digits(integer = 8, fraction = 2, message = "Price must have at most 8 integer digits and 2 decimals") BigDecimal price,
 
-    @NotNull(message = "Position is required")
-    @Min(value = 0, message = "Position must not be negative")
-    @Max(value = 9999, message = "Position must not exceed 9999")
-    Integer sortOrder
-) {}
+        @NotNull(message = "Position is required") @Min(value = 0, message = "Position must not be negative") @Max(value = 9999, message = "Position must not exceed 9999") Integer sortOrder) {}

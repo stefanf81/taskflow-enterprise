@@ -1,12 +1,11 @@
 package com.example.taskflow.catalog;
 
 import com.example.taskflow.core.cache.CacheConfig;
+import java.time.Duration;
 import org.springframework.boot.cache.autoconfigure.RedisCacheManagerBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
-
-import java.time.Duration;
 
 /** The catalog's Redis cache: typed values (see {@link CacheConfig}), applied when the cache type is redis. */
 @Configuration
@@ -33,8 +32,7 @@ class CatalogCacheConfig {
 
     @Bean
     RedisCacheManagerBuilderCustomizer catalogCaches() {
-        return builder -> builder
-                .withCacheConfiguration(SERVICES_CACHE, servicesCache())
+        return builder -> builder.withCacheConfiguration(SERVICES_CACHE, servicesCache())
                 .withCacheConfiguration(PRODUCTS_CACHE, productsCache())
                 .withCacheConfiguration(ANNOUNCEMENT_CACHE, announcementCache());
     }

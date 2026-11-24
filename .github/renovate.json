@@ -9,6 +9,14 @@
   ],
   "customManagers": [
     {
+      "description": "Update the Trivy release and the SHA-256 of its Linux x86_64 tarball together in the install-trivy action. github-release-attachments finds the pinned checksum in the release's checksums file and takes the same file's line from the new release.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/actions/install-trivy/action\\.yml$/"],
+      "matchStrings": ["# trivy-release: tracked by the dedicated regex manager in \\.github/renovate\\.json\\s+TRIVY_PINNED_VERSION: \\\"(?<currentValue>v[^\\\"]+)\\\"\\s+TRIVY_LINUX_64BIT_SHA256: \\\"(?<currentDigest>[a-f0-9]{64})\\\""],
+      "depNameTemplate": "aquasecurity/trivy",
+      "datasourceTemplate": "github-release-attachments"
+    },
+    {
       "description": "Update the Renovate image tag and digest together in both workflows",
       "customType": "regex",
       "managerFilePatterns": ["/^\\.github/workflows/(ci|renovate)\\.yml$/"],
@@ -22,6 +30,30 @@
       "managerFilePatterns": ["/^\\.github/workflows/dast\\.yml$/"],
       "matchStrings": ["# zap-image: tracked by the dedicated regex manager in \\.github/renovate\\.json\\s+ZAP_VERSION: \\\"(?<currentValue>[^@\\\"]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\\""],
       "depNameTemplate": "ghcr.io/zaproxy/zaproxy",
+      "datasourceTemplate": "docker"
+    },
+    {
+      "description": "Update the testssl.sh image tag and digest together in the external scan",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/nightly-external-server-scan\\.yml$/"],
+      "matchStrings": ["# testssl-image: tracked by the dedicated regex manager in \\.github/renovate\\.json\\s+TESTSSL_VERSION: \\\"(?<currentValue>[^@\\\"]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\\""],
+      "depNameTemplate": "ghcr.io/testssl/testssl.sh",
+      "datasourceTemplate": "docker"
+    },
+    {
+      "description": "Update the Nikto image tag and digest together in the external scan",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/nightly-external-server-scan\\.yml$/"],
+      "matchStrings": ["# nikto-image: tracked by the dedicated regex manager in \\.github/renovate\\.json\\s+NIKTO_VERSION: \\\"(?<currentValue>[^@\\\"]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\\""],
+      "depNameTemplate": "ghcr.io/sullo/nikto",
+      "datasourceTemplate": "docker"
+    },
+    {
+      "description": "Update the k6 image tag and digest together in k6.yml",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/k6\\.yml$/"],
+      "matchStrings": ["# k6-image: tracked by the dedicated regex manager in \\.github/renovate\\.json\\s+K6_VERSION: \\\"(?<currentValue>[^@\\\"]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\\""],
+      "depNameTemplate": "grafana/k6",
       "datasourceTemplate": "docker"
     },
     {
@@ -64,6 +96,7 @@
   "gitAuthor": "stefanf81 <17823566+stefanf81@users.noreply.github.com>",
   "prHourlyLimit": 0,
   "prConcurrentLimit": 10,
+  "internalChecksFilter": "strict",
   "branchConcurrentLimit": 10,
   "postUpdateOptions": ["npmDedupe"],
   "vulnerabilityAlerts": {
@@ -228,11 +261,26 @@
       "groupName": "Angular framework and toolchain"
     },
     {
+      "description": "Trivy: the workflows' TRIVY_VERSION and the version and checksum pinned in the install-trivy action must move in one pull request (the action refuses a version it has no checksum for). Must stay below the catch-all groups.",
+      "matchPackageNames": ["aquasecurity/trivy"],
+      "groupName": "Trivy",
+      "groupSlug": "trivy"
+    },
+    {
       "description": "Keep Tailwind CSS and PostCSS plugin aligned",
       "matchManagers": ["npm"],
       "matchFileNames": ["frontend/package.json"],
       "matchPackageNames": ["tailwindcss", "@tailwindcss/**"],
       "groupName": "Tailwind CSS"
+    },
+    {
+      "description": "External-scan images on rolling tags (testssl.sh `3.2`, Nikto `latest`: neither project publishes version tags on GHCR, so every update is a digest update). They scan the production perimeter, and GHCR reports no release timestamp to age against: raise their updates without the soak, in their own group, and never automerge. After a testssl.sh update, regenerate scripts/testdata/testssl if its JSON changed. Must stay below the catch-all groups.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/testssl/testssl.sh", "ghcr.io/sullo/nikto"],
+      "minimumReleaseAgeBehaviour": "timestamp-optional",
+      "groupName": "External scanner images",
+      "groupSlug": "external-scanner-images",
+      "automerge": false
     },
     {
       "description": "Keep Zod aligned across web, mobile, and shared schemas",
@@ -345,6 +393,31 @@
       "description": "Group GitHub Actions updates",
       "matchManagers": ["github-actions"],
       "groupName": "GitHub Actions"
+    },
+    {
+      "description": "A digest-only change of a version-pinned action means its tag was moved to another commit (how 76 of 77 aquasecurity/trivy-action tags were hijacked in March 2026). Renovate ages such an update against the tag's original release date, so the 3-day soak does not hold it back. Never automerge it, and keep it out of the automerged groups. This costs nothing in normal operation: every pin carries its full '# vX.Y.Z' comment, so a regular release is a patch, minor or major update. Must stay below the first rule (automerge) and below 'Group GitHub Actions updates': later packageRules override earlier ones.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["digest"],
+      "groupName": "GitHub Actions whose tag was moved",
+      "groupSlug": "github-actions-moved-tag",
+      "automerge": false
+    },
+    {
+      "description": "Actions that publish, sign or attest the release images, hand the scan report to the signing job, or run Renovate (pushdockerimage.yml push/scan/promote: packages: write, id-token: write, attestations: write; renovate.yml: RENOVATE_TOKEN). No check of the update pull request runs their new version with those credentials, so review every update, patches included. Their own group keeps them out of the automerged batches (one non-automerge member would hold that whole branch back). Must stay below the first rule (automerge) and below 'Group GitHub Actions updates'; add an action here when it starts to run in such a job.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": [
+        "renovatebot/github-action",
+        "sigstore/cosign-installer",
+        "actions/attest",
+        "actions/upload-artifact",
+        "actions/download-artifact",
+        "docker/login-action",
+        "docker/build-push-action",
+        "docker/setup-buildx-action"
+      ],
+      "groupName": "Privileged GitHub Actions",
+      "groupSlug": "privileged-actions",
+      "automerge": false
     },
     {
       "description": "Blocked on Expo: babel-preset-expo (SDK 58 and canary) is built on Babel 7, so @babel/core 8 and babel-plugin-transform-import-meta 3 (requires Babel 8) cannot move. Fully suppressed: no branch, no PR, dashboard-only.",

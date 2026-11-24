@@ -5,8 +5,7 @@ import java.sql.SQLException;
 /** SQLSTATE checks on a data-access exception's cause chain, shared by booking and approval. */
 final class SqlStates {
 
-    private SqlStates() {
-    }
+    private SqlStates() {}
 
     /**
      * H1: Walk the exception cause chain looking for a {@link SQLException}

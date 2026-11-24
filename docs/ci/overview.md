@@ -203,6 +203,7 @@ Audits the public external perimeter, exposed ports, HTTP/TLS compliance, and we
 
 - **Direct CLI, pinned and verified:** downloads the gitleaks release named by `GITLEAKS_VERSION` and checks it against `GITLEAKS_SHA256` before extracting. Bump both together; the hash is in the release's `checksums.txt`. The workflow no longer uses `gitleaks/gitleaks-action`. That action hardcoded gitleaks 8.24.3, listed PR commits through the API without pagination (so only the first 30 commits of a PR were scanned), and uploaded a second copy of the SARIF report with default retention.
 - **Scan scope:** a PR scans only the commits it adds (`--log-opts=--no-merges <base>..<head>`), after checking that both commits are in the checkout, because gitleaks exits 0 on an invalid range. Push, schedule and manual runs scan the full history of every fetched branch (~2 s for this repository).
+- **A pull request cannot suppress its own findings:** gitleaks reads `.gitleaks.toml` and `.gitleaksignore` from the working tree and honours inline `gitleaks:allow` comments, so the commit that adds a secret could also hide it. PR runs replace both files with the base commit's versions before scanning (a PR that changes them gets a warning annotation; the change takes effect once merged), and every run passes `--ignore-gitleaks-allow`. To accept a false positive, merge its fingerprint into `.gitleaksignore` on `main` first, then update the PR branch from `main` (merge, not rebase: a rebase changes the commit SHA in the fingerprint). A plain re-run of the check keeps the event's old base commit and still fails. A pull request can still edit this workflow itself; only review catches that.
 - **One Code Scanning category (`gitleaks`):** every analysis on `main` covers the full history, so a push no longer replaces the nightly full-history analysis with a one-commit delta that would close its alerts. While `main` has no open alerts, a PR's analysis compared with `main` shows exactly the PR's findings.
 - **Concurrency:** superseded runs on the same ref are cancelled. This is safe because PR runs rescan all PR commits and every other run scans the full history.
 - **Fast reporting:** the scan's exit code is the gate, so the SARIF upload does not wait for Code Scanning processing (`wait-for-processing: "false"`, previously ~5 s per run). The `gitleaks-report` artifact (14-day retention) is uploaded only when the job fails. The job summary lists each finding with its `.gitleaksignore` fingerprint.
@@ -347,11 +348,38 @@ and digest updates enable platform automerge after required CI checks pass and
 a 3-day release quarantine soak expires to protect against supply-chain attacks.
 Minor updates require manual review (also holding for 3 days to catch immediate
 regressions). Major updates are held for 30 days and require manual review.
+`internalChecksFilter: "strict"` (Renovate's default, set explicitly) keeps a
+branch from being created before its soak has passed.
+
+Three kinds of update are never merged unattended, whatever their type:
+
+- **A digest-only change of a pinned action** (group "GitHub Actions whose tag
+  was moved"). Every pin carries its full `# vX.Y.Z` comment, so a regular
+  release is a patch, minor or major update; a new commit under the same version
+  means the tag was moved. Renovate ages such an update against the tag's
+  original release date, so the 3-day soak does not hold it back. Compare the
+  two commits before merging.
+- **Actions that publish, sign or attest the release images, hand the scan
+  report to the signing job, or run Renovate** (group "Privileged GitHub
+  Actions": the Renovate action, the cosign installer, `actions/attest`,
+  `actions/upload-artifact`, `actions/download-artifact`, and the Docker login,
+  build-push and Buildx actions). No check of the update PR runs the new
+  version with those credentials.
+- **The Renovate image** (see `docs/agents/ci.md`).
+
+These rules sit below the automerge rule and the "GitHub Actions" group in
+`.github/renovate.json`: Renovate applies `packageRules` in order and a later
+match overrides an earlier one, so a rule moved above them would lose.
 
 Tool versions pinned in workflow `env` blocks are tracked through the
 `customManagers:githubActionsVersions` preset: put a
 `# renovate: datasource=… depName=…` comment directly above a `*_VERSION`
-variable (Trivy, Nuclei, CocoaPods and the k6 image in `k6.yml` do this).
+variable (Trivy, Nuclei and CocoaPods do this). Images are pinned as
+`tag@sha256:<index digest>` and tracked by dedicated regex managers through a
+`# <name>-image:` marker instead: Renovate, ZAP, BuildKit, actionlint, zizmor,
+the k6 image in `k6.yml`, and testssl.sh and Nikto in the external scan. The
+last two only publish rolling tags on GHCR, so their group ("External scanner
+images") is never automerged.
 `GITLEAKS_VERSION` is intentionally not annotated, because its release
 checksum (`GITLEAKS_SHA256`) must change in the same commit. The Node version in
 `mobile/eas.json` is not tracked either; bump it together with `mobile/.nvmrc`.

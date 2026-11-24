@@ -29,10 +29,11 @@ class ShopAnnouncementController {
 
     @PutMapping
     @Operation(summary = "Set the landing pages' announcement; a blank message turns it off (Admin Access)")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Announcement saved"),
-            @ApiResponse(responseCode = "400", description = "Message longer than 120 characters")
-    })
+    @ApiResponses(
+            value = {
+                @ApiResponse(responseCode = "200", description = "Announcement saved"),
+                @ApiResponse(responseCode = "400", description = "Message longer than 120 characters")
+            })
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AnnouncementResponse> updateAnnouncement(@Valid @RequestBody AnnouncementRequest request) {
         return ResponseEntity.ok(announcements.update(request));

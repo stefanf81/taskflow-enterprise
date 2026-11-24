@@ -12,5 +12,4 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * </ul>
  */
 @ConfigurationProperties(prefix = "app.shop")
-record ShopProperties(@DefaultValue("UTC") String timeZone) {
-}
+record ShopProperties(@DefaultValue("UTC") String timeZone) {}

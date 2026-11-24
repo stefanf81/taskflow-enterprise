@@ -1,19 +1,15 @@
 package com.example.taskflow.core.cache;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.example.taskflow.core.RedisTestSupport;
 import com.example.taskflow.core.redis.RedisConnectionRecovery;
 import com.example.taskflow.core.redis.RedisTestAccess;
 import com.example.taskflow.core.web.RateLimiterTestAccess;
-
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.cache.Cache;
-import org.springframework.data.redis.cache.RedisCacheConfiguration;
-import org.springframework.data.redis.cache.RedisCacheManager;
-import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
-import org.springframework.data.redis.core.StringRedisTemplate;
-
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,12 +21,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.cache.Cache;
+import org.springframework.data.redis.cache.RedisCacheConfiguration;
+import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 /**
  * {@link SingleFlightCacheManager} + {@link RedisCacheLoadLock} over the production
@@ -73,11 +71,10 @@ abstract class AbstractRedisCacheLoadLockTest {
         return replica(factory, lease, maxWait, new CacheConfig().cacheConfiguration());
     }
 
-    private Cache replica(LettuceConnectionFactory factory, Duration lease, Duration maxWait,
-                          RedisCacheConfiguration configuration) {
-        RedisCacheManager manager = RedisCacheManager.builder(factory)
-                .cacheDefaults(configuration)
-                .build();
+    private Cache replica(
+            LettuceConnectionFactory factory, Duration lease, Duration maxWait, RedisCacheConfiguration configuration) {
+        RedisCacheManager manager =
+                RedisCacheManager.builder(factory).cacheDefaults(configuration).build();
         manager.afterPropertiesSet();
         StringRedisTemplate template = new StringRedisTemplate(factory);
         Object wrapped = CacheConfig.singleFlightPostProcessor(new RedisCacheLoadLock(() -> template, lease), maxWait)
@@ -128,19 +125,23 @@ abstract class AbstractRedisCacheLoadLockTest {
         var standalone = new org.springframework.data.redis.connection.RedisStandaloneConfiguration(
                 uri.getHost(), uri.getPort() > 0 ? uri.getPort() : 6379);
         io.lettuce.core.ClientOptions.Builder options = io.lettuce.core.ClientOptions.builder()
-                .socketOptions(io.lettuce.core.SocketOptions.builder().connectTimeout(Duration.ofSeconds(1)).build());
+                .socketOptions(io.lettuce.core.SocketOptions.builder()
+                        .connectTimeout(Duration.ofSeconds(1))
+                        .build());
         RedisTestAccess.enableKeepAlive(options);
-        LettuceConnectionFactory factory = new LettuceConnectionFactory(standalone,
+        LettuceConnectionFactory factory = new LettuceConnectionFactory(
+                standalone,
                 org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration.builder()
-                        .clientOptions(options.build()).build());
+                        .clientOptions(options.build())
+                        .build());
         factory.afterPropertiesSet();
         factory.start();
         try {
             StringRedisTemplate template = new StringRedisTemplate(factory);
             String probe = "keepalive-" + UUID.randomUUID();
             template.opsForValue().set(probe, "1", Duration.ofMinutes(1));
-            RedisConnectionRecovery recovery = new RedisConnectionRecovery(factory::resetConnection, 1, 0,
-                    System::currentTimeMillis);
+            RedisConnectionRecovery recovery =
+                    new RedisConnectionRecovery(factory::resetConnection, 1, 0, System::currentTimeMillis);
 
             recovery.recordFailure(new org.springframework.dao.QueryTimeoutException("simulated"));
 
@@ -214,8 +215,12 @@ abstract class AbstractRedisCacheLoadLockTest {
     @Test
     void anEntryInTheFormerFormatIsReloadedAndOverwritten() {
         String entry = CACHE + "::" + key;
-        redis.opsForValue().set(entry, "[\"java.util.ImmutableCollections$List12\",[\"09:00\"]]", Duration.ofMinutes(1));
-        Cache typed = replica(factoryA, Duration.ofSeconds(10), Duration.ofSeconds(5),
+        redis.opsForValue()
+                .set(entry, "[\"java.util.ImmutableCollections$List12\",[\"09:00\"]]", Duration.ofMinutes(1));
+        Cache typed = replica(
+                factoryA,
+                Duration.ofSeconds(10),
+                Duration.ofSeconds(5),
                 CacheConfig.listCache(Duration.ofMinutes(2), String.class));
         AtomicInteger loads = new AtomicInteger();
 

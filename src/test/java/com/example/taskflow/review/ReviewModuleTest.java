@@ -1,11 +1,11 @@
 package com.example.taskflow.review;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.modulith.test.ApplicationModuleTest;
 import org.springframework.test.context.TestPropertySource;
-
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Boots review with the modules it may depend on. Reviews reference their appointment by id and carry

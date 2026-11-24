@@ -8,6 +8,4 @@ import org.jspecify.annotations.Nullable;
  * characters (V45): the prerendered web page reserves room for that much text.
  */
 public record AnnouncementRequest(
-    @Size(max = 120, message = "The announcement must not exceed 120 characters")
-    @Nullable String message
-) {}
+        @Size(max = 120, message = "The announcement must not exceed 120 characters") @Nullable String message) {}

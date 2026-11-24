@@ -1,5 +1,12 @@
 package com.example.taskflow.appointment;
 
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
@@ -9,6 +16,12 @@ import com.example.taskflow.auth.internal.UserRepository;
 import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.HashMap;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,21 +32,6 @@ import org.springframework.cache.CacheManager;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.math.BigDecimal;
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.not;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Gaps in the {@code Idempotency-Key} replay contract beyond the base cases
@@ -96,8 +94,12 @@ class IdempotencyReplayIntegrationTest {
         ensureBarber(OTHER_BARBER);
         ensureService();
 
-        userRepository.save(new AppUser("admin@taskflow.com", passwordEncoder.encode("admin-password"),
-                "Shop Owner", "555-0001", "ROLE_ADMIN"));
+        userRepository.save(new AppUser(
+                "admin@taskflow.com",
+                passwordEncoder.encode("admin-password"),
+                "Shop Owner",
+                "555-0001",
+                "ROLE_ADMIN"));
         adminToken = "Bearer " + login("admin@taskflow.com", "admin-password");
     }
 
@@ -130,7 +132,10 @@ class IdempotencyReplayIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("access_token").getValue();
+                .andReturn()
+                .getResponse()
+                .getCookie("access_token")
+                .getValue();
     }
 
     private LocalDate nextWorkingDate() {
@@ -163,13 +168,15 @@ class IdempotencyReplayIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
     }
 
     @Test
     void sentinelReplay_returnsOriginalResolvedBarber() throws Exception {
-        Map<String, Object> request = request("sentinel@example.com",
-                AppointmentBookingService.NO_PREFERENCE_BARBER, "10:00");
+        Map<String, Object> request =
+                request("sentinel@example.com", AppointmentBookingService.NO_PREFERENCE_BARBER, "10:00");
         String created = create(request, "sentinel-key");
         String resolvedBarber = objectMapper.readTree(created).get("barberName").asText();
 
@@ -178,7 +185,8 @@ class IdempotencyReplayIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id", is(objectMapper.readTree(created).get("id").asInt())))
+                .andExpect(jsonPath(
+                        "$.id", is(objectMapper.readTree(created).get("id").asInt())))
                 .andExpect(jsonPath("$.barberName", is(resolvedBarber)))
                 .andExpect(jsonPath("$.barberName", not(AppointmentBookingService.NO_PREFERENCE_BARBER)));
     }
@@ -188,8 +196,12 @@ class IdempotencyReplayIntegrationTest {
         Map<String, Object> request = request("service@example.com", BARBER, "10:00");
         create(request, "service-key");
 
-        Map<String, Object> changed = request("service@example.com", BARBER, "10:00",
-                "Some Other Service", nextWorkingDate().toString());
+        Map<String, Object> changed = request(
+                "service@example.com",
+                BARBER,
+                "10:00",
+                "Some Other Service",
+                nextWorkingDate().toString());
         mockMvc.perform(post("/api/v1/appointments")
                         .header("Idempotency-Key", "service-key")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -205,8 +217,7 @@ class IdempotencyReplayIntegrationTest {
         mockMvc.perform(post("/api/v1/appointments")
                         .header("Idempotency-Key", "email-key")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                request("intruder@example.com", BARBER, "10:00"))))
+                        .content(objectMapper.writeValueAsString(request("intruder@example.com", BARBER, "10:00"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.id").doesNotExist())
                 .andExpect(jsonPath("$.publicId").doesNotExist())
@@ -220,8 +231,7 @@ class IdempotencyReplayIntegrationTest {
         mockMvc.perform(post("/api/v1/appointments")
                         .header("Idempotency-Key", "barber-key")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                request("barber@example.com", OTHER_BARBER, "10:00"))))
+                        .content(objectMapper.writeValueAsString(request("barber@example.com", OTHER_BARBER, "10:00"))))
                 .andExpect(status().isConflict());
     }
 
@@ -253,7 +263,8 @@ class IdempotencyReplayIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id", is(objectMapper.readTree(created).get("id").asInt())));
+                .andExpect(jsonPath(
+                        "$.id", is(objectMapper.readTree(created).get("id").asInt())));
     }
 
     @Test
@@ -266,8 +277,7 @@ class IdempotencyReplayIntegrationTest {
         mockMvc.perform(post("/api/v1/appointments")
                         .header("Idempotency-Key", "   ")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                request("blank@example.com", BARBER, "11:00"))))
+                        .content(objectMapper.writeValueAsString(request("blank@example.com", BARBER, "11:00"))))
                 .andExpect(status().isCreated());
     }
 
@@ -299,8 +309,7 @@ class IdempotencyReplayIntegrationTest {
         mockMvc.perform(post("/api/v1/appointments")
                         .header("Idempotency-Key", "case-key")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                request("case@example.com", BARBER, "10:00"))))
+                        .content(objectMapper.writeValueAsString(request("case@example.com", BARBER, "10:00"))))
                 .andExpect(status().isOk());
     }
 
@@ -312,8 +321,7 @@ class IdempotencyReplayIntegrationTest {
         mockMvc.perform(post("/api/v1/appointments")
                         .header("Idempotency-Key", hundredCharKey)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                request("maxkey@example.com", BARBER, "10:00"))))
+                        .content(objectMapper.writeValueAsString(request("maxkey@example.com", BARBER, "10:00"))))
                 .andExpect(status().isOk());
     }
 }

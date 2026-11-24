@@ -1,6 +1,10 @@
 package com.example.taskflow.benchmark;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.example.taskflow.core.AsyncConfig;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -12,8 +16,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadMXBean;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,8 +26,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
-
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Benchmarks the bounded vs unbounded async executor under synthetic burst load.
@@ -54,11 +54,11 @@ class AsyncExecutorBenchmarkTest {
     private static final int BENCHMARK_TIMEOUT_SECONDS = 60;
     private static final double MAX_AVG_LATENCY_MS = 500.0;
 
-    @Autowired private BurstService burstService;
+    @Autowired
+    private BurstService burstService;
 
     @Autowired
-    @Qualifier("taskExecutor")
-    private Executor taskExecutor;
+    @Qualifier("taskExecutor") private Executor taskExecutor;
 
     @TestConfiguration
     static class BurstConfig {
@@ -78,7 +78,6 @@ class AsyncExecutorBenchmarkTest {
             }
             return CompletableFuture.completedFuture(null);
         }
-
     }
 
     @Test
@@ -91,16 +90,18 @@ class AsyncExecutorBenchmarkTest {
         System.out.println("=".repeat(90));
 
         if (taskExecutor instanceof ThreadPoolTaskExecutor tpe) {
-            System.out.printf("  Executor: core=%d max=%d queue=%d keepAlive=%ds%n",
-                    tpe.getCorePoolSize(), tpe.getMaxPoolSize(),
-                    tpe.getQueueCapacity(), tpe.getKeepAliveSeconds());
-            System.out.printf("  Rejection: %s%n",
-                    tpe.getThreadPoolExecutor().getRejectedExecutionHandler().getClass().getSimpleName());
+            System.out.printf(
+                    "  Executor: core=%d max=%d queue=%d keepAlive=%ds%n",
+                    tpe.getCorePoolSize(), tpe.getMaxPoolSize(), tpe.getQueueCapacity(), tpe.getKeepAliveSeconds());
+            System.out.printf(
+                    "  Rejection: %s%n",
+                    tpe.getThreadPoolExecutor()
+                            .getRejectedExecutionHandler()
+                            .getClass()
+                            .getSimpleName());
             // Safety assertions — the whole point of P0-1
-            assertTrue(tpe.getMaxPoolSize() <= 64,
-                    "maxPoolSize must be bounded (64), was " + tpe.getMaxPoolSize());
-            assertTrue(tpe.getQueueCapacity() <= 200,
-                    "queueCapacity must be bounded, was " + tpe.getQueueCapacity());
+            assertTrue(tpe.getMaxPoolSize() <= 64, "maxPoolSize must be bounded (64), was " + tpe.getMaxPoolSize());
+            assertTrue(tpe.getQueueCapacity() <= 200, "queueCapacity must be bounded, was " + tpe.getQueueCapacity());
             assertTrue(
                     tpe.getThreadPoolExecutor().getRejectedExecutionHandler()
                             instanceof ThreadPoolExecutor.CallerRunsPolicy,
@@ -110,11 +111,11 @@ class AsyncExecutorBenchmarkTest {
         }
 
         int threadsBefore = threadBean.getThreadCount();
-        long heapBefore = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
-        System.out.printf("  Threads before: %d  Heap used: %.2f MB%n",
-                threadsBefore, heapBefore / (1024.0 * 1024.0));
-        System.out.printf("  Burst: %d tasks  Concurrency: %d  Task sleep: %d ms%n",
-                BURST_SIZE, CONCURRENCY, TASK_SLEEP_MS);
+        long heapBefore =
+                Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+        System.out.printf("  Threads before: %d  Heap used: %.2f MB%n", threadsBefore, heapBefore / (1024.0 * 1024.0));
+        System.out.printf(
+                "  Burst: %d tasks  Concurrency: %d  Task sleep: %d ms%n", BURST_SIZE, CONCURRENCY, TASK_SLEEP_MS);
         System.out.println();
 
         // --- Warm-up (JIT, pool spin-up) --------------------------------------
@@ -141,7 +142,8 @@ class AsyncExecutorBenchmarkTest {
         long p99 = percentile(sorted, 99);
 
         int threadsAfter = threadBean.getThreadCount();
-        long heapAfter = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+        long heapAfter =
+                Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
         int peakThreads = threadsAfter; // approximate — executor threads are visible here
         if (taskExecutor instanceof ThreadPoolTaskExecutor tpe) {
             peakThreads = tpe.getThreadPoolExecutor().getLargestPoolSize();
@@ -175,7 +177,8 @@ class AsyncExecutorBenchmarkTest {
         if (taskExecutor instanceof ThreadPoolTaskExecutor tpe) {
             ThreadPoolExecutor raw = tpe.getThreadPoolExecutor();
             System.out.printf("  %-40s %10d%n", "Pool completed tasks", raw.getCompletedTaskCount());
-            System.out.printf("  %-40s %10d%n", "Pool queue size (after)", raw.getQueue().size());
+            System.out.printf(
+                    "  %-40s %10d%n", "Pool queue size (after)", raw.getQueue().size());
         }
         System.out.println("=".repeat(90));
         System.out.println();
@@ -187,17 +190,18 @@ class AsyncExecutorBenchmarkTest {
                 + "  threadsDelta=" + (threadsAfter - threadsBefore));
 
         // --- Assertions ---------------------------------------------------------
-        assertTrue(avg < MAX_AVG_LATENCY_MS,
+        assertTrue(
+                avg < MAX_AVG_LATENCY_MS,
                 String.format("Average latency %.2f ms exceeds %.2f ms SLA", avg, MAX_AVG_LATENCY_MS));
 
         if (taskExecutor instanceof ThreadPoolTaskExecutor tpe) {
             // With 500 tasks * 50ms each, even the unbounded pool cannot finish
             // in <p99 5s; the bounded pool's CallerRunsPolicy will increase
             // caller latency but must not explode threads.
-            assertTrue(tpe.getThreadPoolExecutor().getLargestPoolSize() <= 64,
+            assertTrue(
+                    tpe.getThreadPoolExecutor().getLargestPoolSize() <= 64,
                     "Peak pool size must stay <= maxPoolSize (64) — bounded safety violated");
-            assertTrue(p99 < 5000,
-                    "p99 latency " + p99 + " ms too high — backpressure not working");
+            assertTrue(p99 < 5000, "p99 latency " + p99 + " ms too high — backpressure not working");
         }
 
         // Memory stability: heap delta should stay bounded (<100 MB for 500*1KB payloads)

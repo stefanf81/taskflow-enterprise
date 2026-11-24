@@ -1,25 +1,23 @@
 package com.example.taskflow.appointment;
 
-import com.example.taskflow.catalog.AnnouncementResponse;
-import com.example.taskflow.catalog.ShopAnnouncementService;
-import com.example.taskflow.appointment.stream.AppointmentEventStreamService;
-
-import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-
-import java.time.Instant;
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import com.example.taskflow.appointment.stream.AppointmentEventStreamService;
+import com.example.taskflow.catalog.AnnouncementResponse;
+import com.example.taskflow.catalog.ShopAnnouncementService;
+import java.time.Instant;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /** BKG-8: the controller hands the access token's expiry to the SSE service. */
 class AppointmentControllerEventStreamTest {
@@ -30,15 +28,26 @@ class AppointmentControllerEventStreamTest {
     private final AppointmentEventStreamService streams = mock(AppointmentEventStreamService.class);
     private final BarberService barberService = mock(BarberService.class);
     private final ShopAnnouncementService announcements = mock(ShopAnnouncementService.class);
-    private final AppointmentController controller = new AppointmentController(queryService, bookingService,
-            lifecycleService, streams, barberService, BookingProperties.defaults(), announcements,
+    private final AppointmentController controller = new AppointmentController(
+            queryService,
+            bookingService,
+            lifecycleService,
+            streams,
+            barberService,
+            BookingProperties.defaults(),
+            announcements,
             java.time.Clock.systemUTC());
 
     @Test
     void jwtPrincipalPassesItsExpiryAndIdToTheStream() {
         Instant expiresAt = Instant.parse("2031-03-10T11:00:00Z");
-        Jwt jwt = Jwt.withTokenValue("token").header("alg", "none").subject("admin").jti("jti-1")
-                .issuedAt(expiresAt.minusSeconds(3600)).expiresAt(expiresAt).build();
+        Jwt jwt = Jwt.withTokenValue("token")
+                .header("alg", "none")
+                .subject("admin")
+                .jti("jti-1")
+                .issuedAt(expiresAt.minusSeconds(3600))
+                .expiresAt(expiresAt)
+                .build();
         SseEmitter emitter = new SseEmitter();
         when(streams.subscribe("admin", expiresAt, "jti-1")).thenReturn(emitter);
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -68,8 +77,14 @@ class AppointmentControllerEventStreamTest {
         when(barberService.getOpeningHours()).thenReturn(hours);
         BookingProperties window = new BookingProperties(30, 5, "09:00", "17:00", List.of(1));
         when(announcements.current()).thenReturn(new AnnouncementResponse(true, "Half-price beard trims on Tuesdays"));
-        AppointmentController inNewYork = new AppointmentController(queryService, bookingService, lifecycleService,
-                streams, barberService, window, announcements,
+        AppointmentController inNewYork = new AppointmentController(
+                queryService,
+                bookingService,
+                lifecycleService,
+                streams,
+                barberService,
+                window,
+                announcements,
                 java.time.Clock.system(java.time.ZoneId.of("America/New_York")));
 
         var response = inNewYork.getShopInfo();

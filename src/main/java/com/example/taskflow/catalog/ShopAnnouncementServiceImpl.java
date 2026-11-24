@@ -24,7 +24,8 @@ class ShopAnnouncementServiceImpl implements ShopAnnouncementService {
     @Transactional(readOnly = true)
     @Cacheable(value = CatalogCacheConfig.ANNOUNCEMENT_CACHE, sync = true)
     public AnnouncementResponse current() {
-        return AnnouncementResponse.of(repository.findById(ShopAnnouncement.ID)
+        return AnnouncementResponse.of(repository
+                .findById(ShopAnnouncement.ID)
                 .map(ShopAnnouncement::getMessage)
                 .orElse(null));
     }
@@ -34,8 +35,7 @@ class ShopAnnouncementServiceImpl implements ShopAnnouncementService {
         String message = request.message() == null || request.message().isBlank()
                 ? null
                 : request.message().trim();
-        ShopAnnouncement row = repository.findById(ShopAnnouncement.ID)
-                .orElseGet(() -> new ShopAnnouncement(null));
+        ShopAnnouncement row = repository.findById(ShopAnnouncement.ID).orElseGet(() -> new ShopAnnouncement(null));
         row.setMessage(message);
         repository.save(row);
         events.publishEvent(new AnnouncementChangedEvent());

@@ -1,26 +1,5 @@
 package com.example.taskflow.catalog;
 
-import com.example.taskflow.appointment.internal.Appointment;
-import com.example.taskflow.appointment.internal.AppointmentRepository;
-import com.example.taskflow.auth.AppUser;
-import com.example.taskflow.auth.internal.UserRepository;
-import com.example.taskflow.catalog.internal.ServiceItemRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.web.servlet.MockMvc;
-
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.Map;
-
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
@@ -34,6 +13,26 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.example.taskflow.appointment.internal.Appointment;
+import com.example.taskflow.appointment.internal.AppointmentRepository;
+import com.example.taskflow.auth.AppUser;
+import com.example.taskflow.auth.internal.UserRepository;
+import com.example.taskflow.catalog.internal.ServiceItemRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.web.servlet.MockMvc;
+
 /**
  * DATA-6 end to end on H2 with the real V32 schema: unique names (409), retiring a service that
  * appointments reference (204 instead of a 500 from fk_appointment_service), retired services
@@ -43,13 +42,26 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class CatalogRetirementIntegrationTest {
 
-    @Autowired private MockMvc mockMvc;
-    @Autowired private UserRepository userRepository;
-    @Autowired private ServiceItemRepository serviceItemRepository;
-    @Autowired private AppointmentRepository appointmentRepository;
-    @Autowired private CatalogService catalogService;
-    @Autowired private PasswordEncoder passwordEncoder;
-    @Autowired private JdbcTemplate jdbc;
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private ServiceItemRepository serviceItemRepository;
+
+    @Autowired
+    private AppointmentRepository appointmentRepository;
+
+    @Autowired
+    private CatalogService catalogService;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private String adminToken;
@@ -61,14 +73,21 @@ class CatalogRetirementIntegrationTest {
         appointmentRepository.deleteAll();
         serviceItemRepository.deleteAll();
         userRepository.deleteAll();
-        userRepository.save(new AppUser("admin@taskflow.com", passwordEncoder.encode("admin-password"),
-                "Shop Owner", "555-1234", "ROLE_ADMIN"));
+        userRepository.save(new AppUser(
+                "admin@taskflow.com",
+                passwordEncoder.encode("admin-password"),
+                "Shop Owner",
+                "555-1234",
+                "ROLE_ADMIN"));
         Map<String, String> login = Map.of("username", "admin@taskflow.com", "password", "admin-password");
         String cookie = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(login)))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("access_token").getValue();
+                .andReturn()
+                .getResponse()
+                .getCookie("access_token")
+                .getValue();
         adminToken = "Bearer " + cookie;
     }
 
@@ -83,11 +102,14 @@ class CatalogRetirementIntegrationTest {
     }
 
     private long create(String name) throws Exception {
-        String json = mockMvc.perform(post("/api/v1/catalog").header("Authorization", adminToken)
+        String json = mockMvc.perform(post("/api/v1/catalog")
+                        .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body(name))))
                 .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         return ((Number) objectMapper.readValue(json, Map.class).get("id")).longValue();
     }
 
@@ -96,18 +118,21 @@ class CatalogRetirementIntegrationTest {
         long first = create("Hot Towel Shave");
         long second = create("Beard Oil Treatment");
 
-        mockMvc.perform(post("/api/v1/catalog").header("Authorization", adminToken)
+        mockMvc.perform(post("/api/v1/catalog")
+                        .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body("hot TOWEL shave"))))
                 .andExpect(status().isConflict());
 
-        mockMvc.perform(put("/api/v1/catalog/" + second).header("Authorization", adminToken)
+        mockMvc.perform(put("/api/v1/catalog/" + second)
+                        .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body("HOT towel SHAVE"))))
                 .andExpect(status().isConflict());
 
         // renaming a service to its own name (different case) is fine
-        mockMvc.perform(put("/api/v1/catalog/" + first).header("Authorization", adminToken)
+        mockMvc.perform(put("/api/v1/catalog/" + first)
+                        .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body("HOT TOWEL SHAVE"))))
                 .andExpect(status().isOk())
@@ -117,16 +142,18 @@ class CatalogRetirementIntegrationTest {
     @Test
     void databaseItselfRefusesCaseInsensitiveDuplicates() {
         jdbc.update("INSERT INTO services (name, price, duration_minutes, category) VALUES ('Dup Check', 1, 1, 'x')");
-        org.junit.jupiter.api.Assertions.assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
-                () -> jdbc.update("INSERT INTO services (name, price, duration_minutes, category) VALUES ('DUP CHECK', 1, 1, 'x')"));
+        org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.dao.DataIntegrityViolationException.class,
+                () -> jdbc.update(
+                        "INSERT INTO services (name, price, duration_minutes, category) VALUES ('DUP CHECK', 1, 1, 'x')"));
     }
 
     @Test
     void deletingAServiceWithAppointmentsRetiresItAndHidesItFromListAndBooking() throws Exception {
         long id = create("Retire Me");
         ServiceItem item = serviceItemRepository.findById(id).orElseThrow();
-        Appointment appointment = new Appointment("Old Customer", "old@x.test", "555", "Alex the Barber",
-                LocalDate.of(2031, 5, 5), "10:00", "Retire Me");
+        Appointment appointment = new Appointment(
+                "Old Customer", "old@x.test", "555", "Alex the Barber", LocalDate.of(2031, 5, 5), "10:00", "Retire Me");
         appointment.setService(item);
         appointmentRepository.save(appointment);
 
@@ -149,7 +176,8 @@ class CatalogRetirementIntegrationTest {
                 .andExpect(status().isNoContent());
 
         // the name can be reused: the retired row comes back instead of hitting the unique index
-        mockMvc.perform(post("/api/v1/catalog").header("Authorization", adminToken)
+        mockMvc.perform(post("/api/v1/catalog")
+                        .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body("retire me"))))
                 .andExpect(status().isCreated())
@@ -163,8 +191,14 @@ class CatalogRetirementIntegrationTest {
     void adminCanListAndRestoreRetiredServices() throws Exception {
         long id = create("Restore Me");
         long other = create("Stay Active");
-        Appointment appointment = new Appointment("Old Customer", "old@x.test", "555", "Alex the Barber",
-                LocalDate.of(2031, 5, 5), "10:00", "Restore Me");
+        Appointment appointment = new Appointment(
+                "Old Customer",
+                "old@x.test",
+                "555",
+                "Alex the Barber",
+                LocalDate.of(2031, 5, 5),
+                "10:00",
+                "Restore Me");
         appointment.setService(serviceItemRepository.findById(id).orElseThrow());
         appointmentRepository.save(appointment);
 
@@ -232,9 +266,16 @@ class CatalogRetirementIntegrationTest {
         Map<String, Object> overDayDuration = body("Ok Name");
         overDayDuration.put("durationMinutes", 1441);
 
-        for (Map<String, Object> invalid : java.util.List.of(longName, longCategory, longDescription, tooManyDigits,
-                tooManyDecimals, zeroDuration, overDayDuration)) {
-            mockMvc.perform(post("/api/v1/catalog").header("Authorization", adminToken)
+        for (Map<String, Object> invalid : java.util.List.of(
+                longName,
+                longCategory,
+                longDescription,
+                tooManyDigits,
+                tooManyDecimals,
+                zeroDuration,
+                overDayDuration)) {
+            mockMvc.perform(post("/api/v1/catalog")
+                            .header("Authorization", adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(invalid)))
                     .andExpect(status().isBadRequest());
@@ -245,7 +286,8 @@ class CatalogRetirementIntegrationTest {
         boundary.put("description", "d".repeat(500));
         boundary.put("price", new BigDecimal("12345678.99"));
         boundary.put("durationMinutes", 1440);
-        mockMvc.perform(post("/api/v1/catalog").header("Authorization", adminToken)
+        mockMvc.perform(post("/api/v1/catalog")
+                        .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(boundary)))
                 .andExpect(status().isCreated());

@@ -9,13 +9,12 @@ import io.swagger.v3.oas.models.media.MediaType;
 import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
-import org.springdoc.core.customizers.OpenApiCustomizer;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springdoc.core.customizers.OpenApiCustomizer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
 /**
  * Documents how the API authenticates: the web app sends the HttpOnly {@code access_token} cookie
@@ -68,8 +67,10 @@ class OpenApiSecurityConfig {
 
     /** The body {@code GlobalExceptionHandler} writes (its schema is registered by core's error customizer). */
     private static Content handlerErrorContent() {
-        return new Content().addMediaType(org.springframework.http.MediaType.APPLICATION_JSON_VALUE,
-                new MediaType().schema(new Schema<>().$ref("#/components/schemas/ErrorResponse")));
+        return new Content()
+                .addMediaType(
+                        org.springframework.http.MediaType.APPLICATION_JSON_VALUE,
+                        new MediaType().schema(new Schema<>().$ref("#/components/schemas/ErrorResponse")));
     }
 
     static void documentSecurity(OpenAPI openApi) {
@@ -77,25 +78,29 @@ class OpenApiSecurityConfig {
             openApi.setComponents(new Components());
         }
         openApi.getComponents()
-                .addSecuritySchemes(COOKIE_AUTH, new SecurityScheme()
-                        .type(SecurityScheme.Type.APIKEY)
-                        .in(SecurityScheme.In.COOKIE)
-                        .name("access_token")
-                        .description("HttpOnly JWT cookie set by POST /api/v1/auth/login (web)."))
-                .addSecuritySchemes(BEARER_AUTH, new SecurityScheme()
-                        .type(SecurityScheme.Type.HTTP)
-                        .scheme("bearer")
-                        .bearerFormat("JWT")
-                        .description("Token returned by POST /api/v1/auth/mobile/login (mobile)."));
+                .addSecuritySchemes(
+                        COOKIE_AUTH,
+                        new SecurityScheme()
+                                .type(SecurityScheme.Type.APIKEY)
+                                .in(SecurityScheme.In.COOKIE)
+                                .name("access_token")
+                                .description("HttpOnly JWT cookie set by POST /api/v1/auth/login (web)."))
+                .addSecuritySchemes(
+                        BEARER_AUTH,
+                        new SecurityScheme()
+                                .type(SecurityScheme.Type.HTTP)
+                                .scheme("bearer")
+                                .bearerFormat("JWT")
+                                .description("Token returned by POST /api/v1/auth/mobile/login (mobile)."));
         // Two alternatives: either scheme authenticates.
         openApi.setSecurity(List.of(
-                new SecurityRequirement().addList(COOKIE_AUTH),
-                new SecurityRequirement().addList(BEARER_AUTH)));
+                new SecurityRequirement().addList(COOKIE_AUTH), new SecurityRequirement().addList(BEARER_AUTH)));
         if (openApi.getPaths() == null) {
             return;
         }
         openApi.getPaths().forEach((path, item) -> {
-            for (Map.Entry<PathItem.HttpMethod, Operation> entry : item.readOperationsMap().entrySet()) {
+            for (Map.Entry<PathItem.HttpMethod, Operation> entry :
+                    item.readOperationsMap().entrySet()) {
                 Operation operation = entry.getValue();
                 boolean isPublic = PUBLIC_OPERATIONS.contains(entry.getKey() + " " + path);
                 if (isPublic) {

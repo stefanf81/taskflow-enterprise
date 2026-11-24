@@ -1,0 +1,3 @@
+# Test-only: every Spring context of the `test` task gets its own PostgreSQL database.
+org.springframework.boot.EnvironmentPostProcessor=\
+com.example.taskflow.testsupport.PostgresTestDatabaseEnvironmentPostProcessor

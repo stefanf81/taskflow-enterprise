@@ -87,7 +87,7 @@ re-resolve a lockfile entry that still satisfies its range when an override is a
 ### Backend (Spring Boot 4.2.0)
 
 ```bash
-./gradlew test           # Fast H2-backed tests; Docker is not required
+./gradlew test           # Unit and Spring-context tests on PostgreSQL (needs Docker)
 ./gradlew build          # Compile, test, and package the application
 ./gradlew bootRun        # Start backend on :8080 (uses H2 in-memory DB for dev)
 ./gradlew testcontainersTest # PostgreSQL parity tests; Docker must be running
@@ -128,7 +128,7 @@ Install the browser required by Playwright once per machine:
 ### Testing
 
 ```bash
-./gradlew test              # Backend H2 tests (does not require Docker)
+./gradlew test              # Backend tests on PostgreSQL (Docker, or TASKFLOW_TEST_POSTGRES_URL)
 ./gradlew testcontainersTest # PostgreSQL tests (requires Docker)
 cd frontend && npm test     # Frontend unit tests
 cd frontend && npm run e2e  # Playwright E2E tests (starts its own dev server)

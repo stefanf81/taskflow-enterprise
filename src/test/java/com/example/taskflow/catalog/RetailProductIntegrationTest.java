@@ -1,25 +1,5 @@
 package com.example.taskflow.catalog;
 
-import com.example.taskflow.auth.AppUser;
-import com.example.taskflow.auth.internal.UserRepository;
-import com.example.taskflow.catalog.internal.RetailProductRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.cache.CacheManager;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.web.servlet.MockMvc;
-
-import java.util.HashMap;
-import java.util.Map;
-
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -30,6 +10,25 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.example.taskflow.auth.AppUser;
+import com.example.taskflow.auth.internal.UserRepository;
+import com.example.taskflow.catalog.internal.RetailProductRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.HashMap;
+import java.util.Map;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.cache.CacheManager;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.web.servlet.MockMvc;
+
 /**
  * Retail products (V44) end to end on H2: the seeded list in the shop's order, admin create /
  * update / delete, the public list following every write (the cache is invalidated after commit),
@@ -39,12 +38,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class RetailProductIntegrationTest {
 
-    @Autowired private MockMvc mockMvc;
-    @Autowired private UserRepository userRepository;
-    @Autowired private RetailProductRepository productRepository;
-    @Autowired private PasswordEncoder passwordEncoder;
-    @Autowired private JdbcTemplate jdbc;
-    @Autowired private CacheManager cacheManager;
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private RetailProductRepository productRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    @Autowired
+    private CacheManager cacheManager;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private String adminToken;
@@ -53,14 +63,21 @@ class RetailProductIntegrationTest {
     void setUp() throws Exception {
         restoreSeed();
         userRepository.findByEmailIgnoreCase("products-admin@taskflow.com").ifPresent(userRepository::delete);
-        userRepository.save(new AppUser("products-admin@taskflow.com", passwordEncoder.encode("admin-password"),
-                "Shop Owner", "555-1234", "ROLE_ADMIN"));
+        userRepository.save(new AppUser(
+                "products-admin@taskflow.com",
+                passwordEncoder.encode("admin-password"),
+                "Shop Owner",
+                "555-1234",
+                "ROLE_ADMIN"));
         Map<String, String> login = Map.of("username", "products-admin@taskflow.com", "password", "admin-password");
         String cookie = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(login)))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("access_token").getValue();
+                .andReturn()
+                .getResponse()
+                .getCookie("access_token")
+                .getValue();
         adminToken = "Bearer " + cookie;
     }
 
@@ -104,12 +121,15 @@ class RetailProductIntegrationTest {
     void adminWritesShowUpInThePublicListRightAway() throws Exception {
         mockMvc.perform(get("/api/v1/catalog/products")).andExpect(status().isOk()); // warm the cache
 
-        String created = mockMvc.perform(post("/api/v1/catalog/products").header("Authorization", adminToken)
+        String created = mockMvc.perform(post("/api/v1/catalog/products")
+                        .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(product("  Matte Paste  ", 18.50, 0))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("Matte Paste"))
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         long id = objectMapper.readTree(created).get("id").asLong();
 
         mockMvc.perform(get("/api/v1/catalog/products"))
@@ -118,7 +138,8 @@ class RetailProductIntegrationTest {
 
         Map<String, Object> update = product("Matte Paste", 20.00, 9);
         update.put("sizeLabel", " ");
-        mockMvc.perform(put("/api/v1/catalog/products/" + id).header("Authorization", adminToken)
+        mockMvc.perform(put("/api/v1/catalog/products/" + id)
+                        .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
                 .andExpect(status().isOk())
@@ -136,27 +157,31 @@ class RetailProductIntegrationTest {
 
     @Test
     void rejectsDuplicateNamesAndInvalidInput() throws Exception {
-        mockMvc.perform(post("/api/v1/catalog/products").header("Authorization", adminToken)
+        mockMvc.perform(post("/api/v1/catalog/products")
+                        .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(product("sandalwood beard balm", 10, 1))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message", containsString("already exists")));
 
-        mockMvc.perform(post("/api/v1/catalog/products").header("Authorization", adminToken)
+        mockMvc.perform(post("/api/v1/catalog/products")
+                        .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(product("", -1, -1))))
                 .andExpect(status().isBadRequest());
 
         Map<String, Object> longSize = product("Big Tub", 10, 1);
         longSize.put("sizeLabel", "x".repeat(31));
-        mockMvc.perform(post("/api/v1/catalog/products").header("Authorization", adminToken)
+        mockMvc.perform(post("/api/v1/catalog/products")
+                        .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(longSize)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.validationErrors[0].field").value("sizeLabel"))
                 .andExpect(jsonPath("$.validationErrors[0].message", containsString("Size")));
 
-        mockMvc.perform(put("/api/v1/catalog/products/999999").header("Authorization", adminToken)
+        mockMvc.perform(put("/api/v1/catalog/products/999999")
+                        .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(product("Ghost", 10, 1))))
                 .andExpect(status().isNotFound());

@@ -1,24 +1,21 @@
 package com.example.taskflow.catalog;
-import com.example.taskflow.catalog.internal.ServiceItemRepository;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.example.taskflow.core.ResourceNotFoundException;
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
 import org.springframework.web.server.ResponseStatusException;
-
-import java.math.BigDecimal;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CatalogServiceImplTest {
@@ -154,8 +151,8 @@ class CatalogServiceImplTest {
         existing.setId(9L);
         when(repository.findByNameIgnoreCase("New Haircut")).thenReturn(Optional.of(existing));
 
-        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> catalogService.createService(request));
+        ResponseStatusException ex =
+                assertThrows(ResponseStatusException.class, () -> catalogService.createService(request));
 
         assertEquals(409, ex.getStatusCode().value());
         verify(repository, never()).save(any(ServiceItem.class));
@@ -233,8 +230,8 @@ class CatalogServiceImplTest {
         when(repository.findById(1L)).thenReturn(Optional.of(item1));
         when(repository.existsByNameIgnoreCaseAndIdNot("New Haircut", 1L)).thenReturn(true);
 
-        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> catalogService.updateService(1L, request));
+        ResponseStatusException ex =
+                assertThrows(ResponseStatusException.class, () -> catalogService.updateService(1L, request));
 
         assertEquals(409, ex.getStatusCode().value());
         verify(repository, never()).save(any(ServiceItem.class));
