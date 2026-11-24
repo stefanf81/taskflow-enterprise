@@ -33,6 +33,30 @@
       "datasourceTemplate": "docker"
     },
     {
+      "description": "Update the testssl.sh image tag and digest together in the external scan",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/nightly-external-server-scan\\.yml$/"],
+      "matchStrings": ["# testssl-image: tracked by the dedicated regex manager in \\.github/renovate\\.json\\s+TESTSSL_VERSION: \\\"(?<currentValue>[^@\\\"]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\\""],
+      "depNameTemplate": "ghcr.io/testssl/testssl.sh",
+      "datasourceTemplate": "docker"
+    },
+    {
+      "description": "Update the Nikto image tag and digest together in the external scan",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/nightly-external-server-scan\\.yml$/"],
+      "matchStrings": ["# nikto-image: tracked by the dedicated regex manager in \\.github/renovate\\.json\\s+NIKTO_VERSION: \\\"(?<currentValue>[^@\\\"]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\\""],
+      "depNameTemplate": "ghcr.io/sullo/nikto",
+      "datasourceTemplate": "docker"
+    },
+    {
+      "description": "Update the k6 image tag and digest together in k6.yml",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/k6\\.yml$/"],
+      "matchStrings": ["# k6-image: tracked by the dedicated regex manager in \\.github/renovate\\.json\\s+K6_VERSION: \\\"(?<currentValue>[^@\\\"]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\\""],
+      "depNameTemplate": "grafana/k6",
+      "datasourceTemplate": "docker"
+    },
+    {
       "description": "Update the BuildKit image tag and digest together in the prepull-buildkit action",
       "customType": "regex",
       "managerFilePatterns": ["/^\\.github/actions/prepull-buildkit/action\\.yml$/"],
@@ -248,6 +272,15 @@
       "matchFileNames": ["frontend/package.json"],
       "matchPackageNames": ["tailwindcss", "@tailwindcss/**"],
       "groupName": "Tailwind CSS"
+    },
+    {
+      "description": "External-scan images on rolling tags (testssl.sh `3.2`, Nikto `latest`: neither project publishes version tags on GHCR, so every update is a digest update). They scan the production perimeter, and GHCR reports no release timestamp to age against: raise their updates without the soak, in their own group, and never automerge. After a testssl.sh update, regenerate scripts/testdata/testssl if its JSON changed. Must stay below the catch-all groups.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/testssl/testssl.sh", "ghcr.io/sullo/nikto"],
+      "minimumReleaseAgeBehaviour": "timestamp-optional",
+      "groupName": "External scanner images",
+      "groupSlug": "external-scanner-images",
+      "automerge": false
     },
     {
       "description": "Keep Zod aligned across web, mobile, and shared schemas",

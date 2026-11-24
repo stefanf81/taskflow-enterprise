@@ -52,6 +52,14 @@ env:
 
   # renovate: datasource=github-releases depName=projectdiscovery/nuclei
   NUCLEI_VERSION: "v3.11.1"
+  # Both images run against the production perimeter with the reports
+  # directory mounted. Neither project publishes version tags on GHCR
+  # (testssl.sh: the `3.2` branch tag; Nikto: `latest`), so the digest is the
+  # version: what runs changes only through a reviewed pull request.
+  # testssl-image: tracked by the dedicated regex manager in .github/renovate.json
+  TESTSSL_VERSION: "3.2@sha256:c24449ff42391fede3aa4d6f24cb00bfdbd53784625750f03fc20c7fcbc63711"
+  # nikto-image: tracked by the dedicated regex manager in .github/renovate.json
+  NIKTO_VERSION: "latest@sha256:0bb37022ebfadc38d6a9a2755c03bfd1f9e079e01e8946fe548153d9ba0c2012"
   NUCLEI_RATE_LIMIT: "20"
   NUCLEI_CONCURRENCY: "10"
   NIKTO_MAX_TIME: "15m"
@@ -582,7 +590,7 @@ jobs:
               --user "$(id -u):$(id -g)" \
               "${extra_hosts[@]}" \
               --volume "${PWD}/reports:/data" \
-              ghcr.io/testssl/testssl.sh:3.2 \
+              "ghcr.io/testssl/testssl.sh:${TESTSSL_VERSION}" \
               --warnings batch \
               --quiet \
               --ip "${TARGET_IP}" \
@@ -630,7 +638,7 @@ jobs:
               --user "$(id -u):$(id -g)" \
               "${extra_hosts[@]}" \
               --volume "${PWD}/reports:/tmp" \
-              ghcr.io/sullo/nikto:latest \
+              "ghcr.io/sullo/nikto:${NIKTO_VERSION}" \
               -h "${url}" \
               -ask no \
               -nointeractive \
