@@ -65,6 +65,12 @@ export const routes: Routes = [
         title: 'Appointments — TaskFlow Owner',
       },
       {
+        path: 'calendar',
+        loadComponent: () =>
+          import('./features/admin/admin-calendar-tab').then((m) => m.AdminCalendarTab),
+        title: 'Calendar — TaskFlow Owner',
+      },
+      {
         path: 'services',
         loadComponent: () =>
           import('./features/admin/admin-services-tab').then((m) => m.AdminServicesTab),

@@ -41,6 +41,19 @@ class AppointmentQueryService {
 
     @Transactional(readOnly = true)
     public AppointmentDashboardResponse getAllAppointments(String status, String searchName, int page, int size) {
+        return getAllAppointments(status, searchName, null, null, page, size);
+    }
+
+    /**
+     * The dashboard list, optionally limited to bookings from {@code from} to {@code to} (both
+     * inclusive, either may be omitted). The calendar view reads one day or week this way.
+     */
+    @Transactional(readOnly = true)
+    public AppointmentDashboardResponse getAllAppointments(String status, String searchName,
+                                                           LocalDate from, LocalDate to, int page, int size) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new IllegalArgumentException("'from' must not be after 'to'.");
+        }
         // Newest first: the dashboard opens on the latest (and upcoming) bookings, not on the oldest
         // history. Several barbers share a slot, so (date, time) alone is not a total order: id
         // breaks the tie so LIMIT/OFFSET pages neither repeat nor skip rows. The whole key is one
@@ -55,7 +68,9 @@ class AppointmentQueryService {
         AppointmentStats stats = statsService.getStatsCached();
 
         Page<Appointment> itemPage;
-        if (term.isEmpty()) {
+        // The derived repository queries above know no date range, so a range takes the
+        // Specification path (its own count, like a search).
+        if (term.isEmpty() && from == null && to == null) {
             // A filtered view counts its own rows. The count is what the pager divides into pages,
             // so it has to agree with the rows this query can actually return: the cached dashboard
             // counters are evicted on every booking and status change, but a cache that fails open
@@ -92,7 +107,15 @@ class AppointmentQueryService {
             } else if (parsed != null) {
                 filters.add((root, query, cb) -> cb.equal(root.get("status"), parsed));
             }
-            filters.add(matchesSearchTerm(term));
+            if (!term.isEmpty()) {
+                filters.add(matchesSearchTerm(term));
+            }
+            if (from != null) {
+                filters.add((root, query, cb) -> cb.greaterThanOrEqualTo(root.<LocalDate>get("bookingDate"), from));
+            }
+            if (to != null) {
+                filters.add((root, query, cb) -> cb.lessThanOrEqualTo(root.<LocalDate>get("bookingDate"), to));
+            }
             itemPage = appointmentRepository.findAll(
                     (root, query, cb) -> cb.and(filters.stream()
                             .map(f -> f.toPredicate(root, query, cb))

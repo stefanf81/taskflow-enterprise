@@ -116,6 +116,15 @@
       "notes": "Mobile renders the list on the dashboard screen itself."
     },
     {
+      "feature": "Admin Calendar (day per barber, week per day)",
+      "webComponent": "frontend/src/app/features/admin/admin-calendar-tab.ts",
+      "webTemplate": "frontend/src/app/features/admin/admin-calendar-tab.html",
+      "storeHook": {
+        "web": "frontend/src/app/features/admin/calendar.store.ts"
+      },
+      "notes": "Web only so far. Layout rules are pure functions in features/admin/admin-calendar.ts; the data is GET /api/v1/appointments with from/to."
+    },
+    {
       "feature": "Admin Service Catalog Management",
       "webComponent": "frontend/src/app/features/admin/admin-services-tab.ts",
       "webTemplate": "frontend/src/app/features/admin/admin-services-tab.html",

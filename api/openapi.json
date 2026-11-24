@@ -1086,7 +1086,7 @@
   "paths": {
     "/api/v1/appointments": {
       "get": {
-        "description": "Can be filtered by status and customer name, with pagination.",
+        "description": "Can be filtered by status, customer name and booking date range, with pagination.",
         "operationId": "getAllAppointments",
         "parameters": [
           {
@@ -1104,6 +1104,26 @@
             "name": "search",
             "required": false,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only bookings on or after this date (YYYY-MM-DD, inclusive)",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only bookings on or before this date (YYYY-MM-DD, inclusive)",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date",
               "type": "string"
             }
           },

@@ -16,6 +16,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpHeaders;
@@ -28,6 +29,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.access.prepost.PreAuthorize;
 
@@ -62,7 +64,7 @@ class AppointmentController {
     }
 
     @GetMapping
-    @Operation(summary = "View a list of scheduled appointments", description = "Can be filtered by status and customer name, with pagination.")
+    @Operation(summary = "View a list of scheduled appointments", description = "Can be filtered by status, customer name and booking date range, with pagination.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Successfully retrieved paginated appointments"),
             @ApiResponse(responseCode = "400", description = "Invalid filter (for example an unknown status) or pagination parameters")
@@ -73,12 +75,16 @@ class AppointmentController {
             @RequestParam(required = false) String status,
             @Parameter(description = "Search by customer name, e-mail or phone (contains, case-insensitive) or by exact public id")
             @RequestParam(required = false) String search,
+            @Parameter(description = "Only bookings on or after this date (YYYY-MM-DD, inclusive)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @Parameter(description = "Only bookings on or before this date (YYYY-MM-DD, inclusive)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @Parameter(description = "Page number (0-indexed)")
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @Parameter(description = "Page size")
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size) {
 
-        AppointmentDashboardResponse response = queryService.getAllAppointments(status, search, page, size);
+        AppointmentDashboardResponse response = queryService.getAllAppointments(status, search, from, to, page, size);
         // Customer names, e-mails and phones: no-store keeps them out of the browser and
         // device HTTP caches, where they would outlive the session.
         return ResponseEntity.ok()

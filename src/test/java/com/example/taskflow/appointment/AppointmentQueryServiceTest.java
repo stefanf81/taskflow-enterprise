@@ -139,6 +139,27 @@ class AppointmentQueryServiceTest extends AppointmentServiceTestSupport {
     }
 
     @Test
+    void testGetAllAppointments_DateRangeUsesTheSpecificationPathWithItsOwnCount() {
+        when(appointmentRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(appointment(1, AppointmentStatus.PENDING, TOMORROW, "10:00"))));
+        when(statsService.getStatsCached()).thenReturn(new AppointmentStats(1L, 1L, 0L, 0L, 0L, 0, 0.0));
+
+        AppointmentDashboardResponse response =
+                queryService.getAllAppointments(null, null, TOMORROW, TOMORROW.plusDays(6), 0, 100);
+
+        assertEquals(1, response.page().getTotalElements());
+        verify(appointmentRepository).findAll(any(Specification.class), any(Pageable.class));
+        verify(appointmentRepository, never()).findPageWithoutCount(any(Pageable.class));
+    }
+
+    @Test
+    void testGetAllAppointments_InvertedDateRangeIsRejected() {
+        assertThrows(IllegalArgumentException.class,
+                () -> queryService.getAllAppointments(null, null, TOMORROW.plusDays(1), TOMORROW, 0, 10));
+        verifyNoInteractions(appointmentRepository);
+    }
+
+    @Test
     void testGetAllAppointments_UnknownStatusIsRejected() {
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> queryService.getAllAppointments("BOGUS", null, 0, 10));

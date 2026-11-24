@@ -14,7 +14,13 @@ import { AppointmentDashboardResponse } from '../../types/api';
 @Component({ template: 'section' })
 class SectionStub {}
 
-const SECTION_PATHS = ['appointments', 'services', 'schedules', 'notifications'] as const;
+const SECTION_PATHS = [
+  'appointments',
+  'calendar',
+  'services',
+  'schedules',
+  'notifications',
+] as const;
 
 describe('AdminDashboard shell', () => {
   let fixture: ComponentFixture<AdminDashboard>;
@@ -78,6 +84,7 @@ describe('AdminDashboard shell', () => {
 
     expect(links().map((a) => [a.textContent?.trim(), a.getAttribute('href')])).toEqual([
       ['Appointments', '/admin/appointments'],
+      ['Calendar', '/admin/calendar'],
       ['Service Catalog', '/admin/services'],
       ['Schedules & Time-Off', '/admin/schedules'],
       ['Notification Outbox', '/admin/notifications'],

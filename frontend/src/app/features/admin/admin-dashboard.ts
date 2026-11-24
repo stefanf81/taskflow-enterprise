@@ -8,6 +8,7 @@ import { Alert } from '../../core/ui/alert';
 import { Button } from '../../core/ui/button';
 import { Icon } from '../../core/ui/icon';
 import { bellIcon } from '../../core/ui/icons/bell';
+import { calendarDaysIcon } from '../../core/ui/icons/calendar-days';
 import { circleCheckIcon } from '../../core/ui/icons/circle-check';
 import { listChecksIcon } from '../../core/ui/icons/list-checks';
 import { scissorsIcon } from '../../core/ui/icons/scissors';
@@ -49,6 +50,7 @@ export class AdminDashboard {
   /** The sections, in the order of the navigation. The labels are what the owner already knew. */
   protected readonly sections: readonly AdminSection[] = [
     { path: '/admin/appointments', label: 'Appointments', icon: listChecksIcon },
+    { path: '/admin/calendar', label: 'Calendar', icon: calendarDaysIcon },
     { path: '/admin/services', label: 'Service Catalog', icon: scissorsIcon },
     { path: '/admin/schedules', label: 'Schedules & Time-Off', icon: usersIcon },
     { path: '/admin/notifications', label: 'Notification Outbox', icon: bellIcon },
