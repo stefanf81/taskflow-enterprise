@@ -5,7 +5,6 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
-  Alert,
   StyleSheet,
   ScrollView,
 } from 'react-native';
@@ -20,11 +19,8 @@ import { EmptyState } from '../../components/common/EmptyState';
 import { ErrorState } from '../../components/common/ErrorState';
 import { ErrorMessage } from '../../components/common/ErrorMessage';
 import { useFlashMessage } from '../../components/common/useFlashMessage';
-import {
-  useAppointments,
-  useUpdateAppointmentStatus,
-  useDeleteAppointment,
-} from '../../core/appointments/useAppointments';
+import { useAppointments } from '../../core/appointments/useAppointments';
+import { useBookingActions } from './useBookingActions';
 import { useAuthStore } from '../../core/auth/useAuthStore';
 import { useShallow } from 'zustand/react/shallow';
 import { colors, semantic, withAlpha } from '../../theme/colors';
@@ -52,15 +48,9 @@ export const AdminDashboardScreen: React.FC = () => {
 
   const { data, isLoading, isError, isSuccess, isPlaceholderData, isFetching, refetch } =
     useAppointments(filter, debouncedSearch, page, 10, { subscribed: isFocused });
-  // The stable functions, not the mutation results: those change identity at every state
-  // (idle, pending, success), and every row's handlers with them (BENCHMARKS.md §79).
-  const { mutateAsync: updateStatus } = useUpdateAppointmentStatus();
-  const { mutateAsync: cancelAppointment } = useDeleteAppointment();
   const { timeZone } = useShopInfo();
   const now = useNow(60_000, timeZone);
-  const actionLocks = useRef(new Set<number>());
   const syncingRef = useRef(false);
-  const [busyIds, setBusyIds] = useState<number[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const { logout } = useAuthStore(useShallow((state) => ({ logout: state.logout })));
 
@@ -104,67 +94,8 @@ export const AdminDashboardScreen: React.FC = () => {
       );
   };
 
-  const runAction = (
-    id: number,
-    action: () => Promise<unknown>,
-    success: string,
-    fallback: string,
-  ) => {
-    // The ref closes the gap before React renders the disabled row. Each row has its own lock.
-    if (actionLocks.current.has(id)) return;
-    actionLocks.current.add(id);
-    setBusyIds((ids) => [...ids, id]);
-    const unlock = () => {
-      actionLocks.current.delete(id);
-      setBusyIds((ids) => ids.filter((busyId) => busyId !== id));
-    };
-    void Promise.resolve()
-      .then(action)
-      .then(
-        () => {
-          unlock();
-          showSuccess(success);
-        },
-        (err: unknown) => {
-          unlock();
-          showError(getApiErrorMessage(err, fallback));
-        },
-      );
-  };
-
-  const handleApprove = (id: number) => runAction(
-    id,
-    () => updateStatus({ id, status: 'APPROVED' }),
-    'Appointment APPROVED! Client notification email queued.',
-    'Failed to approve appointment.',
-  );
-
-  const handleDeny = (id: number) => runAction(
-    id,
-    () => updateStatus({ id, status: 'DENIED' }),
-    'Appointment DECLINED. Client notification email queued.',
-    'Failed to decline appointment.',
-  );
-
-  // Takes the row's booking rather than finding it in `data`, which changes on every refetch.
-  const handleCancel = (appointment: AppointmentItem) => {
-    const id = appointment.id;
-    if (actionLocks.current.has(id) ||
-      (appointment.status !== 'PENDING' && appointment.status !== 'APPROVED')) return;
-    Alert.alert('Cancel Booking', 'Are you sure you want to cancel this booking?', [
-      { text: 'Keep Booking', style: 'cancel' },
-      {
-        text: 'Cancel Booking',
-        style: 'destructive',
-        onPress: () => { void runAction(
-          id,
-          () => cancelAppointment(id),
-          'Booking cancelled.',
-          'Failed to cancel booking.',
-        ); },
-      },
-    ]);
-  };
+  const { busyIds, approve: handleApprove, deny: handleDeny, cancel: handleCancel } =
+    useBookingActions({ showSuccess, showError });
 
   const appointments = data?.page?.content || [];
   const stats = data?.stats;

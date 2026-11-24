@@ -42,6 +42,41 @@ describe('appointmentsApi', () => {
     updatedAt: '',
   };
 
+  describe('getAppointmentsInRange', () => {
+    const page = (content: unknown[], number: number, totalPages: number) => ({
+      data: {
+        ...emptyDashboard,
+        page: { content, page: { number, size: 100, totalElements: content.length, totalPages } },
+      },
+    });
+
+    it('asks for the inclusive range at the largest page size', async () => {
+      mockedGet.mockResolvedValueOnce(page([mockAppt], 0, 1));
+      const { signal } = new AbortController();
+
+      const result = await appointmentsApi.getAppointmentsInRange('2026-08-01', '2026-08-07', { signal });
+
+      expect(mockedGet).toHaveBeenCalledTimes(1);
+      expect(mockedGet).toHaveBeenCalledWith('/api/v1/appointments', {
+        params: { from: '2026-08-01', to: '2026-08-07', page: 0, size: 100 },
+        signal,
+      });
+      expect(result).toEqual([mockAppt]);
+    });
+
+    it('fetches the remaining pages of a busy range and joins them in order', async () => {
+      mockedGet
+        .mockResolvedValueOnce(page([{ ...mockAppt, id: 1 }], 0, 3))
+        .mockResolvedValueOnce(page([{ ...mockAppt, id: 2 }], 1, 3))
+        .mockResolvedValueOnce(page([{ ...mockAppt, id: 3 }], 2, 3));
+
+      const result = await appointmentsApi.getAppointmentsInRange('2026-08-01', '2026-08-07');
+
+      expect(mockedGet.mock.calls.map((call) => call[1].params.page)).toEqual([0, 1, 2]);
+      expect(result.map((item) => item.id)).toEqual([1, 2, 3]);
+    });
+  });
+
   describe('getAllAppointments', () => {
     it('fetches appointments with default params', async () => {
       const mockResponse: AppointmentDashboardResponse = emptyDashboard;

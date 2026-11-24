@@ -23,6 +23,9 @@ import {
   type ShopInfoResponse,
 } from '@taskflow/schemas';
 
+/** The server's largest page. */
+const RANGE_PAGE_SIZE = 100;
+
 export const appointmentsApi = {
   getAllAppointments: async (
     statusFilter?: string,
@@ -53,6 +56,35 @@ export const appointmentsApi = {
       response.data,
       'GET /api/v1/appointments',
     );
+  },
+
+  /**
+   * Every booking from `from` to `to` (inclusive `YYYY-MM-DD`): the calendar's day or week. A busy
+   * week can be longer than the server's largest page (100), so the other pages are fetched too.
+   */
+  getAppointmentsInRange: async (
+    from: string,
+    to: string,
+    { signal }: RequestOptions = {},
+  ): Promise<AppointmentItem[]> => {
+    const fetchPage = async (page: number) => {
+      const response = await apiClient.get<AppointmentDashboardResponse>('/api/v1/appointments', {
+        params: { from, to, page, size: RANGE_PAGE_SIZE },
+        signal,
+      });
+      return parseContract(
+        appointmentDashboardResponseSchema,
+        response.data,
+        'GET /api/v1/appointments',
+      );
+    };
+    const first = await fetchPage(0);
+    const rest = await Promise.all(
+      Array.from({ length: Math.max(first.page.page.totalPages - 1, 0) }, (_, i) =>
+        fetchPage(i + 1),
+      ),
+    );
+    return [first, ...rest].flatMap((response) => response.page.content);
   },
 
   createAppointment: async (

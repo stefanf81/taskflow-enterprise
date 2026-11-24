@@ -119,10 +119,13 @@
       "feature": "Admin Calendar (day per barber, week per day)",
       "webComponent": "frontend/src/app/features/admin/admin-calendar-tab.ts",
       "webTemplate": "frontend/src/app/features/admin/admin-calendar-tab.html",
+      "mobileComponent": "mobile/src/features/admin/AdminCalendarScreen.tsx",
       "storeHook": {
-        "web": "frontend/src/app/features/admin/calendar.store.ts"
+        "web": "frontend/src/app/features/admin/calendar.store.ts",
+        "mobile": "mobile/src/core/appointments/useAppointments.ts"
       },
-      "notes": "Web only so far. Layout rules are pure functions in features/admin/admin-calendar.ts; the data is GET /api/v1/appointments with from/to."
+      "rangeRules": "shared/domain/src/calendar.ts",
+      "notes": "Web draws a column per barber (day) or per day (week); a phone has no room for columns, so mobile lists the bookings per day with the barber as a filter (features/admin/calendarAgenda.ts). The data is GET /api/v1/appointments with from/to, all pages. Approve/decline/cancel: features/admin/useBookingActions.ts (mobile) and features/admin/appointment-actions.ts (web)."
     },
     {
       "feature": "Admin Service Catalog Management",

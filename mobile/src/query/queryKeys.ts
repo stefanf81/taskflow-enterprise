@@ -17,6 +17,11 @@ export const queryKeys = {
     list: (filter: string | undefined, search: string | undefined, page: number, size: number) =>
       ['appointments', filter, search, page, size] as const,
   },
+  /** The owner's calendar: every booking of one day or week (a plain list, not a page). */
+  calendarAppointments: {
+    all: ['calendarAppointments'] as const,
+    range: (from: string, to: string) => ['calendarAppointments', from, to] as const,
+  },
   customerAppointments: {
     all: ['customerAppointments'] as const,
     page: (page: number, size: number) => ['customerAppointments', page, size] as const,
@@ -57,6 +62,7 @@ export function invalidateBookingQueries(
   { refetchBusySlots = true }: { refetchBusySlots?: boolean } = {},
 ): void {
   queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
+  queryClient.invalidateQueries({ queryKey: queryKeys.calendarAppointments.all });
   queryClient.invalidateQueries({ queryKey: queryKeys.customerAppointments.all });
   if (refetchBusySlots) {
     queryClient.invalidateQueries({ queryKey: queryKeys.busySlots.all });
@@ -95,6 +101,14 @@ export function updateCachedBooking(
       if (!old) return old;
       const content = update(old.page.content);
       return content === old.page.content ? old : { ...old, page: { ...old.page, content } };
+    },
+  );
+  queryClient.setQueriesData<AppointmentItem[]>(
+    { queryKey: queryKeys.calendarAppointments.all },
+    (old) => {
+      if (!old) return old;
+      const content = update(old);
+      return content === old ? old : content;
     },
   );
   queryClient.setQueriesData<AppointmentPage>(
