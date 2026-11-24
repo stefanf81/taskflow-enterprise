@@ -1,59 +1,30 @@
 import {
   type OpeningHours,
   type ShopRules,
-  addDays,
   hoursOn,
   isoWeekday,
   parseLocalDate,
   parseTimeToMinutes,
 } from '@taskflow/domain';
+// Not from the '@taskflow/domain' barrel: a module the barrel re-exports counts as main.js's own,
+// so what only the lazy admin chunks use would be bundled into it (+1.3 kB).
+import {
+  type CalendarRange,
+  type CalendarView,
+  SLOT_HOLDING_STATUSES,
+  datesOf,
+  rangeOf,
+  shiftDate,
+  stepOf,
+  weekStart,
+} from '@taskflow/domain/src/calendar';
 import { AppointmentResponse } from '../../types/api';
 
-/** The calendar shows one day (a column per barber) or one week (a column per day). */
-export type CalendarView = 'day' | 'week';
-
-/** Inclusive `YYYY-MM-DD` bounds, as `GET /api/v1/appointments?from=&to=` takes them. */
-export interface CalendarRange {
-  from: string;
-  to: string;
-}
-
-/** Statuses that hold a slot. A denied or cancelled booking has released it, so it is not drawn. */
-export const SLOT_HOLDING_STATUSES: readonly string[] = ['PENDING', 'APPROVED'];
+export { SLOT_HOLDING_STATUSES, datesOf, rangeOf, shiftDate, stepOf, weekStart };
+export type { CalendarRange, CalendarView };
 
 /** The hours shown when the shop's opening hours say nothing (closed all week, not loaded). */
 const FALLBACK_HOURS: Pick<OpeningHours, 'opens' | 'closes'> = { opens: '09:00', closes: '17:00' };
-
-/** `date` moved by `days` calendar days. */
-export function shiftDate(date: string, days: number): string {
-  return addDays(parseLocalDate(date), days);
-}
-
-/** The Monday of the ISO week `date` falls in. */
-export function weekStart(date: string): string {
-  return shiftDate(date, 1 - isoWeekday(parseLocalDate(date)));
-}
-
-/** The days a view covers around `anchor`: that day, or the Monday-to-Sunday week it is in. */
-export function rangeOf(view: CalendarView, anchor: string): CalendarRange {
-  if (view === 'day') return { from: anchor, to: anchor };
-  const monday = weekStart(anchor);
-  return { from: monday, to: shiftDate(monday, 6) };
-}
-
-/** Every date of a range, in order. */
-export function datesOf(range: CalendarRange): string[] {
-  const dates: string[] = [];
-  for (let date = range.from; date <= range.to && dates.length < 366; date = shiftDate(date, 1)) {
-    dates.push(date);
-  }
-  return dates;
-}
-
-/** How far the previous/next buttons move the anchor. */
-export function stepOf(view: CalendarView): number {
-  return view === 'day' ? 1 : 7;
-}
 
 /** `9` -> `9 AM`, `13` -> `1 PM`. */
 export function hourLabel(hour: number): string {
