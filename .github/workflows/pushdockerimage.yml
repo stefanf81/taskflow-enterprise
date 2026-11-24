@@ -474,11 +474,11 @@ jobs:
       # circumstances: such an image has no scan attestation, and the
       # cluster's admission policy refuses it.
       #
-      # Which findings fail it: trivy-action drops the severity filter for
-      # SARIF output unless `limit-severities-for-sarif: true` (the log says
-      # "Building SARIF report with all severities"), so the gate fails on a
-      # fixed vulnerability (`ignore-unfixed`) of any severity, or on a
-      # secret. No `severity:` input, since it would not apply.
+      # Which findings fail it: a HIGH or CRITICAL vulnerability that has a fix
+      # (`ignore-unfixed`), or a HIGH/CRITICAL secret, as in ci.yml.
+      # trivy-action drops `severity` for SARIF output unless
+      # `limit-severities-for-sarif: true`, so both are set; the report step
+      # below uses the same severities.
       #
       # No Trivy cache (`cache: false`): both databases are downloaded here,
       # into the workspace, and the report step below reuses them.
@@ -504,6 +504,8 @@ jobs:
 
           format: sarif
           output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
           ignore-unfixed: true
           exit-code: 1
 
@@ -521,6 +523,7 @@ jobs:
             --skip-db-update \
             --skip-java-db-update \
             --ignore-unfixed \
+            --severity HIGH,CRITICAL \
             --pkg-types os,library \
             --exit-code 1 \
             --format cosign-vuln \
