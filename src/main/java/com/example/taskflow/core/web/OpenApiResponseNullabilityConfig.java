@@ -4,14 +4,6 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.media.MediaType;
 import io.swagger.v3.oas.models.media.Schema;
-import org.jspecify.annotations.Nullable;
-import org.springdoc.core.customizers.OpenApiCustomizer;
-import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.util.ClassUtils;
-
 import java.lang.reflect.RecordComponent;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -21,6 +13,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import org.jspecify.annotations.Nullable;
+import org.springdoc.core.customizers.OpenApiCustomizer;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.util.ClassUtils;
 
 /**
  * Publishes which response fields can be absent. Jackson leaves null fields out of every response
@@ -71,15 +70,17 @@ class OpenApiResponseNullabilityConfig {
     private static Set<String> responseSchemaNames(OpenAPI openApi, Map<String, Schema> schemas) {
         Deque<Schema<?>> queue = new ArrayDeque<>();
         if (openApi.getPaths() != null) {
-            openApi.getPaths().values().forEach(path -> path.readOperations().stream()
-                    .map(Operation::getResponses)
-                    .filter(responses -> responses != null)
-                    .flatMap(responses -> responses.values().stream())
-                    .filter(response -> response.getContent() != null)
-                    .flatMap(response -> response.getContent().values().stream())
-                    .map(MediaType::getSchema)
-                    .filter(schema -> schema != null)
-                    .forEach(queue::add));
+            openApi.getPaths()
+                    .values()
+                    .forEach(path -> path.readOperations().stream()
+                            .map(Operation::getResponses)
+                            .filter(responses -> responses != null)
+                            .flatMap(responses -> responses.values().stream())
+                            .filter(response -> response.getContent() != null)
+                            .flatMap(response -> response.getContent().values().stream())
+                            .map(MediaType::getSchema)
+                            .filter(schema -> schema != null)
+                            .forEach(queue::add));
         }
         Set<String> names = new HashSet<>();
         while (!queue.isEmpty()) {
@@ -103,10 +104,12 @@ class OpenApiResponseNullabilityConfig {
 
     private static Map<String, Class<?>> responseCandidates() {
         ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
-        scanner.addIncludeFilter((reader, factory) -> "java.lang.Record".equals(reader.getClassMetadata().getSuperClassName()));
+        scanner.addIncludeFilter((reader, factory) ->
+                "java.lang.Record".equals(reader.getClassMetadata().getSuperClassName()));
         Map<String, Class<?>> records = new HashMap<>();
         for (BeanDefinition definition : scanner.findCandidateComponents(BASE_PACKAGE)) {
-            Class<?> type = ClassUtils.resolveClassName(definition.getBeanClassName(), OpenApiResponseNullabilityConfig.class.getClassLoader());
+            Class<?> type = ClassUtils.resolveClassName(
+                    definition.getBeanClassName(), OpenApiResponseNullabilityConfig.class.getClassLoader());
             records.putIfAbsent(type.getSimpleName(), type);
         }
         return records;

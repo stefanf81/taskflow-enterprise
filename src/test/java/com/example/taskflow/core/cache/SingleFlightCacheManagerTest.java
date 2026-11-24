@@ -1,13 +1,12 @@
 package com.example.taskflow.core.cache;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.config.BeanPostProcessor;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.concurrent.ConcurrentMapCache;
-import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
-import org.springframework.data.redis.cache.RedisCacheManager;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,14 +17,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.config.BeanPostProcessor;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.concurrent.ConcurrentMapCache;
+import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
+import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 
 /**
  * BKG-7: {@code sync = true} must give single-flight loading on the Redis manager too. The delegate
@@ -149,7 +148,8 @@ class SingleFlightCacheManagerTest {
         SingleFlightCacheManager manager = new SingleFlightCacheManager(naiveManager());
         Cache cache = manager.getCache("barbers");
 
-        Cache.ValueRetrievalException failure = assertThrows(Cache.ValueRetrievalException.class,
+        Cache.ValueRetrievalException failure = assertThrows(
+                Cache.ValueRetrievalException.class,
                 () -> cache.get("k", () -> {
                     throw new IllegalStateException("db down");
                 }));
@@ -157,7 +157,9 @@ class SingleFlightCacheManagerTest {
 
         // the key is not poisoned and not left locked
         assertEquals("recovered", cache.get("k", () -> "recovered"));
-        assertEquals(0, ((SingleFlightCacheManager.SingleFlightCache) cache).activeLockCount(),
+        assertEquals(
+                0,
+                ((SingleFlightCacheManager.SingleFlightCache) cache).activeLockCount(),
                 "no per-key lock entries may leak");
     }
 
@@ -215,11 +217,13 @@ class SingleFlightCacheManagerTest {
                 waits.add(requests.submit(() -> {
                     go.await();
                     long start = System.nanoTime();
-                    assertThrows(Cache.ValueRetrievalException.class, () -> cache.get("k", () -> {
-                        loads.incrementAndGet();
-                        Thread.sleep(loadMillis);
-                        throw new IllegalStateException("connection is not available");
-                    }));
+                    assertThrows(
+                            Cache.ValueRetrievalException.class,
+                            () -> cache.get("k", () -> {
+                                loads.incrementAndGet();
+                                Thread.sleep(loadMillis);
+                                throw new IllegalStateException("connection is not available");
+                            }));
                     return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
                 }));
             }
@@ -389,8 +393,8 @@ class SingleFlightCacheManagerTest {
 
     @Test
     void cacheableSyncThroughTheSpringProxyIsSingleFlightOnAManagerWithoutNativeSyncSupport() throws Exception {
-        try (var context = new org.springframework.context.annotation.AnnotationConfigApplicationContext(
-                CachingConfig.class)) {
+        try (var context =
+                new org.springframework.context.annotation.AnnotationConfigApplicationContext(CachingConfig.class)) {
             SlowCatalog catalog = context.getBean(SlowCatalog.class);
             ExecutorService pool = Executors.newFixedThreadPool(24);
             CountDownLatch go = new CountDownLatch(1);
@@ -415,7 +419,8 @@ class SingleFlightCacheManagerTest {
     void configWrapsOnlyTheRedisCacheManager() {
         BeanPostProcessor processor = CacheConfig.singleFlightCacheManagerPostProcessor(
                 new org.springframework.mock.env.MockEnvironment(), neverResolvedTemplate());
-        RedisCacheManager redis = RedisCacheManager.builder(mock(RedisConnectionFactory.class)).build();
+        RedisCacheManager redis =
+                RedisCacheManager.builder(mock(RedisConnectionFactory.class)).build();
         CacheManager simple = new ConcurrentMapCacheManager();
 
         Object wrapped = processor.postProcessAfterInitialization(redis, "cacheManager");
@@ -423,10 +428,14 @@ class SingleFlightCacheManagerTest {
         CacheManager beneath = ((SingleFlightCacheManager) wrapped).getDelegate();
         assertInstanceOf(RedisBackoffCacheManager.class, beneath, "reads skip a failing Redis");
         assertSame(redis, ((RedisBackoffCacheManager) beneath).getDelegate());
-        assertEquals(null, ((SingleFlightCacheManager) wrapped).getDistributedLock(),
+        assertEquals(
+                null,
+                ((SingleFlightCacheManager) wrapped).getDistributedLock(),
                 "app.state.store=memory (default): per-JVM single flight only");
 
-        assertSame(simple, processor.postProcessAfterInitialization(simple, "cacheManager"),
+        assertSame(
+                simple,
+                processor.postProcessAfterInitialization(simple, "cacheManager"),
                 "the dev/test 'simple' manager already serialises and is left alone");
         Object other = new Object();
         assertSame(other, processor.postProcessAfterInitialization(other, "somethingElse"));
@@ -437,9 +446,10 @@ class SingleFlightCacheManagerTest {
         var environment = new org.springframework.mock.env.MockEnvironment()
                 .withProperty("app.state.store", "redis")
                 .withProperty("app.cache.single-flight.lock-lease-ms", "2500");
-        BeanPostProcessor processor = CacheConfig.singleFlightCacheManagerPostProcessor(
-                environment, neverResolvedTemplate());
-        RedisCacheManager redis = RedisCacheManager.builder(mock(RedisConnectionFactory.class)).build();
+        BeanPostProcessor processor =
+                CacheConfig.singleFlightCacheManagerPostProcessor(environment, neverResolvedTemplate());
+        RedisCacheManager redis =
+                RedisCacheManager.builder(mock(RedisConnectionFactory.class)).build();
 
         SingleFlightCacheManager wrapped =
                 (SingleFlightCacheManager) processor.postProcessAfterInitialization(redis, "cacheManager");
@@ -450,7 +460,8 @@ class SingleFlightCacheManagerTest {
 
     /** Fails the test if the template is resolved: creating the post-processor must stay offline. */
     @SuppressWarnings("unchecked")
-    private static org.springframework.beans.factory.ObjectProvider<org.springframework.data.redis.core.StringRedisTemplate>
+    private static org.springframework.beans.factory.ObjectProvider<
+                    org.springframework.data.redis.core.StringRedisTemplate>
             neverResolvedTemplate() {
         var provider = mock(org.springframework.beans.factory.ObjectProvider.class);
         org.mockito.Mockito.when(provider.getObject()).thenThrow(new AssertionError("resolved at startup"));

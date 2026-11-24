@@ -1,13 +1,12 @@
 package com.example.taskflow.auth;
 
+import java.util.Arrays;
+import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
-import java.util.Arrays;
-import java.util.List;
 
 /**
  * Dedicated CORS configuration extracted from {@link SecurityConfig}
@@ -39,7 +38,8 @@ class CorsConfig {
         configuration.setAllowCredentials(true);
 
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Content-Type", "Authorization", "X-XSRF-TOKEN", "Idempotency-Key"));
+        configuration.setAllowedHeaders(
+                Arrays.asList("Content-Type", "Authorization", "X-XSRF-TOKEN", "Idempotency-Key"));
         // No Set-Cookie: it is a forbidden response header name (Fetch standard) that a browser never
         // exposes to scripts, whatever this list says; the browser stores the cookies itself.
         configuration.setExposedHeaders(List.of("X-XSRF-TOKEN", "Retry-After"));

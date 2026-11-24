@@ -1,12 +1,11 @@
 package com.example.taskflow.appointment;
 
-import org.springframework.dao.CannotAcquireLockException;
-
 import java.time.Duration;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import org.springframework.dao.CannotAcquireLockException;
 
 /**
  * Serialises booking attempts for the same e-mail address in this JVM (the per-address cap is a

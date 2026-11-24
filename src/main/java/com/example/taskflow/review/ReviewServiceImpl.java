@@ -1,16 +1,10 @@
 package com.example.taskflow.review;
-import com.example.taskflow.review.internal.ReviewRepository;
 
 import com.example.taskflow.appointment.AppointmentDetails;
 import com.example.taskflow.appointment.AppointmentService;
 import com.example.taskflow.appointment.AppointmentStatus;
 import com.example.taskflow.core.ResourceNotFoundException;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
+import com.example.taskflow.review.internal.ReviewRepository;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -18,6 +12,11 @@ import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.List;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 class ReviewServiceImpl implements ReviewService {
@@ -32,8 +31,11 @@ class ReviewServiceImpl implements ReviewService {
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
-    public ReviewServiceImpl(ReviewRepository reviewRepository, AppointmentService appointmentService,
-                             ApplicationEventPublisher eventPublisher, Clock clock) {
+    public ReviewServiceImpl(
+            ReviewRepository reviewRepository,
+            AppointmentService appointmentService,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock) {
         this.reviewRepository = reviewRepository;
         this.appointmentService = appointmentService;
         this.eventPublisher = eventPublisher;
@@ -48,8 +50,10 @@ class ReviewServiceImpl implements ReviewService {
      */
     @Override
     @Transactional(readOnly = true)
-    @Cacheable(value = ReviewCacheConfig.BARBER_RATINGS_CACHE,
-            key = "'" + ReviewCacheConfig.ALL_RATINGS_KEY + "'", sync = true)
+    @Cacheable(
+            value = ReviewCacheConfig.BARBER_RATINGS_CACHE,
+            key = "'" + ReviewCacheConfig.ALL_RATINGS_KEY + "'",
+            sync = true)
     public List<BarberRatingResponse> getBarberRatings() {
         // Sorted here rather than in SQL: Java's String order on every database and collation.
         return reviewRepository.findCountedRatingsPerBarber().stream()
@@ -63,7 +67,8 @@ class ReviewServiceImpl implements ReviewService {
         // Resolve the appointment through the appointment module's public API
         // instead of reaching into its internal AppointmentRepository
         // (Spring Modulith module boundary).
-        AppointmentDetails appointment = appointmentService.findDetailsByPublicId(publicId).orElse(null);
+        AppointmentDetails appointment =
+                appointmentService.findDetailsByPublicId(publicId).orElse(null);
         if (appointment == null) {
             // Do not echo the publicId — that would let an attacker enumerate which
             // IDs exist (information disclosure / enumeration oracle).
@@ -74,8 +79,12 @@ class ReviewServiceImpl implements ReviewService {
         // appointment, mirroring the public-cancel verification pattern. This
         // prevents anyone holding the public UUID from leaving a review for an
         // appointment they don't own.
-        if (appointment.customerEmail() == null || request.customerEmail() == null
-                || !appointment.customerEmail().trim().equalsIgnoreCase(request.customerEmail().trim())) {
+        if (appointment.customerEmail() == null
+                || request.customerEmail() == null
+                || !appointment
+                        .customerEmail()
+                        .trim()
+                        .equalsIgnoreCase(request.customerEmail().trim())) {
             throw new IllegalArgumentException("Verification failed: the provided email does not match this booking.");
         }
 
@@ -122,7 +131,8 @@ class ReviewServiceImpl implements ReviewService {
         }
         try {
             LocalDateTime start = LocalDateTime.of(
-                    appointment.bookingDate(), LocalTime.parse(appointment.bookingTime().trim()));
+                    appointment.bookingDate(),
+                    LocalTime.parse(appointment.bookingTime().trim()));
             return !start.isAfter(LocalDateTime.now(clock));
         } catch (DateTimeParseException ex) {
             // An unparseable stored time cannot be proven to be in the past.

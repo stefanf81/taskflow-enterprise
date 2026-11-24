@@ -1,11 +1,10 @@
 package com.example.taskflow.core;
 
-import org.springframework.core.env.Environment;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import org.springframework.core.env.Environment;
 
 /**
  * Where cross-replica state lives: the JWT denylist ({@code TokenRevocationList}), the failed-login
@@ -27,8 +26,7 @@ public final class SharedStateStore {
     /** Raw key parts longer than this are replaced by their SHA-256, so keys stay small. */
     static final int MAX_RAW_KEY_LENGTH = 128;
 
-    private SharedStateStore() {
-    }
+    private SharedStateStore() {}
 
     public static boolean isRedis(Environment environment) {
         return REDIS.equalsIgnoreCase(environment.getProperty(PROPERTY, MEMORY).trim());

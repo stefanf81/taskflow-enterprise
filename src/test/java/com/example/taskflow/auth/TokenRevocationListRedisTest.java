@@ -1,19 +1,5 @@
 package com.example.taskflow.auth;
 
-import com.example.taskflow.core.redis.RedisBackoff;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.redis.RedisConnectionFailureException;
-import org.springframework.data.redis.core.RedisCallback;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
-
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,6 +14,19 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import com.example.taskflow.core.redis.RedisBackoff;
+import java.time.Instant;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 
 /** {@link TokenRevocationList} in {@code app.state.store=redis} mode, with the Redis client mocked. */
 class TokenRevocationListRedisTest {
@@ -57,19 +56,24 @@ class TokenRevocationListRedisTest {
 
     private void writesFail() {
         org.mockito.Mockito.doThrow(new RedisConnectionFailureException("down"))
-                .when(redis).execute(eq(RedisTokenRevocationStore.WRITE_SCRIPT), anyList(), any());
+                .when(redis)
+                .execute(eq(RedisTokenRevocationStore.WRITE_SCRIPT), anyList(), any());
     }
 
     private void writesSucceed() {
         org.mockito.Mockito.doReturn(1L)
-                .when(redis).execute(eq(RedisTokenRevocationStore.WRITE_SCRIPT), anyList(), any());
+                .when(redis)
+                .execute(eq(RedisTokenRevocationStore.WRITE_SCRIPT), anyList(), any());
     }
 
     /** The TTL (ms, as the script's argument) of the one denylist write for {@code jti}. */
     private long writtenTtlMillis(String jti) {
         ArgumentCaptor<Object> ttl = ArgumentCaptor.forClass(Object.class);
-        verify(redis).execute(eq(RedisTokenRevocationStore.WRITE_SCRIPT),
-                eq(List.of("revoked:" + jti, RedisTokenRevocationStore.GENERATION_KEY)), ttl.capture());
+        verify(redis)
+                .execute(
+                        eq(RedisTokenRevocationStore.WRITE_SCRIPT),
+                        eq(List.of("revoked:" + jti, RedisTokenRevocationStore.GENERATION_KEY)),
+                        ttl.capture());
         return Long.parseLong((String) ttl.getValue());
     }
 
@@ -226,7 +230,8 @@ class TokenRevocationListRedisTest {
     @Test
     @SuppressWarnings("unchecked")
     void restoreWritesStoredRevocationsBackToRedisInOnePipeline() {
-        list.restore(java.util.List.of(new RevokedToken("jti-9", Instant.now().plusSeconds(600)),
+        list.restore(java.util.List.of(
+                new RevokedToken("jti-9", Instant.now().plusSeconds(600)),
                 new RevokedToken("jti-10", Instant.now().plusSeconds(600))));
 
         verify(redis, times(1)).executePipelined(any(RedisCallback.class));
@@ -254,7 +259,8 @@ class TokenRevocationListRedisTest {
     @SuppressWarnings("unchecked")
     void restoreStopsWritingToRedisAtTheFirstFailureButKeepsEveryEntryLocally() {
         org.mockito.Mockito.doThrow(new RedisConnectionFailureException("down"))
-                .when(redis).executePipelined(any(RedisCallback.class));
+                .when(redis)
+                .executePipelined(any(RedisCallback.class));
         java.util.List<RevokedToken> many = java.util.stream.IntStream.range(0, 1_200)
                 .mapToObj(i -> new RevokedToken("j" + i, Instant.now().plusSeconds(600)))
                 .toList();
@@ -349,7 +355,8 @@ class TokenRevocationListRedisTest {
         redisTtlIs(-2L);
         assertFalse(caching.isRevoked("jti-1"));
 
-        caching.onRemoteRevocation("other-replica|" + tokenClock.instant().plusSeconds(600).toEpochMilli() + "|jti-1");
+        caching.onRemoteRevocation(
+                "other-replica|" + tokenClock.instant().plusSeconds(600).toEpochMilli() + "|jti-1");
 
         assertTrue(caching.isRevoked("jti-1"));
     }
@@ -371,7 +378,7 @@ class TokenRevocationListRedisTest {
         TokenRevocationList caching = cachingList("5");
         redisTtlIs(-2L);
         assertFalse(caching.isRevoked("jti-1"));
-        caching.readGenerationWith(task -> { }); // reads stop arriving
+        caching.readGenerationWith(task -> {}); // reads stop arriving
 
         tokenClock.millis += TokenRevocationList.GENERATION_MAX_AGE_MILLIS + 1;
         assertFalse(caching.isRevoked("jti-1"));
@@ -387,7 +394,8 @@ class TokenRevocationListRedisTest {
         assertFalse(caching.isRevoked("jti-1"));
         assertEquals(1, caching.notRevokedCount());
 
-        when(values.get(RedisTokenRevocationStore.GENERATION_KEY)).thenThrow(new RedisConnectionFailureException("down"));
+        when(values.get(RedisTokenRevocationStore.GENERATION_KEY))
+                .thenThrow(new RedisConnectionFailureException("down"));
         tokenClock.millis += TokenRevocationList.GENERATION_READ_MILLIS;
         assertFalse(caching.isRevoked("jti-1"));
 

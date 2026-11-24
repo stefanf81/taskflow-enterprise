@@ -1,8 +1,8 @@
 package db.migration;
 
-import org.flywaydb.core.api.configuration.Configuration;
-import org.flywaydb.core.api.migration.Context;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -15,10 +15,9 @@ import java.sql.Time;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.flywaydb.core.api.configuration.Configuration;
+import org.flywaydb.core.api.migration.Context;
+import org.junit.jupiter.api.Test;
 
 /**
  * Verifies the V26 sentinel backfill against a real SQL engine (H2 in
@@ -87,7 +86,8 @@ class V26AssignSentinelAppointmentsTest {
         }
     }
 
-    private void insertConfirmedAppointment(Connection connection, long id, String barberName, String time) throws SQLException {
+    private void insertConfirmedAppointment(Connection connection, long id, String barberName, String time)
+            throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement(
                 "INSERT INTO appointments (id, barber_id, barber_name, booking_date, booking_time, status, updated_at) "
                         + "VALUES (?, NULL, ?, ?, ?, 'APPROVED', CURRENT_TIMESTAMP)")) {
@@ -113,21 +113,18 @@ class V26AssignSentinelAppointmentsTest {
         });
     }
 
-    private record AppointmentState(String barberName, Long barberId, String status) {
-    }
+    private record AppointmentState(String barberName, Long barberId, String status) {}
 
     private AppointmentState state(Connection connection, long id) throws SQLException {
-        try (PreparedStatement ps = connection.prepareStatement(
-                "SELECT barber_name, barber_id, status FROM appointments WHERE id = ?")) {
+        try (PreparedStatement ps =
+                connection.prepareStatement("SELECT barber_name, barber_id, status FROM appointments WHERE id = ?")) {
             ps.setLong(1, id);
             try (ResultSet rs = ps.executeQuery()) {
                 assertTrue(rs.next());
                 long barberId = rs.getLong("barber_id");
                 boolean barberIdWasNull = rs.wasNull();
                 return new AppointmentState(
-                        rs.getString("barber_name"),
-                        barberIdWasNull ? null : barberId,
-                        rs.getString("status"));
+                        rs.getString("barber_name"), barberIdWasNull ? null : barberId, rs.getString("status"));
             }
         }
     }

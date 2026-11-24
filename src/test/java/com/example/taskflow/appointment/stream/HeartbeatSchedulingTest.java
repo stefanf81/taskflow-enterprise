@@ -1,15 +1,14 @@
 package com.example.taskflow.appointment.stream;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.scheduling.concurrent.SimpleAsyncTaskScheduler;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.concurrent.SimpleAsyncTaskScheduler;
 
 /**
  * The dashboard heartbeat must keep its rhythm while another scheduled job is stuck, e.g. the mail
@@ -29,13 +28,15 @@ class HeartbeatSchedulingTest {
         AtomicInteger fixedDelayTicks = new AtomicInteger();
         AtomicInteger fixedRateTicks = new AtomicInteger();
         try {
-            scheduler.scheduleWithFixedDelay(() -> {
-                try {
-                    release.await(5, TimeUnit.SECONDS); // a relay waiting on SMTP
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }, Duration.ofMillis(10));
+            scheduler.scheduleWithFixedDelay(
+                    () -> {
+                        try {
+                            release.await(5, TimeUnit.SECONDS); // a relay waiting on SMTP
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    },
+                    Duration.ofMillis(10));
             Thread.sleep(50);
             scheduler.scheduleWithFixedDelay(fixedDelayTicks::incrementAndGet, Duration.ofMillis(50));
             scheduler.scheduleAtFixedRate(fixedRateTicks::incrementAndGet, Duration.ofMillis(50));
@@ -52,7 +53,8 @@ class HeartbeatSchedulingTest {
 
     @Test
     void theHeartbeatIsScheduledAtAFixedRate() throws Exception {
-        Scheduled scheduled = AppointmentEventStreamService.class.getDeclaredMethod("scheduledHeartbeat")
+        Scheduled scheduled = AppointmentEventStreamService.class
+                .getDeclaredMethod("scheduledHeartbeat")
                 .getAnnotation(Scheduled.class);
 
         assertThat(scheduled.fixedRateString()).contains("app.sse.heartbeat-interval-ms");

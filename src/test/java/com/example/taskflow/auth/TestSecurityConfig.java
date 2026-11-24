@@ -18,9 +18,9 @@ public class TestSecurityConfig {
     public UserDetailsService testUserDetailsService() {
         PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
         UserDetails admin = User.withUsername("admin")
-            .password(passwordEncoder.encode("admin-password"))
-            .roles("ADMIN")
-            .build();
+                .password(passwordEncoder.encode("admin-password"))
+                .roles("ADMIN")
+                .build();
         return new InMemoryUserDetailsManager(admin);
     }
 }

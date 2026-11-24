@@ -1,13 +1,12 @@
 package com.example.taskflow.testsupport;
 
-import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.AppointmentDetails;
+import com.example.taskflow.appointment.internal.Appointment;
 
 /** Builds the read-only {@link AppointmentDetails} view other modules receive from a test entity. */
 public final class AppointmentDetailsFixtures {
 
-    private AppointmentDetailsFixtures() {
-    }
+    private AppointmentDetailsFixtures() {}
 
     public static AppointmentDetails of(Appointment appointment) {
         return new AppointmentDetails(

@@ -100,6 +100,30 @@ test('the BuildKit image is pinned to a version and index digest', () => {
   ));
 });
 
+test('the Trivy binary is pinned to a release and the checksum of its tarball', () => {
+  // The release's own checksums file proves nothing about a replaced asset or a malicious
+  // release, so install-trivy compares the tarball with a SHA-256 kept here in Git.
+  const action = fs.readFileSync(path.join(root, 'actions', 'install-trivy', 'action.yml'), 'utf8');
+  const pin = action.match(new RegExp(
+    '# trivy-release: tracked by the dedicated regex manager in \\.github/renovate\\.json\\n'
+    + '\\s+TRIVY_PINNED_VERSION: "(v\\d+\\.\\d+\\.\\d+)"\\n'
+    + '\\s+TRIVY_LINUX_64BIT_SHA256: "[a-f0-9]{64}"\\n',
+  ));
+  assert.ok(pin, 'install-trivy must pin TRIVY_PINNED_VERSION and TRIVY_LINUX_64BIT_SHA256 below the marker');
+  assert.match(action, /echo "\$\{sha256\}  \$\{work\}\/\$\{archive\}" \| sha256sum --check --strict/);
+  assert.doesNotMatch(action, /checksums\.txt"/, 'do not fall back to the release checksums file');
+
+  // The action refuses any other version at run time; fail here first, in the pull request.
+  const versions = [];
+  for (const file of workflows) {
+    for (const match of fs.readFileSync(file, 'utf8').matchAll(/^\s*TRIVY_VERSION:\s*"?(v[\d.]+)"?\s*$/gm)) {
+      versions.push(`${rel(file)}: ${match[1]}`);
+      assert.equal(match[1], pin[1], `${rel(file)} must use the Trivy version install-trivy pins`);
+    }
+  }
+  assert.ok(versions.length >= 3, `expected TRIVY_VERSION in ci.yml, security.yml and pushdockerimage.yml: ${versions}`);
+});
+
 // The lines of one job: from its key to the next job key (or the end of the file).
 function jobBlock(workflow, name) {
   const lines = workflow.split('\n');

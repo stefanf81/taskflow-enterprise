@@ -13,5 +13,4 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * </ul>
  */
 @ConfigurationProperties(prefix = "app.instance")
-record InstanceProperties(@Nullable String id) {
-}
+record InstanceProperties(@Nullable String id) {}

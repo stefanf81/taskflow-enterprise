@@ -1,13 +1,12 @@
 package com.example.taskflow.core.cache;
-import com.example.taskflow.core.LogSanitizer;
 
+import com.example.taskflow.core.LogSanitizer;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.Cache;
 import org.springframework.cache.interceptor.CacheErrorHandler;
-
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.LongSupplier;
 
 /**
  * Treats a failing cache store (Redis down or hung) as a cache miss instead of a failed request.
@@ -63,8 +62,12 @@ final class FailOpenCacheErrorHandler implements CacheErrorHandler {
         long now = clock.getAsLong();
         long next = nextLogAtMillis.get();
         if (now >= next && nextLogAtMillis.compareAndSet(next, now + LOG_INTERVAL_MILLIS)) {
-            log.warn("Cache {} failed on '{}'; serving without the cache ({} similar failures since the last report): {}",
-                    operation, cache.getName(), suppressed.getAndSet(0), LogSanitizer.safeMessage(exception));
+            log.warn(
+                    "Cache {} failed on '{}'; serving without the cache ({} similar failures since the last report): {}",
+                    operation,
+                    cache.getName(),
+                    suppressed.getAndSet(0),
+                    LogSanitizer.safeMessage(exception));
         } else {
             suppressed.incrementAndGet();
         }

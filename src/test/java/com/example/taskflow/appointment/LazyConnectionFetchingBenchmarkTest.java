@@ -1,5 +1,14 @@
 package com.example.taskflow.appointment;
 
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.sql.Connection;
+import java.sql.Statement;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,16 +19,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.Statement;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
-import static org.junit.jupiter.api.Assertions.*;
-
 /**
  * PRODUCTION-GRADE ARCHITECTURAL BENCHMARK: LAZY VS EAGER JDBC CONNECTION FETCHING
  *
@@ -27,12 +26,13 @@ import static org.junit.jupiter.api.Assertions.*;
  * "spring.datasource.connection-fetch=lazy" property under heavy connection-pool saturation.
  */
 @Tag("benchmark")
-@SpringBootTest(properties = {
-        "app.rate-limit.enabled=false",
-        "spring.datasource.hikari.maximum-pool-size=2",      // Pool size of 2 to avoid boot deadlocks
-        "spring.datasource.hikari.connection-timeout=1000",   // Fails fast after 1 second
-        "spring.datasource.connection-fetch=lazy"             // Enforces Lazy Fetching
-})
+@SpringBootTest(
+        properties = {
+            "app.rate-limit.enabled=false",
+            "spring.datasource.hikari.maximum-pool-size=2", // Pool size of 2 to avoid boot deadlocks
+            "spring.datasource.hikari.connection-timeout=1000", // Fails fast after 1 second
+            "spring.datasource.connection-fetch=lazy" // Enforces Lazy Fetching
+        })
 @Import(LazyConnectionFetchingBenchmarkTest.BenchmarkConfig.class)
 public class LazyConnectionFetchingBenchmarkTest {
 
@@ -67,7 +67,7 @@ public class LazyConnectionFetchingBenchmarkTest {
         @Transactional
         public String queryExecutingTransactionalMethod(DataSource dataSource) throws Exception {
             try (Connection conn = dataSource.getConnection();
-                 Statement stmt = conn.createStatement()) {
+                    Statement stmt = conn.createStatement()) {
                 stmt.execute("SELECT 1");
                 return "Successfully acquired connection and ran query!";
             }
@@ -89,10 +89,10 @@ public class LazyConnectionFetchingBenchmarkTest {
                     try (Statement stmt = conn.createStatement()) {
                         stmt.execute("SELECT 1");
                     }
-                    
+
                     // Signal that we have successfully locked this connection
                     transactionStartedLatch.countDown();
-                    
+
                     // Keep the connection locked
                     holdTransactionLatch.await(5, TimeUnit.SECONDS);
                 } catch (Exception e) {
@@ -132,7 +132,8 @@ public class LazyConnectionFetchingBenchmarkTest {
         assertTrue(elapsedMs < 200.0, "Execution took too long; connection might not be loaded lazily.");
 
         // 3. Active Verification (Control Phase)
-        // Verify that a transactional method that actually executes a query correctly requests a connection and times out.
+        // Verify that a transactional method that actually executes a query correctly requests a connection and times
+        // out.
         long controlStartNs = System.nanoTime();
         Exception exception = assertThrows(Exception.class, () -> {
             benchmarkService.queryExecutingTransactionalMethod(dataSource);
@@ -147,7 +148,8 @@ public class LazyConnectionFetchingBenchmarkTest {
         System.out.println("=========================================================================");
         System.out.printf("  %-40s : %s\n", "Target Method Type", "@Transactional (With Database Query)");
         System.out.printf("  %-40s : %.2f ms\n", "Blocked Wait Time before Timeout", controlElapsedMs);
-        System.out.printf("  %-40s : %s\n", "Resulting Exception", exception.getClass().getSimpleName());
+        System.out.printf(
+                "  %-40s : %s\n", "Resulting Exception", exception.getClass().getSimpleName());
         System.out.println("  💡 Verdict: Verified that when a query is actually executed, the lazy proxy");
         System.out.println("             correctly checked out the connection and safely hit the timeout.");
         System.out.println("=========================================================================\n");

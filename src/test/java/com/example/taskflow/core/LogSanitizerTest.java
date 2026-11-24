@@ -1,9 +1,9 @@
 package com.example.taskflow.core;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+
+import org.junit.jupiter.api.Test;
 
 class LogSanitizerTest {
 
@@ -34,7 +34,9 @@ class LogSanitizerTest {
     void testSafeMessage() {
         assertEquals("unknown error", LogSanitizer.safeMessage(null));
         assertEquals("NullPointerException", LogSanitizer.safeMessage(new NullPointerException()));
-        assertEquals("Invalid argument value", LogSanitizer.safeMessage(new IllegalArgumentException("Invalid argument value")));
+        assertEquals(
+                "Invalid argument value",
+                LogSanitizer.safeMessage(new IllegalArgumentException("Invalid argument value")));
         assertEquals("line 1line 2", LogSanitizer.safeMessage(new RuntimeException("line 1\r\nline 2")));
         assertEquals("line 1line 2", LogSanitizer.safeMessage(new RuntimeException("line 1\nline 2")));
     }

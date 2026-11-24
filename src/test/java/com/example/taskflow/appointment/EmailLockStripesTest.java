@@ -1,8 +1,7 @@
 package com.example.taskflow.appointment;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.dao.CannotAcquireLockException;
-import org.springframework.dao.TransientDataAccessException;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -13,9 +12,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.TransientDataAccessException;
 
 class EmailLockStripesTest {
 
@@ -58,8 +57,8 @@ class EmailLockStripesTest {
             for (int i = 0; i < 5; i++) {
                 waits.add(requests.submit(() -> {
                     long start = System.nanoTime();
-                    CannotAcquireLockException busy = assertThrows(CannotAcquireLockException.class,
-                            () -> stripes.acquire("jane@example.com"));
+                    CannotAcquireLockException busy =
+                            assertThrows(CannotAcquireLockException.class, () -> stripes.acquire("jane@example.com"));
                     assertThat(busy).isInstanceOf(TransientDataAccessException.class); // 503 + Retry-After
                     return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
                 }));

@@ -1,11 +1,4 @@
 package com.example.taskflow.auth;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Import;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -13,11 +6,19 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -77,8 +78,7 @@ class AuthCookieTest {
 
     @Test
     void meReturnsUnauthorizedWhenAnonymous() throws Exception {
-        mockMvc.perform(get("/api/v1/auth/me").with(csrf()))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/auth/me").with(csrf())).andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -91,8 +91,7 @@ class AuthCookieTest {
 
     @Test
     void prometheusScrapeIsUnauthenticatedButOtherActuatorEndpointsRemainAdminOnly() throws Exception {
-        mockMvc.perform(get("/api/v1/barbers"))
-                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/barbers")).andExpect(status().isOk());
 
         String metrics = mockMvc.perform(get("/actuator/prometheus"))
                 .andExpect(status().isOk())
@@ -103,17 +102,19 @@ class AuthCookieTest {
         assertTrue(metrics.contains("jvm_memory_used_bytes"));
         assertTrue(metrics.contains("http_server_requests_seconds"));
         // In-flight requests: opt-in since Boot 4.2 (include-active-long-task-timer).
-        assertTrue(metrics.contains("http_server_requests_active_seconds"),
+        assertTrue(
+                metrics.contains("http_server_requests_active_seconds"),
                 "the active-requests long task timer is exported");
         assertTrue(metrics.contains("hikaricp_connections_active"));
 
-        mockMvc.perform(get("/actuator/info"))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/actuator/info")).andExpect(status().isUnauthorized());
     }
 
     @Test
     void logoutClearsCookie() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/logout").with(csrf()).with(user("admin").roles("ADMIN")))
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .with(csrf())
+                        .with(user("admin").roles("ADMIN")))
                 .andExpect(status().isNoContent())
                 .andExpect(cookie().maxAge("access_token", 0))
                 .andExpect(cookie().value("access_token", ""));

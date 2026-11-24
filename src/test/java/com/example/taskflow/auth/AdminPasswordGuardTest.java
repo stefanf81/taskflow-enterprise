@@ -1,9 +1,9 @@
 package com.example.taskflow.auth;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 class AdminPasswordGuardTest {
 
@@ -15,8 +15,7 @@ class AdminPasswordGuardTest {
         assertThrows(IllegalStateException.class, () -> AdminPasswordGuard.validate(null));
         assertThrows(IllegalStateException.class, () -> AdminPasswordGuard.validate("   "));
         assertThrows(IllegalStateException.class, () -> AdminPasswordGuard.validate("admin-password"));
-        assertThrows(IllegalStateException.class,
-                () -> AdminPasswordGuard.validate("<CHANGE_ME_STRONG_TOKEN_SECRET>"));
+        assertThrows(IllegalStateException.class, () -> AdminPasswordGuard.validate("<CHANGE_ME_STRONG_TOKEN_SECRET>"));
     }
 
     @Test

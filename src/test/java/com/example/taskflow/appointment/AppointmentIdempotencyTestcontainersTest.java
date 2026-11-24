@@ -1,25 +1,14 @@
 package com.example.taskflow.appointment;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
 import com.example.taskflow.appointment.internal.BarberTimeOffRepository;
 import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.catalog.internal.ServiceItemRepository;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-
+import com.example.taskflow.testsupport.PostgresTestServer;
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -31,8 +20,19 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * PostgreSQL parity for the idempotency race. Two or more concurrent requests
@@ -50,7 +50,7 @@ class AppointmentIdempotencyTestcontainersTest {
     private static final String SERVICE = "Race Cut";
 
     @Container
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.7-alpine")
+    static PostgreSQLContainer postgres = new PostgreSQLContainer(PostgresTestServer.IMAGE)
             .withDatabaseName("taskflow_test")
             .withUsername("postgres")
             .withPassword("postgres-password");
@@ -156,13 +156,22 @@ class AppointmentIdempotencyTestcontainersTest {
         }
         pool.shutdown();
 
-        assertEquals(1, appointmentRepository.count(),
-                "exactly one appointment must be persisted for one Idempotency-Key");
-        assertEquals(1, results.stream().filter(result -> !result.replayed()).count(),
+        assertEquals(
+                1, appointmentRepository.count(), "exactly one appointment must be persisted for one Idempotency-Key");
+        assertEquals(
+                1,
+                results.stream().filter(result -> !result.replayed()).count(),
                 "exactly one request must be the creator");
-        assertEquals(threads - 1, results.stream().filter(AppointmentCreationResult::replayed).count(),
+        assertEquals(
+                threads - 1,
+                results.stream().filter(AppointmentCreationResult::replayed).count(),
                 "every other request must be a verified replay");
-        assertEquals(1, results.stream().map(result -> result.appointment().id()).distinct().count(),
+        assertEquals(
+                1,
+                results.stream()
+                        .map(result -> result.appointment().id())
+                        .distinct()
+                        .count(),
                 "all results must reference the same appointment");
     }
 }

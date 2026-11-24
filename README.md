@@ -79,7 +79,7 @@ npm run android                # or: npm run ios
 ## Check a change
 
 ```bash
-./gradlew check                # backend tests (H2), coverage, SpotBugs, container guards
+./gradlew check                # backend tests (PostgreSQL), coverage, SpotBugs, Spotless, container guards
 npm run lint:all               # ESLint, tsc, Prettier, component maps, dependency tree
 npm run test:all               # frontend and mobile unit tests
 npm run sync:api-types:check   # generated API types match api/openapi.json

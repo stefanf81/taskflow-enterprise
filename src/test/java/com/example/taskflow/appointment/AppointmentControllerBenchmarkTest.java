@@ -1,32 +1,30 @@
 package com.example.taskflow.appointment;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.example.taskflow.appointment.internal.Appointment;
 import com.example.taskflow.appointment.internal.AppointmentRepository;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.util.StopWatch;
-
-import org.springframework.context.annotation.Import;
 import com.example.taskflow.auth.TestSecurityConfig;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
-
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.util.StopWatch;
 
 /**
  * HIGH-PERFORMANCE CONCURRENCY AND LATENCY BENCHMARK TEST (BARBER BOOKING DOMAIN)
@@ -51,10 +49,10 @@ public class AppointmentControllerBenchmarkTest {
     private ObjectMapper objectMapper = new ObjectMapper();
 
     private String authHeader;
-    private static final int DATABASE_SIZE = 100;     // Pre-populated items size
-    private static final int CONCURRENT_USERS = 5;    // Active concurrent threads
-    private static final int TOTAL_REQUESTS = 50;     // Total load requests
-    private static final long MAX_LATENCY_MS = 100;   // Max tolerated avg latency per call
+    private static final int DATABASE_SIZE = 100; // Pre-populated items size
+    private static final int CONCURRENT_USERS = 5; // Active concurrent threads
+    private static final int TOTAL_REQUESTS = 50; // Total load requests
+    private static final long MAX_LATENCY_MS = 100; // Max tolerated avg latency per call
 
     @Autowired
     private com.example.taskflow.review.internal.ReviewRepository reviewRepository;
@@ -68,7 +66,14 @@ public class AppointmentControllerBenchmarkTest {
         // 1. Populate the database with dummy appointments to simulate load volume
         List<Appointment> loadData = new ArrayList<>();
         for (int i = 0; i < DATABASE_SIZE; i++) {
-            loadData.add(new Appointment("Client " + i, "client" + i + "@example.com", "555-01" + i, "Barber Alex", LocalDate.now().plusDays(i), "10:00", "Classic Haircut"));
+            loadData.add(new Appointment(
+                    "Client " + i,
+                    "client" + i + "@example.com",
+                    "555-01" + i,
+                    "Barber Alex",
+                    LocalDate.now().plusDays(i),
+                    "10:00",
+                    "Classic Haircut"));
         }
         appointmentRepository.saveAll(loadData);
 
@@ -83,7 +88,10 @@ public class AppointmentControllerBenchmarkTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("access_token").getValue();
+                .andReturn()
+                .getResponse()
+                .getCookie("access_token")
+                .getValue();
 
         authHeader = "Bearer " + cookie;
     }
@@ -151,7 +159,10 @@ public class AppointmentControllerBenchmarkTest {
 
         executorService.shutdown();
 
-        assertTrue(avgLatency < MAX_LATENCY_MS,
-                String.format("Performance regression! Average latency of %.2fms exceeded the %dms SLA limit.", avgLatency, MAX_LATENCY_MS));
+        assertTrue(
+                avgLatency < MAX_LATENCY_MS,
+                String.format(
+                        "Performance regression! Average latency of %.2fms exceeded the %dms SLA limit.",
+                        avgLatency, MAX_LATENCY_MS));
     }
 }

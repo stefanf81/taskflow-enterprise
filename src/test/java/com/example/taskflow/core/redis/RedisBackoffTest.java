@@ -1,12 +1,11 @@
 package com.example.taskflow.core.redis;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.RedisConnectionFailureException;
-
-import java.util.concurrent.atomic.AtomicLong;
-
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.concurrent.atomic.AtomicLong;
+import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.RedisConnectionFailureException;
 
 /** After a failure, exactly one caller per interval probes Redis; the others keep the fallback. */
 class RedisBackoffTest {

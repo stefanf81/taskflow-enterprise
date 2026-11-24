@@ -1,6 +1,6 @@
 package com.example.taskflow.auth;
-import com.example.taskflow.auth.internal.UserRepository;
 
+import com.example.taskflow.auth.internal.UserRepository;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -18,7 +18,8 @@ class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        AppUser user = userRepository.findByEmailIgnoreCase(email)
+        AppUser user = userRepository
+                .findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
 
         return User.withUsername(user.getEmail())

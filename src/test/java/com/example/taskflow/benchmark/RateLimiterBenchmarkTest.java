@@ -1,5 +1,17 @@
 package com.example.taskflow.benchmark;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -7,19 +19,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
-
-import java.util.Collections;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Benchmark & correctness proof for P0-3: Lua-atomic rate limiter.
@@ -36,14 +35,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <pre>{@code ./gradlew benchmarkTest --tests "*RateLimiterBenchmarkTest*"}</pre>
  */
 @Tag("benchmark")
-@SpringBootTest(properties = {
-        "app.rate-limit.enabled=false",
-        "spring.cache.type=simple",
-        "spring.data.redis.host=localhost",
-        "spring.data.redis.port=6379",
-        "spring.data.redis.timeout=2000",
-        "spring.jpa.properties.hibernate.cache.use_second_level_cache=false"
-})
+@SpringBootTest(
+        properties = {
+            "app.rate-limit.enabled=false",
+            "spring.cache.type=simple",
+            "spring.data.redis.host=localhost",
+            "spring.data.redis.port=6379",
+            "spring.data.redis.timeout=2000",
+            "spring.jpa.properties.hibernate.cache.use_second_level_cache=false"
+        })
 class RateLimiterBenchmarkTest {
 
     private static final int WARMUP = 2_000;
@@ -53,6 +53,7 @@ class RateLimiterBenchmarkTest {
     private static final long TTL_MILLIS = 60000;
 
     private static final DefaultRedisScript<Long> RATE_LIMIT_SCRIPT;
+
     static {
         String lua = "local c = redis.call('incr', KEYS[1]); "
                 + "if c == 1 then redis.call('pexpire', KEYS[1], ARGV[1]) end; "
@@ -68,10 +69,16 @@ class RateLimiterBenchmarkTest {
     @BeforeEach
     void flush() {
         try {
-            redisTemplate.getConnectionFactory().getConnection().serverCommands().flushAll();
+            redisTemplate
+                    .getConnectionFactory()
+                    .getConnection()
+                    .serverCommands()
+                    .flushAll();
         } catch (Exception e) {
             // If Redis not available, fail fast with clear message
-            throw new IllegalStateException("Redis not available at localhost:6379 — start with `docker run -p 6379:6379 redis:8.10.3-alpine`", e);
+            throw new IllegalStateException(
+                    "Redis not available at localhost:6379 — start with `docker run -p 6379:6379 redis:8.10.3-alpine`",
+                    e);
         }
     }
 
@@ -162,13 +169,16 @@ class RateLimiterBenchmarkTest {
         System.out.printf("  Lua saves: %.3f µs per op  (%.1fx faster)%n", deltaUs, speedup);
         System.out.printf("  Two-step: %.1f ops/sec  Lua: %.1f ops/sec%n", twoStep.opsPerSec, lua.opsPerSec);
         System.out.println("  Note: Lua is 1 RTT vs 2 RTT. On local Docker, RTT ~0.2-0.5 ms.");
-        System.out.println("  Expected: Lua ~5-15%% faster under low contention, similar under high (Redis single-threaded).");
+        System.out.println(
+                "  Expected: Lua ~5-15%% faster under low contention, similar under high (Redis single-threaded).");
         System.out.println("  Primary win is atomicity, not throughput.");
         System.out.println("=".repeat(80));
 
         // No hard fail on throughput — atomicity is the P0-3 goal. Just ensure Lua is not drastically slower (>50%).
-        assertTrue(lua.avgUs < twoStep.avgUs * 1.5,
-                String.format("Lua %.3f µs should not be >1.5× slower than two-step %.3f µs", lua.avgUs, twoStep.avgUs));
+        assertTrue(
+                lua.avgUs < twoStep.avgUs * 1.5,
+                String.format(
+                        "Lua %.3f µs should not be >1.5× slower than two-step %.3f µs", lua.avgUs, twoStep.avgUs));
     }
 
     @Test
@@ -222,7 +232,8 @@ class RateLimiterBenchmarkTest {
 
         double elapsedMs = elapsedNs / 1_000_000.0;
         double throughput = totalOps / (elapsedNs / 1_000_000_000.0);
-        System.out.printf("  Burst elapsed: %.2f ms  throughput: %.1f ops/sec  concurrency: %d%n",
+        System.out.printf(
+                "  Burst elapsed: %.2f ms  throughput: %.1f ops/sec  concurrency: %d%n",
                 elapsedMs, throughput, CONCURRENCY);
         System.out.println("  ✓ Atomicity verified: no lost increments, TTL persists, no permanent block");
         System.out.println("=".repeat(80));

@@ -18,7 +18,9 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties(prefix = "app.sse")
 record SseProperties(
         @DefaultValue("2") int maxConnectionsPerAdmin,
-        @DefaultValue(SseProperties.DEFAULT_HEARTBEAT_INTERVAL_MS) long heartbeatIntervalMs) {
+
+        @DefaultValue(SseProperties.DEFAULT_HEARTBEAT_INTERVAL_MS)
+        long heartbeatIntervalMs) {
 
     static final String DEFAULT_HEARTBEAT_INTERVAL_MS = "20000";
 }

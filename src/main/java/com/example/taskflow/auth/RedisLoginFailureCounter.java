@@ -1,13 +1,12 @@
 package com.example.taskflow.auth;
 
-import com.example.taskflow.core.redis.RedisBackoff;
 import com.example.taskflow.core.SharedStateStore;
+import com.example.taskflow.core.redis.RedisBackoff;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
-
-import java.nio.charset.StandardCharsets;
-import java.util.Collections;
 
 /**
  * Redis side of {@link LoginAttemptLimiter} ({@code app.state.store=redis}): one fixed window per
@@ -74,8 +73,8 @@ final class RedisLoginFailureCounter {
             return UNAVAILABLE;
         }
         try {
-            Long count = redis.execute(INCREMENT_SCRIPT, Collections.singletonList(key(accountKey)),
-                    String.valueOf(windowMillis));
+            Long count = redis.execute(
+                    INCREMENT_SCRIPT, Collections.singletonList(key(accountKey)), String.valueOf(windowMillis));
             backoff.recordSuccess();
             return count == null ? UNAVAILABLE : count;
         } catch (RuntimeException e) {
@@ -91,7 +90,8 @@ final class RedisLoginFailureCounter {
         }
         try {
             byte[] rawKey = key(accountKey).getBytes(StandardCharsets.UTF_8);
-            Long ttl = redis.execute((RedisCallback<Long>) connection -> connection.keyCommands().pTtl(rawKey));
+            Long ttl = redis.execute(
+                    (RedisCallback<Long>) connection -> connection.keyCommands().pTtl(rawKey));
             backoff.recordSuccess();
             return ttl == null || ttl <= 0 ? 1 : Math.max(1, (ttl + 999) / 1000);
         } catch (RuntimeException e) {

@@ -20,8 +20,8 @@ final class RevocationChannelSubscriber implements DisposableBean {
     static final long RETRY_MILLIS = 30_000;
 
     private final RedisMessageListenerContainer container;
-    private final RedisBackoff backoff = new RedisBackoff("Token revocation channel", RETRY_MILLIS,
-            System::currentTimeMillis);
+    private final RedisBackoff backoff =
+            new RedisBackoff("Token revocation channel", RETRY_MILLIS, System::currentTimeMillis);
     private final long retryMillis;
     private volatile Thread worker;
     private volatile boolean stopped;

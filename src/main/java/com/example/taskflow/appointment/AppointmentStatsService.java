@@ -1,20 +1,19 @@
 package com.example.taskflow.appointment;
-import com.example.taskflow.appointment.internal.AppointmentRepository;
 
+import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.catalog.CatalogService;
 import com.example.taskflow.catalog.ServiceItemResponse;
 import com.example.taskflow.core.LogSanitizer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
-import org.springframework.stereotype.Service;
-
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.concurrent.Callable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.stereotype.Service;
 
 /**
  * Dedicated service for appointment statistics and availability caching, kept apart from the
@@ -46,8 +45,12 @@ class AppointmentStatsService {
     private final AppointmentRepository appointmentRepository;
     private final BookingProperties bookingProperties;
 
-    AppointmentStatsService(CacheManager cacheManager, Clock clock, CatalogService catalogService,
-                            AppointmentRepository appointmentRepository, BookingProperties bookingProperties) {
+    AppointmentStatsService(
+            CacheManager cacheManager,
+            Clock clock,
+            CatalogService catalogService,
+            AppointmentRepository appointmentRepository,
+            BookingProperties bookingProperties) {
         this.cacheManager = cacheManager;
         this.clock = clock;
         this.catalogService = catalogService;
@@ -158,8 +161,7 @@ class AppointmentStatsService {
                     .distinct()
                     .toList();
         } catch (RuntimeException e) {
-            log.warn("Could not list service durations for availability eviction: {}",
-                    LogSanitizer.safeMessage(e));
+            log.warn("Could not list service durations for availability eviction: {}", LogSanitizer.safeMessage(e));
             return List.of();
         }
     }

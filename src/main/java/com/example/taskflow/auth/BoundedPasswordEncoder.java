@@ -1,8 +1,5 @@
 package com.example.taskflow.auth;
 
-import org.springframework.security.authentication.InternalAuthenticationServiceException;
-import org.springframework.security.crypto.password.PasswordEncoder;
-
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -12,6 +9,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.springframework.security.authentication.InternalAuthenticationServiceException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
  * Runs the delegate's hashing (BCrypt: tens of milliseconds of CPU per call) on a few platform
@@ -39,12 +38,18 @@ final class BoundedPasswordEncoder implements PasswordEncoder, AutoCloseable {
     BoundedPasswordEncoder(PasswordEncoder delegate, int threads, int queueCapacity) {
         this.delegate = delegate;
         AtomicInteger counter = new AtomicInteger();
-        this.executor = new ThreadPoolExecutor(threads, threads, 0L, TimeUnit.MILLISECONDS,
-                new ArrayBlockingQueue<>(queueCapacity), runnable -> {
+        this.executor = new ThreadPoolExecutor(
+                threads,
+                threads,
+                0L,
+                TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(queueCapacity),
+                runnable -> {
                     Thread thread = new Thread(runnable, "password-hash-" + counter.incrementAndGet());
                     thread.setDaemon(true);
                     return thread;
-                }, new ThreadPoolExecutor.AbortPolicy());
+                },
+                new ThreadPoolExecutor.AbortPolicy());
     }
 
     /** One thread fewer than the processors the JVM sees (container-aware), at least one. */

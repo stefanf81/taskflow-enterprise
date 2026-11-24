@@ -16,8 +16,7 @@ final class OutboxBackoff {
     static final Duration BASE_DELAY = Duration.ofSeconds(30);
     static final Duration MAX_DELAY = Duration.ofHours(1);
 
-    private OutboxBackoff() {
-    }
+    private OutboxBackoff() {}
 
     /** Delay before the next attempt after {@code failedAttempts} (>= 1) failures. */
     static Duration delayAfter(int failedAttempts) {

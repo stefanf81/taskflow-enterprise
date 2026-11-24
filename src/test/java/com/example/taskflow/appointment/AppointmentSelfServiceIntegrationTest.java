@@ -1,35 +1,5 @@
 package com.example.taskflow.appointment;
 
-import com.example.taskflow.appointment.internal.AppointmentRepository;
-import com.example.taskflow.appointment.internal.BarberRepository;
-import com.example.taskflow.appointment.internal.BarberScheduleRepository;
-import com.example.taskflow.auth.AppUser;
-import com.example.taskflow.auth.internal.UserRepository;
-import com.example.taskflow.catalog.ServiceItem;
-import com.example.taskflow.catalog.internal.ServiceItemRepository;
-import com.example.taskflow.notification.internal.NotificationOutboxRepository;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.ResultActions;
-
-import java.math.BigDecimal;
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.temporal.TemporalAdjusters;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
@@ -45,23 +15,69 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.example.taskflow.appointment.internal.AppointmentRepository;
+import com.example.taskflow.appointment.internal.BarberRepository;
+import com.example.taskflow.appointment.internal.BarberScheduleRepository;
+import com.example.taskflow.auth.AppUser;
+import com.example.taskflow.auth.internal.UserRepository;
+import com.example.taskflow.catalog.ServiceItem;
+import com.example.taskflow.catalog.internal.ServiceItemRepository;
+import com.example.taskflow.notification.internal.NotificationOutboxRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.temporal.TemporalAdjusters;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
 @SpringBootTest(properties = {"app.rate-limit.enabled=false", "app.schedulers.enabled=false"})
 @AutoConfigureMockMvc
 class AppointmentSelfServiceIntegrationTest {
 
-    private static final LocalDate THURSDAY = LocalDate.now().plusDays(7)
-            .with(TemporalAdjusters.nextOrSame(DayOfWeek.THURSDAY));
+    private static final LocalDate THURSDAY =
+            LocalDate.now().plusDays(7).with(TemporalAdjusters.nextOrSame(DayOfWeek.THURSDAY));
     private static final LocalDate FRIDAY = THURSDAY.plusDays(1);
 
-    @Autowired private MockMvc mockMvc;
-    @Autowired private AppointmentRepository appointmentRepository;
-    @Autowired private BarberRepository barberRepository;
-    @Autowired private BarberScheduleRepository barberScheduleRepository;
-    @Autowired private ServiceItemRepository serviceItemRepository;
-    @Autowired private UserRepository userRepository;
-    @Autowired private NotificationOutboxRepository outboxRepository;
-    @Autowired private PasswordEncoder passwordEncoder;
-    @Autowired private JdbcTemplate jdbc;
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private AppointmentRepository appointmentRepository;
+
+    @Autowired
+    private BarberRepository barberRepository;
+
+    @Autowired
+    private BarberScheduleRepository barberScheduleRepository;
+
+    @Autowired
+    private ServiceItemRepository serviceItemRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private NotificationOutboxRepository outboxRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private String adminToken;
@@ -79,10 +95,10 @@ class AppointmentSelfServiceIntegrationTest {
         serviceItemRepository.deleteAll();
         userRepository.deleteAll();
 
-        userRepository.save(new AppUser("admin@taskflow.com", passwordEncoder.encode("admin-password"),
-                "Admin", "555-0001", "ROLE_ADMIN"));
-        userRepository.save(new AppUser("jane@taskflow.com", passwordEncoder.encode("Pass1234"),
-                "Jane Doe", "555-0002", "ROLE_CUSTOMER"));
+        userRepository.save(new AppUser(
+                "admin@taskflow.com", passwordEncoder.encode("admin-password"), "Admin", "555-0001", "ROLE_ADMIN"));
+        userRepository.save(new AppUser(
+                "jane@taskflow.com", passwordEncoder.encode("Pass1234"), "Jane Doe", "555-0002", "ROLE_CUSTOMER"));
 
         adminToken = "Bearer " + login("admin@taskflow.com", "admin-password");
         customerToken = "Bearer " + login("jane@taskflow.com", "Pass1234");
@@ -105,7 +121,10 @@ class AppointmentSelfServiceIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("username", username, "password", password))))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("access_token").getValue();
+                .andReturn()
+                .getResponse()
+                .getCookie("access_token")
+                .getValue();
     }
 
     @Test
@@ -123,7 +142,9 @@ class AppointmentSelfServiceIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createPayload)))
                 .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         String publicId = objectMapper.readTree(createdJson).get("publicId").asText();
 
         // Change catalog duration after booking: calendar export must still reflect the booked 60m interval.
@@ -143,7 +164,9 @@ class AppointmentSelfServiceIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", containsString("no-store")))
                 .andExpect(jsonPath("$.filename", is("appointment-" + publicId + ".ics")))
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         String ics = objectMapper.readTree(exportJson).get("content").asText();
         assertTrue(ics.contains("BEGIN:VCALENDAR\r\n"));
         assertTrue(ics.contains("UID:" + publicId + "@taskflow\r\n"));
@@ -173,7 +196,9 @@ class AppointmentSelfServiceIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createPayload)))
                 .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         JsonNode created = objectMapper.readTree(createdJson);
         long id = created.get("id").asLong();
         String publicId = created.get("publicId").asText();
@@ -219,9 +244,8 @@ class AppointmentSelfServiceIntegrationTest {
         mockMvc.perform(put("/api/v1/customer/appointments/" + publicId + "/reschedule")
                         .header("Authorization", customerToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "bookingDate", FRIDAY.toString(),
-                                "bookingTime", "11:00"))))
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("bookingDate", FRIDAY.toString(), "bookingTime", "11:00"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.bookingDate", is(FRIDAY.toString())))
                 .andExpect(jsonPath("$.bookingTime", is("11:00")));
@@ -239,7 +263,9 @@ class AppointmentSelfServiceIntegrationTest {
                                 "bookingTime", time,
                                 "serviceType", serviceType))))
                 .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         return objectMapper.readTree(json).get("publicId").asText();
     }
 
@@ -257,14 +283,28 @@ class AppointmentSelfServiceIntegrationTest {
     @Test
     void rescheduleAvailabilityUsesTheBookedLengthAndIgnoresTheBookingItself() throws Exception {
         // Through the API, which evicts the cached catalog the create-time answer reads.
-        Map<String, Object> colour = new HashMap<>(Map.of("name", "Long Colour", "price", 90,
-                "durationMinutes", 120, "category", "hair", "description", "Colour"));
-        long colourId = objectMapper.readTree(mockMvc.perform(post("/api/v1/catalog")
-                        .header("Authorization", adminToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(colour)))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+        Map<String, Object> colour = new HashMap<>(Map.of(
+                "name",
+                "Long Colour",
+                "price",
+                90,
+                "durationMinutes",
+                120,
+                "category",
+                "hair",
+                "description",
+                "Colour"));
+        long colourId = objectMapper
+                .readTree(mockMvc.perform(post("/api/v1/catalog")
+                                .header("Authorization", adminToken)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(colour)))
+                        .andExpect(status().isCreated())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString())
+                .get("id")
+                .asLong();
         String publicId = bookThursday("Jane Doe", "jane@taskflow.com", "10:00", "Long Colour");
         bookThursday("Bob Roe", "bob@taskflow.com", "14:00", "Signature Cut");
 
@@ -313,8 +353,8 @@ class AppointmentSelfServiceIntegrationTest {
         mockMvc.perform(put("/api/v1/customer/appointments/" + publicId + "/reschedule")
                         .header("Authorization", customerToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "bookingDate", THURSDAY.toString(), "bookingTime", "11:00"))))
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("bookingDate", THURSDAY.toString(), "bookingTime", "11:00"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.bookingTime", is("11:00")));
     }
@@ -348,7 +388,8 @@ class AppointmentSelfServiceIntegrationTest {
                 .andExpect(status().isBadRequest());
 
         // Every slot is busy on a working day outside the booking window, and on a day off.
-        LocalDate pastThursday = LocalDate.now().minusDays(2).with(TemporalAdjusters.previousOrSame(DayOfWeek.THURSDAY));
+        LocalDate pastThursday =
+                LocalDate.now().minusDays(2).with(TemporalAdjusters.previousOrSame(DayOfWeek.THURSDAY));
         LocalDate lateThursday = LocalDate.now().plusDays(120).with(TemporalAdjusters.nextOrSame(DayOfWeek.THURSDAY));
         for (LocalDate date : List.of(pastThursday, lateThursday, THURSDAY.plusDays(2))) {
             guestAvailability(publicId, "jane@taskflow.com", date)
@@ -378,15 +419,17 @@ class AppointmentSelfServiceIntegrationTest {
                                 "serviceType", "Signature Cut"))))
                 .andExpect(status().isCreated());
 
-        String scheduleJson = mockMvc.perform(get("/api/v1/barbers/" + barber.getId() + "/schedule")
-                        .header("Authorization", adminToken))
+        String scheduleJson = mockMvc.perform(
+                        get("/api/v1/barbers/" + barber.getId() + "/schedule").header("Authorization", adminToken))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         String revision = objectMapper.readTree(scheduleJson).get("revision").asText();
 
         // Shortening Thursday to close at 15:00 conflicts with the 16:00 booking.
-        List<Map<String, Object>> shortenedDays = List.of(
-                Map.of("dayOfWeek", THURSDAY.getDayOfWeek().getValue(), "opens", "09:00", "closes", "15:00"));
+        List<Map<String, Object>> shortenedDays =
+                List.of(Map.of("dayOfWeek", THURSDAY.getDayOfWeek().getValue(), "opens", "09:00", "closes", "15:00"));
 
         String previewJson = mockMvc.perform(post("/api/v1/barbers/" + barber.getId() + "/schedule/preview")
                         .header("Authorization", adminToken)
@@ -397,14 +440,18 @@ class AppointmentSelfServiceIntegrationTest {
                                 "cancelConflictingAppointments", false))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.conflictCount", is(1)))
-                .andReturn().getResponse().getContentAsString();
-        String conflictsRevision = objectMapper.readTree(previewJson).get("conflictsRevision").asText();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String conflictsRevision =
+                objectMapper.readTree(previewJson).get("conflictsRevision").asText();
 
         // Null day elements are rejected with 400 (Bean Validation), never a 500 NPE.
         mockMvc.perform(post("/api/v1/barbers/" + barber.getId() + "/schedule/preview")
                         .header("Authorization", adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"days\":[null],\"expectedRevision\":\"" + revision + "\",\"cancelConflictingAppointments\":false}"))
+                        .content("{\"days\":[null],\"expectedRevision\":\"" + revision
+                                + "\",\"cancelConflictingAppointments\":false}"))
                 .andExpect(status().isBadRequest());
 
         // Saving without confirmation is rejected with 409.
@@ -429,6 +476,8 @@ class AppointmentSelfServiceIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.days[0].closes", is("15:00")));
 
-        assertEquals(AppointmentStatus.CANCELLED, appointmentRepository.findAll().getFirst().getStatusEnum());
+        assertEquals(
+                AppointmentStatus.CANCELLED,
+                appointmentRepository.findAll().getFirst().getStatusEnum());
     }
 }

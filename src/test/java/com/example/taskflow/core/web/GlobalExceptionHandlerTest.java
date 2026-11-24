@@ -1,5 +1,12 @@
 package com.example.taskflow.core.web;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import com.example.taskflow.appointment.IdempotencyConflictException;
 import com.example.taskflow.appointment.InvalidStatusTransitionException;
 import com.example.taskflow.core.ConflictException;
@@ -9,9 +16,15 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,21 +35,6 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class GlobalExceptionHandlerTest {
 
@@ -69,7 +67,7 @@ class GlobalExceptionHandlerTest {
     /** Any module's DomainException is mapped from the status it carries, without core knowing its type. */
     @Test
     void domainExceptionsAreMappedFromTheirOwnStatus() {
-        DomainException gone = new DomainException(HttpStatus.GONE, "This booking link has expired.") { };
+        DomainException gone = new DomainException(HttpStatus.GONE, "This booking link has expired.") {};
 
         ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleDomainException(gone, request);
 
@@ -97,7 +95,9 @@ class GlobalExceptionHandlerTest {
         assertEquals("Validation failed", response.getBody().message());
         assertEquals(1, response.getBody().validationErrors().size());
         assertEquals("field", response.getBody().validationErrors().get(0).field());
-        assertEquals("must not be blank", response.getBody().validationErrors().get(0).message());
+        assertEquals(
+                "must not be blank",
+                response.getBody().validationErrors().get(0).message());
     }
 
     @Test
@@ -107,33 +107,66 @@ class GlobalExceptionHandlerTest {
             public String getMessage() {
                 return "must not be null";
             }
+
             @Override
-            public String getMessageTemplate() { return null; }
+            public String getMessageTemplate() {
+                return null;
+            }
+
             @Override
-            public Object getRootBean() { return null; }
+            public Object getRootBean() {
+                return null;
+            }
+
             @Override
-            public Class<Object> getRootBeanClass() { return null; }
+            public Class<Object> getRootBeanClass() {
+                return null;
+            }
+
             @Override
-            public Object getLeafBean() { return null; }
+            public Object getLeafBean() {
+                return null;
+            }
+
             @Override
-            public Object[] getExecutableParameters() { return new Object[0]; }
+            public Object[] getExecutableParameters() {
+                return new Object[0];
+            }
+
             @Override
-            public Object getExecutableReturnValue() { return null; }
+            public Object getExecutableReturnValue() {
+                return null;
+            }
+
             @Override
             public Path getPropertyPath() {
                 return new Path() {
                     @Override
-                    public String toString() { return "field"; }
+                    public String toString() {
+                        return "field";
+                    }
+
                     @Override
-                    public java.util.Iterator<Node> iterator() { return null; }
+                    public java.util.Iterator<Node> iterator() {
+                        return null;
+                    }
                 };
             }
+
             @Override
-            public Object getInvalidValue() { return null; }
+            public Object getInvalidValue() {
+                return null;
+            }
+
             @Override
-            public jakarta.validation.metadata.ConstraintDescriptor<?> getConstraintDescriptor() { return null; }
+            public jakarta.validation.metadata.ConstraintDescriptor<?> getConstraintDescriptor() {
+                return null;
+            }
+
             @Override
-            public <U> U unwrap(Class<U> type) { return null; }
+            public <U> U unwrap(Class<U> type) {
+                return null;
+            }
         };
 
         Set<ConstraintViolation<?>> violations = new HashSet<>();
@@ -157,7 +190,9 @@ class GlobalExceptionHandlerTest {
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertNotNull(response.getBody());
         assertEquals(400, response.getBody().status());
-        assertEquals("Bad Request: Required parameter 'param' is missing.", response.getBody().message());
+        assertEquals(
+                "Bad Request: Required parameter 'param' is missing.",
+                response.getBody().message());
     }
 
     @Test
@@ -175,8 +210,10 @@ class GlobalExceptionHandlerTest {
         org.springframework.security.authentication.InternalAuthenticationServiceException ex =
                 new org.springframework.security.authentication.InternalAuthenticationServiceException(
                         "PreparedStatementCallback; Connection is not available",
-                        new org.springframework.dao.DataAccessResourceFailureException("HikariPool-1 - Connection is not available"));
-        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleInternalAuthenticationServiceException(ex, request);
+                        new org.springframework.dao.DataAccessResourceFailureException(
+                                "HikariPool-1 - Connection is not available"));
+        ResponseEntity<ErrorResponse> response =
+                globalExceptionHandler.handleInternalAuthenticationServiceException(ex, request);
 
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
         assertEquals("1", response.getHeaders().getFirst("Retry-After"));
@@ -201,12 +238,16 @@ class GlobalExceptionHandlerTest {
         appender.start();
         logger.addAppender(appender);
         try {
-            var mvc = org.springframework.test.web.servlet.setup.MockMvcBuilders
-                    .standaloneSetup(new FailingAuthenticationController())
-                    .setControllerAdvice(globalExceptionHandler).build();
+            var mvc = org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup(
+                            new FailingAuthenticationController())
+                    .setControllerAdvice(globalExceptionHandler)
+                    .build();
             for (String type : List.of("internal", "service")) {
-                var response = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                        .post("/auth-failure").param("type", type)).andReturn().getResponse();
+                var response = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                                        "/auth-failure")
+                                .param("type", type))
+                        .andReturn()
+                        .getResponse();
                 assertEquals(type.equals("internal") ? 503 : 500, response.getStatus());
                 assertEquals(type.equals("internal") ? "1" : null, response.getHeader("Retry-After"));
                 assertFalse(response.getContentAsString().contains("private-customer"));
@@ -245,7 +286,9 @@ class GlobalExceptionHandlerTest {
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertNotNull(response.getBody());
         assertEquals(500, response.getBody().status());
-        assertEquals("An unexpected error occurred. Please try again later.", response.getBody().message());
+        assertEquals(
+                "An unexpected error occurred. Please try again later.",
+                response.getBody().message());
     }
 
     @Test
@@ -260,8 +303,7 @@ class GlobalExceptionHandlerTest {
                     "22001");
             var ex = new org.springframework.dao.DataIntegrityViolationException("insert failed", sqlEx);
 
-            ResponseEntity<ErrorResponse> response =
-                    globalExceptionHandler.handleDataIntegrityViolation(ex, request);
+            ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleDataIntegrityViolation(ex, request);
 
             assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
             assertEquals(1, appender.list.size());
@@ -276,27 +318,34 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void testHandleHttpMessageNotReadableException() {
-        org.springframework.http.converter.HttpMessageNotReadableException ex = mock(org.springframework.http.converter.HttpMessageNotReadableException.class);
+        org.springframework.http.converter.HttpMessageNotReadableException ex =
+                mock(org.springframework.http.converter.HttpMessageNotReadableException.class);
         when(ex.getMessage()).thenReturn("Malformed JSON");
-        RuntimeException cause = new RuntimeException("Cannot deserialize value from String \"secret-customer@example.com\"");
+        RuntimeException cause =
+                new RuntimeException("Cannot deserialize value from String \"secret-customer@example.com\"");
         when(ex.getMostSpecificCause()).thenReturn(cause);
 
-        ch.qos.logback.classic.Logger logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory
-                .getLogger(GlobalExceptionHandler.class);
+        ch.qos.logback.classic.Logger logger =
+                (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class);
         ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
                 new ch.qos.logback.core.read.ListAppender<>();
         appender.start();
         logger.addAppender(appender);
         try {
-            ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleHttpMessageNotReadableException(ex, request);
+            ResponseEntity<ErrorResponse> response =
+                    globalExceptionHandler.handleHttpMessageNotReadableException(ex, request);
 
             assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
             assertNotNull(response.getBody());
             // M1: neither the client response nor the server log may echo the offending scalar value
-            assertEquals("Malformed JSON request payload. Please check your request body and content type.", response.getBody().message());
+            assertEquals(
+                    "Malformed JSON request payload. Please check your request body and content type.",
+                    response.getBody().message());
             assertEquals(1, appender.list.size());
             String logged = appender.list.getFirst().getFormattedMessage();
-            assertFalse(logged.contains("secret-customer@example.com"), "Parser log must not include customer values: " + logged);
+            assertFalse(
+                    logged.contains("secret-customer@example.com"),
+                    "Parser log must not include customer values: " + logged);
         } finally {
             logger.detachAppender(appender);
         }
@@ -304,7 +353,8 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void testHandleNotFoundExceptions() {
-        org.springframework.web.servlet.resource.NoResourceFoundException ex = mock(org.springframework.web.servlet.resource.NoResourceFoundException.class);
+        org.springframework.web.servlet.resource.NoResourceFoundException ex =
+                mock(org.springframework.web.servlet.resource.NoResourceFoundException.class);
         when(ex.getMessage()).thenReturn("Resource not found message");
         ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleNotFoundExceptions(ex, request);
 
@@ -315,7 +365,8 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void testHandleMethodNotSupportedException() {
-        org.springframework.web.HttpRequestMethodNotSupportedException ex = mock(org.springframework.web.HttpRequestMethodNotSupportedException.class);
+        org.springframework.web.HttpRequestMethodNotSupportedException ex =
+                mock(org.springframework.web.HttpRequestMethodNotSupportedException.class);
         when(ex.getMessage()).thenReturn("Request method 'POST' is not supported");
         ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleMethodNotSupportedException(ex, request);
 
@@ -326,9 +377,11 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void testHandleMediaTypeNotSupportedException() {
-        org.springframework.web.HttpMediaTypeNotSupportedException ex = mock(org.springframework.web.HttpMediaTypeNotSupportedException.class);
+        org.springframework.web.HttpMediaTypeNotSupportedException ex =
+                mock(org.springframework.web.HttpMediaTypeNotSupportedException.class);
         when(ex.getMessage()).thenReturn("Content-Type 'text/plain' is not supported");
-        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleMediaTypeNotSupportedException(ex, request);
+        ResponseEntity<ErrorResponse> response =
+                globalExceptionHandler.handleMediaTypeNotSupportedException(ex, request);
 
         assertEquals(HttpStatus.UNSUPPORTED_MEDIA_TYPE, response.getStatusCode());
         assertNotNull(response.getBody());
@@ -340,67 +393,83 @@ class GlobalExceptionHandlerTest {
         org.springframework.dao.DataAccessResourceFailureException ex =
                 new org.springframework.dao.DataAccessResourceFailureException("Connection pool exhausted");
 
-        ResponseEntity<ErrorResponse> response =
-                globalExceptionHandler.handleDataAccessResourceFailure(ex, request);
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleDataAccessResourceFailure(ex, request);
 
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
         assertEquals("1", response.getHeaders().getFirst("Retry-After"));
         assertNotNull(response.getBody());
-        assertEquals("The service is temporarily busy. Please try again shortly.", response.getBody().message());
+        assertEquals(
+                "The service is temporarily busy. Please try again shortly.",
+                response.getBody().message());
     }
 
     @Test
     void typeMismatchDoesNotLeakJavaClassNames() {
         MethodArgumentTypeMismatchException ex = new MethodArgumentTypeMismatchException(
-                "abc", Long.class, "id", mock(MethodParameter.class), new NumberFormatException("For input string: \"abc\""));
+                "abc",
+                Long.class,
+                "id",
+                mock(MethodParameter.class),
+                new NumberFormatException("For input string: \"abc\""));
 
         ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleBadRequestExceptions(ex, request);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals("Bad Request: Invalid value for parameter 'id'.", response.getBody().message());
+        assertEquals(
+                "Bad Request: Invalid value for parameter 'id'.",
+                response.getBody().message());
         assertFalse(response.getBody().message().contains("java.lang"));
     }
 
     @Test
     void uniqueViolationMapsTo409() {
-        var ex = new org.springframework.dao.DataIntegrityViolationException("could not execute statement",
+        var ex = new org.springframework.dao.DataIntegrityViolationException(
+                "could not execute statement",
                 new RuntimeException("wrapper", new java.sql.SQLException("duplicate key", "23505")));
 
         ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleDataIntegrityViolation(ex, request);
 
         assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
-        assertEquals("The request conflicts with existing data.", response.getBody().message());
+        assertEquals(
+                "The request conflicts with existing data.", response.getBody().message());
     }
 
     @Test
     void foreignKeyViolationMapsTo409() {
-        var ex = new org.springframework.dao.DataIntegrityViolationException("fk",
-                new java.sql.SQLException("violates foreign key", "23503"));
+        var ex = new org.springframework.dao.DataIntegrityViolationException(
+                "fk", new java.sql.SQLException("violates foreign key", "23503"));
 
-        assertEquals(HttpStatus.CONFLICT, globalExceptionHandler.handleDataIntegrityViolation(ex, request).getStatusCode());
+        assertEquals(
+                HttpStatus.CONFLICT,
+                globalExceptionHandler.handleDataIntegrityViolation(ex, request).getStatusCode());
     }
 
     @Test
     void exclusionViolationMapsTo409() {
         // PostgreSQL appointments_no_overlap (V35)
-        var ex = new org.springframework.dao.DataIntegrityViolationException("overlap",
-                new java.sql.SQLException("conflicting key value violates exclusion constraint", "23P01"));
+        var ex = new org.springframework.dao.DataIntegrityViolationException(
+                "overlap", new java.sql.SQLException("conflicting key value violates exclusion constraint", "23P01"));
 
-        assertEquals(HttpStatus.CONFLICT, globalExceptionHandler.handleDataIntegrityViolation(ex, request).getStatusCode());
+        assertEquals(
+                HttpStatus.CONFLICT,
+                globalExceptionHandler.handleDataIntegrityViolation(ex, request).getStatusCode());
     }
 
     @Test
     void textPostgresCannotStoreIsABadRequestNotAServerError() {
         // A NUL character in a JSON string or a search term (found by the DAST scan): the INSERT
         // and the SELECT both fail with character_not_in_repertoire.
-        var ex = new org.springframework.dao.DataIntegrityViolationException("could not execute statement",
-                new RuntimeException("wrapper",
+        var ex = new org.springframework.dao.DataIntegrityViolationException(
+                "could not execute statement",
+                new RuntimeException(
+                        "wrapper",
                         new java.sql.SQLException("invalid byte sequence for encoding \"UTF8\": 0x00", "22021")));
 
         ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleDataIntegrityViolation(ex, request);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals("Bad Request: The request contains a character that cannot be stored.",
+        assertEquals(
+                "Bad Request: The request contains a character that cannot be stored.",
                 response.getBody().message());
     }
 
@@ -408,7 +477,8 @@ class GlobalExceptionHandlerTest {
     void loginWithAnUnstorableUsernameIsABadRequestNotAnOutage() {
         var ex = new org.springframework.security.authentication.InternalAuthenticationServiceException(
                 "user lookup failed",
-                new org.springframework.dao.DataIntegrityViolationException("JDBC exception executing SQL",
+                new org.springframework.dao.DataIntegrityViolationException(
+                        "JDBC exception executing SQL",
                         new java.sql.SQLException("invalid byte sequence for encoding \"UTF8\": 0x00", "22021")));
 
         ResponseEntity<ErrorResponse> response =
@@ -427,7 +497,9 @@ class GlobalExceptionHandlerTest {
         ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleInvalidParameters(ex, request);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals("Bad Request: The request parameters could not be parsed.", response.getBody().message());
+        assertEquals(
+                "Bad Request: The request parameters could not be parsed.",
+                response.getBody().message());
         assertEquals("/api/test", response.getBody().path());
     }
 
@@ -435,14 +507,15 @@ class GlobalExceptionHandlerTest {
     void tooManyRequestParametersKeepTomcatsOwnStatus() {
         var ex = new org.apache.tomcat.util.http.InvalidParameterException("too many parameters", 413);
 
-        assertEquals(HttpStatus.CONTENT_TOO_LARGE,
+        assertEquals(
+                HttpStatus.CONTENT_TOO_LARGE,
                 globalExceptionHandler.handleInvalidParameters(ex, request).getStatusCode());
     }
 
     @Test
     void otherIntegrityViolationsStayServerErrors() {
-        var ex = new org.springframework.dao.DataIntegrityViolationException("null value",
-                new java.sql.SQLException("not null", "23502"));
+        var ex = new org.springframework.dao.DataIntegrityViolationException(
+                "null value", new java.sql.SQLException("not null", "23502"));
 
         ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleDataIntegrityViolation(ex, request);
 
@@ -481,18 +554,20 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void conflictExceptionsAreMappedTo409() {
-        ResponseEntity<ErrorResponse> plain = globalExceptionHandler.handleDomainException(
-                new ConflictException("slot taken"), request);
+        ResponseEntity<ErrorResponse> plain =
+                globalExceptionHandler.handleDomainException(new ConflictException("slot taken"), request);
         assertEquals(HttpStatus.CONFLICT, plain.getStatusCode());
         assertEquals("slot taken", plain.getBody().message());
 
         ResponseEntity<ErrorResponse> transition = globalExceptionHandler.handleDomainException(
                 new InvalidStatusTransitionException("CANCELLED", "APPROVED"), request);
         assertEquals(HttpStatus.CONFLICT, transition.getStatusCode());
-        assertEquals("Cannot change an appointment from CANCELLED to APPROVED.", transition.getBody().message());
+        assertEquals(
+                "Cannot change an appointment from CANCELLED to APPROVED.",
+                transition.getBody().message());
 
-        ResponseEntity<ErrorResponse> replay = globalExceptionHandler.handleDomainException(
-                new IdempotencyConflictException("key reused"), request);
+        ResponseEntity<ErrorResponse> replay =
+                globalExceptionHandler.handleDomainException(new IdempotencyConflictException("key reused"), request);
         assertEquals(HttpStatus.CONFLICT, replay.getStatusCode());
         assertEquals("Conflict", replay.getBody().error());
         assertEquals("key reused", replay.getBody().message());
@@ -516,8 +591,12 @@ class GlobalExceptionHandlerTest {
                 new org.springframework.transaction.CannotCreateTransactionException("no connection"),
                 new org.springframework.dao.DataAccessResourceFailureException("down"));
         for (Exception ex : transients) {
-            ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleDataAccessResourceFailure(ex, request);
-            assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode(), ex.getClass().getSimpleName());
+            ResponseEntity<ErrorResponse> response =
+                    globalExceptionHandler.handleDataAccessResourceFailure(ex, request);
+            assertEquals(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    response.getStatusCode(),
+                    ex.getClass().getSimpleName());
             assertEquals("1", response.getHeaders().getFirst("Retry-After"));
             assertEquals(503, response.getBody().status());
         }
@@ -530,32 +609,55 @@ class GlobalExceptionHandlerTest {
     @Test
     void springPicksTheSpecificHandlerForEachExceptionFamily() throws Exception {
         org.springframework.web.method.annotation.ExceptionHandlerMethodResolver resolver =
-                new org.springframework.web.method.annotation.ExceptionHandlerMethodResolver(GlobalExceptionHandler.class);
+                new org.springframework.web.method.annotation.ExceptionHandlerMethodResolver(
+                        GlobalExceptionHandler.class);
 
-        assertEquals("handleOptimisticLockingFailure", resolver.resolveMethodByThrowable(
-                new org.springframework.orm.ObjectOptimisticLockingFailureException("A", 1L)).getName());
-        assertEquals("handleDataAccessResourceFailure", resolver.resolveMethodByThrowable(
-                new org.springframework.dao.QueryTimeoutException("t")).getName());
-        assertEquals("handleDataAccessResourceFailure", resolver.resolveMethodByThrowable(
-                new org.springframework.transaction.CannotCreateTransactionException("t")).getName());
-        assertEquals("handleDomainException", resolver.resolveMethodByThrowable(
-                new InvalidStatusTransitionException("A", "B")).getName());
-        assertEquals("handleDomainException", resolver.resolveMethodByThrowable(
-                new IdempotencyConflictException("x")).getName());
-        assertEquals("handleDomainException", resolver.resolveMethodByThrowable(
-                new ResourceNotFoundException("x")).getName());
+        assertEquals(
+                "handleOptimisticLockingFailure",
+                resolver.resolveMethodByThrowable(
+                                new org.springframework.orm.ObjectOptimisticLockingFailureException("A", 1L))
+                        .getName());
+        assertEquals(
+                "handleDataAccessResourceFailure",
+                resolver.resolveMethodByThrowable(new org.springframework.dao.QueryTimeoutException("t"))
+                        .getName());
+        assertEquals(
+                "handleDataAccessResourceFailure",
+                resolver.resolveMethodByThrowable(
+                                new org.springframework.transaction.CannotCreateTransactionException("t"))
+                        .getName());
+        assertEquals(
+                "handleDomainException",
+                resolver.resolveMethodByThrowable(new InvalidStatusTransitionException("A", "B"))
+                        .getName());
+        assertEquals(
+                "handleDomainException",
+                resolver.resolveMethodByThrowable(new IdempotencyConflictException("x"))
+                        .getName());
+        assertEquals(
+                "handleDomainException",
+                resolver.resolveMethodByThrowable(new ResourceNotFoundException("x"))
+                        .getName());
     }
 
     @Test
     void redisFailuresAreNotReportedAsDatabaseFailures() {
-        assertEquals("Redis", GlobalExceptionHandler.unavailableResource(
-                new org.springframework.dao.QueryTimeoutException("Redis command timed out",
+        assertEquals(
+                "Redis",
+                GlobalExceptionHandler.unavailableResource(new org.springframework.dao.QueryTimeoutException(
+                        "Redis command timed out",
                         new io.lettuce.core.RedisCommandTimeoutException("timed out after 250 ms"))));
-        assertEquals("Redis", GlobalExceptionHandler.unavailableResource(
-                new org.springframework.data.redis.RedisConnectionFailureException("refused")));
-        assertEquals("Database", GlobalExceptionHandler.unavailableResource(
-                new org.springframework.dao.QueryTimeoutException("statement timeout")));
-        assertEquals("Database", GlobalExceptionHandler.unavailableResource(
-                new org.springframework.dao.DataAccessResourceFailureException("pool exhausted")));
+        assertEquals(
+                "Redis",
+                GlobalExceptionHandler.unavailableResource(
+                        new org.springframework.data.redis.RedisConnectionFailureException("refused")));
+        assertEquals(
+                "Database",
+                GlobalExceptionHandler.unavailableResource(
+                        new org.springframework.dao.QueryTimeoutException("statement timeout")));
+        assertEquals(
+                "Database",
+                GlobalExceptionHandler.unavailableResource(
+                        new org.springframework.dao.DataAccessResourceFailureException("pool exhausted")));
     }
 }

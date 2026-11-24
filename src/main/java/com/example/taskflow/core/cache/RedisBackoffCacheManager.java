@@ -1,10 +1,6 @@
 package com.example.taskflow.core.cache;
+
 import com.example.taskflow.core.redis.RedisBackoff;
-
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.support.AbstractValueAdaptingCache;
-
 import java.util.Collection;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -12,6 +8,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.support.AbstractValueAdaptingCache;
 
 /**
  * Keeps reads off a failing Redis. After a cache command fails, reads skip Redis for the
@@ -69,8 +68,8 @@ final class RedisBackoffCacheManager implements CacheManager {
         BackoffCache(Cache delegate, RedisBackoff backoff) {
             this.delegate = delegate;
             this.backoff = backoff;
-            this.nullValuesNotCached = delegate instanceof AbstractValueAdaptingCache adapting
-                    && !adapting.isAllowNullValues();
+            this.nullValuesNotCached =
+                    delegate instanceof AbstractValueAdaptingCache adapting && !adapting.isAllowNullValues();
         }
 
         @Override

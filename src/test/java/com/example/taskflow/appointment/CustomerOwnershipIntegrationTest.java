@@ -1,5 +1,13 @@
 package com.example.taskflow.appointment;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.is;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.example.taskflow.appointment.internal.AppointmentRepository;
 import com.example.taskflow.appointment.internal.BarberRepository;
 import com.example.taskflow.appointment.internal.BarberScheduleRepository;
@@ -8,6 +16,12 @@ import com.example.taskflow.auth.internal.UserRepository;
 import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.catalog.internal.ServiceItemRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.HashMap;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,21 +31,6 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.math.BigDecimal;
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.is;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Booking ownership at the HTTP boundary: a registered account sees the guest
@@ -135,7 +134,9 @@ class CustomerOwnershipIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         return objectMapper.readTree(body).get("publicId").asText();
     }
 
@@ -155,11 +156,15 @@ class CustomerOwnershipIntegrationTest {
         Map<String, String> request = new HashMap<>();
         request.put("username", email);
         request.put("password", password);
-        return "Bearer " + mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("access_token").getValue();
+        return "Bearer "
+                + mockMvc.perform(post("/api/v1/auth/login")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isOk())
+                        .andReturn()
+                        .getResponse()
+                        .getCookie("access_token")
+                        .getValue();
     }
 
     @Test
@@ -186,12 +191,12 @@ class CustomerOwnershipIntegrationTest {
                 .andExpect(jsonPath("$.content", hasSize(0)))
                 .andExpect(jsonPath("$.page.totalElements", is(0)));
 
-        mockMvc.perform(delete("/api/v1/customer/appointments/" + publicId)
-                        .header("Authorization", bobToken))
+        mockMvc.perform(delete("/api/v1/customer/appointments/" + publicId).header("Authorization", bobToken))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message", containsString("not found or unauthorized")));
 
-        assertNotNull(appointmentRepository.findByPublicId(publicId),
+        assertNotNull(
+                appointmentRepository.findByPublicId(publicId),
                 "a failed cross-customer cancel must not delete the booking");
     }
 
@@ -219,8 +224,9 @@ class CustomerOwnershipIntegrationTest {
             mockMvc.perform(get("/api/v1/customer/appointments" + query).header("Authorization", customerToken))
                     .andExpect(status().isBadRequest());
             mockMvc.perform(get("/api/v1/appointments" + query)
-                            .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors
-                                    .user("admin").roles("ADMIN")))
+                            .with(org.springframework.security.test.web.servlet.request
+                                    .SecurityMockMvcRequestPostProcessors.user("admin")
+                                    .roles("ADMIN")))
                     .andExpect(status().isBadRequest());
         }
     }

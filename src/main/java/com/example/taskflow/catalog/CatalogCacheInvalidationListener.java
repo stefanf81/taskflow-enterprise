@@ -27,7 +27,8 @@ class CatalogCacheInvalidationListener {
                 cache.invalidate();
             }
         } catch (RuntimeException e) {
-            log.warn("Catalog cache invalidation failed; entries expire with their TTL: {}",
+            log.warn(
+                    "Catalog cache invalidation failed; entries expire with their TTL: {}",
                     LogSanitizer.safeMessage(e));
         }
     }

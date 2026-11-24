@@ -2,6 +2,7 @@ package com.example.taskflow.review.internal;
 
 import com.example.taskflow.review.BarberRatingResponse;
 import com.example.taskflow.review.Review;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -9,13 +10,11 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
 @Repository
 public interface ReviewRepository extends JpaRepository<Review, Long> {
-    
+
     boolean existsByAppointmentId(Long appointmentId);
-    
+
     /**
      * Average and number of the counted reviews per barber, in one statement over this module's own
      * table (V38 put the barber and the "appointment still APPROVED" flag on each review).

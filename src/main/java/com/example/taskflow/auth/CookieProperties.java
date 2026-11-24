@@ -12,5 +12,4 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * </ul>
  */
 @ConfigurationProperties(prefix = "app.cookie")
-record CookieProperties(@DefaultValue("true") boolean secure) {
-}
+record CookieProperties(@DefaultValue("true") boolean secure) {}

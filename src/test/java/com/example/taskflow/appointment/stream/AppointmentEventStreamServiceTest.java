@@ -1,10 +1,12 @@
 package com.example.taskflow.appointment.stream;
 
-import com.example.taskflow.testsupport.MutableTestClock;
-import org.junit.jupiter.api.Test;
-import org.springframework.web.server.ResponseStatusException;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.example.taskflow.testsupport.MutableTestClock;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
@@ -17,18 +19,15 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 class AppointmentEventStreamServiceTest {
 
     private static final Instant START = Instant.parse("2031-03-10T10:00:00Z");
-    private static final AppointmentAdminEvent EVENT = new AppointmentAdminEvent(
-            AppointmentAdminEvent.Type.CREATED, 42L, Instant.parse("2026-08-06T12:00:00Z"));
+    private static final AppointmentAdminEvent EVENT =
+            new AppointmentAdminEvent(AppointmentAdminEvent.Type.CREATED, 42L, Instant.parse("2026-08-06T12:00:00Z"));
 
     /** An emitter that records what happens to it and can fail or block on send. */
     private static class TestEmitter extends SseEmitter {
@@ -71,8 +70,8 @@ class AppointmentEventStreamServiceTest {
     }
 
     /** A service that hands out pre-built emitters so tests can inspect them. */
-    private static AppointmentEventStreamService serviceWith(int max, Executor executor, MutableTestClock clock,
-                                                             List<TestEmitter> emitters) {
+    private static AppointmentEventStreamService serviceWith(
+            int max, Executor executor, MutableTestClock clock, List<TestEmitter> emitters) {
         List<TestEmitter> queue = new ArrayList<>(emitters);
         return new AppointmentEventStreamService(max, clock, executor) {
             @Override
@@ -97,8 +96,8 @@ class AppointmentEventStreamServiceTest {
         TestEmitter first = new TestEmitter();
         TestEmitter second = new TestEmitter();
         TestEmitter third = new TestEmitter();
-        AppointmentEventStreamService service = serviceWith(2, Runnable::run,
-                new MutableTestClock(START), List.of(first, second, third));
+        AppointmentEventStreamService service =
+                serviceWith(2, Runnable::run, new MutableTestClock(START), List.of(first, second, third));
 
         service.subscribe("admin");
         service.subscribe("admin");
@@ -108,7 +107,9 @@ class AppointmentEventStreamServiceTest {
         assertEquals(third, accepted);
         assertEquals(2, service.connectionCount("admin"));
         assertTrue(first.completed, "the oldest connection is completed");
-        assertEquals(2, first.sends.get(),
+        assertEquals(
+                2,
+                first.sends.get(),
                 "the evicted stream got its ready event plus the terminal 'evicted' event (so it won't reconnect)");
         assertFalse(second.completed);
         assertFalse(third.completed);
@@ -125,8 +126,8 @@ class AppointmentEventStreamServiceTest {
         TestEmitter a1 = new TestEmitter();
         TestEmitter b1 = new TestEmitter();
         TestEmitter a2 = new TestEmitter();
-        AppointmentEventStreamService service = serviceWith(1, Runnable::run,
-                new MutableTestClock(START), List.of(a1, b1, a2));
+        AppointmentEventStreamService service =
+                serviceWith(1, Runnable::run, new MutableTestClock(START), List.of(a1, b1, a2));
 
         service.subscribe("alice");
         service.subscribe("bob");
@@ -142,8 +143,8 @@ class AppointmentEventStreamServiceTest {
     void failedReadyEventSurfacesAs503AndLeavesNoConnectionBehind() {
         TestEmitter broken = new TestEmitter();
         broken.failWith = new IOException("client went away");
-        AppointmentEventStreamService service = serviceWith(2, Runnable::run,
-                new MutableTestClock(START), List.of(broken));
+        AppointmentEventStreamService service =
+                serviceWith(2, Runnable::run, new MutableTestClock(START), List.of(broken));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> service.subscribe("admin"));
 
@@ -167,8 +168,8 @@ class AppointmentEventStreamServiceTest {
     void deadConnectionsAreRemovedByPublishAndHeartbeat() {
         TestEmitter dead = new TestEmitter();
         TestEmitter alive = new TestEmitter();
-        AppointmentEventStreamService service = serviceWith(5, Runnable::run,
-                new MutableTestClock(START), List.of(dead, alive));
+        AppointmentEventStreamService service =
+                serviceWith(5, Runnable::run, new MutableTestClock(START), List.of(dead, alive));
         service.subscribe("admin");
         service.subscribe("admin");
         dead.failWith = new IOException("broken pipe");
@@ -188,13 +189,13 @@ class AppointmentEventStreamServiceTest {
         // subscribe had just added a live emitter to.
         int threads = 8;
         int rounds = 300;
-        AppointmentEventStreamService service = new AppointmentEventStreamService(
-                threads * rounds * 2, new MutableTestClock(START), Runnable::run) {
-            @Override
-            SseEmitter newEmitter(long timeoutMillis) {
-                return new TestEmitter();
-            }
-        };
+        AppointmentEventStreamService service =
+                new AppointmentEventStreamService(threads * rounds * 2, new MutableTestClock(START), Runnable::run) {
+                    @Override
+                    SseEmitter newEmitter(long timeoutMillis) {
+                        return new TestEmitter();
+                    }
+                };
 
         ExecutorService pool = Executors.newFixedThreadPool(threads);
         CountDownLatch go = new CountDownLatch(1);
@@ -231,8 +232,8 @@ class AppointmentEventStreamServiceTest {
     void publishReturnsWithoutWritingOnTheCallingThread() {
         TestEmitter emitter = new TestEmitter();
         List<Runnable> queued = new ArrayList<>();
-        AppointmentEventStreamService service = serviceWith(2, queued::add,
-                new MutableTestClock(START), List.of(emitter));
+        AppointmentEventStreamService service =
+                serviceWith(2, queued::add, new MutableTestClock(START), List.of(emitter));
         service.subscribe("admin");
         assertEquals(1, emitter.sends.get(), "ready event is written during subscribe");
 
@@ -250,8 +251,8 @@ class AppointmentEventStreamServiceTest {
         TestEmitter healthy = new TestEmitter();
         ExecutorService dispatcher = Executors.newFixedThreadPool(4);
         try {
-            AppointmentEventStreamService service = serviceWith(2, dispatcher, new MutableTestClock(START),
-                    List.of(stuck, healthy));
+            AppointmentEventStreamService service =
+                    serviceWith(2, dispatcher, new MutableTestClock(START), List.of(stuck, healthy));
             service.subscribe("slow-admin");
             service.subscribe("fast-admin");
             CountDownLatch release = new CountDownLatch(1);
@@ -262,7 +263,8 @@ class AppointmentEventStreamServiceTest {
             long publishMillis = Duration.ofNanos(System.nanoTime() - started).toMillis();
 
             assertTrue(publishMillis < 1_000, "publish() must not wait for the stuck client, took " + publishMillis);
-            assertTrue(healthy.firstSendAfterReady.await(5, TimeUnit.SECONDS),
+            assertTrue(
+                    healthy.firstSendAfterReady.await(5, TimeUnit.SECONDS),
                     "the healthy connection still receives the event while another is stuck");
             release.countDown();
         } finally {
@@ -276,8 +278,8 @@ class AppointmentEventStreamServiceTest {
         Executor saturated = task -> {
             throw new RejectedExecutionException("queue full");
         };
-        AppointmentEventStreamService service = serviceWith(2, saturated, new MutableTestClock(START),
-                List.of(emitter));
+        AppointmentEventStreamService service =
+                serviceWith(2, saturated, new MutableTestClock(START), List.of(emitter));
         service.subscribe("admin");
 
         service.publish(EVENT);
@@ -294,8 +296,8 @@ class AppointmentEventStreamServiceTest {
         TestEmitter expiring = new TestEmitter();
         TestEmitter noExpiry = new TestEmitter();
         TestEmitter longLived = new TestEmitter();
-        AppointmentEventStreamService service = serviceWith(5, Runnable::run, clock,
-                List.of(expiring, noExpiry, longLived));
+        AppointmentEventStreamService service =
+                serviceWith(5, Runnable::run, clock, List.of(expiring, noExpiry, longLived));
         service.subscribe("admin", START.plusSeconds(60));
         service.subscribe("admin"); // overload without expiry
         service.subscribe("admin", START.plus(Duration.ofHours(1)));
@@ -336,8 +338,8 @@ class AppointmentEventStreamServiceTest {
     void revokingATokenClosesOnlyTheStreamsOpenedWithIt() {
         TestEmitter revokedStream = new TestEmitter();
         TestEmitter otherStream = new TestEmitter();
-        AppointmentEventStreamService service = serviceWith(5, Runnable::run,
-                new MutableTestClock(START), List.of(revokedStream, otherStream));
+        AppointmentEventStreamService service =
+                serviceWith(5, Runnable::run, new MutableTestClock(START), List.of(revokedStream, otherStream));
 
         service.subscribe("admin", START.plusSeconds(3600), "jti-logged-out");
         service.subscribe("admin", START.plusSeconds(3600), "jti-other-tab");
@@ -358,8 +360,8 @@ class AppointmentEventStreamServiceTest {
         TestEmitter aliceFirst = new TestEmitter();
         TestEmitter aliceSecond = new TestEmitter();
         TestEmitter bob = new TestEmitter();
-        AppointmentEventStreamService service = serviceWith(2, Runnable::run,
-                new MutableTestClock(START), List.of(aliceFirst, aliceSecond, bob));
+        AppointmentEventStreamService service =
+                serviceWith(2, Runnable::run, new MutableTestClock(START), List.of(aliceFirst, aliceSecond, bob));
         service.subscribe("alice", START.plusSeconds(3600), "jti-a1");
         service.subscribe("alice", START.plusSeconds(3600), "jti-a2");
         service.subscribe("bob", START.plusSeconds(3600), "jti-b");
@@ -377,8 +379,8 @@ class AppointmentEventStreamServiceTest {
     void contextCloseCompletesEveryStreamAndRefusesNewOnes() {
         TestEmitter alice = new TestEmitter();
         TestEmitter bob = new TestEmitter();
-        AppointmentEventStreamService service = serviceWith(2, Runnable::run,
-                new MutableTestClock(START), List.of(alice, bob));
+        AppointmentEventStreamService service =
+                serviceWith(2, Runnable::run, new MutableTestClock(START), List.of(alice, bob));
         service.subscribe("alice");
         service.subscribe("bob");
 
@@ -388,8 +390,7 @@ class AppointmentEventStreamServiceTest {
         assertTrue(bob.completed);
         assertEquals(0, service.connectionCount("alice"));
         assertEquals(0, service.connectionCount("bob"));
-        ResponseStatusException refused = assertThrows(ResponseStatusException.class,
-                () -> service.subscribe("alice"));
+        ResponseStatusException refused = assertThrows(ResponseStatusException.class, () -> service.subscribe("alice"));
         assertEquals(503, refused.getStatusCode().value());
     }
 
@@ -398,10 +399,13 @@ class AppointmentEventStreamServiceTest {
         TestEmitter stream = new TestEmitter();
         List<Boolean> completedWhenStopping = new ArrayList<>();
         try (var context = new org.springframework.context.annotation.AnnotationConfigApplicationContext()) {
-            context.registerBean(AppointmentEventStreamService.class,
+            context.registerBean(
+                    AppointmentEventStreamService.class,
                     () -> serviceWith(2, Runnable::run, new MutableTestClock(START), List.of(stream)));
             // Stands in for the web server's graceful shutdown, a SmartLifecycle stopped on close.
-            context.registerBean("webServerGracefulShutdown", org.springframework.context.SmartLifecycle.class,
+            context.registerBean(
+                    "webServerGracefulShutdown",
+                    org.springframework.context.SmartLifecycle.class,
                     () -> new org.springframework.context.SmartLifecycle() {
                         private volatile boolean running;
 

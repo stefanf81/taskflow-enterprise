@@ -1,11 +1,10 @@
 package com.example.taskflow.appointment;
 
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.context.properties.bind.DefaultValue;
-
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
  * Booking policy, bound from {@code app.booking.*}.

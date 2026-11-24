@@ -2,7 +2,6 @@ package com.example.taskflow.appointment.internal;
 
 import com.example.taskflow.appointment.AppointmentStatus;
 import com.example.taskflow.appointment.Barber;
-
 import com.example.taskflow.catalog.ServiceItem;
 import com.example.taskflow.core.EntityTimestampListener;
 import com.example.taskflow.core.Timestamped;
@@ -19,14 +18,16 @@ import java.time.format.DateTimeParseException;
 import java.util.UUID;
 
 @Entity
-@Table(name = "appointments", indexes = {
-    @Index(name = "idx_appointments_date_time_id", columnList = "booking_date,booking_time,id"),
-    @Index(name = "idx_appointment_public_id", columnList = "public_id", unique = true),
-    @Index(name = "idx_appointment_status_date", columnList = "status,booking_date"),
-    @Index(name = "idx_appointments_customer_email", columnList = "customer_email"),
-    @Index(name = "idx_appointments_barber_id", columnList = "barber_id"),
-    @Index(name = "idx_appointments_service_id", columnList = "service_id")
-})
+@Table(
+        name = "appointments",
+        indexes = {
+            @Index(name = "idx_appointments_date_time_id", columnList = "booking_date,booking_time,id"),
+            @Index(name = "idx_appointment_public_id", columnList = "public_id", unique = true),
+            @Index(name = "idx_appointment_status_date", columnList = "status,booking_date"),
+            @Index(name = "idx_appointments_customer_email", columnList = "customer_email"),
+            @Index(name = "idx_appointments_barber_id", columnList = "barber_id"),
+            @Index(name = "idx_appointments_service_id", columnList = "service_id")
+        })
 @EntityListeners(EntityTimestampListener.class)
 public class Appointment implements Timestamped {
 
@@ -48,47 +49,37 @@ public class Appointment implements Timestamped {
     private Long id;
 
     @Column(name = "public_id", nullable = false, unique = true, length = 36)
-    @Size(max = 36)
-    private String publicId;
+    @Size(max = 36) private String publicId;
 
     @Column(name = "idempotency_key", unique = true, length = 100)
-    @Size(max = 100)
-    private String idempotencyKey;
+    @Size(max = 100) private String idempotencyKey;
 
     /** Frozen before the first write, so a late create replay still works after rescheduling. */
     @Column(name = "creation_request_fingerprint", length = 64)
     private String creationRequestFingerprint;
 
-    @NotBlank(message = "Customer name is required")
-    @Size(max = 100)
-    @Column(name = "customer_name", nullable = false, length = 100)
+    @NotBlank(message = "Customer name is required") @Size(max = 100) @Column(name = "customer_name", nullable = false, length = 100)
     private String customerName;
 
-    @NotBlank(message = "Customer email is required")
-    @Size(max = 100)
-    @Column(name = "customer_email", nullable = false, length = 100)
+    @NotBlank(message = "Customer email is required") @Size(max = 100) @Column(name = "customer_email", nullable = false, length = 100)
     private String customerEmail;
 
-    @NotBlank(message = "Customer phone is required")
-    @Size(max = 50)
-    @Column(name = "customer_phone", nullable = false, length = 50)
+    @NotBlank(message = "Customer phone is required") @Size(max = 50) @Column(name = "customer_phone", nullable = false, length = 50)
     private String customerPhone;
 
-    @NotBlank(message = "Barber name is required")
-    @Size(max = 100)
-    @Column(name = "barber_name", nullable = false, length = 100)
+    @NotBlank(message = "Barber name is required") @Size(max = 100) @Column(name = "barber_name", nullable = false, length = 100)
     private String barberName;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "barber_id", foreignKey = @ForeignKey(name = "fk_appointment_barber"))
     private Barber barber;
 
-    @NotNull(message = "Booking date is required")
-    @Column(name = "booking_date", nullable = false)
+    @NotNull(message = "Booking date is required") @Column(name = "booking_date", nullable = false)
     private LocalDate bookingDate;
 
-    @NotBlank(message = "Booking time is required")
-    @Pattern(regexp = "^(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?$", message = "Booking time must be in HH:mm or HH:mm:ss format")
+    @NotBlank(message = "Booking time is required") @Pattern(
+            regexp = "^(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?$",
+            message = "Booking time must be in HH:mm or HH:mm:ss format")
     @Convert(converter = StringTimeConverter.class)
     @Column(name = "booking_time", nullable = false, columnDefinition = "TIME")
     private String bookingTime;
@@ -102,9 +93,7 @@ public class Appointment implements Timestamped {
     @Column(name = "booking_end_time", nullable = false)
     private LocalTime bookingEndTime;
 
-    @NotBlank(message = "Service type is required")
-    @Size(max = 100)
-    @Column(name = "service_type", nullable = false, length = 100)
+    @NotBlank(message = "Service type is required") @Size(max = 100) @Column(name = "service_type", nullable = false, length = 100)
     private String serviceType;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -162,10 +151,16 @@ public class Appointment implements Timestamped {
         updatedAt = now;
     }
 
-    public Appointment() {
-    }
+    public Appointment() {}
 
-    public Appointment(String customerName, String customerEmail, String customerPhone, String barberName, LocalDate bookingDate, String bookingTime, String serviceType) {
+    public Appointment(
+            String customerName,
+            String customerEmail,
+            String customerPhone,
+            String barberName,
+            LocalDate bookingDate,
+            String bookingTime,
+            String serviceType) {
         this.customerName = customerName;
         this.customerEmail = customerEmail;
         this.customerPhone = customerPhone;
