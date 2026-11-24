@@ -77,6 +77,12 @@ export class ShopClock {
   readonly loaded = computed(() => this.info() !== null);
 
   /**
+   * Whether the last request for the shop info failed. Unlike `!loaded()`, false while it is still
+   * loading or prerendering: a view that holds room for server data gives it up only on this.
+   */
+  readonly loadFailed = computed(() => this.resource.status() === 'error');
+
+  /**
    * The shop's current wall-clock time (see {@link shopWallClock}). Reactive to {@link watch} and
    * {@link tick} so `computed` consumers (`openNow`, `ReschedulePicker`) advance while open.
    */

@@ -37,6 +37,8 @@ export class CalendarStore {
   readonly isLoading = signal(false);
   readonly loadError = signal<string | null>(null);
   private readonly reloadTick = signal(0);
+  /** A change arrived while a load was running: load once more when it has settled. */
+  private refreshPending = false;
 
   constructor() {
     effect((onCleanup) => {
@@ -44,18 +46,20 @@ export class CalendarStore {
       const { from, to } = this.range();
       this.reloadTick();
       untracked(() => {
+        // This load starts after every change seen so far, so it answers a pending refresh too.
+        this.refreshPending = false;
         this.isLoading.set(true);
         this.loadError.set(null);
       });
       const subscription = this.fetchRange(from, to).subscribe({
         next: (appointments) => {
           this.appointments.set(appointments);
-          this.isLoading.set(false);
+          this.settle();
         },
         // The rows already shown stay: a failed refresh is not an empty day.
         error: () => {
           this.loadError.set('Could not load the calendar. Please retry.');
-          this.isLoading.set(false);
+          this.settle();
         },
       });
       onCleanup(() => subscription.unsubscribe());
@@ -65,15 +69,42 @@ export class CalendarStore {
     merge(sessionEvents.sessionEnded, sessionEvents.unauthorized)
       .pipe(takeUntilDestroyed(inject(DestroyRef)))
       .subscribe(() => {
+        this.refreshPending = false;
         this.appointments.set([]);
         this.loadError.set(null);
         this.isLoading.set(false);
       });
   }
 
-  /** Reloads the shown range (a booking changed). Restarts a load already in flight. */
+  /**
+   * Reloads the shown range now; a load already in flight is restarted. For the owner's own
+   * actions and the retry button, whose answer must not be an older one.
+   */
   refresh(): void {
     this.reloadTick.update((n) => n + 1);
+  }
+
+  /**
+   * Reloads for a change made elsewhere (the event stream): at once when nothing is loading,
+   * otherwise once the running load has settled. Restarting it on every event, as `refresh()`
+   * does, kept a multi-page week from ever finishing while a burst of events arrived (a bulk
+   * approve, time off cancelling many bookings). Any number of calls during one load cost one
+   * extra load, like `AppointmentStore.refreshWhenIdle()`.
+   */
+  refreshWhenIdle(): void {
+    if (this.isLoading()) {
+      this.refreshPending = true;
+      return;
+    }
+    this.refresh();
+  }
+
+  private settle(): void {
+    this.isLoading.set(false);
+    if (this.refreshPending) {
+      this.refreshPending = false;
+      this.refresh();
+    }
   }
 
   setView(view: CalendarView): void {

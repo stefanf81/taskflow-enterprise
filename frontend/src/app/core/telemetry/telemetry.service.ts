@@ -58,9 +58,14 @@ export class TelemetryService {
     // so paints and shifts from before the chunk arrived are still reported.
     let stopped = false;
     let stop: (() => void) | undefined;
-    void import('./web-vitals').then(({ observeWebVitals }) => {
-      if (!stopped) stop = observeWebVitals(this.client, initialRoute, route);
-    });
+    import('./web-vitals')
+      .then(({ observeWebVitals }) => {
+        if (!stopped) stop = observeWebVitals(this.client, initialRoute, route);
+      })
+      // The chunk can fail to load (offline, or a tab still open from before a deployment). The
+      // vitals are optional; unhandled, the rejection would reach the global error listener and
+      // be counted as an application error of the page.
+      .catch(() => undefined);
     return () => {
       stopped = true;
       stop?.();

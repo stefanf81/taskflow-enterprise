@@ -213,6 +213,46 @@ describe('AdminCalendarTab', () => {
     expect(el().textContent).toContain('1 booking');
   });
 
+  it('adds a column for a former barber only while one of their bookings holds a slot', async () => {
+    store.refresh();
+    await answer([
+      item(1, 'Alex', '2026-11-24', '09:00', 'APPROVED'),
+      item(5, 'Jordan', '2026-11-24', '13:00', 'CANCELLED'),
+      item(6, 'Kim', '2026-11-24', '14:00'),
+    ]);
+    // Jordan left the shop and their only booking is cancelled: no empty column.
+    expect(headers()).toEqual(['Alex', 'Kim', 'Sara']);
+  });
+
+  it('shows every barber again when the filtered one is no longer listed', async () => {
+    (
+      Array.from(el().querySelectorAll('app-segmented-control button')).find(
+        (b) => b.textContent?.trim() === 'Week',
+      ) as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+    await answer([
+      item(1, 'Alex', '2026-11-24', '09:00', 'APPROVED'),
+      item(6, 'Kim', '2026-11-26', '14:00'),
+    ]);
+    const select = el().querySelector('#calendar-barber') as HTMLSelectElement;
+    select.value = 'Kim';
+    select.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    expect(events()).toEqual(['2:00 PM Customer 6 Classic Haircut']);
+
+    // Kim's booking was cancelled: Kim (not on the roster) leaves the list, the filter with it.
+    store.refresh();
+    await answer([
+      item(1, 'Alex', '2026-11-24', '09:00', 'APPROVED'),
+      item(6, 'Kim', '2026-11-26', '14:00', 'CANCELLED'),
+    ]);
+    expect(Array.from(select.options).map((o) => o.textContent?.trim())).not.toContain('Kim');
+    expect(select.value).toBe('');
+    // All barbers again, so each booking names its barber.
+    expect(events()).toEqual(['9:00 AM Customer 1 Classic Haircut · Alex']);
+  });
+
   it('offers a retry when the calendar cannot be loaded', async () => {
     store.refresh();
     TestBed.tick();

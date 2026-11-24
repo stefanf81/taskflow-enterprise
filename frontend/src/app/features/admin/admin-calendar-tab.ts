@@ -77,33 +77,45 @@ export class AdminCalendarTab {
   protected readonly barberFilter = signal(ALL_BARBERS);
 
   private readonly today = computed(() => toLocalDateString(this.shopClock.now()));
-  /** Bookings that hold a slot, in the barber filter (week view). */
-  private readonly shown = computed<readonly AppointmentResponse[]>(() => {
-    const filter = this.view() === 'week' ? this.barberFilter() : ALL_BARBERS;
-    return this.store
+  /** Bookings that hold a slot: the only ones drawn, and the only ones that add a barber. */
+  private readonly slotHolding = computed<readonly AppointmentResponse[]>(() =>
+    this.store
       .appointments()
-      .filter(
-        (appointment) =>
-          SLOT_HOLDING_STATUSES.includes(appointment.status) &&
-          (filter === ALL_BARBERS || appointment.barberName === filter),
-      );
+      .filter((appointment) => SLOT_HOLDING_STATUSES.includes(appointment.status)),
+  );
+
+  /**
+   * The roster, plus any barber that only appears in a booking that holds a slot (left the shop
+   * since). A denied or cancelled booking is not drawn, so it adds no column and no filter entry.
+   */
+  protected readonly barberNames = computed(() => {
+    const names = this.barberStore.barbers().map((barber) => barber.name);
+    for (const appointment of this.slotHolding()) {
+      if (!names.includes(appointment.barberName)) names.push(appointment.barberName);
+    }
+    return names.sort((a, b) => a.localeCompare(b));
   });
 
-  /** The roster, plus any barber that only appears in a booking (left the shop since). */
+  /** The week view's barber filter, or all barbers once the chosen one is no longer listed. */
+  protected readonly activeBarber = computed(() => {
+    const filter = this.barberFilter();
+    return filter !== ALL_BARBERS && this.barberNames().includes(filter) ? filter : ALL_BARBERS;
+  });
+
+  /** Bookings that hold a slot, in the barber filter (week view). */
+  private readonly shown = computed<readonly AppointmentResponse[]>(() => {
+    const filter = this.view() === 'week' ? this.activeBarber() : ALL_BARBERS;
+    return this.slotHolding().filter(
+      (appointment) => filter === ALL_BARBERS || appointment.barberName === filter,
+    );
+  });
+
   /** The booking whose details are open (by id, so it follows the booking through a reload). */
   protected readonly selectedId = signal<number | null>(null);
   protected readonly selected = computed(
     () => this.shown().find((appointment) => appointment.id === this.selectedId()) ?? null,
   );
   protected readonly pendingIds = this.actions.pendingIds;
-
-  protected readonly barberNames = computed(() => {
-    const names = this.barberStore.barbers().map((barber) => barber.name);
-    for (const appointment of this.store.appointments()) {
-      if (!names.includes(appointment.barberName)) names.push(appointment.barberName);
-    }
-    return names.sort((a, b) => a.localeCompare(b));
-  });
 
   protected readonly title = computed(() => {
     const { from, to } = this.store.range();
@@ -167,7 +179,7 @@ export class AdminCalendarTab {
         throttleTime(300, asyncScheduler, { leading: true, trailing: true }),
         takeUntilDestroyed(),
       )
-      .subscribe(() => this.store.refresh());
+      .subscribe(() => this.store.refreshWhenIdle());
     // The owner approved, denied or cancelled a booking from the panel.
     this.actions.changed.pipe(takeUntilDestroyed()).subscribe(() => this.store.refresh());
   }
