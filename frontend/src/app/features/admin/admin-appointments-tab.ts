@@ -13,6 +13,7 @@ import { searchIcon } from '../../core/ui/icons/search';
 import { xIcon } from '../../core/ui/icons/x';
 import { SegmentedControl, SegmentOption } from '../../core/ui/segmented-control';
 import { StatusBadge } from '../../core/ui/status-badge';
+import { AdminStats } from './admin-stats';
 import { AppointmentStore } from './appointment.store';
 import { ShopClock } from '../../core/shop-clock';
 import { formatTime12Hour, formatLocalDate, isOverdue } from '../../core/time-utils';
@@ -20,7 +21,7 @@ import { formatTime12Hour, formatLocalDate, isOverdue } from '../../core/time-ut
 /** Owner dashboard · appointments tab (list, filter, search, approve/deny/cancel). */
 @Component({
   selector: 'app-admin-appointments-tab',
-  imports: [Button, EmptyState, Icon, SegmentedControl, StatusBadge],
+  imports: [AdminStats, Button, EmptyState, Icon, SegmentedControl, StatusBadge],
   templateUrl: './admin-appointments-tab.html',
 })
 export class AdminAppointmentsTab {

@@ -93,7 +93,7 @@ test.describe('Content-Security-Policy (nginx image)', () => {
     await page.locator('#password').fill('admin-password');
     await page.locator('.modal-card button[type="submit"]').click();
     await expect(page.locator('h1')).toContainText('TaskFlow Owner Panel');
-    await page.getByRole('button', { name: 'Schedules & Time-Off' }).click();
+    await page.getByRole('link', { name: 'Schedules & Time-Off' }).click();
     await expect(page.getByRole('heading', { name: 'Barber Schedules & Time-Off' })).toBeVisible();
 
     expect(

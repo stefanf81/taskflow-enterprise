@@ -6,16 +6,6 @@
   >
     <button
       type="button"
-      appButton="secondary"
-      class="btn-refresh"
-      (click)="loadAppointments()"
-      title="Sync list from database"
-    >
-      <app-icon [icon]="icons.refreshCw" />
-      Sync DB
-    </button>
-    <button
-      type="button"
       appButton="danger"
       class="btn-logout"
       (click)="onLogout()"
@@ -37,220 +27,34 @@
     </app-alert>
   }
 
-  <!-- STATS: a failed load shows an explicit retry instead of a board of misleading zeros -->
-  @if (loadErrorMessage(); as message) {
-    <app-alert tone="error" class="mb-8">
-      {{ message }}
-      <button type="button" appButton="secondary" alertAction (click)="retryLoad()">Retry</button>
-    </app-alert>
-  } @else {
-    <!-- STATS BOARD GRID (SAAS CLEAN TILES) -->
-    <section class="grid grid-cols-2 lg:grid-cols-5 gap-5 mb-8 text-zinc-100">
-      <!-- Tile 1 -->
-      <div class="card p-5 flex justify-between items-center">
-        <div class="flex flex-col">
-          <span class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
-            >Total Bookings</span
-          >
-          <span class="text-2xl font-black text-white mt-1 leading-none">{{ stats().total }}</span>
-        </div>
-        <div
-          class="w-10 h-10 rounded-xl bg-white/5 text-zinc-400 flex items-center justify-center font-bold"
-        >
-          <app-icon [icon]="icons.clipboardList" class="size-5" />
-        </div>
-      </div>
-
-      <!-- Tile 2 -->
-      <div class="card p-5 flex justify-between items-center">
-        <div class="flex flex-col">
-          <span class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
-            >Pending Approval</span
-          >
-          <span class="text-2xl font-black text-amber-400 mt-1 leading-none">{{
-            stats().pending
-          }}</span>
-        </div>
-        <div
-          class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold"
-        >
-          <app-icon [icon]="icons.hourglass" class="size-5" />
-        </div>
-      </div>
-
-      <!-- Tile 3 -->
-      <div class="card p-5 flex justify-between items-center">
-        <div class="flex flex-col">
-          <span class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
-            >Approved Slots</span
-          >
-          <span class="text-2xl font-black text-emerald-500 mt-1 leading-none">{{
-            stats().approved
-          }}</span>
-        </div>
-        <div
-          class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold"
-        >
-          <app-icon [icon]="icons.check" class="size-5" />
-        </div>
-      </div>
-
-      <!-- Tile 4 -->
-      <div class="card p-5 flex justify-between items-center">
-        <div class="flex flex-col">
-          <span class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
-            >Overdue Pending</span
-          >
-          <span class="text-2xl font-black text-rose-500 mt-1 leading-none">{{
-            stats().overdue
-          }}</span>
-        </div>
-        <div
-          class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center font-bold"
-        >
-          <app-icon [icon]="icons.triangleExclamationPoint" class="size-5" />
-        </div>
-      </div>
-
-      <!-- Tile 5 -->
-      <div class="card p-5 flex justify-between items-center col-span-2 lg:col-span-1">
-        <div class="flex flex-col">
-          <span class="text-xs font-bold text-zinc-500 uppercase tracking-wider"
-            >Estimated Revenue</span
-          >
-          <span class="text-2xl font-black text-accent mt-1 leading-none">{{
-            approvedRevenue()
-          }}</span>
-        </div>
-        <div
-          class="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center font-extrabold"
-        >
-          <app-icon [icon]="icons.dollarSign" class="size-5" />
-        </div>
-      </div>
-    </section>
-
-    <!-- APPROVAL PROGRESS RATE BAR -->
-    <div class="card p-5 mb-10">
-      <div
-        class="flex justify-between items-center text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2"
-      >
-        <span>Slot Approval Completion Rate</span>
-        <span class="text-accent font-extrabold text-sm">{{ stats().progress }}%</span>
-      </div>
-      <div
-        role="progressbar"
-        aria-label="Slot approval completion rate"
-        aria-valuemin="0"
-        aria-valuemax="100"
-        [attr.aria-valuenow]="stats().progress"
-        class="w-full h-2 bg-white/5 rounded-full overflow-hidden"
-      >
-        <div
-          class="h-full bg-gradient-to-r from-accent to-accent-muted rounded-full"
-          [style.width.%]="stats().progress"
-        ></div>
-      </div>
-    </div>
-  }
-
-  <!-- MAIN WORKSPACE ROWS -->
+  <!-- Every section has its own URL (/admin/appointments, /admin/calendar, …), so a reload and the
+       Back button keep the owner where they were. A row of links on a phone, a sidebar from lg. -->
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-    <!-- SIDEBAR: DIRECTIONS (4 COLS) -->
-    <aside class="lg:col-span-4">
-      <div class="card p-6">
-        <h2
-          class="text-zinc-100 font-black text-sm uppercase tracking-tight mb-4 pb-3 border-b border-white/5 flex items-center gap-2"
-        >
-          <app-icon [icon]="icons.scissors" class="text-accent" /> Owner Guidelines
-        </h2>
-        <p class="text-xs text-zinc-500 leading-relaxed font-light mb-4">
-          Welcome, boss! Use this control dashboard panel to manage customer appointment requests:
-        </p>
-        <ul class="space-y-3 text-xs text-zinc-400 font-light list-disc pl-4">
-          <li>Review customer contact details before approving.</li>
-          <li>
-            Status updates queue an email to the client; it goes out once the server's SMTP delivery
-            is configured (see the Notifications tab for what was sent).
+    <nav aria-label="Owner sections" class="lg:col-span-3 xl:col-span-2 lg:sticky lg:top-6">
+      <ul class="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
+        @for (section of sections; track section.path) {
+          <li class="shrink-0 lg:shrink">
+            <a
+              [routerLink]="section.path"
+              [attr.aria-current]="isCurrent(section.path) ? 'page' : null"
+              [class]="
+                isCurrent(section.path)
+                  ? 'bg-accent/10 text-accent border-accent/30'
+                  : 'text-zinc-400 hover:text-zinc-100 border-transparent'
+              "
+              class="admin-nav-link flex items-center gap-2.5 whitespace-nowrap rounded-xl border px-3.5 py-2.5 text-sm font-bold transition-colors"
+            >
+              <app-icon [icon]="section.icon" class="size-4 shrink-0" />
+              {{ section.label }}
+            </a>
           </li>
-          <li>Check the "Pending" tab regularly to keep the shop schedule completely optimized!</li>
-        </ul>
-        <div class="mt-6 border-t border-white/5 pt-4 space-y-2 text-xs">
-          <p class="flex items-center gap-2">
-            <span class="inline-block w-2 h-2 rounded-full bg-amber-500"></span>
-            <span class="font-medium text-zinc-400">Pending Approval</span>
-          </p>
-          <p class="flex items-center gap-2">
-            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span class="font-medium text-zinc-400">Approved Reservation</span>
-          </p>
-          <p class="flex items-center gap-2">
-            <span class="inline-block w-2 h-2 rounded-full bg-rose-500"></span>
-            <span class="font-medium text-zinc-400">Denied Request</span>
-          </p>
-        </div>
-      </div>
-    </aside>
+        }
+      </ul>
+    </nav>
 
-    <!-- MAIN TABLE LIST (8 COLS) -->
-    <main class="lg:col-span-8">
+    <main class="lg:col-span-9 xl:col-span-10 min-w-0">
       <div class="card p-6">
-        <!-- ADMIN VIEW TOGGLE -->
-        <div class="flex gap-4 mb-6 border-b border-white/10 pb-4">
-          <button
-            type="button"
-            (click)="setAdminView('appointments')"
-            [attr.aria-pressed]="adminView() === 'appointments'"
-            [class.text-accent]="adminView() === 'appointments'"
-            [class.font-black]="adminView() === 'appointments'"
-            class="text-sm font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors"
-          >
-            Appointments
-          </button>
-          <button
-            type="button"
-            (click)="setAdminView('services')"
-            [attr.aria-pressed]="adminView() === 'services'"
-            [class.text-accent]="adminView() === 'services'"
-            [class.font-black]="adminView() === 'services'"
-            class="text-sm font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors"
-          >
-            Service Catalog
-          </button>
-          <button
-            type="button"
-            (click)="setAdminView('schedules')"
-            [attr.aria-pressed]="adminView() === 'schedules'"
-            [class.text-accent]="adminView() === 'schedules'"
-            [class.font-black]="adminView() === 'schedules'"
-            class="text-sm font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors"
-          >
-            Schedules & Time-Off
-          </button>
-          <button
-            type="button"
-            (click)="setAdminView('notifications')"
-            [attr.aria-pressed]="adminView() === 'notifications'"
-            [class.text-accent]="adminView() === 'notifications'"
-            [class.font-black]="adminView() === 'notifications'"
-            class="text-sm font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors"
-          >
-            Notification Outbox
-          </button>
-        </div>
-
-        @if (adminView() === 'appointments') {
-          <app-admin-appointments-tab />
-        }
-        @if (adminView() === 'services') {
-          <app-admin-services-tab />
-        }
-        @if (adminView() === 'schedules') {
-          <app-admin-schedules-tab />
-        }
-        @if (adminView() === 'notifications') {
-          <app-admin-notifications-tab />
-        }
+        <router-outlet />
       </div>
     </main>
   </div>

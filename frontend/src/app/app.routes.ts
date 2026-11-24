@@ -54,6 +54,35 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: loadAdminDashboard,
     title: 'Owner Dashboard — TaskFlow',
+    // One URL per section, each its own chunk: a reload or Back keeps the owner where they were.
+    // The guard on the parent covers the children; an unknown /admin/… falls through to the 404.
+    children: [
+      { path: '', pathMatch: 'full', redirectTo: 'appointments' },
+      {
+        path: 'appointments',
+        loadComponent: () =>
+          import('./features/admin/admin-appointments-tab').then((m) => m.AdminAppointmentsTab),
+        title: 'Appointments — TaskFlow Owner',
+      },
+      {
+        path: 'services',
+        loadComponent: () =>
+          import('./features/admin/admin-services-tab').then((m) => m.AdminServicesTab),
+        title: 'Service Catalog — TaskFlow Owner',
+      },
+      {
+        path: 'schedules',
+        loadComponent: () =>
+          import('./features/admin/admin-schedules-tab').then((m) => m.AdminSchedulesTab),
+        title: 'Schedules & Time-Off — TaskFlow Owner',
+      },
+      {
+        path: 'notifications',
+        loadComponent: () =>
+          import('./features/admin/admin-notifications-tab').then((m) => m.AdminNotificationsTab),
+        title: 'Notification Outbox — TaskFlow Owner',
+      },
+    ],
   },
   {
     path: 'customer',

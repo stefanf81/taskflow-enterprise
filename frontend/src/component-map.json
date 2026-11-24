@@ -101,7 +101,8 @@
         "frontend/src/app/features/admin/admin-schedules-tab.ts",
         "frontend/src/app/features/admin/admin-notifications-tab.ts"
       ],
-      "webLiveUpdates": "frontend/src/app/features/admin/admin-events.service.ts"
+      "webLiveUpdates": "frontend/src/app/features/admin/admin-events.service.ts",
+      "notes": "Web: the sections are child routes of /admin (/admin/appointments, services, schedules, notifications), listed in a sidebar; the booking numbers are features/admin/admin-stats.ts at the top of the appointments section. Mobile keeps its own screens."
     },
     {
       "feature": "Admin Appointment List (filter, search, approve/deny/delete)",

@@ -189,11 +189,11 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     await expect(page.locator('.alert-success')).toContainText('Welcome back, Owner!');
 
     // Nav Tab 1: Check Notification Outbox
-    await page.click('button:has-text("Notification Outbox")');
+    await page.getByRole('link', { name: 'Notification Outbox' }).click();
     await expect(page.locator('h3:has-text("Automated Notification Outbox")')).toBeVisible();
 
     // Nav Tab 2: Check Schedules & Time-Off, and Add Barber Time-Off
-    await page.click('button:has-text("Schedules & Time-Off")');
+    await page.getByRole('link', { name: 'Schedules & Time-Off' }).click();
     const schedulesContainer = page.locator('.card:has-text("Barber Schedules & Time-Off")');
     await expect(schedulesContainer).toBeVisible();
 
@@ -229,7 +229,7 @@ test.describe('TaskFlow Full-Stack Portal E2E Flow', () => {
     );
 
     // Nav Tab 3: Appointments List, Filter, Search, Deny & Approve
-    await page.click('button:has-text("Appointments")');
+    await page.getByRole('link', { name: 'Appointments', exact: true }).click();
 
     // Search for our newly generated guest name using exact placeholder to avoid clash with other inputs
     const searchInput = page.locator('input[placeholder="Search customers..."]');

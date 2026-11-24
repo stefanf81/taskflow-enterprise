@@ -1,51 +1,40 @@
-import { Component, computed, inject, DestroyRef, signal } from '@angular/core';
-import { formatUsd } from '../../core/format';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { asyncScheduler, throttleTime } from 'rxjs';
-import { Router } from '@angular/router';
+import { Component, inject, DestroyRef } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { asyncScheduler, filter, map, throttleTime } from 'rxjs';
+import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { injectSignOut } from '../../core/auth/sign-out';
 import { FlashMessages } from '../../core/ui/flash-messages';
 import { Alert } from '../../core/ui/alert';
 import { Button } from '../../core/ui/button';
 import { Icon } from '../../core/ui/icon';
-import { checkIcon } from '../../core/ui/icons/check';
+import { bellIcon } from '../../core/ui/icons/bell';
 import { circleCheckIcon } from '../../core/ui/icons/circle-check';
-import { clipboardListIcon } from '../../core/ui/icons/clipboard-list';
-import { dollarSignIcon } from '../../core/ui/icons/dollar-sign';
-import { hourglassIcon } from '../../core/ui/icons/hourglass';
-import { refreshCwIcon } from '../../core/ui/icons/refresh-cw';
+import { listChecksIcon } from '../../core/ui/icons/list-checks';
 import { scissorsIcon } from '../../core/ui/icons/scissors';
-import { triangleExclamationPointIcon } from '../../core/ui/icons/triangle-exclamation-point';
+import { usersIcon } from '../../core/ui/icons/users';
 import { PageHeader } from '../../core/ui/page-header';
 import { AppointmentStore } from './appointment.store';
 import { AdminEventsService } from './admin-events.service';
-import { AdminAppointmentsTab } from './admin-appointments-tab';
-import { AdminServicesTab } from './admin-services-tab';
-import { AdminSchedulesTab } from './admin-schedules-tab';
-import { AdminNotificationsTab } from './admin-notifications-tab';
+
+/** One section of the owner dashboard: its URL under `/admin`, label and icon. */
+export interface AdminSection {
+  path: string;
+  label: string;
+  icon: string;
+}
 
 /**
  * Lazy-loaded Owner dashboard shell (route: /admin).
  *
- * Owns the dashboard chrome (stats, alerts, view switch, logout, SSE stream)
- * and delegates each workspace to a dedicated tab component. All shared state
- * lives in the injectable singleton stores.
+ * Owns the dashboard chrome (alerts, section navigation, logout, SSE stream); each section is a
+ * lazy child route with its own URL. All shared state lives in the injectable singleton stores.
  */
 /** Window in which a burst of appointment events is coalesced into at most two refreshes. */
 export const REFRESH_THROTTLE_MS = 300;
 
 @Component({
   selector: 'app-admin-dashboard',
-  imports: [
-    AdminAppointmentsTab,
-    AdminServicesTab,
-    AdminSchedulesTab,
-    AdminNotificationsTab,
-    Alert,
-    Button,
-    Icon,
-    PageHeader,
-  ],
+  imports: [Alert, Button, Icon, PageHeader, RouterLink, RouterOutlet],
   templateUrl: './admin-dashboard.html',
 })
 export class AdminDashboard {
@@ -55,26 +44,36 @@ export class AdminDashboard {
   private readonly adminEvents = inject(AdminEventsService);
   private readonly flash = inject(FlashMessages);
   private readonly signOut = injectSignOut();
-  protected readonly icons = {
-    check: checkIcon,
-    circleCheck: circleCheckIcon,
-    clipboardList: clipboardListIcon,
-    dollarSign: dollarSignIcon,
-    hourglass: hourglassIcon,
-    refreshCw: refreshCwIcon,
-    scissors: scissorsIcon,
-    triangleExclamationPoint: triangleExclamationPointIcon,
-  };
+  protected readonly icons = { circleCheck: circleCheckIcon };
 
-  readonly stats = this.store.stats;
-  protected readonly approvedRevenue = computed(() => formatUsd(this.stats().approvedRevenue));
-  protected readonly loadErrorMessage = this.store.loadErrorMessage;
+  /** The sections, in the order of the navigation. The labels are what the owner already knew. */
+  protected readonly sections: readonly AdminSection[] = [
+    { path: '/admin/appointments', label: 'Appointments', icon: listChecksIcon },
+    { path: '/admin/services', label: 'Service Catalog', icon: scissorsIcon },
+    { path: '/admin/schedules', label: 'Schedules & Time-Off', icon: usersIcon },
+    { path: '/admin/notifications', label: 'Notification Outbox', icon: bellIcon },
+  ];
+
+  /**
+   * The URL the router is on, without query or fragment. Not `RouterLinkActive`: using it here
+   * pulled more router code into main.js (+3 kB).
+   */
+  private readonly currentPath = toSignal(
+    this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      map((event) => event.urlAfterRedirects.split(/[?#]/)[0] ?? ''),
+    ),
+    { initialValue: this.router.url.split(/[?#]/)[0] ?? '' },
+  );
+
+  /** Whether `path` is the section on screen (a deeper URL under it counts). */
+  protected isCurrent(path: string): boolean {
+    const current = this.currentPath();
+    return current === path || current.startsWith(`${path}/`);
+  }
+
   protected readonly errorMessage = this.flash.errorMessage;
   protected readonly successMessage = this.flash.successMessage;
-
-  readonly adminView = signal<'appointments' | 'services' | 'schedules' | 'notifications'>(
-    'appointments',
-  );
 
   constructor() {
     // Every event, and every catch-up after the stream reconnects, refetches the list.
@@ -90,18 +89,6 @@ export class AdminDashboard {
       .subscribe(() => this.store.refreshWhenIdle());
     this.adminEvents.connect();
     this.destroyRef.onDestroy(() => this.adminEvents.close());
-  }
-
-  setAdminView(view: 'appointments' | 'services' | 'schedules' | 'notifications'): void {
-    this.adminView.set(view);
-  }
-
-  protected loadAppointments(): void {
-    this.store.loadAppointments(this.store.selectedFilter(), this.store.searchQuery());
-  }
-
-  retryLoad(): void {
-    this.store.refresh();
   }
 
   /** Navigates away only once the server confirmed the sign-out; on failure the error banner shows. */
