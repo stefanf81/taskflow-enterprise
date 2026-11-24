@@ -89,7 +89,8 @@
         "frontend/src/app/features/admin/admin-services-tab.ts",
         "frontend/src/app/features/admin/admin-schedules-tab.ts",
         "frontend/src/app/features/admin/admin-notifications-tab.ts"
-      ]
+      ],
+      "notes": "Web: the sections are child routes of /admin (/admin/appointments, services, schedules, notifications) in a sidebar; the booking numbers are features/admin/admin-stats.ts at the top of the appointments section. Mobile keeps its own screens."
     },
     {
       "feature": "Admin Service Catalog Management",
