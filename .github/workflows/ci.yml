@@ -1412,12 +1412,11 @@ jobs:
       # which is report-only (exit-code: 0) by design. Do not align the two
       # exit-codes without deliberately reconsidering both.
       #
-      # Which findings fail it: trivy-action drops the severity filter for
-      # SARIF output unless `limit-severities-for-sarif: true` (the log says
-      # "Building SARIF report with all severities"), so the gate fails on a
-      # fixed vulnerability (`ignore-unfixed`) of any severity, or on a
-      # secret — the same rule as the publish gate in pushdockerimage.yml.
-      # No `severity:` input, since it would not apply.
+      # Which findings fail it: a HIGH or CRITICAL vulnerability that has a fix
+      # (`ignore-unfixed`), or a HIGH/CRITICAL secret — the same rule as the
+      # publish gate in pushdockerimage.yml. trivy-action drops the `severity`
+      # filter for SARIF output unless `limit-severities-for-sarif: true`, so
+      # both are set; the SARIF (Code Scanning) then lists HIGH/CRITICAL only.
       - name: Scan Docker Image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -1436,6 +1435,10 @@ jobs:
 
           format: sarif
           output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          # Without it trivy-action drops `severity` for SARIF output and the
+          # gate fails on every severity.
+          limit-severities-for-sarif: true
 
           ignore-unfixed: true
 
@@ -1609,8 +1612,8 @@ jobs:
         with:
           version: ${{ env.TRIVY_VERSION }}
 
-      # HARD GATE — see the severity-gating note in `docker-backend` (any
-      # fixed vulnerability, of any severity, or a secret fails it). No DB
+      # HARD GATE — see the severity-gating note in `docker-backend` (a fixed
+      # HIGH/CRITICAL vulnerability, or a HIGH/CRITICAL secret, fails it). No DB
       # cache: the nginx image needs no Java DB, and a restored vulnerability
       # DB is stale on almost every run (see the cache note in `docker-backend`).
       - name: Scan Docker Image
@@ -1629,6 +1632,10 @@ jobs:
 
           format: sarif
           output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          # Without it trivy-action drops `severity` for SARIF output and the
+          # gate fails on every severity.
+          limit-severities-for-sarif: true
 
           ignore-unfixed: true
 

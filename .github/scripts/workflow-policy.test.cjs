@@ -328,9 +328,11 @@ test('the scanner runs without a package write token', () => {
 
 test('a Trivy step that writes SARIF sets no severity filter it would drop', () => {
   // trivy-action (v0.36.0 entrypoint.sh) unsets TRIVY_SEVERITY for `format: sarif` unless
-  // `limit-severities-for-sarif` is exactly `true`. The image gates fail on a fixed finding of any
-  // severity on purpose (docs/agents/ci.md); a `severity:` input there only claims a narrower gate.
+  // `limit-severities-for-sarif` is exactly `true`, so a `severity:` input without it only claims a
+  // narrower gate. The image gates (exit-code 1) gate on HIGH/CRITICAL (docs/agents/ci.md) and
+  // must set both.
   const sarifSteps = [];
+  const gates = [];
   for (const file of workflows) {
     const lines = fs.readFileSync(file, 'utf8').split('\n');
     lines.forEach((line, i) => {
@@ -340,12 +342,18 @@ test('a Trivy step that writes SARIF sets no severity filter it would drop', () 
       if (!has(/^\s*format:\s*sarif\s*$/)) return;
       const where = `${rel(file)}:${i + 1}`;
       sarifSteps.push(where);
+      if (has(/^\s*exit-code:\s*1\s*$/)) {
+        gates.push(where);
+        assert.ok(has(/^\s*severity:\s*HIGH,CRITICAL\s*$/), `${where}: the image gate filters on HIGH,CRITICAL`);
+        assert.ok(has(/^\s*limit-severities-for-sarif:\s*true\s*$/), `${where}: set limit-severities-for-sarif: true`);
+      }
       if (has(/^\s*limit-severities-for-sarif:\s*true\s*$/)) return;
       assert.ok(!has(/^\s*severity:/), `${where}: severity does not apply to SARIF output; remove it or set limit-severities-for-sarif: true`);
     });
   }
   // The three image gates and the two report-only filesystem scans.
   assert.ok(sarifSteps.length >= 5, `expected the Trivy SARIF steps: ${sarifSteps}`);
+  assert.equal(gates.length, 3, `expected the three image gates: ${gates}`);
 });
 
 test('the publish workflow reads and writes no Actions cache', () => {
