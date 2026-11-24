@@ -216,7 +216,11 @@ export const AdminDashboardScreen: React.FC = () => {
             </View>
 
             {/* List of Appointments */}
-            {isError ? (
+            {/* Data first: a failed background refetch keeps the page already loaded. */}
+            {isError && data !== undefined && (
+              <ErrorMessage message="Couldn't refresh the appointments. Showing the last loaded page." />
+            )}
+            {isError && data === undefined ? (
               <ErrorState message="Couldn't load appointments." onRetry={() => refetch()} />
             ) : isLoading ? (
               <LoadingIndicator message="Loading bookings..." />

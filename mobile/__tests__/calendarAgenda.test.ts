@@ -1,4 +1,4 @@
-import { buildAgenda } from '../src/features/admin/calendarAgenda';
+import { buildAgenda, calendarBarbers } from '../src/features/admin/calendarAgenda';
 import type { AppointmentItem } from '../src/types/api';
 
 const item = (
@@ -57,5 +57,21 @@ describe('buildAgenda', () => {
       'Sara',
     );
     expect(agenda[0]!.items.map((i) => i.id)).toEqual([2]);
+  });
+});
+
+describe('calendarBarbers', () => {
+  it('adds barbers off the roster only for bookings that hold a slot, sorted', () => {
+    const bookings = [
+      item(1, 'Zed', '2026-11-24', '09:00'),
+      item(2, 'Jordan', '2026-11-24', '10:00', 'CANCELLED'),
+      item(3, 'Kim', '2026-11-24', '11:00', 'DENIED'),
+      item(4, 'Alex', '2026-11-24', '12:00', 'APPROVED'),
+    ];
+    expect(calendarBarbers([{ name: 'Sara' }, { name: 'Alex' }], bookings)).toEqual([
+      'Alex',
+      'Sara',
+      'Zed',
+    ]);
   });
 });

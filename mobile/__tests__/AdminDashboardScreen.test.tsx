@@ -147,12 +147,24 @@ describe('AdminDashboardScreen', () => {
   });
 
   it('shows error state and retries when appointments fail to load', async () => {
+    // A first load that failed has no data (TanStack Query keeps none for it).
     mockIsError = true;
+    mockAppointmentsData = undefined;
     await render(<AdminDashboardScreen />);
     expect(screen.getByText("Couldn't load appointments.")).toBeTruthy();
     expect(screen.queryByText('No Appointments Found')).toBeNull();
     await fireEvent.press(screen.getByText('Retry'));
     expect(mockRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the loaded page when a background refetch fails', async () => {
+    mockIsError = true;
+    await render(<AdminDashboardScreen />);
+    expect(
+      screen.getByText("Couldn't refresh the appointments. Showing the last loaded page."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Couldn't load appointments.")).toBeNull();
+    expect(screen.queryByText('No Appointments Found')).toBeNull();
   });
 
   // ============ FILTERS ============
