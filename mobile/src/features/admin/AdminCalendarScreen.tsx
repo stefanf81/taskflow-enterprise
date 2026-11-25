@@ -26,7 +26,7 @@ import { useShopInfo } from '../../core/shop/useShopInfo';
 import { colors, semantic, withAlpha } from '../../theme/colors';
 import { formatTime12Hour } from '../../utils/time-utils';
 import type { AppointmentItem } from '../../types/api';
-import { buildAgenda } from './calendarAgenda';
+import { buildAgenda, calendarBarbers } from './calendarAgenda';
 import { useBookingActions } from './useBookingActions';
 
 const DAY_TITLE = { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' } as const;
@@ -60,13 +60,10 @@ export const AdminCalendarScreen: React.FC = () => {
     useFlashMessage();
   const { busyIds, approve, deny, cancel } = useBookingActions({ showSuccess, showError });
 
-  const barberNames = [
-    ...new Set([
-      ...(barbers ?? []).map((item) => item.name),
-      ...(data ?? []).map((item) => item.barberName),
-    ]),
-  ].sort((a, b) => a.localeCompare(b));
-  const agenda = buildAgenda(data ?? [], datesOf(range), barber);
+  const barberNames = calendarBarbers(barbers ?? [], data ?? []);
+  // A chosen barber who is no longer listed (their last booking here was cancelled): show all.
+  const activeBarber = barber !== null && barberNames.includes(barber) ? barber : null;
+  const agenda = buildAgenda(data ?? [], datesOf(range), activeBarber);
   const count = agenda.reduce((sum, day) => sum + day.items.length, 0);
   const title =
     view === 'day'
@@ -137,13 +134,13 @@ export const AdminCalendarScreen: React.FC = () => {
           {[null, ...barberNames].map((name) => (
             <TouchableOpacity
               key={name ?? 'all'}
-              style={[styles.chip, styles.barberChip, barber === name && styles.chipSelected]}
+              style={[styles.chip, styles.barberChip, activeBarber === name && styles.chipSelected]}
               onPress={() => setBarber(name)}
               accessibilityRole="button"
-              accessibilityState={{ selected: barber === name }}
+              accessibilityState={{ selected: activeBarber === name }}
               accessibilityLabel={name ? `Barber ${name}` : 'All barbers'}
             >
-              <Text style={[styles.chipText, barber === name && styles.chipTextSelected]}>
+              <Text style={[styles.chipText, activeBarber === name && styles.chipTextSelected]}>
                 {name ?? 'ALL BARBERS'}
               </Text>
             </TouchableOpacity>
@@ -161,7 +158,11 @@ export const AdminCalendarScreen: React.FC = () => {
           </View>
         )}
 
-        {isError ? (
+        {/* Data first: a failed background refetch keeps the bookings already loaded. */}
+        {isError && data !== undefined && (
+          <ErrorMessage message="Couldn't refresh the calendar. Showing the last loaded bookings." />
+        )}
+        {isError && data === undefined ? (
           <ErrorState message="Couldn't load the calendar." onRetry={() => refetch()} />
         ) : isLoading ? (
           <LoadingIndicator message="Loading calendar..." />
@@ -191,7 +192,7 @@ export const AdminCalendarScreen: React.FC = () => {
             renderItem={({ item }) => (
               <BookingRow
                 item={item}
-                showBarber={barber === null}
+                showBarber={activeBarber === null}
                 open={openId === item.id}
                 isBusy={busyIds.includes(item.id)}
                 onToggle={setOpenId}

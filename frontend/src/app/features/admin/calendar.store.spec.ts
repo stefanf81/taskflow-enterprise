@@ -143,6 +143,66 @@ describe('CalendarStore', () => {
     expect(store.appointments()).toHaveLength(2);
   });
 
+  it('lets a running load finish on server events and then loads once more', () => {
+    TestBed.tick();
+    const running = only();
+
+    // A burst of events while the (multi-page) load runs: none of them cancels it.
+    store.refreshWhenIdle();
+    store.refreshWhenIdle();
+    store.refreshWhenIdle();
+    TestBed.tick();
+    expect(running.cancelled).toBe(false);
+    expect(requests()).toHaveLength(0); // no second request beside the running one
+
+    running.flush(dashboard([item(1)]));
+    expect(store.appointments().map((a) => a.id)).toEqual([1]);
+
+    // One follow-up load for the whole burst.
+    TestBed.tick();
+    only().flush(dashboard([item(1), item(2)]));
+    expect(store.appointments().map((a) => a.id)).toEqual([1, 2]);
+    TestBed.tick();
+    expect(requests()).toHaveLength(0);
+  });
+
+  it('also loads once more after a load that failed while events arrived', () => {
+    TestBed.tick();
+    const running = only();
+    store.refreshWhenIdle();
+    running.flush(null, { status: 500, statusText: 'Server Error' });
+
+    TestBed.tick();
+    only().flush(dashboard([item(4)]));
+    expect(store.loadError()).toBeNull();
+    expect(store.appointments().map((a) => a.id)).toEqual([4]);
+  });
+
+  it('reloads at once on a server event when nothing is loading', () => {
+    TestBed.tick();
+    only().flush(dashboard([item(1)]));
+
+    store.refreshWhenIdle();
+    TestBed.tick();
+    only().flush(dashboard([]));
+    TestBed.tick();
+    expect(requests()).toHaveLength(0);
+  });
+
+  it('does not reload for an event once the owner has moved to another day', () => {
+    TestBed.tick();
+    const stale = only();
+    store.refreshWhenIdle();
+
+    // The load for the new day starts after the event, so it already reflects it.
+    store.step(1);
+    TestBed.tick();
+    expect(stale.cancelled).toBe(true);
+    only().flush(dashboard([]));
+    TestBed.tick();
+    expect(requests()).toHaveLength(0);
+  });
+
   it('empties when the session ends', () => {
     TestBed.tick();
     only().flush(dashboard([item(1)]));

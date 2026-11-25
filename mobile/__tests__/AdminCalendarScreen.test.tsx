@@ -116,6 +116,34 @@ describe('AdminCalendarScreen', () => {
     expect(screen.getByText('Decline')).toBeTruthy();
   });
 
+  it('keeps the loaded bookings when a background refetch fails', async () => {
+    mockIsError = true;
+    await render(<AdminCalendarScreen />);
+    expect(
+      screen.getByText("Couldn't refresh the calendar. Showing the last loaded bookings."),
+    ).toBeTruthy();
+    expect(screen.getByText('Customer 1')).toBeTruthy();
+    expect(screen.queryByText("Couldn't load the calendar.")).toBeNull();
+  });
+
+  it('lists a former barber only while one of their bookings holds a slot', async () => {
+    mockData = [booking(1, 'Alex', '09:00'), booking(4, 'Jordan', '11:00', 'CANCELLED')];
+    const view = await render(<AdminCalendarScreen />);
+    expect(screen.queryByLabelText('Barber Jordan')).toBeNull();
+
+    mockData = [booking(1, 'Alex', '09:00'), booking(5, 'Kim', '12:00')];
+    await view.rerender(<AdminCalendarScreen />);
+    await fireEvent.press(screen.getByLabelText('Barber Kim'));
+    expect(screen.queryByText('Customer 1')).toBeNull();
+
+    // Kim's booking is cancelled: Kim leaves the list, and every barber is shown again.
+    mockData = [booking(1, 'Alex', '09:00'), booking(5, 'Kim', '12:00', 'CANCELLED')];
+    await view.rerender(<AdminCalendarScreen />);
+    expect(screen.queryByLabelText('Barber Kim')).toBeNull();
+    expect(screen.getByLabelText('All barbers').props.accessibilityState).toEqual({ selected: true });
+    expect(screen.getByText('Customer 1')).toBeTruthy();
+  });
+
   it('says so when nothing is booked, and retries a failed load', async () => {
     mockData = [];
     const view = await render(<AdminCalendarScreen />);

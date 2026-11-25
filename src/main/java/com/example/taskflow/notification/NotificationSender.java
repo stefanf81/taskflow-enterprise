@@ -71,11 +71,15 @@ class NotificationSender {
      * Outcomes are recorded for every row even when one of those writes fails (that failure is
      * rethrown afterwards), so a database error cannot leave delivered rows PROCESSING to be sent
      * again by the stale-claim recovery.
+     *
+     * @return how many messages the mail server accepted: 0 when none was handed over (every claim
+     *     was lost meanwhile, no message could be built) or the server took none, so the caller can
+     *     tell a run that reached the transport from one that never contacted it
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public void process(List<Claim> claims) {
+    public int process(List<Claim> claims) {
         if (claims.isEmpty()) {
-            return;
+            return 0;
         }
         List<Delivery> deliveries = readTransaction.execute(status -> {
             Map<Long, NotificationOutbox> rows = new HashMap<>();
@@ -93,7 +97,7 @@ class NotificationSender {
             return owned;
         });
         if (deliveries == null || deliveries.isEmpty()) {
-            return;
+            return 0;
         }
         Map<Long, RuntimeException> failed;
         try {
@@ -108,8 +112,12 @@ class NotificationSender {
             }
         }
         RuntimeException recordFailure = null;
+        int accepted = 0;
         for (Delivery delivery : deliveries) {
             RuntimeException cause = failed.get(delivery.claim().id());
+            if (cause == null) {
+                accepted++;
+            }
             if (cause != null) {
                 logger.warn(
                         "Dispatch failed for outbox id={} ({})",
@@ -129,6 +137,7 @@ class NotificationSender {
         if (recordFailure != null) {
             throw recordFailure;
         }
+        return accepted;
     }
 
     /**

@@ -8,6 +8,22 @@ export interface AgendaDay {
 }
 
 /**
+ * The barbers the calendar offers as filters: the roster, plus any barber that only appears in a
+ * booking that holds a slot (left the shop since). A denied or cancelled booking is not listed, so
+ * it adds no barber either. Sorted by name.
+ */
+export function calendarBarbers(
+  roster: readonly { name: string }[],
+  appointments: readonly AppointmentItem[],
+): string[] {
+  const names = new Set(roster.map((barber) => barber.name));
+  for (const appointment of appointments) {
+    if (SLOT_HOLDING_STATUSES.includes(appointment.status)) names.add(appointment.barberName);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+/**
  * Lays bookings out per day for the owner's calendar. Only bookings that hold a slot are listed
  * (a denied or cancelled one has released it); `barber` narrows them to one barber, `null` keeps
  * all. Every date of the range gets its day, so an empty day reads as empty, not as missing.

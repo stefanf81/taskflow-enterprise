@@ -47,4 +47,13 @@ describe('AnnouncementBarComponent', () => {
     await answer();
     expect(bar()).toBeNull();
   });
+
+  it('collapses instead of holding blank room when the shop info cannot be loaded', async () => {
+    httpMock
+      .expectOne((r) => r.url.endsWith('/public/shop'))
+      .flush(null, { status: 503, statusText: 'Service Unavailable' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(bar()).toBeNull();
+  });
 });

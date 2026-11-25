@@ -143,7 +143,7 @@ class NotificationRelaySchedulerTest {
         when(outboxRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         doAnswer(invocation -> {
                     nanos.addAndGet(Duration.ofSeconds(11).toNanos());
-                    return null;
+                    return NotificationRelayScheduler.SEND_BATCH_SIZE;
                 })
                 .when(sender)
                 .process(anyList());
@@ -235,7 +235,7 @@ class NotificationRelaySchedulerTest {
         // The server is back (a short batch here, so the run ends): it goes out and the pause resets.
         when(outboxRepository.findClaimableForUpdate(anyInt(), any(), any()))
                 .thenAnswer(invocation -> pendingRows(0, 5));
-        doNothing().when(sender).process(anyList());
+        doReturn(5).when(sender).process(anyList());
         nanos.addAndGet(Duration.ofSeconds(2).toNanos());
         relay.relay();
         verify(outboxRepository, times(3)).findClaimableForUpdate(anyInt(), any(), any());
@@ -247,6 +247,49 @@ class NotificationRelaySchedulerTest {
         nanos.addAndGet(Duration.ofSeconds(31).toNanos());
         relay.relay();
         verify(outboxRepository, times(5)).findClaimableForUpdate(anyInt(), any(), any());
+    }
+
+    /**
+     * A run during an outage whose chunk never reached the mail server (its claims were lost to
+     * another instance, or none of its messages could be built) proves nothing about the transport:
+     * the outage stays counted, so the next failure pauses for 60 s, not 30 s again.
+     */
+    @Test
+    void aRunThatSendsNothingDoesNotEndTheOutage() {
+        AtomicLong nanos = new AtomicLong();
+        relay = new NotificationRelayScheduler(
+                outboxRepository,
+                sender,
+                selfProvider,
+                "test-instance",
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                true,
+                Duration.ofSeconds(20),
+                nanos::get);
+        when(outboxRepository.findClaimableForUpdate(anyInt(), any(), any()))
+                .thenAnswer(invocation -> pendingRows(0, 5));
+        when(outboxRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(outboxRepository.findStaleProcessing(any(), any())).thenReturn(List.of());
+        TransportUnavailableException outage =
+                new TransportUnavailableException(new MailSendException("Mail server connection failed"), Map.of());
+
+        doThrow(outage).when(sender).process(anyList());
+        relay.relay(); // first failure: paused for 30 s
+
+        doReturn(0).when(sender).process(anyList());
+        nanos.addAndGet(Duration.ofSeconds(31).toNanos());
+        relay.relay(); // nothing handed to the server
+
+        doThrow(outage).when(sender).process(anyList());
+        relay.relay(); // second failure in a row: paused for 60 s
+        verify(outboxRepository, times(3)).findClaimableForUpdate(anyInt(), any(), any());
+
+        nanos.addAndGet(Duration.ofSeconds(31).toNanos());
+        relay.relay();
+        verify(outboxRepository, times(3)).findClaimableForUpdate(anyInt(), any(), any());
+        nanos.addAndGet(Duration.ofSeconds(30).toNanos());
+        relay.relay();
+        verify(outboxRepository, times(4)).findClaimableForUpdate(anyInt(), any(), any());
     }
 
     private static List<NotificationOutbox> pendingRows(long firstId, int count) {

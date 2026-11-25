@@ -9,7 +9,8 @@ import { ShopClock } from '../../../core/shop-clock';
  * therefore holds its room from the start, exactly the height of the 120 characters the backend
  * allows: three lines on a phone, two from `sm`, one from `lg` (the seeded text fills the same
  * lines, so nothing moves). Its text stays `invisible` until known, like the open/closed badge.
- * Only when the owner has turned the strip off does it collapse, once the shop info has said so.
+ * It collapses once the shop info has said the owner turned the strip off, and when the shop info
+ * could not be loaded: an invisible strip would otherwise stay above the hero for the whole visit.
  */
 @Component({
   selector: 'app-announcement-bar',
@@ -30,6 +31,8 @@ import { ShopClock } from '../../../core/shop-clock';
 })
 export class AnnouncementBarComponent {
   protected readonly shop = inject(ShopClock);
-  /** Collapsed only once the server has said there is no strip. */
-  protected readonly hidden = computed(() => this.shop.loaded() && !this.shop.announcement());
+  /** Collapsed once the server has said there is no strip, or could not say anything. */
+  protected readonly hidden = computed(
+    () => this.shop.loadFailed() || (this.shop.loaded() && !this.shop.announcement()),
+  );
 }

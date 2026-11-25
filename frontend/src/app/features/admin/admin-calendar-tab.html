@@ -61,7 +61,7 @@
     <select
       id="calendar-barber"
       class="form-control w-auto py-2"
-      [value]="barberFilter()"
+      [value]="activeBarber()"
       (change)="setBarber($any($event.target).value)"
     >
       <option [value]="allBarbers">All barbers</option>
@@ -239,7 +239,7 @@
                       <span class="font-semibold"> {{ appt.customerName }}</span>
                       <span class="block opacity-70">
                         {{ appt.serviceType }}
-                        @if (view() === 'week' && barberFilter() === allBarbers) {
+                        @if (view() === 'week' && activeBarber() === allBarbers) {
                           · {{ appt.barberName }}
                         }
                       </span>
