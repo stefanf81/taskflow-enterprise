@@ -5,7 +5,7 @@ import {
   TestRequest,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthState } from '../../core/auth/auth.state';
 import { AppointmentDashboardResponse, AppointmentResponse } from '../../types/api';
 import { AdminCalendarTab } from './admin-calendar-tab';
@@ -88,6 +88,11 @@ describe('AdminCalendarTab', () => {
   };
 
   beforeEach(async () => {
+    // "Today" is 2026-11-24 for every test, whatever day the suite runs on. Only Date is faked:
+    // the timers stay real, so the macrotask in `answer` still runs. Midday UTC is the same date
+    // in every zone the default (unknown) shop time zone can fall back to.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-24T12:00:00Z'));
     TestBed.configureTestingModule({
       imports: [AdminCalendarTab],
       providers: [provideHttpClient(), provideHttpClientTesting()],
@@ -104,6 +109,10 @@ describe('AdminCalendarTab', () => {
       item(3, 'Alex', '2026-11-24', '10:00', 'DENIED'),
       item(4, 'Alex', '2026-11-24', '11:00', 'CANCELLED'),
     ]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('shows the day with a column per barber and a row per opening hour', () => {
@@ -152,7 +161,8 @@ describe('AdminCalendarTab', () => {
       .click();
     fixture.detectChanges();
     await answer([]);
-    expect(store.anchor()).not.toBe('2026-11-25');
+    expect(store.anchor()).toBe('2026-11-24');
+    expect(el().querySelector('h2')?.textContent).toContain('Tuesday, November 24, 2026');
   });
 
   it('switches to the week: a column per day, and a day header opens that day', async () => {
