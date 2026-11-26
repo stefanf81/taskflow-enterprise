@@ -3150,6 +3150,76 @@ Java 25's G1 shrinks the heap after load and collects in the smaller heap, while
 
 How much Java 25 gives back varies from run to run: RSS after load was 601 MiB in most of the main rounds and about 1.1 GiB in some. If a smaller RSS ever matters on 27, cap the heap (`MaxRAMPercentage`) instead of relying on shrinking.
 
+### Profiling the regression
+
+**Method.** Same stack, pinning and `JAVA_TOOL_OPTIONS` as above. Each run: a fresh JVM, then a steady 95 s `hey -c 50` load on `/api/v1/barbers`. Two interleaved rounds per JDK. Every count below is normalized per 1,000 requests served during the profiling window.
+- **JFR:** `settings=profile`, a 40 s window starting 45 s after JVM start.
+- **async-profiler 4.3:** `-e itimer -i 1ms`, 40 s, attached 40 s into the load. It sees native, VM and kernel time; JFR's execution samples see only Java frames.
+
+**JFR: the extra time is everywhere, not in one place.**
+
+| JFR samples per 1,000 requests (inclusive) | Java 25 (2 runs) | Java 27 (2 runs) | Change |
+| :--- | ---: | ---: | ---: |
+| All Java samples | 14.5 / 14.9 | 17.6 / 17.0 | +18% |
+| Tomcat | 12.5 / 12.8 | 15.2 / 14.6 | +18% |
+| Spring MVC | 12.4 / 12.8 | 15.3 / 14.8 | +19% |
+| Spring Security | 8.6 / 9.0 | 10.5 / 10.0 | +16% |
+| Application code (`com.example.taskflow`) | 5.5 / 5.9 | 7.1 / 6.8 | +22% |
+| Lettuce / Netty (Redis) | 1.3 / 1.6 | 2.0 / 1.9 | +34% |
+| Spring cache | 2.1 / 2.2 | 3.0 / 2.7 | +32% |
+
+These are unchanged:
+- **CPU used:** both JDKs run the backend at two full cores.
+- **Lock contention:** a handful of events on both.
+- **Deoptimizations:** 217 / 73 on 25 and 158 / 93 on 27.
+- **Allocation mix, safepoints, and JIT totals:** 19.7k / 19.2k compiled methods.
+
+Inlining moved: small methods such as `Request.getAttribute` and `ObservationFilterChainDecorator.wrap` turn up as leaf frames on 27, while `HashMap.getNode` and `SimpleEvent.<init>` drop out. That shifts cost between frames but does not explain an across-the-board rise.
+
+**Native profile: kernel and syscall time grows by the same ~20%.**
+
+| CPU ms per 1,000 requests (itimer, 1 ms samples) | Java 25 (2 runs) | Java 27 (2 runs) |
+| :--- | ---: | ---: |
+| Total | 64.9 / 63.7 | 73.2 / 79.0 |
+| Java code (leaf) | 34.9 / 34.0 | 38.6 / 40.5 |
+| libc and syscalls (leaf) | 24.5 / 23.8 | 27.7 / 30.1 |
+| `SocketDispatcher.write0` (socket writes, nearest Java caller) | 8.5 | 10.3 |
+| `EPoll.wait` / `EventFD.set0` (selector wait / wake-up) | 1.95 / 2.26 | 2.58 / 2.81 |
+| `Unsafe.unpark` / `Unsafe.park` (virtual-thread hand-offs) | 3.50 / 2.52 | 4.33 / 3.00 |
+| Continuation thaw/freeze, inclusive | 19.7 / 19.2 | 20.4 / 23.3 |
+| GC threads | 1.2 / 1.2 | 1.3 / 1.7 |
+| JIT compiler threads | 1.3 / 1.8 | 1.5 / 2.9 |
+
+The application makes the same calls on both JDKs: the same writes, epoll waits and thread wake-ups per request. Yet on 27 each costs about 20% more CPU, and that includes kernel time the JIT never touches. A slowdown that hits kernel code as hard as Java code points at the cores running slower, not at worse generated code.
+
+**Defaults that changed in 27, reverted one at a time** (3 interleaved rounds each, req/s; Java 27 alone is 17.1% / 14.2% / 6.8% behind 25 in this run):
+
+| Variant | `/catalog` | `/barbers` | `/auth/me` |
+| :--- | ---: | ---: | ---: |
+| Java 25 | 4,488 | 4,763 | 4,867 |
+| Java 27 | 3,723 (−17.1%) | 4,086 (−14.2%) | 4,533 (−6.8%) |
+| 27, `-XX:-UseObjectMonitorTable` (25's monitor layout) | −14.4% | −12.7% | −7.2% |
+| 27, `-XX:-UseCondCardMark` (G1 turns it on itself on 27) | −14.4% | −11.2% | −6.7% |
+| 27, both off | −12.2% | −11.6% | −5.8% |
+
+Prefetch cross-test (3 rounds), req/s against plain Java 25:
+
+| Variant | `/catalog` | `/barbers` | `/auth/me` |
+| :--- | ---: | ---: | ---: |
+| Java 25 with 27's prefetch values (192 / 4) | +4.0% | +2.4% | +3.5% |
+| Java 27 | −11.1% | −14.3% | −7.0% |
+| Java 27 with 25's prefetch values (256 / 3) | −12.3% | −11.9% | −6.9% |
+
+So the allocation-prefetch defaults that changed on this CPU are ruled out. Together with compact headers and heap sizing above, every changed GC and allocation default is ruled out; the monitor table and conditional card marks account for at most 2–5 points.
+
+**Lead (being tested): AVX-512 array copies at every size.**
+- Java 27 adds `CopyAVX3Threshold`, default 0, so its array-copy stubs use 512-bit instructions for copies of any size.
+- Java 25 has only `AVX3Threshold=4096`, which keeps 512-bit copies to 4 KiB and up.
+- This service copies small arrays constantly: socket buffers, Tomcat and Netty byte arrays, strings.
+- On Intel Xeons (this host: model 207, full AVX-512), 512-bit instructions can lower a core's clock for a while. That would slow everything on the core, kernel code included, which is the uniform pattern measured above.
+- The test: Java 27 with `-XX:+UnlockDiagnosticVMOptions -XX:CopyAVX3Threshold=4096` and with `-XX:UseAVX=2`, against Java 25 with `-XX:UseAVX=2`. All three boot with the AOT cache in use.
+- Production runs on an AMD Ryzen 5 7430U (Zen 3, no AVX-512). If this is the cause, the regression would not appear there at all, which is one more reason to re-run there before deciding.
+
 ### Strict integrity modes (what a later JDK will break)
 
 `test` and `testcontainersTest` on JDK 27 with `--sun-misc-unsafe-memory-access=deny --illegal-native-access=deny --illegal-final-field-mutation=deny`, all three set through a Gradle init script on the test JVMs:
@@ -3181,4 +3251,4 @@ The branches stay as ready-made upgrades. `jdk-next` keeps testing 27 and 28 eve
 VARIANTS="j25|taskflow-backend:j25|;jNN|taskflow-backend:jNN|" ROUNDS=5 scripts/benchmark-jdk-runtime.sh
 ```
 
-**Open question:** what in the 27 runtime costs the throughput. A JFR or `perf` profile of the same load on 25 and 27 is the next step; the GC, the object layout and the heap sizing are ruled out above.
+**Open question:** whether the AVX-512 copy threshold (see *Profiling the regression*) is the cause. GC, object layout, heap sizing, the monitor table, card marking and allocation prefetch are ruled out above.
