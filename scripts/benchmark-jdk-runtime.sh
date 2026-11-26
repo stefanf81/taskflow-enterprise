@@ -22,14 +22,25 @@
 # Usage:
 #   IMAGES="taskflow-backend:j25 taskflow-backend:j27" ROUNDS=5 \
 #     scripts/benchmark-jdk-runtime.sh
+#   VARIANTS="j27|taskflow-backend:j27|;j27-jfr|taskflow-backend:j27|-XX:StartFlightRecording" \
+#     scripts/benchmark-jdk-runtime.sh
 #
-# Env: IMAGES (required); ROUNDS, DURATION, WARMUP, CONCURRENCY, APP_CPUS,
+# VARIANTS ("label|image|extra JVM options", separated by ";") replaces IMAGES
+# when JVM flags must differ: the extra options are appended to the compose
+# JAVA_TOOL_OPTIONS, and -XX:+UseZGC replaces its -XX:+UseG1GC.
+#
+# Env: IMAGES or VARIANTS (one is required); ROUNDS, DURATION, WARMUP, CONCURRENCY, APP_CPUS,
 #      SIDE_CPUS, MEMORY, OUT_DIR, HEY (optional).
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-: "${IMAGES:?IMAGES is required (space-separated image tags)}"
+: "${IMAGES:=}"
+: "${VARIANTS:=}"
+[ -n "$IMAGES$VARIANTS" ] || { echo "IMAGES or VARIANTS is required" >&2; exit 1; }
+if [ -z "$VARIANTS" ]; then
+  for image in $IMAGES; do VARIANTS="${VARIANTS:+$VARIANTS;}${image}|${image}|"; done
+fi
 ROUNDS="${ROUNDS:-5}"
 DURATION="${DURATION:-30s}"
 WARMUP="${WARMUP:-10s}"
@@ -78,9 +89,10 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
-# boot IMAGE -> starts the backend and waits for readiness; prints startup seconds.
+# boot IMAGE [EXTRA_OPTS] -> starts the backend and waits for readiness; prints startup seconds.
 boot() {
-  local image="$1"
+  local image="$1" opts="$JAVA_OPTS ${2:-}"
+  case "${2:-}" in *-XX:+UseZGC*) opts="${opts//-XX:+UseG1GC /}" ;; esac
   docker rm -f jdk-bench-app >/dev/null 2>&1 || true
   docker run -d --name jdk-bench-app --network "$NET" --network-alias app -p "127.0.0.1:${PORT}:8080" \
     --cpuset-cpus "$APP_CPUS" --memory "$MEMORY" \
@@ -97,7 +109,7 @@ boot() {
     -e APP_RATE_LIMIT_AUTH_MAX_REQUESTS_PER_MINUTE=100000 \
     -e APP_RSA_PRIVATE_KEY="$PRIVATE_KEY" -e APP_RSA_PUBLIC_KEY="$PUBLIC_KEY" \
     -e MALLOC_ARENA_MAX=2 \
-    -e JAVA_TOOL_OPTIONS="$JAVA_OPTS" \
+    -e JAVA_TOOL_OPTIONS="$opts" \
     "$image" >/dev/null
   for _ in $(seq 1 240); do
     curl -fsS -o /dev/null "http://127.0.0.1:${PORT}/actuator/health/readiness" 2>/dev/null && break
@@ -119,19 +131,20 @@ java_pid() {
     'for p in /proc/[0-9]*; do [ "$(cat $p/comm 2>/dev/null)" = java ] && { echo ${p#/proc/}; break; }; done'
 }
 
-echo "==> applying Flyway migrations (untimed boot of ${IMAGES%% *})"
-boot "${IMAGES%% *}" >/dev/null
+IFS=';' read -r -a VARIANT_LIST <<< "$VARIANTS"
+n=${#VARIANT_LIST[@]}
+IFS='|' read -r _ first_image _ <<< "${VARIANT_LIST[0]}"
+echo "==> applying Flyway migrations (untimed boot of ${first_image})"
+boot "$first_image" >/dev/null
 
-read -r -a IMAGE_LIST <<< "$IMAGES"
-n=${#IMAGE_LIST[@]}
 RESULTS="$OUT_DIR/results.tsv"
 printf 'round\timage\tendpoint\trps\tp50_ms\tp95_ms\tp99_ms\tnon2xx\tstartup_s\trss_mib\thwm_mib\tcontainer_mib\tgc_pauses\tgc_pause_total_ms\tjava\n' > "$RESULTS"
 
 for round in $(seq 1 "$ROUNDS"); do
   for k in $(seq 0 $((n - 1))); do
-    image="${IMAGE_LIST[$(( (k + round - 1) % n ))]}"
-    tag="$(echo "$image" | tr -c 'A-Za-z0-9' '_')"
-    startup="$(boot "$image")"
+    IFS='|' read -r label image extra <<< "${VARIANT_LIST[$(( (k + round - 1) % n ))]}"
+    tag="$(echo "$label" | tr -c 'A-Za-z0-9' '_')"
+    startup="$(boot "$image" "$extra")"
     java_version="$(docker logs jdk-bench-app 2>&1 | sed -nE 's/.*Starting TaskflowApplication v[^ ]+ using Java ([0-9.]+).*/\1/p' | head -1)"
     token="$(curl -fsS -H 'Content-Type: application/json' \
       -d "{\"username\":\"admin\",\"password\":\"${PASSWORD}\"}" \
@@ -157,11 +170,12 @@ for round in $(seq 1 "$ROUNDS"); do
         | awk '/GiB/ {sub("GiB",""); printf "%.0f", $1 * 1024; next} {sub("MiB",""); printf "%.0f", $1}')"
       gc="$(docker exec jdk-bench-app cat /var/log/taskflow/gc.log 2>/dev/null \
         | awk '/Pause/ && $NF ~ /ms$/ {sub(/ms$/, "", $NF); n++; t += $NF} END {printf "%d\t%.1f", n, t}')"
-      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$round" "$image" "$ep" "$rps" "$p50" "$p95" "$p99" \
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$round" "$label" "$ep" "$rps" "$p50" "$p95" "$p99" \
         "$non2xx" "$startup" "$rss" "$hwm" "$cmem" "$gc" "$java_version" >> "$RESULTS"
-      echo "round $round | $image | $ep | ${rps} req/s | p99 ${p99} ms | rss ${rss} MiB | gc ${gc}"
+      echo "round $round | $label | $ep | ${rps} req/s | p99 ${p99} ms | rss ${rss} MiB | gc ${gc}"
     done
     docker logs jdk-bench-app > "$OUT_DIR/r${round}-${tag}-app.log" 2>&1 || true
+    docker exec jdk-bench-app cat /var/log/taskflow/gc.log > "$OUT_DIR/r${round}-${tag}-gc.log" 2>/dev/null || true
   done
 done
 
