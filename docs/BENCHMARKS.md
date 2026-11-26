@@ -22,6 +22,7 @@ All benchmarks were run locally on an **Apple M4 Pro (14-Core, AArch64)** utiliz
   - [§43. JVM Diagnostics — HeapDump, GC Log & Container Support (P1-2)](#-43-jvm-diagnostics--heapdump-gc-log--container-support-p1-2)
   - [§51. glibc Allocator & Huge-Page Tuning on Ubuntu Base (MALLOC_ARENA_MAX)](#-51-glibc-allocator--huge-page-tuning-on-the-ubuntu-base)
   - [§56. CDS Training Coverage & Production Image Slimming](#-56-cds-training-coverage--production-image-slimming)
+  - [§86. Java 27: Runtime Only vs Full Toolchain, and the JDK 26/27 Settings](#-86-java-27-runtime-only-vs-full-toolchain-and-the-jdk-2627-settings-2026-11-26)
 - **🗄️ Database, Hibernate & Connection Pooling**
   - [§5. Database Connection Pooling (HikariCP)](#-5-database-connection-pooling-hikaricp)
   - [§6. Lazy Connection Fetching Under Pool Saturation](#-6-lazy-connection-fetching-under-pool-saturation)
@@ -3063,3 +3064,121 @@ Script time is Chrome's `ScriptDuration`, main-thread tasks `TaskDuration`, both
 * **Found on the first full run:** 3 failures, 2 of them real test-data bugs H2 had hidden. `ReviewRatingsIntegrationTest` booked one barber a minute apart with 60-minute services, which V35's `appointments_no_overlap` exclusion constraint (PostgreSQL only) rejects; its bookings now fall on separate days. `TaskflowApplicationTest` queried H2's upper-case `INFORMATION_SCHEMA`; it now reads `information_schema` case-insensitively and accepts PostgreSQL's `time without time zone`.
 * **H2 kept for:** `bootRun` and the Dockerfile's offline AOT-cache training (default profile, `--network=none`), guarded by the new `H2DefaultProfileSmokeTest` (all migrations applied, Hibernate validation, seed data on H2), plus `FlywayMigrationTest`/`DataMigrationsH2Test`, which exercise the Java migrations' H2 branches directly. `ProductionLayoutContextTest` moved to PostgreSQL: the production migration layout now validates on the production engine.
 * **Requirement:** `./gradlew test` (and so `check`, `verify.sh --quick` and CI's `backend` job) now needs Docker, or `TASKFLOW_TEST_POSTGRES_URL` naming a server where the user may create databases. GitHub's Ubuntu runners have Docker.
+
+## ☕ 86. Java 27: Runtime Only vs Full Toolchain, and the JDK 26/27 Settings (2026-11-26)
+
+**Question:** should the backend move from Java 25 LTS to Java 27? There are two ways to do it:
+- **Option A** (`claude/java27-runtime-only`, ADR-024): keep the Java 25 toolchain (class file 69) and run on the Temurin 27 base.
+- **Option B** (`claude/java27-full`): toolchain 27 (class file 71) and the same base.
+
+What do startup, throughput, latency, memory and GC look like against today's image? And do any of the settings that are new in 26/27 change the answer?
+
+**Method:**
+- **Host:** native amd64. 4-vCPU Intel Xeon @ 2.10 GHz VM (13 AVX-512 flags), 15.7 GiB, Docker 29.9.3, cgroup v1. This is not the production Ryzen 5 7430U, and the VM can have noisy neighbours, so the images are interleaved and their order rotated every round.
+- **Images:** three `local`-target images of the same commit (`584d535`):
+  - `base25`: today's Dockerfile, Temurin 25.0.5.1+2.
+  - `a27`: Option A, Temurin 27.0.1.1+4.
+  - `b27`: Option B, Temurin 27.0.1.1+4.
+
+  Each base is wrapped in one extra layer that only lets apt reach the Ubuntu archive through the sandbox proxy. The JRE is unchanged, and every image trains its own AOT cache.
+- **Startup:** `IMAGES=… NOCDS=1 RUNS=7 CPUS=2 MEMORY=2g scripts/benchmark-cds-startup.sh` (prod profile, PostgreSQL 19.0, Redis 8.12.0, compose `JAVA_TOOL_OPTIONS`).
+- **Throughput:** the new `scripts/benchmark-jdk-runtime.sh`.
+  - The backend runs on two cores of its own (`--cpuset-cpus 0,1`, like production's `ActiveProcessorCount=2`), with the compose `JAVA_TOOL_OPTIONS`, a 2560 MiB limit, `MALLOC_ARENA_MAX=2` and a read-only root. PostgreSQL, Redis and `hey` share the other two cores. The backend sat at 200% CPU under load, so the JVM under test is the bottleneck.
+  - Each run: a fresh JVM; one bearer login (`/api/v1/auth/mobile/login`); 15 s of warm-up per endpoint; then `hey -z 30s -c 50` on `/api/v1/catalog`, `/api/v1/barbers` and the authenticated `/api/v1/auth/me` (the path §58 saw regress).
+  - `hey` runs inside the Docker network. Through a published port, Docker's userland proxy capped the backend at about 1,000 req/s.
+  - Rate limiter in the path; limits raised.
+  - Memory is the java process's VmRSS/VmHWM, not `docker stats`.
+- **Rounds:** 5 interleaved rounds of the three images. Then 4 rounds of Option A against four variants of itself. Then 3 rounds of a Java 25 heap diagnostic.
+
+### Startup (prod profile, 7 interleaved runs, medians)
+
+| Variant | Median | Min–max | Archived classes |
+| :--- | ---: | ---: | ---: |
+| Java 25, `-Xshare:off` | 12.15 s | 11.88–12.88 s | 0% |
+| **Java 25 + AOT cache (today)** | **6.68 s** | 6.43–7.25 s | 89% |
+| **A: Java 27 runtime + AOT cache** | **6.28 s (−6%)** | 6.04–6.48 s | 91% |
+| **B: Java 27 toolchain + runtime + AOT cache** | **6.32 s (−5%)** | 6.27–6.76 s | 91% |
+
+The AOT cache grows 181 → 195 MB on 27. Build-time `[warning][aot]` lines drop from 401 to 50, because the "Unlinked class … AOTClassLinking" messages are gone; the 14 multi-release-JAR "not defined from … as claimed" lines remain. No `AdapterHandlerEntry` warnings appeared at runtime on either JDK.
+
+### Throughput (req/s, 5 interleaved rounds, mean; spread = max/min − 1 within one image)
+
+| Endpoint | Java 25 | A: Java 27 runtime | B: Java 27 full |
+| :--- | ---: | ---: | ---: |
+| `GET /api/v1/catalog` | **4,115** (3,956–4,221) | 3,352 (3,065–3,590) **−18.5%** | 3,447 (3,294–3,582) **−16.2%** |
+| `GET /api/v1/barbers` | **4,413** (4,281–4,507) | 3,618 (3,302–3,845) **−18.0%** | 3,664 (3,559–3,846) **−17.0%** |
+| `GET /api/v1/auth/me` | **4,404** (4,156–4,643) | 3,948 (3,660–4,211) **−10.4%** | 4,012 (3,708–4,277) **−8.9%** |
+| p50 / p99, `/catalog` (median of rounds) | 11.4 / 27.9 ms | 14.5 / 34.4 ms | 14.0 / 32.7 ms |
+| p50 / p99, `/auth/me` | 10.7 / 21.8 ms | 13.0 / 24.0 ms | 12.7 / 24.3 ms |
+| Process RSS after the run (median) | 601 MiB | 1,292 MiB | 1,225 MiB |
+| Peak RSS (VmHWM, median) | 1,597 MiB | 1,658 MiB | 1,653 MiB |
+| G1 pauses per run / total pause time (mean, incl. boot and warm-up) | 333 / 2.00 s | 59 / 0.89 s | 60 / 0.94 s |
+
+All 45 runs answered 0 non-2xx.
+
+* **This is a regression, not noise.** On `/catalog` and `/barbers`, the *slowest* Java 25 round beats the *fastest* round of either Java 27 image. §62's arm64 run saw no clear regression from 21 to 25. This native amd64 run is the comparison §62 asked for before the next move, and it says no.
+* **A and B are the same within noise.** The bytecode version does not matter; the JDK 27 runtime does.
+* **Memory goes the other way.** Both JDKs pre-touch the full 1.25 GiB heap at boot (peak RSS ≈ 1.6 GiB on both). Java 25's G1 then gives most of it back and keeps collecting in a smaller heap (about 5× the pauses). Java 27's G1 keeps it. On 27, RSS stays about 2× higher while GC pause time falls by half.
+
+### What explains the gap: the JDK 26/27 settings, 4 rounds each against Option A
+
+| Variant (on `a27`) | `/catalog` | `/barbers` | `/auth/me` | Startup | RSS | Pause total |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **A (control)** | **3,514** | **3,864** | **4,074** | 6.12 s | 1,230 MiB | 875 ms |
+| Compact object headers off (training + `CMD`) | −0.5% | −2.0% | +1.0% | 5.78 s | 1,240 MiB | 978 ms |
+| G1 `MinHeapFreeRatio=40`/`MaxHeapFreeRatio=70` (the pre-27 defaults, JDK-8238686) | −3.7% | −5.2% | −2.6% | 6.13 s | 1,264 MiB | 960 ms |
+| ZGC + AOT cache trained under ZGC (JEP 516) | −9.5% | −11.5% | −7.2% | 6.53 s | 1,672 MiB | 5 ms |
+| JFR from boot (`-XX:StartFlightRecording`, default settings) | −7.1% | −4.9% | −4.4% | **11.76 s** | 1,299 MiB | 1,225 ms |
+
+* **Compact object headers (on by default in 27, JEP 534) are not the cause:** turning them off changes nothing beyond noise. ADR-020 decision 6 (follow the JVM default) can stand.
+* **The pre-27 heap free ratios do not bring Java 25's shrinking back.** In 27, G1 decides heap shrinking on different grounds, so the two flags no longer reproduce 25's behaviour.
+* **ZGC with the AOT cache works** (JEP 516). The cache trains under ZGC and passes the strict `-XX:AOTMode=on` boot; the archived heap is mapped and AOT-linked classes are used. Pauses all but disappear, but it costs 7–12% throughput and about +440 MiB RSS. Not worth it for this service.
+  - `-XX:+AOTStreamableObjects` is a diagnostic flag in 27 and is not needed: training under ZGC selects the GC-independent format by itself.
+* **JFR from the first instruction nearly doubles startup** and costs 4–7% throughput. If always-on JFR is wanted (JEP 536's default redaction of arguments, environment and properties makes it acceptable under the logging rules), start it after boot with `jcmd <pid> JFR.start` and measure that.
+
+### Heap diagnostic: Java 25 keeping its whole heap
+
+Java 25's G1 shrinks the heap after load and collects in the smaller heap, while 27's keeps the whole heap. Is that what makes 25 faster? Three interleaved rounds: Java 25 as is; Java 25 with `-XX:MinHeapFreeRatio=0 -XX:MaxHeapFreeRatio=100`, which keeps the whole heap committed like 27; and Option A.
+
+| 3 rounds, mean req/s | `/catalog` | `/barbers` | `/auth/me` | RSS (median) | Pauses / total |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| Java 25 | 4,066 | 4,371 | 4,413 | 1,122 MiB | 170 / 1.69 s |
+| Java 25, whole heap kept | 4,170 (+2.6%) | 4,471 (+2.3%) | 4,359 (−1.2%) | 1,677 MiB | 65 / 1.08 s |
+| A: Java 27 runtime | 3,457 (−15.0%) | 3,795 (−13.2%) | 4,083 (−7.5%) | 1,223 MiB | 62 / 0.89 s |
+
+**Heap sizing is ruled out.** With the GC profile of 27 (about 65 pauses, the whole heap committed), Java 25 is as fast as or faster than its default. The regression is in the JDK 27 runtime itself, not in GC, object layout or heap sizing.
+
+How much Java 25 gives back varies from run to run: RSS after load was 601 MiB in most of the main rounds and about 1.1 GiB in some. If a smaller RSS ever matters on 27, cap the heap (`MaxRAMPercentage`) instead of relying on shrinking.
+
+### Strict integrity modes (what a later JDK will break)
+
+`test` and `testcontainersTest` on JDK 27 with `--sun-misc-unsafe-memory-access=deny --illegal-native-access=deny --illegal-final-field-mutation=deny`, all three set through a Gradle init script on the test JVMs:
+
+* **`testcontainersTest`: 50/50 pass.** This covers real PostgreSQL and Redis through Netty, Lettuce, Hibernate and Byte Buddy, with no Unsafe or native-access denial in the log.
+* **`test`: 14 of 875 fail, all on final-field mutation (JEP 500), all in test code.**
+  - spring-security-test's MockMvc support writes `CsrfFilter.tokenRepository` and `SecurityContextHolderFilter.securityContextRepository` reflectively. That affects `SecurityAuthorizationIntegrationTest`, `CustomerOwnershipIntegrationTest`, `HttpCacheHeadersIntegrationTest`, `AuthCookieTest`, `OpenApiSecurityDocumentationTest` and `PrometheusScrapeTokenIntegrationTest`.
+  - `SecurityConfigTest.testJwtDecoderException` sets the final `SecurityConfig.rsaKey` itself.
+
+  Production code is not affected. Before a JDK makes `deny` the default, the project needs a spring-security-test release that stops doing this, and a change to that one test.
+
+### Correctness on both branches
+
+Both branches pass on JDK 27.0.1.1: `./gradlew check` (875 tests, 0 failures, 17 skipped; coverage gate, SpotBugs, Spotless), `testcontainersTest` 50/50, and the container guards 27/27.
+- **Option B:** Gradle, javac, palantir-java-format and SpotBugs 4.10.5 all run on the JDK 27 Gradle JVM; class file version 71 verified.
+- **Option A:** class file 69, tests on the 27 test launcher.
+
+Both images train the AOT cache and pass the `-XX:AOTMode=on` boot validation.
+
+### Decision
+
+**Neither option is adopted; production stays on Java 25 LTS (ADR-020).** On amd64, the architecture production runs, both Java 27 images lose 9–18% throughput and add 2.5–3.3 ms at p50. In return they boot 0.4 s faster and pause less, at about twice the RSS. None of the 26/27 settings tried recovers the throughput.
+
+The branches stay as ready-made upgrades. `jdk-next` keeps testing 27 and 28 every week.
+
+**Re-run this section before any move to 28 or 29, on the production Ryzen host:**
+
+```
+VARIANTS="j25|taskflow-backend:j25|;jNN|taskflow-backend:jNN|" ROUNDS=5 scripts/benchmark-jdk-runtime.sh
+```
+
+**Open question:** what in the 27 runtime costs the throughput. A JFR or `perf` profile of the same load on 25 and 27 is the next step; the GC, the object layout and the heap sizing are ruled out above.
