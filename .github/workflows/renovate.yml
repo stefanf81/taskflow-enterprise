@@ -57,7 +57,7 @@ env:
   # /^(?:RENOVATE_\w+|LOG_LEVEL|GITHUB_COM_TOKEN|NODE_OPTIONS|...)$/ into the
   # container, so that name would reach Renovate as an unknown config option.
   # renovate-image: tracked by the dedicated regex manager in .github/renovate.json
-  RENOVATEBOT_VERSION: "44.257.5@sha256:d57dca79611ee02af29f1243d27956618a291e6364294ea8ae17629b2e66696f"
+  RENOVATEBOT_VERSION: "44.263.5@sha256:9806d1b444f2b0b57d7c3b882d453b99c7494db07689c2e1abed8e6ae502b271"
   # Persists both the repository cache (extract results) and the file-based
   # package/HTTP cache beside it, so datasource lookups revalidate with ETags
   # instead of refetching from an empty cache on every ephemeral runner.
@@ -96,7 +96,7 @@ jobs:
         if: steps.cache-restore.outputs.cache-matched-key != ''
         run: sudo chown -R 12021:0 /tmp/renovate/
 
-      # Pinned to the v46.3.14 commit: this action receives the write-capable
+      # Pinned to a release commit: this action receives the write-capable
       # RENOVATE_TOKEN, so a retargeted tag is a real supply-chain risk.
       # CodeQL's security-extended actions/unpinned-tag query flags mutable
       # refs; Renovate's github-actions manager keeps the digest current from
