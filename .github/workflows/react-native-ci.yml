@@ -356,7 +356,7 @@ jobs:
       # Note: restore-keys must NOT end with a dash — append-timestamp adds the
       # separator itself.
       - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@dbeefd73e8e2ffc1bbc412570072735eb4db3607 # v1.2.25
+        uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
         with:
           key: android-ccache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
@@ -664,7 +664,7 @@ jobs:
       # Same timestamped-snapshot scheme as the Android job (see there); the
       # `ccache-retention` job keeps only the newest snapshot per ref.
       - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@dbeefd73e8e2ffc1bbc412570072735eb4db3607 # v1.2.25
+        uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
         with:
           key: ios-ccache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
@@ -1071,7 +1071,7 @@ jobs:
       # `android` job's arm64-v8a debug build. Pruned by `ccache-retention`.
       - name: Set up ccache
         if: steps.repack.outputs.repacked != 'true'
-        uses: hendrikmuhs/ccache-action@dbeefd73e8e2ffc1bbc412570072735eb4db3607 # v1.2.25
+        uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
         with:
           key: android-e2e-ccache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
@@ -1339,7 +1339,7 @@ jobs:
       # Pruned by `ccache-retention`.
       - name: Set up ccache
         if: steps.repack.outputs.repacked != 'true'
-        uses: hendrikmuhs/ccache-action@dbeefd73e8e2ffc1bbc412570072735eb4db3607 # v1.2.25
+        uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
         with:
           key: ios-e2e-ccache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
