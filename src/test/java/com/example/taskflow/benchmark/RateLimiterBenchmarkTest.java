@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.example.taskflow.core.RedisTestSupport;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -28,8 +29,8 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
  * Fix uses single {@code EVAL} Lua:
  * {@code local c=redis.call('incr',KEYS[1]); if c==1 then redis.call('pexpire',KEYS[1],ARGV[1]) end; return c}
  *
- * <p>Requires a running Redis at localhost:6379 (docker-compose redis or
- * {@code docker run -p 6379:6379 redis:8.10.3-alpine}).
+ * <p>Requires a running Redis at localhost:6379 (the docker-compose {@code redis} service, or
+ * {@code docker run -p 6379:6379} with its image, {@link RedisTestSupport#IMAGE}).
  *
  * <p>Run:
  * <pre>{@code ./gradlew benchmarkTest --tests "*RateLimiterBenchmarkTest*"}</pre>
@@ -77,7 +78,8 @@ class RateLimiterBenchmarkTest {
         } catch (Exception e) {
             // If Redis not available, fail fast with clear message
             throw new IllegalStateException(
-                    "Redis not available at localhost:6379 — start with `docker run -p 6379:6379 redis:8.10.3-alpine`",
+                    "Redis not available at localhost:6379 — start with `docker run -p 6379:6379 "
+                            + RedisTestSupport.IMAGE + "`",
                     e);
         }
     }
@@ -133,7 +135,7 @@ class RateLimiterBenchmarkTest {
     void benchmark_twoStep_vs_lua_throughput() {
         System.out.println("\n" + "=".repeat(80));
         System.out.println("  ▸ RATE LIMITER THROUGHPUT: INCR+EXPIRE (2 RTT) vs LUA EVAL (1 RTT)");
-        System.out.println("  Redis: localhost:6379 (docker: redis:8.10.3-alpine)");
+        System.out.println("  Redis: localhost:6379 (docker: " + RedisTestSupport.IMAGE + ")");
         System.out.println("  Iterations: " + MEASUREMENT + "  warmup: " + WARMUP);
         System.out.println("=".repeat(80));
 

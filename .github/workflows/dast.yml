@@ -95,7 +95,7 @@ jobs:
 
     services: &dast-services
       postgres:
-        image: postgres:19.0-alpine@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188
+        image: postgres:19.0-alpine@sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f
 
         env:
           POSTGRES_DB: taskflow
@@ -112,7 +112,7 @@ jobs:
           --health-retries 30
 
       redis:
-        image: redis:8.10.3-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
+        image: redis:8.12.0-alpine@sha256:5af80107c1eeecb484a2269b80a26d12bfa6521787da4663bd9f19f60a163483
 
         ports:
           - 6379:6379
