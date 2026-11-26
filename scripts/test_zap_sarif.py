@@ -74,6 +74,16 @@ class ZapSarifTest(unittest.TestCase):
         self.assertEqual([rule['name'] for rule in run['tool']['driver']['rules']],
                          ['A Server Error response code was returned by the server'])
 
+    def test_path_traversal_inferred_from_unique_names_is_scoped_to_the_named_records(self):
+        rules = Path(__file__).resolve().parents[1] / '.zap' / 'api-rules.tsv'
+        urls = [f'http://localhost:8080/api/v1/{path}' for path in (
+            'catalog', 'catalog/3', 'catalog/products', 'catalog/products/3', 'barbers', 'barbers/3',
+            'catalog/announcement', 'appointments')]
+        run = self.convert([self.alert('6', url) for url in urls], rules)
+        self.assertEqual([
+            result['locations'][0]['logicalLocations'][0]['name'] for result in run['results']
+        ], urls[-2:])
+
     def test_wildcard_and_comma_separated_scopes_match_packaged_scans(self):
         rules = self.directory / 'rules.tsv'
         rules.write_text(

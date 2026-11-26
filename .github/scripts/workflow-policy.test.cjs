@@ -16,6 +16,8 @@ const actions = fs.readdirSync(path.join(root, 'actions'))
 
 const indent = (line) => line.length - line.trimStart().length;
 const rel = (file) => path.relative(path.resolve(root, '..'), file);
+// Every RegExp metacharacter, backslash included: an image or marker is matched literally.
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // The lines of the step mapping that contains line `i` (stops at the next step).
 function stepBlock(lines, i) {
@@ -84,7 +86,7 @@ test('scanner and load-test images are pinned to a tag and index digest', () => 
       + `\\s+${variable}: "[^@"\\s]+@sha256:[a-f0-9]{64}"`,
     ), `${file}: pin ${variable} as "<tag>@sha256:<digest>" below the # ${marker}: marker`);
     // Every use goes through the variable: no second, unpinned reference to the image.
-    const refs = [...workflow.matchAll(new RegExp(`${image.replace(/[.]/g, '\\.')}:(\\S+)`, 'g'))].map((m) => m[1]);
+    const refs = [...workflow.matchAll(new RegExp(`${escapeRegExp(image)}:(\\S+)`, 'g'))].map((m) => m[1]);
     assert.notDeepEqual(refs, [], `${file} does not use ${image}`);
     for (const ref of refs) {
       assert.ok(ref.startsWith(`\${${variable}}`), `${file}: ${image}:${ref} must use \${${variable}}`);
@@ -96,7 +98,7 @@ test('the BuildKit image is pinned to a version and index digest', () => {
   const action = fs.readFileSync(path.join(root, 'actions', 'prepull-buildkit', 'action.yml'), 'utf8');
   const marker = '# buildkit-image: tracked by the dedicated regex manager in .github/renovate.json';
   assert.match(action, new RegExp(
-    `${marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n\\s+default: "moby/buildkit:v\\d+\\.\\d+\\.\\d+@sha256:[a-f0-9]{64}"`,
+    `${escapeRegExp(marker)}\\n\\s+default: "moby/buildkit:v\\d+\\.\\d+\\.\\d+@sha256:[a-f0-9]{64}"`,
   ));
 });
 

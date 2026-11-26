@@ -24,8 +24,9 @@
 # because its payload came back in a JSON body. Scoped to the JSON API, not ignored globally.
 40014	OUTOFSCOPE	^http://localhost:8080/api/v1/
 # Check 6-5 (Low confidence, no evidence) infers path traversal when a made-up name is rejected
-# and the URL's own last segment ("catalog", "barbers", an id) is accepted. Creating or renaming a
-# record whose name must be unique behaves exactly like that: ZAP's fixed made-up name is a
-# duplicate (409) after its first use, the next unused name succeeds. Which of these endpoints it
-# lands on varies from run to run. The names are database values, never paths.
-6	OUTOFSCOPE	^http://localhost:8080/api/v1/(catalog|barbers)(/\d+)?$
+# and the URL's own last segment ("catalog", "products", "barbers", an id) is accepted. Creating or
+# renaming a record whose name must be unique (services, retail products, barbers) behaves exactly
+# like that: ZAP's fixed made-up name is a duplicate (409) after its first use, the next unused name
+# succeeds. Which of these endpoints it lands on varies from run to run. The names are database
+# values, never paths.
+6	OUTOFSCOPE	^http://localhost:8080/api/v1/(catalog(/products)?|barbers)(/\d+)?$
