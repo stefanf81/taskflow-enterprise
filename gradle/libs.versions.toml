@@ -5,8 +5,7 @@ dependency-analysis = "3.20.4"
 versions-plugin = "0.67.0"
 spotbugs-plugin = "6.5.13"
 spotbugs-tool = "4.10.5"
-# Spotless 8.12.0 (2026-11-21) is still inside the 3-day release-age hold; Renovate moves it.
-spotless-plugin = "8.11.0"
+spotless-plugin = "8.12.0"
 # Java formatter run by Spotless (4-space indent, 120 columns).
 palantir-java-format = "2.103.0"
 # The companion BOM keeps every OpenTelemetry module at this security-reviewed release.
