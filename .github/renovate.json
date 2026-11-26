@@ -398,13 +398,15 @@
       "pinDigests": true
     },
     {
-      "description": "Group GitHub Actions updates",
+      "description": "Group GitHub Actions updates. Actions and reusable workflows only: the same manager also reads the workflows' service and job containers (postgres, redis), which must update together with docker-compose.yml in the catch-all groups.",
       "matchManagers": ["github-actions"],
+      "matchDepTypes": ["action", "workflow"],
       "groupName": "GitHub Actions"
     },
     {
-      "description": "A digest-only change of a version-pinned action means its tag was moved to another commit (how 76 of 77 aquasecurity/trivy-action tags were hijacked in March 2026). Renovate ages such an update against the tag's original release date, so the 3-day soak does not hold it back. Never automerge it, and keep it out of the automerged groups. This costs nothing in normal operation: every pin carries its full '# vX.Y.Z' comment, so a regular release is a patch, minor or major update. Must stay below the first rule (automerge) and below 'Group GitHub Actions updates': later packageRules override earlier ones.",
+      "description": "A digest-only change of a version-pinned action means its tag was moved to another commit (how 76 of 77 aquasecurity/trivy-action tags were hijacked in March 2026). Renovate ages such an update against the tag's original release date, so the 3-day soak does not hold it back. Never automerge it, and keep it out of the automerged groups. This costs nothing in normal operation: every pin carries its full '# vX.Y.Z' comment, so a regular release is a patch, minor or major update. Actions and reusable workflows only: a digest update of a workflow's service container (postgres, redis) is an ordinary image rebuild and stays in 'all patch updates' with docker-compose.yml. Must stay below the first rule (automerge) and below 'Group GitHub Actions updates': later packageRules override earlier ones.",
       "matchManagers": ["github-actions"],
+      "matchDepTypes": ["action", "workflow"],
       "matchUpdateTypes": ["digest"],
       "groupName": "GitHub Actions whose tag was moved",
       "groupSlug": "github-actions-moved-tag",
