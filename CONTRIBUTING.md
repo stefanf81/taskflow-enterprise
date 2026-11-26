@@ -213,7 +213,7 @@ the mobile test and native build suites.
 
 ## Project Structure
 
-- `src/` — Spring Boot backend (Java 25, Gradle)
+- `src/` — Spring Boot backend (compiled for Java 25, runs and is tested on Java 27; Gradle)
 - `frontend/` — Angular 22 SPA (TypeScript, Tailwind CSS)
 - `mobile/` — React Native / Expo application (TypeScript)
 - `shared/schemas/` — Shared Zod validation schemas (`@taskflow/schemas`)

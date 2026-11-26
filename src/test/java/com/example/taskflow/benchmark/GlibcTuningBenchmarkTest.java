@@ -39,7 +39,9 @@ class GlibcTuningBenchmarkTest {
         long us = (System.nanoTime() - t0) / 1000;
 
         boolean arena = yml.contains("MALLOC_ARENA_MAX=2");
-        boolean base = d.contains("eclipse-temurin:25-jre-resolute");
+        boolean base = java.util.regex.Pattern.compile("eclipse-temurin:\\d+-jre-resolute@sha256:[0-9a-f]{64}")
+                .matcher(d)
+                .find();
         boolean noJemalloc = !d.contains("libjemalloc2") && !d.contains("LD_PRELOAD");
         boolean documented = md.contains("MALLOC_ARENA_MAX=2") && md.contains("jemalloc");
         boolean harness = Files.isRegularFile(script);

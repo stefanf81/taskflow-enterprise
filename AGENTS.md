@@ -8,7 +8,7 @@ matching file before changing that area.
 
 | Path | What | Detail |
 | --- | --- | --- |
-| `src/main/java/com/example/taskflow/` | Spring Boot 4 / Java 25 / Gradle modular monolith: `appointment`, `auth`, `catalog`, `notification`, `review`, shared `core` | [backend](docs/agents/backend.md), [domain](docs/agents/domain.md), [security](docs/agents/security.md) |
+| `src/main/java/com/example/taskflow/` | Spring Boot 4 / Java 25 bytecode on a Java 27 runtime (ADR-024) / Gradle modular monolith: `appointment`, `auth`, `catalog`, `notification`, `review`, shared `core` | [backend](docs/agents/backend.md), [domain](docs/agents/domain.md), [security](docs/agents/security.md) |
 | `src/main/resources/db/` , `src/main/java/db/migration/` | Flyway SQL and Java migrations | [domain](docs/agents/domain.md) |
 | `frontend/` | Angular 22 (zoneless, signals), Tailwind, prerendered landing page | [frontend](docs/agents/frontend.md) |
 | `mobile/` | React Native / Expo, React Navigation, TanStack Query, Zustand | [mobile](docs/agents/mobile.md) |

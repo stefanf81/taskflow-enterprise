@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 
-# Spring Boot / Java 25 backend image. One Dockerfile, two final targets:
+# Spring Boot backend image: Java 25 bytecode on a Java 27 runtime (ADR-024).
+# One Dockerfile, two final targets:
 #
 #   prod   (--target prod)   production image: Ubuntu package refresh on every
 #                            build, download tools purged, setuid bits stripped,
@@ -24,17 +25,17 @@
 # the extractor stage pins $BUILDPLATFORM, because JAR extraction is
 # architecture-independent and should run natively.
 #
-# Explicit -resolute (Ubuntu 26.04 LTS, glibc) because the floating 25-jre tag
+# Explicit -resolute (Ubuntu 26.04 LTS, glibc) because the floating 27-jre tag
 # tracks the current Ubuntu release and would drift silently. Renovate updates
-# the digest while the project's Java 25 policy keeps the major. Unlike the
-# Java 21 image, this base ships no curl, wget or gnupg (BENCHMARKS.md §62).
-# Latest available official -resolute image at the 2026-10-27 check: 25.0.4.1
-# (the 2026-10-27 digest is an Ubuntu base refresh of the same JRE build).
-# Retain the digest pin; see docs/deployment/java25-image-security.md for the
-# full scan and known JRE risks outside Trivy's coverage. APT cannot update
-# Temurin. Track Renovate/upstream for the patched image, then rebuild the cache.
+# the digest while the runtime policy keeps the major (ADR-024: the JAR is still
+# compiled for Java 25, only the JRE is 27, so rolling back is a base-image
+# change). Like the Java 25 base, this one ships no curl, wget or gnupg
+# (BENCHMARKS.md §62). Image at the 2026-11-26 check: Temurin 27.0.1.1+4.
+# Java 27 is not an LTS: its updates end when JDK 28 ships (2027-03-09), so
+# ADR-024 requires moving to 28 or back to 25 before then. APT cannot update
+# Temurin; track Renovate/upstream for the patched image, then rebuild the cache.
 # Production approval is operator-controlled, not a CI/publication interlock.
-ARG JAVA_IMAGE=eclipse-temurin:25-jre-resolute@sha256:a0862ac8790c648f6b5db8a113b9990d24fbe8e65f3c4ba8d68b0302d270c1e6
+ARG JAVA_IMAGE=eclipse-temurin:27-jre-resolute@sha256:ad293220c45600f71afe656fa0fb14fa9ebba05afee20745c6b627242493e675
 
 # JAR extraction is architecture-independent: run it natively on the build host
 # (Apple Silicon as well as amd64 CI). Compilation is performed by Gradle before
@@ -105,7 +106,7 @@ FROM java-base AS runtime
 # packages on top. tini itself is not version-pinned, so a build without this
 # cached layer can resolve a newer tini from the archive.
 # wget is the local target's HEALTHCHECK client. The Java 21 base shipped it;
-# the Java 25 base does not, and without it every compose health check failed.
+# the Java 25 and 27 bases do not, and without it every compose health check failed.
 # It is installed here rather than in the local target so a JAR change does not
 # re-run apt; the prod target purges it again.
 # --error-on=any: by default a transient download failure is only a warning
@@ -168,7 +169,7 @@ FROM runtime AS prod
 # --auto-remove below keeps it, and the upgrade refreshes it.
 # The runtime stage installs wget for the local HEALTHCHECK; the Java 21 base
 # also shipped curl and gnupg (plus ~30 dependencies: krb5, LDAP, GnuTLS,
-# libssh2, SQLite), the Java 25 base does not. The JVM uses none of them, so
+# libssh2, SQLite), the Java 25 and 27 bases do not. The JVM uses none of them, so
 # Kubernetes probes must be httpGet rather than exec curl/wget. Purge them
 # (apt skips any that are not installed) before the upgrade so they are neither
 # refreshed nor left for an intruder, then drop setuid/setgid bits in case a

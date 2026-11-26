@@ -116,26 +116,29 @@ java {
 	}
 }
 
-// Runs every Test task on a newer JDK than the compile toolchain: the weekly
-// jdk-next workflow passes -PtestJavaVersion=27 (and 28 for the early-access
-// build). Compilation stays on the Java 25 toolchain, so the tests exercise the
-// class files that ship.
-def testJavaVersion = providers.gradleProperty('testJavaVersion')
-if (testJavaVersion.present) {
-	def testLauncher = javaToolchains.launcherFor {
-		languageVersion = JavaLanguageVersion.of(testJavaVersion.get())
-	}
-	tasks.withType(Test).configureEach {
-		javaLauncher = testLauncher
-		// JDK 28 makes ReflectionFactory.newConstructorForSerialization(Class,
-		// Constructor) throw unless this property is set. Spring's repackaged
-		// Objenesis relies on it to instantiate CGLIB proxies, so without it every
-		// class-proxied bean without a no-arg constructor (BusySlotsService, ...)
-		// fails and no context starts. The JDK calls the property temporary; it
-		// stays out of the image and production (ADR-020 decision 7).
-		if (testJavaVersion.get().toInteger() >= 28) {
-			systemProperty 'jdk.reflect.allowNonSerializableConstruction', 'true'
-		}
+// Compile for Java 25, run on Java 27 (ADR-024). The class files stay version 69,
+// so the image can go back to the Java 25 base without a rebuild of the JAR; the
+// JRE that ships is the Java 27 base in the Dockerfile. Every Test task therefore
+// runs on that runtime, not on the compiler's JDK: -PtestJavaVersion overrides it
+// (the weekly jdk-next workflow passes 28 for the early-access build). Gradle
+// finds the runtime JDK through org.gradle.java.installations.fromEnv
+// (gradle.properties; CI's setup-java exports JAVA_HOME_27_X64) and otherwise
+// provisions it with the foojay resolver (settings.gradle).
+def runtimeJavaVersion = 27
+def testJavaVersion = providers.gradleProperty('testJavaVersion').map { it.toInteger() }.orElse(runtimeJavaVersion)
+def testLauncher = javaToolchains.launcherFor {
+	languageVersion = testJavaVersion.map { JavaLanguageVersion.of(it) }
+}
+tasks.withType(Test).configureEach {
+	javaLauncher = testLauncher
+	// JDK 28 makes ReflectionFactory.newConstructorForSerialization(Class,
+	// Constructor) throw unless this property is set. Spring's repackaged
+	// Objenesis relies on it to instantiate CGLIB proxies, so without it every
+	// class-proxied bean without a no-arg constructor (BusySlotsService, ...)
+	// fails and no context starts. The JDK calls the property temporary; it
+	// stays out of the image and production (ADR-020 decision 7).
+	if (testJavaVersion.get() >= 28) {
+		systemProperty 'jdk.reflect.allowNonSerializableConstruction', 'true'
 	}
 }
 

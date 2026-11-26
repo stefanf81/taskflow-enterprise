@@ -29,3 +29,4 @@ This directory records architectural decisions made during the development of Ta
 | [ADR-021](ADR-021-service-worker-scope.md) | Service Worker for the Web App — Scope and Recommendation | Proposed (recommendation: do not adopt yet) |
 | [ADR-022](ADR-022-enforced-module-boundaries.md) | Enforced Module Boundaries (Spring Modulith) | Accepted |
 | [ADR-023](ADR-023-rotating-refresh-sessions.md) | Rotating Refresh Sessions for Web and Mobile | Accepted |
+| [ADR-024](ADR-024-java-27-runtime.md) | Java 27 Runtime for Java 25 Bytecode | Proposed |

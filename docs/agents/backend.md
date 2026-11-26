@@ -1,6 +1,6 @@
 # Backend architecture, performance and caching
 
-Spring Boot / Java 25 package layout, runtime tunings, the Redis cache stack, async executor, slot index and Cache-Control rules.
+Spring Boot / Java 25 (bytecode; Java 27 runtime since ADR-024) package layout, runtime tunings, the Redis cache stack, async executor, slot index and Cache-Control rules.
 
 _Detail moved out of [`AGENTS.md`](../../AGENTS.md); the text is unchanged._
 

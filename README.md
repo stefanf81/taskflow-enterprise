@@ -5,7 +5,7 @@ approves or denies the booking and manages its barbers, schedules and service ca
 
 | Path | What |
 | --- | --- |
-| `src/` | Spring Boot 4.2 / Java 25 backend: a Spring Modulith monolith (`appointment`, `auth`, `catalog`, `notification`, `review`, shared `core`), PostgreSQL + Flyway, Redis caching |
+| `src/` | Spring Boot 4.2 / Java 25 backend (Java 27 runtime, ADR-024): a Spring Modulith monolith (`appointment`, `auth`, `catalog`, `notification`, `review`, shared `core`), PostgreSQL + Flyway, Redis caching |
 | `frontend/` | Angular 22 web app (zoneless, signals), Tailwind, prerendered landing page, Nginx config |
 | `mobile/` | React Native / Expo app for Android and iOS |
 | `shared/schemas/` | zod/mini request and response schemas used by both clients (`@taskflow/schemas`) |

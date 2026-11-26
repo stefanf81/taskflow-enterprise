@@ -44,6 +44,10 @@ concurrency:
 
 env:
   JAVA_VERSION: "25"
+  # The JRE the image ships (Dockerfile JAVA_IMAGE, ADR-024): tests run on it
+  # (build.gradle), and so does every job that boots the JAR. JAVA_VERSION stays
+  # the compiler and Gradle JDK, so the class files remain Java 25.
+  RUNTIME_JAVA_VERSION: "27"
   NODE_VERSION: "26"
 
   REGISTRY: ghcr.io
@@ -402,11 +406,16 @@ jobs:
         with:
           persist-credentials: false
 
+      # Two JDKs: Gradle and the compiler run on JAVA_VERSION (listed last, so it is
+      # JAVA_HOME), the Test tasks on RUNTIME_JAVA_VERSION (JAVA_HOME_27_X64,
+      # gradle.properties `org.gradle.java.installations.fromEnv`).
       - name: Set up Java
         uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
+          java-version: |
+            ${{ env.RUNTIME_JAVA_VERSION }}
+            ${{ env.JAVA_VERSION }}
 
       # Writes the shared `backend` Gradle entry that `package`, DAST, image publishing and the
       # mobile E2E JAR restore, except on the nightly and manual dispatches: those run with
@@ -507,11 +516,16 @@ jobs:
         with:
           persist-credentials: false
 
+      # Two JDKs: Gradle and the compiler run on JAVA_VERSION (listed last, so it is
+      # JAVA_HOME), the Test tasks on RUNTIME_JAVA_VERSION (JAVA_HOME_27_X64,
+      # gradle.properties `org.gradle.java.installations.fromEnv`).
       - name: Set up Java
         uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
+          java-version: |
+            ${{ env.RUNTIME_JAVA_VERSION }}
+            ${{ env.JAVA_VERSION }}
 
       # Unlike the other read-only jobs, this one keeps its own Gradle User
       # Home entry and writes it from `main` pushes only. Those runs use
@@ -653,7 +667,8 @@ jobs:
         uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
+          # Only boots the JAR: the runtime the image ships (ADR-024).
+          java-version: ${{ env.RUNTIME_JAVA_VERSION }}
 
       # No npm install here, so no npm cache: without `package-manager-cache:
       # false`, setup-node enables npm caching from the root `packageManager`
@@ -994,7 +1009,8 @@ jobs:
         uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
+          # Only boots the JAR: the runtime the image ships (ADR-024).
+          java-version: ${{ env.RUNTIME_JAVA_VERSION }}
 
       ##########################################################
       # Download Backend
