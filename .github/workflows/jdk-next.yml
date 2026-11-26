@@ -1,12 +1,13 @@
 name: JDK next
 
-# Early warning for the next Java upgrade: runs the backend tests on JDK 27 (the
-# current non-LTS release) and the JDK 28 early-access build, and trains and
-# verifies the AOT cache on a Temurin 27 image. Production stays on Java 25 LTS
-# (ADR-020); nothing here changes what ships.
+# Early warning for the next Java upgrade: runs the backend tests on the JDK 28
+# early-access build, and trains and verifies the AOT cache on the floating
+# Temurin 27 tag (ahead of the digest Renovate pins in the Dockerfile). The
+# backend compiles for and runs on Java 27 (ADR-024); nothing here changes what
+# ships.
 #
 # Not a required check, and it never writes a cache: a red run is a signal to
-# read, not a merge blocker. Classes are compiled by the Java 25 toolchain as
+# read, not a merge blocker. Classes are compiled by the Java 27 toolchain as
 # usual; only the test JVM changes (`-PtestJavaVersion`, build.gradle).
 #
 # Compact object headers are ON by default from JDK 27 (they were opt-in on 25).
@@ -30,7 +31,7 @@ concurrency:
 
 env:
   # The compile toolchain (build.gradle). Gradle itself also runs on it.
-  JAVA_VERSION: "25"
+  JAVA_VERSION: "27"
 
 jobs:
   test:
@@ -43,8 +44,6 @@ jobs:
       matrix:
         # setup-java version spec, toolchain major for Gradle.
         include:
-          - java: "27"
-            major: "27"
           - java: "28-ea"
             major: "28"
 
@@ -54,7 +53,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # Installed first so the second setup-java (Java 25) is the one on PATH
+      # Installed first so the second setup-java (Java 27) is the one on PATH
       # and in JAVA_HOME for Gradle; this JDK is only handed to the test JVM.
       - name: Set up JDK ${{ matrix.java }} (test JVM)
         id: test-jdk

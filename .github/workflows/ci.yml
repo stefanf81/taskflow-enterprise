@@ -43,7 +43,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  JAVA_VERSION: "25"
+  JAVA_VERSION: "27"
   NODE_VERSION: "26"
 
   REGISTRY: ghcr.io

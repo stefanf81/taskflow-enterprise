@@ -32,7 +32,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  JAVA_VERSION: "25"
+  JAVA_VERSION: "27"
   NODE_VERSION: "26"
   # The ZAP image is run directly instead of through zaproxy/action-api-scan /
   # action-full-scan: those wrappers default to the mutable `:stable` tag.

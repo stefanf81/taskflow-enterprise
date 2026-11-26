@@ -29,7 +29,7 @@ concurrency:
 
 env:
   NODE_VERSION: '26'
-  JAVA_VERSION: '25'
+  JAVA_VERSION: '27'
 
 jobs:
   # `workflow_run` fires on every Renovate completion (daily). The weekly audit

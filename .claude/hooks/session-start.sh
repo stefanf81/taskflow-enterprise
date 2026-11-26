@@ -9,7 +9,7 @@
 # - One root `npm ci` installs every workspace (frontend, mobile, shared/schemas) from the
 #   single lockfile; `npm install` could rewrite the lockfile, and an install run inside a
 #   workspace folder replaces the root node_modules with that workspace's tree only.
-# - The Gradle wrapper works in the base image; the backend toolchain is Java 25,
+# - The Gradle wrapper works in the base image; the backend toolchain is Java 27,
 #   which Gradle's foojay resolver downloads when the image lacks it.
 set -euo pipefail
 

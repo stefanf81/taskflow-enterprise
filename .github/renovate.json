@@ -219,10 +219,10 @@
       "allowedVersions": "/^0\\.8\\./"
     },
     {
-      "description": "Keep Temurin runtime images on Java 25 (LTS)",
+      "description": "Keep Temurin runtime images on Java 27 (ADR-024; not an LTS: move to 28 before 27's updates end in March 2027)",
       "matchDatasources": ["docker"],
       "matchPackageNames": ["eclipse-temurin"],
-      "allowedVersions": "/^25-/"
+      "allowedVersions": "/^27-/"
     },
     {
       "description": "Keep Alpine runtime images on the 3.24 release line",

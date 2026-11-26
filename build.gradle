@@ -112,14 +112,14 @@ version = '0.0.1-SNAPSHOT'
 
 java {
 	toolchain {
-		languageVersion = JavaLanguageVersion.of(25)
+		languageVersion = JavaLanguageVersion.of(27)
 	}
 }
 
 // Runs every Test task on a newer JDK than the compile toolchain: the weekly
-// jdk-next workflow passes -PtestJavaVersion=27 (and 28 for the early-access
-// build). Compilation stays on the Java 25 toolchain, so the tests exercise the
-// class files that ship.
+// jdk-next workflow passes -PtestJavaVersion=28 for the early-access build.
+// Compilation stays on the Java 27 toolchain (ADR-024), so the tests exercise
+// the class files that ship.
 def testJavaVersion = providers.gradleProperty('testJavaVersion')
 if (testJavaVersion.present) {
 	def testLauncher = javaToolchains.launcherFor {
