@@ -1,6 +1,6 @@
 # ADR-024: Java 27 Toolchain and Runtime
 
-**Status:** Proposed (branch `claude/java27-full`; the lower-risk alternative, Java 25 bytecode on a Java 27 runtime, is on `claude/java27-runtime-only`). Production approval is operator-controlled, as for ADR-020.
+**Status:** Not adopted (2026-11-26). The design below is ready on branch `claude/java27-full`, but Java 27 cost 9–18% throughput on amd64 (BENCHMARKS.md §86); production stays on Java 25 LTS (ADR-020). The lower-risk alternative, Java 25 bytecode on a Java 27 runtime, is on `claude/java27-runtime-only` and measured the same. Production approval is operator-controlled, as for ADR-020.
 
 ## Context
 
@@ -33,7 +33,7 @@ Tooling already supports Java 27 class files (version 71):
 
 Java 27 is **not** an LTS. Its updates end when JDK 28 ships (2027-03-09), and 28 is currently blocked for this application (ADR-020 decision 7). The next LTS is 29 (September 2027).
 
-## Decision
+## Decision (as proposed)
 
 1. **Compile for and run on Java 27.**
    - `build.gradle` toolchain 27 (class file version 71).
@@ -44,10 +44,29 @@ Java 27 is **not** an LTS. Its updates end when JDK 28 ships (2027-03-09), and 2
 3. **`jdk-next` keeps JDK 28 EA only**, plus AOT training on the floating 27 tag.
 4. **Exit plan by 2027-03-09 (JDK 28 GA): move to 28.** That needs a Spring release whose repackaged Objenesis no longer calls the two-argument `newConstructorForSerialization` (ADR-020 decision 7). The alternative is giving every class-proxied bean a non-private no-arg constructor. Going back to 25 is not a base-image change any more (see below).
 
+## Measurement (BENCHMARKS.md §86, 2026-11-26)
+
+Native amd64, interleaved, the backend on two pinned cores:
+
+| | Java 25 | A: 27 runtime | B: 27 toolchain + runtime |
+| :--- | ---: | ---: | ---: |
+| Startup, prod profile, median of 7 | 6.68 s | 6.28 s (−6%) | 6.32 s (−5%) |
+| `/catalog` req/s, mean of 5 rounds | 4,115 | 3,352 (−18.5%) | 3,447 (−16.2%) |
+| `/barbers` req/s | 4,413 | 3,618 (−18.0%) | 3,664 (−17.0%) |
+| `/auth/me` req/s | 4,404 | 3,948 (−10.4%) | 4,012 (−8.9%) |
+| Process RSS after load | 601 MiB | 1,292 MiB | 1,225 MiB |
+
+On `/catalog` and `/barbers`, every Java 25 round beats every Java 27 round. These do not explain the gap:
+- Compact headers off.
+- The pre-27 G1 heap free ratios.
+- Java 25 keeping its whole heap the way 27 does.
+
+ZGC with the AOT cache (now possible, JEP 516) and JFR from boot are slower still.
+
 ## Consequences
 
 ### Positive
-- The JIT, GC and object-layout improvements of 26/27, and one JDK everywhere (compiler, tests, image).
+- The GC and object-layout changes of 26/27 (they halve GC pause time; §86 still measured a net throughput loss), and one JDK everywhere (compiler, tests, image).
 - The code may use Java 26/27 final APIs and language changes as they appear; there are none of note in 26/27 for this codebase.
 
 ### Negative
@@ -57,8 +76,7 @@ Java 27 is **not** an LTS. Its updates end when JDK 28 ships (2027-03-09), and 2
 
 ## Verification
 
-See BENCHMARKS.md §86:
-- Startup and throughput interleaved against the Java 25 image on native amd64.
+See BENCHMARKS.md §86 (startup, throughput, memory, GC, the JDK 26/27 settings and the strict-integrity test run) and the measurement above:
 - `./gradlew check`: 875 tests, 0 failures, on 27.0.1.1. Class file version 71; SpotBugs and Spotless run on the JDK 27 Gradle JVM.
 - `testcontainersTest` 50/50.
 - Container guards 27/27.
