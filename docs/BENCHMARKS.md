@@ -3280,7 +3280,56 @@ The extra time is in arming timeouts and waking the delay-scheduler thread. The 
   - The JVMTI mount/unmount notifications became `startTransition`/`endTransition` natives; their cost is negligible (table above).
   - Continuations are now submitted through a new `submit(Executor, Runnable)` that calls `ForkJoinPool.submit(ForkJoinTask)`, wrapping each continuation in a `ForkJoinTask$AdaptedRunnableAction`, where 25 called `Executor.execute`.
 
-So the same Java code wakes threads about 35–40% more often per request on 26 and 27. The cause is below it, in HotSpot's virtual-thread machinery (freeze/thaw: `ThawBase` +28% in the native profile, park/unpark), and is not visible from Java frames. This is the scope for a report to the OpenJDK loom-dev list.
+The scheduler classes themselves barely changed, but one of the `VirtualThread` changes above is the cause; see *Root cause* below. An earlier version of this section put the cause in HotSpot; that was wrong.
+
+### Root cause: continuation tasks lost `NO_USER_HELP` in JDK 26
+
+**The cause:**
+- **Java 25:** `VirtualThread` submits a continuation with `Executor.execute(Runnable)`. `ForkJoinPool.execute` wraps it in `ForkJoinTask$RunnableExecuteAction`, which extends `InterruptibleTask`, whose constructor calls `setNoUserHelp()`. So every continuation task carries the `NO_USER_HELP` status bit.
+- **Java 26 and 27:** the new private `VirtualThread.submit(Executor, Runnable)` calls `pool.submit(ForkJoinTask.adapt(task))`, which produces a `ForkJoinTask$AdaptedRunnableAction`. That class extends `ForkJoinTask` directly and never sets the bit.
+- **The effect:** `ForkJoinPool.runWorker`, unchanged since 25, reads `noUserHelp()` when deciding whether to propagate `signalWork()` for a task taken from the same queue. With the bit gone, wake-ups propagate differently, and the carriers fall into park/unpark churn.
+- **Origin:** this is the "small change to VirtualThread to submit(ForkJoinTask) consistently" that the jdk26 backout of the ForkJoinPool scalability change JDK-8360046 (JDK-8375130, January 2026) deliberately kept.
+
+**Evidence:**
+
+*Reproducer.* `scripts/jdk-regression/TimedWaitBench.java`: 50 virtual threads, each request does 20 µs of work and 3 round trips to a platform "event loop" thread through `CompletableFuture.get(timeout)` (what Lettuce's synchronous API does) or `get()`. 2 pinned cores, Granite Rapids host (model 173).
+
+| Reproducer | Java 25 | Java 26 | Java 27 |
+| :--- | ---: | ---: | ---: |
+| Timed waits, G1, 3 rounds | 45,513 req/s | 42,188 (−7.3%) | 42,617 (−6.4%) |
+| Untimed waits, G1 | 54,105 | 51,221 (−5.3%) | 51,692 (−4.5%) |
+| Untimed waits, ParallelGC, 2 rounds | 51,960 | 47,379 (−9%) | 47,772 (−8%) |
+| Involuntary context switches per request, untimed (any GC) | 0.012–0.014 | 0.054–0.061 | 0.052–0.062 |
+
+*Per thread.* Over 10 s of the reproducer:
+- **Java 25:** the two carriers make **0 voluntary** context switches and about 5,000 involuntary. They never park.
+- **Java 27:** they make **31,000–35,500 voluntary** and about 31,000–32,500 involuntary context switches, for the same CPU ticks.
+
+*Controls:*
+- Platform threads in the same program: no regression with ParallelGC (26/27 are 5–6% faster). With G1 they are 9–14% slower, which is the separate G1 change.
+- A plain two-thread `LockSupport` park/unpark ping-pong: no regression, and identical futex syscalls under `strace` on all three JDKs.
+
+*Diagnostic patch (evidence only, not a fix).* `scripts/jdk-regression/patch-tool/AddNoUserHelp.java` rewrites `AdaptedRunnableAction` with the ClassFile API so its constructor also calls `setNoUserHelp()`. It is loaded with `--patch-module java.base=…` on Java 27, which also disables the AOT cache.
+
+| 3 interleaved rounds | Java 25 | Java 27 | Java 27 + patch |
+| :--- | ---: | ---: | ---: |
+| Reproducer, timed waits | 45,912 req/s | 40,243 (−12.3%) | 45,036 (−1.9%) |
+| Reproducer, untimed waits | 52,816 | 52,047 (−1.5%) | 56,447 (+6.9%) |
+| Service `/catalog`, AOT off | 5,310 | 5,085 (−4.2%) | **5,660 (+6.6%)** |
+| Service `/barbers`, AOT off | 5,709 | 5,397 (−5.5%) | **5,796 (+1.5%)** |
+| Service `/auth/me`, AOT off | 5,771 | 5,745 (−0.4%) | **6,361 (+10.2%)** |
+| Service voluntary / involuntary switches per request | 4.81 / 4.32 | 6.09 / 5.55 | **4.85 / 4.35** |
+
+**What the patch shows:**
+- It returns the per-request context switches to exactly Java 25's level.
+- It makes Java 27 7–11% faster than unpatched 27, and faster than 25 on every endpoint.
+- The service rows are from the Granite Rapids host, where the unpatched gap is smaller (0–6%) than on the Emerald Rapids host used for the tables above (11–13% with the AOT cache off).
+
+**Reproduce:** `scripts/jdk-regression/run-reproducer.sh` compiles in a JDK container and runs the digest-pinned JREs interleaved. `PATCH=1` adds patched 27.
+
+**Report:** a plain-text report with these numbers and the inlined reproducer is ready for the OpenJDK loom-dev list. It has not been sent.
+
+**What it means for this project:** Java 26/27 would only pay off here once the JDK restores `NO_USER_HELP`, or equivalent signalling, for continuation tasks. Re-check this before any move to 28 or 29.
 
 **Other results from the same runs:**
 - **AOT cache and peak throughput:** turning the cache off made both JDKs 2–8% faster at steady state (25: +3–8%, 27: +2–4%), at the cost of nearly doubling startup (5.5 → 10.0–10.5 s). §62 did not see this on arm64. Treat it as a lead to confirm, not a result; one Java 25 round was low.
@@ -3312,7 +3361,7 @@ Both images train the AOT cache and pass the `-XX:AOTMode=on` boot validation.
 
 ### Decision
 
-**Neither option is adopted; production stays on Java 25 LTS (ADR-020).** On amd64, the architecture production runs, both Java 27 images lose 9–18% throughput and add 2.5–3.3 ms at p50. In return they boot 0.4 s faster and pause less, at about twice the RSS. None of the 26/27 settings tried recovers the throughput. The regression arrived in JDK 26 and follows virtual threads, which this service runs on (ADR-001); it is not in GC, the JIT tier or the AOT cache (*Where the regression lives*).
+**Neither option is adopted; production stays on Java 25 LTS (ADR-020).** On amd64, the architecture production runs, both Java 27 images lose 9–18% throughput and add 2.5–3.3 ms at p50. In return they boot 0.4 s faster and pause less, at about twice the RSS. None of the 26/27 settings tried recovers the throughput. The regression arrived in JDK 26 and follows virtual threads, which this service runs on (ADR-001); it is not in GC, the JIT tier or the AOT cache (*Where the regression lives*). The cause is that virtual-thread continuation tasks lost the `NO_USER_HELP` bit in JDK 26 (*Root cause*).
 
 The branches stay as ready-made upgrades. `jdk-next` keeps testing 27 and 28 every week.
 
@@ -3322,4 +3371,4 @@ The branches stay as ready-made upgrades. `jdk-next` keeps testing 27 and 28 eve
 VARIANTS="j25|taskflow-backend:j25|;jNN|taskflow-backend:jNN|" ROUNDS=5 scripts/benchmark-jdk-runtime.sh
 ```
 
-**Open question:** what in HotSpot's virtual-thread machinery makes 26 and 27 wake threads about 35–40% more often per request (see *Where the regression lives*). GC, object layout, heap sizing, the monitor table, card marking, allocation prefetch, AVX-512, the AOT cache and the JIT tier are ruled out above, and the Java code of the scheduler is unchanged. Next steps: re-run `scripts/benchmark-jdk-runtime.sh` on the production Ryzen host, and report the measurements above to the OpenJDK loom-dev list.
+**Root cause found** (see *Root cause*): since JDK 26, virtual-thread continuation tasks no longer carry `NO_USER_HELP`, and the carriers churn through park/unpark. A diagnostic java.base patch removes the regression in the reproducer and the service. Next steps: send the loom-dev report, and re-run `scripts/benchmark-jdk-runtime.sh` (or `scripts/jdk-regression/run-reproducer.sh`) on the production Ryzen host.
