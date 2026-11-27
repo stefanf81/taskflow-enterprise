@@ -134,6 +134,12 @@ counters() {
     awk '{print \$14, \$15}' /proc/$1/stat"
 }
 
+# jvm_uptime PID -> seconds since the java process started (matches the GC log's uptime).
+jvm_uptime() {
+  docker exec jdk-bench-app sh -c "awk -v t=\$(getconf CLK_TCK) -v s=\$(awk '{print \$22}' /proc/$1/stat) \
+    '{printf \"%.3f\", \$1 - s / t}' /proc/uptime"
+}
+
 java_pid() {
   docker exec jdk-bench-app sh -c \
     'for p in /proc/[0-9]*; do [ "$(cat $p/comm 2>/dev/null)" = java ] && { echo ${p#/proc/}; break; }; done'
@@ -146,7 +152,7 @@ echo "==> applying Flyway migrations (untimed boot of ${first_image})"
 boot "$first_image" >/dev/null
 
 RESULTS="$OUT_DIR/results.tsv"
-printf 'round\timage\tendpoint\trps\tp50_ms\tp95_ms\tp99_ms\tnon2xx\tstartup_s\trss_mib\thwm_mib\tcontainer_mib\tgc_pauses\tgc_pause_total_ms\tjava\tvcsw_per_req\tnvcsw_per_req\tuser_ms_per_req\tsys_ms_per_req\n' > "$RESULTS"
+printf 'round\timage\tendpoint\trps\tp50_ms\tp95_ms\tp99_ms\tnon2xx\tstartup_s\trss_mib\thwm_mib\tcontainer_mib\tgc_pauses\tgc_pause_total_ms\tjava\tvcsw_per_req\tnvcsw_per_req\tuser_ms_per_req\tsys_ms_per_req\tload_start_s\tload_end_s\n' > "$RESULTS"
 
 for round in $(seq 1 "$ROUNDS"); do
   for k in $(seq 0 $((n - 1))); do
@@ -166,9 +172,11 @@ for round in $(seq 1 "$ROUNDS"); do
     tick="$(docker exec jdk-bench-app getconf CLK_TCK)"
     for ep in "${ENDPOINTS[@]}"; do
       read -r v0 n0 u0 s0 <<< "$(counters "$pid")"
+      up0="$(jvm_uptime "$pid")"
       out="$OUT_DIR/r${round}-${tag}-$(echo "$ep" | tr '/' '_').txt"
       load -z "$DURATION" -c "$CONCURRENCY" -H "Authorization: Bearer $token" "http://app:8080${ep}" > "$out" 2>&1
       read -r v1 n1 u1 s1 <<< "$(counters "$pid")"
+      up1="$(jvm_uptime "$pid")"
       rps="$(awk '/Requests\/sec:/ {print $2}' "$out")"
       p50="$(awk '/^[[:space:]]+50%/ {printf "%.2f", $3 * 1000}' "$out")"
       p95="$(awk '/^[[:space:]]+95%/ {printf "%.2f", $3 * 1000}' "$out")"
@@ -185,7 +193,7 @@ for round in $(seq 1 "$ROUNDS"); do
       gc="$(docker exec jdk-bench-app cat /var/log/taskflow/gc.log 2>/dev/null \
         | awk '/Pause/ && $NF ~ /ms$/ {sub(/ms$/, "", $NF); n++; t += $NF} END {printf "%d\t%.1f", n, t}')"
       printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$round" "$label" "$ep" "$rps" "$p50" "$p95" "$p99" \
-        "$non2xx" "$startup" "$rss" "$hwm" "$cmem" "$gc" "$java_version	$per_req" >> "$RESULTS"
+        "$non2xx" "$startup" "$rss" "$hwm" "$cmem" "$gc" "$java_version	$per_req	$up0	$up1" >> "$RESULTS"
       echo "round $round | $label | $ep | ${rps} req/s | p99 ${p99} ms | rss ${rss} MiB | gc ${gc} | per req: vcsw nvcsw user_ms sys_ms ${per_req}"
     done
     docker logs jdk-bench-app > "$OUT_DIR/r${round}-${tag}-app.log" 2>&1 || true
