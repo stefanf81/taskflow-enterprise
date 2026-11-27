@@ -14,6 +14,7 @@ This directory contains utility, benchmarking, and CI/CD security automation scr
 | `test_testssl_gate.py` | Python 3 | Unit tests for `testssl_gate.py` against unedited testssl.sh 3.2.5 reports in `testdata/testssl/`. |
 | `zap2sarif.py` | Python 3 | Parses OWASP ZAP DAST API and Web JSON reports and converts them to SARIF format for GitHub Advanced Security ingestion. |
 | `zap_scan_health.py` | Python 3 | Reads the scanned backend's `http_server_requests` counters after a DAST run and reports whether the scan exercised the application (enough requests served, an admin-only URI answered 2xx) and how many requests ended in 5xx. Used by the `zap-report` action. |
+| `jdk-regression/` | Java + Bash | Standalone reproducer for the JDK 26/27 virtual-thread regression (`TimedWaitBench`, `ParkPingPong`), the diagnostic `NO_USER_HELP` java.base patch tool and `run-reproducer.sh` (BENCHMARKS.md §86, *Root cause*). |
 | `benchmark-jdk-runtime.sh` | Bash | Interleaved throughput, latency, process RSS and G1 pause comparison of backend images that differ only in the JDK (BENCHMARKS.md §86). |
 | `benchmark-cds-startup.sh` | Bash | Measures Spring Boot cold-start latency with and without the Java 25 AOT cache (`application.aot`); also supports older CDS images. |
 | `benchmark-glibc-tuning.sh` | Bash | Generates load sweeps via `hey` and measures container RSS memory across glibc allocator configurations (`MALLOC_ARENA_MAX=2` vs defaults). |
