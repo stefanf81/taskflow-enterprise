@@ -3212,13 +3212,84 @@ Prefetch cross-test (3 rounds), req/s against plain Java 25:
 
 So the allocation-prefetch defaults that changed on this CPU are ruled out. Together with compact headers and heap sizing above, every changed GC and allocation default is ruled out; the monitor table and conditional card marks account for at most 2–5 points.
 
-**Lead (being tested): AVX-512 array copies at every size.**
-- Java 27 adds `CopyAVX3Threshold`, default 0, so its array-copy stubs use 512-bit instructions for copies of any size.
-- Java 25 has only `AVX3Threshold=4096`, which keeps 512-bit copies to 4 KiB and up.
-- This service copies small arrays constantly: socket buffers, Tomcat and Netty byte arrays, strings.
-- On Intel Xeons (this host: model 207, full AVX-512), 512-bit instructions can lower a core's clock for a while. That would slow everything on the core, kernel code included, which is the uniform pattern measured above.
-- The test: Java 27 with `-XX:+UnlockDiagnosticVMOptions -XX:CopyAVX3Threshold=4096` and with `-XX:UseAVX=2`, against Java 25 with `-XX:UseAVX=2`. All three boot with the AOT cache in use.
-- Production runs on an AMD Ryzen 5 7430U (Zen 3, no AVX-512). If this is the cause, the regression would not appear there at all, which is one more reason to re-run there before deciding.
+**AVX-512 array copies: tested and ruled out.**
+- **The suspicion:** Java 27 adds `CopyAVX3Threshold`, default 0, so array-copy stubs use 512-bit instructions at any size; Java 25 had only `AVX3Threshold=4096`. On Intel Xeons (this host: model 207, full AVX-512), 512-bit code can lower a core's clock, which would slow kernel code too.
+- **The test:** 3 interleaved rounds, req/s against Java 25.
+
+| Variant | `/catalog` | `/barbers` | `/auth/me` |
+| :--- | ---: | ---: | ---: |
+| Java 27 | −15.3% | −12.7% | −8.0% |
+| 27, `-XX:CopyAVX3Threshold=4096` (25's copy behaviour) | −11.8% | −11.6% | −7.9% |
+| 27, `-XX:UseAVX=2` (no 512-bit code at all) | −13.5% | −14.0% | −8.6% |
+| Java 25, `-XX:UseAVX=2` | −2.9% | +0.1% | +1.3% |
+
+- **Result:** removing AVX-512 changes neither JDK beyond noise, so 512-bit downclocking is not the cause.
+- **Still to check:** production runs on an AMD Ryzen 5 7430U (Zen 3, no AVX-512), so re-running there is still the deciding check.
+
+### Where the regression lives: six more configurations, each on 25 and 27
+
+Three interleaved rounds of 11 variants. Every run also records the java process's voluntary and involuntary context switches (summed over `/proc/PID/task`) and its user and system CPU (`/proc/PID/stat`), divided by the requests served.
+
+The Java 26 row uses Temurin 26.0.2.1 without an AOT cache; see the JDK 26 note below.
+
+| Java 27 vs Java 25, same configuration (req/s) | `/catalog` | `/barbers` | `/auth/me` |
+| :--- | ---: | ---: | ---: |
+| Default (virtual threads, G1, AOT cache, C2) | −9.3% | −12.1% | −8.5% |
+| AOT cache off (`-XX:AOTMode=off`) | −12.6% | −13.3% | −10.9% |
+| ParallelGC instead of G1 | −14.1% | −12.6% | −10.2% |
+| C1 only (`-XX:TieredStopAtLevel=1`) | −6.7% | −4.3% | −4.1% |
+| **Java 26 vs 25** (both without AOT cache) | **−13.5%** | **−12.0%** | **−9.1%** |
+| **Java 27 vs 26** (both without AOT cache) | **+1.1%** | **−1.5%** | **−2.0%** |
+| Platform threads (`-Dspring.threads.virtual.enabled=false`) | −32.4% | −38.8% | −7.0% (unstable, see below) |
+
+| Per request, mean of 3 endpoints × 3 rounds | Voluntary ctx switches | Involuntary ctx switches | User CPU | System CPU |
+| :--- | ---: | ---: | ---: | ---: |
+| Java 25 | 5.01 | 4.49 | 0.304 ms | 0.109 ms |
+| Java 27 | 6.48 (+29%) | 5.92 (+32%) | 0.340 ms (+12%) | 0.124 ms (+14%) |
+| Java 26 (no AOT) | 6.46 | 5.92 | 0.326 ms | 0.123 ms |
+| Java 25 / 27, AOT cache off | 5.00 / 6.51 | 4.54 / 5.98 | 0.288 / 0.330 ms | 0.106 / 0.122 ms |
+| Java 25 / 27, ParallelGC | 4.94 / 6.49 | 4.48 / 5.99 | 0.273 / 0.314 ms | 0.105 / 0.121 ms |
+| Java 25 / 27, C1 only | 6.59 / 7.86 | 6.33 / 7.59 | 1.239 / 1.294 ms | 0.209 / 0.236 ms |
+| Java 25 / 27, platform threads | 2.46 / 2.37 | 0.32 / 0.30 | 0.399 / 0.599 ms | 0.076 / 0.095 ms |
+
+**The regression arrived in JDK 26.** Without an AOT cache, 26 is 9–14% behind 25, and 27 is within 2% of 26. Java 26 also shows exactly 27's context-switch counts (6.46 / 5.92 per request).
+
+**It follows virtual threads, not GC, JIT tier or AOT cache.** With the AOT cache off, with ParallelGC, and with C1 only, Java 27 still loses throughput and still makes about 30% more voluntary and involuntary context switches per request. With platform threads, the context-switch counts are equal on both JDKs.
+
+**The platform-thread runs are unstable on both JDKs, so that row does not show whether 27 is slower with platform threads.**
+- In some runs user CPU per request roughly doubled (0.3 → 0.7–0.9 ms), with no change in context switches. That looks like spinning on contended locks, with about 50 Tomcat platform threads sharing 2 cores.
+- Java 25 hit it on `/catalog` in every round. Java 27 hit it in most runs.
+- What we can say: the extra context switches are specific to virtual threads. Whether 27 with platform threads is a usable workaround would need its own run, with the spinning explained first.
+
+**Where the extra switches come from** (native profile, CPU ms per 1,000 requests):
+
+| Path | Java 25 | Java 27 |
+| :--- | ---: | ---: |
+| Arming a virtual thread's timeout and waking the pool's `DelayScheduler` thread (`VirtualThread.afterYield` → `VirtualThread.schedule` → `ForkJoinPool.scheduleDelayedTask` → `DelayScheduler.signal` → `Unsafe.unpark`) | 2.0–2.2 | 2.8–3.0 |
+| `DelayScheduler.loop` parking | 2.3–2.5 | 2.8–2.9 |
+| Cancelling a timeout (`ScheduledForkJoinTask.cancel` → signal) | 1.2–1.3 | 1.2–1.35 (unchanged) |
+| The timed waits themselves (`CompletableFuture.get(timeout)` via `managedBlock`, i.e. Lettuce's synchronous API waiting for each Redis reply) | 0.47–0.53 | 0.48–0.49 (unchanged) |
+| Mount/unmount transition natives | 0.13–0.18 | 0.15 |
+
+The extra time is in arming timeouts and waking the delay-scheduler thread. The timed waits themselves cost the same on both JDKs.
+
+**The Java code on that path is essentially unchanged.** Bytecode of the classes extracted from each runtime's `lib/modules` (`jimage`, `javap -c`):
+- **`DelayScheduler`:** identical in 25, 26 and 27.
+- **`ForkJoinPool`:** identical in 26 and 27. From 25 to 26, the only change is one added `signalWork()` call in `setParallelism`, which this application never calls. It is the part kept when the scalability change JDK-8360046 was backed out of the jdk26 branch (JDK-8375130). That change had caused "a regression in some SPECjbb2015 runs" (core-libs-dev, 2026-01-13).
+- **`VirtualThread`:**
+  - The JVMTI mount/unmount notifications became `startTransition`/`endTransition` natives; their cost is negligible (table above).
+  - Continuations are now submitted through a new `submit(Executor, Runnable)` that calls `ForkJoinPool.submit(ForkJoinTask)`, wrapping each continuation in a `ForkJoinTask$AdaptedRunnableAction`, where 25 called `Executor.execute`.
+
+So the same Java code wakes threads about 35–40% more often per request on 26 and 27. The cause is below it, in HotSpot's virtual-thread machinery (freeze/thaw: `ThawBase` +28% in the native profile, park/unpark), and is not visible from Java frames. This is the scope for a report to the OpenJDK loom-dev list.
+
+**Other results from the same runs:**
+- **AOT cache and peak throughput:** turning the cache off made both JDKs 2–8% faster at steady state (25: +3–8%, 27: +2–4%), at the cost of nearly doubling startup (5.5 → 10.0–10.5 s). §62 did not see this on arm64. Treat it as a lead to confirm, not a result; one Java 25 round was low.
+- **ParallelGC vs G1:** ParallelGC was faster than G1 on both JDKs (25: +5–14%, 27: +6–8%), with fewer and shorter total pauses (1.3 s vs 2.2 s on 25) but a larger committed heap (RSS 1.46 vs 0.60 GiB on 25). ADR-002 chose G1 for pause times; this is throughput only, and pause distribution was not measured.
+
+**JDK 26.0.2.1 cannot use its own AOT cache for this application.** The cache trains, but the Dockerfile's strict validation boot (`-XX:AOTMode=on`) fails with `[error][aot] java.lang.InternalError: (no message)` / "Unexpected exception when loading aot-linked classes". This is deterministic: twice, including with the training stage rebuilt from scratch.
+- In the default `AOTMode=auto` the JVM exits with code 1 instead of starting without the cache. A production image built from this Dockerfile on 26.0.2.1 would not start.
+- The strict validation step caught it at build time, as designed.
+- 25.0.5.1 and 27.0.1.1 load their caches.
 
 ### Strict integrity modes (what a later JDK will break)
 
@@ -3241,7 +3312,7 @@ Both images train the AOT cache and pass the `-XX:AOTMode=on` boot validation.
 
 ### Decision
 
-**Neither option is adopted; production stays on Java 25 LTS (ADR-020).** On amd64, the architecture production runs, both Java 27 images lose 9–18% throughput and add 2.5–3.3 ms at p50. In return they boot 0.4 s faster and pause less, at about twice the RSS. None of the 26/27 settings tried recovers the throughput.
+**Neither option is adopted; production stays on Java 25 LTS (ADR-020).** On amd64, the architecture production runs, both Java 27 images lose 9–18% throughput and add 2.5–3.3 ms at p50. In return they boot 0.4 s faster and pause less, at about twice the RSS. None of the 26/27 settings tried recovers the throughput. The regression arrived in JDK 26 and follows virtual threads, which this service runs on (ADR-001); it is not in GC, the JIT tier or the AOT cache (*Where the regression lives*).
 
 The branches stay as ready-made upgrades. `jdk-next` keeps testing 27 and 28 every week.
 
@@ -3251,4 +3322,4 @@ The branches stay as ready-made upgrades. `jdk-next` keeps testing 27 and 28 eve
 VARIANTS="j25|taskflow-backend:j25|;jNN|taskflow-backend:jNN|" ROUNDS=5 scripts/benchmark-jdk-runtime.sh
 ```
 
-**Open question:** whether the AVX-512 copy threshold (see *Profiling the regression*) is the cause. GC, object layout, heap sizing, the monitor table, card marking and allocation prefetch are ruled out above.
+**Open question:** what in HotSpot's virtual-thread machinery makes 26 and 27 wake threads about 35–40% more often per request (see *Where the regression lives*). GC, object layout, heap sizing, the monitor table, card marking, allocation prefetch, AVX-512, the AOT cache and the JIT tier are ruled out above, and the Java code of the scheduler is unchanged. Next steps: re-run `scripts/benchmark-jdk-runtime.sh` on the production Ryzen host, and report the measurements above to the OpenJDK loom-dev list.

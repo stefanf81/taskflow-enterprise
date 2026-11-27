@@ -48,6 +48,13 @@ On `/catalog` and `/barbers`, every Java 25 round beats every Java 27 round. The
 
 ZGC with the AOT cache (now possible, JEP 516) and JFR from boot are slower still.
 
+Follow-up profiling (§86, *Profiling the regression* and *Where the regression lives*):
+- **It arrived in JDK 26.** 26 is 9–14% behind 25 and within 2% of 27.
+- **It follows virtual threads.** Under virtual threads, 26 and 27 make about 30% more context switches per request, with the AOT cache off, with ParallelGC and with C1 only alike. The extra time is in arming virtual-thread timeouts and waking the pool's `DelayScheduler` thread.
+- **The scheduler's Java code is unchanged.** Bytecode of `DelayScheduler` and `ForkJoinPool`, as far as this app's code path goes, is identical across 25–27, so the cause is in HotSpot.
+- **Platform threads are not yet a proven workaround.** Platform-thread runs were unstable on both JDKs.
+- **Java 26.0.2.1 cannot load its own AOT cache for this app.** It exits even in `AOTMode=auto`.
+
 ## Consequences
 
 ### Positive
